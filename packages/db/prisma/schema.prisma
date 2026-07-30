@@ -190,6 +190,17 @@ enum ActorType {
   system
 }
 
+/// One auth system, two audiences (master PRD §7.1).
+enum AuthAudience {
+  tenant
+  staff
+}
+
+enum AuthTokenPurpose {
+  magic_link
+  password_reset
+}
+
 // ------------------------------------------------------------ inventory ----
 
 model Facility {
@@ -294,6 +305,10 @@ model Unit {
 model Tenant {
   id              String    @id @default(cuid())
   email           String    @unique
+  /// Optional forever — magic-link sign-in is a first-class path, not just
+  /// onboarding (PRD 01 FR-5.1). Never a plaintext or reversible value.
+  passwordHash    String?
+  emailVerifiedAt DateTime? @db.Timestamptz(6)
   phone           String?
   firstName       String
   lastName        String
@@ -679,16 +694,57 @@ model Notice {
   @@map("notice")
 }
 
+// ----------------------------------------------------------------- auth ----
+
+/// Single-use, expiring tokens for magic-link sign-in and password reset
+/// (PRD 01 FR-5.2). Only the SHA-256 of the token is stored, so a database
+/// leak does not hand out working links.
+model AuthToken {
+  id        String           @id @default(cuid())
+  tokenHash String           @unique
+  purpose   AuthTokenPurpose
+  audience  AuthAudience
+  /// Tenant.id or StaffUser.id. Not a foreign key: the two audiences live in
+  /// different tables and the token is useless without a matching email.
+  subjectId String
+  email     String
+  expiresAt DateTime         @db.Timestamptz(6)
+  usedAt    DateTime?        @db.Timestamptz(6)
+  ipAddress String?
+  createdAt DateTime         @default(now()) @db.Timestamptz(6)
+
+  @@index([subjectId, purpose])
+  @@index([expiresAt])
+  @@map("auth_token")
+}
+
+/// Feeds the login throttle. Rows are written for successes too, so a
+/// successful sign-in can clear the counter for that identity.
+model LoginAttempt {
+  id          String       @id @default(cuid())
+  email       String
+  audience    AuthAudience
+  ipAddress   String?
+  succeeded   Boolean
+  attemptedAt DateTime     @default(now()) @db.Timestamptz(6)
+
+  @@index([email, audience, attemptedAt])
+  @@index([ipAddress, attemptedAt])
+  @@map("login_attempt")
+}
+
 /// Staff identity. Role assignments and facility scoping are B-004; MFA is B-079.
 model StaffUser {
-  id        String          @id @default(cuid())
-  email     String          @unique
-  firstName String
-  lastName  String
-  status    StaffUserStatus @default(active)
-  createdAt DateTime        @default(now()) @db.Timestamptz(6)
-  updatedAt DateTime        @updatedAt @db.Timestamptz(6)
-  deletedAt DateTime?       @db.Timestamptz(6)
+  id              String          @id @default(cuid())
+  email           String          @unique
+  passwordHash    String?
+  emailVerifiedAt DateTime?       @db.Timestamptz(6)
+  firstName       String
+  lastName        String
+  status          StaffUserStatus @default(active)
+  createdAt       DateTime        @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime        @updatedAt @db.Timestamptz(6)
+  deletedAt       DateTime?       @db.Timestamptz(6)
 
   auditLogs AuditLog[]
 

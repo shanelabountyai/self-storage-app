@@ -34,6 +34,8 @@ const NO_FACILITY_ID: Record<string, string> = {
   InvoiceLineItem: 'scoped through its invoice',
   PaymentAllocation: 'scoped through its payment and invoice',
   AuditLog: 'facilityId is nullable — org-level actions have no facility',
+  AuthToken: 'an identity spans facilities; one account can hold leases at several',
+  LoginAttempt: 'throttling is per identity and IP, not per facility',
 }
 
 describe('prisma schema invariants', () => {

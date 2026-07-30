@@ -18,7 +18,7 @@ Everything else builds on this: repo, schema, auth, RBAC, jobs/events, and the f
 |---|---|---|---|---|---|---|
 | 1 | B-001 ✅ | Monorepo & app scaffold: Next.js (App Router) + TypeScript, Tailwind/shadcn, Prisma + Postgres, Vitest/Playwright, CI (incl. axe + Lighthouse hooks), env/secret handling | PRD 00 §5 Tech Stack, §7.2–7.4 | M | — | MVP |
 | 2 | B-002 ✅ | Core data model & migrations: Facility, UnitType, Unit, Tenant, Lease, Invoice/LineItem, Payment, LedgerEntry, AccessCredential/AccessGrant, Reservation, Lead, Promotion, Notice, AuditLog, StaffUser — money as integer cents, facility_id everywhere | PRD 00 §7.5–7.6 Data Model; PRD 02 §6.1 | L | B-001 | MVP |
-| 3 | B-003 | Auth foundation: Auth.js sessions for customers (email/password + magic link) and staff; rate-limited login, password reset | PRD 00 §7.1 Auth; PRD 01 FR-5 | M | B-002 | MVP |
+| 3 | B-003 ✅ | Auth foundation: Auth.js sessions for customers (email/password + magic link) and staff; rate-limited login, password reset | PRD 00 §7.1 Auth; PRD 01 FR-5 | M | B-002 | MVP |
 | 4 | B-004 | RBAC roles-as-data (tenant/counter/manager/regional/owner/system) + server-side facility scoping on every endpoint; monetary authority limits config | PRD 00 §7.1; PRD 02 §3 Roles & Permissions | M | B-003 | MVP |
 | 5 | B-005 | Append-only audit log service (actor, timestamp, entity, before/after, reason codes) wired as a shared package | PRD 00 §7.1; PRD 02 §4.10 US-38 | M | B-002 | MVP |
 | 6 | B-006 | Background jobs + event bus foundation: job runner (Inngest/Trigger.dev or Vercel Cron), domain-event outbox, idempotent consumers | PRD 00 §5; PRD 02 FR-4/FR-7 | M | B-001 | MVP |

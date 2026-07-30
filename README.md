@@ -68,6 +68,31 @@ Mirror the same variables into Vercel project settings before the first deploy.
 | `npm run db:migrate` | Create and apply a migration |
 | `npm run db:studio` | Prisma Studio |
 
+## Auth
+
+One Auth.js (v5) install serves both audiences — tenants and staff — distinguished
+by an `audience` claim on the session JWT. Sessions are JWT-backed (30 days) in an
+httpOnly, SameSite=Lax cookie; there is no session table to query per request.
+
+- **Passwords are optional.** Magic-link sign-in is a permanent path, not just
+  onboarding (PRD 01 FR-5.1). `Tenant.passwordHash` and `StaffUser.passwordHash`
+  are nullable by design.
+- **Hashing is `node:crypto` scrypt** — no bcrypt/argon2 dependency and no native
+  build on Vercel. Parameters are stored inside each hash, so raising them later
+  doesn't invalidate existing passwords; `needsRehash()` upgrades on next login.
+- **Tokens are stored as SHA-256 only.** Magic links expire in 15 minutes,
+  resets in 60, and both are single-use — burned atomically so a double click
+  can't yield two sessions.
+- **Login is throttled in Postgres**, per identity and per IP. No Redis; see
+  `LIMITS` in `apps/web/lib/auth/rate-limit.ts` to tune.
+- **Failures never enumerate accounts.** Unknown email, no password set, wrong
+  password, and disabled account all return the same result, and the KDF runs
+  even when there's no account so timing doesn't leak either.
+
+Magic-link and reset emails currently print to the server console in development
+and throw in production — the real sender is the notification service in B-030.
+Sign-in and reset screens are B-033; `/login` is referenced but not built yet.
+
 ## Conventions
 
 - Money is integer cents. Never a float.

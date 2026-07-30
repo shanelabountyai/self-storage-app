@@ -47,6 +47,8 @@ jobs:
           {
             echo 'DATABASE_URL=postgresql://ci:ci@localhost:5432/ci'
             echo 'DIRECT_URL=postgresql://ci:ci@localhost:5432/ci'
+            echo "AUTH_SECRET=$(openssl rand -base64 32)"
+            echo 'AUTH_URL=http://localhost:3000'
           } > .env.local
 
       - run: npm run db:generate

@@ -1,0 +1,89 @@
+import { prisma, type AuthAudience } from '@storage/db'
+import { findSubjectByEmail, setPassword } from './accounts'
+import { sendAuthEmail } from './send-auth-email'
+import { consumeToken, mintToken } from './tokens'
+
+function baseUrl(): string {
+  return process.env.AUTH_URL ?? 'http://localhost:3000'
+}
+
+/// Requests a magic link. Always resolves the same way whether or not the
+/// address belongs to an account — the caller must not branch on the result.
+export async function requestMagicLink(
+  email: string,
+  audience: AuthAudience,
+  ipAddress?: string | null,
+): Promise<void> {
+  const subject = await findSubjectByEmail(email, audience)
+  if (!subject) return
+
+  const { token, expiresAt } = await mintToken({
+    purpose: 'magic_link',
+    audience,
+    subjectId: subject.id,
+    email: subject.email,
+    ipAddress,
+  })
+
+  await sendAuthEmail({
+    to: subject.email,
+    purpose: 'magic_link',
+    url: `${baseUrl()}/login/magic?token=${token}`,
+    expiresAt,
+  })
+}
+
+export async function requestPasswordReset(
+  email: string,
+  audience: AuthAudience,
+  ipAddress?: string | null,
+): Promise<void> {
+  const subject = await findSubjectByEmail(email, audience)
+  if (!subject) return
+
+  const { token, expiresAt } = await mintToken({
+    purpose: 'password_reset',
+    audience,
+    subjectId: subject.id,
+    email: subject.email,
+    ipAddress,
+  })
+
+  await sendAuthEmail({
+    to: subject.email,
+    purpose: 'password_reset',
+    url: `${baseUrl()}/reset-password?token=${token}`,
+    expiresAt,
+  })
+}
+
+/// Consumes the reset token and sets the new password. The token burn and the
+/// password write are separate steps by necessity — the burn is atomic and
+/// happens first, so a failure here cannot leave a reusable token behind.
+export async function completePasswordReset(
+  token: string,
+  newPassword: string,
+): Promise<{ ok: true } | { ok: false; reason: 'invalid_token' | 'weak_password' }> {
+  if (newPassword.length < 8) return { ok: false, reason: 'weak_password' }
+
+  const consumed = await consumeToken(token, 'password_reset')
+  if (!consumed) return { ok: false, reason: 'invalid_token' }
+
+  await setPassword(consumed.subjectId, consumed.audience, newPassword)
+
+  // Password changes are privileged actions and belong in the audit log
+  // (master PRD §7.1).
+  await prisma.auditLog.create({
+    data: {
+      actorType: consumed.audience === 'staff' ? 'staff' : 'tenant',
+      actorStaffId: consumed.audience === 'staff' ? consumed.subjectId : null,
+      actorLabel: consumed.email,
+      entityType: consumed.audience === 'staff' ? 'StaffUser' : 'Tenant',
+      entityId: consumed.subjectId,
+      action: 'password.reset_completed',
+      reasonCode: 'self_service',
+    },
+  })
+
+  return { ok: true }
+}
