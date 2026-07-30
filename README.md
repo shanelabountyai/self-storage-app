@@ -121,6 +121,12 @@ and **fail closed**: a staff user with no assignments gets `{ facilityId: { in: 
 which matches nothing. They never return an unrestricted `{}` except for a genuine
 all-facilities assignment. Requesting a specific facility narrows; it can never widen.
 
+There is no superuser bypass and there must never be one (D-12). Unrestricted access
+is an ordinary assignment row — `owner` role, `facilityId: null` — so it stays
+grantable, revocable, and auditable. The `db:create-owner` bootstrap script that
+creates the first one lands with the admin shell in B-007; until then there are no
+staff accounts.
+
 Monetary authority (`fees:waive`, `refunds:approve`, `credits:manual`) is configured
 per role in cents; `null` means unlimited. Over-limit is not a plain failure —
 `checkMonetaryAuthority()` reports the shortfall and `nextApproverRole()` finds the
