@@ -1,6 +1,6 @@
 import { prisma } from '@storage/db'
 import type { DomainEvent, Prisma } from '@storage/db'
-import { isKnownEvent, type EventName } from './catalog'
+import { isKnownEvent, type EventName } from './catalog.ts'
 
 export type EmitEventInput = {
   name: EventName
@@ -13,9 +13,16 @@ export type EmitEventInput = {
 }
 
 export class UnknownEventError extends Error {
-  constructor(readonly name: string) {
-    super(`"${name}" is not in the event catalog`)
+  readonly eventName: string
+
+  constructor(eventName: string) {
+    super(`"${eventName}" is not in the event catalog`)
+    // A constructor-parameter-property named `name` here would have collided
+    // with (and been overwritten by) this line, silently discarding the event
+    // name — found while removing the parameter-property sugar, hence the
+    // explicit field is called eventName, not name.
     this.name = 'UnknownEventError'
+    this.eventName = eventName
   }
 }
 

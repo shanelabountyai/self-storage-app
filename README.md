@@ -65,6 +65,7 @@ Mirror the same variables into Vercel project settings before the first deploy.
 | `npm run db:generate` | Regenerate the Prisma client |
 | `npm run db:migrate` | Create and apply a migration |
 | `npm run db:seed` | Seed roles and permissions (idempotent) |
+| `npm run db:create-owner` | Bootstrap the first admin account (see Admin shell below) |
 | `npm run db:studio` | Prisma Studio |
 
 ## Auth
@@ -130,6 +131,43 @@ per role in cents; `null` means unlimited. Over-limit is not a plain failure —
 `checkMonetaryAuthority()` reports the shortfall and `nextApproverRole()` finds the
 role that can approve it (PRD 02 RBAC-2). The approval-request workflow itself lands
 with refunds in B-048.
+
+## Admin shell
+
+`/admin/*` is role-gated at two layers: [proxy.ts](apps/web/proxy.ts) (Next's
+edge middleware convention, renamed from `middleware.ts` in Next 16) checks the
+JWT session's `audience` claim before any page renders — no DB call, since Prisma
+isn't Edge-Runtime compatible — and every layout/page re-checks with the actor's
+real permissions from `lib/rbac/authorize.ts`. Nav visibility hides items a role
+can't use, but hiding a link is UX, not the gate: `app/admin/[section]/page.tsx`
+checks the same permission server-side before rendering anything.
+
+**Bootstrapping the first account.** Nothing before this item can create a
+`StaffUser` at all (D-12 — there is no permission bypass, ever; unrestricted
+access is always an ordinary `owner` + all-facilities assignment row):
+
+```bash
+npm run db:create-owner -- --email you@example.com
+```
+
+Prints a one-time password-setup link (60-minute expiry, reuses the B-003 token
+machinery). Refuses to create a second owner unless you pass `--force`, so
+re-running it by accident is a safe no-op. The reset link points at
+`/reset-password`, which doesn't exist until B-033 — call
+`completePasswordReset()` directly, or wait for that item, to actually set the
+password.
+
+**The facility switcher** persists per browser via a cookie
+(`lib/admin/facility-selection.ts`), not a per-user DB row — a deliberate
+simplification, noted in code, upgradeable if cross-device persistence is ever
+asked for. It always re-resolves against the actor's real access rather than
+trusting a stale cookie, and "All facilities" only appears on the dashboard
+(the one roll-up-capable screen that exists before B-042's portfolio report).
+
+**Nav destinations without their own backlog item yet** (Units, Tenants,
+Billing, …) render through one dynamic route,
+[app/admin/\[section\]/page.tsx](apps/web/app/admin/[section]/page.tsx), rather
+than ten placeholder folders.
 
 ## Audit log
 
@@ -220,6 +258,13 @@ register themselves as they're built.
   task. CI runs axe and asserts a perfect Lighthouse accessibility score.
 - Compliance defaults are Texas, built per-state configurable (D-10). All legal and
   notice text is draft-only and not legal advice.
+- Custom error classes use explicit field declarations, not TypeScript's
+  constructor-parameter-property shorthand (`constructor(readonly x: T)`). Node's
+  type-stripping — which runs `apps/web/scripts/*.mts` and `packages/db/prisma/seed.mts`
+  directly, no build step — erases type annotations but can't transform that
+  shorthand, and errors on it. `apps/web/scripts/*` also import via `tsx` (a
+  devDependency) rather than plain `node`, since they need the `@/*` path alias;
+  packages under `packages/*` don't use that alias and run under plain `node`.
 
 ## CI
 

@@ -3,13 +3,17 @@ import type { PermissionKey } from '@storage/db/rbac-catalog'
 import type { Actor, Assignment } from './actor'
 
 export class ForbiddenError extends Error {
-  constructor(
-    message: string,
-    readonly permission?: PermissionKey,
-    readonly facilityId?: string | null,
-  ) {
+  // Explicit fields, not TS constructor-parameter-property sugar: Node's
+  // type-stripping (used to run apps/web/scripts/*.mts directly) only erases
+  // types, it doesn't transform syntax, and errors on that shorthand.
+  readonly permission?: PermissionKey
+  readonly facilityId?: string | null
+
+  constructor(message: string, permission?: PermissionKey, facilityId?: string | null) {
     super(message)
     this.name = 'ForbiddenError'
+    this.permission = permission
+    this.facilityId = facilityId
   }
 }
 
@@ -54,6 +58,22 @@ export async function loadSystemPermissions(): Promise<void> {
   })
   SYSTEM_PERMISSIONS = new Set(
     (role?.permissions ?? []).map((p) => p.permissionKey as PermissionKey),
+  )
+}
+
+/// "Does this actor hold this permission at ANY facility they're assigned to"
+/// — for UI decisions that aren't yet scoped to one facility, like which nav
+/// items to show. Deliberately distinct from `can()`: it never gates an actual
+/// action (nothing here should authorize a write), only whether a menu item or
+/// route is worth showing before a specific facility is in play.
+export function hasPermissionAnywhere(
+  actor: Actor,
+  permissions: readonly PermissionKey[],
+): boolean {
+  if (actor.kind === 'tenant') return false
+  if (actor.kind === 'system') return permissions.some((p) => SYSTEM_PERMISSIONS.has(p))
+  return actor.assignments.some((assignment) =>
+    permissions.some((permission) => assignment.permissions.has(permission)),
   )
 }
 

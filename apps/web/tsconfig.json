@@ -7,6 +7,10 @@
     "strict": true,
     "noEmit": true,
     "esModuleInterop": true,
+    // Scripts run directly by Node (apps/web/scripts/*.mts) need explicit
+    // extensions in their relative imports — Node's ESM resolution doesn't
+    // guess them the way bundler resolution does. Safe with noEmit: true.
+    "allowImportingTsExtensions": true,
     "module": "esnext",
     "moduleResolution": "bundler",
     "resolveJsonModule": true,

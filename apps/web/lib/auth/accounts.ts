@@ -37,9 +37,14 @@ async function findAccount(
 }
 
 export class LoginThrottledError extends Error {
-  constructor(readonly retryAfterMs: number) {
+  // Explicit field, not a constructor-parameter-property: see the comment on
+  // ForbiddenError in lib/rbac/authorize.ts.
+  readonly retryAfterMs: number
+
+  constructor(retryAfterMs: number) {
     super('Too many attempts. Try again later.')
     this.name = 'LoginThrottledError'
+    this.retryAfterMs = retryAfterMs
   }
 }
 

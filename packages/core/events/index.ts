@@ -1,3 +1,3 @@
-export * from './catalog'
-export * from './outbox'
-export * from './dispatch'
+export * from './catalog.ts'
+export * from './outbox.ts'
+export * from './dispatch.ts'

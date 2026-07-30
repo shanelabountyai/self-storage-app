@@ -7,6 +7,7 @@ import {
   facilityAccess,
   facilityScope,
   ForbiddenError,
+  hasPermissionAnywhere,
   requirePermission,
   resolveFacilityFilter,
 } from '../apps/web/lib/rbac/authorize'
@@ -215,5 +216,26 @@ describe('monetary authority', () => {
       allowed: false,
       reason: 'forbidden',
     })
+  })
+})
+
+describe('hasPermissionAnywhere (nav/UI visibility, not authorization)', () => {
+  it('finds a permission granted at a specific facility with no facility given', () => {
+    // The gap can() closes on purpose: calling can() with no facilityId only
+    // matches all-facilities assignments. Nav visibility has no "current
+    // facility" yet, so it must check across every assignment instead.
+    const actor = staff(assignmentFor('manager', FACILITY_A))
+    expect(can(actor, 'units:edit')).toBe(false)
+    expect(hasPermissionAnywhere(actor, ['units:edit'])).toBe(true)
+  })
+
+  it('is false when none of the assignments grant it anywhere', () => {
+    const actor = staff(assignmentFor('counter', FACILITY_A))
+    expect(hasPermissionAnywhere(actor, ['facility:settings'])).toBe(false)
+  })
+
+  it('is false for tenants and true only for a system role that has it', () => {
+    expect(hasPermissionAnywhere(tenant, ['tenants:view'])).toBe(false)
+    expect(hasPermissionAnywhere({ kind: 'system', label: 'job' }, ['users:manage'])).toBe(false)
   })
 })

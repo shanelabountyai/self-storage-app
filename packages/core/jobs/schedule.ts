@@ -49,6 +49,36 @@ export function facilitiesDueAt<T extends SchedulableFacility>(
     }))
 }
 
+function tzOffsetMs(instant: Date, timezone: string): number {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    hourCycle: 'h23',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).formatToParts(instant)
+  const get = (type: string) => Number(parts.find((p) => p.type === type)!.value)
+  const asUtc = Date.UTC(get('year'), get('month') - 1, get('day'), get('hour') % 24, get('minute'), get('second'))
+  return asUtc - instant.getTime()
+}
+
+// ponytail: approximates local midnight using the zone's offset at the UTC-
+// guess instant, which can be off by the DST shift (~1h) on the two transition
+// days a year. Fine for a "what happened today" dashboard tile; never use this
+// for billing math — invoice due dates need the exact-day guarantees in
+// facilitiesDueAt/businessDateFor instead.
+export function localDayBounds(instant: Date, timezone: string): { start: Date; end: Date } {
+  const { year, month, day } = localParts(instant, timezone)
+  const utcGuess = new Date(Date.UTC(year, month - 1, day))
+  const offset = tzOffsetMs(utcGuess, timezone)
+  const start = new Date(utcGuess.getTime() - offset)
+  const end = new Date(start.getTime() + 24 * 60 * 60 * 1000)
+  return { start, end }
+}
+
 /// Business dates between the last completed run and now, so a job that missed
 /// ticks during an outage can be caught up rather than silently skipped
 /// (PRD 02 FR-4, FR-14).

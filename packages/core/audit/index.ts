@@ -1,10 +1,10 @@
 import { prisma } from '@storage/db'
 import type { AuditLog, Prisma } from '@storage/db'
-import { requiresReasonCode } from './actions'
-import { diffSnapshots, redact, type Json } from './redact'
+import { requiresReasonCode } from './actions.ts'
+import { diffSnapshots, redact, type Json } from './redact.ts'
 
-export * from './actions'
-export { diffSnapshots, redact, REDACTED, type Json } from './redact'
+export * from './actions.ts'
+export { diffSnapshots, redact, REDACTED, type Json } from './redact.ts'
 
 /// Deliberately independent of the RBAC Actor type: packages/core must not
 /// depend on apps/web. Callers map their actor to this shape.
@@ -31,9 +31,14 @@ export type RecordAuditInput = {
 }
 
 export class MissingReasonCodeError extends Error {
-  constructor(readonly action: string) {
+  // Explicit field, not a constructor-parameter-property: see the comment on
+  // ForbiddenError in apps/web/lib/rbac/authorize.ts.
+  readonly action: string
+
+  constructor(action: string) {
     super(`Action "${action}" requires a reason code`)
     this.name = 'MissingReasonCodeError'
+    this.action = action
   }
 }
 

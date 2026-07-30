@@ -1,6 +1,6 @@
 import { prisma } from '@storage/db'
 import type { DomainEvent } from '@storage/db'
-import type { EventName } from './catalog'
+import type { EventName } from './catalog.ts'
 
 export type EventHandlerContext = {
   event: DomainEvent

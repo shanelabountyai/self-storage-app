@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   businessDateFor,
   facilitiesDueAt,
+  localDayBounds,
   localParts,
   missedBusinessDates,
 } from '../packages/core/jobs/schedule'
@@ -33,6 +34,35 @@ describe('facility-local time', () => {
   it('renders midnight as hour 0, never 24', () => {
     // 05:00 UTC is midnight CDT.
     expect(localParts(new Date('2026-07-30T05:00:00Z'), CHICAGO).hour).toBe(0)
+  })
+})
+
+describe('local day bounds', () => {
+  it('gives the UTC instants of local midnight and the next midnight', () => {
+    // Chicago is UTC-5 (CDT) in July: local midnight on the 30th is 05:00 UTC.
+    const { start, end } = localDayBounds(new Date('2026-07-30T14:00:00Z'), CHICAGO)
+    expect(start.toISOString()).toBe('2026-07-30T05:00:00.000Z')
+    expect(end.toISOString()).toBe('2026-07-31T05:00:00.000Z')
+  })
+
+  it('matches plain UTC bounds when the zone is UTC', () => {
+    const { start, end } = localDayBounds(new Date('2026-07-30T14:00:00Z'), 'UTC')
+    expect(start.toISOString()).toBe('2026-07-30T00:00:00.000Z')
+    expect(end.toISOString()).toBe('2026-07-31T00:00:00.000Z')
+  })
+
+  it('places an instant inside its own day bounds', () => {
+    const now = new Date('2026-07-30T14:00:00Z')
+    const { start, end } = localDayBounds(now, CHICAGO)
+    expect(now.getTime()).toBeGreaterThanOrEqual(start.getTime())
+    expect(now.getTime()).toBeLessThan(end.getTime())
+  })
+
+  it('handles a zone ahead of UTC', () => {
+    // Tokyo is UTC+9 year-round. 20:00 UTC on the 30th is 05:00 JST on the
+    // 31st, so that instant's local day starts at 2026-07-30T15:00:00Z.
+    const { start } = localDayBounds(new Date('2026-07-30T20:00:00Z'), 'Asia/Tokyo')
+    expect(start.toISOString()).toBe('2026-07-30T15:00:00.000Z')
   })
 })
 
