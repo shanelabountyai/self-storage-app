@@ -154,6 +154,15 @@ SMS goes live (gated on 10DLC), operational depth in admin, hardware hardening, 
 | 89 | B-089 | Growth marketing bundle: per-city/size landing-page generation, offer A/B testing, referral program, marketplace (SpareFoot-style) channel evaluation | PRD 00 §6 Phase 3; PRD 04 §7 Phase 3 | L | B-082 | Phase 3 |
 | 90 | B-090 | Tenant experience & channel expansion: waitlists with notify-me, business accounts (consolidated billing), online transfer flow, delinquency payment plans/self-cure, live chat/AI assistant, two-way SMS inbox + broadcast sends, PWA push, Spanish/multilingual | PRD 01 §9 Phase 2–3; PRD 05 §8 Phase 3; PRD 00 §6 Phase 3 | XL | B-074, B-081 | Phase 3 |
 
+## Appended after v1.0 — internal tooling
+
+Added 2026-07-30, after the original 90 were sequenced. Appended rather than inserted so the global numbering above stays stable. **These are not in top-to-bottom build order** — their dependencies (B-003/B-004/B-005) are already built, so they are buildable at any point; the Phase column is the recommendation, not a gate.
+
+| # | ID | Item | PRD/Feature | Size | Depends on | Phase |
+|---|---|---|---|---|---|---|
+| 91 | B-091 | Support impersonation core: `ImpersonationSession` model, four permissions, escalation guard (rank + facility-scope subset), read-only enforcement with the permanent hard-block list, persistent banner, dual-attribution audit (`impersonatorStaffId` on AuditLog), start/end/expiry | PRD 09 §5–7 Phase A | L | B-003, B-004, B-005 | Phase 2 |
+| 92 | B-092 | Impersonation oversight: active-session list with force-end, impersonation report + CSV export, tenant account-activity view, tenant access notification, frequency flags | PRD 09 §5.5, §8 Phase B | M | B-091 | Phase 2 |
+
 ---
 
 ## How to use this backlog with Claude Code
