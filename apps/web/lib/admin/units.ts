@@ -8,9 +8,10 @@ import {
   type ManualUnitStatus,
   type UnitOccupancyFacts,
 } from '@storage/core/inventory'
-import { ForbiddenError, requirePermission, resolveFacilityFilter } from '@/lib/rbac/authorize'
+import { ForbiddenError, requirePermission } from '@/lib/rbac/authorize'
 import type { Actor } from '@/lib/rbac/actor'
 import { toAuditActor } from '@/lib/rbac/audit-actor'
+import { unitWhere, type UnitFilters } from './unit-query'
 
 // The adapter between the pure rule in @storage/core/inventory and real rows.
 // Everything that writes Unit.status goes through recomputeUnitStatus() — that
@@ -27,30 +28,62 @@ export class UnitStatusChangeBlockedError extends Error {
   }
 }
 
+/// Facts for many units in two queries rather than two per unit. Bulk
+/// operations and the grid view both need this — the single-unit version below
+/// is a thin wrapper so there is only one definition of "what occupies a unit".
+export async function occupancyFactsForMany(
+  unitIds: readonly string[],
+  client: Prisma.TransactionClient | typeof prisma = prisma,
+): Promise<Map<string, UnitOccupancyFacts>> {
+  const facts = new Map<string, UnitOccupancyFacts>(
+    unitIds.map((id) => [
+      id,
+      {
+        activeLease: null,
+        activeReservation: null,
+        // No source yet — the delinquency engine (B-057) and field ops (B-060)
+        // populate this. Until then no unit can be overlocked, which is
+        // correct: nothing in the system can currently overlock one.
+        overlocked: false,
+      },
+    ]),
+  )
+  if (unitIds.length === 0) return facts
+
+  const [leases, reservations] = await Promise.all([
+    client.lease.findMany({
+      where: {
+        unitId: { in: [...unitIds] },
+        status: { in: [...OCCUPYING_LEASE_STATUSES] },
+        deletedAt: null,
+      },
+      select: { id: true, status: true, unitId: true },
+    }),
+    client.reservation.findMany({
+      where: { unitId: { in: [...unitIds] }, status: 'held', expiresAt: { gt: new Date() } },
+      select: { id: true, unitId: true },
+    }),
+  ])
+
+  for (const lease of leases) {
+    const entry = facts.get(lease.unitId!)
+    if (entry) entry.activeLease = { id: lease.id, status: lease.status }
+  }
+  for (const reservation of reservations) {
+    const entry = reservation.unitId ? facts.get(reservation.unitId) : undefined
+    if (entry) entry.activeReservation = { id: reservation.id }
+  }
+
+  return facts
+}
+
 /// Gathers the facts the derivation needs for one unit.
 async function occupancyFactsFor(
   unitId: string,
   client: Prisma.TransactionClient | typeof prisma = prisma,
 ): Promise<UnitOccupancyFacts> {
-  const [activeLease, activeReservation] = await Promise.all([
-    client.lease.findFirst({
-      where: { unitId, status: { in: [...OCCUPYING_LEASE_STATUSES] }, deletedAt: null },
-      select: { id: true, status: true },
-    }),
-    client.reservation.findFirst({
-      where: { unitId, status: 'held', expiresAt: { gt: new Date() } },
-      select: { id: true },
-    }),
-  ])
-
-  return {
-    activeLease,
-    activeReservation,
-    // No source yet — the delinquency engine (B-057) and field ops (B-060)
-    // populate this. Until then no unit can be overlocked, which is correct:
-    // nothing in the system can currently overlock one.
-    overlocked: false,
-  }
+  const facts = await occupancyFactsForMany([unitId], client)
+  return facts.get(unitId)!
 }
 
 /// Recomputes and persists one unit's effective status from current facts.
@@ -73,29 +106,13 @@ export async function recomputeUnitStatus(
   return derived
 }
 
-export type UnitFilters = {
-  status?: UnitStatus
-  unitTypeId?: string
-  building?: string
-  floor?: number
-  /// Matches unit number, case-insensitively.
-  search?: string
-}
+export type { UnitFilters } from './unit-query'
 
 export async function listUnits(actor: Actor, facilityId: string, filters: UnitFilters = {}) {
-  const where: Prisma.UnitWhereInput = {
-    // Scoped through the shared helper rather than a bare facilityId, so this
-    // list can never show a facility the actor lacks.
-    ...resolveFacilityFilter(actor, facilityId),
-    ...(filters.status && { status: filters.status }),
-    ...(filters.unitTypeId && { unitTypeId: filters.unitTypeId }),
-    ...(filters.building && { building: filters.building }),
-    ...(filters.floor !== undefined && { floor: filters.floor }),
-    ...(filters.search && { number: { contains: filters.search, mode: 'insensitive' } }),
-  }
-
   return prisma.unit.findMany({
-    where,
+    // Same selector bulk operations use — the rows the operator sees are the
+    // rows a bulk edit will consider.
+    where: unitWhere(actor, facilityId, filters),
     include: { unitType: { select: { id: true, name: true, widthFt: true, lengthFt: true, streetRateCents: true } } },
     orderBy: [{ building: 'asc' }, { floor: 'asc' }, { number: 'asc' }],
   })

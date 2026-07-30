@@ -99,7 +99,10 @@ export function canSetManualStatus(
   if (facts.activeLease) {
     return {
       allowed: false,
-      reason: `Unit has a ${facts.activeLease.status} lease (${facts.activeLease.id}). Move the tenant out before marking it ${target}.`,
+      // Phrased to avoid an a/an article problem — "a active lease" reads as a
+      // bug to anyone who sees it, and lease statuses start with both vowels
+      // and consonants.
+      reason: `Unit has a lease in ${facts.activeLease.status} status (${facts.activeLease.id}). Move the tenant out before marking it ${target}.`,
       blocking: { type: 'lease', id: facts.activeLease.id },
     }
   }

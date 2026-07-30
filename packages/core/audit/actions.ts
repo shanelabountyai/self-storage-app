@@ -31,6 +31,11 @@ export const AUDIT_ACTIONS = [
   { action: 'unit.created', label: 'Unit created', requiresReason: false },
   { action: 'unit.updated', label: 'Unit updated', requiresReason: false },
   { action: 'unit.status_overridden', label: 'Unit status manually overridden', requiresReason: true },
+  /// One grouped entry per bulk operation, with per-unit detail inside
+  /// (PRD 02 US-7). Reason required for the same reason a single status
+  /// override needs one — more so, since it touches many units at once.
+  { action: 'unit.bulk_edited', label: 'Units bulk edited', requiresReason: true },
+  { action: 'unit.layout_imported', label: 'Unit layout imported', requiresReason: true },
   { action: 'unit_type.created', label: 'Unit type created', requiresReason: false },
   { action: 'unit_type.updated', label: 'Unit type updated', requiresReason: false },
   { action: 'unit_type.cloned', label: 'Unit type cloned to another facility', requiresReason: false },

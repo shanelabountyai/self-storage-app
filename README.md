@@ -219,6 +219,42 @@ There is no "Units" grid/list yet — that's PRD 02 US-5/7/8, backlogged as B-01
 replaced its placeholder in B-008; B-010 adds the actual inventory view alongside
 or on a sub-route.
 
+## Unit inventory
+
+`/admin/units` is the inventory (list and grid); `/admin/units/types` is unit-type
+management. Both share one filter definition (`lib/admin/unit-query.ts`) so the
+rows an operator sees are provably the rows a bulk edit will act on.
+
+**Status is derived, not free-form** (PRD 02 US-8), which needs two columns:
+
+| Column | Meaning |
+|---|---|
+| `Unit.status` | Effective status. Derived, queryable. Written **only** by `recomputeUnitStatus()`. |
+| `Unit.operationalStatus` | The operator's intent — `available` / `maintenance` / `unrentable`. The only part a human sets. |
+
+One column can't do both: a unit marked `maintenance`, leased, then vacated must
+return to `maintenance`, not silently to `available`. The rule itself is pure and
+lives in [packages/core/inventory](packages/core/inventory/unit-status.ts), so
+availability reads (B-014) reuse it rather than redefining "rentable". Precedence
+is `overlocked > occupied > reserved > intent`.
+
+A direct `data: { status }` write anywhere outside `recomputeUnitStatus()` is a
+bug. Anything that changes lease, reservation, or delinquency state must call it —
+that's B-018, B-026, B-040, and B-057.
+
+**Bulk edit** previews before applying, and preview and apply run the *same*
+evaluator — otherwise the preview eventually lies about what apply will do.
+Blocked rows are skipped and reported with the blocking record named; the whole
+operation lands as one audit entry with per-unit detail inside it (US-7). The
+operation is re-evaluated at apply time, since a lease can be signed between
+preview and confirm.
+
+**JSON layout import** creates missing units and updates existing ones, matched by
+number — the realistic case is standing up a facility where nothing exists yet.
+It's all-or-nothing: if any row references an unknown unit type, nothing is
+written, because a half-imported layout is worse than none. It never touches
+occupancy.
+
 ## Audit log
 
 `@storage/core/audit` is the only way to write an audit entry. Append-only is

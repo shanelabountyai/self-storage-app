@@ -9,8 +9,8 @@ This is the **narrative** record — what exists, what it decided, and what a la
 - `git log` — the change-by-change record
 - `README.md` — how the built thing works today
 
-**Status:** Milestone 1 (Foundation) in progress — B-001 through B-009 done; B-010 session 1 of 2 done.
-**Tests:** 274 unit + 8 e2e passing as of B-010 session 1.
+**Status:** Milestone 1 (Foundation) in progress — B-001 through B-010 done. Next: B-011 (street rate management).
+**Tests:** 297 unit + 8 e2e passing as of B-010.
 
 ---
 
@@ -101,6 +101,22 @@ Everything that writes `Unit.status` goes through `recomputeUnitStatus()`; a dir
 **Left behind:** `overlocked` has no source — the delinquency engine (B-057) and field ops (B-060) populate it, so the adapter passes `false` and no unit can currently be overlocked. Modeled now anyway because it outranks `occupied`, and retrofitting precedence later is how display bugs start. No reconciliation job either: nothing can currently cause drift, so one would be guarding against an impossibility.
 
 **Found:** the drift check caught an index I wrote in raw SQL but never declared in `schema.prisma`. Now declared with an explicit `map:` pinning the migration's name.
+
+### B-010 (2 of 2) — Unit inventory: views, import, bulk edit ✅ `pending`
+
+List and grid views at `/admin/units` (types moved to `/admin/units/types`), JSON layout import, and bulk edit with preview. Completes US-5/US-7/US-8.
+
+**Decided:** one filter definition (`lib/admin/unit-query.ts`) backs the list, the grid, and bulk operations — that shared selector is what makes "select by filter → bulk edit" safe, because the rows the operator saw are provably the rows the operation considers. Preview and apply run the *same* evaluator for the same reason: two implementations would eventually disagree, and a preview that lies is worse than no preview. Apply re-evaluates rather than trusting a round-tripped preview, since a lease can be signed in between.
+
+Bulk edits land as one audit entry anchored to the facility with per-unit detail inside (US-7's wording). Trade-off recorded: filtering the audit log by a single unit will not surface a bulk edit that touched it.
+
+Layout import is all-or-nothing — if any row names an unknown unit type, nothing is written. A half-imported layout is worse than none because you cannot tell by looking which half landed. It never touches `status` or `operationalStatus`: a layout describes geometry, not occupancy.
+
+Status colours follow the US-5 AC, but colour is never the only signal — every badge carries its label and `unrentable` gets its AC-specified hatch, so the six states survive WCAG 1.4.1.
+
+**Left behind:** the interactive map with zoom/pan and the drag-to-place layout editor are P2 by the AC's own phasing; grid is the MVP fallback. No unit *detail panel* yet — the list exposes status changes inline, and the panel's richer content (tenant, balance, quick actions) needs entities that arrive with B-026/B-038. `occupancyFactsForMany` replaced an N+1 that would have run two queries per unit during a 500-unit bulk operation.
+
+**Found:** a user-facing copy bug — the block message read "Unit has a active lease". Rephrased so no lease status can produce a wrong article.
 
 ---
 

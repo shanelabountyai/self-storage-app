@@ -1,52 +1,98 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import type { ManualUnitStatus } from '@storage/core/inventory'
 import { requireStaffActor } from '@/lib/rbac/session'
-import { cloneUnitType, createUnitType, updateUnitType, type UnitTypeInput } from '@/lib/admin/unit-types'
+import { createUnit, setUnitOperationalStatus } from '@/lib/admin/units'
+import { applyBulkOperation, type BulkUnitOperation } from '@/lib/admin/units-bulk'
+import { applyLayoutImport } from '@/lib/admin/unit-layout'
+import type { UnitFilters } from '@/lib/admin/unit-query'
 
-function readUnitTypeInput(formData: FormData): UnitTypeInput {
-  const heightFt = String(formData.get('heightFt') ?? '').trim()
+function readFilters(formData: FormData): UnitFilters {
+  const floor = String(formData.get('filterFloor') ?? '')
   return {
-    name: String(formData.get('name')),
-    widthFt: Number(formData.get('widthFt')),
-    lengthFt: Number(formData.get('lengthFt')),
-    heightFt: heightFt ? Number(heightFt) : null,
-    climateControlled: formData.get('climateControlled') != null,
-    driveUp: formData.get('driveUp') != null,
-    floor: Number(formData.get('floor') || 1),
-    powerAvailable: formData.get('powerAvailable') != null,
-    description: String(formData.get('description') || '') || null,
-    // Entered in dollars; stored in cents, per the money-is-cents convention.
-    streetRateCents: Math.round(Number(formData.get('streetRateDollars')) * 100),
-    webRateCents: Math.round(Number(formData.get('webRateDollars')) * 100),
+    status: (String(formData.get('filterStatus') ?? '') || undefined) as UnitFilters['status'],
+    unitTypeId: String(formData.get('filterUnitTypeId') ?? '') || undefined,
+    building: String(formData.get('filterBuilding') ?? '') || undefined,
+    floor: floor ? Number(floor) : undefined,
+    search: String(formData.get('filterSearch') ?? '') || undefined,
   }
 }
 
-export async function createUnitTypeAction(formData: FormData) {
+function readOperation(formData: FormData): BulkUnitOperation {
+  const kind = String(formData.get('operationKind'))
+  if (kind === 'status') {
+    return { kind: 'status', operationalStatus: String(formData.get('operationalStatus')) as ManualUnitStatus }
+  }
+  if (kind === 'unitType') {
+    return { kind: 'unitType', unitTypeId: String(formData.get('targetUnitTypeId')) }
+  }
+  const building = String(formData.get('targetBuilding') ?? '')
+  const floor = String(formData.get('targetFloor') ?? '')
+  const doorType = String(formData.get('targetDoorType') ?? '')
+  return {
+    kind: 'attributes',
+    ...(building !== '' && { building: building === '—' ? null : building }),
+    ...(floor !== '' && { floor: Number(floor) }),
+    ...(doorType !== '' && { doorType: doorType === '—' ? null : doorType }),
+  }
+}
+
+export async function createUnitAction(formData: FormData) {
   const actor = await requireStaffActor()
   const facilityId = String(formData.get('facilityId'))
 
-  await createUnitType(actor, facilityId, readUnitTypeInput(formData))
+  await createUnit(actor, facilityId, {
+    unitTypeId: String(formData.get('unitTypeId')),
+    number: String(formData.get('number')),
+    building: String(formData.get('building') || '') || null,
+    floor: Number(formData.get('floor') || 1),
+    doorType: String(formData.get('doorType') || '') || null,
+    notes: null,
+  })
 
   revalidatePath('/admin/units')
 }
 
-export async function updateUnitTypeAction(formData: FormData) {
+export async function setUnitStatusAction(formData: FormData) {
   const actor = await requireStaffActor()
-  const facilityId = String(formData.get('facilityId'))
-  const unitTypeId = String(formData.get('unitTypeId'))
 
-  await updateUnitType(actor, facilityId, unitTypeId, readUnitTypeInput(formData))
+  await setUnitOperationalStatus(
+    actor,
+    String(formData.get('facilityId')),
+    String(formData.get('unitId')),
+    String(formData.get('operationalStatus')),
+    String(formData.get('reasonCode') || 'management_approval'),
+  )
 
   revalidatePath('/admin/units')
 }
 
-export async function cloneUnitTypeAction(formData: FormData) {
+/// Confirmed apply. The preview itself is a GET (search params) so it can be
+/// re-rendered and linked without a mutation — only this crosses the line.
+export async function applyBulkAction(formData: FormData) {
   const actor = await requireStaffActor()
-  const sourceUnitTypeId = String(formData.get('unitTypeId'))
-  const targetFacilityId = String(formData.get('targetFacilityId'))
 
-  await cloneUnitType(actor, sourceUnitTypeId, targetFacilityId)
+  await applyBulkOperation(
+    actor,
+    String(formData.get('facilityId')),
+    readFilters(formData),
+    readOperation(formData),
+    String(formData.get('reasonCode') || 'management_approval'),
+  )
+
+  revalidatePath('/admin/units')
+}
+
+export async function applyLayoutImportAction(formData: FormData) {
+  const actor = await requireStaffActor()
+
+  await applyLayoutImport(
+    actor,
+    String(formData.get('facilityId')),
+    String(formData.get('layoutJson')),
+    String(formData.get('reasonCode') || 'management_approval'),
+  )
 
   revalidatePath('/admin/units')
 }
