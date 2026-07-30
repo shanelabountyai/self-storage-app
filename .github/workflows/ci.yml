@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      # The app never talks to a real database in CI; these only satisfy the
+      # datasource block and dotenv-cli. Real values live in Vercel/GitHub
+      # secrets (master PRD §7.4).
+      - name: Provision CI env
+        run: |
+          {
+            echo 'DATABASE_URL=postgresql://ci:ci@localhost:5432/ci'
+            echo 'DIRECT_URL=postgresql://ci:ci@localhost:5432/ci'
+          } > .env.local
+
+      - run: npm run db:generate
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run test
+      - run: npm run build
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      # Covers the axe accessibility scan (master PRD §7.2) and the smoke suite.
+      - name: End-to-end + axe
+        run: npm run test:e2e
+
+      # Core Web Vitals budgets from master PRD §7.3, asserted in lighthouserc.json.
+      - name: Lighthouse
+        run: npx lhci autorun
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
+      # Reported, not enforced: the current advisories come from version pins
+      # inside next and eslint that we cannot override without breaking the
+      # dependency tree. See _overrides_note in package.json.
+      - name: Dependency audit (report only)
+        continue-on-error: true
+        run: npm audit --audit-level=moderate

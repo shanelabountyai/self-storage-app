@@ -1,0 +1,26 @@
+// Shared schema for the whole platform (master PRD §7.5).
+// B-001 wires Prisma up; B-002 adds the entities.
+//
+// Conventions for B-002 onward:
+//   - money is Int (cents), never Float/Decimal
+//   - all timestamps are UTC (@db.Timestamptz), displayed in facility-local time
+//   - every table representing physical or financial reality carries facilityId,
+//     directly or through its parent (master PRD §7.6)
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/client"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+/// Placeholder so `prisma generate` has a model to emit. B-002 replaces this
+/// with the real entities (Facility, UnitType, Unit, Tenant, Lease, ...).
+model HealthCheck {
+  id        String   @id @default(cuid())
+  checkedAt DateTime @default(now()) @db.Timestamptz(6)
+}

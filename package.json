@@ -1,0 +1,43 @@
+{
+  "name": "storage-platform",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "dotenv -e .env.local -- npm run dev -w web",
+    "build": "dotenv -e .env.local -- npm run build -w web",
+    "start": "dotenv -e .env.local -- npm run start -w web",
+    "lint": "npm run lint -w web",
+    "typecheck": "npm run typecheck -w web",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "db:generate": "dotenv -e .env.local -- prisma generate --schema packages/db/prisma/schema.prisma",
+    "db:migrate": "dotenv -e .env.local -- prisma migrate dev --schema packages/db/prisma/schema.prisma",
+    "db:studio": "dotenv -e .env.local -- prisma studio --schema packages/db/prisma/schema.prisma"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.10.2",
+    "@lhci/cli": "^0.15.1",
+    "@playwright/test": "^1.56.1",
+    "dotenv-cli": "^10.0.0",
+    "prisma": "^6.19.0",
+    "vitest": "^3.2.4"
+  },
+  "_overrides_note": "Only transitive deps we can bump without putting the tree in an `invalid` state. Left alone deliberately: postcss/sharp (pinned by next), brace-expansion (minimatch@3 requires the 1.x line). `npm audit` runs in CI so the inherited advisories stay visible; they clear when next and eslint ship bumps.",
+  "overrides": {
+    "tmp": "^0.2.5",
+    "uuid": "^11.1.1"
+  },
+  "allowScripts": {
+    "@prisma/client": true,
+    "@prisma/engines": true,
+    "esbuild": true,
+    "prisma": true,
+    "sharp": true,
+    "unrs-resolver": true
+  }
+}

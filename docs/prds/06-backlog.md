@@ -6,7 +6,7 @@
 
 This is the single, strictly-ordered build backlog for the whole platform. Items are sequenced so that every item is buildable when reached (all dependencies appear earlier), foundation comes first, and the shortest path runs to the two golden paths: **(1) a renter completes an online move-in with payment and receives a simulated gate code** (end of Milestone 2) and **(2) the billing engine invoices tenants and the comms module sends payment/past-due reminders** (end of Milestone 4). Numbering is global and continuous across milestones.
 
-Sizes: **S** ≈ one short session, **M** ≈ one focused session, **L** ≈ 2–3 sessions or one long one, **XL** ≈ should be split during sprint planning. Phase = the phase the feature belongs to per the PRDs (master PRD wins on conflicts — see Flagged gaps/conflicts).
+Sizes: **S** ≈ one short session, **M** ≈ one focused session, **L** ≈ 2–3 sessions or one long one, **XL** ≈ should be split during sprint planning. Phase = the phase the feature belongs to per the PRDs (master PRD wins on conflicts — see Flagged gaps/conflicts). A ✅ on the ID means the item is built and committed.
 
 ---
 
@@ -16,7 +16,7 @@ Everything else builds on this: repo, schema, auth, RBAC, jobs/events, and the f
 
 | # | ID | Item | PRD/Feature | Size | Depends on | Phase |
 |---|---|---|---|---|---|---|
-| 1 | B-001 | Monorepo & app scaffold: Next.js (App Router) + TypeScript, Tailwind/shadcn, Prisma + Postgres, Vitest/Playwright, CI (incl. axe + Lighthouse hooks), env/secret handling | PRD 00 §5 Tech Stack, §7.2–7.4 | M | — | MVP |
+| 1 | B-001 ✅ | Monorepo & app scaffold: Next.js (App Router) + TypeScript, Tailwind/shadcn, Prisma + Postgres, Vitest/Playwright, CI (incl. axe + Lighthouse hooks), env/secret handling | PRD 00 §5 Tech Stack, §7.2–7.4 | M | — | MVP |
 | 2 | B-002 | Core data model & migrations: Facility, UnitType, Unit, Tenant, Lease, Invoice/LineItem, Payment, LedgerEntry, AccessCredential/AccessGrant, Reservation, Lead, Promotion, Notice, AuditLog, StaffUser — money as integer cents, facility_id everywhere | PRD 00 §7.5–7.6 Data Model; PRD 02 §6.1 | L | B-001 | MVP |
 | 3 | B-003 | Auth foundation: Auth.js sessions for customers (email/password + magic link) and staff; rate-limited login, password reset | PRD 00 §7.1 Auth; PRD 01 FR-5 | M | B-002 | MVP |
 | 4 | B-004 | RBAC roles-as-data (tenant/counter/manager/regional/owner/system) + server-side facility scoping on every endpoint; monetary authority limits config | PRD 00 §7.1; PRD 02 §3 Roles & Permissions | M | B-003 | MVP |
