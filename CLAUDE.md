@@ -14,5 +14,6 @@ Multi-facility self-storage platform. Learning project, built to professional st
 - Accessibility: WCAG 2.1 AA is an acceptance criterion on customer-facing work, not a later cleanup.
 - After completing a backlog item, in this order: run tests → mark the item ✅ in `docs/prds/06-backlog.md` → add its entry to `docs/PROGRESS.md` → commit.
 - `docs/PROGRESS.md` is the running narrative of what has been built. One entry per completed item, with its commit SHA and three things: **what it built**, **what it decided** (choices a later session must not silently reverse), and **what it left behind** (deliberate gaps and which item owns them). Note any real bug found along the way. Keep it factual — it is a record, not a changelog of intentions.
+- Record the SHA in a small follow-up commit, not by amending. Amending changes the SHA you just wrote down, leaving `PROGRESS.md` pointing at a commit that no longer exists.
 - Also update the same-day PRD when an item settles something the PRD left open, and append owner decisions to `07-decisions.md` with a new D-number rather than resolving them silently.
 - Commit after every completed item with a message like `B-012: unit CRUD`.

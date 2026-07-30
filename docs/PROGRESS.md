@@ -9,8 +9,8 @@ This is the **narrative** record — what exists, what it decided, and what a la
 - `git log` — the change-by-change record
 - `README.md` — how the built thing works today
 
-**Status:** Milestone 1 (Foundation) in progress — B-001 through B-009 done, B-010 in progress.
-**Tests:** 227 unit + 8 e2e passing as of B-009.
+**Status:** Milestone 1 (Foundation) in progress — B-001 through B-009 done; B-010 session 1 of 2 done.
+**Tests:** 274 unit + 8 e2e passing as of B-010 session 1.
 
 ---
 
@@ -88,7 +88,7 @@ Per-facility unit types with dimensions, floor, climate/drive-up/power, and clon
 
 **Found:** `tests/schema-invariants.test.ts` only ever read the *first* migration file, so every hand-written constraint added across five later migrations had zero regression protection. Now scans all migrations and pins 25 names.
 
-### B-010 (1 of 2) — Unit inventory: rules layer ✅ `a24f36a`
+### B-010 (1 of 2) — Unit inventory: rules layer ✅ `64d6e86`
 
 Split into two sessions — the backlog sizes B-010 as M, but it is four distinct things. This session is the rules layer: derived status engine, unit CRUD, list + filters. Session 2 is the grid view, JSON layout import, and bulk edit with preview.
 
