@@ -169,6 +169,30 @@ Billing, …) render through one dynamic route,
 [app/admin/\[section\]/page.tsx](apps/web/app/admin/[section]/page.tsx), rather
 than ten placeholder folders.
 
+## Facility settings
+
+`/admin/settings` (PRD 02 US-3) edits the currently selected facility — there is
+no "all facilities" bulk edit and no facility-*creation* screen; US-3's story is
+configuring a site that already exists, and nothing else backlogs one either
+(B-012's seed script creates demo facilities directly).
+
+**Tax components and fee schedule are effective-dated (FR-9) and append-only.**
+Changing a rate never edits or deletes a row — it inserts a new one with a later
+`effectiveFrom`. `packages/core/facility-settings/effective-dating.ts` picks
+"whichever row's effectiveFrom is the latest on or before a given date," so a
+past invoice's already-generated line items are never retroactively touched, and
+the full history stays visible (the versioning US-3 asks for) instead of being
+overwritten. Tax rates are stored as basis points (`rateBasisPoints`, hundredths
+of a percent — 8.25% is 825), the same reasoning as money-as-cents applied to
+percentages. Fee amounts follow the normal `...Cents` convention; B-047 adds the
+actual late-fee *rules* (caps, grace periods) on top of this baseline later.
+
+Office and gate hours share one weekly-schedule shape
+(`packages/core/facility-settings/weekly-schedule.ts`), validated on every write
+so a malformed JSON blob can't reach the database. Gate hours are additionally
+exposed at `GET /api/facilities/[facilityId]/gate-hours` — the API contract point
+US-3's AC asks for, for the hardware module to consume once it exists (B-027+).
+
 ## Audit log
 
 `@storage/core/audit` is the only way to write an audit entry. Append-only is

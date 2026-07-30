@@ -3,3 +3,4 @@
 export * from './audit/index.ts'
 export * from './events/index.ts'
 export * from './jobs/index.ts'
+export * from './facility-settings/index.ts'

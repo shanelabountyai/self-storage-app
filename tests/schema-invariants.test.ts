@@ -86,12 +86,22 @@ describe('prisma schema invariants', () => {
     ])
     // Split on camelCase so `generatedAt` doesn't trip on the "rate" inside it.
     const words = (name: string) => name.split(/(?=[A-Z])/).map((w) => w.toLowerCase())
+    // Non-money units that legitimately share a money word: a tax rate in
+    // hundredths of a percent (TaxComponent.rateBasisPoints) is a "rate" but
+    // is never cents.
+    const ACCEPTED_SUFFIXES = ['Cents', 'BasisPoints']
 
     const suspicious = models.flatMap((model) =>
       model.fields
-        .map((field) => ({ field, name: field.split(/\s/)[0] }))
+        .map((field) => {
+          const [name, type] = field.split(/\s+/)
+          return { field, name, type }
+        })
+        // Only scalar Int/Float fields can be money — relation arrays
+        // (FeeSchedule[]) and enum-typed fields (feeType FeeType) can't.
+        .filter(({ type }) => type === 'Int' || type === 'Int?' || type === 'Float' || type === 'Float?')
         .filter(({ name }) => words(name).some((word) => MONEY_WORDS.has(word)))
-        .filter(({ name }) => !name.endsWith('Cents'))
+        .filter(({ name }) => !ACCEPTED_SUFFIXES.some((suffix) => name.endsWith(suffix)))
         .map(({ field }) => `${model.name}.${field}`),
     )
     expect(suspicious).toEqual([])

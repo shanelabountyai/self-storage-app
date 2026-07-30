@@ -9,7 +9,8 @@
     ".": "./index.ts",
     "./audit": "./audit/index.ts",
     "./events": "./events/index.ts",
-    "./jobs": "./jobs/index.ts"
+    "./jobs": "./jobs/index.ts",
+    "./facility-settings": "./facility-settings/index.ts"
   },
   "dependencies": {
     "@storage/db": "*"

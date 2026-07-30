@@ -190,6 +190,13 @@ enum ActorType {
   system
 }
 
+enum FeeType {
+  admin
+  late
+  nsf
+  lien
+}
+
 /// One auth system, two audiences (master PRD §7.1).
 enum AuthAudience {
   tenant
@@ -244,9 +251,56 @@ model Facility {
   staffAssignments  StaffFacilityAssignment[]
   domainEvents      DomainEvent[]
   jobRuns           JobRun[]
+  taxComponents     TaxComponent[]
+  feeSchedules      FeeSchedule[]
 
   @@index([state])
   @@map("facility")
+}
+
+/// A tax jurisdiction component (state/county/city), effective-dated per
+/// PRD 02 US-3/FR-9. Rows are never edited or deleted — "changing a rate" is
+/// inserting a new row with a later effectiveFrom for the same jurisdiction,
+/// so a past invoice's already-generated line items are never touched and a
+/// future invoice picks up whichever row's effectiveFrom is the latest one
+/// on or before its issue date.
+model TaxComponent {
+  id              String   @id @default(cuid())
+  facilityId      String
+  /// Free text, not an enum — jurisdiction names vary by state ("county" in
+  /// Texas, "parish" in Louisiana, etc).
+  jurisdiction    String
+  /// Hundredths of a percent, so 8.25% is stored as 825 — same reasoning as
+  /// money-as-cents: percentages with two decimal places need an integer unit
+  /// to stay exact.
+  rateBasisPoints Int
+  effectiveFrom   DateTime @db.Timestamptz(6)
+  createdAt       DateTime @default(now()) @db.Timestamptz(6)
+
+  facility Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+
+  @@unique([facilityId, jurisdiction, effectiveFrom])
+  @@index([facilityId, jurisdiction, effectiveFrom])
+  @@map("tax_component")
+}
+
+/// Effective-dated per-facility fee amounts (admin/late/NSF/lien), same
+/// append-only versioning as TaxComponent. B-047 later adds late-fee *rules*
+/// (caps, percentage-vs-flat, grace periods) on top of this baseline amount —
+/// deliberately not built here.
+model FeeSchedule {
+  id            String   @id @default(cuid())
+  facilityId    String
+  feeType       FeeType
+  amountCents   Int
+  effectiveFrom DateTime @db.Timestamptz(6)
+  createdAt     DateTime @default(now()) @db.Timestamptz(6)
+
+  facility Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+
+  @@unique([facilityId, feeType, effectiveFrom])
+  @@index([facilityId, feeType, effectiveFrom])
+  @@map("fee_schedule")
 }
 
 model UnitType {
