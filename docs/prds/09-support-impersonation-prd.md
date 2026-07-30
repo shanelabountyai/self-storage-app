@@ -31,14 +31,14 @@ Support conversations stall on "it works for me." A tenant calls saying the pay 
 - **Not a "become the customer" sales tool.** Completing a move-in, signing a lease, or taking a payment *as* a tenant is out of scope permanently, not deferred (see §5.3). Walk-in move-ins have their own flow (PRD 02 US-32 / B-039).
 - **Not shared credentials.** This replaces the "just tell me your password" antipattern; it never involves learning or resetting the subject's password.
 - **Not a data-export tool.** Bulk extraction while impersonating is not a supported workflow; reporting and CSV export have their own permissioned surfaces (PRD 02 §4.11).
-- **Not customer-initiated.** A tenant cannot grant or invite an impersonation session in v1. (Considered in §9.)
+- **Not customer-initiated.** A tenant cannot grant or invite an impersonation session in v1 (deferred, D-13e).
 
 ---
 
 ## 2. Personas
 
 - **Sam (Owner/Admin, master PRD §2.4)** — the "super user" in this feature's sense: holds the `owner` role with an all-facilities assignment. Wants to diagnose an escalated complaint without a screen-share.
-- **Dana (Facility Manager, §2.3)** — front-line support. Fields the "I can't pay" call. Should be able to *look* at a tenant's portal for her own facilities; should not be able to act as anyone, nor look at staff accounts.
+- **Dana (Facility Manager, §2.3)** — front-line support. Fields the "I can't pay" call and today has to escalate it. Under D-13b she does **not** hold impersonation permissions at seed; she is the persona the feature is most likely to be widened to once oversight reporting is live, and the escalation guard (§5.2) is designed so that widening is safe — she would be confined to tenants at her own facilities and could never reach a staff account.
 - **Marcus (Tenant, §2.2)** — the subject. Has a reasonable expectation that account access is limited, purposeful, logged, and disclosed.
 
 ---
@@ -66,12 +66,14 @@ Four new permissions, seeded as data like every other (master §7.1, `packages/d
 
 | Permission | Grants | Seeded to |
 |---|---|---|
-| `impersonation:tenant` | Start a **read-only** session as a tenant | `owner`, `regional` |
+| `impersonation:tenant` | Start a **read-only** session as a tenant | `owner` |
 | `impersonation:staff` | Start a **read-only** session as another staff user | `owner` |
 | `impersonation:write` | Upgrade a session to read-write (still subject to §5.3 hard blocks) | `owner` |
 | `impersonation:oversee` | See all active sessions, force-end someone else's, run the report | `owner` |
 
-Because roles are data, an owner can widen or narrow these without a code change — e.g. granting `impersonation:tenant` to `manager` if front-desk support warrants it. Defaults above are the conservative starting point, not a ceiling.
+**All four are owner-only at seed (D-13b).** This is deliberately tighter than the obvious "regionals field escalations, give it to them too" — because D-13a removed tenant notification, oversight reporting is now the *only* channel through which misuse becomes visible. Start with the smallest surface, get B-092's reporting running, then widen against observed usage.
+
+Because roles are data, widening is a seed change and not a code change: granting `impersonation:tenant` to `regional` or `manager` later requires no migration. Treat that as the expected path once support volume justifies it, not as a redesign.
 
 - **RBAC-I1:** Every permission is enforced server-side on session start **and re-checked on every request during the session**, consistent with the existing rule that a revoked role takes effect immediately rather than at token expiry.
 - **RBAC-I2:** `impersonation:write` is meaningless alone — it only upgrades a session the actor could already start.
@@ -121,14 +123,22 @@ This is G2 made concrete. Without it, impersonation is a privilege-escalation ex
 
 - **FR-14:** A persistent, high-contrast banner is fixed to the viewport for the entire session, naming the subject, the remaining time, the mode (read-only / read-write), and a "Return to my account" control. It is not dismissible.
 - **FR-15:** The banner meets WCAG 2.1 AA (master §7.2) and is announced to assistive technology on entry — a screen-reader user must not be unaware they are impersonating.
-- **FR-16:** Tenants can see staff-access events in their own portal account-activity view.
-- **FR-17:** Tenant notification on access is **configurable, default on** — an email to the tenant that a support session occurred. (See OQ-1: this is a real policy trade-off.)
+- **FR-16:** **Tenants are not notified when staff view their account** (D-13). No email, no SMS, no in-portal alert fires on session start or end. This is a deliberate decision, not an unimplemented feature — do not add "helpful" notification later without amending D-13.
+- **FR-17:** Not notifying changes nothing about the *record*. The `ImpersonationSession` row and the dual-attributed audit entries are written exactly as specified in §6, remain append-only, and remain fully discoverable by an owner, by a regulator, and in any dispute. SR-6 (non-repudiation) is unaffected: the decision is about what the tenant is *pushed*, never about what is *kept*.
+
+> **Revisit if the operating footprint changes.** Texas is the seeded compliance default (D-10) and has no general consumer right-to-know covering this. Several states' privacy regimes — California's CPRA most prominently — take a different view of access disclosure. Because compliance config is per-state by design, expanding outside Texas should re-open this specific question rather than inheriting the Texas answer silently.
 
 ### 5.5 Oversight
 
 - **FR-18:** An owner sees all active sessions and can force-end any of them immediately.
 - **FR-19:** An impersonation report, filterable by impersonator / subject / date / facility and CSV-exportable, mirroring PRD 02 US-38's audit-log surface.
 - **FR-20:** Sessions exceeding a configurable frequency threshold (e.g. one staff member impersonating >N distinct tenants in a day) raise an operational flag. Detecting misuse is a reporting concern, not a blocking one.
+- **FR-21:** Because the tenant is never notified (D-13a/FR-16), oversight is the *only* place misuse surfaces. FR-18–FR-20 are therefore load-bearing rather than nice-to-have, and B-092 should not be deferred indefinitely behind B-091.
+
+### 5.6 Render target
+
+- **FR-22:** An impersonated tenant session renders **the real portal at its real URLs** (D-13d), not a copy embedded in the admin shell. G1 is "reproduce the user's exact view," and the bugs people actually call about — layout, responsive breakpoints, a control that doesn't respond — are exactly the ones an embedded reproduction would hide.
+- **FR-23:** URL segregation is therefore explicitly **not** a security control here. The controls are the persistent banner (FR-14), the service-layer write blocks (FR-11–FR-13), and the escalation guard (§5.2). An implementation must not assume "it's under `/admin`, so it's safe" — the impersonated session lives outside `/admin` by design.
 
 ---
 
@@ -143,13 +153,15 @@ The real identity is **never replaced** — replacing it is precisely how attrib
 
 **Why a row and not just the JWT:** a JWT cannot be revoked, and FR-9/FR-18 both require server-side termination mid-session. This also matches the existing precedent that authority is re-read per request rather than trusted from the token.
 
+**Retention: ≥7 years, matching the audit log (D-13c).** The rows are a few hundred bytes each, and with no tenant notification they carry the accountability trail on their own. A shorter window would strand the audit entries that reference them — you would still know an impersonation occurred, but not its stated reason, its duration, or who ended it, which is most of what an investigation needs. `ImpersonationSession` rows are therefore **not** covered by any shorter former-tenant PII purge; they hold no tenant PII beyond an id reference.
+
 ### 6.2 Audit attribution — schema change required
 
 `AuditLog` currently records a single actor (`actorType`, `actorStaffId`, `actorLabel`). That is insufficient here: an action taken during impersonation has two responsible parties.
 
-- **FR-21:** Add nullable `impersonatorStaffId` and `impersonationSessionId` to `AuditLog`. The **actor stays the subject** (they are who appeared to act); the impersonator is recorded alongside. A log filtered to a tenant still shows what happened to their account, and a log filtered by impersonator shows everything a staff member did while wearing someone else's identity.
-- **FR-22:** New audit actions, both requiring a reason: `impersonation.started`, `impersonation.ended` (recording `endedBy`).
-- **FR-23:** The change is purely additive — two nullable columns — which is compatible with the append-only triggers on `audit_log` (no backfill, no row rewrites).
+- **FR-24:** Add nullable `impersonatorStaffId` and `impersonationSessionId` to `AuditLog`. The **actor stays the subject** (they are who appeared to act); the impersonator is recorded alongside. A log filtered to a tenant still shows what happened to their account, and a log filtered by impersonator shows everything a staff member did while wearing someone else's identity.
+- **FR-25:** New audit actions, both requiring a reason: `impersonation.started`, `impersonation.ended` (recording `endedBy`).
+- **FR-26:** The change is purely additive — two nullable columns — which is compatible with the append-only triggers on `audit_log` (no backfill, no row rewrites).
 
 ### 6.3 Interaction with existing subsystems
 
@@ -180,26 +192,37 @@ The real identity is **never replaced** — replacing it is precisely how attrib
 | Phase | Contents |
 |---|---|
 | **Phase A (core)** | Session model, four permissions, escalation guard, read-only enforcement + hard-block list, banner, dual-attribution audit, start/end/expiry |
-| **Phase B (oversight)** | Active-session list with force-end, impersonation report + CSV, tenant account-activity view, tenant notification, frequency flags |
-| **Later / optional** | `impersonation:write` mode, tenant-initiated support invitations (§9 OQ-4) |
+| **Phase B (oversight)** | Active-session list with force-end, impersonation report + CSV, frequency flags |
+| **Later / optional** | `impersonation:write` mode, tenant-initiated support invitations (D-13e) |
 
 Phase A's dependencies (B-003 auth, B-004 RBAC, B-005 audit) are all built, so it is buildable now. It is nonetheless **internal tooling, not MVP golden-path work** — recommended placement is Phase 2, after the money loop works, unless support pain arrives sooner.
 
-Read-only tenant impersonation is by far the highest value-to-risk slice. If this gets trimmed, keep that and drop everything else.
+Read-only tenant impersonation is by far the highest value-to-risk slice. If this gets trimmed, keep that and drop everything else — but note that D-13a/D-13b make Phase B's reporting the sole misuse-detection channel, so "Phase A only, indefinitely" is not a safe resting state.
 
 ---
 
-## 9. Open Questions
+## 9. Settled decisions
 
-1. **Tenant notification default.** FR-17 proposes default-on. Notifying builds trust and is closer to what privacy-forward SaaS does; it also risks alarming a tenant who just asked for help ("why did I get an email saying someone accessed my account?"). Options: always notify, notify unless the tenant initiated the contact, or notify on write-mode only. **Owner decision required.**
-2. **Does `regional` get `impersonation:tenant` by default?** §4 says yes. The conservative alternative is owner-only until support volume justifies widening.
-3. **Retention of `ImpersonationSession` rows.** The audit entries are ≥7 years by US-38. Should the session rows match, or is a shorter window (e.g. 2 years, aligned with PRD 03 FR-12 access events) sufficient?
-4. **Tenant-initiated support access.** A "grant support access for 1 hour" button in the portal is a genuinely friendlier model and sidesteps most of the privacy question. Deferred, not rejected.
-5. **Lease/privacy-policy disclosure.** This feature implies language stating staff may access an account for support. Drafting it is in scope for whoever builds Phase A; **attorney review is required** before real tenants are impersonated (D-10, Texas default).
-6. **Does impersonation belong on the public site at all,** or admin-only with the portal rendered inside the admin shell? Admin-only is simpler to gate but a less faithful reproduction of what the tenant sees.
+Resolved by the owner 2026-07-30 and recorded as **D-13a–D-13e** in `07-decisions.md`, which takes precedence over anything above that contradicts it. Do not re-open without amending that log.
+
+| Ref | Question | Decision |
+|---|---|---|
+| D-13a | Notify tenants when staff view their account? | **No.** No email, SMS, or in-portal alert. The record is still written in full (FR-16/FR-17). |
+| D-13b | Which roles get impersonation permissions at seed? | **Owner only**, all four. Widen via seed once B-092 reporting is live (§4). |
+| D-13c | Retention of `ImpersonationSession` rows | **≥7 years**, matching the audit log (§6.1). |
+| D-13d | Where does an impersonated portal render? | **The real portal at real URLs**, not embedded in the admin shell (FR-22/FR-23). |
+| D-13e | Tenant-initiated support access | **Deferred**, not rejected — revisit together with D-13a if that is ever reconsidered. |
+
+## 10. Open Questions
+
+1. **Lease/privacy-policy disclosure.** This feature implies language stating staff may access an account for support. Drafting it is in scope for whoever builds Phase A; **attorney review is required** before real staff view real tenant accounts (D-10, Texas default). This is a task with a legal dependency, not a design choice.
+2. **Should `impersonation:write` ship at all?** §8 lists it as "later / optional." Every troubleshooting case identified so far is satisfied by read-only. If no concrete need appears by the time Phase B lands, the honest move is to delete the permission rather than carry an unused write path through the codebase.
+3. **Frequency-flag threshold (FR-20).** "More than N distinct subjects per day" needs a real N, which needs observed usage. Ship Phase B with a conservative default and tune.
 
 ---
 
-## 10. Acceptance Summary
+## 11. Acceptance Summary
 
-The feature is done when a manager can answer "what does this tenant actually see?" in under a minute, and an owner can answer "who looked at this account, when, why, and what did they do?" from an append-only record — while it remains provably impossible for that manager to acquire authority they did not already have.
+The feature is done when an owner can answer "what does this tenant actually see?" in under a minute, and can separately answer "who looked at this account, when, why, and what did they do?" from an append-only record — while it remains provably impossible for *any* impersonator, at any role, to acquire authority they did not already hold.
+
+(The first question is deliberately an owner's to answer for now, not a manager's — D-13b. The escalation guard in §5.2 is what makes widening to `regional`/`manager` a seed change rather than a security review.)

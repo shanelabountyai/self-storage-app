@@ -161,7 +161,7 @@ Added 2026-07-30, after the original 90 were sequenced. Appended rather than ins
 | # | ID | Item | PRD/Feature | Size | Depends on | Phase |
 |---|---|---|---|---|---|---|
 | 91 | B-091 | Support impersonation core: `ImpersonationSession` model, four permissions, escalation guard (rank + facility-scope subset), read-only enforcement with the permanent hard-block list, persistent banner, dual-attribution audit (`impersonatorStaffId` on AuditLog), start/end/expiry | PRD 09 §5–7 Phase A | L | B-003, B-004, B-005 | Phase 2 |
-| 92 | B-092 | Impersonation oversight: active-session list with force-end, impersonation report + CSV export, tenant account-activity view, tenant access notification, frequency flags | PRD 09 §5.5, §8 Phase B | M | B-091 | Phase 2 |
+| 92 | B-092 | Impersonation oversight: active-session list with force-end, impersonation report + CSV export, frequency flags. **No tenant notification and no tenant-facing activity view** (D-13a) — which makes this the *only* misuse-detection channel, so it should not trail B-091 indefinitely | PRD 09 §5.5, §8 Phase B | M | B-091 | Phase 2 |
 
 ---
 
