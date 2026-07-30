@@ -40,7 +40,13 @@ const NO_FACILITY_ID: Record<string, string> = {
   Permission: 'org-level reference data',
   RolePermission: 'join over two org-level tables',
   StaffFacilityAssignment: 'facilityId is nullable — null grants every facility',
+  EventDelivery: 'scoped through the domain event it delivers',
 }
+
+/// Calendar dates, not instants. A business date is a facility-local day with
+/// no meaningful time component, so Timestamptz would imply precision it does
+/// not have. Anything added here must genuinely be a date rather than a moment.
+const CALENDAR_DATE_FIELDS = new Set(['JobRun.businessDate'])
 
 describe('prisma schema invariants', () => {
   it('parses the expected number of models', () => {
@@ -96,9 +102,20 @@ describe('prisma schema invariants', () => {
       model.fields
         .filter((field) => /^\w+\s+DateTime\b/.test(field))
         .filter((field) => !field.includes('@db.Timestamptz(6)'))
+        .filter((field) => !CALENDAR_DATE_FIELDS.has(`${model.name}.${field.split(/\s/)[0]}`))
         .map((field) => `${model.name}.${field}`),
     )
     expect(offenders).toEqual([])
+  })
+
+  it('declares calendar-date fields as @db.Date, not a bare DateTime', () => {
+    for (const qualified of CALENDAR_DATE_FIELDS) {
+      const [modelName, fieldName] = qualified.split('.')
+      const field = models
+        .find((m) => m.name === modelName)!
+        .fields.find((f) => f.startsWith(`${fieldName} `))
+      expect(field, qualified).toContain('@db.Date')
+    }
   })
 
   it('scopes every facility-bound model by facilityId', () => {

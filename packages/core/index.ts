@@ -1,3 +1,5 @@
-// Shared domain logic (master PRD §5). Audit is the first resident; billing and
-// lease logic join it as those items are built.
+// Shared domain logic (master PRD §5). Billing and lease logic join these as
+// those items are built.
 export * from './audit/index'
+export * from './events/index'
+export * from './jobs/index'

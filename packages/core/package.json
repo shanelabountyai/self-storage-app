@@ -7,7 +7,9 @@
   "types": "./index.ts",
   "exports": {
     ".": "./index.ts",
-    "./audit": "./audit/index.ts"
+    "./audit": "./audit/index.ts",
+    "./events": "./events/index.ts",
+    "./jobs": "./jobs/index.ts"
   },
   "dependencies": {
     "@storage/db": "*"

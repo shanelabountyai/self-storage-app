@@ -11,7 +11,7 @@ Product specs live in [docs/prds/](docs/prds/). Build order is
 ```
 apps/web        Next.js App Router — public site, tenant portal, admin (role-gated routes)
 packages/db     Prisma schema + generated client, shared by every surface
-packages/core   Shared domain logic — audit today, billing and lease logic later
+packages/core   Shared domain logic — audit, events, jobs; billing and lease logic later
 docs/prds       Product requirements, backlog, decision log
 e2e             Playwright specs (smoke + axe accessibility)
 tests           Vitest unit tests
@@ -163,6 +163,52 @@ await recordAudit({
   `npm test` leaves entries behind in the dev database. That is correct behaviour.
 - **Retention is ≥7 years** and there is deliberately no in-band purge. When one is
   needed it requires dropping the trigger — see the migration for the procedure.
+
+## Events and background jobs
+
+Vercel Cron hits `/api/cron` **hourly** ([vercel.json](vercel.json)), guarded by a
+`CRON_SECRET` bearer token — the route rejects everything when that is unset.
+Master §5 offers Vercel Cron as the MVP option; there is no Inngest or
+Trigger.dev account to manage and nothing extra to run locally.
+
+Hourly, not nightly, because nightly jobs run in **facility-local** time
+(PRD 02 FR-4). Each tick asks which facilities have just reached their target
+local hour, which is DST-safe for free: the 2am that doesn't exist in spring and
+the 1am that happens twice in autumn both produce exactly one run.
+
+**Transactional outbox.** Pass the transaction client so the event and the change
+it describes commit together:
+
+```ts
+await prisma.$transaction(async (tx) => {
+  const lease = await tx.lease.update({ where: { id }, data: { status: 'ended' } })
+  await emitEvent({ name: 'lease.moved_out', entityType: 'Lease', entityId: lease.id, facilityId }, tx)
+})
+```
+
+An event never describes a rolled-back change, and a committed change never loses
+its event. Names come from the catalog in
+[events/catalog.ts](packages/core/events/catalog.ts); an unknown name throws at the
+emit site rather than silently never firing a consumer.
+
+**Delivery is at-least-once.** A handler that succeeds and then crashes before its
+row is marked will run again — consumers must be idempotent. Exclusivity comes from
+the unique index on `(eventId, consumer)`, so no advisory locks are involved.
+Failures retry with exponential backoff (1m/5m/25m/60m) and dead-letter after 5
+attempts rather than looping forever; `deadLetters()` surfaces them until B-054
+turns them into staff tasks.
+
+**Jobs are idempotent by constraint**, not by check-then-act: `JobRun` is unique on
+`(jobName, facilityId, businessDate)`, so two workers racing the same nightly run
+means one loses the insert and skips. A failed *item* leaves the run `partial` —
+one bad lease can't stop the other 799. `force: true` re-runs a date for admin
+re-runnability, reusing the same row.
+
+`CONSUMERS` and `SCHEDULED_JOBS` in
+[lib/jobs/registry.ts](apps/web/lib/jobs/registry.ts) are intentionally empty —
+this item is the machinery. Reservation expiry (B-018), Stripe reconciliation
+(B-019), gate commands (B-027), comms (B-030), and the billing scheduler (B-043)
+register themselves as they're built.
 
 ## Conventions
 
