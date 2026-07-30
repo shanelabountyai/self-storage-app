@@ -1,11 +1,17 @@
-// Shared schema for the whole platform (master PRD §7.5).
-// B-001 wires Prisma up; B-002 adds the entities.
+// Shared schema for the whole platform — master PRD §7.5 (canonical entity
+// names) and §7.6 (multi-facility by default).
 //
-// Conventions for B-002 onward:
-//   - money is Int (cents), never Float/Decimal
-//   - all timestamps are UTC (@db.Timestamptz), displayed in facility-local time
+// Invariants enforced repo-wide by tests/schema-invariants.test.ts:
+//   - money is Int cents, and every money field is named `...Cents`
 //   - every table representing physical or financial reality carries facilityId,
-//     directly or through its parent (master PRD §7.6)
+//     directly or through its parent
+//   - every timestamp is @db.Timestamptz(6) and stored UTC; facility-local time
+//     is a display concern only
+//
+// Scope note: this is B-002. Entities owned by later items are deliberately
+// absent — RoleAssignment (B-004), effective-dated tax/fee schedules (B-008),
+// street-rate history (B-011), promo codes and redemptions (B-070),
+// DelinquencyTimeline and AuctionRecord (Milestone 5), DrawerSession (B-078).
 
 generator client {
   provider = "prisma-client-js"
@@ -18,9 +24,700 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
-/// Placeholder so `prisma generate` has a model to emit. B-002 replaces this
-/// with the real entities (Facility, UnitType, Unit, Tenant, Lease, ...).
-model HealthCheck {
-  id        String   @id @default(cuid())
-  checkedAt DateTime @default(now()) @db.Timestamptz(6)
+// ---------------------------------------------------------------- enums ----
+
+enum FacilityStatus {
+  active
+  inactive
+}
+
+enum UnitStatus {
+  available
+  reserved
+  occupied
+  overlocked
+  maintenance
+  unrentable
+}
+
+enum LeaseStatus {
+  pending
+  active
+  delinquent
+  pending_auction
+  ended
+}
+
+enum InvoiceStatus {
+  draft
+  open
+  partially_paid
+  paid
+  void
+  uncollectible
+}
+
+enum LineItemType {
+  rent
+  fee
+  protection
+  tax
+  discount
+}
+
+enum PaymentMethod {
+  card
+  ach
+  cash
+  check
+  money_order
+}
+
+enum PaymentStatus {
+  pending
+  succeeded
+  failed
+  refunded
+  partially_refunded
+}
+
+/// Signed amounts: charge/refund are positive, payment/credit/write_off negative.
+/// Posted entries are never edited — corrections are reversing entries (PRD 02 FR-8).
+enum LedgerEntryType {
+  charge
+  payment
+  credit
+  refund
+  adjustment
+  write_off
+}
+
+enum AccessGrantState {
+  pending
+  active
+  suspended
+  revoked
+}
+
+enum AccessCredentialType {
+  pin
+  mobile_key
+}
+
+enum AccessCredentialState {
+  active
+  suspended
+  revoked
+}
+
+enum HardwareSyncStatus {
+  pending
+  synced
+  failed
+}
+
+enum ReservationStatus {
+  held
+  converted
+  cancelled
+  expired
+}
+
+enum LeadStatus {
+  new
+  contacted
+  reserved
+  converted
+  lost
+}
+
+enum PromotionType {
+  percent_off
+  amount_off
+  free_months
+}
+
+enum PromotionStatus {
+  draft
+  active
+  paused
+  ended
+}
+
+enum PromotionDisplayMode {
+  auto
+  code
+}
+
+enum NoticeType {
+  late_notice
+  pre_lien
+  lien
+  auction
+  rate_change
+  move_out
+}
+
+enum NoticeStatus {
+  draft
+  generated
+  delivered
+  failed
+}
+
+/// Marketing channels require opt-in; account channels are transactional but
+/// still respect global suppression (PRD 04 FR-MSG-1, PRD 05 §199).
+enum ConsentChannel {
+  marketing_email
+  marketing_sms
+  account_email
+  account_sms
+}
+
+enum ConsentState {
+  granted
+  revoked
+}
+
+enum StaffUserStatus {
+  active
+  suspended
+}
+
+enum ActorType {
+  staff
+  tenant
+  system
+}
+
+// ------------------------------------------------------------ inventory ----
+
+model Facility {
+  id           String         @id @default(cuid())
+  name         String
+  /// URL segment for location pages; SEO-sensitive, see PRD 04 OQ-7.
+  slug         String         @unique
+  status       FacilityStatus @default(active)
+  addressLine1 String
+  addressLine2 String?
+  city         String
+  /// Two-letter code. Drives compliance config; Texas is the seeded default (D-10).
+  state        String
+  postalCode   String
+  country      String         @default("US")
+  latitude     Float?
+  longitude    Float?
+  /// IANA name, e.g. "America/Chicago". All display time is derived from this.
+  timezone     String
+  phone        String?
+  email        String?
+  /// Weekly schedules land in B-008; held as JSON until that item defines them.
+  officeHours  Json?
+  gateHours    Json?
+  amenities    String[]       @default([])
+  createdAt    DateTime       @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime       @updatedAt @db.Timestamptz(6)
+
+  unitTypes         UnitType[]
+  units             Unit[]
+  leases            Lease[]
+  invoices          Invoice[]
+  payments          Payment[]
+  ledgerEntries     LedgerEntry[]
+  accessGrants      AccessGrant[]
+  accessCredentials AccessCredential[]
+  reservations      Reservation[]
+  leads             Lead[]
+  notices           Notice[]
+  auditLogs         AuditLog[]
+
+  @@index([state])
+  @@map("facility")
+}
+
+model UnitType {
+  id                String   @id @default(cuid())
+  facilityId        String
+  name              String
+  widthFt           Int
+  lengthFt          Int
+  heightFt          Int?
+  climateControlled Boolean  @default(false)
+  driveUp           Boolean  @default(false)
+  floor             Int      @default(1)
+  powerAvailable    Boolean  @default(false)
+  description       String?
+  /// Current published rates. Effective-dated history arrives in B-011.
+  streetRateCents   Int
+  webRateCents      Int
+  createdAt         DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime @updatedAt @db.Timestamptz(6)
+
+  facility     Facility      @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  units        Unit[]
+  reservations Reservation[]
+  leads        Lead[]
+
+  @@unique([facilityId, name])
+  @@index([facilityId])
+  @@map("unit_type")
+}
+
+model Unit {
+  id         String     @id @default(cuid())
+  facilityId String
+  unitTypeId String
+  number     String
+  floor      Int        @default(1)
+  doorType   String?
+  status     UnitStatus @default(available)
+  /// Coordinates for the grid/map view (B-010).
+  mapX       Float?
+  mapY       Float?
+  notes      String?
+  createdAt  DateTime   @default(now()) @db.Timestamptz(6)
+  updatedAt  DateTime   @updatedAt @db.Timestamptz(6)
+
+  facility     Facility      @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  unitType     UnitType      @relation(fields: [unitTypeId], references: [id], onDelete: Restrict)
+  leases       Lease[]
+  reservations Reservation[]
+
+  @@unique([facilityId, number])
+  @@index([facilityId, status])
+  @@index([unitTypeId])
+  @@map("unit")
+}
+
+// --------------------------------------------------------- people/leases ----
+
+model Tenant {
+  id              String    @id @default(cuid())
+  email           String    @unique
+  phone           String?
+  firstName       String
+  lastName        String
+  addressLine1    String?
+  addressLine2    String?
+  city            String?
+  state           String?
+  postalCode      String?
+  country         String?   @default("US")
+  altContactName  String?
+  altContactPhone String?
+  altContactEmail String?
+  createdAt       DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @db.Timestamptz(6)
+  /// Soft delete only (PRD 02 FR-10); hard delete is never exposed.
+  deletedAt       DateTime? @db.Timestamptz(6)
+  /// Optimistic locking (PRD 02 FR-11).
+  version         Int       @default(0)
+
+  leases       Lease[]
+  payments     Payment[]
+  accessGrants AccessGrant[]
+  reservations Reservation[]
+  leads        Lead[]
+  consents     Consent[]
+
+  @@index([lastName, firstName])
+  @@map("tenant")
+}
+
+model Lease {
+  id                 String      @id @default(cuid())
+  facilityId         String
+  tenantId           String
+  unitId             String
+  status             LeaseStatus @default(pending)
+  startDate          DateTime    @db.Timestamptz(6)
+  endDate            DateTime?   @db.Timestamptz(6)
+  monthlyRateCents   Int
+  /// Day of month rent is billed, 1–28 to stay valid in every month.
+  billingDay         Int
+  protectionPlanName String?
+  protectionCents    Int         @default(0)
+  /// Set when the tenant waives protection, with the attestation text shown.
+  protectionWaivedAt DateTime?   @db.Timestamptz(6)
+  signedDocumentUrl  String?
+  signedDocumentHash String?
+  signedAt           DateTime?   @db.Timestamptz(6)
+  createdAt          DateTime    @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime    @updatedAt @db.Timestamptz(6)
+  deletedAt          DateTime?   @db.Timestamptz(6)
+  version            Int         @default(0)
+
+  facility          Facility           @relation(fields: [facilityId], references: [id], onDelete: Restrict)
+  tenant            Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  unit              Unit               @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  invoices          Invoice[]
+  ledgerEntries     LedgerEntry[]
+  accessCredentials AccessCredential[]
+  notices           Notice[]
+
+  @@index([facilityId, status])
+  @@index([tenantId])
+  @@index([unitId])
+  @@map("lease")
+}
+
+// -------------------------------------------------------------- billing ----
+
+model Invoice {
+  id              String        @id @default(cuid())
+  facilityId      String
+  leaseId         String
+  /// Gapless and sequential per facility; the numbering service is B-044.
+  number          String
+  status          InvoiceStatus @default(draft)
+  issueDate       DateTime      @db.Timestamptz(6)
+  dueDate         DateTime      @db.Timestamptz(6)
+  subtotalCents   Int           @default(0)
+  taxCents        Int           @default(0)
+  discountCents   Int           @default(0)
+  totalCents      Int           @default(0)
+  amountPaidCents Int           @default(0)
+  createdAt       DateTime      @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime      @updatedAt @db.Timestamptz(6)
+
+  facility      Facility            @relation(fields: [facilityId], references: [id], onDelete: Restrict)
+  lease         Lease               @relation(fields: [leaseId], references: [id], onDelete: Restrict)
+  lineItems     InvoiceLineItem[]
+  allocations   PaymentAllocation[]
+  ledgerEntries LedgerEntry[]
+
+  @@unique([facilityId, number])
+  @@index([leaseId, dueDate])
+  @@index([facilityId, status])
+  @@map("invoice")
+}
+
+model InvoiceLineItem {
+  id              String       @id @default(cuid())
+  invoiceId       String
+  type            LineItemType
+  description     String
+  quantity        Int          @default(1)
+  unitAmountCents Int
+  amountCents     Int
+  createdAt       DateTime     @default(now()) @db.Timestamptz(6)
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@map("invoice_line_item")
+}
+
+model Payment {
+  id                    String        @id @default(cuid())
+  facilityId            String
+  tenantId              String
+  amountCents           Int
+  method                PaymentMethod
+  status                PaymentStatus @default(pending)
+  /// Token only — card data never touches our servers (master PRD §7.4).
+  stripePaymentIntentId String?       @unique
+  /// Cash drawer detail; the drawer session itself is B-078.
+  tenderedCents         Int?
+  changeCents           Int?
+  checkNumber           String?
+  receivedAt            DateTime      @default(now()) @db.Timestamptz(6)
+  failureReason         String?
+  /// Set on a refund payment, pointing at the payment being refunded.
+  refundOfPaymentId     String?
+  createdAt             DateTime      @default(now()) @db.Timestamptz(6)
+  updatedAt             DateTime      @updatedAt @db.Timestamptz(6)
+
+  facility      Facility            @relation(fields: [facilityId], references: [id], onDelete: Restrict)
+  tenant        Tenant              @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  refundOf      Payment?            @relation("PaymentRefund", fields: [refundOfPaymentId], references: [id], onDelete: Restrict)
+  refunds       Payment[]           @relation("PaymentRefund")
+  allocations   PaymentAllocation[]
+  ledgerEntries LedgerEntry[]
+
+  @@index([facilityId, receivedAt])
+  @@index([tenantId])
+  @@map("payment")
+}
+
+/// A payment can settle several invoices; allocation order is configurable in B-048.
+model PaymentAllocation {
+  id          String   @id @default(cuid())
+  paymentId   String
+  invoiceId   String
+  amountCents Int
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+
+  @@unique([paymentId, invoiceId])
+  @@index([invoiceId])
+  @@map("payment_allocation")
+}
+
+/// Append-only. Posted entries are never mutated; a correction is a new entry
+/// with reversalOfId set (PRD 02 FR-8).
+model LedgerEntry {
+  id           String          @id @default(cuid())
+  facilityId   String
+  leaseId      String
+  type         LedgerEntryType
+  /// Signed cents. Charges and refunds increase the balance; payments,
+  /// credits and write-offs decrease it.
+  amountCents  Int
+  description  String
+  occurredAt   DateTime        @default(now()) @db.Timestamptz(6)
+  invoiceId    String?
+  paymentId    String?
+  reversalOfId String?         @unique
+  createdAt    DateTime        @default(now()) @db.Timestamptz(6)
+
+  facility   Facility     @relation(fields: [facilityId], references: [id], onDelete: Restrict)
+  lease      Lease        @relation(fields: [leaseId], references: [id], onDelete: Restrict)
+  invoice    Invoice?     @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  payment    Payment?     @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  reversalOf LedgerEntry? @relation("LedgerReversal", fields: [reversalOfId], references: [id], onDelete: Restrict)
+  reversedBy LedgerEntry? @relation("LedgerReversal")
+
+  @@index([leaseId, occurredAt])
+  @@index([facilityId, occurredAt])
+  @@map("ledger_entry")
+}
+
+// --------------------------------------------------------------- access ----
+
+/// One grant per tenant × facility (PRD 03 FR-1).
+model AccessGrant {
+  id         String           @id @default(cuid())
+  facilityId String
+  tenantId   String
+  state      AccessGrantState @default(pending)
+  /// Why the grant last changed, e.g. "system:move_in", "staff:<userId>".
+  stateCause String?
+  createdAt  DateTime         @default(now()) @db.Timestamptz(6)
+  updatedAt  DateTime         @updatedAt @db.Timestamptz(6)
+
+  facility    Facility           @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  tenant      Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  credentials AccessCredential[]
+
+  @@unique([facilityId, tenantId])
+  @@index([facilityId, state])
+  @@map("access_grant")
+}
+
+model AccessCredential {
+  id         String                @id @default(cuid())
+  facilityId String
+  grantId    String
+  leaseId    String?
+  type       AccessCredentialType  @default(pin)
+  /// Never the plaintext gate code. Viewing the real code is a separate,
+  /// audited permission (PRD 03 SR-2) resolved through the secret store.
+  valueRef   String
+  state      AccessCredentialState @default(active)
+  syncStatus HardwareSyncStatus    @default(pending)
+  lastSyncAt DateTime?             @db.Timestamptz(6)
+  createdAt  DateTime              @default(now()) @db.Timestamptz(6)
+  updatedAt  DateTime              @updatedAt @db.Timestamptz(6)
+
+  facility Facility    @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  grant    AccessGrant @relation(fields: [grantId], references: [id], onDelete: Cascade)
+  lease    Lease?      @relation(fields: [leaseId], references: [id], onDelete: SetNull)
+
+  @@index([facilityId, state])
+  @@index([grantId])
+  @@map("access_credential")
+}
+
+// ---------------------------------------------------- demand & marketing ----
+
+/// Free hold, no card and no deposit (D-7).
+model Reservation {
+  id              String            @id @default(cuid())
+  facilityId      String
+  unitTypeId      String
+  unitId          String?
+  tenantId        String?
+  leadId          String?
+  status          ReservationStatus @default(held)
+  firstName       String
+  lastName        String
+  email           String
+  phone           String?
+  quotedRateCents Int
+  moveInDate      DateTime?         @db.Timestamptz(6)
+  expiresAt       DateTime          @db.Timestamptz(6)
+  /// Signed-token deep links let a prospect complete or cancel without login
+  /// (PRD 01 FR-3.2).
+  tokenHash       String            @unique
+  utmSource       String?
+  utmMedium       String?
+  utmCampaign     String?
+  createdAt       DateTime          @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime          @updatedAt @db.Timestamptz(6)
+
+  facility Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  unitType UnitType @relation(fields: [unitTypeId], references: [id], onDelete: Restrict)
+  unit     Unit?    @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  tenant   Tenant?  @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  lead     Lead?    @relation(fields: [leadId], references: [id], onDelete: SetNull)
+
+  @@index([facilityId, status])
+  @@index([status, expiresAt])
+  @@map("reservation")
+}
+
+model Lead {
+  id                    String     @id @default(cuid())
+  facilityId            String?
+  unitTypeId            String?
+  tenantId              String?
+  status                LeadStatus @default(new)
+  firstName             String?
+  lastName              String?
+  email                 String?
+  phone                 String?
+  message               String?
+  source                String?
+  firstTouchSource      String?
+  firstTouchMedium      String?
+  firstTouchCampaign    String?
+  firstTouchLandingPage String?
+  lastTouchSource       String?
+  lastTouchMedium       String?
+  lastTouchCampaign     String?
+  createdAt             DateTime   @default(now()) @db.Timestamptz(6)
+  updatedAt             DateTime   @updatedAt @db.Timestamptz(6)
+
+  facility     Facility?     @relation(fields: [facilityId], references: [id], onDelete: SetNull)
+  unitType     UnitType?     @relation(fields: [unitTypeId], references: [id], onDelete: SetNull)
+  tenant       Tenant?       @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  reservations Reservation[]
+  consents     Consent[]
+
+  @@index([facilityId, status])
+  @@index([email])
+  @@index([phone])
+  @@map("lead")
+}
+
+/// Definition and eligibility only. Codes, redemptions and the discount hand-off
+/// to billing are B-070.
+model Promotion {
+  id              String               @id @default(cuid())
+  name            String
+  type            PromotionType
+  /// Percent (1–100) for percent_off, cents for amount_off, months for free_months.
+  value           Int
+  durationPeriods Int                  @default(1)
+  status          PromotionStatus      @default(draft)
+  displayMode     PromotionDisplayMode @default(auto)
+  /// Empty array means every facility / every unit type.
+  facilityIds     String[]             @default([])
+  unitTypeIds     String[]             @default([])
+  newTenantOnly   Boolean              @default(false)
+  startsAt        DateTime?            @db.Timestamptz(6)
+  endsAt          DateTime?            @db.Timestamptz(6)
+  maxRedemptions  Int?
+  redemptionCount Int                  @default(0)
+  termsText       String?
+  createdAt       DateTime             @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime             @updatedAt @db.Timestamptz(6)
+
+  @@index([status])
+  @@map("promotion")
+}
+
+/// One consent record per subject × channel. Owned by the shared schema so
+/// neither marketing nor comms owns the table (D-8).
+model Consent {
+  id                String         @id @default(cuid())
+  tenantId          String?
+  leadId            String?
+  channel           ConsentChannel
+  state             ConsentState
+  /// Where the opt-in happened, e.g. "checkout_step_1", "portal_preferences".
+  source            String
+  disclosureVersion String?
+  ipAddress         String?
+  capturedAt        DateTime       @default(now()) @db.Timestamptz(6)
+  createdAt         DateTime       @default(now()) @db.Timestamptz(6)
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  lead   Lead?   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, channel])
+  @@index([leadId, channel])
+  @@map("consent")
+}
+
+// ----------------------------------------------- documents, staff, audit ----
+
+/// Generated delinquency, lien and rate-change documents. Immutable once
+/// generated; all text is draft-only and not legal advice (D-10).
+model Notice {
+  id            String       @id @default(cuid())
+  facilityId    String
+  leaseId       String
+  type          NoticeType
+  status        NoticeStatus @default(draft)
+  generatedAt   DateTime?    @db.Timestamptz(6)
+  documentUrl   String?
+  documentHash  String?
+  /// Tracking numbers, photos, mail receipts — the lien evidence chain.
+  deliveryProof Json?
+  createdAt     DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime     @updatedAt @db.Timestamptz(6)
+
+  facility Facility @relation(fields: [facilityId], references: [id], onDelete: Restrict)
+  lease    Lease    @relation(fields: [leaseId], references: [id], onDelete: Restrict)
+
+  @@index([facilityId, type])
+  @@index([leaseId])
+  @@map("notice")
+}
+
+/// Staff identity. Role assignments and facility scoping are B-004; MFA is B-079.
+model StaffUser {
+  id        String          @id @default(cuid())
+  email     String          @unique
+  firstName String
+  lastName  String
+  status    StaffUserStatus @default(active)
+  createdAt DateTime        @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime        @updatedAt @db.Timestamptz(6)
+  deletedAt DateTime?       @db.Timestamptz(6)
+
+  auditLogs AuditLog[]
+
+  @@map("staff_user")
+}
+
+/// Append-only. Every privileged action lands here with before/after values
+/// (master PRD §7.1). Nothing in the app updates or deletes a row.
+model AuditLog {
+  id            String    @id @default(cuid())
+  facilityId    String?
+  actorType     ActorType
+  actorStaffId  String?
+  /// Set when the actor is a tenant or an external system rather than staff.
+  actorLabel    String?
+  entityType    String
+  entityId      String
+  action        String
+  before        Json?
+  after         Json?
+  reasonCode    String?
+  correlationId String?
+  occurredAt    DateTime  @default(now()) @db.Timestamptz(6)
+
+  facility   Facility?  @relation(fields: [facilityId], references: [id], onDelete: SetNull)
+  actorStaff StaffUser? @relation(fields: [actorStaffId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId])
+  @@index([facilityId, occurredAt])
+  @@index([correlationId])
+  @@map("audit_log")
 }

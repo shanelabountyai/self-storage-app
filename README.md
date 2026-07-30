@@ -17,7 +17,19 @@ tests           Vitest unit tests
 ```
 
 `packages/core` (billing/lease domain logic, per master PRD §5) gets created when
-there's domain logic to put in it — B-002 onward.
+there's domain logic to put in it.
+
+## Data model
+
+[packages/db/prisma/schema.prisma](packages/db/prisma/schema.prisma) is the single
+schema for every surface. Entity names are canonical per master PRD §7.5 — use them.
+
+A few invariants can't be expressed in Prisma's schema language and live as raw SQL
+appended to the migration: one active lease per unit, billing day 1–28, non-negative
+invoice totals, positive payment allocations, and single-subject consent records.
+`tests/schema-invariants.test.ts` pins them so a regenerated migration can't drop
+them silently, and `tests/db-constraints.test.ts` exercises them against a real
+Postgres (skipped when `DATABASE_URL` is unset).
 
 ## Setup
 

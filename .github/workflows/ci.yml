@@ -12,6 +12,24 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-latest
+
+    # Throwaway Postgres so migrations are proven to apply from scratch and the
+    # raw-SQL constraints in them are exercised for real (tests/db-constraints).
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - uses: actions/checkout@v5
 
@@ -22,9 +40,8 @@ jobs:
 
       - run: npm ci
 
-      # The app never talks to a real database in CI; these only satisfy the
-      # datasource block and dotenv-cli. Real values live in Vercel/GitHub
-      # secrets (master PRD §7.4).
+      # Points at the throwaway service above. Real credentials live in
+      # Vercel/GitHub secrets and never in the repo (master PRD §7.4).
       - name: Provision CI env
         run: |
           {
@@ -33,6 +50,20 @@ jobs:
           } > .env.local
 
       - run: npm run db:generate
+
+      # Fails if a migration is missing, out of order, or does not apply cleanly
+      # to an empty database.
+      - name: Apply migrations
+        run: npx dotenv -e .env.local -- npx prisma migrate deploy --schema packages/db/prisma/schema.prisma
+
+      # Catches a schema.prisma edit that was never turned into a migration:
+      # exit code 2 means the migrated database and the datamodel disagree.
+      - name: Check for schema drift
+        run: |
+          npx dotenv -e .env.local -- npx prisma migrate diff \
+            --from-schema-datasource packages/db/prisma/schema.prisma \
+            --to-schema-datamodel packages/db/prisma/schema.prisma \
+            --exit-code
       - run: npm run lint
       - run: npm run typecheck
       - run: npm run test
