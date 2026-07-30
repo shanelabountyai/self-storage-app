@@ -36,6 +36,10 @@ const NO_FACILITY_ID: Record<string, string> = {
   AuditLog: 'facilityId is nullable — org-level actions have no facility',
   AuthToken: 'an identity spans facilities; one account can hold leases at several',
   LoginAttempt: 'throttling is per identity and IP, not per facility',
+  Role: 'org-level reference data; facility scoping lives on the assignment',
+  Permission: 'org-level reference data',
+  RolePermission: 'join over two org-level tables',
+  StaffFacilityAssignment: 'facilityId is nullable — null grants every facility',
 }
 
 describe('prisma schema invariants', () => {

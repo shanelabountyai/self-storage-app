@@ -17,6 +17,7 @@
     "test:e2e": "playwright test",
     "db:generate": "dotenv -e .env.local -- prisma generate --schema packages/db/prisma/schema.prisma",
     "db:migrate": "dotenv -e .env.local -- prisma migrate dev --schema packages/db/prisma/schema.prisma",
+    "db:seed": "dotenv -e .env.local -- node packages/db/prisma/seed.mts",
     "db:studio": "dotenv -e .env.local -- prisma studio --schema packages/db/prisma/schema.prisma"
   },
   "devDependencies": {

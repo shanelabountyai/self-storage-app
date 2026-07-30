@@ -241,6 +241,7 @@ model Facility {
   leads             Lead[]
   notices           Notice[]
   auditLogs         AuditLog[]
+  staffAssignments  StaffFacilityAssignment[]
 
   @@index([state])
   @@map("facility")
@@ -694,6 +695,85 @@ model Notice {
   @@map("notice")
 }
 
+// ----------------------------------------------------------------- rbac ----
+
+/// Roles are rows, not an enum, so adding one is configuration rather than a
+/// code change (master PRD §7.1). Seeded idempotently by prisma/seed.ts.
+model Role {
+  id          String  @id @default(cuid())
+  /// Stable identifier used in code, e.g. "manager". Never renamed.
+  key         String  @unique
+  name        String
+  description String?
+  /// Ordering for "escalate to the next role up" (PRD 02 RBAC-2). Higher wins.
+  rank        Int
+  /// False for `tenant`, which is granted by session audience rather than by
+  /// a facility assignment.
+  isStaffRole Boolean @default(true)
+
+  // Monetary authority, configured per role at the org level (PRD 02 RBAC-2).
+  // null means unlimited; 0 means no authority at all.
+  maxFeeWaiverCents Int?
+  maxRefundCents    Int?
+  maxCreditCents    Int?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  permissions RolePermission[]
+  assignments StaffFacilityAssignment[]
+
+  @@index([rank])
+  @@map("role")
+}
+
+/// The permission catalog. Also data — a new capability is a seeded row plus
+/// the check that references it.
+model Permission {
+  key         String  @id
+  name        String
+  description String?
+  /// Grouping for the admin UI, e.g. "billing", "inventory".
+  category    String
+
+  roles RolePermission[]
+
+  @@map("permission")
+}
+
+model RolePermission {
+  roleId        String
+  permissionKey String
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionKey], references: [key], onDelete: Cascade)
+
+  @@id([roleId, permissionKey])
+  @@index([permissionKey])
+  @@map("role_permission")
+}
+
+/// A staff user holds exactly one role per facility assignment, and may be
+/// assigned to one, several, or all facilities (PRD 02 §3). A null facilityId
+/// means all facilities, present and future.
+model StaffFacilityAssignment {
+  id          String   @id @default(cuid())
+  staffUserId String
+  roleId      String
+  facilityId  String?
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+
+  staffUser StaffUser @relation(fields: [staffUserId], references: [id], onDelete: Cascade)
+  role      Role      @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  facility  Facility? @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+
+  @@unique([staffUserId, facilityId])
+  @@index([facilityId])
+  @@index([staffUserId])
+  @@map("staff_facility_assignment")
+}
+
 // ----------------------------------------------------------------- auth ----
 
 /// Single-use, expiring tokens for magic-link sign-in and password reset
@@ -746,7 +826,8 @@ model StaffUser {
   updatedAt       DateTime        @updatedAt @db.Timestamptz(6)
   deletedAt       DateTime?       @db.Timestamptz(6)
 
-  auditLogs AuditLog[]
+  auditLogs   AuditLog[]
+  assignments StaffFacilityAssignment[]
 
   @@map("staff_user")
 }

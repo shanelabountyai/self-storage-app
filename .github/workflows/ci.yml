@@ -58,6 +58,11 @@ jobs:
       - name: Apply migrations
         run: npx dotenv -e .env.local -- npx prisma migrate deploy --schema packages/db/prisma/schema.prisma
 
+      # Roles and permissions are reference data, not fixtures — authorization
+      # does not work without them, so every environment gets them.
+      - name: Seed roles and permissions
+        run: npm run db:seed
+
       # Catches a schema.prisma edit that was never turned into a migration:
       # exit code 2 means the migrated database and the datamodel disagree.
       - name: Check for schema drift

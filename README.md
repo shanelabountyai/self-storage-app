@@ -66,6 +66,7 @@ Mirror the same variables into Vercel project settings before the first deploy.
 | `npm run test:e2e` | Playwright smoke + axe accessibility scan |
 | `npm run db:generate` | Regenerate the Prisma client |
 | `npm run db:migrate` | Create and apply a migration |
+| `npm run db:seed` | Seed roles and permissions (idempotent) |
 | `npm run db:studio` | Prisma Studio |
 
 ## Auth
@@ -92,6 +93,39 @@ httpOnly, SameSite=Lax cookie; there is no session table to query per request.
 Magic-link and reset emails currently print to the server console in development
 and throw in production — the real sender is the notification service in B-030.
 Sign-in and reset screens are B-033; `/login` is referenced but not built yet.
+
+## Authorization
+
+Roles are rows, not an enum — adding one is a seed change, not a migration
+(master PRD §7.1). The catalog lives in
+[packages/db/rbac-catalog.ts](packages/db/rbac-catalog.ts) and is applied by
+`npm run db:seed`, which is idempotent and safe on every deploy.
+
+Seven roles: `tenant`, `counter`, `bookkeeper`, `manager`, `regional`, `owner`,
+`system`. The `system` actor used by jobs is **not** a superuser — it holds only
+what its seeded role grants.
+
+Every facility-scoped query must go through `apps/web/lib/rbac/authorize.ts`:
+
+```ts
+const actor = await requireStaffActor()
+requirePermission(actor, 'units:edit', facilityId)
+
+const units = await prisma.unit.findMany({
+  where: { ...resolveFacilityFilter(actor, facilityId), status: 'available' },
+})
+```
+
+`facilityScope()` and `resolveFacilityFilter()` return a Prisma `where` fragment
+and **fail closed**: a staff user with no assignments gets `{ facilityId: { in: [] } }`,
+which matches nothing. They never return an unrestricted `{}` except for a genuine
+all-facilities assignment. Requesting a specific facility narrows; it can never widen.
+
+Monetary authority (`fees:waive`, `refunds:approve`, `credits:manual`) is configured
+per role in cents; `null` means unlimited. Over-limit is not a plain failure —
+`checkMonetaryAuthority()` reports the shortfall and `nextApproverRole()` finds the
+role that can approve it (PRD 02 RBAC-2). The approval-request workflow itself lands
+with refunds in B-048.
 
 ## Conventions
 
