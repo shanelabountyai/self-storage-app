@@ -102,7 +102,7 @@ Everything that writes `Unit.status` goes through `recomputeUnitStatus()`; a dir
 
 **Found:** the drift check caught an index I wrote in raw SQL but never declared in `schema.prisma`. Now declared with an explicit `map:` pinning the migration's name.
 
-### B-010 (2 of 2) — Unit inventory: views, import, bulk edit ✅ `pending`
+### B-010 (2 of 2) — Unit inventory: views, import, bulk edit ✅ `952c339`
 
 List and grid views at `/admin/units` (types moved to `/admin/units/types`), JSON layout import, and bulk edit with preview. Completes US-5/US-7/US-8.
 
