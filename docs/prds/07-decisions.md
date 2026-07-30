@@ -1,0 +1,23 @@
+# Decision Log — Self-Storage Business Application
+
+**Status:** All 11 flagged gaps/conflicts from `06-backlog.md` resolved by the owner on 2026-07-30.
+**Precedence:** This document amends the PRDs. Where a PRD conflicts with a decision below, this document wins. When building from the backlog, treat each decision as settled — do not re-open unless the owner amends this log.
+
+| # | Flag (from 06-backlog.md) | Decision | What it means for the build |
+|---|---------------------------|----------|------------------------------|
+| D-1 | Delinquency/lien + POS/reports MVP scope (PRD 02 vs master) | **Master's leaner MVP wins.** | MVP = online move-in, billing, reminders, basic late-fee schedule, occupancy & rent-roll reports. Full lien/auction pipeline, cash-drawer sessions, remaining reports, and field ops stay in Phase 2 (Milestones 5/7). Backlog phasing is correct as written. |
+| D-2 | Marketing Phase 1 scope (PRD 04 vs master) | **Master wins.** | MVP marketing = SEO location pages, GBP checklist, basic lead capture. Reviews, drips, abandoned-reservation follow-ups, promo codes in checkout = Phase 2 labels, built together in Milestone 6 per backlog ordering. Promotions engine stays MVP (also required by PRD 02 US-10 / B-070). |
+| D-3 | Kiosk mode (master P2 vs PRD 03 P3) | **PRD 03 wins: Phase 3, default no.** | B-085 remains an evaluation item only. No kiosk work before Phase 3. |
+| D-4 | First real gate-vendor driver (master P2 vs PRD 03 stubs) | **PRD 03 wins: stubs only.** | Learning build ships the simulated adapter + manual adapter + stub vendor adapters (B-080). A real vendor driver (B-086) is Phase 3 and contingent on a partner agreement. |
+| D-5 | Scheduled tenant rate increases (PRD 02 MVP vs master P2) | **Master wins: Phase 2.** | Stays at B-076. MVP has street-rate management only; existing-tenant increases with notice letters come in Phase 2. |
+| D-6 | Stripe Billing vs ledger-driven charges | **Ledger-driven PaymentIntents.** | Our invoice ledger is the source of truth; it creates Stripe PaymentIntents on due dates and autopay runs. Do NOT use Stripe Billing subscriptions. PRD 05's CN-6 "Stripe Billing retry config" reference is void — retry schedule (+1/+3/+5) is implemented in our billing engine per PRD 02. Unblocks B-043–B-046. |
+| D-7 | Reservation deposit policy | **Free hold, no card.** | Reservations require no card and no deposit; holds expire (default 7 days, per-facility configurable). PRD 02 US-14's "optional deposit" is dropped from scope; master OQ-3 closed. B-018 builds free-hold only. |
+| D-8 | Consent store ownership | **Shared schema package owns it.** | One `consent` table/package in the core schema (built at B-002, extended B-032/B-072). PRD 04 (marketing consent) and PRD 05 (SMS/transactional consent) both read/write through it; neither module owns the table. |
+| D-9 | PRD cross-reference numbering | **Fixed editorially.** | Master §3 amended to five modules including `05-communications-prd.md`; PRD 02 sibling references corrected to actual filenames. No build impact. |
+| D-10 | Operating state for legal defaults | **Texas, built configurable.** | Compliance config is per-state by design; Texas (Property Code Ch. 59 self-storage lien statute) is the seeded default for lien timelines, notice templates, late-fee behavior, lease clauses, and SMS disclosure copy. All legal artifacts are drafts requiring attorney review before any real-world use — this is a learning project, not legal advice. Unblocks Milestone 5 (B-056, B-061) and B-074. |
+| D-11a | Autopay pre-charge reminder default | **On by default.** | Autopay tenants get a pre-charge notice (e.g., "card ending 4242 will be charged $X on {date}") a few days before the charge, plus receipts. Per-tenant opt-out. Applies to B-050 templates; closes PRD 05 Q1. |
+| D-11b | Minor phasing splits | **Backlog's treatment stands.** | Spanish language: Phase 3 (bundled B-090). City landing pages: Phase 2 (B-082); generated size-in-city pages: Phase 3 (B-089). |
+
+## How to use this log
+
+When starting a Claude Code session on a backlog item, include this file alongside the relevant PRD section. If an item's PRD text contradicts a decision here (e.g., PRD 02 saying lien pipeline is MVP), the decision wins. New conflicts discovered during the build should be appended here with a new D-number rather than resolved silently.
