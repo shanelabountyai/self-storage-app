@@ -193,6 +193,32 @@ so a malformed JSON blob can't reach the database. Gate hours are additionally
 exposed at `GET /api/facilities/[facilityId]/gate-hours` — the API contract point
 US-3's AC asks for, for the hardware module to consume once it exists (B-027+).
 
+## Unit types
+
+`/admin/units` (PRD 02 US-6) manages unit types per facility — dimensions, floor,
+climate/drive-up/power, description, and the two flat rate fields the `UnitType`
+model already carries (effective-dated rate *history* is B-011). Unlike facility
+settings, a unit type is plainly mutable, not effective-dated — there's no US-3-
+style versioning requirement for it, so edits update in place.
+
+**Door type is deliberately not managed here.** US-6's prose lists it as a
+unit-type attribute, but B-002 already modeled `doorType` on `Unit` (a physical
+unit's door can vary within a type — e.g. a corner unit). Adding it to `UnitType`
+too, with no defined rule for which one wins, would just create two sources of
+truth. Flagged for an owner decision if a per-type default door type is wanted;
+B-010 (unit inventory) owns the per-unit value either way.
+
+**Clonable across facilities** (the AC's own word) copies every attribute except
+`facilityId` into a new row at the target facility, and refuses if that facility
+already has a type with the same name — the existing `@@unique([facilityId, name])`
+constraint, not new logic. Requires `units:edit` at the *target* facility, since
+that's where the write lands; only needs to be able to see the source.
+
+There is no "Units" grid/list yet — that's PRD 02 US-5/7/8, backlogged as B-010.
+`/admin/units` shows type management for now, the same way `/admin/settings`
+replaced its placeholder in B-008; B-010 adds the actual inventory view alongside
+or on a sub-route.
+
 ## Audit log
 
 `@storage/core/audit` is the only way to write an audit entry. Append-only is

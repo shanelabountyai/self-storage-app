@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 // Static guard on the cross-cutting rules in master PRD §7.5/§7.6 and CLAUDE.md.
@@ -146,23 +146,52 @@ describe('prisma schema invariants', () => {
 })
 
 describe('migration invariants', () => {
-  const migration = readFileSync(
-    new URL(
-      '../packages/db/prisma/migrations/20260730161951_core_data_model/migration.sql',
-      import.meta.url,
-    ),
-    'utf8',
-  )
+  // Concatenated across every migration, not just the first — a constraint
+  // introduced in migration N is exactly as permanent as one from migration 1,
+  // so this must not go blind to everything added after B-002. (It did, for
+  // five migrations, until this test was generalized in B-009.)
+  const migrationsDir = new URL('../packages/db/prisma/migrations/', import.meta.url)
+  const migrationFiles = readdirSync(migrationsDir)
+    .filter((entry) => statSync(new URL(entry, migrationsDir)).isDirectory())
+    .map((dir) => readFileSync(new URL(`${dir}/migration.sql`, migrationsDir), 'utf8'))
+  const allMigrations = migrationFiles.join('\n')
 
-  // These live in raw SQL because Prisma's schema language cannot express them;
-  // that also means nothing regenerates them, so they're pinned here.
+  it('has discovered more than one migration file', () => {
+    // Guards the test itself: if the glob ever stops matching anything, every
+    // case below would pass vacuously against an empty string.
+    expect(migrationFiles.length).toBeGreaterThan(1)
+  })
+
+  // These live in raw SQL because Prisma's schema language cannot express
+  // them; that also means nothing regenerates them, so they're pinned here.
+  // Add a new one in this list every time a migration hand-writes another.
   it.each([
     'lease_one_active_per_unit',
     'lease_billing_day_range',
     'invoice_amounts_non_negative',
     'payment_allocation_amount_positive',
     'consent_single_subject',
+    'auth_token_used_after_created',
+    'auth_token_expires_after_created',
+    'auth_token_one_live_per_subject_purpose',
+    'staff_assignment_one_all_facilities_per_user',
+    'role_monetary_limits_non_negative',
+    'audit_log_no_update',
+    'audit_log_no_delete',
+    'audit_log_no_truncate',
+    'audit_log_actor_identified',
+    'event_delivery_settled_consistently',
+    'event_delivery_attempts_non_negative',
+    'job_run_finished_after_started',
+    'job_run_terminal_has_finished_at',
+    'job_run_counts_non_negative',
+    'job_run_one_global_per_date',
+    'tax_component_rate_range',
+    'fee_schedule_amount_non_negative',
+    'unit_type_dimensions_positive',
+    'unit_type_rates_non_negative',
+    'unit_type_floor_positive',
   ])('keeps the %s constraint', (name) => {
-    expect(migration).toContain(name)
+    expect(allMigrations).toContain(name)
   })
 })

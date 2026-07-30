@@ -29,6 +29,9 @@ export const AUDIT_ACTIONS = [
   { action: 'lease.moved_out', label: 'Move-out completed', requiresReason: false },
   { action: 'lease.move_out_overridden', label: 'Move-out charges overridden', requiresReason: true },
   { action: 'unit.status_overridden', label: 'Unit status manually overridden', requiresReason: true },
+  { action: 'unit_type.created', label: 'Unit type created', requiresReason: false },
+  { action: 'unit_type.updated', label: 'Unit type updated', requiresReason: false },
+  { action: 'unit_type.cloned', label: 'Unit type cloned to another facility', requiresReason: false },
 
   // Delinquency, notices, auctions
   { action: 'delinquency.step_overridden', label: 'Delinquency step overridden', requiresReason: true },
