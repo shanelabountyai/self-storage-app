@@ -88,11 +88,19 @@ Per-facility unit types with dimensions, floor, climate/drive-up/power, and clon
 
 **Found:** `tests/schema-invariants.test.ts` only ever read the *first* migration file, so every hand-written constraint added across five later migrations had zero regression protection. Now scans all migrations and pins 25 names.
 
-### B-010 — Unit inventory 🔨 in progress
+### B-010 (1 of 2) — Unit inventory: rules layer ✅ `a24f36a`
 
-Split into two sessions (backlog sizes it M; it is four distinct things). Session 1 is the rules layer — derived status engine, unit CRUD, list + filters. Session 2 is grid view, JSON layout import, and bulk edit with preview.
+Split into two sessions — the backlog sizes B-010 as M, but it is four distinct things. This session is the rules layer: derived status engine, unit CRUD, list + filters. Session 2 is the grid view, JSON layout import, and bulk edit with preview.
 
-**Deciding:** `Unit.status` stays the *effective* status (derived, queryable), and a new `Unit.operationalStatus` holds the operator's *intent* (available/maintenance/unrentable). Two columns because effective status alone destroys intent — a unit marked `maintenance`, leased, then vacated must return to `maintenance`, not silently to `available`, and the collapsing failure mode rents out a unit somebody deliberately took offline.
+**Decided:** `Unit.status` stays the *effective* status (derived, queryable — the dashboard already filters on it), and a new `Unit.operationalStatus` holds the operator's *intent*. Two columns because effective status alone destroys intent: a unit marked `maintenance`, leased, then vacated must return to `maintenance`, not silently to `available`. The collapsing failure mode rents out a unit somebody deliberately took offline, so the test for that round trip is the one that matters most.
+
+The derivation is pure and lives in `packages/core/inventory` so availability reads (B-014) reuse it rather than redefining "rentable". Precedence is `overlocked > occupied > reserved > intent`. `OCCUPYING_LEASE_STATUSES` deliberately mirrors B-002's `lease_one_active_per_unit` partial index (`status <> 'ended'`) — if those two ever disagree, a unit could hold two leases while the UI calls it vacant.
+
+Everything that writes `Unit.status` goes through `recomputeUnitStatus()`; a direct `data: { status }` write anywhere else is a bug. B-018/B-026/B-040/B-057 must call it after changing lease, reservation, or delinquency state.
+
+**Left behind:** `overlocked` has no source — the delinquency engine (B-057) and field ops (B-060) populate it, so the adapter passes `false` and no unit can currently be overlocked. Modeled now anyway because it outranks `occupied`, and retrofitting precedence later is how display bugs start. No reconciliation job either: nothing can currently cause drift, so one would be guarding against an impossibility.
+
+**Found:** the drift check caught an index I wrote in raw SQL but never declared in `schema.prisma`. Now declared with an explicit `map:` pinning the migration's name.
 
 ---
 

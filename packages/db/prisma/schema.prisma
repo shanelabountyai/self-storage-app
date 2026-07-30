@@ -379,6 +379,9 @@ model Unit {
   @@unique([facilityId, number])
   @@index([facilityId, status])
   @@index([unitTypeId])
+  /// Grid view groups by building then floor (PRD 02 US-5). `map:` pins the
+  /// name to the one the migration created, so schema and database agree.
+  @@index([facilityId, building, floor], map: "unit_facility_building_floor")
   @@map("unit")
 }
 

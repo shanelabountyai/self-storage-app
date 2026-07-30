@@ -28,6 +28,8 @@ export const AUDIT_ACTIONS = [
   { action: 'lease.edited', label: 'Lease edited', requiresReason: false },
   { action: 'lease.moved_out', label: 'Move-out completed', requiresReason: false },
   { action: 'lease.move_out_overridden', label: 'Move-out charges overridden', requiresReason: true },
+  { action: 'unit.created', label: 'Unit created', requiresReason: false },
+  { action: 'unit.updated', label: 'Unit updated', requiresReason: false },
   { action: 'unit.status_overridden', label: 'Unit status manually overridden', requiresReason: true },
   { action: 'unit_type.created', label: 'Unit type created', requiresReason: false },
   { action: 'unit_type.updated', label: 'Unit type updated', requiresReason: false },

@@ -10,7 +10,8 @@
     "./audit": "./audit/index.ts",
     "./events": "./events/index.ts",
     "./jobs": "./jobs/index.ts",
-    "./facility-settings": "./facility-settings/index.ts"
+    "./facility-settings": "./facility-settings/index.ts",
+    "./inventory": "./inventory/index.ts"
   },
   "dependencies": {
     "@storage/db": "*"
