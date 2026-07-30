@@ -31,11 +31,30 @@ enum FacilityStatus {
   inactive
 }
 
+/// The *effective* status of a unit, shown everywhere and used for filtering.
+/// Derived, never free-form (PRD 02 US-8): `occupied` follows lease state,
+/// `reserved` follows reservation state, `overlocked` follows the delinquency
+/// pipeline. Written only by `recomputeUnitStatus`, never set directly by a
+/// human — see OperationalUnitStatus for the part a human controls.
 enum UnitStatus {
   available
   reserved
   occupied
   overlocked
+  maintenance
+  unrentable
+}
+
+/// The operator's *intent* for a unit — the only statuses a human may set
+/// (PRD 02 US-8), and only while nothing occupies the unit.
+///
+/// Stored separately from `Unit.status` because effective status alone
+/// destroys the intent: a unit marked `maintenance`, then leased, then vacated
+/// must return to `maintenance`, not silently to `available`. Collapsing the
+/// two into one column loses that, and loses it in the direction that rents
+/// out a unit somebody deliberately took offline.
+enum OperationalUnitStatus {
+  available
   maintenance
   unrentable
 }
@@ -332,19 +351,25 @@ model UnitType {
 }
 
 model Unit {
-  id         String     @id @default(cuid())
-  facilityId String
-  unitTypeId String
-  number     String
-  floor      Int        @default(1)
-  doorType   String?
-  status     UnitStatus @default(available)
+  id                String                @id @default(cuid())
+  facilityId        String
+  unitTypeId        String
+  number            String
+  floor             Int                   @default(1)
+  /// Optional grouping for the grid view, e.g. "Building A". Null for
+  /// single-building sites.
+  building          String?
+  doorType          String?
+  /// Derived. Write through recomputeUnitStatus() only.
+  status            UnitStatus            @default(available)
+  /// Manually settable, guarded by canSetManualStatus().
+  operationalStatus OperationalUnitStatus @default(available)
   /// Coordinates for the grid/map view (B-010).
-  mapX       Float?
-  mapY       Float?
-  notes      String?
-  createdAt  DateTime   @default(now()) @db.Timestamptz(6)
-  updatedAt  DateTime   @updatedAt @db.Timestamptz(6)
+  mapX              Float?
+  mapY              Float?
+  notes             String?
+  createdAt         DateTime              @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime              @updatedAt @db.Timestamptz(6)
 
   facility     Facility      @relation(fields: [facilityId], references: [id], onDelete: Cascade)
   unitType     UnitType      @relation(fields: [unitTypeId], references: [id], onDelete: Restrict)
