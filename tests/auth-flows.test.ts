@@ -32,7 +32,8 @@ afterEach(async () => {
 
 afterAll(async () => {
   if (!hasDatabase) return
-  await prisma.auditLog.deleteMany({ where: { entityId: tenantId } })
+  // Audit rows are deliberately not cleaned up — the append-only triggers from
+  // B-005 reject deletes, so the password-reset entries this suite writes stay.
   await prisma.authToken.deleteMany({ where: { subjectId: tenantId } })
   await prisma.loginAttempt.deleteMany({ where: { email: { in: TEST_EMAILS } } })
   await prisma.tenant.deleteMany({ where: { id: tenantId } })

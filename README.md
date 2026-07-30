@@ -11,13 +11,11 @@ Product specs live in [docs/prds/](docs/prds/). Build order is
 ```
 apps/web        Next.js App Router — public site, tenant portal, admin (role-gated routes)
 packages/db     Prisma schema + generated client, shared by every surface
+packages/core   Shared domain logic — audit today, billing and lease logic later
 docs/prds       Product requirements, backlog, decision log
 e2e             Playwright specs (smoke + axe accessibility)
 tests           Vitest unit tests
 ```
-
-`packages/core` (billing/lease domain logic, per master PRD §5) gets created when
-there's domain logic to put in it.
 
 ## Data model
 
@@ -132,6 +130,39 @@ per role in cents; `null` means unlimited. Over-limit is not a plain failure —
 `checkMonetaryAuthority()` reports the shortfall and `nextApproverRole()` finds the
 role that can approve it (PRD 02 RBAC-2). The approval-request workflow itself lands
 with refunds in B-048.
+
+## Audit log
+
+`@storage/core/audit` is the only way to write an audit entry. Append-only is
+enforced by Postgres triggers, not convention — `UPDATE`, `DELETE`, and `TRUNCATE`
+on `audit_log` all raise, for every writer including psql.
+
+```ts
+await recordAudit({
+  actor: toAuditActor(actor),
+  action: 'fee.waived',
+  entityType: 'Invoice',
+  entityId: invoice.id,
+  facilityId,
+  reasonCode: 'customer_goodwill',   // required for this action, or it throws
+  before: previous,
+  after: updated,
+})
+```
+
+- **Actions are a catalog** ([audit/actions.ts](packages/core/audit/actions.ts)),
+  transcribed from PRD 02 US-38. Each carries `requiresReason`; `recordAudit()`
+  throws rather than writing a privileged action with no reason code.
+- **Snapshots are diffed, then redacted.** Only changed fields are stored, and any
+  key matching password/secret/token/`valueRef`/ssn/pin is replaced with
+  `[redacted]`. The diff compares *raw* values and redacts the result — redacting
+  first would make two different passwords look equal and lose the change entirely.
+- **Consequences of append-only:** a facility or staff user with audit history
+  cannot be hard-deleted (`onDelete: Restrict`, since nulling the column would
+  itself be a blocked update). Test suites cannot clean up audit rows, so
+  `npm test` leaves entries behind in the dev database. That is correct behaviour.
+- **Retention is ≥7 years** and there is deliberately no in-band purge. When one is
+  needed it requires dropping the trigger — see the migration for the procedure.
 
 ## Conventions
 

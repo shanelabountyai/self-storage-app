@@ -1,4 +1,5 @@
-import { prisma, type AuthAudience } from '@storage/db'
+import type { AuthAudience } from '@storage/db'
+import { recordAudit } from '@storage/core/audit'
 import { findSubjectByEmail, setPassword } from './accounts'
 import { sendAuthEmail } from './send-auth-email'
 import { consumeToken, mintToken } from './tokens'
@@ -73,16 +74,15 @@ export async function completePasswordReset(
 
   // Password changes are privileged actions and belong in the audit log
   // (master PRD §7.1).
-  await prisma.auditLog.create({
-    data: {
-      actorType: consumed.audience === 'staff' ? 'staff' : 'tenant',
-      actorStaffId: consumed.audience === 'staff' ? consumed.subjectId : null,
-      actorLabel: consumed.email,
-      entityType: consumed.audience === 'staff' ? 'StaffUser' : 'Tenant',
-      entityId: consumed.subjectId,
-      action: 'password.reset_completed',
-      reasonCode: 'self_service',
-    },
+  await recordAudit({
+    actor:
+      consumed.audience === 'staff'
+        ? { type: 'staff', staffUserId: consumed.subjectId, label: consumed.email }
+        : { type: 'tenant', tenantId: consumed.subjectId, label: consumed.email },
+    action: 'password.reset_completed',
+    entityType: consumed.audience === 'staff' ? 'StaffUser' : 'Tenant',
+    entityId: consumed.subjectId,
+    reasonCode: 'self_service',
   })
 
   return { ok: true }

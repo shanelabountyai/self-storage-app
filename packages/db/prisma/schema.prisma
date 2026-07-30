@@ -850,11 +850,19 @@ model AuditLog {
   correlationId String?
   occurredAt    DateTime  @default(now()) @db.Timestamptz(6)
 
-  facility   Facility?  @relation(fields: [facilityId], references: [id], onDelete: SetNull)
-  actorStaff StaffUser? @relation(fields: [actorStaffId], references: [id], onDelete: SetNull)
+  // Restrict, not SetNull: nulling the column on a parent delete is an UPDATE,
+  // and the append-only triggers reject those. A facility or staff user with
+  // audit history therefore cannot be hard-deleted — which is the intended
+  // outcome, since both are soft-deleted in normal operation (PRD 02 FR-10).
+  facility   Facility?  @relation(fields: [facilityId], references: [id], onDelete: Restrict)
+  actorStaff StaffUser? @relation(fields: [actorStaffId], references: [id], onDelete: Restrict)
 
   @@index([entityType, entityId])
   @@index([facilityId, occurredAt])
   @@index([correlationId])
+  // Filters required by PRD 02 US-38: by actor, entity, action, and date.
+  @@index([actorStaffId, occurredAt])
+  @@index([action, occurredAt])
+  @@index([occurredAt])
   @@map("audit_log")
 }
