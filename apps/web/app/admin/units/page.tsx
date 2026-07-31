@@ -8,6 +8,7 @@ import { getSwitcherData } from '@/lib/admin/context'
 import { resolveSelectedFacility } from '@/lib/admin/facility-selection-logic'
 import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
 import { listUnits, unitGroupings } from '@/lib/admin/units'
+import { currentRatesForFacility } from '@/lib/pricing/unit-type-rates'
 import { previewBulkOperation, type BulkUnitOperation } from '@/lib/admin/units-bulk'
 import { previewLayoutImport } from '@/lib/admin/unit-layout'
 import type { UnitFilters } from '@/lib/admin/unit-query'
@@ -95,10 +96,12 @@ export default async function AdminUnitsPage({
   const filters = filtersFrom(params)
   const view = params.view === 'grid' ? 'grid' : 'list'
 
-  const [units, groupings, unitTypes] = await Promise.all([
+  const [units, groupings, unitTypes, rates] = await Promise.all([
     listUnits(actor, facilityId, filters),
     unitGroupings(facilityId),
     prisma.unitType.findMany({ where: { facilityId }, select: { id: true, name: true }, orderBy: { name: 'asc' } }),
+    // Rates resolve from effective-dated history (B-011), not a column.
+    currentRatesForFacility(facilityId),
   ])
 
   const operation = operationFrom(params)
@@ -221,7 +224,14 @@ export default async function AdminUnitsPage({
                   <span className="text-muted-foreground"> · {unit.unitType.widthFt}×{unit.unitType.lengthFt}</span>
                 </td>
                 <td className="py-2">{[unit.building, `Floor ${unit.floor}`].filter(Boolean).join(' · ')}</td>
-                <td className="py-2">{formatCents(unit.unitType.streetRateCents)}</td>
+                <td className="py-2">
+                  {(() => {
+                    const rate = rates.get(unit.unitTypeId)
+                    // A type whose only rate starts in the future has no
+                    // current price — shown as such rather than as $0.00.
+                    return rate ? formatCents(rate.streetRateCents) : <span className="text-muted-foreground">not priced</span>
+                  })()}
+                </td>
                 <td className="py-2"><UnitStatusBadge status={unit.status} /></td>
                 <td className="py-2">
                   {/* Only the three manual statuses are offered — the derived

@@ -50,9 +50,9 @@ beforeAll(async () => {
   otherFacilityId = other.id
 
   const [t1, t2, foreign] = await Promise.all([
-    prisma.unitType.create({ data: { facilityId, name: '10x10', widthFt: 10, lengthFt: 10, streetRateCents: 12_000, webRateCents: 10_900 } }),
-    prisma.unitType.create({ data: { facilityId, name: '5x5', widthFt: 5, lengthFt: 5, streetRateCents: 6_000, webRateCents: 5_500 } }),
-    prisma.unitType.create({ data: { facilityId: otherFacilityId, name: '10x10', widthFt: 10, lengthFt: 10, streetRateCents: 12_000, webRateCents: 10_900 } }),
+    prisma.unitType.create({ data: { facilityId, name: '10x10', widthFt: 10, lengthFt: 10,  } }),
+    prisma.unitType.create({ data: { facilityId, name: '5x5', widthFt: 5, lengthFt: 5,  } }),
+    prisma.unitType.create({ data: { facilityId: otherFacilityId, name: '10x10', widthFt: 10, lengthFt: 10,  } }),
   ])
   unitTypeId = t1.id
   otherTypeId = t2.id

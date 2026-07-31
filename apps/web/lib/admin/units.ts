@@ -113,7 +113,7 @@ export async function listUnits(actor: Actor, facilityId: string, filters: UnitF
     // Same selector bulk operations use — the rows the operator sees are the
     // rows a bulk edit will consider.
     where: unitWhere(actor, facilityId, filters),
-    include: { unitType: { select: { id: true, name: true, widthFt: true, lengthFt: true, streetRateCents: true } } },
+    include: { unitType: { select: { id: true, name: true, widthFt: true, lengthFt: true } } },
     orderBy: [{ building: 'asc' }, { floor: 'asc' }, { number: 'asc' }],
   })
 }

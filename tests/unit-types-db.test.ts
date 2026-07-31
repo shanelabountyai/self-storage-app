@@ -10,6 +10,7 @@ import {
   listUnitTypes,
   updateUnitType,
 } from '../apps/web/lib/admin/unit-types'
+import { currentRateForUnitType } from '../apps/web/lib/pricing/unit-type-rates'
 import { ROLES } from '../packages/db/rbac-catalog'
 
 const hasDatabase = Boolean(process.env.DATABASE_URL)
@@ -165,19 +166,26 @@ describe.skipIf(!hasDatabase)('updateUnitType', () => {
     const updated = await updateUnitType(actor, facilityAId, created.id, {
       ...BASE_INPUT,
       name: 'Update Me',
+      // Deliberately posts a different rate: updateUnitType must ignore it.
       streetRateCents: 15_000,
       climateControlled: true,
     })
 
-    expect(updated.streetRateCents).toBe(15_000)
     expect(updated.climateControlled).toBe(true)
+
+    // B-011: rates are effective-dated rows, not columns. Editing a type must
+    // never change its price — that is publishUnitTypeRate()'s job — so a form
+    // that still posts a rate is silently ignored rather than rewriting history.
+    const rate = await currentRateForUnitType(created.id)
+    expect(rate?.streetRateCents).toBe(BASE_INPUT.streetRateCents)
+    expect(await prisma.unitTypeRate.count({ where: { unitTypeId: created.id } })).toBe(1)
 
     const entries = await prisma.auditLog.findMany({
       where: { entityId: created.id, action: 'unit_type.updated' },
     })
     expect(entries).toHaveLength(1)
-    expect(entries[0].before).toMatchObject({ streetRateCents: 12_000, climateControlled: false })
-    expect(entries[0].after).toMatchObject({ streetRateCents: 15_000, climateControlled: true })
+    expect(entries[0].before).toMatchObject({ climateControlled: false })
+    expect(entries[0].after).toMatchObject({ climateControlled: true })
   })
 
   it("refuses to update a unit type that doesn't belong to the claimed facility", async () => {
@@ -210,7 +218,13 @@ describe.skipIf(!hasDatabase)('cloneUnitType', () => {
     expect(cloned.climateControlled).toBe(true)
     expect(cloned.driveUp).toBe(true)
     expect(cloned.description).toBe('A cloneable type')
-    expect(cloned.streetRateCents).toBe(BASE_INPUT.streetRateCents)
+
+    // The clone opens at the source's *current* rate, as its own first
+    // effective-dated row — not by inheriting the source's history.
+    const clonedRate = await currentRateForUnitType(cloned.id)
+    expect(clonedRate?.streetRateCents).toBe(BASE_INPUT.streetRateCents)
+    expect(clonedRate?.webRateCents).toBe(BASE_INPUT.webRateCents)
+    expect(await prisma.unitTypeRate.count({ where: { unitTypeId: cloned.id } })).toBe(1)
 
     const entries = await prisma.auditLog.findMany({
       where: { entityId: cloned.id, action: 'unit_type.cloned' },

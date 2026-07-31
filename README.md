@@ -255,6 +255,32 @@ It's all-or-nothing: if any row references an unknown unit type, nothing is
 written, because a half-imported layout is worse than none. It never touches
 occupancy.
 
+## Street rates
+
+Rates live in `UnitTypeRate`, effective-dated and append-only (PRD 02 US-9) —
+`UnitType` carries **no** current-rate column. A denormalized "current rate"
+would go stale the moment a future-dated row's date passed, because nothing
+fires an event when a date arrives, and US-9 requires the site to *always* show
+the current rate. Resolving at read time makes that true by construction.
+
+- `currentRatesForFacility(facilityId, asOf?)` — one query, one rate per type
+- `currentRateForUnitType(unitTypeId, asOf?)` / `rateHistoryForUnitType(...)`
+- `publishUnitTypeRate(...)` — appends; requires `rates:street:change`
+
+The "which row wins as of a date" logic is B-008's `effectiveAsOf` /
+`effectiveByGroup`, reused rather than reimplemented — one definition of
+effective-dating across tax components, fee schedules, and rates.
+
+A type whose only rate starts in the future is **absent** from the resolved map
+rather than priced at zero, so a caller cannot mistake "unpriced" for "free".
+Editing a unit type cannot change its price: that's `publishUnitTypeRate`, and
+`updateUnitType` ignores any rate posted to it. Backdating inserts history
+without rewriting the present.
+
+Current rates are exposed at `GET /api/facilities/[id]/rates` (staff auth,
+facility-scoped), which accepts `?asOf=` so a scheduled change can be verified
+before it lands. The *public* pricing read with quote tokens is B-014.
+
 ## Audit log
 
 `@storage/core/audit` is the only way to write an audit entry. Append-only is

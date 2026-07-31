@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { requireStaffActor } from '@/lib/rbac/session'
 import { cloneUnitType, createUnitType, updateUnitType, type UnitTypeInput } from '@/lib/admin/unit-types'
+import { publishUnitTypeRate } from '@/lib/pricing/unit-type-rates'
 
 function readUnitTypeInput(formData: FormData): UnitTypeInput {
   const heightFt = String(formData.get('heightFt') ?? '').trim()
@@ -49,4 +50,26 @@ export async function cloneUnitTypeAction(formData: FormData) {
   await cloneUnitType(actor, sourceUnitTypeId, targetFacilityId)
 
   revalidatePath('/admin/units/types')
+}
+
+/// US-9: publishing a rate is its own action, gated on rates:street:change
+/// rather than units:edit — pricing authority is a different privilege from
+/// inventory editing, and the seeded roles differ (manager can propose but
+/// not publish).
+export async function publishRateAction(formData: FormData) {
+  const actor = await requireStaffActor()
+
+  await publishUnitTypeRate(
+    actor,
+    String(formData.get('facilityId')),
+    String(formData.get('unitTypeId')),
+    {
+      streetRateCents: Math.round(Number(formData.get('streetRateDollars')) * 100),
+      webRateCents: Math.round(Number(formData.get('webRateDollars')) * 100),
+      effectiveFrom: new Date(String(formData.get('effectiveFrom'))),
+    },
+  )
+
+  revalidatePath('/admin/units/types')
+  revalidatePath('/admin/units')
 }

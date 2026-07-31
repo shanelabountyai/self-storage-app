@@ -42,9 +42,7 @@ async function seedLease(tx: Tx, suffix: string) {
       facilityId: facility.id,
       name: '10x10',
       widthFt: 10,
-      lengthFt: 10,
-      streetRateCents: 12_000,
-      webRateCents: 10_900,
+      lengthFt: 10
     },
   })
   const unit = await tx.unit.create({

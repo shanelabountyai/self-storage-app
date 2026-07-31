@@ -272,6 +272,7 @@ model Facility {
   jobRuns           JobRun[]
   taxComponents     TaxComponent[]
   feeSchedules      FeeSchedule[]
+  unitTypeRates     UnitTypeRate[]
 
   @@index([state])
   @@map("facility")
@@ -334,20 +335,52 @@ model UnitType {
   floor             Int      @default(1)
   powerAvailable    Boolean  @default(false)
   description       String?
-  /// Current published rates. Effective-dated history arrives in B-011.
-  streetRateCents   Int
-  webRateCents      Int
   createdAt         DateTime @default(now()) @db.Timestamptz(6)
   updatedAt         DateTime @updatedAt @db.Timestamptz(6)
 
-  facility     Facility      @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  facility     Facility       @relation(fields: [facilityId], references: [id], onDelete: Cascade)
   units        Unit[]
   reservations Reservation[]
   leads        Lead[]
+  rates        UnitTypeRate[]
 
   @@unique([facilityId, name])
   @@index([facilityId])
   @@map("unit_type")
+}
+
+/// Effective-dated street and web rates per unit type (PRD 02 US-9, FR-9).
+/// Append-only, the same pattern as TaxComponent and FeeSchedule: changing a
+/// rate inserts a new row rather than editing one, so the rate *history* the
+/// AC asks for is simply this table.
+///
+/// UnitType deliberately carries no current-rate column. A denormalized
+/// "current rate" would go stale the moment a future-dated row's date passed,
+/// because nothing fires an event when a date arrives — and US-9 requires the
+/// website to *always* show the current rate. Resolving at read time makes
+/// that true by construction. Volumes are tiny (a facility has tens of unit
+/// types and a handful of rate versions each).
+///
+/// Changing a rate here can never alter an existing lease: Lease.monthlyRateCents
+/// is its own column and nothing in this file writes it (US-9 AC).
+model UnitTypeRate {
+  id              String   @id @default(cuid())
+  facilityId      String
+  unitTypeId      String
+  /// Walk-in / in-store rate.
+  streetRateCents Int
+  /// Online rate shown by the public site. Commonly lower than street.
+  webRateCents    Int
+  effectiveFrom   DateTime @db.Timestamptz(6)
+  createdAt       DateTime @default(now()) @db.Timestamptz(6)
+
+  facility Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  unitType UnitType @relation(fields: [unitTypeId], references: [id], onDelete: Cascade)
+
+  @@unique([unitTypeId, effectiveFrom])
+  @@index([facilityId, effectiveFrom])
+  @@index([unitTypeId, effectiveFrom])
+  @@map("unit_type_rate")
 }
 
 model Unit {

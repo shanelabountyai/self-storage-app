@@ -96,9 +96,7 @@ beforeAll(async () => {
         facilityId: facilityAId,
         name: '10x10',
         widthFt: 10,
-        lengthFt: 10,
-        streetRateCents: 12_000,
-        webRateCents: 10_900,
+        lengthFt: 10
       },
     }),
     prisma.unitType.create({
@@ -106,9 +104,7 @@ beforeAll(async () => {
         facilityId: facilityBId,
         name: '10x10',
         widthFt: 10,
-        lengthFt: 10,
-        streetRateCents: 12_000,
-        webRateCents: 10_900,
+        lengthFt: 10
       },
     }),
   ])
