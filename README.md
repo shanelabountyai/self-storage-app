@@ -282,6 +282,37 @@ Current rates are exposed at `GET /api/facilities/[id]/rates` (staff auth,
 facility-scoped), which accepts `?asOf=` so a scheduled change can be verified
 before it lands. The *public* pricing read with quote tokens is B-014.
 
+## Public site
+
+Public pages live in the `app/(public)/` route group — a group rather than a path
+segment, so they keep clean URLs (`/faq`, not `/public/faq`) while `/admin`,
+`/login`, and `/api` stay outside and never inherit the site header and footer.
+
+Mobile-first per PRD 01 §6.1–6.2: designed at 360px, tap targets ≥44×44px, `tel:`
+on every phone number, numeric `inputMode` on the zip field, and no
+hover-dependent interaction.
+
+**WCAG 2.1 AA is an acceptance criterion here, not cleanup** (§6.8), and it is
+verified rather than claimed:
+
+- `e2e/a11y.spec.ts` runs axe over **every** public route at two viewports. The
+  route list is the contract — a page not in it is a page nobody checks.
+- `e2e/smoke.spec.ts` asserts the skip link is genuinely the first tab stop, and
+  that the document does not scroll horizontally at 320px (1.4.10).
+- `prefers-reduced-motion` is honoured globally in `globals.css`, so a future
+  animation cannot forget it.
+- Lighthouse gates accessibility at 100 and holds LCP < 2.5s / CLS < 0.1.
+
+The homepage search submits by GET to `/storage/search?q=…` so the query lands in
+a shareable URL (US-101). That page is a placeholder — geocoding and
+distance-ranked results are B-015 — but the URL shape is already correct so it
+won't change under anyone later.
+
+**Legal pages are unreviewed drafts and say so on the page**, not just in a code
+comment (D-10). The accessibility statement is written as a real claim, including
+what is *not* done yet, because claiming conformance for flows that don't exist
+would be worse than saying so.
+
 ## Demo data
 
 `npm run db:seed:demo` creates two facilities with tenants in **every** lifecycle

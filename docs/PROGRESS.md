@@ -9,8 +9,8 @@ This is the **narrative** record — what exists, what it decided, and what a la
 - `git log` — the change-by-change record
 - `README.md` — how the built thing works today
 
-**Status:** **Milestone 1 (Foundation) complete** — B-001 through B-012. Next: Milestone 2, starting at B-013 (public site shell).
-**Tests:** 312 unit + 8 e2e passing as of B-012.
+**Status:** Milestone 1 complete (B-001–B-012). Milestone 2 in progress — B-013 done. Next: B-014 (inventory & pricing read API with quote tokens).
+**Tests:** 312 unit + 30 e2e passing as of B-013.
 
 ---
 
@@ -155,6 +155,26 @@ Unit statuses are never asserted into place — the seed calls `recomputeUnitSta
 3. The same function used an unordered `findFirst` across multiple owners, so the "an owner already exists (X)" message named an arbitrary one and differed between identical runs. Now ordered oldest-first.
 
 **Also fixed:** test-fixture facilities were accumulating in the facility switcher — 117 of them — because any test touching an audited function makes its facility undeletable. Fixtures are now created `status: 'inactive'`, which the switcher already filters out. Existing rows are unaffected and still visible.
+
+---
+
+## Milestone 2 — First online move-in
+
+### B-013 — Public site shell ✅ `pending`
+
+Mobile-first public site: persistent header (logo, Find storage, click-to-call, Pay bill), homepage search hero, and the static/legal pages FR-8.1 lists — FAQ, about, contact, terms, privacy, accessibility.
+
+**Decided:** public pages live in an `app/(public)/` **route group**, not a path segment, so they keep clean URLs while `/admin`, `/login`, and `/api` stay outside and never inherit site chrome. Verified empirically, not just structurally: `/login` is a sibling outside the group and has no header, which is the same mechanism `/admin` relies on.
+
+The homepage search submits by **GET** to `/storage/search?q=…` so the query lands in a shareable URL (US-101). That results page is a placeholder — geocoding and distance ranking are B-015 — but the URL shape is already the one the AC specifies, so it won't move under anyone later. A form pointing at a 404 would have been worse than a placeholder.
+
+**WCAG 2.1 AA is verified, not claimed.** axe runs over every public route at two viewports and the route list is the contract; the skip link is asserted to be genuinely the first tab stop; the document is asserted not to scroll horizontally at 320px. `prefers-reduced-motion` is handled globally so a future animation can't forget it. Lighthouse: accessibility 100, SEO 100, LCP 2.3s, CLS 0.
+
+**Legal text is an unreviewed draft and says so on the page**, in a visible notice rather than a code comment (D-10). The accessibility statement is written as a real claim and states what is *not* done yet — claiming conformance for flows that don't exist would be worse than admitting the gap.
+
+**Left behind:** the size guide is B-017. Cookie consent and analytics (FR-8.2) belong with B-069's analytics work. There is no CMS — copy is in the components, which FR-8.1 leaves open between that and markdown-in-repo.
+
+**Also fixed this session:** 110 test-fixture facilities were still showing in the facility switcher from before B-012's `status: 'inactive'` change. Marked inactive with a non-destructive status update — nothing deleted, and only the two demo facilities remain active. Confirmed `npm audit`'s remaining 16 advisories still have no non-breaking fix (npm's suggestions are downgrades to `next@9` and `eslint-config-next@12`), so the documented position stands.
 
 ---
 
