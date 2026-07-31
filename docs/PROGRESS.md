@@ -218,7 +218,7 @@ The demo seed now sets facility coordinates from the zip centroid; without them 
 
 ---
 
-### B-016 — Facility detail page ✅ `PENDING`
+### B-016 — Facility detail page ✅ `32b6df3`
 
 `/storage/{state}/{city}/{slug}` renders a facility's address, click-to-call, directions deep link, office and gate hours, live unit sizes with prices and real availability counts, amenities, and a map. Search result cards now link to it — B-015 deliberately left them linking nowhere.
 
