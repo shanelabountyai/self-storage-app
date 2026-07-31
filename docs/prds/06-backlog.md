@@ -27,7 +27,7 @@ Everything else builds on this: repo, schema, auth, RBAC, jobs/events, and the f
 | 9 | B-009 ✅ | Unit type management: dimensions, attributes (climate, drive-up, floor, power), clonable across facilities | PRD 02 §4.2 US-6 | S | B-008 | MVP |
 | 10 | B-010 ✅ | Unit inventory: list + grid view (JSON layout import), derived statuses (available/reserved/occupied/overlocked/maintenance/unrentable), bulk edit with preview | PRD 02 §4.2 US-5/US-7/US-8 | M | B-009 | MVP |
 | 11 | B-011 ✅ | Street rate management: web vs in-store rates per unit type, effective-dated, rate history, exposed via API | PRD 02 §4.3 US-9 | S | B-009 | MVP |
-| 12 | B-012 | Seed & demo data script: ≥2 facilities, unit types/units, tenants in every lifecycle state | PRD 02 §7 (demo scenarios); PRD 03 US-7 AC4 | S | B-010, B-011 | MVP |
+| 12 | B-012 ✅ | Seed & demo data script: ≥2 facilities, unit types/units, tenants in every lifecycle state | PRD 02 §7 (demo scenarios); PRD 03 US-7 AC4 | S | B-010, B-011 | MVP |
 
 ## Milestone 2: First online move-in (Golden Path 1)
 

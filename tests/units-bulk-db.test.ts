@@ -40,10 +40,10 @@ beforeAll(async () => {
   if (!hasDatabase) return
   const [f, other] = await Promise.all([
     prisma.facility.create({
-      data: { name: 'Bulk A', slug: `bulk-a-${suffix}`, addressLine1: '1 St', city: 'Austin', state: 'TX', postalCode: '78701', timezone: 'America/Chicago' },
+      data: { name: 'Bulk A', slug: `bulk-a-${suffix}`, addressLine1: '1 St', city: 'Austin', state: 'TX', postalCode: '78701', timezone: 'America/Chicago', status: 'inactive' as const },
     }),
     prisma.facility.create({
-      data: { name: 'Bulk B', slug: `bulk-b-${suffix}`, addressLine1: '2 St', city: 'Dallas', state: 'TX', postalCode: '75201', timezone: 'America/Chicago' },
+      data: { name: 'Bulk B', slug: `bulk-b-${suffix}`, addressLine1: '2 St', city: 'Dallas', state: 'TX', postalCode: '75201', timezone: 'America/Chicago', status: 'inactive' as const },
     }),
   ])
   facilityId = f.id

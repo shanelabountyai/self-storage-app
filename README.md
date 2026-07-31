@@ -65,6 +65,7 @@ Mirror the same variables into Vercel project settings before the first deploy.
 | `npm run db:generate` | Regenerate the Prisma client |
 | `npm run db:migrate` | Create and apply a migration |
 | `npm run db:seed` | Seed roles and permissions (idempotent) |
+| `npm run db:seed:demo` | Seed two demo facilities and tenants in every lifecycle state |
 | `npm run db:create-owner` | Bootstrap the first admin account (see Admin shell below) |
 | `npm run db:studio` | Prisma Studio |
 
@@ -280,6 +281,32 @@ without rewriting the present.
 Current rates are exposed at `GET /api/facilities/[id]/rates` (staff auth,
 facility-scoped), which accepts `?asOf=` so a scheduled change can be verified
 before it lands. The *public* pricing read with quote tokens is B-014.
+
+## Demo data
+
+`npm run db:seed:demo` creates two facilities with tenants in **every** lifecycle
+state — lead, reserved, pending, active, delinquent, pending_auction, ended — at
+both, so facility scoping is demonstrable (PRD 03 US-7 AC4). Distinct from
+`db:seed`, which seeds roles and permissions: those are reference data every
+environment needs, these are fixtures only a demo wants.
+
+Two deliberate properties:
+
+- **It writes no audit entries.** Demo data is constructed state, not actions
+  somebody took, so inventing audit history would make the log lie. It also keeps
+  the data deletable — `AuditLog.facility` is `onDelete: Restrict`, so a facility
+  with audit rows can never be removed.
+- **Idempotent by teardown-then-create.** Every row is marked (`demo-*` slug,
+  `*@demo.example.com` email), so a re-run reproduces a known state exactly
+  rather than layering onto whatever was there.
+
+Unit statuses are never written directly — the seed calls `recomputeUnitStatus()`
+like everything else, so the demo exercises the real derivation rather than
+asserting a status into place.
+
+Test fixtures create their facilities with `status: 'inactive'`, which keeps them
+out of the facility switcher. Any test touching an audited service function makes
+its facility permanently undeletable, so without that they accumulate visibly.
 
 ## Audit log
 

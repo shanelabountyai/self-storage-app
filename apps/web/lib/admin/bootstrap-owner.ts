@@ -53,8 +53,21 @@ export async function createOwnerAccount(input: CreateOwnerInput): Promise<Creat
   const ownerRole = await prisma.role.findUnique({ where: { key: 'owner' } })
   if (!ownerRole) throw new OwnerRoleMissingError()
 
+  // Only a *usable* owner blocks bootstrapping. An assignment belonging to a
+  // soft-deleted or suspended staff user grants nothing — loadStaffActor()
+  // refuses it — so counting one here would lock the system out: the recovery
+  // path after deactivating a compromised owner is to create a new one.
   const existingOwnerAssignment = await prisma.staffFacilityAssignment.findFirst({
-    where: { roleId: ownerRole.id, facilityId: null },
+    where: {
+      roleId: ownerRole.id,
+      facilityId: null,
+      staffUser: { deletedAt: null, status: 'active' },
+    },
+    // Oldest first: with several owners (created via --force) an unordered
+    // findFirst reports an arbitrary one, so the "an owner already exists (X)"
+    // message would change between identical runs. The original owner is also
+    // the more useful one to name.
+    orderBy: { createdAt: 'asc' },
     include: { staffUser: true },
   })
   if (existingOwnerAssignment && !input.force) {

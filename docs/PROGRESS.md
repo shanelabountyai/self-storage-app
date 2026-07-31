@@ -9,8 +9,8 @@ This is the **narrative** record — what exists, what it decided, and what a la
 - `git log` — the change-by-change record
 - `README.md` — how the built thing works today
 
-**Status:** Milestone 1 (Foundation) — B-001 through B-011 done. Next: B-012 (seed & demo data), which closes the milestone.
-**Tests:** 309 unit + 8 e2e passing as of B-011.
+**Status:** **Milestone 1 (Foundation) complete** — B-001 through B-012. Next: Milestone 2, starting at B-013 (public site shell).
+**Tests:** 312 unit + 8 e2e passing as of B-012.
 
 ---
 
@@ -137,6 +137,24 @@ Rate history state (`scheduled` / `current` / `superseded`) is resolved in the d
 **Left behind:** `rates:street:propose` (which `manager` holds) has no propose→approve workflow; publishing needs `rates:street:change`, so managers currently cannot change prices at all. The public, unauthenticated pricing read with quote tokens is B-014 — `/api/facilities/[id]/rates` is staff-auth only.
 
 **Found:** Prisma generated the migration with `DROP COLUMN` *before* the new table, which would have destroyed every existing rate. Rewrote it as create → backfill → drop, and proved the backfill by seeding a known $199.00/$179.00 type, running the migration, and confirming the values survived.
+
+### B-012 — Seed & demo data ✅ `pending`
+
+`npm run db:seed:demo` — two facilities, 40 units, 16 tenants, and every lifecycle state (lead, reserved, pending, active, delinquent, pending_auction, ended) at **both** facilities so scoping is demonstrable. Closes Milestone 1.
+
+**Decided:** the seed writes **no audit entries**. Demo data is constructed state, not actions somebody took, so inventing audit history would make the log lie — and since `AuditLog.facility` is `Restrict`, audit rows would make the demo facilities permanently undeletable. That single choice is what makes the seed idempotent by teardown-then-create rather than upsert, which reproduces a known state exactly instead of layering onto whatever was there.
+
+Unit statuses are never asserted into place — the seed calls `recomputeUnitStatus()`, so it exercises the real B-010 derivation rather than duplicating it.
+
+**Left behind:** no invoices, payments, or ledger entries. The AC doesn't ask for them and B-044 owns invoice generation including gapless per-facility numbering; seeding invoices now would pre-empt that numbering scheme. The delinquent tenant therefore has a status but no balance — worth revisiting once B-044 exists.
+
+**Found:** three real bugs, all surfaced by wiring the seed up rather than by reading code.
+
+1. Importing the seed module **ran it** — `main()` executed at import, so the coverage test tore down and rebuilt demo data as a side effect of a test run. Now guarded behind a direct-invocation check.
+2. `createOwnerAccount` counted owners belonging to **soft-deleted or suspended** staff, so deactivating a compromised owner would lock the system out with no way to bootstrap a replacement. Now ignores deactivated accounts, with a regression test.
+3. The same function used an unordered `findFirst` across multiple owners, so the "an owner already exists (X)" message named an arbitrary one and differed between identical runs. Now ordered oldest-first.
+
+**Also fixed:** test-fixture facilities were accumulating in the facility switcher — 117 of them — because any test touching an audited function makes its facility undeletable. Fixtures are now created `status: 'inactive'`, which the switcher already filters out. Existing rows are unaffected and still visible.
 
 ---
 

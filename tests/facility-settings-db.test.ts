@@ -64,6 +64,7 @@ beforeAll(async () => {
         state: 'TX',
         postalCode: '78701',
         timezone: 'America/Chicago',
+        status: 'inactive' as const,
       },
     }),
     prisma.facility.create({
@@ -75,6 +76,7 @@ beforeAll(async () => {
         state: 'TX',
         postalCode: '75201',
         timezone: 'America/Chicago',
+        status: 'inactive' as const,
       },
     }),
   ])
@@ -157,6 +159,7 @@ describe.skipIf(!hasDatabase)('updateFacilityDetails', () => {
         state: 'TX',
         postalCode: '00000',
         timezone: 'America/Chicago',
+        status: 'inactive' as const,
         phone: null,
         email: null,
       }),
@@ -174,6 +177,7 @@ describe.skipIf(!hasDatabase)('updateFacilityDetails', () => {
         state: 'TX',
         postalCode: '00000',
         timezone: 'America/Chicago',
+        status: 'inactive' as const,
         phone: null,
         email: null,
       }),

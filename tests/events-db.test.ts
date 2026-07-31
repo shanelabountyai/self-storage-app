@@ -28,6 +28,7 @@ beforeAll(async () => {
       state: 'TX',
       postalCode: '78701',
       timezone: 'America/Chicago',
+        status: 'inactive' as const,
     },
   })
   facilityId = facility.id

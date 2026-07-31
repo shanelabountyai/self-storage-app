@@ -82,6 +82,30 @@ describe.skipIf(!hasDatabase)('createOwnerAccount', () => {
     expect(result).toEqual({ created: false, reason: 'owner_exists', existingEmail: emailA })
   })
 
+  it('ignores an owner whose staff account has been deactivated', async () => {
+    // Otherwise deactivating a compromised owner would lock the system out —
+    // there would be no way to bootstrap a replacement.
+    const deactivatedEmail = `owner-deactivated-${suffix}@example.com`
+    const created = await createOwnerAccount({ email: deactivatedEmail, force: true })
+    if (!created.created) throw new Error('unreachable')
+    createdStaffIds.push(created.staffUserId)
+
+    await prisma.staffUser.update({
+      where: { id: created.staffUserId },
+      data: { deletedAt: new Date(), status: 'suspended' },
+    })
+
+    // With every other owner also deactivated, a fresh bootstrap must succeed
+    // without --force.
+    await prisma.staffUser.updateMany({
+      where: { id: { in: createdStaffIds } },
+      data: { deletedAt: new Date(), status: 'suspended' },
+    })
+    const recovery = await createOwnerAccount({ email: `owner-recovery-${suffix}@example.com` })
+    expect(recovery.created).toBe(true)
+    if (recovery.created) createdStaffIds.push(recovery.staffUserId)
+  })
+
   it('refuses to reuse an email that belongs to a non-owner staff user', async () => {
     const nonOwnerEmail = `non-owner-${suffix}@example.com`
     const nonOwner = await prisma.staffUser.create({

@@ -73,6 +73,7 @@ beforeAll(async () => {
         state: 'TX',
         postalCode: '78701',
         timezone: 'America/Chicago',
+        status: 'inactive' as const,
       },
     }),
     prisma.facility.create({
@@ -84,6 +85,7 @@ beforeAll(async () => {
         state: 'TX',
         postalCode: '75201',
         timezone: 'America/Chicago',
+        status: 'inactive' as const,
       },
     }),
   ])

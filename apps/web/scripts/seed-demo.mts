@@ -1,0 +1,442 @@
+import { pathToFileURL } from 'node:url'
+import { prisma } from '@storage/db'
+import { CLOSED_ALL_WEEK, type WeeklySchedule } from '@storage/core/facility-settings'
+import { recomputeUnitStatus } from '@/lib/admin/units'
+
+// Demo/dev data — two facilities and tenants in every lifecycle state
+// (PRD 02 §7, PRD 03 US-7 AC4). Distinct from `npm run db:seed`, which seeds
+// roles and permissions: those are *reference* data every environment needs,
+// these are fixtures only a demo wants.
+//
+// Two deliberate properties:
+//
+// 1. It writes NO audit entries. Demo data is constructed state, not actions
+//    somebody took, so inventing audit history would make the log lie. It also
+//    keeps the data deletable: AuditLog.facility is onDelete: Restrict, so a
+//    facility with audit rows can never be removed (B-005).
+//
+// 2. It is idempotent by teardown-then-create rather than upsert. Every row it
+//    makes is marked with the DEMO_PREFIX, so a re-run reproduces a known
+//    state exactly instead of layering onto whatever was there.
+//
+// Unit statuses are never written directly — they go through
+// recomputeUnitStatus() like everything else (B-010 US-8).
+
+export const DEMO_PREFIX = 'demo-'
+export const DEMO_EMAIL_DOMAIN = 'demo.example.com'
+
+/// Every lease lifecycle state the seed creates, at every facility.
+/// tests/seed-demo.test.ts asserts this covers the LeaseStatus enum — CI never
+/// runs this script, so without that check a newly added status would silently
+/// go unrepresented in the demo.
+export const DEMO_LEASE_STATES = [
+  'pending',
+  'active',
+  'delinquent',
+  'pending_auction',
+  'ended',
+] as const
+
+/// Lifecycle states that exist before a lease does.
+export const DEMO_PRE_LEASE_STATES = ['lead', 'reserved'] as const
+
+const officeHours: WeeklySchedule = {
+  ...CLOSED_ALL_WEEK,
+  monday: { closed: false, open: '09:00', close: '18:00' },
+  tuesday: { closed: false, open: '09:00', close: '18:00' },
+  wednesday: { closed: false, open: '09:00', close: '18:00' },
+  thursday: { closed: false, open: '09:00', close: '18:00' },
+  friday: { closed: false, open: '09:00', close: '18:00' },
+  saturday: { closed: false, open: '10:00', close: '16:00' },
+}
+
+const gateHours: WeeklySchedule = {
+  monday: { closed: false, open: '06:00', close: '22:00' },
+  tuesday: { closed: false, open: '06:00', close: '22:00' },
+  wednesday: { closed: false, open: '06:00', close: '22:00' },
+  thursday: { closed: false, open: '06:00', close: '22:00' },
+  friday: { closed: false, open: '06:00', close: '22:00' },
+  saturday: { closed: false, open: '06:00', close: '22:00' },
+  sunday: { closed: false, open: '08:00', close: '20:00' },
+}
+
+const daysAgo = (n: number) => new Date(Date.now() - n * 24 * 60 * 60 * 1000)
+const daysFromNow = (n: number) => new Date(Date.now() + n * 24 * 60 * 60 * 1000)
+
+async function teardown() {
+  const facilities = await prisma.facility.findMany({
+    where: { slug: { startsWith: DEMO_PREFIX } },
+    select: { id: true },
+  })
+  const facilityIds = facilities.map((f) => f.id)
+  if (facilityIds.length === 0) return 0
+
+  const where = { facilityId: { in: facilityIds } }
+
+  // Order matters: children before parents, since most FKs are Restrict.
+  await prisma.ledgerEntry.deleteMany({ where })
+  await prisma.paymentAllocation.deleteMany({ where: { payment: { facilityId: { in: facilityIds } } } })
+  await prisma.payment.deleteMany({ where })
+  await prisma.invoiceLineItem.deleteMany({ where: { invoice: { facilityId: { in: facilityIds } } } })
+  await prisma.invoice.deleteMany({ where })
+  await prisma.accessCredential.deleteMany({ where })
+  await prisma.accessGrant.deleteMany({ where })
+  await prisma.reservation.deleteMany({ where })
+  await prisma.notice.deleteMany({ where })
+  await prisma.lease.deleteMany({ where })
+  await prisma.unit.deleteMany({ where })
+  await prisma.unitTypeRate.deleteMany({ where })
+  await prisma.unitType.deleteMany({ where })
+  await prisma.lead.deleteMany({ where })
+  await prisma.taxComponent.deleteMany({ where })
+  await prisma.feeSchedule.deleteMany({ where })
+  await prisma.staffFacilityAssignment.deleteMany({ where: { facilityId: { in: facilityIds } } })
+  await prisma.domainEvent.deleteMany({ where })
+  await prisma.jobRun.deleteMany({ where })
+
+  await prisma.consent.deleteMany({
+    where: { tenant: { email: { endsWith: DEMO_EMAIL_DOMAIN } } },
+  })
+  await prisma.tenant.deleteMany({ where: { email: { endsWith: DEMO_EMAIL_DOMAIN } } })
+  await prisma.facility.deleteMany({ where: { id: { in: facilityIds } } })
+
+  return facilityIds.length
+}
+
+type SeededFacility = Awaited<ReturnType<typeof seedFacility>>
+
+async function seedFacility(input: {
+  slug: string
+  name: string
+  city: string
+  postalCode: string
+  addressLine1: string
+  unitTypes: { name: string; widthFt: number; lengthFt: number; climate: boolean; driveUp: boolean; street: number; web: number; count: number }[]
+}) {
+  const facility = await prisma.facility.create({
+    data: {
+      name: input.name,
+      slug: input.slug,
+      addressLine1: input.addressLine1,
+      city: input.city,
+      state: 'TX',
+      postalCode: input.postalCode,
+      timezone: 'America/Chicago',
+      phone: '512-555-0100',
+      email: `manager@${input.slug}.${DEMO_EMAIL_DOMAIN}`,
+      officeHours,
+      gateHours,
+      amenities: ['Gated access', 'Video recording', 'Drive-up units'],
+    },
+  })
+
+  // Texas is the seeded compliance default (D-10). Rates are basis points.
+  await prisma.taxComponent.createMany({
+    data: [
+      { facilityId: facility.id, jurisdiction: 'state', rateBasisPoints: 625, effectiveFrom: daysAgo(400) },
+      { facilityId: facility.id, jurisdiction: 'city', rateBasisPoints: 200, effectiveFrom: daysAgo(400) },
+    ],
+  })
+  await prisma.feeSchedule.createMany({
+    data: [
+      { facilityId: facility.id, feeType: 'admin', amountCents: 2_500, effectiveFrom: daysAgo(400) },
+      { facilityId: facility.id, feeType: 'late', amountCents: 2_000, effectiveFrom: daysAgo(400) },
+      { facilityId: facility.id, feeType: 'nsf', amountCents: 3_000, effectiveFrom: daysAgo(400) },
+      { facilityId: facility.id, feeType: 'lien', amountCents: 5_000, effectiveFrom: daysAgo(400) },
+    ],
+  })
+
+  const unitTypes = []
+  for (const spec of input.unitTypes) {
+    const unitType = await prisma.unitType.create({
+      data: {
+        facilityId: facility.id,
+        name: spec.name,
+        widthFt: spec.widthFt,
+        lengthFt: spec.lengthFt,
+        climateControlled: spec.climate,
+        driveUp: spec.driveUp,
+        floor: 1,
+        powerAvailable: false,
+      },
+    })
+    // Rates are effective-dated rows, never columns (B-011).
+    await prisma.unitTypeRate.create({
+      data: {
+        facilityId: facility.id,
+        unitTypeId: unitType.id,
+        streetRateCents: spec.street,
+        webRateCents: spec.web,
+        effectiveFrom: daysAgo(400),
+      },
+    })
+
+    const units = []
+    for (let i = 1; i <= spec.count; i++) {
+      units.push(
+        await prisma.unit.create({
+          data: {
+            facilityId: facility.id,
+            unitTypeId: unitType.id,
+            number: `${spec.name.split(' ')[0]}-${String(i).padStart(3, '0')}`,
+            building: spec.climate ? 'A' : 'B',
+            floor: 1,
+            doorType: spec.driveUp ? 'roll-up' : 'swing',
+          },
+        }),
+      )
+    }
+    unitTypes.push({ unitType, units, spec })
+  }
+
+  return { facility, unitTypes }
+}
+
+async function makeTenant(first: string, last: string, index: number) {
+  return prisma.tenant.create({
+    data: {
+      email: `${first.toLowerCase()}.${last.toLowerCase()}${index}@${DEMO_EMAIL_DOMAIN}`,
+      firstName: first,
+      lastName: last,
+      phone: `512-555-${String(1000 + index).slice(-4)}`,
+      addressLine1: `${100 + index} Demo Street`,
+      city: 'Austin',
+      state: 'TX',
+      postalCode: '78701',
+    },
+  })
+}
+
+/// Creates a lease in a given lifecycle state, plus the access grant an
+/// occupying lease would have. Unit status is derived afterwards, never set.
+async function makeLease(
+  facilityId: string,
+  unitId: string,
+  tenantId: string,
+  status: 'pending' | 'active' | 'delinquent' | 'pending_auction' | 'ended',
+  monthlyRateCents: number,
+  startedDaysAgo: number,
+) {
+  const lease = await prisma.lease.create({
+    data: {
+      facilityId,
+      tenantId,
+      unitId,
+      status,
+      startDate: daysAgo(startedDaysAgo),
+      endDate: status === 'ended' ? daysAgo(5) : null,
+      monthlyRateCents,
+      billingDay: 1,
+      protectionPlanName: 'Standard $2,000',
+      protectionCents: 1_200,
+      signedAt: daysAgo(startedDaysAgo),
+    },
+  })
+
+  if (status !== 'ended' && status !== 'pending') {
+    const grant = await prisma.accessGrant.upsert({
+      where: { facilityId_tenantId: { facilityId, tenantId } },
+      create: {
+        facilityId,
+        tenantId,
+        state: status === 'delinquent' || status === 'pending_auction' ? 'suspended' : 'active',
+        stateCause: status === 'active' ? 'system:move_in' : 'system:delinquency',
+      },
+      update: {},
+    })
+    await prisma.accessCredential.create({
+      data: {
+        facilityId,
+        grantId: grant.id,
+        leaseId: lease.id,
+        type: 'pin',
+        // Never a plaintext gate code — the real code lives behind a separate
+        // audited permission (PRD 03 SR-2). This is only a reference.
+        valueRef: `demo-pin-ref-${lease.id.slice(-6)}`,
+        state: grant.state === 'active' ? 'active' : 'suspended',
+        syncStatus: 'synced',
+        lastSyncAt: daysAgo(1),
+      },
+    })
+  }
+
+  await recomputeUnitStatus(unitId)
+  return lease
+}
+
+async function seedLifecycleStates(seeded: SeededFacility, startIndex: number) {
+  const { facility, unitTypes } = seeded
+  const pool = unitTypes.flatMap((t) => t.units.map((u) => ({ unit: u, rate: t.spec.street })))
+  let cursor = 0
+  const next = () => pool[cursor++]
+  let index = startIndex
+
+  const summary: Record<string, number> = {}
+  const note = (state: string) => {
+    summary[state] = (summary[state] ?? 0) + 1
+  }
+
+  // --- lead: interested, no tenant record yet -----------------------------
+  await prisma.lead.create({
+    data: {
+      facilityId: facility.id,
+      unitTypeId: unitTypes[0].unitType.id,
+      status: 'new',
+      firstName: 'Priya',
+      lastName: 'Prospect',
+      email: `priya.prospect${index}@${DEMO_EMAIL_DOMAIN}`,
+      phone: '512-555-0199',
+      message: 'Moving in three weeks, need a 10x10.',
+      source: 'organic',
+      firstTouchSource: 'google',
+      firstTouchMedium: 'organic',
+    },
+  })
+  note('lead')
+  index++
+
+  // --- reserved: free hold, no card (D-7) ---------------------------------
+  const reserving = await makeTenant('Rosa', 'Reserved', index++)
+  const reservedSlot = next()
+  await prisma.reservation.create({
+    data: {
+      facilityId: facility.id,
+      unitTypeId: unitTypes[0].unitType.id,
+      unitId: reservedSlot.unit.id,
+      tenantId: reserving.id,
+      status: 'held',
+      firstName: reserving.firstName,
+      lastName: reserving.lastName,
+      email: reserving.email,
+      quotedRateCents: reservedSlot.rate,
+      moveInDate: daysFromNow(3),
+      expiresAt: daysFromNow(7),
+      tokenHash: `demo-reservation-${facility.slug}-${index}`,
+      utmSource: 'google',
+      utmMedium: 'organic',
+    },
+  })
+  await recomputeUnitStatus(reservedSlot.unit.id)
+  note('reserved')
+
+  // --- pending: checkout in progress, not yet provisioned -----------------
+  const pendingTenant = await makeTenant('Pat', 'Pending', index++)
+  const pendingSlot = next()
+  await makeLease(facility.id, pendingSlot.unit.id, pendingTenant.id, 'pending', pendingSlot.rate, 0)
+  note('pending')
+
+  // --- active ×3 ----------------------------------------------------------
+  for (let i = 0; i < 3; i++) {
+    const tenant = await makeTenant('Alex', 'Active', index++)
+    const slot = next()
+    await makeLease(facility.id, slot.unit.id, tenant.id, 'active', slot.rate, 90 + i * 30)
+    note('active')
+  }
+
+  // --- delinquent ---------------------------------------------------------
+  const delinquentTenant = await makeTenant('Dana', 'Delinquent', index++)
+  const delinquentSlot = next()
+  await makeLease(facility.id, delinquentSlot.unit.id, delinquentTenant.id, 'delinquent', delinquentSlot.rate, 200)
+  note('delinquent')
+
+  // --- pending_auction: far enough along to demo the lien arc -------------
+  const auctionTenant = await makeTenant('Avery', 'Auction', index++)
+  const auctionSlot = next()
+  await makeLease(facility.id, auctionSlot.unit.id, auctionTenant.id, 'pending_auction', auctionSlot.rate, 300)
+  note('pending_auction')
+
+  // --- ended: moved out, unit back in service -----------------------------
+  const endedTenant = await makeTenant('Erin', 'Ended', index++)
+  const endedSlot = next()
+  await makeLease(facility.id, endedSlot.unit.id, endedTenant.id, 'ended', endedSlot.rate, 400)
+  note('ended')
+
+  // A couple of units taken offline, so the derived-vs-operational status
+  // split (B-010) is visible in the demo rather than only in tests.
+  const maintenanceSlot = next()
+  await prisma.unit.update({
+    where: { id: maintenanceSlot.unit.id },
+    data: { operationalStatus: 'maintenance' },
+  })
+  await recomputeUnitStatus(maintenanceSlot.unit.id)
+
+  const unrentableSlot = next()
+  await prisma.unit.update({
+    where: { id: unrentableSlot.unit.id },
+    data: { operationalStatus: 'unrentable' },
+  })
+  await recomputeUnitStatus(unrentableSlot.unit.id)
+
+  return { summary, nextIndex: index }
+}
+
+async function main() {
+  if (process.env.NODE_ENV === 'production') {
+    console.error('Refusing to seed demo data with NODE_ENV=production.')
+    process.exitCode = 1
+    return
+  }
+
+  const removed = await teardown()
+  if (removed > 0) console.info(`Removed ${removed} existing demo facilit${removed === 1 ? 'y' : 'ies'}.`)
+
+  const austin = await seedFacility({
+    slug: `${DEMO_PREFIX}austin-south`,
+    name: 'Demo — Austin South',
+    city: 'Austin',
+    postalCode: '78704',
+    addressLine1: '2400 South Congress Ave',
+    unitTypes: [
+      { name: '10x10 Climate', widthFt: 10, lengthFt: 10, climate: true, driveUp: false, street: 14_900, web: 12_900, count: 10 },
+      { name: '10x20 Drive-Up', widthFt: 10, lengthFt: 20, climate: false, driveUp: true, street: 24_900, web: 22_900, count: 8 },
+      { name: '5x5 Locker', widthFt: 5, lengthFt: 5, climate: true, driveUp: false, street: 6_900, web: 5_900, count: 6 },
+    ],
+  })
+
+  const dallas = await seedFacility({
+    slug: `${DEMO_PREFIX}dallas-north`,
+    name: 'Demo — Dallas North',
+    city: 'Dallas',
+    postalCode: '75201',
+    addressLine1: '1800 North Field Street',
+    unitTypes: [
+      { name: '10x15 Climate', widthFt: 10, lengthFt: 15, climate: true, driveUp: false, street: 19_900, web: 17_900, count: 8 },
+      { name: '10x10 Drive-Up', widthFt: 10, lengthFt: 10, climate: false, driveUp: true, street: 15_900, web: 13_900, count: 8 },
+    ],
+  })
+
+  // Every lifecycle state exists at BOTH facilities, so facility scoping is
+  // demonstrable — a manager assigned to one must not see the other's tenants.
+  const first = await seedLifecycleStates(austin, 1)
+  // Indices continue from the first facility so tenant emails stay unique.
+  await seedLifecycleStates(dallas, first.nextIndex)
+
+  const [facilityCount, unitCount, tenantCount, leaseCount] = await Promise.all([
+    prisma.facility.count({ where: { slug: { startsWith: DEMO_PREFIX } } }),
+    prisma.unit.count({ where: { facility: { slug: { startsWith: DEMO_PREFIX } } } }),
+    prisma.tenant.count({ where: { email: { endsWith: DEMO_EMAIL_DOMAIN } } }),
+    prisma.lease.count({ where: { facility: { slug: { startsWith: DEMO_PREFIX } } } }),
+  ])
+
+  console.info(
+    `\nSeeded ${facilityCount} demo facilities, ${unitCount} units, ${tenantCount} tenants, ${leaseCount} leases.`,
+  )
+  console.info('Lifecycle states per facility:', Object.keys(first.summary).join(', '))
+  console.info(`\nAll demo rows are marked: facility slug "${DEMO_PREFIX}*", tenant email "*@${DEMO_EMAIL_DOMAIN}".`)
+  console.info('Re-running this script removes and recreates them; it writes no audit entries.')
+}
+
+// Only run when invoked directly. Without this, merely importing the module —
+// as tests/seed-demo.test.ts does to read its exported constants — would tear
+// down and rebuild the demo data as a side effect of a test run.
+const invokedDirectly =
+  process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href
+
+if (invokedDirectly) {
+  main()
+    .catch((error) => {
+      console.error(error)
+      process.exitCode = 1
+    })
+    .finally(() => prisma.$disconnect())
+}
