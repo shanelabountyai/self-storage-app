@@ -178,7 +178,7 @@ The homepage search submits by **GET** to `/storage/search?q=…` so the query l
 
 ---
 
-### B-014 — Inventory & pricing read API with quote tokens ✅ `PENDING`
+### B-014 — Inventory & pricing read API with quote tokens ✅ `db019dd`
 
 The public, unauthenticated read behind facility and search pages: `GET /api/public/facilities/{slug}/inventory` returns unit types with real availability counts, both rates, and a quote token per type. Keyed by slug because the slug is already the public identifier in `/storage/{state}/{city}/{slug}`; internal ids have no business in a customer-facing URL.
 
