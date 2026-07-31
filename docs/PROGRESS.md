@@ -120,7 +120,7 @@ Status colours follow the US-5 AC, but colour is never the only signal — every
 
 ---
 
-### B-011 — Street rate management ✅ `pending`
+### B-011 — Street rate management ✅ `8b548ed`
 
 Effective-dated street and web rates per unit type, rate history, and a rates API. Completes US-9.
 
