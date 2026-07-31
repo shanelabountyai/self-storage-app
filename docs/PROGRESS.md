@@ -196,7 +196,7 @@ TTL is 30 minutes, matching FR-4.1's checkout unit lock. It is short on purpose:
 
 ---
 
-### B-015 — Location search ✅ `PENDING`
+### B-015 — Location search ✅ `b1413bf`
 
 `/storage/search?q=…` geocodes a zip, city, or "city, state", ranks active facilities by distance from that point, and shows each with its distance, address, amenities, and "units from $X/mo". Whole state lives in the URL, so every result view is shareable and the back button works.
 
