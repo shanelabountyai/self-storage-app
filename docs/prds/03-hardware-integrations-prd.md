@@ -184,6 +184,15 @@ Physical access must not depend on our app being up — and our app must not lie
 - AC3: Simulator supports fault injection via config/UI: offline mode (commands queue), latency, webhook delivery failure, event backlog replay — enough to demo Section 4.3 behaviors.
 - AC4: Seed script creates demo tenants in every lifecycle state across ≥ 2 facilities.
 
+**US-9 [MVP]: Authorized access list per lease.**
+*As a facility manager, I give the tenant's named people their own gate credentials, so the gate log says who actually entered and I can cut off one of them without changing the tenant's code.*
+*(Raised by the operator review, 2026-07-31. A contractor sends two employees; a husband rents and his wife arrives. Today the tenant hands his code around, which destroys the log's evidentiary value at exactly the moment a theft claim needs it, and there is no way to revoke one person.)*
+- AC1: A lease carries an authorized-access list: name, phone, relationship, optional access hours, active/revoked with dates and the actor who changed it. Default per-facility cap of 3 named people, configurable.
+- AC2: Each authorized person gets **their own credential** through the existing grant/credential machinery — never a copy of the tenant's code — individually revocable, and suspended together with the lease when the lease is suspended for delinquency (US-3).
+- AC3: Access events attribute to the credential holder, not to the lease, so "who entered" is answerable from the log alone.
+- AC4: The list is **staff-managed at MVP** (the counter case is the common one). Tenant self-service from the portal is Phase 2 and inherits the same cap.
+- AC5: The authorized-access list and the tenant's **alternate contact** are different things and are never conflated: the alternate contact is who we call, not who gets in. Access by a non-tenant after default is a lien-process input and stays in the event log.
+
 **US-8 (Phase 3): Smart-entry shared access.**
 *As a tenant with smart locks, I unlock via my phone and grant time-boxed access to a family member.*
 - AC1: Tenant can invite a secondary user (name, phone/email) with scope (which unit(s), schedule, expiry) from the portal; invitee gets their own credential — codes are never shared verbatim.
@@ -195,7 +204,7 @@ Physical access must not depend on our app being up — and our app must not lie
 
 ## 6. Functional Requirements
 
-**FR-1 Access grants.** One `AccessGrant` per tenant × facility; states `pending → active ⇄ suspended → revoked`; every transition recorded with cause (`system:move_in`, `system:delinquency`, `staff:<user>` etc.), correlation ID, and pre/post state.
+**FR-1 Access grants.** One `AccessGrant` per **credential holder** × facility — the tenant is one holder, and each authorized person on one of that tenant's leases is another (US-9). A tenant with two units at one site still holds one grant (US-1 AC3); a tenant at two sites holds two. States `pending → active ⇄ suspended → revoked`; every transition recorded with cause (`system:move_in`, `system:delinquency`, `staff:<user>` etc.), correlation ID, and pre/post state.
 **FR-2 Code policy.** Per-facility: length (4–8 digits), uniqueness scope, banned patterns, optional per-gate-zone permissions. Codes generated server-side; staff may trigger regenerate but never hand-type an arbitrary code except through `ManualAdapter` confirmation.
 **FR-3 Command pipeline.** Persistent outbox; idempotent commands; per-facility FIFO ordering; retry with backoff (max ~1h spread) then dead-letter + alert; commands superseded by newer state for the same grant are collapsed (revoke beats suspend).
 **FR-4 Event pipeline.** Webhook receiver (signed) + poller (cursor-based) per Section 4.2; normalization; dedup by `(facilityId, vendorEventId)`; unknown-code retention; ≤ 60s ingestion lag target.

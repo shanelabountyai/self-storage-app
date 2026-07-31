@@ -95,6 +95,8 @@ Role-based access control (RBAC) with facility scoping. A user has exactly one r
 
 Grouped by feature area. AC = acceptance criteria. Stories tagged **[MVP]** or **[P2]** (see Phasing, §9).
 
+> **Numbering note.** US-41 through US-44 were added on 2026-07-31 from the operator review and are filed in the section they belong to, so numbering is not sequential *within* a section. Numbers are never reused or renumbered — they are referenced from `06-backlog.md` and commit messages.
+
 ### 4.1 Multi-Facility
 
 **US-1 [MVP]** As a regional manager, I can switch my working facility from a persistent facility switcher so that all screens scope to that facility.
@@ -103,6 +105,9 @@ Grouped by feature area. AC = acceptance criteria. Stories tagged **[MVP]** or *
 
 **US-2 [MVP]** As an owner, I see a portfolio dashboard rolling up occupancy, revenue MTD, delinquency exposure, and today's move-ins/outs per facility, so I can spot problems in under a minute.
 - AC: One row/card per facility with unit occupancy %, economic occupancy %, revenue MTD vs prior month, delinquent tenant count and delinquent AR $, today's scheduled move-ins/outs; each metric links to the corresponding facility-scoped report; loads in <2s for 20 facilities.
+- AC: **No tile shows a lifetime cumulative count.** Every count carries a time window or a resolution concept in its own label ("Failed payments (this month)"), because a number that only ever goes up under a heading like "needs attention" trains the reader to ignore the row within a week. A tile with nothing to show says so in words; a permanent em dash is noise that teaches the eye to skip the whole row.
+- AC: Every tile is a link to the filtered list or report behind it, as those screens land. A tile whose destination does not exist yet is not a tile.
+- AC: The facility dashboard answers the counter's actual question — **"what can I rent right now?"** — with an *Available now* tile showing the real count of `available` units, hinted with the reserved count. `occupied / total` does not answer it, because reserved, maintenance and unrentable all sit in the gap.
 
 **US-3 [MVP]** As an owner, I configure per-facility settings — office hours, gate hours, tax rates (state/county/city components), fee schedule (admin fee, late fees, NSF fee, lien fees), timezone, address — so each site operates under local rules.
 - AC: Settings are versioned (effective-dated for tax rates and fees); gate hours are exposed via API for PRD 04; changing a tax rate applies to invoices generated after the effective date, never retroactively; every change is audit-logged.
@@ -135,24 +140,58 @@ Grouped by feature area. AC = acceptance criteria. Stories tagged **[MVP]** or *
 **US-11 [MVP]** As a regional manager, I schedule rate increases for existing tenants — one-off (selected tenants) or rule-based (e.g., tenants ≥ 9 months since last increase and ≥ $15 below street) — with required advance notice, so revenue keeps pace without violating notice terms.
 - AC: Each scheduled increase records: tenant, unit, current rate, new rate, effective date, notice date. The system generates the notice letter/email from a template on the notice date (see 4.7 for delivery), and blocks effective dates that violate the facility's configured minimum notice period (default 30 days; configurable, since required notice varies by state/lease). The new rate applies automatically to the first invoice on/after the effective date, with proration if mid-cycle billing anniversary rules require it. Increases are cancellable up to the effective date; cancellation is audit-logged.
 - AC: A rate-increase review screen shows pending increases with projected revenue delta; regional/owner approval is required before notices go out.
+- **AC (schema, MVP — must exist before the data does):** every change to a lease's in-place rate writes a `LeaseRateChange` row — lease, previous cents, new cents, effective date, reason (`move_in`, `ecri`, `transfer`, `promo_expiry`, `manual`), actor, notice-sent reference (nullable until this story ships), and the notice days given. The **first** row is written at move-in. `Lease.monthlyRateCents` remains the current rate and is written **only** through the function that writes the history row — the same discipline as `recomputeUnitStatus()`.
+  This is deliberately built ahead of the workflow it serves (D-5 keeps the workflow in Phase 2, and that stands). Rule-based eligibility asks two questions — when did we last raise this tenant, and how far below street is he — and neither can be reconstructed retroactively. If the history starts when the workflow ships, the first year of tenants is permanently ineligible.
+- **AC (promotional rates):** a discount is a line item; the lease rate is the real rate. A "$1 first month" tenant is not a $1 tenant. Recording a promotion as the lease rate makes economic occupancy lie and makes the first rules-based increase batch do something absurd.
 
 **US-12 [P2]** Rules-based revenue management: automatic street-rate suggestions from occupancy per unit type (e.g., raise when type occupancy > 92%), one-click apply. (Comparable to incumbent "rate management" offerings — [Storable SiteLink](https://www.storable.com/products/sitelink/).)
+
+**US-44 [MVP]** As an owner, I configure the protection-plan catalog and the facility's protection policy, so every move-in either carries a plan or carries evidence of the tenant's own cover.
+*(Added 2026-07-31 from the operator review. Protection is the highest-margin line on the invoice and is currently modelled as a checkbox: the tenant waives by claiming homeowner's cover, nobody sees the declaration page, the policy lapses eight months later, the unit floods, and the operator is in a coverage argument with no record.)*
+- AC: Per-facility policy setting — protection **required** (with a proof-of-insurance waiver permitted) vs **optional**. Texas practice is generally "required, or show proof"; the setting ships defaulted and clearly labelled as configuration (D-10).
+- AC: The plan catalog is coverage tiers with premium cents and coverage cents, **effective-dated like every other price in this system** (FR-9). The premium bills monthly and prorates identically to rent (US-18).
+- AC: Waiving requires a structured record — carrier, policy number, expiry date, and an uploaded declaration page (typed document per US-16) — **or** an explicit manager override with a reason code, audit-logged, for the counter case where the tenant will not produce one.
+- AC: Proof of insurance expiring in 30 days generates a task (US-41) and a tenant notice; lapsed proof flags the lease and appears on the tenant profile.
+- AC: Attach rate is reportable: plan-enrolled leases ÷ new move-ins, per facility, per month, **and per staff member who completed the move-in**. Per-staff is the point — it is a coaching number, not a vanity metric.
+- **Open, blocking:** §10 Q5 (is a full insurance *program* — provider integration, claims — in scope for any phase, and which PRD owns it) must be answered before this ships; it determines whether the waiver record is ours or a provider's. **Auto-enrolment into the plan on lapse is deliberately not specified here** — it is legally sensitive and needs the same attorney caveat as D-10.
 
 ### 4.4 Tenant & Lease Management
 
 **US-13 [MVP]** As counter staff, I see a tenant profile with contact info, alternate contact, active/past leases, balance, payment methods, communication history, notes, and uploaded documents, so any staffer can pick up any conversation.
 - AC: Tenant search by name, phone, email, unit number (partial match, <500ms); profile shows delinquency status prominently; notes support pinning; every note records author + timestamp and is immutable once saved (corrections are new notes).
+- **AC (address of record, MVP — must exist before the data does):** the tenant's address is a **history**, not a mutable field. Every change writes a row with old and new values, the source (`portal`, `counter`, `mail_return`), the actor, and the timestamp; the current address is derived from the latest row. This holds wherever contact info is written — counter, portal, or import.
+  The reason is evidentiary, not tidiness: on day 40 of a lien cycle a tenant updates his address in the portal, and "which address does the notice go to" has to be answerable from records rather than from inference. Mailing to the old one when he can show he told us is a wrongful sale; mailing to the new one when the lease states another may be a failure to use the address of record.
+- **AC:** the `Lease` snapshots the address of record at signing. Notice generation stores the address it actually rendered on the `Notice` row alongside the document hash (US-27), so "where did you send it" is answered by the record.
+- **AC:** an address row can be flagged **returned mail**, which makes the tenant's contact information visibly stale everywhere it renders and creates a task (US-41) rather than sitting in a folder.
+- **AC:** consent to receive **notices by email** is its own consent type, distinct from `account_email` and from marketing consent, captured with the disclosure version at lease signing. Texas permits electronic notice only where the tenant agreed to it; overloading the account-email consent destroys the ability to prove that agreement.
 
 **US-14 [MVP]** Lease lifecycle: reserve → move-in → (transfer)* → move-out.
 - *Reserve:* holds a specific unit (or unit type) with optional deposit; auto-expires after configurable days; reserved units are excluded from availability. AC: expiry releases the unit and notifies the tenant; reservations created on the website (PRD 03) appear identically.
 - *Move-in:* wizard collects tenant info (or links existing tenant), unit, rate (street ± promo), fees (admin fee, first period prorated per policy), insurance selection, lease generation → e-sign or print/countersign upload, payment, gate code issuance (event to PRD 04). AC: completing move-in sets unit `occupied`, creates the recurring billing schedule, and stores the executed lease PDF against the lease record.
 - *Transfer:* moves a tenant to another unit in the same facility; closes old lease, opens new lease with new rate, prorates both sides per policy, keeps tenant history unified. AC: one wizard, one confirmation, both units' statuses update atomically.
-- *Move-out:* records date, computes final balance (prorated refund or amount due per facility policy), settles or writes off small balances (≤ configurable threshold, logged), releases the unit to `available` (or `maintenance` if flagged for cleanout), revokes gate access (event to PRD 04). AC: cannot complete move-out with an unsettled balance above the write-off threshold without a manager override (logged).
+- *Move-out:* records date, computes final balance (prorated refund or amount due per facility policy), settles or writes off small balances (≤ configurable threshold, logged), revokes gate access (event to PRD 04). AC: cannot complete move-out with an unsettled balance above the write-off threshold without a manager override (logged).
+  - AC: **move-out releases the unit to `maintenance`, never straight to `available`.** A staff "verified empty and clean" confirmation, with optional photo, is what makes it rentable again. Skipping the confirmation requires a manager override and is audit-logged. A unit that goes back on sale before anyone opened the door rents on Saturday with the last tenant's junk and a padlock still on it, and costs a same-day refund and a review.
+  - AC: three dates are recorded and never collapsed into one — `moveOutDate` (physical), `paidThroughDate` (billing), and `noticeGivenAt`. Every argument at the counter is about the gap between them.
+  - AC: two facility-level policy settings, defaulted to Texas practice and labelled as configuration (D-10): **prorate out vs no refund on move-out**, and **required notice days** (default: none). Both are already implied by the portal's move-out validation (PRD 01 US-707) and by US-18; they become explicit settings rather than constants.
+  - AC: **abandonment / no-notice move-out is a distinct, staff-initiated path**, dated to the last known occupancy evidence (gate event, lock check), and it does not silently forgive the balance.
+  - AC: an ended lease carrying a balance lands somewhere — a former-tenant AR list with a disposition of write-off (permission + reason code) or collections referral. It never simply disappears from the delinquency view, and it stays inside the AR aging report (US-39.4).
+  - AC: gate access revokes **on the move-out date at facility close**, in facility-local time — not at midnight UTC and not whenever the next nightly run happens to fire.
+- *Proration math is built once,* in the shared core package, in both directions (in and out). The transfer wizard is then a screen over existing math rather than a second implementation of it.
 
 **US-15 [MVP]** E-sign lease storage: executed leases (e-signed via the customer flow in PRD 03, or in-office) are stored immutably against the lease with signer, timestamp, IP (for e-sign), and template version.
 - AC: Any staff role with tenant view access can view/download the lease PDF; re-generation of a lease document creates a new version, never overwrites; the e-sign provider integration is shared with PRD 03 (same envelope records).
 
 **US-16 [MVP]** Document uploads on tenant/lease: ID copies, insurance certificates, correspondence, lien evidence. AC: PDF/JPG/PNG up to 20MB; documents are typed (ID, insurance, lien-notice, other); deletion is soft (admin-only) and audit-logged.
+- AC: this is **one** document store, used by lease PDFs, notices, walkthrough photos, overlock photos and auction evidence alike. Three URL columns on three entities is how the evidence chain ends up with three retention policies and two of them wrong.
+
+**US-42 [MVP]** As a facility manager, I place a **hold** on a lease so that automated collections stop that night and the account cannot be sold, and so any staffer sees why the moment they open it.
+*(Added 2026-07-31 from the operator review. US-25 already says the pipeline halts on "payment/move-out/hold", and nothing anywhere defines a hold. A tenant deploys, files Chapter 7, or dies and his daughter calls: selling the goods of an active-duty servicemember without a court order, or of a debtor under an automatic stay, is not a bad customer experience — it is a federal problem.)*
+- AC: a `LeaseHold` record with type (`military_scra`, `bankruptcy`, `deceased`, `litigation`, `dispute`, `do_not_contact`, `payment_plan`), effective from/to, reason text, supporting-document reference (US-16), and placed-by actor. Multiple concurrent holds are allowed and each is evaluated independently.
+- AC: **effects are declared per hold type as configuration, not hardcoded per screen** — halt dunning sends, halt late-fee assessment (configurable per type), halt access suspension, hard-block auction eligibility, suppress marketing channels. A new hold type is a configuration row, not six code changes.
+- AC: any active hold renders as a persistent banner on the tenant profile, on the delinquency queue row, and on **every** notice-generation and auction-approval screen. A manager must never be able to approve a sale without the hold in view.
+- AC: placing and lifting a hold is audit-logged with a reason; lifting a `military_scra` or `bankruptcy` hold requires manager-or-above.
+- AC: the `deceased` type records an estate contact, and access decisions on that lease are staff-only rather than portal-driven.
+- Note: which effects each hold type must have in Texas needs an attorney pass under D-10's framing. **The mechanism is built now regardless** — the effects are configuration, and the exposure is uncapped while it does not exist.
 
 ### 4.5 Billing Engine
 
@@ -170,6 +209,7 @@ Grouped by feature area. AC = acceptance criteria. Stories tagged **[MVP]** or *
 
 **US-21 [MVP]** Late fee schedule: per-facility rules such as "$X or Y% (greater/lesser) at N days late; second fee at M days" — applied automatically by the delinquency engine, itemized on the ledger.
 - AC: Late fees respect configurable caps; waiving a late fee requires the fee-waive permission and a reason code; waivers are audit-logged and reportable.
+- AC: the fee catalogue covers what a facility actually charges: `admin`, `late`, `nsf`, `lien`, **`lock_cut`, `cleaning`, `damage`, `transfer`, `certified_mail`, `auction_cost`** — all effective-dated per facility like the original four (FR-9). Uncharged lock-cut and cleaning is $50–75 per move-out, and a fee with nowhere to post is a fee nobody charges.
 
 **US-22 [MVP]** Partial payments: staff (and portal) can accept any amount; allocation order is configurable per facility (default: taxes → fees → insurance → oldest rent first).
 - AC: Allocation is displayed at payment time and on the receipt; a partial payment does not by itself stop the delinquency clock (configurable: option to require balance below threshold to exit delinquency).
@@ -207,6 +247,12 @@ Design informed by the commonly described US lien-sale process: default → deni
 **US-28 [MVP]** Status tracking & auction pipeline: an Auction Pipeline screen lists auction-eligible leases with full step history (each step, date executed, proof), pending approvals, scheduled sale date, and advertising record fields (publication/site, dates run).
 - AC: Scheduling a sale requires regional/owner approval and completion of all prior steps with proofs — the system hard-blocks scheduling if any required step lacks proof; sale outcome recording captures: sale date, buyer, gross proceeds, applied-to-balance amount, surplus amount and disposition note, unit released to `maintenance` for cleanout verification.
 - AC: Cancelling a sale (tenant paid) at any point restores the normal lifecycle and logs the reason.
+- **AC (lock cut and inventory):** date and time of the cut, the cutting staff member, disposition of the old lock, an itemised inventory of the unit's contents, and photographs — timestamped, stored immutably and hashed like the notices in US-27. This is the primary evidence that you sold what you said you sold.
+- **AC (buyer record):** name, address, government-ID reference, sales-tax resale certificate where exempt, amount, payment method, and the cleanout deadline with its forfeit terms. A sales-tax return on auction proceeds cannot be filed without it.
+- **AC (proceeds waterfall):** applied by the system in a fixed and stated order — reasonable sale costs → lien balance (rent, late fees, lien fees) → surplus — and **posted as ledger entries against the lease**, never typed in as a total.
+- **AC (surplus):** a surplus is a liability with a statutory life, not revenue. Notify the former tenant at the address of record (US-13), hold for the state's required period, and record the disposition — claimed, or remitted to the state comptroller. Surplus quietly retained is how a routine auction becomes a class-action-shaped problem.
+- **AC (vehicles, boats, trailers):** flag unit contents as vehicle-containing and **hard-block the standard auction path** with "requires separate vehicle lien process". Titled property follows a different notice and sale route in Texas and most states; running one silently through this pipeline is a wrongful sale by construction.
+- Note: the Texas surplus holding period and the vehicle carve-out specifics need an attorney pass under D-10. The fields and the hard block are built now; the durations are configuration.
 
 **US-29 [MVP]** Per-state disclaimer & guardrails: the timeline configuration screen displays a persistent disclaimer that lien requirements vary by state and configurations must be attorney-reviewed; the system requires a facility "state" and shows the configured timeline summary on every auction approval screen.
 - AC: No default timeline is presented as legally compliant; defaults are labeled "example configuration."
@@ -220,14 +266,34 @@ Design informed by the commonly described US lien-sale process: default → deni
 ### 4.8 Walk-In Operations (POS)
 
 **US-32 [MVP]** As counter staff, I complete a walk-in move-in at the counter in under 5 minutes: pick unit from map/list → tenant details → lease e-sign on a tablet/counter screen (or print) → take payment (card via terminal/manual entry, cash, or check) → receipt (print/email) → gate code issued.
-- AC: The POS flow is the same move-in wizard as US-14 with a payment step supporting card, cash (with tendered/change calculation), and check (check # required); cash and check payments post to the drawer session.
+- AC: The POS flow is the same move-in wizard as US-14 with a payment step supporting card, cash (with tendered/change calculation), and check (check # required); cash and check payments post to the drawer session where one exists (drawer sessions are Phase 2 per D-1 — the attribution below is not).
+- **AC (attribution, MVP):** `Payment.receivedByStaffId` is set from the **session actor**, never from a form field, and is required and non-overridable for `cash`, `check`, and `money_order`. A $200 cash payment that posts with a facility id, a timestamp and no human attached is how money walks out of storage facilities, and it is invisible until an annual audit.
+- **AC (daily summary, MVP):** a per-facility per-business-day payments summary — every payment taken that day by method, with the staff name, totals per method, printable as a deposit slip listing check numbers. This is a **read over `Payment`**; it is not a drawer session and does not pre-empt US-33.
+- **AC:** cash payments over a configurable amount, and any cash refund, require manager-or-above through the existing monetary-authority machinery (RBAC-2).
+- **AC:** receipt numbering is gapless per facility, the same discipline as invoice numbering in US-17, so a voided receipt is a visible gap with a reason rather than an absence.
 
 **US-33 [MVP]** Cash/check recording & drawer management: each facility day has a drawer session — opening float, all cash/check transactions, close-out count with over/short recorded and explained.
 - AC: Drawer close-out produces a deposit slip summary (cash total, check list) that feeds the deposits reconciliation report (US-40); over/short beyond a configurable threshold requires a manager note; sessions are audit-logged.
 
+**US-43 [MVP]** As counter staff, I capture a phone or walk-in inquiry in under a minute, so the half of our rentals that start on the phone are in the system instead of on a sticky note.
+*(Added 2026-07-31 from the operator review. "Do you have a 10x10 and how much?" is a ninety-second call that converts often. Today there is nowhere to put it: the web forms are a marketing-module item, the reservation flow is customer-facing, and the counter move-in assumes the person is standing there with a card. The consequence is a lead-to-rental report showing only web leads and looking excellent.)*
+- AC: a "new inquiry" action reachable in one click from any admin screen: name, phone, what they need, target date, unit-type interest, and source (`phone`, `walk_in`, `referral`, `drive_by`) — writing a `Lead` (the entity already exists in the shared schema).
+- AC: from that lead, one click to **quote** (current online and in-store price for the type, plus any applicable promotion) and one click to place a **free hold** through the same reservation service the website uses, with `source = phone`. No card, no account, under 60 seconds end to end.
+- AC: a lead not contacted within the facility's configured window generates a follow-up task (US-41). A lead with no disposition is visible, never silently ageing in `new`.
+- AC: source and channel carry through reservation → move-in, so the move-in/move-out report (US-39.3) can split walk-in vs phone vs web. Web-only attribution is the classic way software talks an owner into defunding the phone.
+
 **US-34 [P2]** Merchandise sales: locks, boxes, packing supplies as SKU'd inventory per facility — price, tax category, stock count, low-stock alert — sellable standalone or attached to a move-in; simple COGS report.
 
 ### 4.9 Tasks & Operations
+
+**US-41 [MVP]** As a part-timer alone on a Saturday, I open **one list** that tells me what to do today at this facility, instead of checking seven queues.
+*(Added 2026-07-31 from the operator review. Failed payments, move-out verifications, delinquency steps, overlocks, manual gate commands, bounced emails and move-in provisioning failures are each specced as their own queue, and `Task` appears in §6.1's entity list with nothing building it. Left alone, each of those grows its own table and its own screen, and the manager who works seven screens skips the last three — against a success metric of ≥95% of delinquency steps executed on their scheduled day.)*
+- AC: one `Task` entity: facility, type, subject entity (lease / unit / tenant / payment), due date as a **facility-local business date**, priority, assignee (nullable = anyone at the facility), status, required proof fields as typed JSON, completion actor + timestamp, and the **source event id** so a task is traceable to whatever created it.
+- AC: creation is **idempotent**, keyed on (type, entityId, businessDate) — a re-run of a nightly job produces one overlock task, not four. This matches the existing job-run idempotency contract.
+- AC: one "My day" list per facility: everything due today or overdue, grouped by type, **mobile-first** because half of it is done while walking the property. Overdue items escalate and roll up to the regional view.
+- AC: a task whose type demands proof (tracking number, photo) cannot be completed without it. There is no "mark done" shortcut past a required proof field.
+- AC: completion is audit-logged wherever the underlying action is sensitive — overlock applied, delinquency step executed, gate command performed manually.
+- AC: **every later queue is a filtered view of this list, not a new table.** US-26 (delinquency), US-35/36 (walkthrough, overlock), US-20's failed payments, PRD 03 US-6's manual gate queue, PRD 05 CN-19's failure follow-ups, and PRD 01 FR-4.6's provisioning failures all create and read `Task`.
 
 **US-35 [MVP]** Daily walkthrough checklist: a mobile-web checklist generated daily per facility: overlocks to apply/remove (from delinquency engine), lock checks on recently vacated units, space-by-space verification items, and free-form findings that convert to maintenance tickets.
 - AC: Checklist completion status is visible to regional roll-up; items can attach photos; skipped days are visible (not silently absent).
@@ -253,6 +319,11 @@ Design informed by the commonly described US lien-sale process: default → deni
 5. **Revenue** — billed vs collected, by category (rent, fees, insurance, merchandise, taxes collected), discounts/promos given, write-offs.
 6. **Deposits reconciliation** — per day per facility: system-recorded payments by method (card batches from processor, cash, check) vs drawer close-outs and processor settlement records; variances flagged (US-33).
 - AC: Every report: facility filter, date range, on-screen table + summary tiles, CSV export matching on-screen data exactly; report numbers are consistent with each other (one metrics definition layer — e.g., "occupied" means the same everywhere); month-end snapshot values are frozen once the month closes (P2: formal close process).
+- **AC (the metrics layer is a module, not an intention):** a shared `metrics` module in the core package owns every definition, each with a written formula and unit tests — unit occupancy (occupied ÷ rentable, where **rentable excludes `unrentable` and includes `maintenance`** — state it, do not leave it to be inferred), square-foot occupancy, economic occupancy (collected ÷ gross potential at street), rate variance, AR aging buckets, days-past-due, move-in/move-out counts, delinquent AR. **No screen, tile, or export computes any of these inline.** The first time the owner dashboard says 91% and the rent roll says 88%, he stops trusting both, and a week goes on proving which one was right.
+- **AC:** `daysPastDue(lease)` has exactly one definition, computed from the **original** invoice due date and never from the last retry attempt (US-20), and is used by the dashboard tile, the late-fee run, and every later delinquency consumer.
+- **AC:** roll-up equals the sum of the facility reports with no double counting — asserted in a test, not stated in a document.
+- **AC (report 3 has an owner):** move-ins/move-outs is not an optional extra. Counts and net by facility and date range, by source (walk-in / phone / web per US-43), with reservation-to-move-in conversion and average days from reservation to move-in, CSV matching the screen exactly. It is the report a multi-site manager opens every morning.
+- **AC (rate variance is a report, not a column):** in-place rate vs current street rate per occupied unit, sorted by gap, with months since the last change (US-11). That report is the worklist the Phase-2 rate-increase workflow runs from.
 
 **US-40 [P2]** Scheduled report emails; management summary pack (monthly PDF); accounting export (QuickBooks-compatible journal CSV).
 
@@ -283,12 +354,30 @@ Design informed by the commonly described US lien-sale process: default → deni
 - FR-14: Availability target 99.5%; billing jobs recover automatically after downtime (catch-up runs).
 - FR-15: PII and payment data handling per master PRD (tokenized payments only — no PAN storage; provider handles PCI scope).
 
+### 5.5 Accessibility — WCAG 2.1 AA (admin surfaces)
+
+*Added 2026-07-31 from the accessibility review, which found that this PRD contained no accessibility text at all — no "accessib", no "WCAG", no "keyboard", no "contrast", no "aria". Master PRD §7.2 puts admin surfaces in scope in two sentences, and PRD 01 §6.8 is scoped to the customer site, so every admin item to date has been built from a spec that never mentioned AA. That is why the shipped admin routes carry the majority of the audit's blocking findings.*
+
+This section is the admin equivalent of PRD 01 §6.8 and is an acceptance criterion on **every** story in this PRD, not a later cleanup. Staff are users, a manager may be the one with low vision, and a back office is exactly where nobody notices for three years.
+
+- **FR-16 Inherited baseline.** Everything in PRD 01 §6.8 applies here: semantic HTML and landmarks, correct heading order, full keyboard operability, ≥4.5:1 text contrast, ≥3:1 for UI components *and focus indicators*, colour never the sole carrier of meaning, reflow to 320px, text resizable to 200%, `prefers-reduced-motion` respected. Admin shares the customer site's design tokens, so a token that fails on the public site fails here too — fix it once, in the token.
+- **FR-17 Bypass and shell.** Every admin page has a skip link as its first focusable element, targeting a `<main id="main" tabIndex={-1}>`. Without one, a keyboard or switch user tabs the facility switcher, the search, the bell, the user menu, sign-out and every nav item **on every page load** before reaching content.
+- **FR-18 No context change on input (3.2.2).** No `<select>`, checkbox, filter or sort control submits a form or navigates on `change`. The facility switcher, every queue filter, and every report control carry a visible submit. Arrow-keying a select fires `change` on every option passed on some platforms — an auto-submitting switcher navigates a keyboard user to three wrong facilities on the way to the fourth. Where the working context does change, the new context is announced (a `role="status"` on the header facility name is enough).
+- **FR-19 Errors are identified, suggested, and announced (3.3.1, 3.3.3, 4.1.3).** Server actions **return** error state rather than throwing — a thrown error is not a user-facing error message. Field errors render adjacent to their control, referenced by `aria-describedby`, with `aria-invalid="true"`; a summary above the form receives focus on submit so the user hears the count and can jump to each. Messages carry a *suggestion*, not just an identification: "State must be a 2-letter code, e.g. TX."
+- **FR-20 Success is announced too.** Every form has one `role="status"` region **rendered empty at page load** and filled on state change ("Tax rate added, effective 2026-08-01"). A live region inserted into the DOM already populated is unreliably announced by VoiceOver and routinely missed by NVDA — the region must pre-exist the event. The same rule governs every async control: a control that goes silent for ten seconds after activation has failed, and a control that disables itself while busy blurs the user's focus to `<body>`. Use `aria-busy` and a changed label instead of `disabled`.
+- **FR-21 Error prevention for financial and legal data (3.3.4).** Any append-only or irreversible financial configuration — tax components, fee schedule rows, street rates, late-fee rules, refunds, scheduled rate increases — passes through a confirm step that **echoes the parsed result back in the user's terms**: "Add a **state** tax of **8.25%** to *Demo — Austin South*, effective **1 Aug 2026**. This cannot be edited or deleted," with explicit Confirm and Cancel. Values are range-checked server-side and implausible input is rejected with a suggestion rather than stored — a fat-fingered `825` must not become an 825% tax rate on every future invoice. The bulk-edit preview-then-apply shape (US-7) is the pattern to reuse, not to reinvent.
+- **FR-22 Tables carry their relationships (1.3.1, 2.4.6).** The identifying cell of a row is a `<th scope="row">` (unit number, day name, tenant name) and header cells are `scope="col"`. **Every repeated control in a table names its row** — a rotor listing "Set" 200 times or fourteen checkboxes all named "Closed" is unusable by ear. Sortable columns carry `aria-sort`; the row count is announced after filtering; bulk actions announce their outcome ("14 units updated, 2 skipped") rather than only re-rendering the table. Disabling a control in response to another control's state is announced, or the control is made read-only and left reachable instead.
+- **FR-23 Queues, escalation, and charts.** Visual escalation of overdue work never relies on colour alone — text or icon-plus-text (1.4.1). Dashboard charts carry a data-table equivalent or a full text summary, and series are distinguished by more than hue.
+- **FR-24 Verification.** `/admin/*` routes are in the automated axe run using the existing authenticated staff session, alongside the public routes. Automated scanning is a floor: it checks text contrast only, cannot judge announcement, and only ever sees a freshly loaded page — so scans additionally run **after** an invalid form submit and after a bulk-edit preview opens, and token contrast pairs get a unit test. Focus-indicator visibility and screen-reader announcement get a recorded manual pass, and "recorded" means a line in `docs/PROGRESS.md`, not a memory.
+
 ---
 
 ## 6. Data & Integration Points
 
 ### 6.1 Core Entities (owned by this module unless noted)
-`Facility` (settings, tax components, fee schedule, hours, timezone, state) · `UnitType` · `Unit` (facility, type, map coordinates, derived status) · `Tenant` (shared with PRD 03 portal identity) · `Lease` (unit, tenant, rate, billing day, status, timeline version) · `Reservation` · `Invoice` / `LineItem` / `Payment` / `Credit` / `Refund` / `LedgerEntry` · `Promotion` · `RateChange` (street) / `TenantRateIncrease` · `DelinquencyTimeline` / `DelinquencyStepInstance` (with proofs) · `Notice` (generated docs) · `AuctionRecord` · `DrawerSession` · `Task` / `MaintenanceTicket` · `Document` · `AuditEntry` · `User` / `RoleAssignment` (shared identity service).
+`Facility` (settings, tax components, fee schedule, hours, timezone, state) · `UnitType` · `Unit` (facility, type, map coordinates, derived status) · `Tenant` (shared with PRD 03 portal identity) · `TenantAddressHistory` (US-13) · `Lease` (unit, tenant, rate, billing day, status, timeline version, address snapshot at signing) · `LeaseRateChange` (US-11) · `LeaseHold` (US-42) · `Reservation` · `Invoice` / `LineItem` / `Payment` (incl. `receivedByStaffId`, US-32) / `Credit` / `Refund` / `LedgerEntry` · `Promotion` · `ProtectionPlan` / `ProtectionWaiver` (US-44) · `RateChange` (street) / `TenantRateIncrease` · `DelinquencyTimeline` / `DelinquencyStepInstance` (with proofs) · `Notice` (generated docs, incl. the address it rendered) · `AuctionRecord` · `DrawerSession` · `Task` (US-41) / `MaintenanceTicket` · `Document` · `AuditEntry` · `User` / `RoleAssignment` (shared identity service).
+
+Four of these are deliberately built **before** the workflow that consumes them, because their value is entirely that they exist before the data does and none of them can be reconstructed retroactively: `LeaseRateChange`, `TenantAddressHistory`, `LeaseHold`, and `Payment.receivedByStaffId`.
 
 ### 6.2 Integration Map
 
@@ -344,7 +433,8 @@ See US-39/40. Principles: one shared metrics-definition layer; every report expo
 - Multi-facility shell: switcher, portfolio dashboard, per-facility settings (US-1–3)
 - Units: grid + basic map view (JSON layout import), types/attributes, bulk edit, derived statuses (US-5–8)
 - Pricing: street rates, promotions, scheduled tenant rate increases with notice letters (US-9–11)
-- Tenants & leases: profiles, reserve/move-in/transfer/move-out, e-sign storage, notes, documents (US-13–16)
+- Tenants & leases: profiles with address-of-record history, reserve/move-in/transfer/move-out, e-sign storage, notes, documents, lease holds (US-13–16, US-42)
+- Tasks as one entity with one per-facility "my day" list, consumed by every queue (US-41); phone/walk-in inquiry capture (US-43); protection-plan catalog and waiver record (US-44)
 - Billing: recurring invoices, proration, autopay + retries, late fees, partial payments, refunds, ledger (US-17–24)
 - Delinquency & lien: configurable timeline, queue, generated notices with proofs, auction pipeline with hard-blocked approvals, disclaimers (US-25–29)
 - POS: counter move-in, cash/check, drawer sessions (US-32–33)
@@ -352,7 +442,8 @@ See US-39/40. Principles: one shared metrics-definition layer; every report expo
 - Audit log (US-38); Reports 1–6 with CSV (US-39); email comms (US-31)
 
 ### Phase 2
-- Visual map layout editor; org-level settings push (US-4); revenue-management rate suggestions (US-12)
+- Org-level settings push (US-4); revenue-management rate suggestions (US-12)
+- ~~Visual map layout editor~~ — **dropped** (operator review, 2026-07-31). A site layout is drawn once and never again; JSON layout import plus the grid view, both shipped, are the correct answer. This also settles §10 Q4 in the negative. Reopen only if a real facility cannot express its layout as JSON.
 - Merchandise/retail inventory (US-34); SMS + print/mail queues; certified-mail and auction-platform integrations (US-30)
 - Scheduled reports, monthly close + accounting export (US-40); approval workflows for refunds at scale; gate-activity display from PRD 04
 
@@ -366,8 +457,8 @@ See US-39/40. Principles: one shared metrics-definition layer; every report expo
 1. **Billing anniversary vs first-of-month:** support both per facility in MVP, or anniversary-only to simplify proration? (Leaning: both, since incumbents support both and migration demand expects it.)
 2. **Delinquency clock vs partial payments:** default policy for whether a partial payment pauses the timeline — configurable in MVP (US-22), but what should the shipped default be? Needs owner input.
 3. **State configuration depth:** do we ship example timeline presets per state (clearly labeled non-legal-advice), or only a single generic example? Presets are valuable but raise "implied compliance" risk — needs a decision with the disclaimer language.
-4. **Map editor scope:** is JSON layout import acceptable for MVP, or is a minimal drag-to-place editor required for the learning-project demo?
-5. **Insurance/protection plans:** treated here as a recurring line item; is a full insurance-program feature (provider integration, claims) in scope for any phase, and which PRD owns it?
+4. ~~**Map editor scope:**~~ **Closed 2026-07-31** — JSON layout import plus the grid view is the answer, and the drag-to-place editor is dropped from Phase 2 (see §9).
+5. **Insurance/protection plans:** treated here as a recurring line item; is a full insurance-program feature (provider integration, claims) in scope for any phase, and which PRD owns it? — **Now blocking.** US-44 needs this answered before it is built: the answer decides whether the waiver's proof-of-insurance record is ours to design or a provider's to supply, and whether "protection required" is a product we sell or a policy we enforce. Escalated to the owner 2026-07-31.
 6. **Approval routing:** single-step approvals (this PRD) vs a shared approval-workflow service used by other modules — master PRD decision.
 7. **Processor settlement ingestion:** MVP reconciles against drawer + system records; when do we ingest processor settlement files automatically (needed for true 3-way reconciliation)?
 8. **Data migration:** importing tenants/ledgers from SiteLink/storEDGE exports — Phase 2 feature or out of scope for the learning project?

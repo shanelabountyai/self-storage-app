@@ -93,6 +93,7 @@ As a prospect, I want a facility page with photos, hours, amenities, and availab
 - Click-to-call phone number (`tel:` link) visible without scrolling on mobile.
 - Facility page renders availability from the live inventory API; if the API is down, show cached data with a "call to confirm availability" notice rather than an error page.
 - Each facility page has a stable, crawlable URL (`/storage/{state}/{city}/{facility-slug}`) — integration point with Marketing/SEO PRD (structured data, local SEO).
+- **Comparison is a two-way door.** When the renter arrives from a search, the facility page carries that context: a back affordance at the top of the page ("← Back to storage near 78704") and the distance from the searched point shown under the address. Any "see other locations" link targets the originating search, not a bare results URL. With no search context the back affordance is absent rather than pointing at an empty results page.
 
 ### 4.2 Unit browsing & size guide
 
@@ -109,7 +110,7 @@ As a prospect, I want to filter available units by size and type so I only see r
 As a first-time renter, I want visual size guidance so I can pick the right unit without guessing.
 *Acceptance criteria:*
 - A size-guide page and an inline drawer on unit lists show each standard size (5x5, 5x10, 5x15, 10x10, 10x15, 10x20, 10x30, parking spaces) with: a real-world comparison ("large closet," "one-bedroom apartment," "two-car garage"), an illustrated top-down view showing example contents (mattress, boxes, appliances), and typical use cases.
-- Optional "size estimator" quiz (MVP-optional, see Phasing): pick rooms/items, get a recommended size with a direct link to available units of that size at the selected facility.
+- ~~Optional "size estimator" quiz~~ — **dropped** (see §9 Phase 2). The guide carries the whole job: a photograph of each size with real contents in it, and a plain "fits a one-bedroom apartment" line.
 - All illustrations have text alternatives; the guide is informational and never blocks the rental flow.
 
 ### 4.3 Pricing display
@@ -122,6 +123,11 @@ As a comparer, I want to see the real monthly cost and all fees before I commit 
 - A cost summary at unit selection and again before payment itemizes: first month's rent (prorated if applicable — show the proration math), one-time admin fee, insurance premium (if selected), lock (if sold), taxes, and **total due today** plus **ongoing monthly total**. No fee may first appear on the payment step.
 - Rent is month-to-month; the site states this plainly ("No long-term contract — month to month").
 - Rate-increase policy disclosure (e.g., "rates may change with 30 days' notice") appears in the lease summary — exact copy is a legal open question (§10).
+- **Both rates render whenever they differ:** the online rate is the primary figure and the in-store rate is struck through, with the saving stated in words ("$179/mo online · $199 in store — $20 off for renting online"). When the two are equal, one figure renders and no strike-through appears — a struck-through price identical to the price charged is a fabricated discount.
+- Each size carries a **"What you'd pay today"** expander, closed by default, itemizing: first month's rent (with a note that a mid-month start is prorated), the one-time admin fee, tax, and a line stating that a protection plan *or* proof of the renter's own cover is required and is chosen at checkout. It foots with **Total due today** and **Then $X/mo**.
+- Components not knowable before checkout (proration for a mid-month start, protection tier) are **named and explained, not omitted** — the rule is no surprises, not no unknowns.
+- Every dollar figure on a customer-facing page carries a unit or a label; no bare number.
+- The total shown at unit selection and the total shown on checkout step 1 are produced by **one shared calculation**, not two implementations. A discrepancy between the two is a release-blocking defect, not a rounding issue.
 
 ### 4.4 Online reservation (no payment)
 
@@ -162,6 +168,10 @@ As a renter, I want to sign the lease, pay, and get my gate code online so I can
 *Acceptance criteria:*
 - All payment collection uses **Stripe** — Payment Element / hosted components only; card data never touches our servers (SAQ-A scope). Methods: cards, Apple Pay, Google Pay, Link, and ACH bank debit (ACH: portal payments and autopay; optional at checkout).
 - **Autopay enrollment** stores the payment method (Stripe SetupIntent → saved payment method on the Stripe Customer) and charges rent automatically on the due date. Enrollment state is visible and toggleable in the portal (US-704).
+- **Autopay default-on carries its disclosure adjacent to the control, not behind a link.** §6.9 permits the pre-selected default only on that condition. Draft copy, to ship with the same "unreviewed draft" convention as the legal pages until OQ-4 closes: *"Autopay is on. We'll charge this card $[X] on the [n]th of each month. We'll email you two days before every charge. Turn it off any time in your account — or here."* with a visible toggle beside it.
+- The opt-out is one activation on the same screen — one tap, and one keypress for a keyboard user. It is never a link to a settings page.
+- The confirmation screen (US-501 step 7) restates the autopay state, the next charge date, and the next charge amount.
+- The pre-charge notice (D-11a) is a dependency of this step, not merely a template in the comms backlog: autopay may not ship default-on without it.
 - **One-time payments** in the portal: pay current balance or a chosen amount ≥ minimum due; instant receipt (§4.8).
 - Failed autopay triggers dunning: automatic retry per configurable schedule (e.g., day 1, 3, 5), notifications at each attempt (§4.8), and a prominent "update card & pay now" portal banner. Delinquency status/fees are computed by the admin module — the site only displays them.
 - All amounts, receipts, and statements shown in USD with taxes itemized; Stripe webhooks reconcile payment state with the admin ledger (integration point §7).
@@ -173,6 +183,10 @@ As a renter, I want to sign the lease, pay, and get my gate code online so I can
 
 **US-702 — See my account at a glance**
 - Dashboard shows: unit(s) with facility, unit number, size, monthly rate; current balance and due date; autopay status; **gate code** behind a "show" tap (with copy button); next payment amount.
+- **A past-due account says so, above everything else on the page**, in the problem → consequence → action order of §6.7: "Your account is past due. Your gate code won't open the gate until the balance is paid. **Pay $[X] now**." Pay-now from that banner is ≤2 taps, the same as the normal path.
+- **Where access is suspended, the gate-code panel says so instead of displaying a code.** A displayed code that fails at the gate is worse than no code, and it produces the exact support call the portal exists to prevent.
+- The banner is **display-only**: it renders whatever delinquency state the ledger exposes at the time it is built and never computes delinquency itself. If no delinquency signal exists yet, the item that builds this dashboard records that as an explicit dependency rather than pulling the delinquency engine forward.
+- Until OQ-11 closes, restoration copy is the conservative form: "Access is usually restored within a few minutes of payment. Call us if it isn't."
 
 **US-703 — Pay my bill**
 - Pay balance in ≤3 taps from dashboard using saved method or a new one; wallet support.
@@ -201,6 +215,7 @@ As a renter, I want to sign the lease, pay, and get my gate code online so I can
 |---|---|---|
 | Reservation confirmation | ✓ | ✓ |
 | Reservation expiring reminder (24h before) | ✓ | ✓ |
+| Checkout resume link (sent when the email is captured at step 1 and the session is still open) | ✓ | – |
 | Move-in complete: lease PDF, receipt, **gate code**, unit directions | ✓ | ✓ (gate code + address) |
 | Payment receipt (every successful charge) | ✓ | opt-in |
 | Upcoming due date (X days before; default 5, admin-config) — sent only when autopay is OFF | ✓ | ✓ |
@@ -241,7 +256,7 @@ Numbered for traceability. "MUST" = MVP unless the Phasing table says otherwise.
 3.3 Reservation events emitted to admin (for follow-up workflows owned by admin/marketing modules).
 
 **FR-4 Move-in orchestration**
-4.1 Server-side checkout session state machine: details → unit-assign → insurance → lease → payment → provisioned. Each transition validated server-side; resumable; 30-min unit lock with heartbeat extension.
+4.1 Server-side checkout session state machine: details → unit-assign → insurance → lease → payment → provisioned. Each transition validated server-side; resumable; 30-min unit lock with heartbeat extension. **Resumability requires a resume link the renter actually receives** — the session's signed token is emailed once the email is captured at step 1 (§4.8), not on abandonment detection, and opening it restores the step the renter left. A draft that only survives while the tab is open is not resumable.
 4.2 Lease generation: merge tenant + unit + rate + insurance into facility-specific lease template (templates managed in admin); e-sign capture (typed signature, consent checkbox, timestamp, IP, SHA-256 doc hash); store signed PDF; email copy.
 4.3 Insurance: plan catalog from admin config; selection or waiver-with-attestation recorded on the tenant record; premium added to recurring billing.
 4.4 Payment: Stripe PaymentIntent for amount due today + SetupIntent for autopay method; idempotency keys on all charge calls; webhook-driven finalization (never trust the client redirect alone).
@@ -300,6 +315,9 @@ Numbered for traceability. "MUST" = MVP unless the Phasing table says otherwise.
 - Each step ≤7 visible fields; optional fields marked "(optional)" — required is the default and unmarked.
 - Errors inline, next to the field, in plain language, announced to screen readers (`aria-live`); the page scrolls to the first error.
 - Price summary persistently visible (collapsible on mobile) through all checkout steps; **total due today** never changes without an explicit intervening choice by the user.
+- **The summary is part of the stepper's chrome, not part of the payment step.** It is built with the stepper and renders on every step, including the ones that ship before payment exists. Contents: unit size + facility, total due today (itemized, expandable), ongoing monthly total, move-in date. On mobile it collapses to one sticky line — "Due today $X · then $Y/mo · tap for detail".
+- Any step that changes either total states the cause in the same breath as the change ("Protection plan added: $12/mo") and announces it to assistive technology. A total that changes silently between steps is a defect.
+- The summary's numbers come from the same shared calculation as the unit-selection total (US-301) — one implementation, two surfaces.
 - Lease step: plain-language summary card first; full lease scrollable below; signature control disabled until the summary has been rendered (not until "scrolled to bottom" — that pattern is hostile and fails on screen readers).
 
 ### 6.5 Tenant portal
@@ -324,6 +342,25 @@ Numbered for traceability. "MUST" = MVP unless the Phasing table says otherwise.
 - Map views have list equivalents; date pickers allow manual text entry; session-timeout warnings with extension option (checkout lock warning at T-5 min).
 - Third-party embeds (Stripe elements, maps) chosen/configured for accessibility; Stripe Payment Element meets this.
 - CI includes automated a11y checks (axe) on all key templates + manual screen-reader test on the two golden paths (rent online; pay bill) each release. Public accessibility statement page.
+- **The accessibility statement claims only what is true today.** Every conformance claim on that page names a mechanism that exists (a CI job, a recorded manual pass, a shipped pattern); anything not yet true belongs in its "where we fall short" section with the item it waits on, and the page carries a dated "last reviewed" line. An overstated statement converts a fixable bug into an alleged misrepresentation.
+- **Automated scanning is a floor, not the definition of done.** Axe checks text contrast but has no opinion on focus-indicator or UI-component boundary contrast, cannot judge whether a live region was announced, and only ever sees a freshly loaded page. The token pairs (`--ring` and the operable-control border against their backgrounds) get a unit test asserting ≥3:1; live regions get a structural test asserting the region is in the DOM *before* the event that fills it; error and post-interaction states get their own scans.
+
+#### 6.8.1 Per-flow accessibility acceptance criteria
+
+§6.8 states the rules; this section states them as the acceptance criteria the individual backlog item carries, because the item row is what a build session actually loads. Every row below inherits §6.8 in full — these are the additions specific to that flow.
+
+| Flow | Additional acceptance criteria |
+|---|---|
+| **Unit browsing, filters, size guide** (US-201/US-202) | Result and filter counts announce from a live region present at page load ("7 sizes match"). Filter and sort controls never auto-submit on change (3.2.2). Every size-guide diagram carries a text equivalent describing what fits, adjacent to the diagram, not inside a long `alt`. Truthful-scarcity indicators never rely on colour or an icon alone. The web-vs-in-store comparison is a table with headers, not two coloured numbers. Any rendering of a dimension string (`10×20`) carries the `sr-only` expansion shipped in B-016 ("10 foot by 20 foot") — U+00D7 announces as a multiplication operator. |
+| **Reservation hold & magic links** (US-401, pay-now links) | Hold expiry is communicated as an absolute local date and time in text ("expires Friday 8 Aug, 5:00 PM"), not a countdown; any countdown is pausable or extendable (2.2.1). A cancel link from an email lands on a confirmation page — an irreversible action never fires from a `GET` (3.3.4). A scoped payment session warns before expiry and offers extension rather than dropping someone mid-payment. |
+| **Checkout stepper** (FR-4.1) | The 30-minute unit lock is a time limit: a warning at T-5 min offers "extend" in one activation and is announced via a live region already in the DOM. The extension control is keyboard-reachable and returns focus where the user was. The heartbeat must not be the only thing holding the lock — a screen-reader user reading a long lease step generates no input events, and an idle-based heartbeat drops that user specifically. Expiry never silently rewrites the page: the unit-lost fallback moves focus to its own heading and is announced. Each step transition moves focus to the new step's `<h2>` and announces "Step 3 of 5, protection plan". The progress indicator carries text, with `aria-current="step"` on the current step. |
+| **Renter details** (US-501 step 1) | Every field carries the correct WCAG `autocomplete` token (`given-name`, `family-name`, `email`, `tel`, `address-line1`, `address-level2`, `postal-code`) — 1.3.5 is an AA criterion and is failed by omission. `inputmode` matches the data and only the data: `numeric` belongs on a zip-only field, never on a field that also accepts letters. Any address autocomplete is a native `<datalist>` or a spec-conformant ARIA 1.2 combobox with managed `aria-activedescendant`, with results announced as a count. |
+| **Protection plan** (US-501 step 3) | Plan options are a `<fieldset>` with a `<legend>` and real radios; the preselected mid-tier announces as selected on entry. The attestation checkbox is unchecked by default and has its own visible label. **Continue is never disabled** — it submits and fails loudly with focus moved to an identified, announced error. A disabled button is invisible to a user who cannot see why it is disabled. The premium's effect on the recurring total is announced when the selection changes. |
+| **Lease review & e-signature** (US-501 step 4) | The on-screen lease carries the same heading structure as the document and is keyboard-scrollable — not a fixed-height clipped div and not an image. The plain-language summary is page content preceding the full text, not a tooltip. The typed signature is a labelled `<input>` with instructions stating what typing the name constitutes; consent is a separate labelled checkbox. A review step shows the exact terms with the ability to go back and correct before the signature commits (3.3.4). |
+| **Generated PDFs** (leases, receipts, notices) | Generated PDFs are tagged: heading structure, reading order, table headers, document `lang`, `/Title` metadata, and real text rather than a rasterised page. A lease emailed to a tenant is content they must be able to read; an untagged PDF fails 1.1.1/1.3.1/1.3.2 years before anyone notices. |
+| **Payment step** (US-501 step 5) | An itemised review of everything charged today with a distinct confirm action, and back-navigation to any earlier step without losing entered data (3.3.4). The itemised total is a `<table>` or `<dl>` so each amount announces with the thing it is for. The Stripe Payment Element is configured with an `appearance` theme meeting 4.5:1 text and **3:1 borders and focus rings** — Stripe's defaults inherit the same weak-border look this codebase has already had to fix. The checkout route joins the axe list (axe does inject into cross-origin frames), and because contrast over the Element's own surfaces returns undecidable, the scan is paired with a manual keyboard and screen-reader pass and Stripe's current VPAT on file before the item merges. Declined-card and validation errors from inside the Element are mirrored into a page-level live region with focus moved to them. Autopay default-on has a real `<label>`, `aria-describedby` pointing at the pre-charge disclosure, and an opt-out in the same tab sequence. |
+| **Portal dashboard & gate code** (US-702) | The reveal control is a `<button>` with `aria-expanded`, and the revealed code is announced. The code announces character by character — a six-digit code read as "four hundred eighty-two thousand…" is useless. "Copied" is announced, not only shown as a transient toast. This is the toast pattern every later surface will copy, so it is specified once, with a region that persists in the DOM. |
+| **Cookie consent banner** (FR-8.2) | Dismissible entirely by keyboard, with focus moved into it on appearance and returned on dismissal, and no trap — consent banners are the most common source of shipped keyboard traps. It does not obscure content at 320px or at 200% zoom. "Reject" is as reachable and as prominent as "Accept". |
 
 ### 6.9 Friction-reduction decision log (explicit)
 | Decision | Choice | Rationale |
@@ -335,6 +372,24 @@ Numbered for traceability. "MUST" = MVP unless the Phasing table says otherwise.
 | Insurance step | **Explicit choose-or-waive; cannot silently skip; mid-tier preselected.** | Protects both parties; forced-choice avoids "surprise fee" complaints while keeping attach rate. |
 | Form fields | Minimum legally/operationally required; address autocomplete; DOB only if lease requires. | Every field must justify itself; PM sign-off required to add any field to checkout. |
 | ID verification (scan license) | **Not at MVP.** Attestation + payment instrument only; revisit if fraud warrants. | ID-scan steps are high-friction; industry is mixed. Open question §10. |
+
+### 6.10 Customer lexicon (binding on every public surface)
+
+Recorded as **D-15**. The industry's vocabulary is not the renter's, and the shipped site has already drifted three ways for one concept ("unit type" in code and admin, "sizes" on the facility page, "unit types" in the FAQ). One word per concept, used everywhere a customer can read it:
+
+| Concept | Customer word | Admin/internal word |
+|---|---|---|
+| The dimensions (10×20) | **size** | unit type |
+| The thing that is rented | **unit** | Unit |
+| Price for renting online | **online price** | web rate |
+| Price for renting at the counter | **in-store price** | street rate |
+| When the gate opens | **gate hours** | gate hours |
+| When the office is staffed | **office hours** | office hours |
+
+- "Unit type", "street rate", "web rate", "lease", and "delinquent" are admin words and do not appear on customer-facing pages.
+- Copy states what is actually true of the two prices: the online price applies to **renting** online, not to reserving. The FAQ answer reads "Some sizes cost less when you rent online than when you rent at the counter. Both prices are shown before you commit, so you can see which applies to you."
+- No internal identifier — backlog IDs, entity names, status enums — may appear in any customer-reachable route, including `/login` and error states. This is checkable: a test asserts no `B-0\d\d` string renders under the public route group or `/login`.
+- One money formatter serves every customer-facing price (`formatRate()`, shipped in B-016): `$129/mo`, no trailing zeros.
 
 ---
 
@@ -411,7 +466,7 @@ Instrumentation: full checkout-funnel events (per §7.5) from day one — the fu
 
 ### Phase 2 — Fast follow
 - Map view with pins/price bubbles; "use my location."
-- Interactive size-estimator quiz; richer size-guide illustrations.
+- Richer size-guide illustrations. **The interactive size-estimator quiz is dropped** (operator review, 2026-07-31): renters do not complete quizzes, and a static size guide with photographs and "fits a one-bedroom apartment" copy converts better for a tenth of the cost. The static guide (US-202, B-017) stands; reopen the quiz only with evidence that the guide is failing.
 - ACH at checkout (portal-only ACH may ship in MVP if cheap); Stripe Link.
 - Monthly statements center; insurance tier change + proof-of-insurance upload in portal.
 - Reservation follow-up nudges (coordinated with marketing module); promo-code entry field.

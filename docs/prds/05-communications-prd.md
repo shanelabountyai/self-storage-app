@@ -96,7 +96,18 @@ Personas (from siblings): **Tara — Tenant**, **Priya — Facility Manager**, *
 
 **CN-9 [MVP]** Rate-increase notice: when the billing engine schedules a rate increase (PRD 02 US-11), send the tenant notice on the configured advance-notice date. AC: email is the primary channel; this notice is **also queued to postal mail when facility/state configuration requires written notice** (PRD 02 owns the mail queue and the legal-sufficiency call — this module only sends the electronic copy and records it); merge fields include old rate, new rate, effective date, and the governing notice-period; send is blocked (loud failure to admin) if any merge field is missing (PRD 02 FR-6 rule inherited).
 
-**CN-10 [P2]** Operational notices: invoice-created ("your invoice is ready") for tenants who want it, autopay-upcoming ("we'll charge your card on the 1st"), card-expiring-soon, insurance-expiring, gate-hours/holiday closures (facility broadcast), maintenance affecting a tenant's building. AC: each is a distinct event-template mapping with per-tenant opt-out where non-essential.
+**CN-10 [P2]** Operational notices: invoice-created ("your invoice is ready") for tenants who want it, autopay-upcoming ("we'll charge your card on the 1st"), insurance-expiring, gate-hours/holiday closures (facility broadcast), maintenance affecting a tenant's building. AC: each is a distinct event-template mapping with per-tenant opt-out where non-essential.
+
+**CN-10a [MVP]** **Card-expiry pre-emption.** *(Pulled from CN-10's P2 bundle on 2026-07-31 — PRD 01 §4.8 already lists "card expiring soon" in its Phase 1 transactional table, and the operator review makes the case that this is not an operational nicety but the cheapest point of autopay success available.)* A nightly job scans saved payment methods expiring within 30 days and sends one templated email with a portal deep link to update the card; it retriggers at 7 days and is suppressed the moment the method is replaced.
+- AC: the scan is idempotent per (tenant, payment method, stage) — a re-run sends nothing twice.
+- AC: replacing the method cancels the 7-day retrigger; there is no message telling a tenant to fix something they have already fixed.
+- AC: measured against PRD 02 §7's ≥92% autopay success target. A card that silently expires puts a tenant who has paid on time for three years into the dunning ladder over something visible 30 days ahead.
+
+**CN-22 [MVP]** **Checkout resume link.** *(Added 2026-07-31 from the UX review.)* PRD 01 FR-4.1 promises a checkout restored "via emailed link", and nothing sends one — the abandonment sequence that would (CN, marketing side) is Phase 2. So a renter interrupted at the lease step, the longest step and the one most likely to be interrupted, has a server-side draft they cannot reach.
+- AC: sent when the checkout session is created **and the renter's email is captured** (end of step 1) — not on abandonment detection.
+- AC: the link carries the session's signed token and restores the step the renter left, not step 1.
+- AC: the body states the hold plainly: "We're holding this unit for you until [time]. After that it goes back on sale."
+- AC: this is **transactional**, not marketing. It is not gated on marketing consent and is distinct from the Phase-2 abandoned-reservation sequence, which remains consent-gated.
 
 ### 3.3 Delinquency-stage and legal-adjacent messages
 
