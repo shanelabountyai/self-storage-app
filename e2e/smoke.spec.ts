@@ -72,6 +72,51 @@ test('search works with JavaScript disabled', async ({ browser }) => {
   await context.close()
 })
 
+test('a search result links through to its facility page', async ({ page }) => {
+  await page.goto('/storage/search?q=78704')
+  await page.getByRole('link', { name: 'Demo — Austin South' }).click()
+
+  // US-103: the crawlable URL scheme is /storage/{state}/{city}/{slug}.
+  await expect(page).toHaveURL('/storage/tx/austin/demo-austin-south')
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('Demo — Austin South')
+})
+
+test('the facility page separates office hours from gate hours', async ({ page }) => {
+  await page.goto('/storage/tx/austin/demo-austin-south')
+
+  // §6.3: these must never be conflated. The demo facility's office is shut on
+  // Sunday while the gate is open — if one table were rendering for both, this
+  // pair could not both hold.
+  const office = page.getByRole('table', { name: 'Office hours' })
+  const gate = page.getByRole('table', { name: 'Gate access hours' })
+  await expect(office.getByRole('row').filter({ hasText: 'sunday' })).toContainText('Closed')
+  await expect(gate.getByRole('row').filter({ hasText: 'sunday' })).toContainText('8:00 AM')
+})
+
+test('the facility page offers click-to-call without scrolling', async ({ page }) => {
+  await page.goto('/storage/tx/austin/demo-austin-south')
+
+  // §4.1 US-103: visible without scrolling on mobile. Asserted as "inside the
+  // first viewport", which is what that sentence means on a phone.
+  const call = page.getByRole('main').getByRole('link', { name: /^Call/ })
+  await expect(call).toBeVisible()
+  const box = await call.boundingBox()
+  const viewport = page.viewportSize()!
+  expect(box!.y + box!.height).toBeLessThanOrEqual(viewport.height)
+})
+
+test('a non-canonical facility URL redirects to the canonical one', async ({ page }) => {
+  // The slug alone resolves the facility, so the state/city segments are
+  // forgeable. One URL per facility in the index, not one per spelling.
+  await page.goto('/storage/ca/nowhere/demo-austin-south')
+  await expect(page).toHaveURL('/storage/tx/austin/demo-austin-south')
+})
+
+test('an unknown facility 404s rather than rendering an empty page', async ({ page }) => {
+  const response = await page.goto('/storage/tx/austin/no-such-facility')
+  expect(response?.status()).toBe(404)
+})
+
 test('every footer legal page resolves', async ({ page }) => {
   for (const legalPage of LEGAL_PAGES) {
     const response = await page.goto(legalPage.href)

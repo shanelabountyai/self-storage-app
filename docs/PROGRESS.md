@@ -218,6 +218,34 @@ The demo seed now sets facility coordinates from the zip centroid; without them 
 
 ---
 
+### B-016 — Facility detail page ✅ `PENDING`
+
+`/storage/{state}/{city}/{slug}` renders a facility's address, click-to-call, directions deep link, office and gate hours, live unit sizes with prices and real availability counts, amenities, and a map. Search result cards now link to it — B-015 deliberately left them linking nowhere.
+
+**The URL scheme is canonical, not decorative.** The slug alone resolves the facility, so `/storage/ca/nowhere/{slug}` would render perfectly well. Anything that isn't the canonical spelling `permanentRedirect`s (308) to the one that is, so the index carries one URL per facility rather than one per spelling anybody links. `facilityPath()` is the single place that path is built, it is asserted idempotent (a non-idempotent one would be an infinite redirect), and `generateMetadata` declares the same path as `rel=canonical`. That required setting `metadataBase` on the root layout — without it Next emits a relative canonical that crawlers ignore, which Lighthouse caught as SEO 0.91 on this page. B-066 still owns the wider canonical/301 policy and the JSON-LD.
+
+**Office hours and gate hours are two tables, one row per day, never collapsed.** §6.3 forbids conflating them. Collapsed ranges ("Mon–Fri 9–6") read better but guess at which days are equivalent, and the renter who drives out on the one day that differs has been misled by the nicer format. Each table carries both a `<caption>` (names it in the screen-reader table list) and an `<h3>` (puts the distinction in the document outline, where more people meet it). The en dash between times is `aria-hidden` with an `sr-only` "to" beside it — most screen readers don't speak the dash at default verbosity, so "nine AM, six PM" leaves the listener guessing which is opening. `10×20` gets the same treatment: U+00D7 announces as "ten times twenty" with the unit missing entirely.
+
+**Decided: sold-out sizes stay on the page.** They were filtered out at first; that tells a renter looking for a 10x20 that we don't offer one, and they leave instead of calling. Available sizes lead, full ones follow under "Also here, currently full" with a call link. **Decided: one phone number per page** — the facility's own line if it has one, otherwise the org line labelled "our main line" so a renter knows they may be transferred. The first cut mixed the two, sending readers to a different number than the button above it. **Decided: `formatRate()` in `lib/format.ts` is the single customer-facing money format** ("$129", not "$129.00"); the search page had its own copy and the two surfaces rendered the same unit differently one click apart.
+
+**The map embed is behind a native `<details>`.** Two problems, one fix. It put LCP at 2613ms against a 2500ms budget — ~140ms above the otherwise-identical homepage — and collapsed, the third-party document is never fetched at all (verified: zero OpenStreetMap requests). It also keeps the frame out of the tab order, so nobody has to traverse a map they cannot use to reach the directions link, which now precedes it. `<details>` rather than a button because the public path still works with JavaScript disabled. OpenStreetMap needs no API key, which is the same reasoning as D-14 — a required key would be a vendor dependency for a decorative panel.
+
+**Degradation is real, not decorative.** The inventory read is the only call allowed to fail soft: it catches to a "call to confirm availability" notice while address, hours and directions still render (US-103). The profile read is not allowed to fail — a facility page with no address is not worth serving. `revalidate = 300` matches the inventory TTL, and `generateStaticParams` prerenders one page per active facility; without it the segment was on-demand only and the build output showed `ƒ (Dynamic)` with no revalidate window, i.e. the config was dead. That function catches its own database errors and returns `[]` so an unreachable database during a build degrades to on-demand rendering instead of failing the deploy.
+
+**Found — CI never seeded demo data.** `npm run db:seed` seeds roles and permissions only, yet the e2e suite asserts against "Demo — Austin South" by name. Those assertions were being checked against the "we have no facilities listed yet" template and passing anyway. CI now runs `db:seed:demo` before the e2e step. Anything B-015's e2e run proved locally, it was not proving in CI.
+
+**Found — axe reaches inside cross-origin iframes.** The a11y spec asserted only on `violations`, which silently reads "we could not test that" as "that passed". It now asserts on `incomplete` too, and that immediately surfaced four undecidable colour-contrast results — OpenStreetMap's own attribution text over map tiles. Content inside a third-party frame is exempt (we cannot restyle someone else's document); anything on our own page is not.
+
+**Found — iCloud breaks `tsc` after every build.** iCloud Drive resolves its own sync conflicts by writing `file 2.ts` beside `file.ts`, and inside `.next/types` that duplicates every generated route type and fails typecheck with TS2300/TS6200. `apps/web/tsconfig.json` now excludes the `* 2.*` pattern rather than requiring a manual delete after each build.
+
+**Verified:** 365 unit tests (11 new), 54 e2e (7 new, both viewports), Lighthouse accessibility 100 and SEO 100 on the facility page.
+
+**Watch this:** the facility page's LCP is **2612ms against an asserted 2500ms budget** and reproducibly so — three clean runs at 2612/2613/2613 before the map was gated, one run at 2311 after. It passes today only because lhci's aggregation takes the most favourable run, which makes the gate flaky rather than green. The LCP element is a plain text paragraph — no image, no third party, nothing left to defer — so this is the cost of a text-heavy page under Lighthouse's 4× CPU throttling, and the homepage itself hit 2610ms on one run. **Whether the 2500ms budget is right for this project is an owner decision and is deliberately not resolved here**; it was not silently relaxed.
+
+**Left behind:** the photo gallery US-103 asks for — nothing stores a photo yet, and **B-067** owns photo management *with required alt text*, so a gallery built here would either ship without alt text or duplicate that item. Filters, sort, web-vs-street rate comparison and the itemized "what you'd pay today" summary are **B-017** (the page shows the online rate only). Reserve and Rent CTAs are **B-018**/**B-020**, so today the page's only conversion action is a phone call. Search context is not carried into the page, so a comparer loses their zip on the way back — B-017.
+
+---
+
 ## Feature PRDs added mid-build
 
 ### PRD 09 — Support impersonation ("log in as") 📋 specced, not built

@@ -1,6 +1,8 @@
 import Link from 'next/link'
 import { FacilitySearchForm } from '@/components/site/facility-search-form'
 import { SITE } from '@/lib/site-config'
+import { formatRate } from '@/lib/format'
+import { facilityPath } from '@/lib/facility/public-facility'
 import {
   searchFacilities,
   SEARCH_RADIUS_MILES,
@@ -20,18 +22,18 @@ function formatMiles(miles: number): string {
   return `${miles < 10 ? miles.toFixed(1) : Math.round(miles)} mi`
 }
 
-function formatFromPrice(cents: number): string {
-  const dollars = cents / 100
-  // Whole dollars unless the rate genuinely has cents, which street rates
-  // rarely do — "$129/mo" reads better than "$129.00/mo".
-  return `$${dollars % 1 === 0 ? dollars.toFixed(0) : dollars.toFixed(2)}`
-}
-
 function ResultCard({ facility }: { facility: FacilityResult }) {
   return (
     <li className="rounded-lg border p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <h3 className="text-lg font-medium">{facility.name}</h3>
+        <h3 className="text-lg font-medium">
+          {/* The name is the link rather than the whole card: a card-wide click
+              target swallows the address text a user may want to select, and
+              gives screen readers one enormous link name (US-103). */}
+          <Link href={facilityPath(facility)} className="underline underline-offset-4">
+            {facility.name}
+          </Link>
+        </h3>
         <p className="text-muted-foreground text-sm">{formatMiles(facility.distanceMiles)}</p>
       </div>
 
@@ -64,7 +66,7 @@ function ResultCard({ facility }: { facility: FacilityResult }) {
           </>
         ) : (
           <>
-            Units from {formatFromPrice(facility.fromWebRateCents)}
+            Units from {formatRate(facility.fromWebRateCents)}
             <span className="text-muted-foreground font-normal">/mo</span>
           </>
         )}

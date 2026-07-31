@@ -63,6 +63,13 @@ jobs:
       - name: Seed roles and permissions
         run: npm run db:seed
 
+      # The e2e suite asserts against the demo facilities by name (search
+      # ranking, the facility page, the axe route list), so CI has to have them.
+      # Without this the smoke suite was checking the "we have no facilities
+      # listed yet" template and calling it a pass.
+      - name: Seed demo facilities for e2e
+        run: npm run db:seed:demo
+
       # Catches a schema.prisma edit that was never turned into a migration:
       # exit code 2 means the migrated database and the datamodel disagree.
       - name: Check for schema drift
