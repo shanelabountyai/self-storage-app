@@ -36,7 +36,7 @@ Search → facility page → unit → reserve or rent → e-sign → Stripe paym
 | # | ID | Item | PRD/Feature | Size | Depends on | Phase |
 |---|---|---|---|---|---|---|
 | 13 | B-013 ✅ | Public site shell: mobile-first layout, persistent header, homepage with search hero, static/legal pages (FAQ, terms, privacy, accessibility statement) | PRD 01 §6.1–6.2, FR-8 | M | B-001 | MVP |
-| 14 | B-014 | Inventory & pricing read API with quote tokens (price seen = price charged), availability cache TTL + live checkout checks | PRD 01 FR-2 §Inventory & pricing | M | B-010, B-011 | MVP |
+| 14 | B-014 ✅ | Inventory & pricing read API with quote tokens (price seen = price charged), availability cache TTL + live checkout checks | PRD 01 FR-2 §Inventory & pricing | M | B-010, B-011 | MVP |
 | 15 | B-015 | Location search: geocode zip/city, distance-ranked results with "units from $X/mo", shareable URLs, zero-results fallback | PRD 01 §4.1 US-101, FR-1 | M | B-013, B-008, B-014 | MVP |
 | 16 | B-016 | Facility detail page: photos, office vs gate hours, amenities, click-to-call, maps deep link, live unit list, crawlable URL scheme | PRD 01 §4.1 US-103 | M | B-015 | MVP |
 | 17 | B-017 | Unit browsing + transparent pricing: filters/sort, availability counts (truthful scarcity), web vs in-store rate display, cost summary itemization; static size guide page | PRD 01 §4.2–4.3 US-201/US-202/US-301 | M | B-016 | MVP |

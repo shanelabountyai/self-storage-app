@@ -178,6 +178,24 @@ The homepage search submits by **GET** to `/storage/search?q=…` so the query l
 
 ---
 
+### B-014 — Inventory & pricing read API with quote tokens ✅ `PENDING`
+
+The public, unauthenticated read behind facility and search pages: `GET /api/public/facilities/{slug}/inventory` returns unit types with real availability counts, both rates, and a quote token per type. Keyed by slug because the slug is already the public identifier in `/storage/{state}/{city}/{slug}`; internal ids have no business in a customer-facing URL.
+
+**Quote tokens are signed, not stored — the opposite of B-003's auth tokens, deliberately.** An auth token needs revocation, so it lives in a row that can be burned. A quote is the reverse: its whole purpose is to be honoured *even after the street rate moves*, so there is nothing to revoke and expiry is the only bound it needs. The signing key is derived from `AUTH_SECRET` via HKDF rather than reused directly, so a session signature can never be spent as a price — there is a test that signs a payload with `AUTH_SECRET` directly and asserts it is rejected. The payload binds facility + unit type, so a $69 locker quote cannot be redeemed against a $249 drive-up unit.
+
+TTL is 30 minutes, matching FR-4.1's checkout unit lock. It is short on purpose: the token only bridges *seeing* a price to *committing* to one. Once a Reservation exists, `Reservation.quotedRateCents` is the durable record, so the token never needs to survive the 7-day hold.
+
+**Staleness is bounded by `Cache-Control`, not `export const revalidate`** — and that changed mid-item because the build output disproved the first attempt. Route handlers are dynamic by default in Next 16: the segment config left the route marked `ƒ (Dynamic)` and cached nothing, so the ≤5-minute ceiling FR-2.1 promises would have been a claim with no mechanism behind it. `s-maxage=300` with **no** `stale-while-revalidate` is the honest expression of a *worst case* — SWR would let the edge serve past the ceiling. The 404 is explicitly `no-store` so a facility going live isn't hidden by a stale miss.
+
+`liveAvailableCount()` is the separate always-live path FR-2.1 requires for checkout, and is deliberately not reachable from the cached read — a checkout trusting a five-minute-old count would sell the last unit twice.
+
+**Decided:** unit types with no rate in effect are **omitted** from the public feed rather than published at a null price — a "Rent now" button with nothing to charge is worse than an absent listing. Inactive facilities 404 rather than returning an empty list. Only `status: 'available'` counts toward availability; `reserved`/`occupied`/`overlocked`/`maintenance`/`unrentable` are all unsellable. The response lists facility fields one by one instead of spreading the row, so a column added to `Facility` later cannot silently leak into an unauthenticated response.
+
+**Left behind:** promotions (FR-2.3) are B-070 — the token payload is versioned so adding them is a v2 bump, and old tokens are rejected rather than migrated, which a 30-minute TTL makes cheap. Filtering and sorting (US-201) are client-side against this payload and belong to the facility page, B-016. This is a read: B-018 still has to decrement availability atomically when it creates a hold.
+
+---
+
 ## Feature PRDs added mid-build
 
 ### PRD 09 — Support impersonation ("log in as") 📋 specced, not built
