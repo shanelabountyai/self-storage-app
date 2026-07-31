@@ -138,7 +138,7 @@ Rate history state (`scheduled` / `current` / `superseded`) is resolved in the d
 
 **Found:** Prisma generated the migration with `DROP COLUMN` *before* the new table, which would have destroyed every existing rate. Rewrote it as create → backfill → drop, and proved the backfill by seeding a known $199.00/$179.00 type, running the migration, and confirming the values survived.
 
-### B-012 — Seed & demo data ✅ `pending`
+### B-012 — Seed & demo data ✅ `616bc57`
 
 `npm run db:seed:demo` — two facilities, 40 units, 16 tenants, and every lifecycle state (lead, reserved, pending, active, delinquent, pending_auction, ended) at **both** facilities so scoping is demonstrable. Closes Milestone 1.
 
