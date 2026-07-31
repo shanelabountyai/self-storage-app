@@ -160,7 +160,7 @@ Unit statuses are never asserted into place — the seed calls `recomputeUnitSta
 
 ## Milestone 2 — First online move-in
 
-### B-013 — Public site shell ✅ `pending`
+### B-013 — Public site shell ✅ `11bfac8`
 
 Mobile-first public site: persistent header (logo, Find storage, click-to-call, Pay bill), homepage search hero, and the static/legal pages FR-8.1 lists — FAQ, about, contact, terms, privacy, accessibility.
 
