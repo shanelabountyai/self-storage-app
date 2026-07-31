@@ -7,6 +7,11 @@ import { expect, test } from '@playwright/test'
 const PUBLIC_ROUTES = [
   '/',
   '/storage/search?q=78704',
+  // The three search outcomes render different templates, so each is its own
+  // page as far as axe is concerned. 99501 is Anchorage — a real place with no
+  // facility near it, which is the "nothing nearby" state.
+  '/storage/search?q=99501',
+  '/storage/search?q=zzzzz',
   '/faq',
   '/about',
   '/contact',

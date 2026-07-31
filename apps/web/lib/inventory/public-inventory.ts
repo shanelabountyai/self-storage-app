@@ -1,4 +1,5 @@
 import { prisma } from '@storage/db'
+import { effectiveByGroup } from '@storage/core/facility-settings'
 import { currentRatesForFacility } from '@/lib/pricing/unit-type-rates'
 import { mintQuoteToken } from '@/lib/pricing/quote-token'
 
@@ -144,6 +145,52 @@ export async function publicInventoryForFacility(
     asOf: asOf.toISOString(),
     unitTypes: priced,
   }
+}
+
+/// US-101's "units from $X/mo" — the lowest current web rate across unit types
+/// that actually have a unit available, for many facilities at once.
+///
+/// Two queries regardless of how many facilities are passed, because a search
+/// result list would otherwise fan out into one rate query per facility.
+///
+/// A facility is absent from the map when nothing is rentable there, which is
+/// not the same as $0 — callers must render "call for availability" rather than
+/// a price. `null`-vs-absent is the same distinction `currentRatesForFacility`
+/// makes for unpriced types.
+export async function lowestAvailableWebRateByFacility(
+  facilityIds: string[],
+  asOf: Date = new Date(),
+): Promise<Map<string, number>> {
+  if (facilityIds.length === 0) return new Map()
+
+  const [availability, rateRows] = await Promise.all([
+    prisma.unit.groupBy({
+      by: ['facilityId', 'unitTypeId'],
+      where: { facilityId: { in: facilityIds }, status: 'available' },
+      _count: { _all: true },
+    }),
+    prisma.unitTypeRate.findMany({
+      where: { facilityId: { in: facilityIds } },
+      select: { unitTypeId: true, streetRateCents: true, webRateCents: true, effectiveFrom: true },
+    }),
+  ])
+
+  const rates = effectiveByGroup(rateRows, asOf, (row) => row.unitTypeId)
+
+  const lowest = new Map<string, number>()
+  for (const row of availability) {
+    if (row._count._all === 0) continue
+    const rate = rates.get(row.unitTypeId)
+    // An available unit whose type has no rate in effect is not sellable, so
+    // it must not set the "from" price — same rule as the facility feed.
+    if (!rate) continue
+
+    const current = lowest.get(row.facilityId)
+    if (current === undefined || rate.webRateCents < current) {
+      lowest.set(row.facilityId, rate.webRateCents)
+    }
+  }
+  return lowest
 }
 
 /// FR-2.1: "checkout availability checks are always live."

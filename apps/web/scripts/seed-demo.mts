@@ -1,4 +1,5 @@
 import { pathToFileURL } from 'node:url'
+import zipcodes from 'zipcodes'
 import { prisma } from '@storage/db'
 import { CLOSED_ALL_WEEK, type WeeklySchedule } from '@storage/core/facility-settings'
 import { recomputeUnitStatus } from '@/lib/admin/units'
@@ -113,6 +114,12 @@ async function seedFacility(input: {
   addressLine1: string
   unitTypes: { name: string; widthFt: number; lengthFt: number; climate: boolean; driveUp: boolean; street: number; web: number; count: number }[]
 }) {
+  // B-015 ranks facilities by distance, so a facility without coordinates is
+  // invisible to search. Demo sites take their zip centroid, which is accurate
+  // to a mile or so — a real facility would carry the surveyed coordinates of
+  // its gate, captured when the site is set up.
+  const centroid = zipcodes.lookup(input.postalCode)
+
   const facility = await prisma.facility.create({
     data: {
       name: input.name,
@@ -121,6 +128,8 @@ async function seedFacility(input: {
       city: input.city,
       state: 'TX',
       postalCode: input.postalCode,
+      latitude: centroid?.latitude ?? null,
+      longitude: centroid?.longitude ?? null,
       timezone: 'America/Chicago',
       phone: '512-555-0100',
       email: `manager@${input.slug}.${DEMO_EMAIL_DOMAIN}`,

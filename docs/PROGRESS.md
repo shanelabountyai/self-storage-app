@@ -196,6 +196,28 @@ TTL is 30 minutes, matching FR-4.1's checkout unit lock. It is short on purpose:
 
 ---
 
+### B-015 — Location search ✅ `PENDING`
+
+`/storage/search?q=…` geocodes a zip, city, or "city, state", ranks active facilities by distance from that point, and shows each with its distance, address, amenities, and "units from $X/mo". Whole state lives in the URL, so every result view is shareable and the back button works.
+
+**Geocoding takes no vendor — recorded as D-14.** OQ-6's two candidates (Google, Mapbox) both want a billed API key and a network call on the hot search path, for public data that changes about once a year. This follows D-4's precedent for undecided vendors: ship a real local implementation now. A bundled BSD dataset (`zipcodes`) resolves zip and city offline, which is also why `tests/geocode.test.ts` asserts real coordinates instead of mocking a provider. **OQ-6 is narrowed, not closed** — map rendering (B-016) and street-address autocomplete still need a vendor.
+
+Ambiguity resolves rather than dead-ends: "springfield" returns Springfield, IL (most zip codes is a fair proxy for biggest) and puts the state in the echoed label so the user can correct it by typing "Springfield, MA". Cities outside Texas geocode deliberately — a searcher in Tulsa should land on "nothing within 25 miles, here are the closest" rather than "we couldn't find that", which are different problems needing different copy. Both are distinct outcomes in the code and both are in the axe route list.
+
+**"Units from $X/mo" is the cheapest rate a renter could actually take today** — lowest current web rate among unit types with a unit *available*. A cheaper sold-out type must not set the headline price; that would be a truthfulness bug, not a rounding one, and there is a test for exactly that. Facilities with nothing rentable render "no units available, call us" rather than a price, and never $0. `lowestAvailableWebRateByFacility()` answers for every facility in two queries rather than fanning out per result.
+
+**Decided:** search radius is 25 miles — the distance someone will drive with a car full of boxes. Facilities without coordinates are excluded from results rather than sorted to an arbitrary position in a distance-ordered list, and inactive ones are never advertised, matching B-014's feed. Typeahead uses a **native `<datalist>`** populated from our own facility list, not a hand-rolled ARIA combobox and not a national gazetteer: the browser supplies the keyboard model and screen-reader semantics for free, and every suggestion resolves to a real facility instead of confidently routing someone to a zero-results page. The whole search path works with JavaScript disabled — "Use my location" is the only client component and is purely additive — and there is an e2e test that runs the journey with JS off.
+
+The demo seed now sets facility coordinates from the zip centroid; without them a facility is invisible to search. A real facility would carry surveyed coordinates for its gate.
+
+**Verified:** 354 unit tests, 42 e2e (both new search outcome templates added to the axe contract), Lighthouse accessibility 100 on the homepage and the results page. Worth watching: LCP on the results page is ~2.5s, right at the asserted budget rather than comfortably under it. The homepage still prerenders (`○ Static`, 1h revalidate) despite now reading the facility registry for its typeahead.
+
+**Found:** the first e2e run failed against a *stale* server — a leftover `next start` from the previous item still held port 3000 and Playwright reuses an existing server, so four new tests were being checked against the old build. Worth knowing: a green-looking local e2e run is only as current as whatever is on :3000.
+
+**Left behind:** result cards don't link anywhere yet — the facility detail page and its `/storage/{state}/{city}/{slug}` URL scheme are B-016, and linking to a 404 would be worse than not linking. Map view and a richer "use my location" are B-081 (Phase 2). US-101's "typeahead after 2 characters" is the browser's native datalist behaviour, which starts filtering from the first character.
+
+---
+
 ## Feature PRDs added mid-build
 
 ### PRD 09 — Support impersonation ("log in as") 📋 specced, not built

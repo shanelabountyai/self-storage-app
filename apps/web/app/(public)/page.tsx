@@ -1,9 +1,16 @@
 import Link from 'next/link'
+import { FacilitySearchForm } from '@/components/site/facility-search-form'
 import { SITE } from '@/lib/site-config'
 
 // Homepage (PRD 01 §6.1). One primary CTA — the search — and nothing competing
-// with it. The results page itself is B-015; this submits to it via GET so the
-// query lands in a shareable URL (`/storage/search?q=78704`, US-101).
+// with it. The form submits by GET so the query lands in a shareable URL
+// (`/storage/search?q=78704`, US-101).
+
+/// The search form's typeahead lists the places we operate, which means this
+/// page now reads the facility registry. Revalidating hourly keeps it
+/// prerendered and fast rather than making the homepage render per request —
+/// the facility list changes when a site opens, not between page views.
+export const revalidate = 3600
 
 const STEPS = [
   { title: 'Find a facility', body: 'Search by zip or city and compare real prices and real availability.' },
@@ -22,39 +29,9 @@ export default function HomePage() {
           {SITE.tagline}
         </p>
 
-        {/* GET so the result is a bookmarkable URL rather than a POST that
-            can't be shared or refreshed (US-101). */}
-        <form action="/storage/search" method="GET" className="mt-8 flex max-w-xl flex-col gap-3 sm:flex-row">
-          <div className="flex-1">
-            <label htmlFor="q" className="block text-sm font-medium">
-              Where do you need storage?
-            </label>
-            <input
-              id="q"
-              name="q"
-              type="search"
-              required
-              // Zip is the common case on mobile, so open a numeric keypad —
-              // but `inputMode` not `type="number"`, since "Austin, TX" is
-              // equally valid input (§6.2).
-              inputMode="numeric"
-              autoComplete="postal-code"
-              placeholder="Zip code or city"
-              aria-describedby="q-hint"
-              className="border-input bg-background mt-1 h-12 w-full rounded-md border px-3 text-base"
-            />
-            <p id="q-hint" className="text-muted-foreground mt-1 text-sm">
-              For example: 78704, or Austin, TX
-            </p>
-          </div>
-          {/* Full-width on mobile, in the thumb zone (§6.1). */}
-          <button
-            type="submit"
-            className="bg-primary text-primary-foreground hover:bg-primary/90 mt-1 h-12 rounded-md px-6 text-base font-medium sm:mt-7"
-          >
-            Find storage
-          </button>
-        </form>
+        <div className="mt-8">
+          <FacilitySearchForm />
+        </div>
       </section>
 
       <section aria-labelledby="how-heading" className="border-t">
