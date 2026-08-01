@@ -222,3 +222,85 @@ test('the size guide answers the question the links promise', async ({ page }) =
   await expect(page.getByRole('heading', { name: '10 foot by 10 foot' })).toBeVisible()
   await expect(page.getByRole('main')).toContainText('half a standard garage')
 })
+
+test('reserving a unit holds it, for free, with no account', async ({ page }) => {
+  // US-401 / D-7: no password, no card. The whole journey from a unit card to
+  // a confirmed hold.
+  await page.goto('/storage/tx/austin/demo-austin-south')
+  const card = page.getByRole('listitem').filter({ hasText: '5x5 Locker' }).first()
+  await card.getByRole('link', { name: 'Reserve for free' }).click()
+
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('Reserve this unit')
+  await expect(page.getByRole('main')).toContainText('No credit card needed')
+
+  const email = `e2e-${Date.now()}@demo.example.com`
+  await page.getByLabel('First name').fill('Ada')
+  await page.getByLabel('Last name').fill('Prospect')
+  await page.getByLabel('Email').fill(email)
+  await page.getByLabel('Mobile number').fill('512-555-0142')
+  await page.getByRole('button', { name: 'Reserve for free' }).click()
+
+  await expect(page).toHaveURL(/\/reservations\?token=/)
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('Your unit is reserved')
+  // 2.2.1: the hold is communicated as an absolute date and time, never a
+  // countdown the renter cannot pause.
+  await expect(page.getByRole('main')).toContainText('We hold it until')
+  await expect(page.getByRole('main')).toContainText('Nothing has been charged')
+
+  // Give the unit back. Unlike every other test in this suite these hold real
+  // inventory, and the demo facility has a finite number of lockers — a test
+  // that keeps what it takes quietly sells the size out after a few runs and
+  // then fails for a reason that has nothing to do with the code.
+  await page.getByRole('button', { name: 'Cancel this reservation' }).click()
+})
+
+test('an invalid reservation reports the problem next to the field', async ({ page }) => {
+  await page.goto('/storage/tx/austin/demo-austin-south')
+  const card = page.getByRole('listitem').filter({ hasText: '5x5 Locker' }).first()
+  await card.getByRole('link', { name: 'Reserve for free' }).click()
+
+  // A syntactically valid but wrong-looking email gets past the browser's own
+  // check, so the server's message is what the renter actually sees.
+  await page.getByLabel('First name').fill('Ada')
+  await page.getByLabel('Last name').fill('Prospect')
+  await page.getByLabel('Email').fill('ada@nowhere')
+  await page.getByLabel('Mobile number').fill('512-555-0142')
+  await page.getByRole('button', { name: 'Reserve for free' }).click()
+
+  await expect(page.getByRole('main').getByRole('alert')).toBeVisible()
+  await expect(page.getByLabel('Email')).toHaveAttribute('aria-invalid', 'true')
+})
+
+test('the cancel link shows the hold before releasing it', async ({ page }) => {
+  await page.goto('/storage/tx/austin/demo-austin-south')
+  const card = page.getByRole('listitem').filter({ hasText: '5x5 Locker' }).first()
+  await card.getByRole('link', { name: 'Reserve for free' }).click()
+
+  await page.getByLabel('First name').fill('Cancel')
+  await page.getByLabel('Last name').fill('Me')
+  await page.getByLabel('Email').fill(`e2e-cancel-${Date.now()}@demo.example.com`)
+  await page.getByLabel('Mobile number').fill('512-555-0143')
+  await page.getByRole('button', { name: 'Reserve for free' }).click()
+  await expect(page).toHaveURL(/\/reservations\?token=/)
+
+  // 3.3.4: landing on the page cancels nothing — a mail client prefetching the
+  // link must not release someone's unit. Cancelling is a separate POST.
+  // Re-enter the way the emailed link does: the token alone, without the
+  // `new=1` the post-submit redirect carries.
+  const token = new URL(page.url()).searchParams.get('token')!
+  await page.goto(`/reservations?token=${encodeURIComponent(token)}`)
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('Your reservation')
+  await expect(page.getByRole('button', { name: 'Cancel this reservation' })).toBeVisible()
+
+  await page.getByRole('button', { name: 'Cancel this reservation' }).click()
+  // The cancel form is gone once the hold is, so the outcome is reported by the
+  // state that replaced it.
+  await expect(page.getByRole('main').getByRole('status')).toContainText('back available')
+  await expect(page.getByRole('button', { name: 'Cancel this reservation' })).toHaveCount(0)
+})
+
+test('a reservation link that is not real says so without leaking why', async ({ page }) => {
+  await page.goto('/reservations?token=definitely-not-a-real-token')
+  await expect(page.getByRole('heading', { level: 1 })).toContainText("isn't good any more")
+  await expect(page.getByRole('main').getByRole('link', { name: /^Call/ })).toBeVisible()
+})

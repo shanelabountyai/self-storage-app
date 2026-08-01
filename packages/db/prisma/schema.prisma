@@ -699,6 +699,10 @@ model Reservation {
 
   @@index([facilityId, status])
   @@index([status, expiresAt])
+  /// Two invariants live in raw SQL because Prisma cannot express a partial
+  /// index (migration 20260801090000_reservation_hold_invariants):
+  ///   reservation_one_held_per_unit       — unique(unitId) where status='held'
+  ///   reservation_expires_after_creation  — CHECK (expiresAt > createdAt)
   @@map("reservation")
 }
 

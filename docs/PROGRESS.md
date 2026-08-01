@@ -328,6 +328,36 @@ Filters and sort on the facility page, both rates shown honestly, a "What you'd 
 
 ---
 
+### B-018 — Free reservation service ✅ `PENDING`
+
+A no-card hold on a real unit, at a locked rate, cancellable from a link with no login (D-7, US-401, FR-3). The first item where two customers can collide over the same row.
+
+**The concurrency story is `FOR UPDATE SKIP LOCKED`.** "Decrements availability atomically" (FR-3.1) really means "claims one available unit without two requests claiming the same one". A transaction selects one `available` unit of the type with `FOR UPDATE SKIP LOCKED` and attaches the reservation to it. Two renters racing for the last *two* units lock different rows and both succeed; two racing for the *last* unit produce one winner and one honest "sold out", with no retry loop and no advisory lock. Without `SKIP LOCKED` the loser would block until the winner committed and then claim a unit that was no longer free. Both races are tested with real concurrent transactions, not mocks.
+
+**Decided: the database enforces the invariant, not the service.** `reservation_one_held_per_unit` is a partial unique index over `(unitId) WHERE status = 'held'`, so a future code path that skips the claim gets a rejected write rather than a quietly double-booked unit — the same posture as the lease and auth-token invariants. There is a test that bypasses the service to prove it bites. A second constraint, `expiresAt > createdAt`, immediately caught an existing fixture in `units-db.test.ts` that created a hold expiring *before* it was made; the constraint was right and the fixture was wrong.
+
+**There is no availability counter.** The "decrement" is the unit's derived status becoming `reserved`, which is exactly what the public inventory read already counts (B-010's derived-status rule). Nothing to drift out of step with reality, and cancel and expiry are the same mechanism in reverse.
+
+**Decided: holds expire at end of the facility-local day after the move-in date.** A renter moving in on the 8th keeps the unit through the 9th. The offset is read at the *target* instant rather than at the move-in date, so a hold spanning a DST change still lands on local midnight — there is a test for the 1 Nov 2026 fall-back specifically. The sweep job is per-facility at local hour 0 for the same reason: a single UTC hour would expire Texas holds either five hours early or nineteen late depending on the season.
+
+**Decided: the duplicate guard updates in place and does NOT mint a new token.** Same email, facility and unit type within the window is one person changing their mind about a date, not two reservations. Minting a replacement token would invalidate the confirmation email they may be reading right now, so the existing link keeps working and the form says so.
+
+**Decided: arriving at the cancel link cancels nothing.** The link in an email is a GET, and a mail client that prefetches links must not release someone's unit. The link renders the hold — what it is, what it costs, when it ends — and cancelling is a separate POST from that page (3.3.4). The hold is shown as an absolute local date and time, never a countdown: a ticking clock on a page a renter may leave open is a time limit they cannot pause (2.2.1), and it reads as pressure rather than information.
+
+**Only the token hash is stored**, like the auth tokens in B-003, so a database leak hands over no working cancel links. An unknown token and an expired one render the identical page — a guesser learns nothing from the difference, and the renter's next step is the same either way.
+
+**The admin form primitives turned out not to be admin-specific.** The reserve form and the cancel confirmation both use B-094's `AdminForm`/`Field`: they already carry error identification, a suggestion, a focused summary and a persistent live region, which is what PRD 01 §6.8.1 asks of customer-facing forms too. The checkout stepper (B-020) inherits the same behaviour rather than re-deriving half of it. The quoted rate is read server-side from current inventory and never from the posted form — a rate the browser sends is a rate the renter can choose.
+
+**Found — a stale link can outlive its unit type.** The facility page is served from a cached read (B-017), so a size withdrawn in the last five minutes still appears on it. The reserve page does the uncached read, and now redirects back to the list with an explanation instead of 404-ing, which is what a renter following a slightly-stale link actually wants.
+
+**Found — the e2e suite mutates real inventory.** These are the first tests that hold actual units, and the demo facility has six lockers; a test that keeps what it takes sells the size out after a few runs and then fails for reasons unrelated to the code. The reservation tests now cancel their own holds. Related: `unstable_cache` persists to `.next/cache` across dev-server restarts, so a destructive re-seed leaves the facility page serving unit-type IDs that no longer exist until the window ages out.
+
+**Verified:** 444 unit tests (18 new, including both concurrency races and the DST boundary), 192 e2e (8 new), typecheck, lint and build clean. The reserve form and the bad-token reservation page are both in the axe contract.
+
+**Left behind:** no confirmation email or SMS — US-401 lists them and they are **B-031**'s (comms is B-030). Today the confirmation screen is the only place the renter sees their link, which means a closed tab loses it; that is the single biggest gap in this item and it closes as soon as comms lands. "Complete move-in online" from the reservation is **B-020**. Reminder-before-expiry is **B-031**. The move-in window is a constant rather than the per-facility setting US-401 mentions, marked with a `ponytail:` comment. Promotions are not locked with the rate because they do not exist yet (B-070).
+
+---
+
 ## Feature PRDs added mid-build
 
 ### PRD 09 — Support impersonation ("log in as") 📋 specced, not built

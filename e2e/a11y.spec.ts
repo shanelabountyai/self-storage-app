@@ -19,6 +19,10 @@ const PUBLIC_ROUTES = [
   // renders the "nothing matches those filters" state and the applied controls.
   '/storage/tx/austin/demo-austin-south?size=small&features=climate&sort=size',
   '/storage/size-guide',
+  '/storage/tx/austin/demo-austin-south/reserve?unitType=INVALID',
+  // The token-less and bad-token states of the reservation page are the ones a
+  // crawler or a mistyped link reaches; the live states need a real hold.
+  '/reservations?token=not-a-real-token',
   '/faq',
   '/about',
   '/contact',

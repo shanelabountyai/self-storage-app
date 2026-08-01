@@ -235,10 +235,12 @@ function UnitTypeCard({
   unitType,
   phone,
   pricing,
+  facility,
 }: {
   unitType: PublicUnitType
   phone: Phone
   pricing: PublicPricingContext
+  facility: PublicFacility
 }) {
   const available = unitType.availableCount
   const saving = Math.max(0, unitType.streetRateCents - unitType.webRateCents)
@@ -296,6 +298,22 @@ function UnitTypeCard({
       {unitType.description && <p className="mt-3 text-sm text-pretty">{unitType.description}</p>}
 
       {available > 0 && <CostBreakdown unitType={unitType} pricing={pricing} />}
+
+      {available > 0 && (
+        <div className="mt-4">
+          {/* US-401's entry point. Rent now (B-020) joins it here later; §6.6's
+              trust line sits beside the CTA, not buried in the lease. */}
+          <Link
+            href={`${facilityPath(facility)}/reserve?unitType=${unitType.unitTypeId}`}
+            className="bg-primary text-primary-foreground inline-flex min-h-11 items-center rounded-md px-4 text-sm font-medium"
+          >
+            Reserve for free
+          </Link>
+          <p className="text-muted-foreground mt-2 text-xs">
+            Free cancellation · No credit card needed
+          </p>
+        </div>
+      )}
 
       {/* §6.6 / US-201: scarcity language only ever comes from the real count.
           There is no countdown and no "in demand" — the number is the claim. */}
@@ -419,11 +437,13 @@ function UnitList({
   phone,
   pricing,
   filtered,
+  facility,
 }: {
   unitTypes: PublicUnitType[] | null
   phone: Phone
   pricing: PublicPricingContext
   filtered: boolean
+  facility: PublicFacility
 }) {
   if (unitTypes === null) {
     // US-103: an inventory read that fails shows a call-to-confirm notice, never
@@ -484,6 +504,7 @@ function UnitList({
               unitType={unitType}
               phone={phone}
               pricing={pricing}
+              facility={facility}
             />
           ))}
         </ul>
@@ -499,6 +520,7 @@ function UnitList({
               unitType={unitType}
               phone={phone}
               pricing={pricing}
+              facility={facility}
             />
             ))}
           </ul>
@@ -548,6 +570,7 @@ export default async function FacilityPage({
     features?: string | string[]
     sort?: string
     from?: string
+    unavailable?: string
   }>
 }) {
   const { state, city, slug } = await params
@@ -587,6 +610,12 @@ export default async function FacilityPage({
           <Link href={backToSearch} className="underline underline-offset-4">
             ← Back to storage near {query.from}
           </Link>
+        </p>
+      )}
+
+      {query.unavailable && (
+        <p role="status" className="border-input mb-4 rounded-md border p-3 text-sm text-pretty">
+          That size isn&apos;t available here any more. Here is everything we do have.
         </p>
       )}
 
@@ -633,6 +662,7 @@ export default async function FacilityPage({
             phone={phone}
             pricing={pricing}
             filtered={hasActiveFilters(filters)}
+            facility={facility}
           />
         </div>
       </section>

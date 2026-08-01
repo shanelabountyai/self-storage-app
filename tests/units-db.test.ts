@@ -321,8 +321,12 @@ describe.skipIf(!hasDatabase)('recomputeUnitStatus', () => {
         lastName: 'Renter',
         email: `expired-${suffix}@example.com`,
         quotedRateCents: 12_000,
-        // Already past — a stale hold must not keep a unit off the market.
-        expiresAt: new Date(Date.now() - 1000),
+        // A hold taken two days ago that ran out yesterday. B-018 added a CHECK
+        // (expiresAt > createdAt), which this fixture used to violate by
+        // leaving createdAt at "now" — a hold that expired before it was made
+        // cannot happen, and the constraint was right to reject it.
+        createdAt: new Date(Date.now() - 2 * 86_400_000),
+        expiresAt: new Date(Date.now() - 86_400_000),
         tokenHash: `hash-${randomUUID()}`,
       },
     })
