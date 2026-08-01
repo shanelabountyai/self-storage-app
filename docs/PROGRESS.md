@@ -328,7 +328,7 @@ Filters and sort on the facility page, both rates shown honestly, a "What you'd 
 
 ---
 
-### B-018 — Free reservation service ✅ `PENDING`
+### B-018 — Free reservation service ✅ `f297961`
 
 A no-card hold on a real unit, at a locked rate, cancellable from a link with no login (D-7, US-401, FR-3). The first item where two customers can collide over the same row.
 
