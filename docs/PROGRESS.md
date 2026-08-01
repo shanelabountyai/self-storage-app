@@ -304,7 +304,7 @@ The admin half of the review round. PRD 02 contained no accessibility text at al
 
 ---
 
-### B-017 — Unit browsing & transparent pricing ✅ `PENDING`
+### B-017 — Unit browsing & transparent pricing ✅ `74de9dd`
 
 Filters and sort on the facility page, both rates shown honestly, a "What you'd pay today" itemization, a size guide, and the search context carried through so a comparer can get back.
 
