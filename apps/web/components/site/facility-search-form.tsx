@@ -56,10 +56,12 @@ export async function FacilitySearchForm({
             // free. The suggestion set is small enough to ship inline, so there
             // is no fetch-on-keystroke and it works with JavaScript disabled.
             list="facility-suggestions"
-            // Zip is the common case on mobile, so open a numeric keypad — but
-            // `inputMode` not `type="number"`, since "Austin, TX" is equally
-            // valid input (§6.2).
-            inputMode="numeric"
+            // No `inputMode`. Zip is the common case, but this field also
+            // accepts "Austin, TX" — and `inputMode="numeric"` gives iOS Safari
+            // a digits-only keypad with no way to reach letters, which made the
+            // hint below ("or Austin, TX") impossible to follow on an iPhone.
+            // A mixed field takes the full keyboard; §6.2's numeric-keyboard
+            // rule is for genuinely numeric fields.
             autoComplete="postal-code"
             placeholder="Zip code or city"
             aria-describedby="q-hint"

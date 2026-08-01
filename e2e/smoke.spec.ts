@@ -125,14 +125,33 @@ test('every footer legal page resolves', async ({ page }) => {
   }
 })
 
-test('page reflows to 320px without horizontal scroll', async ({ page }) => {
-  // WCAG 1.4.10 / PRD 01 §6.8. Checked at the narrowest supported width
-  // because that is where a fixed-width element would first break out.
-  await page.setViewportSize({ width: 320, height: 800 })
-  await page.goto('/')
+// Reflow moved to e2e/a11y.spec.ts in B-093, where it runs over every public
+// route rather than the homepage alone — the two-column hours grid and the unit
+// tables are the things that break out of 320px, and neither is on the homepage.
 
-  const overflows = await page.evaluate(
-    () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
-  )
-  expect(overflows, 'document scrolls horizontally at 320px').toBe(false)
+test('the skip link paints a real focus indicator', async ({ page }) => {
+  // The programmatic half of WCAG 1.4.11 for focus. A machine can check that an
+  // indicator is drawn and how thick it is; it cannot check that it is visible
+  // against what is behind it — tests/contrast-tokens.test.ts does the contrast
+  // arithmetic, and a human still has to look at it in Safari, whose handling of
+  // `outline-style: auto` differs from Chromium's.
+  await page.goto('/')
+  await page.keyboard.press('Tab')
+
+  const indicator = await page.evaluate(() => {
+    const el = document.activeElement
+    if (!el) return null
+    const style = getComputedStyle(el)
+    return {
+      outlineStyle: style.outlineStyle,
+      outlineWidth: parseFloat(style.outlineWidth),
+      boxShadow: style.boxShadow,
+    }
+  })
+
+  expect(indicator, 'nothing was focused after one Tab').not.toBeNull()
+  const drawn =
+    (indicator!.outlineStyle !== 'none' && indicator!.outlineWidth >= 2) ||
+    indicator!.boxShadow !== 'none'
+  expect(drawn, `focused element draws no indicator: ${JSON.stringify(indicator)}`).toBe(true)
 })

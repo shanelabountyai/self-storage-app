@@ -324,7 +324,7 @@ function ContactBlock({ facility, phone }: { facility: PublicFacility; phone: Ph
         </a>
         <a
           href={directionsUrl(facility)}
-          className="hover:bg-accent inline-flex min-h-11 items-center gap-2 rounded-md border px-4 text-sm font-medium"
+          className="border-input hover:bg-accent inline-flex min-h-11 items-center gap-2 rounded-md border px-4 text-sm font-medium"
         >
           <MapPin className="size-4" aria-hidden="true" />
           Get directions
@@ -441,7 +441,7 @@ export default async function FacilityPage({
               <details> and not a button because this needs no JavaScript — the
               whole public path works with the bundle disabled (B-015). */}
           <details className="mt-4">
-            <summary className="inline-flex min-h-11 cursor-pointer items-center rounded-md border px-4 text-sm font-medium">
+            <summary className="border-input inline-flex min-h-11 cursor-pointer items-center rounded-md border px-4 text-sm font-medium">
               Show map
             </summary>
             {/* `title` gives the frame an accessible name; without one a screen

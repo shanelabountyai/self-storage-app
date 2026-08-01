@@ -64,9 +64,20 @@
   --accent: oklch(0.97 0 0);
   --accent-foreground: oklch(0.205 0 0);
   --destructive: oklch(0.577 0.245 27.325);
+  /* Decorative only — card edges, table rules, dividers. Exempt from 1.4.11
+     because it carries no state and delimits nothing the user operates. */
   --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  /* The boundary of anything the user OPERATES: inputs, selects, outline
+     buttons. Must clear 3:1 against --background (1.4.11 Non-text Contrast).
+     For achromatic oklch, relative luminance is exactly L³, so contrast against
+     white is 1.05/(L³+0.05) — the 3:1 floor is L = 0.669. At the old shared
+     0.922 this was 1.26:1, i.e. a white box on a white page whose only edge was
+     invisible. tests/contrast-tokens.test.ts asserts the arithmetic. */
+  --input: oklch(0.62 0 0);
+  /* Focus indicator, same 3:1 floor. Was 0.708 (2.59:1) and applied at /50
+     alpha, which composited to 1.54:1 — including on the skip link, the one
+     control that exists solely for keyboard users. */
+  --ring: oklch(0.55 0 0);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
@@ -100,7 +111,9 @@
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.704 0.191 22.216);
   --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
+  /* Solid rather than a 15% white wash: alpha over a dark ground lands around
+     1.3:1, and the whole point of this token is that it is measurable. */
+  --input: oklch(0.5 0 0);
   --ring: oklch(0.556 0 0);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
@@ -119,7 +132,18 @@
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border;
+  }
+  /* An explicit indicator rather than `outline-ring/50` on `*`. Two reasons the
+     old form was unreliable: the /50 alpha composited the ring down to 1.54:1,
+     and recolouring the UA's `outline-style: auto` ring is honoured by Chromium
+     and Firefox but largely ignored by Safari — so the site's focus visibility
+     was not merely weak, it was undefined per browser. 2px is the minimum that
+     survives the 2px-perimeter test; the offset keeps it off the control's own
+     border so the two don't read as one thick edge. */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
   }
   body {
     @apply bg-background text-foreground;
