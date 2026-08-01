@@ -384,7 +384,7 @@ On the outbound side, the Stripe idempotency key is derived from **what the mone
 
 ---
 
-### B-020 — Checkout session state machine ✅ `PENDING`
+### B-020 — Checkout session state machine ✅ `db0ae0b`
 
 The machine a move-in runs on: a server-side resumable stepper, a 30-minute unit lock, the unit-lost fallback, and the price summary. The *content* of each step is B-021–B-025; what this owns is that they have somewhere to run.
 
