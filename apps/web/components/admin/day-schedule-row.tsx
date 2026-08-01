@@ -13,13 +13,23 @@ type Props = {
 /// One row of a weekly-hours editor. Native <input type="time"> and a
 /// checkbox — the only client-side behavior is disabling the time inputs
 /// while "closed" is checked, so a closed day can't submit stale times.
+///
+/// Every control names its row (B-094). The two schedules render fourteen
+/// checkboxes on one page and their accessible name used to be "Closed" for
+/// all fourteen, with the day sitting in a <td> rather than a <th scope="row">
+/// — so there was no way to tell Monday's office closure from Sunday's gate
+/// closure by ear. The time inputs beside them were already labelled per day;
+/// the pattern was known and just not applied to the checkbox.
 export function DayScheduleRow({ namePrefix, day, value }: Props) {
   const [closed, setClosed] = useState(value.closed)
   const closedId = useId()
+  const schedule = namePrefix === 'gateHours' ? 'Gate hours' : 'Office hours'
 
   return (
     <tr>
-      <td className="py-1 pr-4 capitalize">{day}</td>
+      <th scope="row" className="py-1 pr-4 text-left font-normal capitalize">
+        {day}
+      </th>
       <td className="py-1 pr-4">
         <label className="inline-flex items-center gap-2 text-sm">
           <input
@@ -30,11 +40,15 @@ export function DayScheduleRow({ namePrefix, day, value }: Props) {
             onChange={(e) => setClosed(e.target.checked)}
           />
           Closed
+          <span className="sr-only">
+            {' '}
+            — {schedule}, {day}
+          </span>
         </label>
       </td>
       <td className="py-1 pr-4">
         <label htmlFor={`${closedId}-open`} className="sr-only">
-          {day} opening time
+          {schedule}, {day} opening time
         </label>
         <input
           id={`${closedId}-open`}
@@ -48,7 +62,7 @@ export function DayScheduleRow({ namePrefix, day, value }: Props) {
       </td>
       <td className="py-1">
         <label htmlFor={`${closedId}-close`} className="sr-only">
-          {day} closing time
+          {schedule}, {day} closing time
         </label>
         <input
           id={`${closedId}-close`}

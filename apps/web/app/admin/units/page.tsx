@@ -204,21 +204,22 @@ export default async function AdminUnitsPage({
       </p>
 
       {view === 'list' ? (
-        <table className="w-full text-left text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-max text-left text-sm">
           <thead>
             <tr className="text-muted-foreground">
-              <th className="pb-2 font-normal">Unit</th>
-              <th className="pb-2 font-normal">Type</th>
-              <th className="pb-2 font-normal">Location</th>
-              <th className="pb-2 font-normal">Rate</th>
-              <th className="pb-2 font-normal">Status</th>
-              <th className="pb-2 font-normal"><span className="sr-only">Actions</span></th>
+              <th scope="col" className="pb-2 font-normal">Unit</th>
+              <th scope="col" className="pb-2 font-normal">Type</th>
+              <th scope="col" className="pb-2 font-normal">Location</th>
+              <th scope="col" className="pb-2 font-normal">Rate</th>
+              <th scope="col" className="pb-2 font-normal">Status</th>
+              <th scope="col" className="pb-2 font-normal"><span className="sr-only">Actions</span></th>
             </tr>
           </thead>
           <tbody>
             {units.map((unit) => (
               <tr key={unit.id} className="border-t align-middle">
-                <td className="py-2 font-medium">{unit.number}</td>
+                <th scope="row" className="py-2 text-left font-medium">{unit.number}</th>
                 <td className="py-2">
                   {unit.unitType.name}
                   <span className="text-muted-foreground"> · {unit.unitType.widthFt}×{unit.unitType.lengthFt}</span>
@@ -251,13 +252,16 @@ export default async function AdminUnitsPage({
                         <option key={s} value={s}>{s}</option>
                       ))}
                     </select>
-                    <button type="submit" className="text-xs underline underline-offset-2">Set</button>
+                    <button type="submit" className="text-xs underline underline-offset-2">
+                      Set<span className="sr-only"> status for {unit.number}</span>
+                    </button>
                   </form>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
+        </div>
       ) : (
         <div className="flex flex-col gap-6">
           {[...groups.entries()].map(([label, groupUnits]) => (
@@ -338,15 +342,15 @@ export default async function AdminUnitsPage({
             <table className="w-full text-left text-xs">
               <thead>
                 <tr className="text-muted-foreground">
-                  <th className="pb-1 font-normal">Unit</th>
-                  <th className="pb-1 font-normal">Outcome</th>
-                  <th className="pb-1 font-normal">Detail</th>
+                  <th scope="col" className="pb-1 font-normal">Unit</th>
+                  <th scope="col" className="pb-1 font-normal">Outcome</th>
+                  <th scope="col" className="pb-1 font-normal">Detail</th>
                 </tr>
               </thead>
               <tbody>
                 {preview.rows.map((row) => (
                   <tr key={row.unitId} className="border-t">
-                    <td className="py-1 font-medium">{row.number}</td>
+                    <th scope="row" className="py-1 text-left font-medium">{row.number}</th>
                     <td className="py-1">{row.outcome === 'apply' ? 'Will change' : 'Skipped'}</td>
                     <td className="py-1">
                       {row.outcome === 'apply' ? `${row.from} → ${row.to}` : row.skipReason}
@@ -418,7 +422,9 @@ export default async function AdminUnitsPage({
         <p className="text-muted-foreground text-xs">
           Creates missing units and updates existing ones, matched by number. Never changes
           occupancy. Example:{' '}
-          <code>{`[{"number":"A-1","unitTypeName":"10x10","building":"A","floor":1}]`}</code>
+          {/* One unbreakable token, so it pushed the page sideways at phone
+              width until `break-all` let it wrap (1.4.10). */}
+          <code className="break-all">{`[{"number":"A-1","unitTypeName":"10x10","building":"A","floor":1}]`}</code>
         </p>
 
         <form method="GET" className="flex flex-col gap-2">

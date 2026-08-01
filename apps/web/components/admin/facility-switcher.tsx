@@ -1,6 +1,5 @@
 'use client'
 
-import { useRef } from 'react'
 import { usePathname } from 'next/navigation'
 import { setFacility } from '@/app/admin/actions'
 import {
@@ -21,10 +20,21 @@ type Props = {
 /// screen-reader-accessible for free, and its built-in type-ahead already
 /// satisfies the "search/filter for >5 facilities" acceptance criterion —
 /// no Combobox dependency needed for what a native element already does.
+///
+/// B-094 removed the `onChange` auto-submit (WCAG 3.2.2 On Input). Changing a
+/// <select> value used to run a server action and navigate. On Windows/Firefox
+/// arrow-keying through the option list fires `change` on every option passed,
+/// so a keyboard user with four assigned facilities navigated to three wrong
+/// facilities on the way to the fourth — each one a full page load that reset
+/// their focus. On macOS/VoiceOver the page was replaced mid-interaction with
+/// no warning and nothing announcing the new context.
+///
+/// The fix is a visible submit button. The component stays a client component
+/// only to read the current route for `returnTo`; there is no client-side
+/// behaviour left, and the form posts to a server action, so it works with
+/// JavaScript disabled either way.
 export function FacilitySwitcher({ facilities, cookieValue, canSeeAll }: Props) {
-  const formRef = useRef<HTMLFormElement>(null)
   const pathname = usePathname()
-
   // "All facilities" is offered only on roll-up screens (PRD 02 US-1 AC2).
   // The dashboard is the only one that exists before B-042's portfolio report.
   const allowAllOption = canSeeAll && pathname === '/admin'
@@ -38,7 +48,7 @@ export function FacilitySwitcher({ facilities, cookieValue, canSeeAll }: Props) 
   }
 
   return (
-    <form ref={formRef} action={setFacility} className="inline-flex items-center gap-2">
+    <form action={setFacility} className="inline-flex items-center gap-2">
       <input type="hidden" name="returnTo" value={pathname} />
       <label htmlFor="facility-switcher" className="sr-only">
         Switch facility
@@ -47,7 +57,6 @@ export function FacilitySwitcher({ facilities, cookieValue, canSeeAll }: Props) 
         id="facility-switcher"
         name="facilityId"
         defaultValue={currentValue}
-        onChange={() => formRef.current?.requestSubmit()}
         className="border-input bg-background h-9 rounded-md border px-2 text-sm"
       >
         {allowAllOption && <option value={ALL_FACILITIES}>All facilities</option>}
@@ -57,6 +66,12 @@ export function FacilitySwitcher({ facilities, cookieValue, canSeeAll }: Props) 
           </option>
         ))}
       </select>
+      <button
+        type="submit"
+        className="border-input hover:bg-accent h-9 rounded-md border px-3 text-sm font-medium"
+      >
+        Switch
+      </button>
     </form>
   )
 }

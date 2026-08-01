@@ -178,12 +178,12 @@ export default async function AdminUnitTypesPage({
       <table className="w-full text-left text-sm">
         <thead>
           <tr className="text-muted-foreground">
-            <th className="pb-2 font-normal">Name</th>
-            <th className="pb-2 font-normal">Dimensions</th>
-            <th className="pb-2 font-normal">Attributes</th>
-            <th className="pb-2 font-normal">Street rate</th>
-            <th className="pb-2 font-normal">Web rate</th>
-            <th className="pb-2 font-normal">
+            <th scope="col" className="pb-2 font-normal">Name</th>
+            <th scope="col" className="pb-2 font-normal">Dimensions</th>
+            <th scope="col" className="pb-2 font-normal">Attributes</th>
+            <th scope="col" className="pb-2 font-normal">Street rate</th>
+            <th scope="col" className="pb-2 font-normal">Web rate</th>
+            <th scope="col" className="pb-2 font-normal">
               <span className="sr-only">Actions</span>
             </th>
           </tr>
@@ -211,7 +211,7 @@ export default async function AdminUnitTypesPage({
               </tr>
             ) : (
               <tr key={unitType.id} className="border-t">
-                <td className="py-2">{unitType.name}</td>
+                <th scope="row" className="py-2 text-left font-normal">{unitType.name}</th>
                 <td className="py-2">{dimensions(unitType)}</td>
                 <td className="py-2">{attributeTags(unitType).join(', ') || '—'}</td>
                 <td className="py-2">
@@ -254,7 +254,7 @@ export default async function AdminUnitTypesPage({
                           ))}
                         </select>
                         <button type="submit" className="text-xs underline underline-offset-2">
-                          Go
+                          Go<span className="sr-only"> — clone {unitType.name} to the selected facility</span>
                         </button>
                       </form>
                     )}
@@ -283,10 +283,10 @@ export default async function AdminUnitTypesPage({
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="text-muted-foreground">
-                <th className="pb-1 font-normal">Effective from</th>
-                <th className="pb-1 font-normal">Street</th>
-                <th className="pb-1 font-normal">Web</th>
-                <th className="pb-1 font-normal">State</th>
+                <th scope="col" className="pb-1 font-normal">Effective from</th>
+                <th scope="col" className="pb-1 font-normal">Street</th>
+                <th scope="col" className="pb-1 font-normal">Web</th>
+                <th scope="col" className="pb-1 font-normal">State</th>
               </tr>
             </thead>
             <tbody>

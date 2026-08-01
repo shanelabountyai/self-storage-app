@@ -3,6 +3,8 @@ import zipcodes from 'zipcodes'
 import { prisma } from '@storage/db'
 import { CLOSED_ALL_WEEK, type WeeklySchedule } from '@storage/core/facility-settings'
 import { recomputeUnitStatus } from '@/lib/admin/units'
+import { setPassword } from '@/lib/auth/accounts'
+import { DEMO_EMAIL_DOMAIN, DEMO_STAFF_EMAIL, DEMO_STAFF_PASSWORD } from './demo-credentials.ts'
 
 // Demo/dev data — two facilities and tenants in every lifecycle state
 // (PRD 02 §7, PRD 03 US-7 AC4). Distinct from `npm run db:seed`, which seeds
@@ -24,7 +26,21 @@ import { recomputeUnitStatus } from '@/lib/admin/units'
 // recomputeUnitStatus() like everything else (B-010 US-8).
 
 export const DEMO_PREFIX = 'demo-'
-export const DEMO_EMAIL_DOMAIN = 'demo.example.com'
+export { DEMO_EMAIL_DOMAIN, DEMO_STAFF_EMAIL, DEMO_STAFF_PASSWORD }
+
+/// A signed-in staff account for the e2e suite.
+///
+/// The admin surface had no automated accessibility coverage at all before
+/// B-094, and the reason was circular: the axe run needs a session, and nothing
+/// could create a staff user with a known password. That is exactly how admin
+/// came to carry the majority of the accessibility audit's blocking findings.
+///
+/// This is a real owner account created through the ordinary path — an owner
+/// role plus an all-facilities assignment, per D-12, with no bypass flag. Its
+/// safety rests on the same guard as the rest of this script: `main()` refuses
+/// to run with NODE_ENV=production, it is never invoked by a deploy, and every
+/// row it makes is marked with DEMO_PREFIX / the demo email domain so a
+/// teardown removes it.
 
 /// Every lease lifecycle state the seed creates, at every facility.
 /// tests/seed-demo.test.ts asserts this covers the LeaseStatus enum — CI never
@@ -95,11 +111,36 @@ async function teardown() {
   await prisma.domainEvent.deleteMany({ where })
   await prisma.jobRun.deleteMany({ where })
 
+  // The demo staff user is deliberately NOT deleted. Once it has signed in and
+  // done anything, it owns AuditLog rows, and AuditLog.actorStaffId is
+  // onDelete: Restrict — an audited actor can never be erased, which is the
+  // whole point of an append-only log. Its assignments are removed with the
+  // facilities above and seedStaffOwner() re-creates them, so a re-run still
+  // reproduces a known state.
+  await prisma.staffFacilityAssignment.deleteMany({
+    where: { staffUser: { email: { endsWith: DEMO_EMAIL_DOMAIN } } },
+  })
+
   await prisma.consent.deleteMany({
     where: { tenant: { email: { endsWith: DEMO_EMAIL_DOMAIN } } },
   })
   await prisma.tenant.deleteMany({ where: { email: { endsWith: DEMO_EMAIL_DOMAIN } } })
-  await prisma.facility.deleteMany({ where: { id: { in: facilityIds } } })
+
+  // The facility row itself may be undeletable, and that is not a failure.
+  // AuditLog.facilityId is onDelete: Restrict and a trigger blocks DELETE on
+  // audit_log entirely (B-005), so once anything performs a real audited admin
+  // action against a demo facility — which the e2e suite now can, since B-094
+  // signs in — that facility can never be removed. Every child row above is
+  // already gone, so seedFacility() upserts the shell back to a known state
+  // instead. Without this the seed would be idempotent right up until the first
+  // authenticated test run, then fail forever.
+  try {
+    await prisma.facility.deleteMany({ where: { id: { in: facilityIds } } })
+  } catch {
+    console.info(
+      `Kept ${facilityIds.length} demo facilit${facilityIds.length === 1 ? 'y' : 'ies'} that own audit history; reusing the rows.`,
+    )
+  }
 
   return facilityIds.length
 }
@@ -120,23 +161,29 @@ async function seedFacility(input: {
   // its gate, captured when the site is set up.
   const centroid = zipcodes.lookup(input.postalCode)
 
-  const facility = await prisma.facility.create({
-    data: {
-      name: input.name,
-      slug: input.slug,
-      addressLine1: input.addressLine1,
-      city: input.city,
-      state: 'TX',
-      postalCode: input.postalCode,
-      latitude: centroid?.latitude ?? null,
-      longitude: centroid?.longitude ?? null,
-      timezone: 'America/Chicago',
-      phone: '512-555-0100',
-      email: `manager@${input.slug}.${DEMO_EMAIL_DOMAIN}`,
-      officeHours,
-      gateHours,
-      amenities: ['Gated access', 'Video recording', 'Drive-up units'],
-    },
+  // Upsert, not create: a facility that owns audit history survives teardown
+  // (see the note there), so this has to be able to reset an existing row to
+  // the known demo state rather than assuming a clean slate.
+  const facilityData = {
+    name: input.name,
+    addressLine1: input.addressLine1,
+    city: input.city,
+    state: 'TX',
+    postalCode: input.postalCode,
+    latitude: centroid?.latitude ?? null,
+    longitude: centroid?.longitude ?? null,
+    timezone: 'America/Chicago',
+    phone: '512-555-0100',
+    email: `manager@${input.slug}.${DEMO_EMAIL_DOMAIN}`,
+    officeHours,
+    gateHours,
+    amenities: ['Gated access', 'Video recording', 'Drive-up units'],
+    status: 'active' as const,
+  }
+  const facility = await prisma.facility.upsert({
+    where: { slug: input.slug },
+    create: { slug: input.slug, ...facilityData },
+    update: facilityData,
   })
 
   // Texas is the seeded compliance default (D-10). Rates are basis points.
@@ -199,6 +246,45 @@ async function seedFacility(input: {
   }
 
   return { facility, unitTypes }
+}
+
+/// Scoped to the demo facilities, NOT an all-facilities assignment.
+///
+/// That is deliberate and load-bearing. `createOwnerAccount()` refuses to
+/// bootstrap when a usable all-facilities owner already exists (B-007), so a
+/// demo account holding `facilityId: null` would make `db:seed:demo` silently
+/// break `tests/bootstrap-owner.test.ts` for everyone afterwards — and in CI,
+/// where the demo seed runs before the unit tests, permanently.
+///
+/// Nothing is lost: the e2e suite needs an account that can reach the demo
+/// facilities and exercise the switcher, and two scoped assignments do that
+/// while also being the more realistic shape (a district manager over two
+/// sites). D-12 is untouched — this is an ordinary role + assignment, and the
+/// only unrestricted access remains owner + all-facilities.
+async function seedStaffOwner(facilityIds: string[]) {
+  const ownerRole = await prisma.role.findUnique({ where: { key: 'owner' } })
+  if (!ownerRole) {
+    throw new Error('The "owner" role does not exist — run `npm run db:seed` first.')
+  }
+
+  // Reused rather than recreated: see the note in teardown() — once this
+  // account has acted it cannot be deleted, so the seed has to be able to find
+  // it again. The password is reset on every run so a rotated constant takes
+  // effect without needing the row gone.
+  const staffUser = await prisma.staffUser.upsert({
+    where: { email: DEMO_STAFF_EMAIL },
+    create: { email: DEMO_STAFF_EMAIL, firstName: 'Demo', lastName: 'Owner' },
+    update: { status: 'active', deletedAt: null },
+  })
+  await prisma.staffFacilityAssignment.createMany({
+    data: facilityIds.map((facilityId) => ({
+      staffUserId: staffUser.id,
+      roleId: ownerRole.id,
+      facilityId,
+    })),
+  })
+  await setPassword(staffUser.id, 'staff', DEMO_STAFF_PASSWORD)
+  return staffUser
 }
 
 async function makeTenant(first: string, last: string, index: number) {
@@ -416,6 +502,8 @@ async function main() {
 
   // Every lifecycle state exists at BOTH facilities, so facility scoping is
   // demonstrable — a manager assigned to one must not see the other's tenants.
+  await seedStaffOwner([austin.facility.id, dallas.facility.id])
+
   const first = await seedLifecycleStates(austin, 1)
   // Indices continue from the first facility so tenant emails stay unique.
   await seedLifecycleStates(dallas, first.nextIndex)
@@ -431,7 +519,8 @@ async function main() {
     `\nSeeded ${facilityCount} demo facilities, ${unitCount} units, ${tenantCount} tenants, ${leaseCount} leases.`,
   )
   console.info('Lifecycle states per facility:', Object.keys(first.summary).join(', '))
-  console.info(`\nAll demo rows are marked: facility slug "${DEMO_PREFIX}*", tenant email "*@${DEMO_EMAIL_DOMAIN}".`)
+  console.info(`\nSigned-in demo staff account: ${DEMO_STAFF_EMAIL} / ${DEMO_STAFF_PASSWORD}`)
+  console.info(`All demo rows are marked: facility slug "${DEMO_PREFIX}*", email "*@${DEMO_EMAIL_DOMAIN}".`)
   console.info('Re-running this script removes and recreates them; it writes no audit entries.')
 }
 

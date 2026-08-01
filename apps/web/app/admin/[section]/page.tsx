@@ -1,7 +1,7 @@
-import { notFound } from 'next/navigation'
-import { getAdminActor } from '@/lib/admin/context'
-import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
-import { navItemForSection } from '@/lib/admin/nav'
+import { notFound } from "next/navigation";
+import { getAdminActor } from "@/lib/admin/context";
+import { hasPermissionAnywhere } from "@/lib/rbac/authorize";
+import { navItemForSection } from "@/lib/admin/nav";
 
 // One dynamic route for every nav destination that doesn't have its own
 // backlog item yet, rather than ten near-identical placeholder folders.
@@ -11,19 +11,19 @@ import { navItemForSection } from '@/lib/admin/nav'
 export default async function AdminSectionPage({
   params,
 }: {
-  params: Promise<{ section: string }>
+  params: Promise<{ section: string }>;
 }) {
-  const { section } = await params
-  const item = navItemForSection(section)
-  if (!item) notFound()
+  const { section } = await params;
+  const item = navItemForSection(section);
+  if (!item) notFound();
 
-  const actor = await getAdminActor()
+  const actor = await getAdminActor();
   if (item.anyOf && !hasPermissionAnywhere(actor, item.anyOf)) {
     return (
       <p className="text-muted-foreground text-sm">
         You don&apos;t have access to {item.label}.
       </p>
-    )
+    );
   }
 
   return (
@@ -34,5 +34,5 @@ export default async function AdminSectionPage({
         around it are live.
       </p>
     </div>
-  )
+  );
 }

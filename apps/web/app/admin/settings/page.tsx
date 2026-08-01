@@ -1,4 +1,5 @@
 import { Button } from '@/components/ui/button'
+import { AdminForm, Field } from '@/components/admin/form'
 import { DayScheduleRow } from '@/components/admin/day-schedule-row'
 import { getSwitcherData } from '@/lib/admin/context'
 import { resolveSelectedFacility } from '@/lib/admin/facility-selection-logic'
@@ -57,164 +58,141 @@ export default async function AdminSettingsPage() {
         <h2 id="details-heading" className="text-base font-medium">
           Facility details
         </h2>
-        <form action={updateFacilityDetailsAction} className="grid grid-cols-2 gap-3">
+        <AdminForm
+          action={updateFacilityDetailsAction}
+          label="Facility details"
+          className="grid grid-cols-1 gap-3 sm:grid-cols-2"
+        >
           <input type="hidden" name="facilityId" value={facilityId} />
 
-          <label className="col-span-2 flex flex-col gap-1 text-sm">
-            Name
-            <input
-              name="name"
-              defaultValue={facility.name}
-              required
-              className="border-input bg-background h-9 rounded-md border px-2"
-            />
-          </label>
+          <Field
+            name="name"
+            label="Name"
+            defaultValue={facility.name}
+            required
+            className="flex flex-col gap-1 text-sm sm:col-span-2"
+          />
+          <Field
+            name="addressLine1"
+            label="Address line 1"
+            defaultValue={facility.addressLine1}
+            required
+            className="flex flex-col gap-1 text-sm sm:col-span-2"
+          />
+          <Field
+            name="addressLine2"
+            label="Address line 2"
+            defaultValue={facility.addressLine2 ?? ''}
+            className="flex flex-col gap-1 text-sm sm:col-span-2"
+          />
+          <Field name="city" label="City" defaultValue={facility.city} required />
+          <Field
+            name="state"
+            label="State"
+            defaultValue={facility.state}
+            required
+            maxLength={2}
+            hint="Two-letter code, for example TX."
+          />
+          <Field
+            name="postalCode"
+            label="Postal code"
+            defaultValue={facility.postalCode}
+            required
+          />
+          <Field
+            name="timezone"
+            label="Timezone"
+            as="select"
+            defaultValue={facility.timezone}
+            required
+          >
+            {TIMEZONES.map((tz) => (
+              <option key={tz} value={tz}>
+                {tz}
+              </option>
+            ))}
+          </Field>
+          <Field name="phone" label="Phone" type="tel" defaultValue={facility.phone ?? ''} />
+          <Field name="email" label="Email" type="email" defaultValue={facility.email ?? ''} />
 
-          <label className="col-span-2 flex flex-col gap-1 text-sm">
-            Address line 1
-            <input
-              name="addressLine1"
-              defaultValue={facility.addressLine1}
-              required
-              className="border-input bg-background h-9 rounded-md border px-2"
-            />
-          </label>
-
-          <label className="col-span-2 flex flex-col gap-1 text-sm">
-            Address line 2
-            <input
-              name="addressLine2"
-              defaultValue={facility.addressLine2 ?? ''}
-              className="border-input bg-background h-9 rounded-md border px-2"
-            />
-          </label>
-
-          <label className="flex flex-col gap-1 text-sm">
-            City
-            <input
-              name="city"
-              defaultValue={facility.city}
-              required
-              className="border-input bg-background h-9 rounded-md border px-2"
-            />
-          </label>
-
-          <label className="flex flex-col gap-1 text-sm">
-            State
-            <input
-              name="state"
-              defaultValue={facility.state}
-              required
-              maxLength={2}
-              className="border-input bg-background h-9 rounded-md border px-2 uppercase"
-            />
-          </label>
-
-          <label className="flex flex-col gap-1 text-sm">
-            Postal code
-            <input
-              name="postalCode"
-              defaultValue={facility.postalCode}
-              required
-              className="border-input bg-background h-9 rounded-md border px-2"
-            />
-          </label>
-
-          <label className="flex flex-col gap-1 text-sm">
-            Timezone
-            <select
-              name="timezone"
-              defaultValue={facility.timezone}
-              required
-              className="border-input bg-background h-9 rounded-md border px-2"
-            >
-              {TIMEZONES.map((tz) => (
-                <option key={tz} value={tz}>
-                  {tz}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="flex flex-col gap-1 text-sm">
-            Phone
-            <input
-              name="phone"
-              type="tel"
-              defaultValue={facility.phone ?? ''}
-              className="border-input bg-background h-9 rounded-md border px-2"
-            />
-          </label>
-
-          <label className="flex flex-col gap-1 text-sm">
-            Email
-            <input
-              name="email"
-              type="email"
-              defaultValue={facility.email ?? ''}
-              className="border-input bg-background h-9 rounded-md border px-2"
-            />
-          </label>
-
-          <div className="col-span-2">
+          <div className="sm:col-span-2">
             <Button type="submit">Save details</Button>
           </div>
-        </form>
+        </AdminForm>
       </section>
 
       <section aria-labelledby="hours-heading" className="flex flex-col gap-3">
         <h2 id="hours-heading" className="text-base font-medium">
           Office &amp; gate hours
         </h2>
-        <form action={updateFacilityHoursAction} className="flex flex-col gap-6">
+        <AdminForm
+          action={updateFacilityHoursAction}
+          label="Office and gate hours"
+          className="flex flex-col gap-6"
+        >
           <input type="hidden" name="facilityId" value={facilityId} />
 
           <div>
             <h3 className="mb-2 text-sm font-medium">Office hours</h3>
-            <table className="w-full text-left">
-              <thead className="sr-only">
-                <tr>
-                  <th>Day</th>
-                  <th>Closed</th>
-                  <th>Opens</th>
-                  <th>Closes</th>
-                </tr>
-              </thead>
-              <tbody>
-                {DAYS_OF_WEEK.map((day) => (
-                  <DayScheduleRow key={day} namePrefix="officeHours" day={day} value={officeHours[day]} />
-                ))}
-              </tbody>
-            </table>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-max text-left">
+                <thead className="sr-only">
+                  <tr>
+                    <th scope="col">Day</th>
+                    <th scope="col">Closed</th>
+                    <th scope="col">Opens</th>
+                    <th scope="col">Closes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {DAYS_OF_WEEK.map((day) => (
+                    <DayScheduleRow
+                      key={day}
+                      namePrefix="officeHours"
+                      day={day}
+                      value={officeHours[day]}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
 
           <div>
             <h3 className="mb-2 text-sm font-medium">Gate hours</h3>
-            <table className="w-full text-left">
-              <thead className="sr-only">
-                <tr>
-                  <th>Day</th>
-                  <th>Closed</th>
-                  <th>Opens</th>
-                  <th>Closes</th>
-                </tr>
-              </thead>
-              <tbody>
-                {DAYS_OF_WEEK.map((day) => (
-                  <DayScheduleRow key={day} namePrefix="gateHours" day={day} value={gateHours[day]} />
-                ))}
-              </tbody>
-            </table>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-max text-left">
+                <thead className="sr-only">
+                  <tr>
+                    <th scope="col">Day</th>
+                    <th scope="col">Closed</th>
+                    <th scope="col">Opens</th>
+                    <th scope="col">Closes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {DAYS_OF_WEEK.map((day) => (
+                    <DayScheduleRow
+                      key={day}
+                      namePrefix="gateHours"
+                      day={day}
+                      value={gateHours[day]}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </div>
             <p className="text-muted-foreground mt-2 text-xs">
-              Exposed at <code>/api/facilities/{facilityId}/gate-hours</code> for the hardware
-              module (PRD 03).
+              Exposed at <code className="break-all">/api/facilities/{facilityId}/gate-hours</code>{' '}
+              for the hardware module (PRD 03).
             </p>
           </div>
 
           <div>
             <Button type="submit">Save hours</Button>
           </div>
-        </form>
+        </AdminForm>
       </section>
 
       <section aria-labelledby="tax-heading" className="flex flex-col gap-3">
@@ -222,66 +200,72 @@ export default async function AdminSettingsPage() {
           Tax components
         </h2>
         <p className="text-muted-foreground text-xs">
-          Effective-dated: adding a new rate never changes invoices already generated
-          under the old one (PRD 02 US-3).
+          Effective-dated: adding a new rate never changes invoices already generated under the old
+          one (PRD 02 US-3).
         </p>
 
         {settings.currentTaxComponents.length > 0 && (
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="text-muted-foreground">
-                <th className="pb-1 font-normal">Jurisdiction</th>
-                <th className="pb-1 font-normal">Rate</th>
-                <th className="pb-1 font-normal">Effective from</th>
-              </tr>
-            </thead>
-            <tbody>
-              {settings.currentTaxComponents.map((tax) => (
-                <tr key={tax.jurisdiction}>
-                  <td className="py-1 capitalize">{tax.jurisdiction}</td>
-                  <td className="py-1">{(tax.rateBasisPoints / 100).toFixed(2)}%</td>
-                  <td className="py-1">{tax.effectiveFrom.toISOString().slice(0, 10)}</td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="text-muted-foreground">
+                  <th scope="col" className="pb-1 font-normal">
+                    Jurisdiction
+                  </th>
+                  <th scope="col" className="pb-1 font-normal">
+                    Rate
+                  </th>
+                  <th scope="col" className="pb-1 font-normal">
+                    Effective from
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {settings.currentTaxComponents.map((tax) => (
+                  <tr key={tax.jurisdiction}>
+                    <th scope="row" className="py-1 text-left font-normal capitalize">
+                      {tax.jurisdiction}
+                    </th>
+                    <td className="py-1">{(tax.rateBasisPoints / 100).toFixed(2)}%</td>
+                    <td className="py-1">{tax.effectiveFrom.toISOString().slice(0, 10)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
 
-        <form action={addTaxComponentAction} className="flex flex-wrap items-end gap-3">
+        <AdminForm
+          action={addTaxComponentAction}
+          label="Add a tax component"
+          className="flex flex-wrap items-end gap-3"
+        >
           <input type="hidden" name="facilityId" value={facilityId} />
-          <label className="flex flex-col gap-1 text-sm">
-            Jurisdiction
-            <input
-              name="jurisdiction"
-              placeholder="state, county, city…"
-              required
-              className="border-input bg-background h-9 rounded-md border px-2"
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-sm">
-            Rate (%)
-            <input
-              name="ratePercent"
-              type="number"
-              step="0.01"
-              min="0"
-              max="100"
-              required
-              className="border-input bg-background h-9 w-28 rounded-md border px-2"
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-sm">
-            Effective from
-            <input
-              name="effectiveFrom"
-              type="date"
-              defaultValue={todayIso()}
-              required
-              className="border-input bg-background h-9 rounded-md border px-2"
-            />
-          </label>
+          <Field
+            name="jurisdiction"
+            label="Jurisdiction"
+            placeholder="state, county, city…"
+            required
+          />
+          <Field
+            name="ratePercent"
+            label="Rate (%)"
+            type="number"
+            step="0.01"
+            min="0"
+            max="100"
+            required
+            className="flex w-32 flex-col gap-1 text-sm"
+          />
+          <Field
+            name="effectiveFrom"
+            label="Effective from"
+            type="date"
+            defaultValue={todayIso()}
+            required
+          />
           <Button type="submit">Add rate</Button>
-        </form>
+        </AdminForm>
       </section>
 
       <section aria-labelledby="fees-heading" className="flex flex-col gap-3">
@@ -289,70 +273,77 @@ export default async function AdminSettingsPage() {
           Fee schedule
         </h2>
         <p className="text-muted-foreground text-xs">
-          Baseline amounts only — late-fee rules (caps, grace periods) are configured
-          in B-047.
+          Baseline amounts only — late-fee rules (caps, grace periods) are configured in B-047.
         </p>
 
         {settings.currentFeeSchedule.length > 0 && (
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="text-muted-foreground">
-                <th className="pb-1 font-normal">Fee</th>
-                <th className="pb-1 font-normal">Amount</th>
-                <th className="pb-1 font-normal">Effective from</th>
-              </tr>
-            </thead>
-            <tbody>
-              {settings.currentFeeSchedule.map((fee) => (
-                <tr key={fee.feeType}>
-                  <td className="py-1 capitalize">{fee.feeType}</td>
-                  <td className="py-1">{formatCents(fee.amountCents)}</td>
-                  <td className="py-1">{fee.effectiveFrom.toISOString().slice(0, 10)}</td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="text-muted-foreground">
+                  <th scope="col" className="pb-1 font-normal">
+                    Fee
+                  </th>
+                  <th scope="col" className="pb-1 font-normal">
+                    Amount
+                  </th>
+                  <th scope="col" className="pb-1 font-normal">
+                    Effective from
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {settings.currentFeeSchedule.map((fee) => (
+                  <tr key={fee.feeType}>
+                    <th scope="row" className="py-1 text-left font-normal capitalize">
+                      {fee.feeType}
+                    </th>
+                    <td className="py-1">{formatCents(fee.amountCents)}</td>
+                    <td className="py-1">{fee.effectiveFrom.toISOString().slice(0, 10)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
 
-        <form action={addFeeScheduleEntryAction} className="flex flex-wrap items-end gap-3">
+        <AdminForm
+          action={addFeeScheduleEntryAction}
+          label="Add a fee schedule entry"
+          className="flex flex-wrap items-end gap-3"
+        >
           <input type="hidden" name="facilityId" value={facilityId} />
-          <label className="flex flex-col gap-1 text-sm">
-            Fee type
-            <select
-              name="feeType"
-              required
-              className="border-input bg-background h-9 rounded-md border px-2 capitalize"
-            >
-              {FEE_TYPES.map((type) => (
-                <option key={type} value={type} className="capitalize">
-                  {type}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="flex flex-col gap-1 text-sm">
-            Amount ($)
-            <input
-              name="amountDollars"
-              type="number"
-              step="0.01"
-              min="0"
-              required
-              className="border-input bg-background h-9 w-28 rounded-md border px-2"
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-sm">
-            Effective from
-            <input
-              name="effectiveFrom"
-              type="date"
-              defaultValue={todayIso()}
-              required
-              className="border-input bg-background h-9 rounded-md border px-2"
-            />
-          </label>
+          <Field
+            name="feeType"
+            label="Fee type"
+            as="select"
+            required
+            className="flex flex-col gap-1 text-sm capitalize"
+          >
+            {FEE_TYPES.map((type) => (
+              <option key={type} value={type} className="capitalize">
+                {type}
+              </option>
+            ))}
+          </Field>
+          <Field
+            name="amountDollars"
+            label="Amount ($)"
+            type="number"
+            step="0.01"
+            min="0"
+            required
+            className="flex w-32 flex-col gap-1 text-sm"
+          />
+          <Field
+            name="effectiveFrom"
+            label="Effective from"
+            type="date"
+            defaultValue={todayIso()}
+            required
+          />
           <Button type="submit">Add fee</Button>
-        </form>
+        </AdminForm>
       </section>
     </div>
   )
