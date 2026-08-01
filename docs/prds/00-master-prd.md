@@ -221,6 +221,7 @@ These apply to every module; module PRDs must not re-decide them.
 
 - Mobile-first CSS; every flow usable one-handed on a 360-px-wide viewport. The rental funnel is designed on mobile and adapted up to desktop, not vice versa.
 - Performance budget on 4G mobile: LCP < 2.5 s on location pages (they are the SEO surface), CLS < 0.1.
+- **That budget is the *field* target — the Core Web Vitals threshold real users are measured against. The CI *lab* gate is a different number** (D-19): Lighthouse's mobile run applies simulated 4× CPU throttling and reports pessimistically by design, so it warns at 2500 ms and fails at 3000 ms with run aggregation pinned. Two measurements, two purposes. Do not tighten the lab failure threshold to match the field target — a text-only page with nothing left to defer already reproduces ~2.6 s in the lab, and a gate that passes only because aggregation picked a lucky run is flaky rather than green.
 
 ### 7.4 Security & PCI Scope
 

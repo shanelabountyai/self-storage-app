@@ -186,7 +186,7 @@ As a renter, I want to sign the lease, pay, and get my gate code online so I can
 - **A past-due account says so, above everything else on the page**, in the problem → consequence → action order of §6.7: "Your account is past due. Your gate code won't open the gate until the balance is paid. **Pay $[X] now**." Pay-now from that banner is ≤2 taps, the same as the normal path.
 - **Where access is suspended, the gate-code panel says so instead of displaying a code.** A displayed code that fails at the gate is worse than no code, and it produces the exact support call the portal exists to prevent.
 - The banner is **display-only**: it renders whatever delinquency state the ledger exposes at the time it is built and never computes delinquency itself. If no delinquency signal exists yet, the item that builds this dashboard records that as an explicit dependency rather than pulling the delinquency engine forward.
-- Until OQ-11 closes, restoration copy is the conservative form: "Access is usually restored within a few minutes of payment. Call us if it isn't."
+- **Restoration copy is now definite (OQ-11 closed by D-16):** paying restores access automatically, with no staff action, usually within a couple of minutes. The copy must also be honest about what "paying" means — the balance has to reach zero, so a part payment leaves the gate closed. "Pay your full balance of $[X] and your gate code starts working again, usually within a couple of minutes." A banner that implies any payment reopens the gate produces the angriest call the office takes.
 
 **US-703 — Pay my bill**
 - Pay balance in ≤3 taps from dashboard using saved method or a new one; wallet support.
@@ -281,7 +281,7 @@ Numbered for traceability. "MUST" = MVP unless the Phasing table says otherwise.
 8.2 Cookie consent + analytics per privacy requirements (state privacy laws; coordinate with Marketing PRD's analytics plan).
 
 **FR-9 Performance & reliability**
-9.1 Core Web Vitals "good" thresholds on mobile (LCP ≤2.5s, INP ≤200ms, CLS ≤0.1) for search, facility, and unit pages.
+9.1 Core Web Vitals "good" thresholds on mobile (LCP ≤2.5s, INP ≤200ms, CLS ≤0.1) for search, facility, and unit pages. These are **field** targets; the CI Lighthouse gate is a separate, looser lab number by design — see master §7.3 and D-19.
 9.2 Availability target 99.9% for browse/portal; checkout degrades gracefully (see FR-4.6, US-103).
 9.3 All customer PII encrypted at rest; TLS everywhere; payment scope limited to Stripe tokens (SAQ-A).
 
@@ -495,7 +495,7 @@ Instrumentation: full checkout-funnel events (per §7.5) from day one — the fu
 8. **Reservation hold policy:** Default hold length and max future move-in date — product wants generous holds; operations may want tighter. Configurable per facility, but what are launch defaults?
 9. **Gate code semantics:** Per-tenant persistent code vs. per-unit vs. rotating — owned by Hardware PRD, but the portal display copy and SMS template depend on it.
 10. **CMS choice for marketing content blocks** (FR-8.1): repo-managed markdown (simplest, dev-gated) vs. lightweight headless CMS (marketing self-service). Coordinate with Marketing/SEO PRD.
-11. **Overlock/past-due display:** Exact portal messaging and whether paying online auto-restores gate access without staff action (joint with admin + hardware modules).
+11. ~~**Overlock/past-due display:**~~ **Closed 2026-07-31 by D-16.** Paying online auto-restores gate access with no staff action, within ~2 minutes, and the portal says so — but "paying" means the balance reaches zero, so the copy states the full amount and does not imply a part payment reopens the gate. Portal messaging is specified at US-702.
 
 ---
 

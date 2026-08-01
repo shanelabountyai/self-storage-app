@@ -156,6 +156,7 @@ Physical access must not depend on our app being up — and our app must not lie
 - AC2: On `billing.cured`, grant → `active` and access restored without staff action; restore SLA ≤ 2 min (simulated); tenant notified on both transitions.
 - AC3: Suspension never deletes the grant or code history; event log shows `denied: suspended` for attempts during suspension.
 - AC4: Suspension stage transitions are idempotent — replayed billing events cause no duplicate commands or notifications.
+- AC5: **In MVP the trigger is a single per-facility days-past-due threshold, not the delinquency timeline** (PRD 02 US-45, D-16): suspend at N days past due (default 6), restore automatically when the balance reaches zero. The ACS contract is unchanged either way — it consumes a suspend/restore instruction and does not care which side produced it — so the Phase-2 timeline engine replaces the *producer* and nothing here is rebuilt.
 
 **US-4: Gate-hours enforcement.**
 *As an operator, I set access hours per facility (and optionally per gate/zone), and codes only work within them.*
