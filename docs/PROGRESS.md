@@ -414,6 +414,30 @@ The machine a move-in runs on: a server-side resumable stepper, a 30-minute unit
 
 ---
 
+### B-021 — Checkout steps 1–2 ✅ `PENDING`
+
+"Your details" and unit confirmation, plus the implicit account FR-5.1 describes. The first code in the product that creates a customer identity from public input.
+
+**Decided: an existing account's details are never overwritten from checkout.** This is the security property of the item. The form is unauthenticated, so without this rule anyone who knows an email address could rewrite that person's home address and alternate contact simply by starting a checkout — no password, no verification, by design. Blank fields are filled in, because that is strictly additive; anything already stored is left alone and the entered values stay on the checkout session for staff to reconcile at move-in. There is a test that tries the takeover and asserts every stored field survives.
+
+Email is the identifier and matching is case-insensitive, so a returning renter is the same tenant across facilities (FR-5.3) rather than a second account. No password field exists anywhere in the flow and no verification wall stands in front of a move-in (FR-5.1) — asserted in e2e by counting password inputs on the page, which is the kind of thing that quietly reappears.
+
+**Decided: no address-autocomplete vendor.** US-501 asks for "autocomplete via address API". D-14 settled that this product carries no geocoding vendor and narrowed the open question to map rendering and address autocomplete — both still want a billed key. The browser's own autofill does the same job for a returning renter from the `autocomplete` tokens (1.3.5), at no cost and without a third party in the middle of someone's home address. If a vendor is ever added, the tokens are already right.
+
+**The SCRA flag is captured at step 1**, self-declared, with a sentence saying why anyone would tick it — an unexplained question about someone's military service is worse than no question. `null` means never asked, `false` means asked and answered no. B-096's `LeaseHold` is what acts on it; capturing it now means the flag exists before the first tenant does, which is the whole reason the operator review wanted it early.
+
+**Step 2 confirms rather than assigns.** US-501 puts unit assignment at step 2; B-020 assigns at session start instead, because a lock that begins at step 2 leaves the renter filling in step 1 for a unit anyone can take. So this step shows the unit number, the locked rate and the move-in date and asks the renter to agree. The difference from the PRD is deliberate and noted here rather than silently absorbed.
+
+**Validation carries suggestions, not just identifications** (3.3.3): every message says what to do, and the phone check accepts any punctuation a real person might use while rejecting nonsense — a trust boundary should turn away typos, not people with unusual formatting.
+
+**Found — the e2e suite was competing with itself for inventory.** With `fullyParallel` across two browser projects, a dozen reservation and checkout tests take real units simultaneously, and they were sharing the Austin demo facility with its lifecycle fixtures. A size would sell out mid-run and unrelated tests failed for reasons that had nothing to do with the code. There is now a **`demo-e2e` sandbox facility** in Houston — 60 units of one type, no lifecycle states, far enough from 78704 not to disturb the search-ranking assertions. Inventory-consuming tests point at it. This is the third time this session that inventory contention has broken the suite; the sandbox is the fix that generalises.
+
+**Verified:** 497 unit tests (11 new), 210 e2e (2 new), typecheck, lint and build clean.
+
+**Left behind:** date of birth and vehicle details from US-501 step 1 are not captured — DOB is "if required by lease" and nothing generates a lease until **B-024**, and vehicle details are only for parking/RV unit types, which the data model has no concept of yet. Both are noted rather than guessed at. The move-in date shown at step 2 is today rather than a chosen date; a future-dated move-in is Phase 2 (**B-081**). Steps 3–5 still render a heading and a Continue — **B-022**, **B-024** and **B-025**. The resume link is still not emailed (**B-031**), so an account created here is reachable only while the tab is open.
+
+---
+
 ## Feature PRDs added mid-build
 
 ### PRD 09 — Support impersonation ("log in as") 📋 specced, not built

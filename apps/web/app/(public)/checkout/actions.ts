@@ -2,10 +2,61 @@
 
 import { revalidatePath } from 'next/cache'
 import { advance, extendLock, relock, type Step } from '@/lib/checkout/session'
-import type { FormState } from '@/lib/admin/form-state'
+import { upsertTenantForCheckout, validateDetails } from '@/lib/checkout/details'
+import { prisma } from '@storage/db'
+import { fieldError, type FormState } from '@/lib/admin/form-state'
 
 // B-020. The transitions a step's form can trigger. The individual steps'
 // validation lands with B-021..B-025; this item owns the machine they run on.
+
+/// US-501 step 1. Validates, creates or links the account, and moves on.
+export async function submitDetailsAction(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const token = String(formData.get('token') ?? '')
+  const input = {
+    firstName: String(formData.get('firstName') ?? ''),
+    lastName: String(formData.get('lastName') ?? ''),
+    email: String(formData.get('email') ?? ''),
+    phone: String(formData.get('phone') ?? ''),
+    addressLine1: String(formData.get('addressLine1') ?? ''),
+    addressLine2: String(formData.get('addressLine2') ?? ''),
+    city: String(formData.get('city') ?? ''),
+    state: String(formData.get('state') ?? ''),
+    postalCode: String(formData.get('postalCode') ?? ''),
+    altContactName: String(formData.get('altContactName') ?? ''),
+    altContactPhone: String(formData.get('altContactPhone') ?? ''),
+    activeDutyMilitary: formData.get('activeDutyMilitary') === 'yes',
+  }
+
+  const errors = validateDetails(input)
+  if (Object.keys(errors).length > 0) return fieldError(errors)
+
+  const { tenantId } = await upsertTenantForCheckout(input)
+
+  const result = await advance(token, 'details', {
+    ...input,
+    email: input.email.trim().toLowerCase(),
+  })
+  if (!result.ok) {
+    return {
+      status: 'error',
+      message:
+        result.reason === 'lock_lapsed'
+          ? 'The 30 minutes we were holding your unit ran out. Nothing has been charged — see below for what we can do.'
+          : 'We could not save those details. Reload the page and try again.',
+      fieldErrors: {},
+    }
+  }
+
+  // Linked after the transition so a validation failure never leaves a session
+  // pointing at an account for a step the renter did not complete.
+  await prisma.checkoutSession.update({ where: { id: result.session.id }, data: { tenantId } })
+
+  revalidatePath('/checkout')
+  return { status: 'success', message: 'Details saved. Next: confirm your unit.' }
+}
 
 export async function advanceAction(_prev: FormState, formData: FormData): Promise<FormState> {
   const token = String(formData.get('token') ?? '')

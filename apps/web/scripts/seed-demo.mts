@@ -503,6 +503,26 @@ async function main() {
     ],
   })
 
+  // A facility that exists purely for the e2e suite.
+  //
+  // Reservation and checkout tests take real units and hold them, and with
+  // `fullyParallel` across two browser projects a dozen of them land at once.
+  // Sharing the Austin site meant they competed with each other AND with the
+  // lifecycle fixtures, and a size would sell out mid-run — failing tests for a
+  // reason that had nothing to do with the code. Houston keeps it out of the
+  // 78704 search-ranking assertions, and it carries no lifecycle states, so
+  // every unit is genuinely available.
+  await seedFacility({
+    slug: `${DEMO_PREFIX}e2e`,
+    name: 'Demo — E2E Sandbox',
+    city: 'Houston',
+    postalCode: '77002',
+    addressLine1: '900 Bagby Street',
+    unitTypes: [
+      { name: '10x10 Test', widthFt: 10, lengthFt: 10, climate: true, driveUp: false, street: 14_900, web: 12_900, count: 60 },
+    ],
+  })
+
   // Every lifecycle state exists at BOTH facilities, so facility scoping is
   // demonstrable — a manager assigned to one must not see the other's tenants.
   await seedStaffOwner([austin.facility.id, dallas.facility.id])

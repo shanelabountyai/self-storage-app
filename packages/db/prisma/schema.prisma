@@ -460,6 +460,12 @@ model Tenant {
   state                        String?
   postalCode                   String?
   country                      String?   @default("US")
+  /// Self-declared at move-in (US-501 step 1). NOT verification — it is the
+  /// flag that tells staff to check before any delinquency action, because
+  /// selling an active-duty servicemember's goods without a court order is a
+  /// federal problem (SCRA). B-096's LeaseHold is what acts on it; null means
+  /// never asked.
+  activeDutyMilitary           Boolean?
   altContactName               String?
   altContactPhone              String?
   altContactEmail              String?

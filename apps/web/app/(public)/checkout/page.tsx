@@ -6,6 +6,9 @@ import { SITE } from '@/lib/site-config'
 import { prisma } from '@storage/db'
 import { publicInventoryForFacility } from '@/lib/inventory/public-inventory'
 import { LOCK_WARNING_MINUTES, sessionByToken } from '@/lib/checkout/session'
+import { prefillFromReservation } from '@/lib/checkout/details'
+import { DetailsStep } from '@/components/checkout/details-step'
+import { UnitStep } from '@/components/checkout/unit-step'
 import { advanceAction, extendLockAction, relockAction } from './actions'
 
 export const metadata = {
@@ -67,6 +70,13 @@ export default async function CheckoutPage({
   })
   const inventory = facility ? await publicInventoryForFacility(facility.slug) : null
   const unitType = inventory?.unitTypes.find((type) => type.unitTypeId === session.unitTypeId)
+
+  // US-501: arriving from a reservation pre-fills everything already known.
+  const reservation = await prisma.checkoutSession.findUnique({
+    where: { id: session.id },
+    select: { reservationId: true, unit: { select: { number: true } } },
+  })
+  const prefill = await prefillFromReservation(reservation?.reservationId ?? null)
 
   const remaining = minutesLeft(session.lockExpiresAt)
   const warning = !session.lockLapsed && remaining <= LOCK_WARNING_MINUTES
@@ -143,7 +153,33 @@ export default async function CheckoutPage({
             {session.step === 'provisioned' && 'You are moved in'}
           </h2>
 
-          {session.step !== 'provisioned' && (
+          {/* Session data wins over the reservation prefill: if the renter has
+              already corrected something on this step, their correction is what
+              comes back when they return to it. */}
+          {session.step === 'details' && (
+            <DetailsStep
+              token={token!}
+              prefill={{ ...prefill, ...(session.data as Partial<typeof prefill>) }}
+            />
+          )}
+
+          {session.step === 'unit_assign' && unitType && (
+            <UnitStep
+              token={token!}
+              unitNumber={reservation?.unit?.number ?? null}
+              unitLabel={`${unitType.widthFt} foot by ${unitType.lengthFt} foot ${unitType.name}`}
+              facilityName={inventory!.facility.name}
+              quotedRateCents={session.quotedRateCents}
+              moveInDate={new Intl.DateTimeFormat('en-US', {
+                dateStyle: 'full',
+                timeZone: inventory!.facility.timezone,
+              }).format(new Date())}
+            />
+          )}
+
+          {/* Steps beyond 2 are B-022/B-024/B-025. Until then the machine still
+              has to be walkable end to end, so they keep the plain continue. */}
+          {!['details', 'unit_assign', 'provisioned'].includes(session.step) && (
             <AdminForm action={advanceAction} label="Continue" className="mt-4">
               <input type="hidden" name="token" value={token} />
               <input type="hidden" name="from" value={session.step} />

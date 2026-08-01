@@ -226,8 +226,8 @@ test('the size guide answers the question the links promise', async ({ page }) =
 test('reserving a unit holds it, for free, with no account', async ({ page }) => {
   // US-401 / D-7: no password, no card. The whole journey from a unit card to
   // a confirmed hold.
-  await page.goto('/storage/tx/austin/demo-austin-south')
-  const card = page.getByRole('listitem').filter({ hasText: '5x5 Locker' }).first()
+  await page.goto('/storage/tx/houston/demo-e2e')
+  const card = page.getByRole('listitem').filter({ hasText: '10x10 Test' }).first()
   await card.getByRole('link', { name: 'Reserve for free' }).click()
 
   await expect(page.getByRole('heading', { level: 1 })).toContainText('Reserve this unit')
@@ -255,8 +255,8 @@ test('reserving a unit holds it, for free, with no account', async ({ page }) =>
 })
 
 test('an invalid reservation reports the problem next to the field', async ({ page }) => {
-  await page.goto('/storage/tx/austin/demo-austin-south')
-  const card = page.getByRole('listitem').filter({ hasText: '5x5 Locker' }).first()
+  await page.goto('/storage/tx/houston/demo-e2e')
+  const card = page.getByRole('listitem').filter({ hasText: '10x10 Test' }).first()
   await card.getByRole('link', { name: 'Reserve for free' }).click()
 
   // A syntactically valid but wrong-looking email gets past the browser's own
@@ -272,8 +272,8 @@ test('an invalid reservation reports the problem next to the field', async ({ pa
 })
 
 test('the cancel link shows the hold before releasing it', async ({ page }) => {
-  await page.goto('/storage/tx/austin/demo-austin-south')
-  const card = page.getByRole('listitem').filter({ hasText: '5x5 Locker' }).first()
+  await page.goto('/storage/tx/houston/demo-e2e')
+  const card = page.getByRole('listitem').filter({ hasText: '10x10 Test' }).first()
   await card.getByRole('link', { name: 'Reserve for free' }).click()
 
   await page.getByLabel('First name').fill('Cancel')
@@ -306,8 +306,8 @@ test('a reservation link that is not real says so without leaking why', async ({
 })
 
 test('Rent now starts a checkout and holds the unit', async ({ page }) => {
-  await page.goto('/storage/tx/austin/demo-austin-south')
-  const card = page.getByRole('listitem').filter({ hasText: '5x5 Locker' }).first()
+  await page.goto('/storage/tx/houston/demo-e2e')
+  const card = page.getByRole('listitem').filter({ hasText: '10x10 Test' }).first()
   await card.getByRole('button', { name: 'Rent now' }).click()
 
   await expect(page).toHaveURL(/\/checkout\?token=/)
@@ -324,17 +324,80 @@ test('Rent now starts a checkout and holds the unit', async ({ page }) => {
   await expect(progress.getByText(/step 1 of 6, current step/)).toBeAttached()
 })
 
-test('the checkout stepper advances server-side and resumes', async ({ page }) => {
-  await page.goto('/storage/tx/austin/demo-austin-south')
+test('checkout step 1 creates an account with no password', async ({ page }) => {
+  await page.goto('/storage/tx/houston/demo-e2e')
   await page
     .getByRole('listitem')
-    .filter({ hasText: '10x20 Drive-Up' })
+    .filter({ hasText: '10x10 Test' })
+    .first()
+    .getByRole('button', { name: 'Rent now' })
+    .click()
+  await expect(page).toHaveURL(/\/checkout\?token=/)
+
+  // US-501 step 1 / FR-5.1: no password field anywhere, and no verification
+  // wall in front of a move-in.
+  await expect(page.getByLabel('Email')).toBeVisible()
+  await expect(page.locator('input[type="password"]')).toHaveCount(0)
+
+  await page.getByLabel('First name').fill('Ada')
+  await page.getByLabel('Last name').fill('Renter')
+  await page.getByLabel('Email').fill(`e2e-details-${Date.now()}@demo.example.com`)
+  await page.getByLabel('Mobile number').fill('512-555-0100')
+  await page.getByLabel('Street address').fill('2400 South Congress Ave')
+  await page.getByLabel('City').fill('Austin')
+  await page.getByLabel('State').fill('TX')
+  await page.getByLabel('Zip code').fill('78704')
+  await page.getByRole('button', { name: 'Continue' }).click()
+
+  // Step 2 confirms the unit that was already locked, and names it.
+  await expect(page.getByRole('heading', { name: 'Your unit' })).toBeVisible()
+  await expect(page.getByRole('main')).toContainText('Your unit')
+  await expect(page.getByRole('main')).toContainText('/mo')
+})
+
+test('checkout step 1 reports a bad field with a suggestion', async ({ page }) => {
+  await page.goto('/storage/tx/houston/demo-e2e')
+  await page
+    .getByRole('listitem')
+    .filter({ hasText: '10x10 Test' })
+    .first()
+    .getByRole('button', { name: 'Rent now' })
+    .click()
+
+  await page.getByLabel('First name').fill('Ada')
+  await page.getByLabel('Last name').fill('Renter')
+  await page.getByLabel('Email').fill(`e2e-bad-${Date.now()}@demo.example.com`)
+  await page.getByLabel('Mobile number').fill('555')
+  await page.getByLabel('Street address').fill('2400 South Congress Ave')
+  await page.getByLabel('City').fill('Austin')
+  await page.getByLabel('State').fill('TX')
+  await page.getByLabel('Zip code').fill('78704')
+  await page.getByRole('button', { name: 'Continue' }).click()
+
+  // 3.3.1/3.3.3: identified, tied to the field, and carrying a suggestion.
+  await expect(page.getByRole('main').getByRole('alert')).toContainText('area code')
+  await expect(page.getByLabel('Mobile number')).toHaveAttribute('aria-invalid', 'true')
+})
+
+test('the checkout stepper advances server-side and resumes', async ({ page }) => {
+  await page.goto('/storage/tx/houston/demo-e2e')
+  await page
+    .getByRole('listitem')
+    .filter({ hasText: '10x10 Test' })
     .first()
     .getByRole('button', { name: 'Rent now' })
     .click()
   await expect(page).toHaveURL(/\/checkout\?token=/)
   const url = page.url()
 
+  await page.getByLabel('First name').fill('Ada')
+  await page.getByLabel('Last name').fill('Renter')
+  await page.getByLabel('Email').fill(`e2e-resume-${Date.now()}@demo.example.com`)
+  await page.getByLabel('Mobile number').fill('512-555-0100')
+  await page.getByLabel('Street address').fill('2400 South Congress Ave')
+  await page.getByLabel('City').fill('Austin')
+  await page.getByLabel('State').fill('TX')
+  await page.getByLabel('Zip code').fill('78704')
   await page.getByRole('button', { name: 'Continue' }).click()
   await expect(page.getByRole('heading', { name: 'Your unit' })).toBeVisible()
 
