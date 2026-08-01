@@ -358,7 +358,7 @@ A no-card hold on a real unit, at a locked rate, cancellable from a link with no
 
 ---
 
-### B-019 — Stripe foundation ✅ `PENDING`
+### B-019 — Stripe foundation ✅ `e48c963`
 
 Customers, PaymentIntents, SetupIntents, a signature-verified webhook endpoint, idempotency keys, and reconciliation into the ledger. No money moves yet — nothing creates a lease or an invoice until B-021/B-044 — but the path money will take is now built and tested.
 
