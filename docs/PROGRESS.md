@@ -462,7 +462,7 @@ The coverage catalog, the per-facility policy, and checkout step 3's choose-or-w
 
 ---
 
-### B-023 — Document generation & store ✅ `PENDING`
+### B-023 — Document generation & store ✅ `fc043f8`
 
 One document store (US-16) and a templating service that fails loudly (FR-6). The thing B-024's e-signature evidence chain rests on.
 
