@@ -292,6 +292,7 @@ model Facility {
   checkoutSessions  CheckoutSession[]
   protectionPlans   ProtectionPlan[]
   protectionWaivers ProtectionWaiver[]
+  documents         Document[]
   leads             Lead[]
   notices           Notice[]
   auditLogs         AuditLog[]
@@ -756,6 +757,58 @@ model ProtectionWaiver {
 
   @@index([facilityId, expiresAt])
   @@map("protection_waiver")
+}
+
+/// PRD 02 US-16 / FR-6. THE document store — one, not one per feature.
+///
+/// US-16 is explicit about why: "three URL columns on three entities is how the
+/// evidence chain ends up with three retention policies and two of them wrong."
+/// Lease PDFs, notices, walkthrough photos, overlock photos, auction evidence
+/// and proof-of-insurance declaration pages all land here.
+model Document {
+  id          String       @id @default(cuid())
+  facilityId  String
+  type        DocumentType
+  /// What the document is about. Deliberately loose strings rather than six
+  /// nullable FKs: a document store that needs a migration for every new kind
+  /// of subject stops being one store.
+  subjectType String
+  subjectId   String
+  title       String
+  /// The rendered document itself, when we generated it. Generated documents
+  /// are HTML — see lib/documents/render.ts for why that is the canonical form
+  /// rather than a PDF.
+  content     String?
+  /// Where the bytes live for an uploaded file. Null for generated documents.
+  /// No blob store is configured yet (B-023 note), so nothing writes this.
+  storageRef  String?
+  mimeType    String
+  byteSize    Int?
+  /// SHA-256 over the exact bytes or content that were signed or delivered.
+  /// This is the evidence half of e-signature (PRD 01 FR-4.2): a lease whose
+  /// hash no longer matches is a lease that changed after signing.
+  contentHash String
+  createdAt   DateTime     @default(now()) @db.Timestamptz(6)
+  /// Soft delete only, admin-only, audit-logged (US-16). Evidence is not
+  /// something a mis-click removes.
+  deletedAt   DateTime?    @db.Timestamptz(6)
+
+  facility Facility @relation(fields: [facilityId], references: [id], onDelete: Restrict)
+
+  @@index([facilityId, type])
+  @@index([subjectType, subjectId])
+  @@map("document")
+}
+
+enum DocumentType {
+  lease
+  receipt
+  notice
+  insurance_proof
+  id_copy
+  inspection_photo
+  lien_evidence
+  other
 }
 
 model StripeEvent {

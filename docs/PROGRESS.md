@@ -462,6 +462,30 @@ The coverage catalog, the per-facility policy, and checkout step 3's choose-or-w
 
 ---
 
+### B-023 — Document generation & store ✅ `PENDING`
+
+One document store (US-16) and a templating service that fails loudly (FR-6). The thing B-024's e-signature evidence chain rests on.
+
+**Decided: the canonical rendered document is semantic HTML, not PDF — and that is a real deviation from the backlog row.** The row asks for *tagged* PDFs: heading structure, reading order, table headers, `lang`, `/Title`, real text not raster. That is not decoration; PRD 01 §6.8.1 lists it because an untagged lease PDF is the classic accessibility failure discovered years later, usually in a demand letter.
+
+No JavaScript PDF library available here emits tagged PDFs. `pdf-lib`, `pdfkit` and `@react-pdf/renderer` all produce untagged output — tagging is a structure tree the encoder has to build and none of them expose one. The routes that work are a headless browser's print pipeline or a paid API, both a runtime or vendor decision this project has not taken, and Vercel's serverless runtime has no Chrome. So rather than ship an untagged PDF that fails the acceptance criterion silently, the service renders accessible HTML that carries exactly the properties the tagged-PDF requirement asks for, hashes and stores identically, and is what the signature will bind. The PDF encoder is a named seam with no adapter — the same posture D-4 took for gate vendors and D-14 for geocoding: implement well the thing we can do, and leave a seam rather than a bad version of the thing we cannot. **Whether to add a rendering runtime is an owner decision and is flagged below.**
+
+**"Fails loudly on missing fields" is the requirement, and it is enforced before anything is written.** A lease that renders "Dear " is a document somebody signs — a legal artifact with a hole in it. A blank value counts as missing, because an empty string is how an absent value usually arrives from a form, and the error names every missing field rather than the first. There is a test asserting that a template with a hole stores nothing at all.
+
+**Merged values are escaped.** A lease is exactly where someone would try, and a surname containing an ampersand must not be able to break the document either.
+
+**One store, not one per feature.** US-16 is explicit about why: three URL columns on three entities is how the evidence chain acquires three retention policies, two of them wrong. Lease PDFs, notices, walkthrough and overlock photos, auction evidence and proof-of-insurance declaration pages all land in the same table, typed, with soft delete only.
+
+**The SHA-256 answers the only question a dispute asks:** is this still the document that was signed? `verifyDocument` recomputes it, and there is a test that edits the stored row directly and asserts the mismatch is caught. It reports "no content" rather than a confident "ok" for uploaded files, whose bytes are not in the database.
+
+**Found — the audit layer refused the delete.** `document.deleted` is on B-005's list of actions that cannot be recorded without a reason *code*, and the first implementation passed free text in the context instead. The invariant was right: evidence deletion is precisely where "why" must be captured at the moment it is known rather than reconstructed from a timestamp later.
+
+**Verified:** 523 unit tests (13 new), typecheck, lint and build clean.
+
+**Left behind and needing a decision:** **uploads have nowhere to put bytes.** `storageRef` exists and nothing writes it, because no blob store is configured and inventing a local filesystem path would not survive a serverless deploy. That blocks US-16's ID copies and insurance certificates, **B-022**'s declaration-page upload, **B-060**'s walkthrough photos and **B-062**'s auction evidence — the last of which is the lock-cut inventory that a wrongful-sale defence depends on. Generated documents are unaffected: they are text, they are small, and keeping them in the row means the hash and the content cannot drift apart. Also outstanding: no template *registry* — B-024 brings the first real template with it, and inventing a management UI before there is one document to manage would be scaffolding.
+
+---
+
 ## Feature PRDs added mid-build
 
 ### PRD 09 — Support impersonation ("log in as") 📋 specced, not built
