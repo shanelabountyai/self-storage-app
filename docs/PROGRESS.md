@@ -438,7 +438,7 @@ Email is the identifier and matching is case-insensitive, so a returning renter 
 
 ---
 
-### B-022 — Protection plan ✅ `PENDING`
+### B-022 — Protection plan ✅ `e35d7c9`
 
 The coverage catalog, the per-facility policy, and checkout step 3's choose-or-waive with a real waiver record.
 
