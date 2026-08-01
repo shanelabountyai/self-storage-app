@@ -251,30 +251,34 @@ enum AuthTokenPurpose {
 // ------------------------------------------------------------ inventory ----
 
 model Facility {
-  id           String         @id @default(cuid())
-  name         String
+  id                 String         @id @default(cuid())
+  name               String
   /// URL segment for location pages; SEO-sensitive, see PRD 04 OQ-7.
-  slug         String         @unique
-  status       FacilityStatus @default(active)
-  addressLine1 String
-  addressLine2 String?
-  city         String
+  slug               String         @unique
+  status             FacilityStatus @default(active)
+  addressLine1       String
+  addressLine2       String?
+  city               String
   /// Two-letter code. Drives compliance config; Texas is the seeded default (D-10).
-  state        String
-  postalCode   String
-  country      String         @default("US")
-  latitude     Float?
-  longitude    Float?
+  state              String
+  postalCode         String
+  country            String         @default("US")
+  latitude           Float?
+  longitude          Float?
   /// IANA name, e.g. "America/Chicago". All display time is derived from this.
-  timezone     String
-  phone        String?
-  email        String?
+  timezone           String
+  phone              String?
+  email              String?
   /// Weekly schedules land in B-008; held as JSON until that item defines them.
-  officeHours  Json?
-  gateHours    Json?
-  amenities    String[]       @default([])
-  createdAt    DateTime       @default(now()) @db.Timestamptz(6)
-  updatedAt    DateTime       @updatedAt @db.Timestamptz(6)
+  officeHours        Json?
+  gateHours          Json?
+  amenities          String[]       @default([])
+  /// US-44: protection **required** (a proof-of-insurance waiver is still
+  /// permitted) vs optional. Texas practice is generally "required, or show
+  /// proof", so that is the shipped default — configuration, not law (D-10).
+  protectionRequired Boolean        @default(true)
+  createdAt          DateTime       @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime       @updatedAt @db.Timestamptz(6)
 
   unitTypes         UnitType[]
   units             Unit[]
@@ -286,6 +290,8 @@ model Facility {
   accessCredentials AccessCredential[]
   reservations      Reservation[]
   checkoutSessions  CheckoutSession[]
+  protectionPlans   ProtectionPlan[]
+  protectionWaivers ProtectionWaiver[]
   leads             Lead[]
   notices           Notice[]
   auditLogs         AuditLog[]
@@ -688,6 +694,68 @@ model CheckoutSession {
   /// express a partial index (migration 20260801120000_checkout_session):
   ///   checkout_session_one_active_per_unit — unique(unitId) where status='active'
   @@map("checkout_session")
+}
+
+/// PRD 02 US-44. A coverage tier the operator sells.
+///
+/// What we sell is a **protection plan**, not insurance: "insurance" describes
+/// cover the tenant already holds somewhere else. The two words are not
+/// interchangeable in copy, in this schema, or on an invoice — selling actual
+/// insurance generally requires a licensed agent, which is exactly why the
+/// industry sells an addendum instead.
+///
+/// Effective-dated like every other price here (FR-9): rows are never edited,
+/// and changing a premium means inserting a new row with a later
+/// `effectiveFrom`. `tier` is the grouping key so renaming the display name
+/// does not fork the price history.
+model ProtectionPlan {
+  id            String   @id @default(cuid())
+  facilityId    String
+  tier          String
+  name          String
+  coverageCents Int
+  premiumCents  Int
+  effectiveFrom DateTime @db.Timestamptz(6)
+  createdAt     DateTime @default(now()) @db.Timestamptz(6)
+
+  facility Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+
+  @@unique([facilityId, tier, effectiveFrom])
+  @@index([facilityId, effectiveFrom])
+  @@map("protection_plan")
+}
+
+/// PRD 02 US-44. The evidence behind a waiver.
+///
+/// The failure this exists to prevent: the tenant waives by claiming their own
+/// cover, nobody ever sees the declaration page, the policy lapses eight months
+/// later, the unit floods, and the operator is in a coverage argument with no
+/// record. A structured row with an expiry date is what makes D-17's lapse scan
+/// possible at all.
+model ProtectionWaiver {
+  id                String    @id @default(cuid())
+  facilityId        String
+  /// Set once the lease exists (B-026). Until then the waiver belongs to the
+  /// checkout session that captured it.
+  leaseId           String?   @unique
+  checkoutSessionId String?   @unique
+  tenantId          String?
+  carrier           String?
+  policyNumber      String?
+  /// What D-17's nightly scan looks at. Null only on a manager override.
+  expiresAt         DateTime? @db.Timestamptz(6)
+  /// Reference to the uploaded declaration page (US-16's document store).
+  documentRef       String?
+  /// The counter case: the tenant will not produce a declaration page and a
+  /// manager accepts the waiver anyway. Audit-logged by the caller.
+  overrideReason    String?
+  overrideByStaffId String?
+  createdAt         DateTime  @default(now()) @db.Timestamptz(6)
+
+  facility Facility @relation(fields: [facilityId], references: [id], onDelete: Restrict)
+
+  @@index([facilityId, expiresAt])
+  @@map("protection_waiver")
 }
 
 model StripeEvent {

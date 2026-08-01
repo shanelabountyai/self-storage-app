@@ -438,6 +438,30 @@ Email is the identifier and matching is case-insensitive, so a returning renter 
 
 ---
 
+### B-022 — Protection plan ✅ `PENDING`
+
+The coverage catalog, the per-facility policy, and checkout step 3's choose-or-waive with a real waiver record.
+
+**"Protection plan", never "insurance" — in copy, in the schema, and on the invoice.** Not pedantry: selling actual insurance generally requires a licensed agent, which is precisely why the industry sells a lease addendum instead. "Insurance" describes cover the tenant already holds somewhere else. The naming is enforced by the model names and carried through every string a renter reads. §10 Q5 (whether a full insurance *program* belongs in any phase) stays open by decision and is not a blocker — a program later replaces this catalog behind identical lease-facing behaviour.
+
+**The waiver is a record, not a tick.** This is the whole point of US-44, and the failure it prevents is specific: the tenant waives by claiming their own cover, nobody ever sees the declaration page, the policy lapses eight months later, the unit floods, and the operator is in a coverage argument with nothing on file. So waiving requires carrier, policy number and an expiry date — and cover that has *already* lapsed is refused rather than accepted as a waiver that was dead on arrival. The expiry is what makes D-17's nightly lapse scan possible at all; without a date there is nothing to scan.
+
+**Continue is never disabled.** US-501 says the step cannot be skipped silently, and the tempting implementation — grey out the button until the form is valid — is the one PRD 01 §6.8.1 explicitly forbids. A control that cannot be pressed, with no message, is invisible to someone who cannot see why. The step submits, fails, and names what is missing beside the field (3.3.1/3.3.3). The attestation checkbox is unchecked by default, because an attestation that arrives pre-agreed is not an attestation.
+
+**The waiver fields are always in the DOM**, not revealed by JavaScript when the radio changes. The public path works with the bundle disabled, and a field that only exists after a click is a field a screen-reader user may never learn about.
+
+**Decided: the mid-tier default is computed, not named.** US-501 asks for the mid tier preselected. Hardcoding `'standard'` breaks for an operator selling two tiers or four, so it is the middle of what is actually on sale — tested at one, two, three and four tiers.
+
+**The catalog is effective-dated like every other price** (FR-9), grouped by a `tier` key rather than the display name so renaming a tier does not fork its price history. Adding one goes through the same 3.3.4 confirm-and-echo as tax and fees: it is money that bills monthly, forever, and the row cannot be taken back. The premium flows into the price summary as its own line, so the renter sees *which* number moved rather than a larger total to account for themselves (§6.4).
+
+**Per-facility policy: required vs optional**, shipped defaulted to required-or-show-proof, which is Texas practice — labelled in the admin UI as configuration rather than law (D-10).
+
+**Verified:** 510 unit tests (13 new), 212 e2e (1 new, walking the full four-step path), typecheck, lint and build clean.
+
+**Left behind:** **D-17's auto-enrolment is not built** — the schema carries the expiry the scan needs and the decision is recorded, but the nightly scan, the 30-day notice and the enrolment itself are **B-043**/**B-050**. That decision also carries an explicit attorney-pass requirement before it runs against a real tenant (notice copy, the authorising lease clause, retroactivity), which is recorded in PRD 02 US-44 and not discharged here. The declaration-page upload has nowhere to go until **B-023**'s document store, so the waiver stores a `documentRef` that nothing writes; the manager-override path (`overrideReason`) is modelled but has no counter UI until **B-039**. Attach-rate reporting, including the per-staff coaching number, is **B-042**. The premium reaches `Lease.protectionCents` only when **B-026** creates the lease — until then it lives on the checkout session.
+
+---
+
 ## Feature PRDs added mid-build
 
 ### PRD 09 — Support impersonation ("log in as") 📋 specced, not built

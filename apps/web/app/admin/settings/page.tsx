@@ -7,8 +7,11 @@ import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
 import { getFacilitySettings } from '@/lib/admin/facility-settings'
 import { formatCents } from '@/lib/format'
 import { CLOSED_ALL_WEEK, DAYS_OF_WEEK } from '@storage/core/facility-settings'
+import { currentPlans } from '@/lib/protection/plans'
 import {
   addFeeScheduleEntryAction,
+  addProtectionPlanAction,
+  setProtectionPolicyAction,
   addTaxComponentAction,
   updateFacilityDetailsAction,
   updateFacilityHoursAction,
@@ -47,6 +50,7 @@ export default async function AdminSettingsPage() {
   const facilityId = selected.facility.id
   const settings = await getFacilitySettings(facilityId)
   const { facility } = settings
+  const plans = await currentPlans(facilityId)
   const officeHours = settings.officeHours ?? CLOSED_ALL_WEEK
   const gateHours = settings.gateHours ?? CLOSED_ALL_WEEK
 
@@ -343,6 +347,90 @@ export default async function AdminSettingsPage() {
             required
           />
           <Button type="submit">Add fee</Button>
+        </AdminForm>
+      </section>
+
+      <section aria-labelledby="protection-heading" className="flex flex-col gap-3">
+        <h2 id="protection-heading" className="text-base font-medium">
+          Protection plans
+        </h2>
+        <p className="text-muted-foreground text-xs text-pretty">
+          What we sell is a <strong>protection plan</strong>, not insurance — &ldquo;insurance&rdquo;
+          describes cover a tenant already holds elsewhere (PRD 02 US-44). Tiers are
+          effective-dated: changing a premium adds a new row and never repricing an existing lease.
+        </p>
+
+        <AdminForm
+          action={setProtectionPolicyAction}
+          label="Protection policy"
+          className="flex flex-wrap items-end gap-3"
+        >
+          <input type="hidden" name="facilityId" value={facilityId} />
+          <Field
+            name="protectionRequired"
+            label="Policy at this facility"
+            as="select"
+            defaultValue={facility.protectionRequired ? 'yes' : 'no'}
+          >
+            <option value="yes">Required — a plan, or proof of the tenant&apos;s own cover</option>
+            <option value="no">Optional</option>
+          </Field>
+          <Button type="submit">Save policy</Button>
+        </AdminForm>
+
+        {plans.length > 0 && (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="text-muted-foreground">
+                  <th scope="col" className="pb-1 font-normal">Tier</th>
+                  <th scope="col" className="pb-1 font-normal">Covers up to</th>
+                  <th scope="col" className="pb-1 font-normal">Premium</th>
+                </tr>
+              </thead>
+              <tbody>
+                {plans.map((plan) => (
+                  <tr key={plan.tier}>
+                    <th scope="row" className="py-1 text-left font-normal">
+                      {plan.name} <span className="text-muted-foreground">({plan.tier})</span>
+                    </th>
+                    <td className="py-1">{formatCents(plan.coverageCents)}</td>
+                    <td className="py-1">{formatCents(plan.premiumCents)}/mo</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <AdminForm
+          action={addProtectionPlanAction}
+          label="Add a protection tier"
+          className="flex flex-wrap items-end gap-3"
+        >
+          <input type="hidden" name="facilityId" value={facilityId} />
+          <Field name="tier" label="Tier key" placeholder="standard" required hint="Lowercase, never changes." />
+          <Field name="name" label="Name customers see" placeholder="$3,000 cover" required />
+          <Field
+            name="coverageDollars"
+            label="Covers up to ($)"
+            type="number"
+            step="1"
+            min="0"
+            required
+            className="flex w-36 flex-col gap-1 text-sm"
+          />
+          <Field
+            name="premiumDollars"
+            label="Premium ($/mo)"
+            type="number"
+            step="0.01"
+            min="0"
+            required
+            className="flex w-32 flex-col gap-1 text-sm"
+          />
+          <Field name="effectiveFrom" label="Effective from" type="date" defaultValue={todayIso()} required />
+          <Button type="submit">Add tier</Button>
         </AdminForm>
       </section>
     </div>

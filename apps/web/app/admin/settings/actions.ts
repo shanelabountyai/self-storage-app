@@ -12,6 +12,10 @@ import {
   type FieldErrors,
   type FormState,
 } from '@/lib/admin/form-state'
+import { prisma } from '@storage/db'
+import { recordAudit } from '@storage/core/audit'
+import { toAuditActor } from '@/lib/rbac/audit-actor'
+import { requirePermission } from '@/lib/rbac/authorize'
 import {
   addFeeScheduleEntry,
   addTaxComponent,
@@ -216,5 +220,122 @@ export async function addFeeScheduleEntryAction(
     `${feeType} fee of ${formatCents(amount.value)} added, effective ${effectiveFrom.value
       .toISOString()
       .slice(0, 10)}.`,
+  )
+}
+
+/// PRD 02 US-44. Adds a protection tier, effective-dated like every other price
+/// (FR-9) — rows are never edited, so a premium change is a new row with a
+/// later date and existing leases keep what they signed up to.
+///
+/// Same 3.3.4 confirm-and-echo as tax and fees: this is money that will bill
+/// monthly, forever, and the row cannot be taken back.
+export async function addProtectionPlanAction(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const actor = await requireStaffActor()
+  const facilityId = String(formData.get('facilityId'))
+  requirePermission(actor, 'facility:settings', facilityId)
+
+  const tier = String(formData.get('tier') ?? '').trim()
+  const name = String(formData.get('name') ?? '').trim()
+  const coverage = parseScaled(formData.get('coverageDollars'), {
+    scale: 100,
+    min: 0,
+    max: 100_000,
+    unit: 'dollars',
+  })
+  const premium = parseScaled(formData.get('premiumDollars'), {
+    scale: 100,
+    min: 0,
+    max: 1_000,
+    unit: 'dollars',
+  })
+  const effectiveFrom = parseDate(formData.get('effectiveFrom'))
+
+  const errors: FieldErrors = {}
+  if (!/^[a-z0-9_]+$/.test(tier)) {
+    errors.tier = 'Use a short lowercase key, for example "standard". It never changes once set.'
+  }
+  if (!name) errors.name = 'Name the tier as a customer will see it, for example "$3,000 cover".'
+  if ('error' in coverage) errors.coverageDollars = coverage.error
+  if ('error' in premium) errors.premiumDollars = premium.error
+  if ('error' in effectiveFrom) errors.effectiveFrom = effectiveFrom.error
+  if (Object.keys(errors).length > 0) return fieldError(errors)
+  if ('error' in coverage || 'error' in premium || 'error' in effectiveFrom) {
+    return fieldError(errors)
+  }
+
+  if (formData.get('confirmed') !== 'yes') {
+    return {
+      status: 'confirm',
+      message: 'Check this before it is published — it cannot be edited or deleted.',
+      echo: [
+        { label: 'Tier', value: `${name} (${tier})` },
+        { label: 'Covers up to', value: formatCents(coverage.value) },
+        { label: 'Premium', value: `${formatCents(premium.value)}/mo` },
+        { label: 'Effective from', value: effectiveFrom.value.toISOString().slice(0, 10) },
+      ],
+    }
+  }
+
+  try {
+    const plan = await prisma.protectionPlan.create({
+      data: {
+        facilityId,
+        tier,
+        name,
+        coverageCents: coverage.value,
+        premiumCents: premium.value,
+        effectiveFrom: effectiveFrom.value,
+      },
+    })
+    await recordAudit({
+      actor: toAuditActor(actor),
+      facilityId,
+      action: 'facility.settings_updated',
+      entityType: 'ProtectionPlan',
+      entityId: plan.id,
+      context: { tier, premiumCents: premium.value, coverageCents: coverage.value },
+    })
+  } catch (error) {
+    return asFormError(error, 'Could not add that tier.')
+  }
+
+  revalidatePath('/admin/settings')
+  return success(`${name} added at ${formatCents(premium.value)}/mo.`)
+}
+
+/// The per-facility policy: protection required (a proof-of-insurance waiver is
+/// still permitted) vs optional. Texas practice is "required, or show proof",
+/// which is the shipped default — configuration, not law (D-10).
+export async function setProtectionPolicyAction(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const actor = await requireStaffActor()
+  const facilityId = String(formData.get('facilityId'))
+  requirePermission(actor, 'facility:settings', facilityId)
+
+  const required = formData.get('protectionRequired') === 'yes'
+  try {
+    await prisma.facility.update({ where: { id: facilityId }, data: { protectionRequired: required } })
+    await recordAudit({
+      actor: toAuditActor(actor),
+      facilityId,
+      action: 'facility.settings_updated',
+      entityType: 'Facility',
+      entityId: facilityId,
+      context: { protectionRequired: required },
+    })
+  } catch (error) {
+    return asFormError(error, 'Could not save the policy.')
+  }
+
+  revalidatePath('/admin/settings')
+  return success(
+    required
+      ? 'Protection is now required at this facility — a tenant may still show their own cover.'
+      : 'Protection is now optional at this facility.',
   )
 }

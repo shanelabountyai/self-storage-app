@@ -5,6 +5,14 @@ import { advance, extendLock, relock, type Step } from '@/lib/checkout/session'
 import { upsertTenantForCheckout, validateDetails } from '@/lib/checkout/details'
 import { prisma } from '@storage/db'
 import { fieldError, type FormState } from '@/lib/admin/form-state'
+import {
+  currentPlans,
+  premiumFor,
+  recordWaiver,
+  validateChoice,
+  type ProtectionChoice,
+} from '@/lib/protection/plans'
+import { sessionByToken } from '@/lib/checkout/session'
 
 // B-020. The transitions a step's form can trigger. The individual steps'
 // validation lands with B-021..B-025; this item owns the machine they run on.
@@ -56,6 +64,74 @@ export async function submitDetailsAction(
 
   revalidatePath('/checkout')
   return { status: 'success', message: 'Details saved. Next: confirm your unit.' }
+}
+
+/// US-501 step 3 / US-44. Choose a plan, or waive with a real record.
+export async function submitProtectionAction(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const token = String(formData.get('token') ?? '')
+  const session = await sessionByToken(token)
+  if (!session) {
+    return { status: 'error', message: 'We could not find that checkout.', fieldErrors: {} }
+  }
+
+  const plans = await currentPlans(session.facilityId)
+  const tier = String(formData.get('tier') ?? '')
+
+  const choice = (
+    tier === '__waiver__'
+      ? {
+          kind: 'waiver',
+          carrier: String(formData.get('carrier') ?? ''),
+          policyNumber: String(formData.get('policyNumber') ?? ''),
+          expiresAt: String(formData.get('expiresAt') ?? ''),
+          attested: formData.get('attested') === 'yes',
+        }
+      : { kind: 'plan', tier }
+  ) as ProtectionChoice
+
+  const errors = validateChoice(choice, plans)
+  if (Object.keys(errors).length > 0) return fieldError(errors)
+
+  if (choice.kind === 'waiver') {
+    await recordWaiver({
+      facilityId: session.facilityId,
+      checkoutSessionId: session.id,
+      tenantId: null,
+      carrier: choice.carrier,
+      policyNumber: choice.policyNumber,
+      expiresAt: new Date(`${choice.expiresAt}T12:00:00`),
+    })
+  }
+
+  const premiumCents = premiumFor(choice, plans)
+  const result = await advance(token, 'insurance', {
+    protection: choice.kind === 'waiver' ? 'waiver' : choice.tier,
+    protectionPremiumCents: premiumCents,
+  })
+  if (!result.ok) {
+    return {
+      status: 'error',
+      message:
+        result.reason === 'lock_lapsed'
+          ? 'The 30 minutes we were holding your unit ran out. Nothing has been charged — see below for what we can do.'
+          : 'We could not save that choice. Reload the page and try again.',
+      fieldErrors: {},
+    }
+  }
+
+  revalidatePath('/checkout')
+  // §6.4: a total that moves has to say why. This is the message the summary's
+  // live region announces.
+  return {
+    status: 'success',
+    message:
+      premiumCents > 0
+        ? `Protection added — your monthly total went up by ${(premiumCents / 100).toFixed(2)} dollars.`
+        : 'Your own cover recorded. No protection charge added.',
+  }
 }
 
 export async function advanceAction(_prev: FormState, formData: FormData): Promise<FormState> {

@@ -9,6 +9,8 @@ import { LOCK_WARNING_MINUTES, sessionByToken } from '@/lib/checkout/session'
 import { prefillFromReservation } from '@/lib/checkout/details'
 import { DetailsStep } from '@/components/checkout/details-step'
 import { UnitStep } from '@/components/checkout/unit-step'
+import { ProtectionStep } from '@/components/checkout/protection-step'
+import { currentPlans, defaultTier } from '@/lib/protection/plans'
 import { advanceAction, extendLockAction, relockAction } from './actions'
 
 export const metadata = {
@@ -77,6 +79,12 @@ export default async function CheckoutPage({
     select: { reservationId: true, unit: { select: { number: true } } },
   })
   const prefill = await prefillFromReservation(reservation?.reservationId ?? null)
+
+  const plans = session.step === 'insurance' ? await currentPlans(session.facilityId) : []
+  const facilityPolicy = await prisma.facility.findUnique({
+    where: { id: session.facilityId },
+    select: { protectionRequired: true },
+  })
 
   const remaining = minutesLeft(session.lockExpiresAt)
   const warning = !session.lockLapsed && remaining <= LOCK_WARNING_MINUTES
@@ -177,9 +185,18 @@ export default async function CheckoutPage({
             />
           )}
 
-          {/* Steps beyond 2 are B-022/B-024/B-025. Until then the machine still
+          {session.step === 'insurance' && (
+            <ProtectionStep
+              token={token!}
+              plans={plans}
+              defaultTier={defaultTier(plans)}
+              required={facilityPolicy?.protectionRequired ?? true}
+            />
+          )}
+
+          {/* Steps beyond 3 are B-024/B-025. Until then the machine still
               has to be walkable end to end, so they keep the plain continue. */}
-          {!['details', 'unit_assign', 'provisioned'].includes(session.step) && (
+          {!['details', 'unit_assign', 'insurance', 'provisioned'].includes(session.step) && (
             <AdminForm action={advanceAction} label="Continue" className="mt-4">
               <input type="hidden" name="token" value={token} />
               <input type="hidden" name="from" value={session.step} />
@@ -200,6 +217,11 @@ export default async function CheckoutPage({
             unitLabel={`${unitType.widthFt} foot by ${unitType.lengthFt} foot ${unitType.name}`}
             facilityName={inventory!.facility.name}
             webRateCents={session.quotedRateCents}
+            protectionPremiumCents={
+              typeof session.data.protectionPremiumCents === 'number'
+                ? session.data.protectionPremiumCents
+                : undefined
+            }
             streetRateCents={unitType.streetRateCents}
             adminFeeCents={inventory!.pricing.adminFeeCents}
             taxRates={inventory!.pricing.taxRates}

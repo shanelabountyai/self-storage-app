@@ -100,6 +100,8 @@ async function teardown() {
   await prisma.accessGrant.deleteMany({ where })
   // Before reservations and unit types: CheckoutSession restricts unitType and
   // references both (B-020).
+  await prisma.protectionWaiver.deleteMany({ where })
+  await prisma.protectionPlan.deleteMany({ where })
   await prisma.checkoutSession.deleteMany({ where })
   await prisma.reservation.deleteMany({ where })
   await prisma.notice.deleteMany({ where })
@@ -194,6 +196,16 @@ async function seedFacility(input: {
     data: [
       { facilityId: facility.id, jurisdiction: 'state', rateBasisPoints: 625, effectiveFrom: daysAgo(400) },
       { facilityId: facility.id, jurisdiction: 'city', rateBasisPoints: 200, effectiveFrom: daysAgo(400) },
+    ],
+  })
+  // US-44's coverage tiers. Effective-dated like every other price, and named
+  // as protection rather than insurance — what we sell is an addendum, not a
+  // policy.
+  await prisma.protectionPlan.createMany({
+    data: [
+      { facilityId: facility.id, tier: 'basic', name: '$2,000 cover', coverageCents: 200_000, premiumCents: 900, effectiveFrom: daysAgo(400) },
+      { facilityId: facility.id, tier: 'standard', name: '$3,000 cover', coverageCents: 300_000, premiumCents: 1_400, effectiveFrom: daysAgo(400) },
+      { facilityId: facility.id, tier: 'premium', name: '$5,000 cover', coverageCents: 500_000, premiumCents: 2_200, effectiveFrom: daysAgo(400) },
     ],
   })
   await prisma.feeSchedule.createMany({

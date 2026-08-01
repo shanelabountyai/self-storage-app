@@ -408,6 +408,44 @@ test('the checkout stepper advances server-side and resumes', async ({ page }) =
   await expect(page.getByRole('heading', { name: 'Your unit' })).toBeVisible()
 })
 
+test('the protection step cannot be skipped and updates the total', async ({ page }) => {
+  await page.goto('/storage/tx/houston/demo-e2e')
+  await page
+    .getByRole('listitem')
+    .filter({ hasText: '10x10 Test' })
+    .first()
+    .getByRole('button', { name: 'Rent now' })
+    .click()
+
+  await page.getByLabel('First name').fill('Ada')
+  await page.getByLabel('Last name').fill('Renter')
+  await page.getByLabel('Email').fill(`e2e-prot-${Date.now()}@demo.example.com`)
+  await page.getByLabel('Mobile number').fill('512-555-0100')
+  await page.getByLabel('Street address').fill('2400 South Congress Ave')
+  await page.getByLabel('City').fill('Austin')
+  await page.getByLabel('State').fill('TX')
+  await page.getByLabel('Zip code').fill('78704')
+  await page.getByRole('button', { name: 'Continue' }).click()
+  await page.getByRole('button', { name: 'This is right — continue' }).click()
+
+  await expect(page.getByRole('heading', { name: 'Protect what you store' })).toBeVisible()
+  // US-501: the mid tier is preselected and changeable in one tap.
+  await expect(page.getByRole('radio', { name: /\$3,000 cover/ })).toBeChecked()
+
+  // Choosing "my own cover" without the record is refused with a named error,
+  // not a disabled button (3.3.1).
+  await page.getByRole('radio', { name: /I have my own cover/ }).check()
+  await page.getByRole('button', { name: 'Continue' }).click()
+  await expect(page.getByRole('main').getByRole('alert')).toBeVisible()
+  await expect(page.getByLabel('Insurer')).toHaveAttribute('aria-invalid', 'true')
+
+  // A plan instead, and the recurring total moves with a stated cause (§6.4).
+  await page.getByRole('radio', { name: /\$5,000 cover/ }).check()
+  await page.getByRole('button', { name: 'Continue' }).click()
+  await expect(page.getByRole('main')).toContainText('Your lease')
+  await expect(page.getByRole('main')).toContainText('Protection')
+})
+
 test('an unknown checkout link says so and charges nothing', async ({ page }) => {
   await page.goto('/checkout?token=not-a-real-session')
   await expect(page.getByRole('heading', { level: 1 })).toContainText("couldn't find that checkout")

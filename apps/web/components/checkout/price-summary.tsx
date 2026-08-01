@@ -20,6 +20,10 @@ export type PriceSummaryProps = {
   streetRateCents: number
   adminFeeCents?: number
   taxRates?: readonly TaxRate[]
+  /// Once the renter has chosen at step 3. Added to the recurring total and
+  /// shown as its own line, so the number that changed is identifiable rather
+  /// than a bigger total the renter has to account for themselves.
+  protectionPremiumCents?: number
   /// Rendered when a step has changed the totals, e.g. "Protection plan added".
   /// §6.4: a total that moves without an explicit cause is a defect, so the
   /// cause is stated rather than left to be inferred from a changed number.
@@ -33,9 +37,13 @@ export function PriceSummary({
   streetRateCents,
   adminFeeCents,
   taxRates = [],
+  protectionPremiumCents,
   changeNote,
 }: PriceSummaryProps) {
   const cost = calculateMoveInCost({ webRateCents, streetRateCents, adminFeeCents, taxRates })
+  const premium = protectionPremiumCents ?? 0
+  const dueToday = cost.totalDueTodayCents + premium
+  const monthly = cost.ongoingMonthlyCents + premium
 
   return (
     <aside
@@ -52,10 +60,10 @@ export function PriceSummary({
       <details className="group">
         <summary className="flex cursor-pointer flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
           <span className="font-medium">
-            Due today <span className="tabular-nums">{formatRate(cost.totalDueTodayCents)}</span>
+            Due today <span className="tabular-nums">{formatRate(dueToday)}</span>
           </span>
           <span className="text-muted-foreground text-sm">
-            then <span className="tabular-nums">{formatRate(cost.ongoingMonthlyCents)}</span>/mo
+            then <span className="tabular-nums">{formatRate(monthly)}</span>/mo
           </span>
         </summary>
 
@@ -68,15 +76,19 @@ export function PriceSummary({
             <div key={line.key} className="flex justify-between gap-4">
               <dt>{line.label}</dt>
               <dd className="tabular-nums">
-                {line.key === 'protection' && line.amountCents === 0
-                  ? 'chosen at checkout'
+                {line.key === 'protection'
+                  ? protectionPremiumCents === undefined
+                    ? 'chosen at checkout'
+                    : premium === 0
+                      ? 'your own cover'
+                      : formatRate(premium)
                   : formatRate(line.amountCents)}
               </dd>
             </div>
           ))}
           <div className="flex justify-between gap-4 border-t pt-2 font-medium">
             <dt>Total due today</dt>
-            <dd className="tabular-nums">{formatRate(cost.totalDueTodayCents)}</dd>
+            <dd className="tabular-nums">{formatRate(dueToday)}</dd>
           </div>
         </dl>
       </details>
