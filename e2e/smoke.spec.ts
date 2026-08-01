@@ -304,3 +304,49 @@ test('a reservation link that is not real says so without leaking why', async ({
   await expect(page.getByRole('heading', { level: 1 })).toContainText("isn't good any more")
   await expect(page.getByRole('main').getByRole('link', { name: /^Call/ })).toBeVisible()
 })
+
+test('Rent now starts a checkout and holds the unit', async ({ page }) => {
+  await page.goto('/storage/tx/austin/demo-austin-south')
+  const card = page.getByRole('listitem').filter({ hasText: '5x5 Locker' }).first()
+  await card.getByRole('button', { name: 'Rent now' }).click()
+
+  await expect(page).toHaveURL(/\/checkout\?token=/)
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('Move in online')
+
+  // §6.4: the price summary is the stepper's chrome, so the total is visible
+  // at step 1 rather than first appearing on the screen that asks for a card.
+  await expect(page.getByRole('main')).toContainText('Due today')
+  await expect(page.getByRole('main')).toContainText('/mo')
+
+  // §6.8.1: the progress indicator carries its state in words, not colour.
+  const progress = page.getByRole('navigation', { name: 'Checkout progress' })
+  await expect(progress).toContainText('Your details')
+  await expect(progress.getByText(/step 1 of 6, current step/)).toBeAttached()
+})
+
+test('the checkout stepper advances server-side and resumes', async ({ page }) => {
+  await page.goto('/storage/tx/austin/demo-austin-south')
+  await page
+    .getByRole('listitem')
+    .filter({ hasText: '10x20 Drive-Up' })
+    .first()
+    .getByRole('button', { name: 'Rent now' })
+    .click()
+  await expect(page).toHaveURL(/\/checkout\?token=/)
+  const url = page.url()
+
+  await page.getByRole('button', { name: 'Continue' }).click()
+  await expect(page.getByRole('heading', { name: 'Your unit' })).toBeVisible()
+
+  // FR-4.1: resumable. Re-entering the same link lands on the step the renter
+  // left, not back at the start — the session is the truth, not the tab.
+  await page.goto('/')
+  await page.goto(url)
+  await expect(page.getByRole('heading', { name: 'Your unit' })).toBeVisible()
+})
+
+test('an unknown checkout link says so and charges nothing', async ({ page }) => {
+  await page.goto('/checkout?token=not-a-real-session')
+  await expect(page.getByRole('heading', { level: 1 })).toContainText("couldn't find that checkout")
+  await expect(page.getByRole('main')).toContainText('Nothing has been charged')
+})

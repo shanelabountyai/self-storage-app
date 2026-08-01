@@ -13,6 +13,7 @@ import {
 const VACANT: UnitOccupancyFacts = {
   activeLease: null,
   activeReservation: null,
+  activeCheckoutLock: null,
   overlocked: false,
 }
 
@@ -21,7 +22,39 @@ const leased = (status = 'active'): UnitOccupancyFacts => ({
   activeLease: { id: 'lease-1', status },
 })
 const held: UnitOccupancyFacts = { ...VACANT, activeReservation: { id: 'res-1' } }
+/// A move-in in progress (B-020). A different event from a reservation, but to
+/// anyone looking at the unit it means the same thing: spoken for.
+const inCheckout: UnitOccupancyFacts = { ...VACANT, activeCheckoutLock: { id: 'co-1' } }
 const overlocked: UnitOccupancyFacts = { ...leased(), overlocked: true }
+
+describe('deriveUnitStatus — a checkout in progress holds the unit', () => {
+  it('reads as reserved while the lock is live', () => {
+    expect(deriveUnitStatus('available', inCheckout)).toBe('reserved')
+  })
+
+  it('outranks operator intent, exactly as a reservation does', () => {
+    // B-010's documented precedence puts `reserved` above operational intent,
+    // so a lock on a unit someone has since marked for maintenance still reads
+    // as reserved. That is the existing contract, not a new one — asserted here
+    // so the checkout lock cannot quietly diverge from the reservation it sits
+    // beside.
+    expect(deriveUnitStatus('maintenance', inCheckout)).toBe('reserved')
+    expect(deriveUnitStatus('maintenance', inCheckout)).toBe(
+      deriveUnitStatus('maintenance', held),
+    )
+  })
+
+  it('ranks below a lease', () => {
+    // Both at once should be impossible, but if the data ever says so the more
+    // serious fact wins — the same precedence a reservation gets.
+    const both: UnitOccupancyFacts = { ...leased(), activeCheckoutLock: { id: 'co-1' } }
+    expect(deriveUnitStatus('available', both)).toBe('occupied')
+  })
+
+  it('is indistinguishable from a reservation in the derived status', () => {
+    expect(deriveUnitStatus('available', inCheckout)).toBe(deriveUnitStatus('available', held))
+  })
+})
 
 describe('deriveUnitStatus — operator intent when nothing occupies the unit', () => {
   it.each(MANUAL_UNIT_STATUSES)('a vacant unit shows its own %s intent', (intent) => {

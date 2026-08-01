@@ -1,5 +1,6 @@
 import type { Consumer } from '@storage/core/events'
 import { expireReservations } from '@/lib/reservations/reserve'
+import { expireCheckoutSessions } from '@/lib/checkout/session'
 
 // Consumer and job registration. The machinery is B-006's; the things that use
 // it arrive with their own backlog items: reservation expiry (B-018, below),
@@ -44,6 +45,27 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
         itemId: facilityId ?? 'global',
         ok: true,
         message: `expired ${expired} reservation${expired === 1 ? '' : 's'}`,
+      })
+    },
+  },
+  {
+    // B-020 / FR-4.1: the 30-minute checkout lock.
+    //
+    // Daily, and that is enough — the runner is once-per-business-date by
+    // design (B-006), and this sweep is bookkeeping rather than the guard.
+    // Availability derives from `lockExpiresAt > now`, so a lapsed lock stops
+    // holding its unit the instant it lapses whether or not the sweep has run;
+    // all this does is settle the row's status and free the FK. If that ever
+    // stops being true, the fix is the derivation, not a faster job.
+    name: 'checkout.expire',
+    localHour: 0,
+    scope: 'global',
+    handler: async ({ recordItem }) => {
+      const { expired } = await expireCheckoutSessions()
+      recordItem({
+        itemId: 'global',
+        ok: true,
+        message: `expired ${expired} checkout session${expired === 1 ? '' : 's'}`,
       })
     },
   },

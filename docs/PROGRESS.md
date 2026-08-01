@@ -384,6 +384,36 @@ On the outbound side, the Stripe idempotency key is derived from **what the mone
 
 ---
 
+### B-020 — Checkout session state machine ✅ `PENDING`
+
+The machine a move-in runs on: a server-side resumable stepper, a 30-minute unit lock, the unit-lost fallback, and the price summary. The *content* of each step is B-021–B-025; what this owns is that they have somewhere to run.
+
+**Decided: a checkout lock is not a reservation.** Reusing the `Reservation` row as the lock would have been less code — the derived status, the availability read and the partial unique index all already exist for it. It was rejected because it would make every abandoned checkout look like a reservation, silently corrupting the reservation→move-in conversion report that the whole funnel is judged on (and that the operator review called a daily-standup number). A hold someone *asked for* and a lock the system *took while they type* are different events. So `CheckoutSession` is its own model, and `deriveUnitStatus` gained a third fact, `activeCheckoutLock`, which renders identically to a reservation — to anyone looking at the unit, both mean "spoken for".
+
+**The lock is the same concurrency primitive as B-018**, deliberately: `FOR UPDATE SKIP LOCKED` to claim one available unit, backed by a partial unique index (`one active session per unit`) so a future code path that skips the claim is rejected rather than double-booking. Both races are tested — two simultaneous checkouts take different units; two racing for the last one produce a single winner.
+
+**Every transition is validated server-side.** A stepper whose position lives in the browser is a stepper a renter can skip, so the session row is the truth and the page renders whatever step it says. Posting step 4's form while the session says step 2 is refused as `out_of_order` — a stale tab or a forged request, and either way the server wins. Step data is merged across steps rather than replaced.
+
+**Advancing renews the lock, and refusing to advance is the point.** A renter working through the steps never meets the warning. A lapsed lock refuses to advance and refuses to extend: the unit may already belong to someone else, and carrying on to a payment step for a unit we cannot deliver is the exact failure this machine exists to prevent.
+
+**2.2.1 is handled with a control, not just a timer.** The warning appears at five minutes with a one-activation "keep it for another 30 minutes". It is an explicit control rather than a background heartbeat because a screen-reader user reading a long lease generates no interaction events — an idle-based heartbeat would drop precisely them. The unit-lost fallback keeps every answer already given and only changes the unit; when the size is genuinely gone it says so and offers a human.
+
+**Decided: the price summary is this item's chrome.** It was scoped to B-025, which would have meant steps 1–4 shipping with no total — including the protection step, where the monthly figure moves most. A renter must never first meet a number on the screen that asks for their card. It renders from the same `calculateMoveInCost` as the facility page (B-017), which is what makes US-301's "a discrepancy is release-blocking" enforceable at all.
+
+**"Rent now" is a POST, not a link.** Starting a checkout takes a unit off the market; as a page it would fire on every prefetch and every back-button visit, quietly locking units for people who only hovered.
+
+**Found — a dangling foreign key, caught by a test.** `startCheckout` persisted the caller's `reservationId` even when the reservation did not exist or had lapsed, writing a bad FK for an unknown id and linking sessions to holds that held nothing. It now only keeps the id when the reservation is real and still live.
+
+**Found — the e2e suite could not release what it locked.** Unlike a reservation there is no renter-facing way to give a checkout unit back, so each run cost the demo facility a unit until a size sold out and unrelated tests began failing. `e2e/global-teardown.ts` now releases them, scoped to checkout sessions because nothing in the seed creates one. The demo seed also had to delete sessions before unit types — `CheckoutSession.unitType` is `Restrict`.
+
+**Also found:** the pure unit-status truth table passed unchanged after gaining a new fact, because vitest strips types rather than checking them and the root `tests/` directory is not in the app's tsconfig. The new fact had no coverage until it was added explicitly. Worth remembering: a green test run does not mean the fixtures still typecheck.
+
+**Verified:** 486 unit tests (25 new), 206 e2e (3 new), typecheck, lint and build clean.
+
+**Left behind:** every step renders a heading and a Continue control and nothing else — **B-021** (details and implicit account), **B-022** (protection), **B-024** (lease and e-sign) and **B-025** (payment) fill them in. The resume link is generated and stored but **not emailed**, so resumability is real server-side and unreachable in practice until **B-031**; FR-4.1 is explicit that a draft only surviving while the tab is open is not resumable, so this is the item's biggest gap. Provisioning (FR-4.5) and rollback (FR-4.6) belong to **B-026**. The expiry sweep is daily, which is enough because availability derives from `lockExpiresAt > now` rather than from the sweep having run.
+
+---
+
 ## Feature PRDs added mid-build
 
 ### PRD 09 — Support impersonation ("log in as") 📋 specced, not built

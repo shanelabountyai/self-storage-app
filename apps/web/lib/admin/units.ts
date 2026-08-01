@@ -41,6 +41,7 @@ export async function occupancyFactsForMany(
       {
         activeLease: null,
         activeReservation: null,
+        activeCheckoutLock: null,
         // No source yet — the delinquency engine (B-057) and field ops (B-060)
         // populate this. Until then no unit can be overlocked, which is
         // correct: nothing in the system can currently overlock one.
@@ -50,7 +51,7 @@ export async function occupancyFactsForMany(
   )
   if (unitIds.length === 0) return facts
 
-  const [leases, reservations] = await Promise.all([
+  const [leases, reservations, checkoutLocks] = await Promise.all([
     client.lease.findMany({
       where: {
         unitId: { in: [...unitIds] },
@@ -63,6 +64,13 @@ export async function occupancyFactsForMany(
       where: { unitId: { in: [...unitIds] }, status: 'held', expiresAt: { gt: new Date() } },
       select: { id: true, unitId: true },
     }),
+    // A move-in in progress holds its unit for 30 minutes (B-020). Same
+    // "not past its expiry" rule as a reservation: a lapsed lock holds nothing,
+    // whether or not the sweep has run yet.
+    client.checkoutSession.findMany({
+      where: { unitId: { in: [...unitIds] }, status: 'active', lockExpiresAt: { gt: new Date() } },
+      select: { id: true, unitId: true },
+    }),
   ])
 
   for (const lease of leases) {
@@ -72,6 +80,10 @@ export async function occupancyFactsForMany(
   for (const reservation of reservations) {
     const entry = reservation.unitId ? facts.get(reservation.unitId) : undefined
     if (entry) entry.activeReservation = { id: reservation.id }
+  }
+  for (const session of checkoutLocks) {
+    const entry = session.unitId ? facts.get(session.unitId) : undefined
+    if (entry) entry.activeCheckoutLock = { id: session.id }
   }
 
   return facts

@@ -142,6 +142,27 @@ enum ReservationStatus {
   expired
 }
 
+/// FR-4.1's stepper: details → unit-assign → insurance → lease → payment →
+/// provisioned. Stored rather than inferred, so a resumed session lands exactly
+/// where the renter left rather than wherever the data happens to imply.
+enum CheckoutStep {
+  details
+  unit_assign
+  insurance
+  lease
+  payment
+  provisioned
+}
+
+enum CheckoutStatus {
+  active
+  completed
+  /// The 30-minute lock ran out. The session is kept: it is the record of what
+  /// the renter had chosen, and B-073's abandonment follow-up reads it.
+  expired
+  abandoned
+}
+
 enum LeadStatus {
   new
   contacted
@@ -264,6 +285,7 @@ model Facility {
   accessGrants      AccessGrant[]
   accessCredentials AccessCredential[]
   reservations      Reservation[]
+  checkoutSessions  CheckoutSession[]
   leads             Lead[]
   notices           Notice[]
   auditLogs         AuditLog[]
@@ -338,11 +360,12 @@ model UnitType {
   createdAt         DateTime @default(now()) @db.Timestamptz(6)
   updatedAt         DateTime @updatedAt @db.Timestamptz(6)
 
-  facility     Facility       @relation(fields: [facilityId], references: [id], onDelete: Cascade)
-  units        Unit[]
-  reservations Reservation[]
-  leads        Lead[]
-  rates        UnitTypeRate[]
+  facility         Facility          @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  units            Unit[]
+  reservations     Reservation[]
+  checkoutSessions CheckoutSession[]
+  leads            Lead[]
+  rates            UnitTypeRate[]
 
   @@unique([facilityId, name])
   @@index([facilityId])
@@ -404,10 +427,11 @@ model Unit {
   createdAt         DateTime              @default(now()) @db.Timestamptz(6)
   updatedAt         DateTime              @updatedAt @db.Timestamptz(6)
 
-  facility     Facility      @relation(fields: [facilityId], references: [id], onDelete: Cascade)
-  unitType     UnitType      @relation(fields: [unitTypeId], references: [id], onDelete: Restrict)
-  leases       Lease[]
-  reservations Reservation[]
+  facility         Facility          @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  unitType         UnitType          @relation(fields: [unitTypeId], references: [id], onDelete: Restrict)
+  leases           Lease[]
+  reservations     Reservation[]
+  checkoutSessions CheckoutSession[]
 
   @@unique([facilityId, number])
   @@index([facilityId, status])
@@ -421,44 +445,45 @@ model Unit {
 // --------------------------------------------------------- people/leases ----
 
 model Tenant {
-  id              String    @id @default(cuid())
-  email           String    @unique
+  id                           String    @id @default(cuid())
+  email                        String    @unique
   /// Optional forever — magic-link sign-in is a first-class path, not just
   /// onboarding (PRD 01 FR-5.1). Never a plaintext or reversible value.
-  passwordHash    String?
-  emailVerifiedAt DateTime? @db.Timestamptz(6)
-  phone           String?
-  firstName       String
-  lastName        String
-  addressLine1    String?
-  addressLine2    String?
-  city            String?
-  state           String?
-  postalCode      String?
-  country         String?   @default("US")
-  altContactName  String?
-  altContactPhone String?
-  altContactEmail String?
+  passwordHash                 String?
+  emailVerifiedAt              DateTime? @db.Timestamptz(6)
+  phone                        String?
+  firstName                    String
+  lastName                     String
+  addressLine1                 String?
+  addressLine2                 String?
+  city                         String?
+  state                        String?
+  postalCode                   String?
+  country                      String?   @default("US")
+  altContactName               String?
+  altContactPhone              String?
+  altContactEmail              String?
   /// Stripe Customer for this tenant. A reference, never card data (master
   /// PRD §7.4 keeps us in SAQ-A: the browser talks to Stripe directly and we
   /// only ever hold tokens).
-  stripeCustomerId String? @unique
+  stripeCustomerId             String?   @unique
   /// The saved method autopay charges. Set by a SetupIntent; B-025 owns the
   /// enrolment UI, this is the field it writes.
   stripeDefaultPaymentMethodId String?
-  createdAt       DateTime  @default(now()) @db.Timestamptz(6)
-  updatedAt       DateTime  @updatedAt @db.Timestamptz(6)
+  createdAt                    DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt                    DateTime  @updatedAt @db.Timestamptz(6)
   /// Soft delete only (PRD 02 FR-10); hard delete is never exposed.
-  deletedAt       DateTime? @db.Timestamptz(6)
+  deletedAt                    DateTime? @db.Timestamptz(6)
   /// Optimistic locking (PRD 02 FR-11).
-  version         Int       @default(0)
+  version                      Int       @default(0)
 
-  leases       Lease[]
-  payments     Payment[]
-  accessGrants AccessGrant[]
-  reservations Reservation[]
-  leads        Lead[]
-  consents     Consent[]
+  leases           Lease[]
+  payments         Payment[]
+  accessGrants     AccessGrant[]
+  reservations     Reservation[]
+  checkoutSessions CheckoutSession[]
+  leads            Lead[]
+  consents         Consent[]
 
   @@index([lastName, firstName])
   @@map("tenant")
@@ -605,6 +630,60 @@ model PaymentAllocation {
 /// twice a no-op rather than a double-posted payment. Rows are kept after
 /// processing: they are the reconciliation trail between Stripe and the ledger
 /// (PRD 01 §7.3), and the only way to answer "did we ever see this event".
+/// PRD 01 FR-4.1. A move-in in progress.
+///
+/// Deliberately NOT a Reservation. Reusing the reservation row as the checkout
+/// lock would be less code, and it would make every abandoned checkout look
+/// like a reservation — which silently corrupts the reservation→move-in
+/// conversion report the whole funnel is judged on. A hold someone asked for
+/// and a lock the system took while they type are different events.
+model CheckoutSession {
+  id              String         @id @default(cuid())
+  facilityId      String
+  unitTypeId      String
+  /// The specific unit this session is holding. Claimed the same way a
+  /// reservation claims one (FOR UPDATE SKIP LOCKED), and released when the
+  /// lock lapses.
+  unitId          String?
+  /// Set when the renter came from a free hold, so completing does not leave a
+  /// stale reservation behind and abandoning does not release a unit they had
+  /// already been promised.
+  reservationId   String?
+  tenantId        String?
+  step            CheckoutStep   @default(details)
+  status          CheckoutStatus @default(active)
+  /// FR-4.1: the resume link is the session's signed token, emailed once the
+  /// address is captured at step 1. Only the hash is stored.
+  tokenHash       String         @unique
+  /// Captured at step 1 and held here so the resume email can be sent before a
+  /// Tenant row exists.
+  email           String?
+  /// Rate seen = rate charged. Locked at the moment the session started, so a
+  /// rate change mid-checkout cannot move the total under the renter.
+  quotedRateCents Int
+  /// The 30-minute unit lock. Extended by the heartbeat and by an explicit
+  /// "keep it" from the renter (2.2.1).
+  lockExpiresAt   DateTime       @db.Timestamptz(6)
+  /// Per-step captured data, merged as the renter advances. Typed at the edges
+  /// by the step schemas in B-021..B-025 rather than here.
+  data            Json           @default("{}")
+  createdAt       DateTime       @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime       @updatedAt @db.Timestamptz(6)
+
+  facility    Facility     @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  unitType    UnitType     @relation(fields: [unitTypeId], references: [id], onDelete: Restrict)
+  unit        Unit?        @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  reservation Reservation? @relation(fields: [reservationId], references: [id], onDelete: SetNull)
+  tenant      Tenant?      @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+
+  @@index([facilityId, status])
+  @@index([status, lockExpiresAt])
+  /// One live session per unit, enforced in raw SQL because Prisma cannot
+  /// express a partial index (migration 20260801120000_checkout_session):
+  ///   checkout_session_one_active_per_unit — unique(unitId) where status='active'
+  @@map("checkout_session")
+}
+
 model StripeEvent {
   /// Stripe's `evt_...` id, used directly as the primary key.
   id          String    @id
@@ -728,6 +807,8 @@ model Reservation {
   unit     Unit?    @relation(fields: [unitId], references: [id], onDelete: SetNull)
   tenant   Tenant?  @relation(fields: [tenantId], references: [id], onDelete: SetNull)
   lead     Lead?    @relation(fields: [leadId], references: [id], onDelete: SetNull)
+
+  checkoutSessions CheckoutSession[]
 
   @@index([facilityId, status])
   @@index([status, expiresAt])

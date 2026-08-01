@@ -28,6 +28,13 @@ export type UnitOccupancyFacts = {
   activeLease: { id: string; status: string } | null
   /// A reservation still holding the unit — `held` and not past its expiry.
   activeReservation: { id: string } | null
+  /// A move-in in progress holding the unit — an `active` CheckoutSession whose
+  /// 30-minute lock has not lapsed (B-020, FR-4.1). Separate from a reservation
+  /// on purpose: a hold someone asked for and a lock the system took while they
+  /// type are different events, and conflating them would corrupt the
+  /// reservation→move-in conversion report. They render identically, because to
+  /// anyone looking at the unit both mean "spoken for".
+  activeCheckoutLock: { id: string } | null
   /// Physical overlock from the delinquency pipeline. There is no source for
   /// this yet: the delinquency engine is B-057 and field ops is B-060, so the
   /// adapter passes `false`. Modeled now because `overlocked` outranks
@@ -39,7 +46,7 @@ export type UnitOccupancyFacts = {
 ///   overlocked — an enforcement state, and strictly more informative than the
 ///                occupancy it implies
 ///   occupied   — a lease exists
-///   reserved   — a hold exists
+///   reserved   — a hold or a live checkout lock exists
 ///   operational intent (available / maintenance / unrentable)
 export function deriveUnitStatus(
   operationalStatus: ManualUnitStatus,
@@ -47,7 +54,7 @@ export function deriveUnitStatus(
 ): EffectiveUnitStatus {
   if (facts.overlocked) return 'overlocked'
   if (facts.activeLease) return 'occupied'
-  if (facts.activeReservation) return 'reserved'
+  if (facts.activeReservation || facts.activeCheckoutLock) return 'reserved'
   return operationalStatus
 }
 

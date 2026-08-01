@@ -98,6 +98,9 @@ async function teardown() {
   await prisma.invoice.deleteMany({ where })
   await prisma.accessCredential.deleteMany({ where })
   await prisma.accessGrant.deleteMany({ where })
+  // Before reservations and unit types: CheckoutSession restricts unitType and
+  // references both (B-020).
+  await prisma.checkoutSession.deleteMany({ where })
   await prisma.reservation.deleteMany({ where })
   await prisma.notice.deleteMany({ where })
   await prisma.lease.deleteMany({ where })

@@ -303,14 +303,29 @@ function UnitTypeCard({
         <div className="mt-4">
           {/* US-401's entry point. Rent now (B-020) joins it here later; §6.6's
               trust line sits beside the CTA, not buried in the lease. */}
-          <Link
-            href={`${facilityPath(facility)}/reserve?unitType=${unitType.unitTypeId}`}
-            className="bg-primary text-primary-foreground inline-flex min-h-11 items-center rounded-md px-4 text-sm font-medium"
-          >
-            Reserve for free
-          </Link>
+          <div className="flex flex-wrap gap-3">
+            {/* POST, not a link: starting a checkout takes a unit off the
+                market, so it must not fire on a prefetch or a back-button
+                visit (B-020). */}
+            <form method="POST" action={`${facilityPath(facility)}/rent`}>
+              <input type="hidden" name="unitTypeId" value={unitType.unitTypeId} />
+              <button
+                type="submit"
+                className="bg-primary text-primary-foreground inline-flex min-h-11 items-center rounded-md px-4 text-sm font-medium"
+              >
+                Rent now
+              </button>
+            </form>
+            <Link
+              href={`${facilityPath(facility)}/reserve?unitType=${unitType.unitTypeId}`}
+              className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
+            >
+              Reserve for free
+            </Link>
+          </div>
+          {/* §6.6: the trust line for each action, beside the action. */}
           <p className="text-muted-foreground mt-2 text-xs">
-            Free cancellation · No credit card needed
+            Month-to-month, no long-term commitment · Reserving is free and needs no card
           </p>
         </div>
       )}
@@ -571,6 +586,7 @@ export default async function FacilityPage({
     sort?: string
     from?: string
     unavailable?: string
+    soldout?: string
   }>
 }) {
   const { state, city, slug } = await params
@@ -610,6 +626,13 @@ export default async function FacilityPage({
           <Link href={backToSearch} className="underline underline-offset-4">
             ← Back to storage near {query.from}
           </Link>
+        </p>
+      )}
+
+      {query.soldout && (
+        <p role="status" className="border-input mb-4 rounded-md border p-3 text-sm text-pretty">
+          Someone took the last one of that size just before you. Nothing has been charged — here is
+          what we still have.
         </p>
       )}
 

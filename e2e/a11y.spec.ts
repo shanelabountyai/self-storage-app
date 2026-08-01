@@ -23,6 +23,7 @@ const PUBLIC_ROUTES = [
   // The token-less and bad-token states of the reservation page are the ones a
   // crawler or a mistyped link reaches; the live states need a real hold.
   '/reservations?token=not-a-real-token',
+  '/checkout?token=not-a-real-session',
   '/faq',
   '/about',
   '/contact',
