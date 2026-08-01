@@ -22,7 +22,7 @@ function formatMiles(miles: number): string {
   return `${miles < 10 ? miles.toFixed(1) : Math.round(miles)} mi`
 }
 
-function ResultCard({ facility }: { facility: FacilityResult }) {
+function ResultCard({ facility, query }: { facility: FacilityResult; query: string }) {
   return (
     <li className="rounded-lg border p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
@@ -30,7 +30,12 @@ function ResultCard({ facility }: { facility: FacilityResult }) {
           {/* The name is the link rather than the whole card: a card-wide click
               target swallows the address text a user may want to select, and
               gives screen readers one enormous link name (US-103). */}
-          <Link href={facilityPath(facility)} className="underline underline-offset-4">
+          {/* `from` carries the search onward so the facility page can offer a
+              way back without the comparer retyping their zip (US-103). */}
+          <Link
+            href={query ? `${facilityPath(facility)}?from=${encodeURIComponent(query)}` : facilityPath(facility)}
+            className="underline underline-offset-4"
+          >
             {facility.name}
           </Link>
         </h3>
@@ -93,6 +98,9 @@ function Dead({ heading, children }: { heading: string; children: React.ReactNod
 }
 
 function Results({ outcome }: { outcome: SearchOutcome }) {
+  // "Your location" results have no text query to hand on; the back link is
+  // simply absent there rather than pointing at an empty search.
+  const query = outcome.status === 'ok' || outcome.status === 'none_nearby' ? outcome.query : ''
   if (outcome.status === 'empty') {
     return (
       <p className="text-muted-foreground mt-8 text-pretty">
@@ -134,7 +142,7 @@ function Results({ outcome }: { outcome: SearchOutcome }) {
         </p>
         <ul className="mt-6 flex flex-col gap-4">
           {outcome.results.map((facility) => (
-            <ResultCard key={facility.id} facility={facility} />
+            <ResultCard key={facility.id} facility={facility} query={query} />
           ))}
         </ul>
         <p className="mt-6">
@@ -158,7 +166,7 @@ function Results({ outcome }: { outcome: SearchOutcome }) {
       </p>
       <ul className="mt-4 flex flex-col gap-4">
         {outcome.results.map((facility) => (
-          <ResultCard key={facility.id} facility={facility} />
+          <ResultCard key={facility.id} facility={facility} query={query} />
         ))}
       </ul>
     </div>
@@ -205,8 +213,8 @@ export default async function SearchPage({
 
       <p className="text-muted-foreground mt-10 text-sm text-pretty">
         Not sure what size you need? Read the{' '}
-        <Link href="/faq" className="underline underline-offset-4">
-          FAQ
+        <Link href="/storage/size-guide" className="underline underline-offset-4">
+          size guide
         </Link>
         .
       </p>

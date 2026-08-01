@@ -15,6 +15,10 @@ const PUBLIC_ROUTES = [
   // US-103's facility detail template: hours tables, live unit list, and the
   // map iframe, which is the part axe is most likely to have an opinion about.
   '/storage/tx/austin/demo-austin-south',
+  // The filtered view is a different template from the unfiltered one — it
+  // renders the "nothing matches those filters" state and the applied controls.
+  '/storage/tx/austin/demo-austin-south?size=small&features=climate&sort=size',
+  '/storage/size-guide',
   '/faq',
   '/about',
   '/contact',
@@ -30,6 +34,12 @@ const PUBLIC_ROUTES = [
 for (const route of PUBLIC_ROUTES) {
   test(`${route} has no WCAG 2.1 AA violations`, async ({ page }) => {
     await page.goto(route)
+    // Wait for the page's own content before scanning. `goto` resolves on the
+    // document load, which in dev mode can land while the route is still
+    // compiling — a scan of a half-rendered page produced one spurious failure
+    // in three runs, and a spurious a11y failure is worse than none because it
+    // teaches people to re-run the suite.
+    await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible()
 
     const { violations, incomplete } = await new AxeBuilder({ page })
       .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])

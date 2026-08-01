@@ -6,7 +6,8 @@
       "url": [
         "http://localhost:3000/",
         "http://localhost:3000/storage/search?q=78704",
-        "http://localhost:3000/storage/tx/austin/demo-austin-south"
+        "http://localhost:3000/storage/tx/austin/demo-austin-south",
+        "http://localhost:3000/storage/size-guide"
       ],
       "numberOfRuns": 3
     },
@@ -15,16 +16,37 @@
         {
           "matchingUrlPattern": ".*",
           "assertions": {
-            "categories:accessibility": ["error", { "minScore": 1 }],
-            "categories:performance": ["warn", { "minScore": 0.9 }],
-            "categories:seo": ["warn", { "minScore": 0.9 }],
+            "categories:accessibility": [
+              "error",
+              {
+                "minScore": 1
+              }
+            ],
+            "categories:performance": [
+              "warn",
+              {
+                "minScore": 0.9
+              }
+            ],
+            "categories:seo": [
+              "warn",
+              {
+                "minScore": 0.9
+              }
+            ],
             "cumulative-layout-shift": [
               "error",
-              { "maxNumericValue": 0.1, "aggregationMethod": "median" }
+              {
+                "maxNumericValue": 0.1,
+                "aggregationMethod": "median"
+              }
             ],
             "largest-contentful-paint": [
               "error",
-              { "maxNumericValue": 3000, "aggregationMethod": "median" }
+              {
+                "maxNumericValue": 3000,
+                "aggregationMethod": "median"
+              }
             ]
           }
         },
@@ -33,7 +55,10 @@
           "assertions": {
             "largest-contentful-paint": [
               "warn",
-              { "maxNumericValue": 2500, "aggregationMethod": "median" }
+              {
+                "maxNumericValue": 2500,
+                "aggregationMethod": "median"
+              }
             ]
           }
         }

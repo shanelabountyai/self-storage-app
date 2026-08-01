@@ -304,6 +304,30 @@ The admin half of the review round. PRD 02 contained no accessibility text at al
 
 ---
 
+### B-017 — Unit browsing & transparent pricing ✅ `PENDING`
+
+Filters and sort on the facility page, both rates shown honestly, a "What you'd pay today" itemization, a size guide, and the search context carried through so a comparer can get back.
+
+**The move-in cost calculation is the load-bearing part.** US-301 makes it a *release-blocking defect* for the total at unit selection to disagree with the total at checkout, so `packages/core/pricing/move-in-cost.ts` is deliberately the only implementation and B-020's stepper will call it. Zero I/O — callers hand over the effective rate, fee and tax rows — which is what makes it exhaustively testable, and the test asserts the itemization actually sums to the total it foots to rather than only checking the total.
+
+**Decided: tax applies to rent plus the admin fee, rounded per jurisdiction.** Texas treats self-storage as a taxable service and the fee travels with it (D-10). Per-jurisdiction rounding matches how an invoice will list the lines later. Per-component taxability — a state that taxes rent but exempts fees — is B-044's to model; guessing the other way here would *understate* the estimate, and US-301's rule is that no fee may first appear at the payment step.
+
+**Decided: no strike-through when the two prices are equal.** A struck-through price identical to the price charged is a fabricated discount. `savingCents` is `max(0, street − web)`, so a web rate accidentally set *above* street reports zero rather than rendering "−$20 off" — a data error is not a surcharge to advertise. The saving is also stated in words, because a line through a number is a visual-only signal (1.4.1).
+
+**Decided: the protection plan is a named line with no amount.** US-301 says components not knowable before checkout are named and explained, never omitted. It renders as "chosen at checkout" rather than being left out, because discovering a required charge at the payment step is the exact surprise the story exists to prevent. Mid-month proration is named the same way.
+
+**Filters do not auto-submit.** A plain GET form with an Apply button: arrow-keying a `<select>` fires `change` on every option passed on some platforms, so an auto-submitting filter walks a keyboard user through several reloads to reach one option (3.2.2) — the same defect B-094 removed from the admin facility switcher. It also means filtering works with JavaScript disabled, like the rest of the public path. The result count announces through a live region that is in the DOM on load, so the change is a mutation rather than an insertion.
+
+**"Nothing matches those filters" and "this facility has nothing" are different states** with different next actions (§6.7) — one offers to clear the filters, the other offers a phone call. Unrecognised filter values in the URL degrade to "no filter" rather than to a blank page the visitor cannot explain.
+
+**Found — adding filters silently killed the prerender.** Reading `searchParams` makes a route dynamic, so B-016's `generateStaticParams` and `revalidate = 300` stopped applying the moment this item touched the page — turning them back into exactly the dead configuration B-016 had found and fixed. Both were removed rather than left in place looking meaningful, and FR-2.1's ≤5-minute staleness ceiling moved onto the data read (`cachedPublicInventory`), where it still holds and additionally bounds database load to one query set per facility per window however many filter combinations are requested. **This made the page faster, not slower:** Lighthouse LCP went 2609ms → 2461ms, now under the 2500ms warn threshold rather than over it, because the render no longer waits on Postgres.
+
+**Left behind:** no photographs on the size guide or the unit cards — nothing stores an image and B-067 owns photo management *with required alt text*, so illustrations here would ship alt-text-less or duplicate that item. The written comparisons are what a screen-reader user would get from a good alt attribute anyway. Promotion badges (US-301) are B-070. Reserve and Rent CTAs are B-018/B-020, so a phone call is still the only conversion action on the page. The size-estimator quiz stays dropped.
+
+**Verified:** 423 unit tests (18 new), 168 e2e (12 new), Lighthouse accessibility 100 and SEO 100 on all four public templates. The size guide sits at 2611ms LCP — over the 2500ms warn, under the 3000ms error (D-19).
+
+---
+
 ## Feature PRDs added mid-build
 
 ### PRD 09 — Support impersonation ("log in as") 📋 specced, not built

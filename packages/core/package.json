@@ -11,7 +11,8 @@
     "./events": "./events/index.ts",
     "./jobs": "./jobs/index.ts",
     "./facility-settings": "./facility-settings/index.ts",
-    "./inventory": "./inventory/index.ts"
+    "./inventory": "./inventory/index.ts",
+    "./pricing": "./pricing/index.ts"
   },
   "dependencies": {
     "@storage/db": "*"

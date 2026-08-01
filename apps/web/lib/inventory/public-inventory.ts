@@ -1,5 +1,7 @@
+import { unstable_cache } from 'next/cache'
 import { prisma } from '@storage/db'
 import { effectiveByGroup } from '@storage/core/facility-settings'
+import type { TaxRate } from '@storage/core/pricing'
 import { currentRatesForFacility } from '@/lib/pricing/unit-type-rates'
 import { mintQuoteToken } from '@/lib/pricing/quote-token'
 
@@ -38,6 +40,16 @@ export type PublicUnitType = {
   quote: { token: string; expiresAt: string }
 }
 
+/// The facility-level money a cost estimate needs, effective today. Read here
+/// rather than on the page so the browse estimate and B-020's checkout stepper
+/// draw from one source (US-301: one shared calculation).
+export type PublicPricingContext = {
+  /// Undefined when the facility has no admin fee configured, which is not the
+  /// same as zero — a $0.00 line is noise, an absent one is correct.
+  adminFeeCents?: number
+  taxRates: TaxRate[]
+}
+
 export type PublicInventory = {
   facility: {
     id: string
@@ -49,7 +61,34 @@ export type PublicInventory = {
     phone: string | null
   }
   asOf: string
+  pricing: PublicPricingContext
   unitTypes: PublicUnitType[]
+}
+
+/// Effective admin fee and tax rates for a facility. Same effective-dating rule
+/// as everything else: rows are never edited, the latest one on or before
+/// `asOf` wins (FR-9).
+async function pricingContext(facilityId: string, asOf: Date): Promise<PublicPricingContext> {
+  const [feeRows, taxRows] = await Promise.all([
+    prisma.feeSchedule.findMany({
+      where: { facilityId, feeType: 'admin' },
+      select: { feeType: true, amountCents: true, effectiveFrom: true },
+    }),
+    prisma.taxComponent.findMany({
+      where: { facilityId },
+      select: { jurisdiction: true, rateBasisPoints: true, effectiveFrom: true },
+    }),
+  ])
+
+  const admin = effectiveByGroup(feeRows, asOf, (row) => row.feeType).get('admin')
+  const taxes = effectiveByGroup(taxRows, asOf, (row) => row.jurisdiction)
+
+  return {
+    adminFeeCents: admin?.amountCents,
+    taxRates: [...taxes.values()]
+      .map((row) => ({ jurisdiction: row.jurisdiction, rateBasisPoints: row.rateBasisPoints }))
+      .sort((a, b) => a.jurisdiction.localeCompare(b.jurisdiction)),
+  }
 }
 
 /// Availability per unit type, counted from the derived `Unit.status`.
@@ -86,13 +125,14 @@ export async function publicInventoryForFacility(
   // advertise it at all, so this is a 404 rather than an empty list.
   if (!facility || facility.status !== 'active') return null
 
-  const [unitTypes, rates, counts] = await Promise.all([
+  const [unitTypes, rates, counts, pricing] = await Promise.all([
     prisma.unitType.findMany({
       where: { facilityId: facility.id },
       orderBy: [{ widthFt: 'asc' }, { lengthFt: 'asc' }, { name: 'asc' }],
     }),
     currentRatesForFacility(facility.id, asOf),
     availableCountsByUnitType(facility.id),
+    pricingContext(facility.id, asOf),
   ])
 
   const priced: PublicUnitType[] = []
@@ -143,6 +183,7 @@ export async function publicInventoryForFacility(
       phone: facility.phone,
     },
     asOf: asOf.toISOString(),
+    pricing,
     unitTypes: priced,
   }
 }
@@ -192,6 +233,24 @@ export async function lowestAvailableWebRateByFacility(
   }
   return lowest
 }
+
+/// The cached display read. B-017 gave the facility page filter and sort
+/// parameters, which makes it a dynamic route — `searchParams` cannot be
+/// prerendered — so the route-segment `revalidate` that used to enforce
+/// FR-2.1's ≤5-minute ceiling no longer applies to it.
+///
+/// Caching the *read* rather than the page keeps that ceiling real and bounds
+/// database load to one query set per facility per window however many filter
+/// combinations get requested. What it gives up versus B-016's prerender is
+/// TTFB: the page now renders per request, it just doesn't wait on Postgres.
+///
+/// Not reachable from checkout — `liveAvailableCount` below is the always-live
+/// path, and that separation is the point.
+export const cachedPublicInventory = unstable_cache(
+  (slug: string) => publicInventoryForFacility(slug),
+  ['public-inventory'],
+  { revalidate: INVENTORY_CACHE_TTL_SECONDS, tags: ['public-inventory'] },
+)
 
 /// FR-2.1: "checkout availability checks are always live."
 ///

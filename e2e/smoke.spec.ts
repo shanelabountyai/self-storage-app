@@ -76,8 +76,10 @@ test('a search result links through to its facility page', async ({ page }) => {
   await page.goto('/storage/search?q=78704')
   await page.getByRole('link', { name: 'Demo — Austin South' }).click()
 
-  // US-103: the crawlable URL scheme is /storage/{state}/{city}/{slug}.
-  await expect(page).toHaveURL('/storage/tx/austin/demo-austin-south')
+  // US-103: the crawlable URL scheme is /storage/{state}/{city}/{slug}. The
+  // `from` parameter carries the search onward so the facility page can offer
+  // a way back; it is not part of the canonical path.
+  await expect(page).toHaveURL(/\/storage\/tx\/austin\/demo-austin-south(\?|$)/)
   await expect(page.getByRole('heading', { level: 1 })).toContainText('Demo — Austin South')
 })
 
@@ -154,4 +156,69 @@ test('the skip link paints a real focus indicator', async ({ page }) => {
     (indicator!.outlineStyle !== 'none' && indicator!.outlineWidth >= 2) ||
     indicator!.boxShadow !== 'none'
   expect(drawn, `focused element draws no indicator: ${JSON.stringify(indicator)}`).toBe(true)
+})
+
+test('a unit shows both rates only when they differ', async ({ page }) => {
+  await page.goto('/storage/tx/austin/demo-austin-south')
+
+  // The demo facility prices every size below its street rate, so the saving
+  // must be stated in words as well as struck through — a line through a
+  // number is a visual-only signal (1.4.1).
+  const card = page.getByRole('listitem').filter({ hasText: '10x10 Climate' }).first()
+  await expect(card).toContainText('/mo online')
+  await expect(card).toContainText('off for renting online')
+})
+
+test('"What you\'d pay today" itemizes and foots', async ({ page }) => {
+  await page.goto('/storage/tx/austin/demo-austin-south')
+
+  const card = page.getByRole('listitem').filter({ hasText: '10x10 Climate' }).first()
+  await card.getByText("What you'd pay today").click()
+
+  // US-301: rent, the one-time fee, tax, and the protection plan named even
+  // though it costs nothing yet — plus both totals.
+  await expect(card).toContainText('First month rent')
+  await expect(card).toContainText('One-time admin fee')
+  await expect(card).toContainText('Tax')
+  await expect(card).toContainText('Protection plan')
+  await expect(card).toContainText('Total due today')
+  await expect(card).toContainText('Then each month')
+})
+
+test('filters narrow the list and survive into the URL', async ({ page }) => {
+  await page.goto('/storage/tx/austin/demo-austin-south')
+
+  await page.getByLabel('Size').selectOption('small')
+  // 3.2.2: selecting must not navigate on its own.
+  await expect(page).not.toHaveURL(/size=small/)
+
+  await page.getByRole('button', { name: 'Apply' }).click()
+  await expect(page).toHaveURL(/size=small/)
+  await expect(page.getByRole('status')).toContainText('1 size matches')
+})
+
+test('a filter combination with no matches offers a way out', async ({ page }) => {
+  // §6.7: name the problem and the next action. "Nothing matches" is a
+  // different problem from "this facility has nothing", and needs different copy.
+  await page.goto('/storage/tx/austin/demo-austin-south?size=small&features=driveUp')
+
+  await expect(page.getByRole('main')).toContainText('Nothing here matches those filters')
+  await expect(page.getByRole('link', { name: 'Clear them' })).toBeVisible()
+})
+
+test('a search result carries its query into the facility page', async ({ page }) => {
+  await page.goto('/storage/search?q=78704')
+  await page.getByRole('link', { name: 'Demo — Austin South' }).click()
+
+  // US-103: a comparer must be able to get back without retyping their zip.
+  await expect(page.getByRole('link', { name: /Back to storage near 78704/ })).toBeVisible()
+  await page.getByRole('link', { name: /Back to storage near 78704/ }).click()
+  await expect(page).toHaveURL(/\/storage\/search\?q=78704/)
+})
+
+test('the size guide answers the question the links promise', async ({ page }) => {
+  await page.goto('/storage/size-guide')
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('What size')
+  await expect(page.getByRole('heading', { name: '10 foot by 10 foot' })).toBeVisible()
+  await expect(page.getByRole('main')).toContainText('half a standard garage')
 })

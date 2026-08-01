@@ -1,12 +1,10 @@
 import Link from 'next/link'
 import { notFound, permanentRedirect } from 'next/navigation'
 import { MapPin, Phone } from 'lucide-react'
-import { prisma } from '@storage/db'
 import { DAYS_OF_WEEK, type WeeklySchedule } from '@storage/core/facility-settings'
 import { formatRate } from '@/lib/format'
 import { SITE } from '@/lib/site-config'
 import {
-  citySlug,
   directionsUrl,
   facilityPath,
   formatAddress,
@@ -15,7 +13,21 @@ import {
   publicFacilityBySlug,
   type PublicFacility,
 } from '@/lib/facility/public-facility'
-import { publicInventoryForFacility, type PublicUnitType } from '@/lib/inventory/public-inventory'
+import {
+  cachedPublicInventory,
+  type PublicPricingContext,
+  type PublicUnitType,
+} from '@/lib/inventory/public-inventory'
+import { calculateMoveInCost } from '@storage/core/pricing'
+import {
+  applyFilters,
+  FEATURE_FILTERS,
+  hasActiveFilters,
+  parseFilters,
+  SIZE_BANDS,
+  SORTS,
+  type UnitFilters,
+} from '@/lib/inventory/unit-filters'
 
 // PRD 01 §4.1 US-103 — the facility detail page.
 //
@@ -25,39 +37,12 @@ import { publicInventoryForFacility, type PublicUnitType } from '@/lib/inventory
 // photo yet, and B-067 owns photo management *with required alt text*. A
 // gallery built here would either ship without alt text or duplicate that item.
 
-/// Matches INVENTORY_CACHE_TTL_SECONDS (300). Next needs this to be a literal,
-/// so it cannot import the constant. Two jobs at once: it holds FR-2.1's
-/// ≤5-minute staleness ceiling for the availability numbers, and it is what
-/// makes US-103's "if the API is down, show cached data" real — when a
-/// revalidation render fails, Next keeps serving the last good page instead of
-/// throwing an error page at the renter.
-export const revalidate = 300
-
-/// Prerenders one page per active facility. Without this the segment is
-/// on-demand only and `revalidate` above is dead config — the build output says
-/// ƒ (Dynamic) with no revalidate window at all.
-///
-/// The facility set is small and changes when a site opens, so building them all
-/// is cheap. A facility added after the build still renders on first request
-/// (`dynamicParams` defaults to true); it just isn't warm.
-///
-/// The catch is deliberate: a database that is unreachable during a build should
-/// degrade to on-demand rendering, not fail the deploy.
-export async function generateStaticParams() {
-  try {
-    const facilities = await prisma.facility.findMany({
-      where: { status: 'active' },
-      select: { state: true, city: true, slug: true },
-    })
-    return facilities.map((facility) => ({
-      state: facility.state.toLowerCase(),
-      city: citySlug(facility.city),
-      slug: facility.slug,
-    }))
-  } catch {
-    return []
-  }
-}
+// B-016 prerendered this segment with `generateStaticParams` and a 300s
+// `revalidate`. B-017 added filter and sort parameters, and a route that reads
+// `searchParams` cannot be prerendered — so both were removed rather than left
+// in place as configuration that no longer does anything, which is the exact
+// trap B-016 found them in to begin with. FR-2.1's staleness ceiling now lives
+// on the data read (`cachedPublicInventory`), where it still holds.
 
 export async function generateMetadata({
   params,
@@ -172,6 +157,71 @@ function HoursTable({
   )
 }
 
+/// US-202's real-world comparison, inline on the card. Keyed by square footage
+/// rather than by name so an operator naming a type "Big Locker" still gets the
+/// right hint. The full guide is /storage/size-guide.
+function sizeHint(sqFt: number): string {
+  if (sqFt <= 25) return 'Holds about a large closet — boxes, a bike, seasonal things.'
+  if (sqFt <= 50) return 'Holds about a studio flat — a mattress set, boxes, small furniture.'
+  if (sqFt <= 100) return 'Holds about a one-bedroom apartment, including a sofa.'
+  if (sqFt <= 200) return 'Holds about a two- or three-bedroom house.'
+  return 'Holds a three-bedroom house, or a car with room to spare.'
+}
+
+/// US-301's "What you'd pay today", closed by default. A native <details>: no
+/// JavaScript, no client bundle, and it keeps working with the bundle disabled
+/// like the rest of the public path.
+function CostBreakdown({
+  unitType,
+  pricing,
+}: {
+  unitType: PublicUnitType
+  pricing: PublicPricingContext
+}) {
+  // The one shared calculation (US-301). B-020's checkout stepper calls the
+  // same function with the same inputs; a disagreement between the two is a
+  // release-blocking defect, not a rounding issue.
+  const cost = calculateMoveInCost({
+    webRateCents: unitType.webRateCents,
+    streetRateCents: unitType.streetRateCents,
+    adminFeeCents: pricing.adminFeeCents,
+    taxRates: pricing.taxRates,
+  })
+
+  return (
+    <details className="mt-3">
+      <summary className="border-input inline-flex min-h-11 cursor-pointer items-center rounded-md border px-3 text-sm font-medium">
+        What you&apos;d pay today
+      </summary>
+
+      <dl className="mt-3 flex flex-col gap-2 text-sm">
+        {cost.lines.map((line) => (
+          <div key={line.key} className="flex flex-col">
+            <div className="flex justify-between gap-4">
+              <dt>{line.label}</dt>
+              <dd className="tabular-nums">
+                {line.key === 'protection' ? 'chosen at checkout' : formatRate(line.amountCents)}
+              </dd>
+            </div>
+            {line.note && (
+              <p className="text-muted-foreground mt-0.5 text-xs text-pretty">{line.note}</p>
+            )}
+          </div>
+        ))}
+
+        <div className="flex justify-between gap-4 border-t pt-2 font-medium">
+          <dt>Total due today</dt>
+          <dd className="tabular-nums">{formatRate(cost.totalDueTodayCents)}</dd>
+        </div>
+        <div className="flex justify-between gap-4">
+          <dt>Then each month</dt>
+          <dd className="tabular-nums">{formatRate(cost.ongoingMonthlyCents)}/mo</dd>
+        </div>
+      </dl>
+    </details>
+  )
+}
+
 function features(unitType: PublicUnitType): string[] {
   const list: string[] = []
   if (unitType.climateControlled) list.push('Climate controlled')
@@ -181,8 +231,17 @@ function features(unitType: PublicUnitType): string[] {
   return list
 }
 
-function UnitTypeCard({ unitType, phone }: { unitType: PublicUnitType; phone: Phone }) {
+function UnitTypeCard({
+  unitType,
+  phone,
+  pricing,
+}: {
+  unitType: PublicUnitType
+  phone: Phone
+  pricing: PublicPricingContext
+}) {
   const available = unitType.availableCount
+  const saving = Math.max(0, unitType.streetRateCents - unitType.webRateCents)
   return (
     <li className="rounded-lg border p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
@@ -200,14 +259,29 @@ function UnitTypeCard({ unitType, phone }: { unitType: PublicUnitType; phone: Ph
         </h3>
         <p className="font-medium">
           {formatRate(unitType.webRateCents)}
-          <span className="text-muted-foreground font-normal">/mo</span>
+          <span className="text-muted-foreground font-normal">/mo online</span>
         </p>
       </div>
+
+      {/* US-301: the in-store rate is struck through ONLY when it differs. A
+          struck-through price identical to the price charged is a fabricated
+          discount, so the equal case renders one figure and no strike. The
+          saving is also stated in words — a line through a number is a visual
+          signal only, and 1.4.1 forbids carrying meaning that way alone. */}
+      {saving > 0 && (
+        <p className="text-muted-foreground mt-1 text-sm">
+          <s>{formatRate(unitType.streetRateCents)}/mo in store</s>{' '}
+          <span className="text-foreground">
+            — {formatRate(saving)} off for renting online
+          </span>
+        </p>
+      )}
 
       <p className="text-muted-foreground mt-1 text-sm">
         {unitType.sqFt} sq ft
         {unitType.heightFt !== null ? ` · ${unitType.heightFt} ft ceiling` : ''}
       </p>
+      <p className="mt-1 text-sm text-pretty">{sizeHint(unitType.sqFt)}</p>
 
       {features(unitType).length > 0 && (
         <ul className="mt-3 flex flex-wrap gap-2">
@@ -221,6 +295,8 @@ function UnitTypeCard({ unitType, phone }: { unitType: PublicUnitType; phone: Ph
 
       {unitType.description && <p className="mt-3 text-sm text-pretty">{unitType.description}</p>}
 
+      {available > 0 && <CostBreakdown unitType={unitType} pricing={pricing} />}
+
       {/* §6.6 / US-201: scarcity language only ever comes from the real count.
           There is no countdown and no "in demand" — the number is the claim. */}
       <p className="mt-3 text-sm">
@@ -232,9 +308,19 @@ function UnitTypeCard({ unitType, phone }: { unitType: PublicUnitType; phone: Ph
           </>
         ) : (
           <>
-            {available} available
-            {/* Reserve and Rent now arrive with B-018 and B-020. Naming them here
-                would be a button that does nothing. */}
+            {/* US-201 permits a scarcity label only at ≤3 and only from the real
+                count. Above that the number reads as commodity and adds
+                nothing, so it stays plain. No countdown, no "in demand" — the
+                count is the entire claim.
+                Reserve and Rent now arrive with B-018 and B-020; naming them
+                here would be a button that does nothing. */}
+            {available <= 3 ? (
+              <span className="font-medium">
+                Only {available} left
+              </span>
+            ) : (
+              <>{available} available</>
+            )}
           </>
         )}
       </p>
@@ -242,7 +328,103 @@ function UnitTypeCard({ unitType, phone }: { unitType: PublicUnitType; phone: Ph
   )
 }
 
-function UnitList({ unitTypes, phone }: { unitTypes: PublicUnitType[] | null; phone: Phone }) {
+function FilterForm({ filters, resultCount }: { filters: UnitFilters; resultCount: number }) {
+  return (
+    <form method="GET" className="border-input rounded-lg border p-4">
+      <h3 className="text-base font-medium">Narrow these down</h3>
+
+      <div className="mt-3 flex flex-col gap-4 sm:flex-row sm:flex-wrap">
+        <div className="flex flex-col gap-1 text-sm">
+          <label htmlFor="size">Size</label>
+          <select
+            id="size"
+            name="size"
+            defaultValue={filters.size ?? ''}
+            className="border-input bg-background h-11 rounded-md border px-2"
+          >
+            <option value="">Any size</option>
+            {Object.entries(SIZE_BANDS).map(([key, band]) => (
+              <option key={key} value={key}>
+                {band.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="flex flex-col gap-1 text-sm">
+          <label htmlFor="sort">Sort by</label>
+          <select
+            id="sort"
+            name="sort"
+            defaultValue={filters.sort}
+            className="border-input bg-background h-11 rounded-md border px-2"
+          >
+            {Object.entries(SORTS).map(([key, sort]) => (
+              <option key={key} value={key}>
+                {sort.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <fieldset className="flex flex-col gap-1 text-sm">
+          <legend className="mb-1">Features</legend>
+          <div className="flex flex-wrap gap-x-4 gap-y-2">
+            {Object.entries(FEATURE_FILTERS).map(([key, feature]) => (
+              <label key={key} className="inline-flex min-h-11 items-center gap-2">
+                <input
+                  type="checkbox"
+                  name="features"
+                  value={key}
+                  defaultChecked={filters.features.includes(key as never)}
+                />
+                {feature.label}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        {/* An explicit Apply, never a submit on `change`. Arrow-keying a select
+            fires `change` on every option passed on some platforms, so an
+            auto-submitting filter walks a keyboard user through several
+            reloads to reach one option (3.2.2). It also means the whole thing
+            works with JavaScript disabled. */}
+        <button
+          type="submit"
+          className="bg-primary text-primary-foreground inline-flex min-h-11 items-center rounded-md px-4 text-sm font-medium"
+        >
+          Apply
+        </button>
+        {hasActiveFilters(filters) && (
+          <a href="?" className="text-sm underline underline-offset-4">
+            Clear filters
+          </a>
+        )}
+      </div>
+
+      {/* 4.1.3: the result of applying a filter is announced, not just
+          re-rendered. The region is in the DOM on every load, so the count
+          changing is a mutation rather than an insertion. */}
+      <p role="status" className="text-muted-foreground mt-3 text-sm">
+        {resultCount === 1 ? '1 size matches' : `${resultCount} sizes match`}
+      </p>
+    </form>
+  )
+}
+
+function UnitList({
+  unitTypes,
+  phone,
+  pricing,
+  filtered,
+}: {
+  unitTypes: PublicUnitType[] | null
+  phone: Phone
+  pricing: PublicPricingContext
+  filtered: boolean
+}) {
   if (unitTypes === null) {
     // US-103: an inventory read that fails shows a call-to-confirm notice, never
     // an error page. The rest of the page — address, hours, directions — is
@@ -257,7 +439,18 @@ function UnitList({ unitTypes, phone }: { unitTypes: PublicUnitType[] | null; ph
   }
 
   if (unitTypes.length === 0) {
-    return (
+    // Two different problems with two different fixes: widen your filters, or
+    // there is genuinely nothing here (§6.7 — name the problem, then the next
+    // action).
+    return filtered ? (
+      <p className="rounded-lg border p-4 text-pretty">
+        Nothing here matches those filters.{' '}
+        <a href="?" className="font-medium underline underline-offset-4">
+          Clear them
+        </a>{' '}
+        to see every size at this location.
+      </p>
+    ) : (
       <p className="rounded-lg border p-4 text-pretty">
         We haven&apos;t published sizes for this location yet.{' '}
         <CallLink phone={phone} className="font-medium underline underline-offset-4" /> and we will
@@ -286,7 +479,12 @@ function UnitList({ unitTypes, phone }: { unitTypes: PublicUnitType[] | null; ph
       {available.length > 0 && (
         <ul className="mt-4 flex flex-col gap-4">
           {available.map((unitType) => (
-            <UnitTypeCard key={unitType.unitTypeId} unitType={unitType} phone={phone} />
+            <UnitTypeCard
+              key={unitType.unitTypeId}
+              unitType={unitType}
+              phone={phone}
+              pricing={pricing}
+            />
           ))}
         </ul>
       )}
@@ -296,7 +494,12 @@ function UnitList({ unitTypes, phone }: { unitTypes: PublicUnitType[] | null; ph
           <h3 className="mt-8 text-base font-medium">Also here, currently full</h3>
           <ul className="mt-4 flex flex-col gap-4">
             {full.map((unitType) => (
-              <UnitTypeCard key={unitType.unitTypeId} unitType={unitType} phone={phone} />
+              <UnitTypeCard
+              key={unitType.unitTypeId}
+              unitType={unitType}
+              phone={phone}
+              pricing={pricing}
+            />
             ))}
           </ul>
         </>
@@ -337,10 +540,19 @@ function ContactBlock({ facility, phone }: { facility: PublicFacility; phone: Ph
 
 export default async function FacilityPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ state: string; city: string; slug: string }>
+  searchParams: Promise<{
+    size?: string
+    features?: string | string[]
+    sort?: string
+    from?: string
+  }>
 }) {
   const { state, city, slug } = await params
+  const query = await searchParams
+  const filters = parseFilters(query)
 
   const facility = await publicFacilityBySlug(slug)
   if (!facility) notFound()
@@ -354,15 +566,30 @@ export default async function FacilityPage({
   // A failed availability read must not take the page down (US-103), so the
   // inventory call is the only one allowed to fail soft. The profile read above
   // is not: a facility page with no address is not worth serving.
-  const unitTypes = await publicInventoryForFacility(slug)
-    .then((inventory) => inventory?.unitTypes ?? [])
-    .catch(() => null)
+  const inventory = await cachedPublicInventory(slug).catch(() => null)
+  const unitTypes = inventory?.unitTypes ?? (inventory === null ? null : [])
+  const pricing = inventory?.pricing ?? { taxRates: [] }
+  const visible = unitTypes === null ? null : applyFilters(unitTypes, filters)
 
   const embed = mapEmbedUrl(facility)
   const phone = phoneFor(facility)
 
+  // US-101 → US-103: a comparer arriving from a search should be able to get
+  // back to it without retyping their zip. `from` carries the original query;
+  // absent, the back link is omitted rather than pointing at an empty results
+  // page.
+  const backToSearch = query.from ? `/storage/search?q=${encodeURIComponent(query.from)}` : null
+
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-12">
+      {backToSearch && (
+        <p className="mb-4 text-sm">
+          <Link href={backToSearch} className="underline underline-offset-4">
+            ← Back to storage near {query.from}
+          </Link>
+        </p>
+      )}
+
       <h1 className="text-3xl font-semibold tracking-tight text-balance">{facility.name}</h1>
       <ContactBlock facility={facility} phone={phone} />
 
@@ -394,8 +621,19 @@ export default async function FacilityPage({
         <h2 id="units" className="text-xl font-medium">
           Available units
         </h2>
+        {unitTypes !== null && unitTypes.length > 0 && (
+          <div className="mt-4">
+            <FilterForm filters={filters} resultCount={visible?.length ?? 0} />
+          </div>
+        )}
+
         <div className="mt-4">
-          <UnitList unitTypes={unitTypes} phone={phone} />
+          <UnitList
+            unitTypes={visible}
+            phone={phone}
+            pricing={pricing}
+            filtered={hasActiveFilters(filters)}
+          />
         </div>
       </section>
 
@@ -458,8 +696,8 @@ export default async function FacilityPage({
 
       <p className="text-muted-foreground mt-10 text-sm text-pretty">
         Not sure what size you need? Read the{' '}
-        <Link href="/faq" className="underline underline-offset-4">
-          FAQ
+        <Link href="/storage/size-guide" className="underline underline-offset-4">
+          size guide
         </Link>
         , or{' '}
         <Link href="/storage/search" className="underline underline-offset-4">
