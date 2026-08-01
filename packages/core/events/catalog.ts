@@ -25,6 +25,9 @@ export const EVENT_NAMES = [
   'invoice.due_today',
   'payment.succeeded',
   'payment.failed',
+  /// Emitted from the Stripe reconciler for full and partial refunds alike —
+  /// the payload says which (B-019). Refund *authorisation* is B-048.
+  'payment.refunded',
 
   // Delinquency (PRD 02 FR-5). The dunning ladder is driven by these, never by
   // a comms-side calendar (PRD 05 CN-3).

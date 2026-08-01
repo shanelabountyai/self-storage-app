@@ -358,6 +358,32 @@ A no-card hold on a real unit, at a locked rate, cancellable from a link with no
 
 ---
 
+### B-019 — Stripe foundation ✅ `PENDING`
+
+Customers, PaymentIntents, SetupIntents, a signature-verified webhook endpoint, idempotency keys, and reconciliation into the ledger. No money moves yet — nothing creates a lease or an invoice until B-021/B-044 — but the path money will take is now built and tested.
+
+**The webhook endpoint is the security surface, and it is ordered accordingly.** It is public and unauthenticated, so without signature verification anyone who learns the URL can post `payment_intent.succeeded` and mark an invoice paid. Three rules in order: verify the signature against the **raw** body (`req.json()` would reserialise it and break the signature); claim the event id before doing any work; acknowledge what we cannot handle. That last one matters — a non-2xx makes Stripe retry, so erroring on an event type we never intended to process would generate load forever.
+
+**Decided: fail closed when unconfigured.** With no `STRIPE_WEBHOOK_SECRET` the endpoint returns 503 rather than processing. An unverifiable delivery is indistinguishable from anyone else's POST, and being down is better than being wrong about money.
+
+**Idempotency is designed in twice, at different layers.** Stripe delivers at-least-once and retries a non-2xx for days, so the same event *will* arrive twice. The outer guard is `StripeEvent`, keyed by Stripe's own `evt_...` id — a duplicate loses the insert race and returns 200 without touching the ledger. The inner guard is in each handler: a payment already `succeeded` is not re-posted, and a ledger entry already written for a payment is not written again. Both are tested by applying the same event twice and asserting one domain event and one ledger row.
+
+On the outbound side, the Stripe idempotency key is derived from **what the money is for** (`charge:<reference>`), never from a timestamp or a random value. A fresh key on retry is precisely the double-charge idempotency exists to prevent, so the rule is written into the helper's doc comment rather than left to whoever writes the next caller.
+
+**Decided: a payment with no lease is recorded, not invented.** `LedgerEntry.leaseId` is required and nothing creates a lease yet. Rather than attaching a payment to a lease it does not have, the `Payment` row is written and left unposted, and `unreconciledEvents()` surfaces the gap. PRD 01 §7.3 makes the ledger the tenant-facing source of truth, which is only defensible if the places it has drifted from Stripe are visible rather than papered over.
+
+**Events arriving out of order cannot un-pay a payment.** A late `payment_intent.payment_failed` for something already seen succeed is ignored, with a test. Refunds compare Stripe's running `amount_refunded` against `amount`, so partial and full are the same comparison rather than a total we maintain ourselves and can get wrong.
+
+**Verified without a Stripe account or a network call.** Signature verification is pure crypto and Stripe ships `generateTestHeaderString`, so the security-critical half is exercised for real — including a tampered payload, a wrong secret, and a **replayed capture of a genuine old delivery**, which the timestamp tolerance rejects. The reconciler is driven with event objects shaped the way Stripe sends them.
+
+**Found — `StripeEvent` breaks the facility-scoping invariant, correctly.** `tests/schema-invariants.test.ts` requires every model to carry a `facilityId`; a Stripe account is org-level and the facility is whatever the referenced payment belongs to. Added to the exemption list with that reasoning, which is the point of keeping the list annotated rather than a bare array.
+
+**Verified:** 461 unit tests (17 new), 192 e2e, typecheck, lint and build clean. PCI scope is unchanged and stays SAQ-A: card details go from the browser to Stripe directly, and nothing here ever receives a PAN.
+
+**Left behind:** no Payment Element in the UI and no checkout — that is **B-025**, and **B-020** has to build the stepper first. `createChargeIntent` and `createSetupIntent` have no callers yet by design. Autopay enrolment writes `Tenant.stripeDefaultPaymentMethodId` from a SetupIntent, but nothing enrols yet (B-025). ACH and Link are Phase 2 (**B-081**). The reconciliation *report* is a function, not a screen; **B-042** owns admin reporting. No Stripe keys are configured anywhere, so `paymentsEnabled()` is false and any UI that lands on this must say "call us" rather than render a form that cannot submit.
+
+---
+
 ## Feature PRDs added mid-build
 
 ### PRD 09 — Support impersonation ("log in as") 📋 specced, not built

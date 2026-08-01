@@ -439,6 +439,13 @@ model Tenant {
   altContactName  String?
   altContactPhone String?
   altContactEmail String?
+  /// Stripe Customer for this tenant. A reference, never card data (master
+  /// PRD §7.4 keeps us in SAQ-A: the browser talks to Stripe directly and we
+  /// only ever hold tokens).
+  stripeCustomerId String? @unique
+  /// The saved method autopay charges. Set by a SetupIntent; B-025 owns the
+  /// enrolment UI, this is the field it writes.
+  stripeDefaultPaymentMethodId String?
   createdAt       DateTime  @default(now()) @db.Timestamptz(6)
   updatedAt       DateTime  @updatedAt @db.Timestamptz(6)
   /// Soft delete only (PRD 02 FR-10); hard delete is never exposed.
@@ -591,6 +598,31 @@ model PaymentAllocation {
 
 /// Append-only. Posted entries are never mutated; a correction is a new entry
 /// with reversalOfId set (PRD 02 FR-8).
+/// Every Stripe webhook we have accepted, keyed by Stripe's own event id.
+///
+/// Stripe delivers at-least-once and retries a non-2xx for days, so the same
+/// event WILL arrive twice — the unique primary key is what makes handling it
+/// twice a no-op rather than a double-posted payment. Rows are kept after
+/// processing: they are the reconciliation trail between Stripe and the ledger
+/// (PRD 01 §7.3), and the only way to answer "did we ever see this event".
+model StripeEvent {
+  /// Stripe's `evt_...` id, used directly as the primary key.
+  id          String    @id
+  type        String
+  /// Null until handled. A row with this unset is an event we accepted but
+  /// could not process — the thing a reconciliation report looks for.
+  processedAt DateTime? @db.Timestamptz(6)
+  /// Set when handling failed, so a retry has something to explain itself with.
+  error       String?
+  /// The event body as Stripe sent it. Kept for replay and for disputes; card
+  /// data never appears in it.
+  payload     Json
+  receivedAt  DateTime  @default(now()) @db.Timestamptz(6)
+
+  @@index([processedAt])
+  @@map("stripe_event")
+}
+
 model LedgerEntry {
   id           String          @id @default(cuid())
   facilityId   String

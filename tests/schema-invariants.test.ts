@@ -41,6 +41,8 @@ const NO_FACILITY_ID: Record<string, string> = {
   RolePermission: 'join over two org-level tables',
   StaffFacilityAssignment: 'facilityId is nullable — null grants every facility',
   EventDelivery: 'scoped through the domain event it delivers',
+  StripeEvent:
+    'a Stripe account is org-level, and the facility is whatever the referenced payment belongs to',
 }
 
 /// Calendar dates, not instants. A business date is a facility-local day with
