@@ -414,7 +414,7 @@ The machine a move-in runs on: a server-side resumable stepper, a 30-minute unit
 
 ---
 
-### B-021 — Checkout steps 1–2 ✅ `PENDING`
+### B-021 — Checkout steps 1–2 ✅ `5aecc5d`
 
 "Your details" and unit confirmation, plus the implicit account FR-5.1 describes. The first code in the product that creates a customer identity from public input.
 
