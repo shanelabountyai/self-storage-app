@@ -12,7 +12,8 @@
     "./jobs": "./jobs/index.ts",
     "./facility-settings": "./facility-settings/index.ts",
     "./inventory": "./inventory/index.ts",
-    "./pricing": "./pricing/index.ts"
+    "./pricing": "./pricing/index.ts",
+    "./access": "./access/index.ts"
   },
   "dependencies": {
     "@storage/db": "*"

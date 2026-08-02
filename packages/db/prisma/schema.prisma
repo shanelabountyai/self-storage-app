@@ -293,6 +293,7 @@ model Facility {
   protectionPlans   ProtectionPlan[]
   protectionWaivers ProtectionWaiver[]
   documents         Document[]
+  gateCommands      GateCommand[]
   leads             Lead[]
   notices           Notice[]
   auditLogs         AuditLog[]
@@ -878,6 +879,57 @@ enum LeaseRateReason {
   transfer
   promo_expiry
   manual
+}
+
+/// PRD 03 FR-3. The command outbox between us and a gate controller.
+///
+/// Every write to hardware goes through here rather than being called inline.
+/// A gate controller is a box in a car park on a domestic broadband line: it is
+/// offline sometimes, slow often, and a move-in must never depend on its uptime
+/// (PRD 01 US-501). So the service records what it wants to happen and returns;
+/// the drain does the talking and retries.
+model GateCommand {
+  id             String            @id @default(cuid())
+  facilityId     String
+  grantId        String?
+  credentialId   String?
+  type           GateCommandType
+  /// Deduplicates retries and redeliveries. Derived from what the command is
+  /// FOR — the same rule the Stripe idempotency keys follow — so asking twice
+  /// for the same effect is one command, not two.
+  idempotencyKey String            @unique
+  payload        Json
+  status         GateCommandStatus @default(pending)
+  attempts       Int               @default(0)
+  lastError      String?
+  /// Exponential backoff, so a controller that is down does not get hammered.
+  nextAttemptAt  DateTime          @default(now()) @db.Timestamptz(6)
+  /// Set when we stop retrying. A dead-lettered command is a staff alert
+  /// (FR-3), never a silent failure — somebody has to key the code in by hand.
+  deadLetteredAt DateTime?         @db.Timestamptz(6)
+  completedAt    DateTime?         @db.Timestamptz(6)
+  createdAt      DateTime          @default(now()) @db.Timestamptz(6)
+
+  facility Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+
+  @@index([status, nextAttemptAt])
+  @@index([facilityId, status])
+  @@map("gate_command")
+}
+
+enum GateCommandType {
+  grant_access
+  revoke_access
+  suspend_access
+  resume_access
+  set_credential
+}
+
+enum GateCommandStatus {
+  pending
+  succeeded
+  failed
+  dead_lettered
 }
 
 model StripeEvent {

@@ -39,6 +39,10 @@ export const EVENT_NAMES = [
   'access.suspended',
   'access.restored',
   'access.revoked',
+  /// A gate command gave up after retrying (PRD 03 FR-3). The tenant is already
+  /// moved in and expecting a code, so this is a staff alert — somebody has to
+  /// key it in by hand — never a customer-facing failure.
+  'access.sync_failed',
   'overlock.required',
   'overlock.cleared',
 

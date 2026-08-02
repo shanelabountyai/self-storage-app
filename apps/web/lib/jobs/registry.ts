@@ -1,13 +1,29 @@
 import type { Consumer } from '@storage/core/events'
 import { expireReservations } from '@/lib/reservations/reserve'
 import { expireCheckoutSessions } from '@/lib/checkout/session'
+import { drainGateCommands } from '@/lib/access/service'
+import { provisionAccessForLease } from '@/lib/access/provision'
 
 // Consumer and job registration. The machinery is B-006's; the things that use
 // it arrive with their own backlog items: reservation expiry (B-018, below),
 // Stripe reconciliation (B-019), gate command outbox (B-027), comms (B-030),
 // billing scheduler (B-043).
 
-export const CONSUMERS: readonly Consumer[] = []
+export const CONSUMERS: readonly Consumer[] = [
+  {
+    // PRD 01 FR-4.5 / PRD 03 US-1: a move-in grants access.
+    //
+    // A consumer rather than an inline call in B-026's transaction, and that is
+    // the point of the outbox: gate provisioning must not be able to fail a
+    // move-in that has already been paid for. If this handler throws, the event
+    // is retried and the tenant stays moved in.
+    name: 'access.provision-on-move-in',
+    events: ['lease.moved_in'],
+    handle: async ({ event }) => {
+      await provisionAccessForLease(event.entityId)
+    },
+  },
+]
 
 export type ScheduledJob = {
   name: string
@@ -45,6 +61,25 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
         itemId: facilityId ?? 'global',
         ok: true,
         message: `expired ${expired} reservation${expired === 1 ? '' : 's'}`,
+      })
+    },
+  },
+  {
+    // PRD 03 FR-3. Drains the gate command outbox.
+    //
+    // Hourly would be better and the runner is once-per-business-date (B-006),
+    // so this is the floor rather than the target: the drain is also called
+    // directly after provisioning, and this scheduled pass is what catches
+    // commands whose retries have come due since.
+    name: 'access.drain-commands',
+    localHour: 1,
+    scope: 'global',
+    handler: async ({ recordItem }) => {
+      const result = await drainGateCommands()
+      recordItem({
+        itemId: 'global',
+        ok: result.deadLettered === 0,
+        message: `sent ${result.succeeded}, retrying ${result.failed}, dead-lettered ${result.deadLettered}`,
       })
     },
   },

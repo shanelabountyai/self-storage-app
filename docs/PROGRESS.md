@@ -566,6 +566,32 @@ The flow now ends in a moved-in tenant: a paid checkout becomes a lease, an occu
 
 ---
 
+### B-027 — Access control service ✅ `PENDING`
+
+The `AccessGrant` state machine, the gate-command outbox, and the simulated adapter. A move-in now issues a real gate code.
+
+**The outbox exists because a gate controller is a box in a car park on domestic broadband.** It is offline sometimes and slow often, and US-501 is explicit that move-in success must not depend on its uptime. So nothing calls hardware inline: the service records what it wants to happen and returns, and a drain does the talking with backoff and dead letters. Access provisioning is a **consumer of `lease.moved_in`**, not a step inside B-026's transaction — if it throws, the event retries and the tenant stays moved in.
+
+**Decided: the state machine is a table, not a switch.** FR-1 requires every transition recorded with a cause, and a table can be enumerated in a test where a switch has to be read. `revoked` is terminal: a tenant who comes back gets a new grant rather than a revived one, because the history of why access ended is evidence. `pending → suspended` is refused — suspending access that was never granted is a bug, not a state.
+
+**A same-state move is a quiet no-op, not an error.** A delinquency run that fires twice should not tell the controller twice; the caller gets `changed: false` and nothing is enqueued.
+
+**`opensGate()` is a function rather than an inline comparison**, because it is the question every access decision asks and a second site spelling it `!== 'suspended'` would let a pending or revoked grant open a gate.
+
+**The gate code is returned exactly once and never stored.** SR-2 makes viewing a real code a separate audited permission, so the credential row holds a reference and the plaintext exists only in the return value and in what goes to the controller. A test asserts the code appears nowhere in the serialised credential row. Codes are server-generated and reject the obvious patterns — a keypad wears, and "123456" or six identical digits is what a stranger tries first; that generator is tested directly across 5,000 draws rather than through the database.
+
+**Retryable and permanent failures are different.** A controller that is offline gets five attempts with exponential backoff; a rejected code or an unknown zone dead-letters immediately, because retrying will fail identically and only delays the staff alert that is the actual fix. Dead-lettering emits `access.sync_failed` — the tenant is already moved in and expecting a code, so it has to reach a human rather than sit in a table.
+
+**Found — `randomInt` caps its range at 2⁴⁸.** The first credential reference asked for a 16-digit random and threw at runtime, not at compile time. Replaced with `randomBytes`.
+
+**Found — a deleted credential could wedge the queue.** The drain used `update`, which throws when the row has gone; a command whose credential was removed underneath it would fail forever behind a `RecordNotFound`. `updateMany` no-ops instead — the command still succeeded, because the controller took it.
+
+**Verified:** 565 unit tests (17 new), 216 e2e, typecheck, lint and build clean.
+
+**Left behind:** the code still is not **delivered** to anyone — `provisionAccessForLease` returns it and B-026's confirmation screen still says "your gate code will be texted within 15 minutes", which remains true only because **B-030**/**B-031** will make it so. That is now the seventh consecutive item waiting on comms. The portal's "show gate code" (**B-034**) has nothing to show until a secret store exists (**B-028**) — today the plaintext is genuinely unrecoverable after issuance, which is safe but not yet useful. Authorized-access holders are **B-029**: FR-1's "one grant per credential holder" is currently one grant per *tenant*, which is the same shape with a single holder. Per-facility code policy (length, banned patterns, zones) is a constant with a `ponytail:` marker. Real vendor drivers are **B-080**/**B-085**, one stub per D-18.
+
+---
+
 ## Feature PRDs added mid-build
 
 ### PRD 09 — Support impersonation ("log in as") 📋 specced, not built
