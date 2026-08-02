@@ -244,7 +244,28 @@ export default async function CheckoutPage({
             />
           )}
 
-          {/* Provisioning is B-026. Until then the machine still
+          {session.step === 'provisioned' && (
+            <div className="mt-4">
+              <p className="text-pretty">
+                Your unit is yours. We have emailed your lease and receipt to{' '}
+                <strong>{session.email}</strong>.
+              </p>
+              {/* US-501 step 7 wants the gate code in large type with a copy
+                  button, the unit number, hours and a maps link. The gate code
+                  does not exist yet — access control is B-027 and B-029 — so
+                  this says what is true rather than showing a placeholder that
+                  looks like a code. */}
+              <p className="border-input mt-4 rounded-lg border p-4 text-pretty">
+                Your gate code will be texted to you within 15 minutes. If it has not arrived, call{' '}
+                <a href={`tel:${SITE.phone.href}`} className="font-medium underline underline-offset-4">
+                  {SITE.phone.display}
+                </a>{' '}
+                and we will read it to you — you can move in either way.
+              </p>
+            </div>
+          )}
+
+          {/* Nothing below provisioned. Until then the machine still
               has to be walkable end to end, so they keep the plain continue. */}
           {!['details', 'unit_assign', 'insurance', 'lease', 'payment', 'provisioned'].includes(
             session.step,

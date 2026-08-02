@@ -181,6 +181,14 @@ export async function sessionByToken(token: string): Promise<CheckoutSessionView
   return session ? toView(session) : null
 }
 
+/// By id rather than token — for server-side callers like the webhook
+/// reconciler, which knows the session from a PaymentIntent's metadata and has
+/// no token to hand.
+export async function sessionById(sessionId: string): Promise<CheckoutSessionView | null> {
+  const session = await prisma.checkoutSession.findUnique({ where: { id: sessionId } })
+  return session ? toView(session) : null
+}
+
 export type AdvanceResult =
   | { ok: true; session: CheckoutSessionView }
   | { ok: false; reason: 'not_found' | 'not_active' | 'lock_lapsed' | 'out_of_order' }

@@ -1,6 +1,14 @@
 import type Stripe from 'stripe'
 import { type Prisma, prisma } from '@storage/db'
 import { emitEvent } from '@storage/core/events'
+import { provisionMoveIn, requestDownstream } from '@/lib/checkout/provision'
+
+/// The checkout session a PaymentIntent belongs to, from the reference B-025
+/// set when it created the intent (`checkout:<sessionId>`).
+function referenceSessionId(intent: Stripe.PaymentIntent): string | null {
+  const reference = intent.metadata?.reference
+  return reference?.startsWith('checkout:') ? reference.slice('checkout:'.length) : null
+}
 
 // PRD 01 §7.3: "webhook events post to the admin ledger; the ledger, not
 // Stripe, is the tenant-facing source of truth for balance."
@@ -71,6 +79,8 @@ export async function applyStripeEvent(event: Stripe.Event): Promise<void> {
   switch (event.type) {
     case 'payment_intent.succeeded': {
       const intent = event.data.object as Stripe.PaymentIntent
+      let checkoutSessionId: string | null = null
+
       await prisma.$transaction(async (tx) => {
         const payment = await tx.payment.findUnique({
           where: { stripePaymentIntentId: intent.id },
@@ -87,6 +97,9 @@ export async function applyStripeEvent(event: Stripe.Event): Promise<void> {
           data: { status: 'succeeded', receivedAt: new Date(intent.created * 1000) },
         })
         await postPaymentToLedger(tx, payment)
+        // FR-4.4: finalisation is webhook-driven. The reference carries which
+        // checkout this was, so a renter who closed the tab still gets moved in.
+        checkoutSessionId = referenceSessionId(intent)
         await emitEvent(
           {
             name: 'payment.succeeded',
@@ -98,6 +111,20 @@ export async function applyStripeEvent(event: Stripe.Event): Promise<void> {
           tx,
         )
       })
+
+      // Outside the payment transaction on purpose (FR-4.6): provisioning
+      // failing must not roll back a payment that succeeded. The renter has
+      // paid; if this throws, the webhook retries and the money stays received.
+      if (checkoutSessionId) {
+        const result = await provisionMoveIn(checkoutSessionId)
+        if (result.ok && !result.alreadyProvisioned) {
+          const session = await prisma.checkoutSession.findUnique({
+            where: { id: checkoutSessionId },
+            select: { facilityId: true },
+          })
+          if (session) await requestDownstream(result.leaseId, session.facilityId)
+        }
+      }
       return
     }
 

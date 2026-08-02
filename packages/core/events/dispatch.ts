@@ -32,10 +32,15 @@ export type DispatchResult = {
 
 /// Finds events this consumer has not settled yet. A delivery row exists only
 /// once the consumer has claimed the event, so "no row" means "never seen".
-async function pendingEventsFor(consumer: Consumer, limit: number): Promise<DomainEvent[]> {
+async function pendingEventsFor(
+  consumer: Consumer,
+  limit: number,
+  facilityId?: string,
+): Promise<DomainEvent[]> {
   return prisma.domainEvent.findMany({
     where: {
       name: { in: [...consumer.events] },
+      ...(facilityId ? { facilityId } : {}),
       OR: [
         { deliveries: { none: { consumer: consumer.name } } },
         {
@@ -95,15 +100,23 @@ async function claim(
 /// Delivery is **at-least-once**: a handler that succeeds and then crashes
 /// before its row is marked will be called again on the next dispatch. Handlers
 /// must be idempotent — see the note on EventDelivery in the schema.
+/// Drains the outbox.
+///
+/// `facilityId` narrows it to one facility's events. The scheduled drain passes
+/// nothing and behaves exactly as before — the option exists so a caller can
+/// work one facility's queue in isolation, which is also what lets the dispatch
+/// tests assert their own counts without claiming events another test file
+/// emitted a moment earlier. The outbox is global by design; a test that shares
+/// a database with one needs a way to say which events are its own.
 export async function dispatchEvents(
   consumers: readonly Consumer[],
-  options: { limitPerConsumer?: number } = {},
+  options: { limitPerConsumer?: number; facilityId?: string } = {},
 ): Promise<DispatchResult> {
   const limit = options.limitPerConsumer ?? 100
   const result: DispatchResult = { claimed: 0, succeeded: 0, failed: 0, deadLettered: 0 }
 
   for (const consumer of consumers) {
-    const events = await pendingEventsFor(consumer, limit)
+    const events = await pendingEventsFor(consumer, limit, options.facilityId)
 
     for (const event of events) {
       const claimed = await claim(consumer, event)

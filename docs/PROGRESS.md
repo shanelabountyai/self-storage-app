@@ -540,6 +540,32 @@ The Stripe Payment Element, the itemised review, and autopay default-on with the
 
 ---
 
+### B-026 — Move-in provisioning & rollback ✅ `PENDING`
+
+The flow now ends in a moved-in tenant: a paid checkout becomes a lease, an occupied unit, an opened ledger and a `lease.moved_in` event. **Milestone 2's golden path is closed end to end** — search → facility → reserve or rent → details → unit → protection → lease → payment → moved in.
+
+**FR-4.6 shapes the whole design: a paid renter is moved in, whatever fails afterwards.** So provisioning splits in two. The part that must be atomic with the payment — lease, unit status, ledger, waiver and document re-parenting, reservation conversion — is one transaction that either all commits or none does. Everything after it is best-effort and *cannot* un-move-in someone who has paid. The provisioning call sits deliberately **outside** the payment transaction in the webhook: if it throws, Stripe retries and the money stays received rather than the payment rolling back.
+
+**Idempotent, because it has to be.** Stripe delivers at-least-once, and a renter refreshing the confirmation page is the same problem. A second call returns the existing lease with `alreadyProvisioned: true` — tested by calling twice and asserting one lease and one rate-change row.
+
+**The rate-increase clock starts here, and that timing is the entire point.** `LeaseRateChange` gets its first row at move-in with reason `move_in`. ECRI is the largest revenue lever in self-storage and needs two facts — when this tenant was last raised, and how far below street they sit — neither of which can be reconstructed afterwards. A lease created without this row is a tenant permanently ineligible for a rules-based increase. **B-076** builds the workflow; this is the clock it reads, started early on purpose because it cannot be backfilled.
+
+**The unit becomes occupied by derivation, not assignment** — the lease is what makes it so (B-010), so there is no second source of truth to drift. Verified by asserting the public inventory read drops to zero available.
+
+**A reservation that led here is marked `converted`, not left to expire.** That distinction is the whole basis of the reservation→move-in conversion report, and it is exactly why B-020 refused to reuse the reservation row as the checkout lock.
+
+**The signed lease document is re-parented from the checkout session to the lease**, so the evidence chain points at something permanent rather than a transient session id.
+
+**Found — a global outbox and parallel test files do not mix.** `dispatchEvents` claims any pending event matching a consumer's subscriptions, and the dispatch tests' consumer subscribes to `lease.moved_in` — which provisioning now emits. With vitest running files in parallel against one database, the dispatch tests were claiming another file's events mid-assertion, and the failure looked like an outbox bug rather than a fixture collision. Serialising files fixed it and cost **7×** — 22s to 164s — so instead `dispatchEvents` gained an optional `facilityId` scope. The scheduled drain passes nothing and behaves exactly as before; the tests pass their own facility. Suite back to 23s.
+
+**Verified:** 548 unit tests (9 new), 216 e2e, typecheck, lint and build clean.
+
+**Left behind:** the gate code is **not issued** — access control is **B-027**/**B-029**, so the confirmation screen says the code will be texted within 15 minutes and offers a phone number, which is true rather than a placeholder that looks like a code. US-501 step 7's full confirmation (code in large type with copy button, maps link, lock instructions) waits on that. No emails: **B-030**/**B-031**, now the outstanding dependency for the sixth consecutive item. Downstream failures should become `Task` rows (**B-095**) and currently emit an event with no consumer. The password-set step (US-501 step 6) is **B-033**. Invoicing the second month is **B-044** — this opens the ledger with the move-in charge and nothing schedules the next one yet.
+
+**Also worth knowing:** the `.next/cache` window from B-018 bit again. The facility page renders from a 5-minute cached read, so immediately after a destructive re-seed it serves unit-type IDs the uncached rent route rejects — which presents as "Rent now" bouncing to `?unavailable=1`. Clearing `apps/web/.next/cache` after seeding is the fix; the redirect itself is correct behaviour for a genuinely withdrawn size.
+
+---
+
 ## Feature PRDs added mid-build
 
 ### PRD 09 — Support impersonation ("log in as") 📋 specced, not built

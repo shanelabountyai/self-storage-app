@@ -116,11 +116,11 @@ describe.skipIf(!hasDatabase)('dispatch', () => {
     const a = recordingConsumer('consumer-a')
     const b = recordingConsumer('consumer-b')
 
-    const first = await dispatchEvents([a.consumer, b.consumer])
+    const first = await dispatchEvents([a.consumer, b.consumer], { facilityId })
     expect(first).toMatchObject({ claimed: 2, succeeded: 2, failed: 0 })
 
     // A second pass must not redeliver settled events.
-    const second = await dispatchEvents([a.consumer, b.consumer])
+    const second = await dispatchEvents([a.consumer, b.consumer], { facilityId })
     expect(second.claimed).toBe(0)
     expect(a.calls).toHaveLength(1)
     expect(b.calls).toHaveLength(1)
@@ -132,8 +132,8 @@ describe.skipIf(!hasDatabase)('dispatch', () => {
 
     // The unique index on (eventId, consumer) is the claim.
     const results = await Promise.all([
-      dispatchEvents([consumer]),
-      dispatchEvents([consumer]),
+      dispatchEvents([consumer], { facilityId }),
+      dispatchEvents([consumer], { facilityId }),
     ])
 
     expect(results.reduce((sum, r) => sum + r.claimed, 0)).toBe(1)
@@ -143,7 +143,7 @@ describe.skipIf(!hasDatabase)('dispatch', () => {
   it('ignores events the consumer did not subscribe to', async () => {
     await emit('rates.updated')
     const { consumer, calls } = recordingConsumer('narrow-consumer')
-    expect((await dispatchEvents([consumer])).claimed).toBe(0)
+    expect((await dispatchEvents([consumer], { facilityId })).claimed).toBe(0)
     expect(calls).toEqual([])
   })
 
@@ -157,7 +157,7 @@ describe.skipIf(!hasDatabase)('dispatch', () => {
       },
     }
 
-    const result = await dispatchEvents([failing])
+    const result = await dispatchEvents([failing], { facilityId })
     expect(result).toMatchObject({ claimed: 1, failed: 1, succeeded: 0 })
 
     const delivery = await prisma.eventDelivery.findFirstOrThrow({
@@ -179,8 +179,8 @@ describe.skipIf(!hasDatabase)('dispatch', () => {
       },
     }
 
-    await dispatchEvents([failing])
-    expect((await dispatchEvents([failing])).claimed).toBe(0)
+    await dispatchEvents([failing], { facilityId })
+    expect((await dispatchEvents([failing], { facilityId })).claimed).toBe(0)
   })
 
   it('dead-letters after the retry limit rather than looping forever', async () => {
@@ -194,7 +194,7 @@ describe.skipIf(!hasDatabase)('dispatch', () => {
     }
 
     for (let attempt = 0; attempt < RETRY.maxAttempts; attempt++) {
-      await dispatchEvents([failing])
+      await dispatchEvents([failing], { facilityId })
       // Fast-forward past the backoff window.
       await prisma.eventDelivery.updateMany({
         where: { consumer: 'doomed-consumer', status: 'failed' },
@@ -211,7 +211,7 @@ describe.skipIf(!hasDatabase)('dispatch', () => {
     expect(delivery.nextAttemptAt).toBeNull()
 
     // A dead letter is never picked up again.
-    expect((await dispatchEvents([failing])).claimed).toBe(0)
+    expect((await dispatchEvents([failing], { facilityId })).claimed).toBe(0)
   })
 
   it('recovers when a failing handler starts working', async () => {
@@ -225,14 +225,14 @@ describe.skipIf(!hasDatabase)('dispatch', () => {
       },
     }
 
-    await dispatchEvents([consumer])
+    await dispatchEvents([consumer], { facilityId })
     shouldFail = false
     await prisma.eventDelivery.updateMany({
       where: { consumer: 'recovering-consumer' },
       data: { nextAttemptAt: new Date(Date.now() - 1000) },
     })
 
-    expect((await dispatchEvents([consumer])).succeeded).toBe(1)
+    expect((await dispatchEvents([consumer], { facilityId })).succeeded).toBe(1)
     const delivery = await prisma.eventDelivery.findFirstOrThrow({
       where: { consumer: 'recovering-consumer' },
     })
@@ -252,7 +252,7 @@ describe.skipIf(!hasDatabase)('dispatch', () => {
       },
     }
 
-    const result = await dispatchEvents([consumer])
+    const result = await dispatchEvents([consumer], { facilityId })
     expect(result).toMatchObject({ claimed: 2, succeeded: 1, failed: 1 })
 
     const settled = await prisma.eventDelivery.findFirstOrThrow({

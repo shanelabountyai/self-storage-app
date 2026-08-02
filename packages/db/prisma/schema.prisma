@@ -532,6 +532,7 @@ model Lease {
   ledgerEntries     LedgerEntry[]
   accessCredentials AccessCredential[]
   notices           Notice[]
+  rateChanges       LeaseRateChange[]
 
   @@index([facilityId, status])
   @@index([tenantId])
@@ -841,6 +842,42 @@ enum DocumentType {
   inspection_photo
   lien_evidence
   other
+}
+
+/// PRD 02 US-11. Every change to a lease's in-place rate, with why.
+///
+/// Written from the very first lease (B-026), and that timing is the entire
+/// point. ECRI — raising an existing tenant's rate — is the largest revenue
+/// lever in self-storage, and it needs two facts: when this tenant was last
+/// raised, and how far below street they are. Neither can be reconstructed
+/// afterwards, so a lease created without a history row is a tenant who is
+/// permanently ineligible for a rules-based increase. B-076 builds the
+/// workflow; this is the clock it reads, started early on purpose.
+model LeaseRateChange {
+  id                String          @id @default(cuid())
+  leaseId           String
+  previousRateCents Int?
+  newRateCents      Int
+  effectiveFrom     DateTime        @db.Timestamptz(6)
+  reason            LeaseRateReason
+  /// Null for a system-initiated change (move-in, a scheduled ECRI batch).
+  actorStaffId      String?
+  /// Days of notice given, where the reason required any.
+  noticeDays        Int?
+  createdAt         DateTime        @default(now()) @db.Timestamptz(6)
+
+  lease Lease @relation(fields: [leaseId], references: [id], onDelete: Restrict)
+
+  @@index([leaseId, effectiveFrom])
+  @@map("lease_rate_change")
+}
+
+enum LeaseRateReason {
+  move_in
+  ecri
+  transfer
+  promo_expiry
+  manual
 }
 
 model StripeEvent {

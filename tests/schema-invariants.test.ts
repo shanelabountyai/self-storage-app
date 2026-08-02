@@ -44,6 +44,7 @@ const NO_FACILITY_ID: Record<string, string> = {
   StripeEvent:
     'a Stripe account is org-level, and the facility is whatever the referenced payment belongs to',
   DocumentSignature: 'scoped through the document it signs',
+  LeaseRateChange: 'scoped through its lease',
 }
 
 /// Calendar dates, not instants. A business date is a facility-local day with
