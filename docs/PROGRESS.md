@@ -590,7 +590,7 @@ The `AccessGrant` state machine, the gate-command outbox, and the simulated adap
 
 **Left behind:** the code still is not **delivered** to anyone — `provisionAccessForLease` returns it and B-026's confirmation screen still says "your gate code will be texted within 15 minutes", which remains true only because **B-030**/**B-031** will make it so. That is now the seventh consecutive item waiting on comms. The portal's "show gate code" (**B-034**) has nothing to show until a secret store exists — no backlog item owns one yet, flagged when B-028 turned out to be the simulator rather than that store — today the plaintext is genuinely unrecoverable after issuance, which is safe but not yet useful. Authorized-access holders are **B-029**: FR-1's "one grant per credential holder" is currently one grant per *tenant*, which is the same shape with a single holder. Per-facility code policy (length, banned patterns, zones) is a constant with a `ponytail:` marker. Real vendor drivers are **B-080**/**B-085**, one stub per D-18.
 
-### B-028 — Gate simulator ✅ `PENDING`
+### B-028 — Gate simulator ✅ `26c6a71`
 
 `SimulatedAdapter` gained real state, a mock vendor's own database, a signed webhook path, a virtual keypad dev page, and fault injection. The whole access lifecycle now runs with no hardware, proven end to end against B-027's real service.
 
