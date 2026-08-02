@@ -514,7 +514,7 @@ That last field is separate from `Document.contentHash` on purpose, and the diff
 
 ---
 
-### B-025 — Payment step ✅ `PENDING`
+### B-025 — Payment step ✅ `e7bb69a`
 
 The Stripe Payment Element, the itemised review, and autopay default-on with the disclosure §6.9 requires. The step that finally connects B-019's foundation to a real charge.
 
