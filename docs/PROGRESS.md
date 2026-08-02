@@ -486,7 +486,7 @@ No JavaScript PDF library available here emits tagged PDFs. `pdf-lib`, `pdfkit` 
 
 ---
 
-### B-024 — Lease template & e-signature ✅ `PENDING`
+### B-024 — Lease template & e-signature ✅ `3072779`
 
 The lease, the plain-language summary, and the signature evidence E-SIGN actually asks for.
 
