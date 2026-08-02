@@ -1,4 +1,6 @@
+import { prisma } from '@storage/db'
 import type { GateCommandType } from '@storage/db'
+import { opensGate, type GrantState } from '@storage/core/access'
 
 // PRD 03 §4.1 / FR-3. The port every gate controller sits behind.
 //
@@ -9,7 +11,10 @@ import type { GateCommandType } from '@storage/db'
 
 export type GateCommandInput = {
   type: GateCommandType
-  /// Opaque to the adapter — the code reference, the zone, whatever the vendor
+  facilityId: string
+  grantId: string | null
+  credentialId: string | null
+  /// Opaque to the port itself — the code, the zone, whatever a real vendor
   /// needs. Never the plaintext PIN in a log.
   payload: Record<string, unknown>
 }
@@ -27,17 +32,74 @@ export type GateAdapter = {
   send(command: GateCommandInput): Promise<AdapterResult>
 }
 
-/// The adapter every facility uses today.
-///
-/// It succeeds, and that is deliberate rather than lazy: the value of running
-/// against a simulator is that the *queue* — idempotency, retry, backoff, dead
-/// letters, staff alerts — is exercised for real. Failure modes are injected in
-/// tests through `failingAdapter`, not by making the default flaky.
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+/// The state mutation a real vendor would perform on receiving each command
+/// type — applied here against `SimulatedGateCode`, which plays the vendor's
+/// own database (see the model's comment: we never store the plaintext, so the
+/// simulator has to keep it somewhere that is honestly not `AccessCredential`).
+async function applyToSimulatedController(command: GateCommandInput): Promise<AdapterResult> {
+  switch (command.type) {
+    case 'set_credential': {
+      const code = command.payload.code
+      if (typeof code !== 'string' || !command.credentialId) {
+        return { ok: false, retryable: false, message: 'set_credential requires a credentialId and a code' }
+      }
+      const credential = await prisma.accessCredential.findUnique({
+        where: { id: command.credentialId },
+        select: { grant: { select: { state: true } } },
+      })
+      if (!credential) return { ok: false, retryable: false, message: 'Unknown credential' }
+
+      await prisma.simulatedGateCode.upsert({
+        where: { credentialId: command.credentialId },
+        create: {
+          facilityId: command.facilityId,
+          credentialId: command.credentialId,
+          code,
+          active: opensGate(credential.grant.state as GrantState),
+        },
+        update: { code, active: opensGate(credential.grant.state as GrantState) },
+      })
+      return { ok: true }
+    }
+
+    case 'grant_access':
+    case 'resume_access':
+    case 'suspend_access':
+    case 'revoke_access': {
+      if (!command.grantId) {
+        return { ok: false, retryable: false, message: `${command.type} requires a grantId` }
+      }
+      const active = command.type === 'grant_access' || command.type === 'resume_access'
+      const credentials = await prisma.accessCredential.findMany({
+        where: { grantId: command.grantId },
+        select: { id: true },
+      })
+      // Nothing to flip yet is not a failure — grant_access is issued before a
+      // credential necessarily exists; set_credential will arrive active.
+      if (credentials.length > 0) {
+        await prisma.simulatedGateCode.updateMany({
+          where: { credentialId: { in: credentials.map((c) => c.id) } },
+          data: { active },
+        })
+      }
+      return { ok: true }
+    }
+
+    default:
+      return { ok: false, retryable: false, message: `Unhandled command type: ${command.type}` }
+  }
+}
+
+/// The zero-fault adapter: applies the command with no offline/latency
+/// simulation. What tests use, and what `adapterFor` wraps with the
+/// per-facility fault configuration below.
 export const simulatedAdapter: GateAdapter = {
   name: 'simulated',
-  async send() {
-    return { ok: true }
-  },
+  send: applyToSimulatedController,
 }
 
 /// For tests and for the "what happens when the car park is offline" drill.
@@ -53,12 +115,23 @@ export function scriptedAdapter(results: AdapterResult[]): GateAdapter {
   }
 }
 
-/// Per-facility adapter selection (FR-3).
-///
-/// Every facility is on the simulator, so the argument is unused today — it is
-/// in the signature because the callers are already passing the right thing,
-/// and adding it later would mean touching every call site to fix a lookup.
+/// Per-facility adapter selection (FR-3), wrapped with US-7 AC3's fault
+/// injection: `offline` fails every command retryable — without touching
+/// controller state — so B-027's existing retry/backoff/dead-letter path is
+/// exercised for real from a UI toggle rather than reimplemented here.
+/// `latencyMs` delays a successful send, to demonstrate that nothing in the
+/// checkout or provisioning path blocks on it (B-026/B-027 already made that
+/// true; this is where you go to watch it stay true).
 export function adapterFor(facilityId: string): GateAdapter {
-  void facilityId
-  return simulatedAdapter
+  return {
+    name: 'simulated',
+    async send(command) {
+      const config = await prisma.gateSimulatorConfig.findUnique({ where: { facilityId } })
+      if (config?.offline) {
+        return { ok: false, retryable: true, message: 'Gate controller is offline (simulated)' }
+      }
+      if (config?.latencyMs) await delay(config.latencyMs)
+      return applyToSimulatedController(command)
+    },
+  }
 }

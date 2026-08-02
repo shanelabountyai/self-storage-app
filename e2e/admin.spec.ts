@@ -30,7 +30,7 @@ test.describe('signed in as the demo owner', () => {
     await signInAsDemoOwner(page)
   })
 
-  const ADMIN_ROUTES = ['/admin', '/admin/units', '/admin/units/types', '/admin/settings']
+  const ADMIN_ROUTES = ['/admin', '/admin/units', '/admin/units/types', '/admin/settings', '/admin/dev/keypad']
 
   for (const route of ADMIN_ROUTES) {
     test(`${route} has no WCAG 2.1 AA violations`, async ({ page }) => {

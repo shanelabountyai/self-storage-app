@@ -280,29 +280,33 @@ model Facility {
   createdAt          DateTime       @default(now()) @db.Timestamptz(6)
   updatedAt          DateTime       @updatedAt @db.Timestamptz(6)
 
-  unitTypes         UnitType[]
-  units             Unit[]
-  leases            Lease[]
-  invoices          Invoice[]
-  payments          Payment[]
-  ledgerEntries     LedgerEntry[]
-  accessGrants      AccessGrant[]
-  accessCredentials AccessCredential[]
-  reservations      Reservation[]
-  checkoutSessions  CheckoutSession[]
-  protectionPlans   ProtectionPlan[]
-  protectionWaivers ProtectionWaiver[]
-  documents         Document[]
-  gateCommands      GateCommand[]
-  leads             Lead[]
-  notices           Notice[]
-  auditLogs         AuditLog[]
-  staffAssignments  StaffFacilityAssignment[]
-  domainEvents      DomainEvent[]
-  jobRuns           JobRun[]
-  taxComponents     TaxComponent[]
-  feeSchedules      FeeSchedule[]
-  unitTypeRates     UnitTypeRate[]
+  unitTypes             UnitType[]
+  units                 Unit[]
+  leases                Lease[]
+  invoices              Invoice[]
+  payments              Payment[]
+  ledgerEntries         LedgerEntry[]
+  accessGrants          AccessGrant[]
+  accessCredentials     AccessCredential[]
+  reservations          Reservation[]
+  checkoutSessions      CheckoutSession[]
+  protectionPlans       ProtectionPlan[]
+  protectionWaivers     ProtectionWaiver[]
+  documents             Document[]
+  gateCommands          GateCommand[]
+  accessEvents          AccessEvent[]
+  simulatedGateCodes    SimulatedGateCode[]
+  simulatedVendorEvents SimulatedVendorEvent[]
+  gateSimulatorConfig   GateSimulatorConfig?
+  leads                 Lead[]
+  notices               Notice[]
+  auditLogs             AuditLog[]
+  staffAssignments      StaffFacilityAssignment[]
+  domainEvents          DomainEvent[]
+  jobRuns               JobRun[]
+  taxComponents         TaxComponent[]
+  feeSchedules          FeeSchedule[]
+  unitTypeRates         UnitTypeRate[]
 
   @@index([state])
   @@map("facility")
@@ -932,6 +936,95 @@ enum GateCommandStatus {
   dead_lettered
 }
 
+/// PRD 03 FR-4 (minimal slice) / US-7 AC2. A real access event, produced by
+/// the same webhook path a vendor integration would use.
+///
+/// Deliberately small: dedup, normalization, the admin event log and anomaly
+/// flags are FR-4's fuller pipeline and belong to B-064, which depends on this
+/// item. What B-028 owes is that the event exists and arrived through a
+/// signed webhook — everything downstream builds on top of this row.
+model AccessEvent {
+  id            String            @id @default(cuid())
+  facilityId    String
+  /// What the vendor calls this event. The dedup key (FR-4: "dedup by
+  /// (facilityId, vendorEventId)") — a redelivered webhook must not double-log
+  /// a gate open.
+  vendorEventId String            @unique
+  /// Null when the code presented does not match anything on file — "unknown
+  /// code" is itself retained (FR-4), never discarded, because a stranger
+  /// trying codes at a gate is exactly the pattern a later anomaly flag reads.
+  credentialId  String?
+  result        AccessEventResult
+  reason        String
+  occurredAt    DateTime          @db.Timestamptz(6)
+  createdAt     DateTime          @default(now()) @db.Timestamptz(6)
+
+  facility   Facility          @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  credential AccessCredential? @relation(fields: [credentialId], references: [id], onDelete: SetNull)
+
+  @@index([facilityId, occurredAt])
+  @@map("access_event")
+}
+
+enum AccessEventResult {
+  granted
+  denied
+}
+
+/// PRD 03 US-7. The mock vendor's own database — deliberately separate from
+/// `AccessCredential`, which by design (SR-2) never stores the plaintext code.
+/// A real vendor's controller holds the code; we hold only a reference to it.
+/// This table exists to play that vendor's part in the simulation, and a real
+/// integration would have no equivalent row on our side at all.
+model SimulatedGateCode {
+  id           String   @id @default(cuid())
+  facilityId   String
+  credentialId String   @unique
+  code         String
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(6)
+
+  facility Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+
+  @@index([facilityId, code])
+  @@map("simulated_gate_code")
+}
+
+/// PRD 03 US-7 AC3's "webhook delivery failure" and "event backlog replay".
+/// What the mock vendor has generated but not necessarily gotten to us yet —
+/// the queue on the OTHER side of the boundary from `GateCommand`, which is
+/// ours.
+model SimulatedVendorEvent {
+  id            String   @id @default(cuid())
+  facilityId    String
+  vendorEventId String   @unique
+  payload       Json
+  delivered     Boolean  @default(false)
+  createdAt     DateTime @default(now()) @db.Timestamptz(6)
+
+  facility Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+
+  @@index([facilityId, delivered])
+  @@map("simulated_vendor_event")
+}
+
+/// PRD 03 US-7 AC3. Per-facility fault injection, toggled from the dev keypad
+/// page. `offline` and `latencyMs` affect the outbound command adapter
+/// (B-027's queue does the rest); `webhookFailing` affects whether a simulated
+/// event actually reaches our webhook.
+model GateSimulatorConfig {
+  facilityId     String   @id
+  offline        Boolean  @default(false)
+  latencyMs      Int      @default(0)
+  webhookFailing Boolean  @default(false)
+  updatedAt      DateTime @updatedAt @db.Timestamptz(6)
+
+  facility Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+
+  @@map("gate_simulator_config")
+}
+
 model StripeEvent {
   /// Stripe's `evt_...` id, used directly as the primary key.
   id          String    @id
@@ -1014,9 +1107,10 @@ model AccessCredential {
   createdAt  DateTime              @default(now()) @db.Timestamptz(6)
   updatedAt  DateTime              @updatedAt @db.Timestamptz(6)
 
-  facility Facility    @relation(fields: [facilityId], references: [id], onDelete: Cascade)
-  grant    AccessGrant @relation(fields: [grantId], references: [id], onDelete: Cascade)
-  lease    Lease?      @relation(fields: [leaseId], references: [id], onDelete: SetNull)
+  facility Facility      @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  grant    AccessGrant   @relation(fields: [grantId], references: [id], onDelete: Cascade)
+  lease    Lease?        @relation(fields: [leaseId], references: [id], onDelete: SetNull)
+  events   AccessEvent[]
 
   @@index([facilityId, state])
   @@index([grantId])

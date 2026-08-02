@@ -245,6 +245,9 @@ export async function drainGateCommands(
     const adapter = adapterFor(command.facilityId)
     const outcome = await adapter.send({
       type: command.type,
+      facilityId: command.facilityId,
+      grantId: command.grantId,
+      credentialId: command.credentialId,
       payload: (command.payload ?? {}) as Record<string, unknown>,
     })
 
