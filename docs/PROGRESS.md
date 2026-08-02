@@ -566,7 +566,7 @@ The flow now ends in a moved-in tenant: a paid checkout becomes a lease, an occu
 
 ---
 
-### B-027 — Access control service ✅ `PENDING`
+### B-027 — Access control service ✅ `510a5c9`
 
 The `AccessGrant` state machine, the gate-command outbox, and the simulated adapter. A move-in now issues a real gate code.
 
