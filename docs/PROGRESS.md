@@ -540,7 +540,7 @@ The Stripe Payment Element, the itemised review, and autopay default-on with the
 
 ---
 
-### B-026 — Move-in provisioning & rollback ✅ `PENDING`
+### B-026 — Move-in provisioning & rollback ✅ `df322b8`
 
 The flow now ends in a moved-in tenant: a paid checkout becomes a lease, an occupied unit, an opened ledger and a `lease.moved_in` event. **Milestone 2's golden path is closed end to end** — search → facility → reserve or rent → details → unit → protection → lease → payment → moved in.
 
