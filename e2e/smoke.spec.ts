@@ -496,6 +496,51 @@ test('the lease shows a summary first and signs with a typed name', async ({ pag
   await expect(page.getByRole('heading', { name: 'Payment' })).toBeVisible()
 })
 
+test('the payment step itemises before it charges and discloses autopay', async ({ page }) => {
+  await page.goto('/storage/tx/houston/demo-e2e')
+  await page
+    .getByRole('listitem')
+    .filter({ hasText: '10x10 Test' })
+    .first()
+    .getByRole('button', { name: 'Rent now' })
+    .click()
+
+  await page.getByLabel('First name').fill('Ada')
+  await page.getByLabel('Last name').fill('Renter')
+  await page.getByLabel('Email').fill(`e2e-pay-${Date.now()}@demo.example.com`)
+  await page.getByLabel('Mobile number').fill('512-555-0100')
+  await page.getByLabel('Street address').fill('2400 South Congress Ave')
+  await page.getByLabel('City').fill('Austin')
+  await page.getByLabel('State').fill('TX')
+  await page.getByLabel('Zip code').fill('78704')
+  await page.getByRole('button', { name: 'Continue', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Your unit' })).toBeVisible()
+  await page.getByRole('button', { name: 'This is right' }).click()
+  await expect(page.getByRole('heading', { name: 'Protect what you store' })).toBeVisible()
+  await page.getByRole('button', { name: 'Continue', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'The short version' })).toBeVisible()
+
+  await page.getByRole('checkbox').first().check()
+  await page.getByLabel('Type your full name to sign').fill('Ada Renter')
+  await page.getByRole('button', { name: 'Sign and continue' }).click()
+
+  // 3.3.4: everything being charged, itemised, before the act that charges it.
+  await expect(page.getByRole('heading', { name: 'What you are paying today' })).toBeVisible()
+  await expect(page.getByRole('main')).toContainText('Total due today')
+  await expect(page.getByRole('main')).toContainText('Then each month')
+
+  // §6.9 / D-11a: default-on, with the amount and date stated beside the
+  // control and the opt-out one activation away.
+  const autopay = page.getByRole('checkbox', { name: /Pay automatically each month/ })
+  await expect(autopay).toBeChecked()
+  await expect(page.locator('#autopay-disclosure')).toContainText('day 1 of each month')
+  await expect(autopay).toHaveAttribute('aria-describedby', 'autopay-disclosure')
+
+  // No Stripe keys are configured, so the honest fallback is what renders —
+  // a phone number rather than a card form that cannot submit.
+  await expect(page.getByRole('main')).toContainText("can't take card payments online just now")
+})
+
 test('an unknown checkout link says so and charges nothing', async ({ page }) => {
   await page.goto('/checkout?token=not-a-real-session')
   await expect(page.getByRole('heading', { level: 1 })).toContainText("couldn't find that checkout")

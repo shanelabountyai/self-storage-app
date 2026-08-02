@@ -12,6 +12,8 @@
   "dependencies": {
     "@storage/core": "*",
     "@storage/db": "*",
+    "@stripe/react-stripe-js": "^6.8.0",
+    "@stripe/stripe-js": "^9.12.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.28.0",

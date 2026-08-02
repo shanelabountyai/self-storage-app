@@ -11,6 +11,8 @@ import { DetailsStep } from '@/components/checkout/details-step'
 import { UnitStep } from '@/components/checkout/unit-step'
 import { ProtectionStep } from '@/components/checkout/protection-step'
 import { LeaseStep } from '@/components/checkout/lease-step'
+import { PaymentStep } from '@/components/checkout/payment-step'
+import { amountDueToday, preparePayment } from '@/lib/checkout/payment'
 import { currentPlans, defaultTier } from '@/lib/protection/plans'
 import { buildLeaseDocument, existingLeaseDocument } from '@/lib/lease/build'
 import { renderTemplate } from '@/lib/documents/render'
@@ -108,6 +110,9 @@ export default async function CheckoutPage({
       lease = { leaseHtml: built.html, summaryHtml: built.summaryHtml }
     }
   }
+
+  const payment = session.step === 'payment' ? await preparePayment(session) : null
+  const due = session.step === 'payment' ? await amountDueToday(session) : null
 
   const remaining = minutesLeft(session.lockExpiresAt)
   const warning = !session.lockLapsed && remaining <= LOCK_WARNING_MINUTES
@@ -228,9 +233,22 @@ export default async function CheckoutPage({
             />
           )}
 
-          {/* The payment step is B-025. Until then the machine still
+          {session.step === 'payment' && payment && due && (
+            <PaymentStep
+              token={token!}
+              due={due}
+              payment={payment}
+              autopayOn={session.data.autopay !== false}
+              returnUrl={`${process.env.AUTH_URL ?? 'http://localhost:3000'}/checkout?token=${encodeURIComponent(token!)}`}
+              billingDay={1}
+            />
+          )}
+
+          {/* Provisioning is B-026. Until then the machine still
               has to be walkable end to end, so they keep the plain continue. */}
-          {!['details', 'unit_assign', 'insurance', 'lease', 'provisioned'].includes(session.step) && (
+          {!['details', 'unit_assign', 'insurance', 'lease', 'payment', 'provisioned'].includes(
+            session.step,
+          ) && (
             <AdminForm action={advanceAction} label="Continue" className="mt-4">
               <input type="hidden" name="token" value={token} />
               <input type="hidden" name="from" value={session.step} />

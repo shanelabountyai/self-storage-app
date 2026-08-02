@@ -208,6 +208,31 @@ export async function signLeaseAction(_prev: FormState, formData: FormData): Pro
   return { status: 'success', message: 'Lease signed. Next: payment.' }
 }
 
+/// §6.9 / D-11a. Records the autopay choice on the session; B-026 carries it
+/// onto the lease. Default-on is only defensible because the disclosure sits
+/// beside the control and turning it off is one activation.
+export async function setAutopayAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const token = String(formData.get('token') ?? '')
+  const session = await sessionByToken(token)
+  if (!session) {
+    return { status: 'error', message: 'We could not find that checkout.', fieldErrors: {} }
+  }
+
+  const autopay = formData.get('autopay') === 'yes'
+  await prisma.checkoutSession.update({
+    where: { id: session.id },
+    data: { data: { ...session.data, autopay } as never },
+  })
+
+  revalidatePath('/checkout')
+  return {
+    status: 'success',
+    message: autopay
+      ? 'Automatic payments are on. We will email you before every charge.'
+      : 'Automatic payments are off. We will email you when each payment is due.',
+  }
+}
+
 export async function advanceAction(_prev: FormState, formData: FormData): Promise<FormState> {
   const token = String(formData.get('token') ?? '')
   const from = String(formData.get('from') ?? '') as Step

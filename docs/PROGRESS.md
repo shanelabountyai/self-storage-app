@@ -514,6 +514,32 @@ That last field is separate from `Document.contentHash` on purpose, and the diff
 
 ---
 
+### B-025 — Payment step ✅ `PENDING`
+
+The Stripe Payment Element, the itemised review, and autopay default-on with the disclosure §6.9 requires. The step that finally connects B-019's foundation to a real charge.
+
+**No Stripe keys are configured, so what actually renders today is the honest fallback**: "we can't take card payments online just now — call us, and your unit stays held." That is the shipped behaviour, and it is the one e2e asserts. A form that cannot submit is worse than a sentence that ends in a rented unit, and `paymentsEnabled()` existing since B-019 is what makes the choice cheap.
+
+**The total is computed server-side from the session, never from the browser.** The protection premium comes from where step 3 recorded it — a premium the browser could supply is a total the renter could choose. There is a test that passes a nonsense premium through the session data and asserts the total does not move.
+
+**The same calculation as the facility page**, asserted directly against `calculateMoveInCost` rather than against a number that happens to match today. US-301 makes a discrepancy release-blocking; that is only enforceable because there is one implementation and a test that compares them.
+
+**The idempotency key is the checkout session id.** A renter who reloads, double-submits, or returns to the step gets Stripe's original intent rather than a second charge — the reason B-019 derived keys from *what the money is for* rather than from when it was asked for.
+
+**Finalisation is webhook-driven, never the client redirect** (FR-4.4). `redirect: 'if_required'` and a reload; the webhook is what marks the payment succeeded, so a renter who closes the tab still gets their unit.
+
+**A decline is mirrored out of Stripe's iframe.** Errors reported only inside the Element are frequently not announced at all, so the message is copied into a page-level `role="alert"` that is rendered empty on load and receives focus when it fills. The Element is also given an explicit `appearance` with 4.5:1 text and a 3:1 focus ring matching this project's own tokens — Stripe's defaults inherit exactly the weak borders B-093 had to fix, and the Element is a cross-origin iframe that axe cannot scan, so those values are the only contrast guarantee it gets.
+
+**Autopay is default-on with the disclosure beside the control, not behind a link** (§6.9, D-11a): the amount, the day of the month, and the promise of a notice two days before every charge, tied to the checkbox with `aria-describedby`. Turning it off is one activation in the same tab sequence rather than a settings page to find later. That default is only defensible with the disclosure attached, which is why the two ship together and why e2e asserts the association.
+
+**Verified:** 539 unit tests (5 new), 216 e2e (1 new, walking all six steps), typecheck, lint and build clean.
+
+**Left behind:** provisioning is **B-026** — a successful payment currently records a `Payment` row and advances the step, and nothing yet creates the `Lease`, marks the unit occupied, opens the ledger or requests a gate code. **So the flow does not yet end in a moved-in tenant**, which is the milestone's whole point and the next item. Wallets (Apple Pay/Google Pay) come from the Element automatically on supporting devices but are untested without keys. ACH and Link are Phase 2 (**B-081**). The password-set step and the confirmation screen with the gate code (US-501 steps 6–7) are **B-026**/**B-029**. OQ-4's legal review of the autopay copy is still open, and the draft text is exactly that — a draft.
+
+**Worth recording — the e2e suite is flaky under local parallel load.** Several runs this session failed a handful of tests that pass in isolation, always different ones, always dev-server-timing shaped. CI runs with `retries: 2` and a production build; locally it is `retries: 0` against `next dev`, which compiles routes on demand while two browser projects hammer it. Nothing has been changed for it, but a green local run currently means "green on the second try" often enough to be worth knowing.
+
+---
+
 ## Feature PRDs added mid-build
 
 ### PRD 09 — Support impersonation ("log in as") 📋 specced, not built
