@@ -73,7 +73,16 @@ function escapeHtml(value: string): string {
 
 export type RenderedDocument = {
   title: string
+  /// The complete document — doctype, `<html lang>`, `<title>`, `<h1>`. This is
+  /// what gets stored, hashed, signed and emailed.
   html: string
+  /// The merged content alone, with no document wrapper.
+  ///
+  /// Embedding `html` in a page does not work: injecting a full document into a
+  /// `<div>` leaves the markup in the DOM but unrendered, which is a bug that
+  /// looks like "the element exists but is not visible" and wastes an afternoon.
+  /// A stored document is a document; an on-page preview is a fragment.
+  bodyHtml: string
   /// SHA-256 over the exact rendered bytes. PRD 01 FR-4.2's evidence: a signed
   /// document whose hash no longer matches is one that changed after signing.
   contentHash: string
@@ -105,7 +114,7 @@ export function renderDocument(input: {
     '</html>',
   ].join('\n')
 
-  return { title: input.title, html, contentHash: hashContent(html) }
+  return { title: input.title, html, bodyHtml: body, contentHash: hashContent(html) }
 }
 
 export function hashContent(content: string): string {

@@ -13,6 +13,9 @@ import {
   type ProtectionChoice,
 } from '@/lib/protection/plans'
 import { sessionByToken } from '@/lib/checkout/session'
+import { headers } from 'next/headers'
+import { existingLeaseDocument } from '@/lib/lease/build'
+import { signDocument, validateSignature } from '@/lib/lease/sign'
 
 // B-020. The transitions a step's form can trigger. The individual steps'
 // validation lands with B-021..B-025; this item owns the machine they run on.
@@ -132,6 +135,77 @@ export async function submitProtectionAction(
         ? `Protection added — your monthly total went up by ${(premiumCents / 100).toFixed(2)} dollars.`
         : 'Your own cover recorded. No protection charge added.',
   }
+}
+
+/// US-501 step 4 / FR-4.2. Signs the lease that was rendered for this session.
+export async function signLeaseAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const token = String(formData.get('token') ?? '')
+  const session = await sessionByToken(token)
+  if (!session) {
+    return { status: 'error', message: 'We could not find that checkout.', fieldErrors: {} }
+  }
+
+  const document = await existingLeaseDocument(session.id)
+  if (!document) {
+    return {
+      status: 'error',
+      message: 'We could not find your lease. Reload the page and it will be rebuilt.',
+      fieldErrors: {},
+    }
+  }
+
+  const data = session.data as Record<string, string | undefined>
+  const legalName = `${data.firstName ?? ''} ${data.lastName ?? ''}`.trim()
+
+  const errors = validateSignature({
+    typedName: String(formData.get('typedName') ?? ''),
+    legalName,
+    consented: formData.get('consented') === 'yes',
+  })
+  if (Object.keys(errors).length > 0) return fieldError(errors)
+
+  // Best-effort attribution. Behind a proxy the client address is the first
+  // entry of the forwarded chain; it is evidence, not identity, and is recorded
+  // as what the browser reported rather than as a claim about who was there.
+  const headerBag = await headers()
+  const forwarded = headerBag.get('x-forwarded-for')
+  const signed = await signDocument({
+    documentId: document.id,
+    typedName: String(formData.get('typedName') ?? ''),
+    legalName,
+    consented: true,
+    ipAddress: forwarded ? forwarded.split(',')[0].trim() : null,
+    userAgent: headerBag.get('user-agent'),
+  })
+
+  if (!signed.ok) {
+    return {
+      status: 'error',
+      message:
+        signed.reason === 'already_signed'
+          ? 'This lease has already been signed.'
+          : 'We could not record your signature. Reload the page and try again.',
+      fieldErrors: {},
+    }
+  }
+
+  const result = await advance(token, 'lease', {
+    leaseDocumentId: document.id,
+    signedAt: signed.signedAt.toISOString(),
+  })
+  if (!result.ok) {
+    return {
+      status: 'error',
+      message:
+        result.reason === 'lock_lapsed'
+          ? 'The 30 minutes we were holding your unit ran out. Nothing has been charged — see below for what we can do.'
+          : 'We could not continue. Reload the page and try again.',
+      fieldErrors: {},
+    }
+  }
+
+  revalidatePath('/checkout')
+  return { status: 'success', message: 'Lease signed. Next: payment.' }
 }
 
 export async function advanceAction(_prev: FormState, formData: FormData): Promise<FormState> {

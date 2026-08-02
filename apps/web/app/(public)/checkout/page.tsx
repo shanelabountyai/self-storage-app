@@ -10,7 +10,12 @@ import { prefillFromReservation } from '@/lib/checkout/details'
 import { DetailsStep } from '@/components/checkout/details-step'
 import { UnitStep } from '@/components/checkout/unit-step'
 import { ProtectionStep } from '@/components/checkout/protection-step'
+import { LeaseStep } from '@/components/checkout/lease-step'
 import { currentPlans, defaultTier } from '@/lib/protection/plans'
+import { buildLeaseDocument, existingLeaseDocument } from '@/lib/lease/build'
+import { renderTemplate } from '@/lib/documents/render'
+import { LEASE_SUMMARY_TEMPLATE } from '@/lib/lease/template'
+import { leaseValuesFor } from '@/lib/lease/build'
 import { advanceAction, extendLockAction, relockAction } from './actions'
 
 export const metadata = {
@@ -85,6 +90,24 @@ export default async function CheckoutPage({
     where: { id: session.facilityId },
     select: { protectionRequired: true },
   })
+
+  // The lease is built once and reused. Re-rendering on every page view would
+  // move the hash under a signer part-way through the step.
+  let lease: { summaryHtml: string; leaseHtml: string } | null = null
+  if (session.step === 'lease') {
+    const existing = await existingLeaseDocument(session.id)
+    if (existing?.content) {
+      lease = {
+        // The stored document is a complete HTML document; only its body can be
+        // embedded in this page. See renderDocument's note.
+        leaseHtml: existing.content.replace(/^[\s\S]*<body>/, '').replace(/<\/body>[\s\S]*$/, ''),
+        summaryHtml: renderTemplate(LEASE_SUMMARY_TEMPLATE, await leaseValuesFor(session)),
+      }
+    } else {
+      const built = await buildLeaseDocument(session)
+      lease = { leaseHtml: built.html, summaryHtml: built.summaryHtml }
+    }
+  }
 
   const remaining = minutesLeft(session.lockExpiresAt)
   const warning = !session.lockLapsed && remaining <= LOCK_WARNING_MINUTES
@@ -194,9 +217,20 @@ export default async function CheckoutPage({
             />
           )}
 
-          {/* Steps beyond 3 are B-024/B-025. Until then the machine still
+          {session.step === 'lease' && lease && (
+            <LeaseStep
+              token={token!}
+              summaryHtml={lease.summaryHtml}
+              leaseHtml={lease.leaseHtml}
+              legalName={`${(session.data as Record<string, string>).firstName ?? ''} ${
+                (session.data as Record<string, string>).lastName ?? ''
+              }`.trim()}
+            />
+          )}
+
+          {/* The payment step is B-025. Until then the machine still
               has to be walkable end to end, so they keep the plain continue. */}
-          {!['details', 'unit_assign', 'insurance', 'provisioned'].includes(session.step) && (
+          {!['details', 'unit_assign', 'insurance', 'lease', 'provisioned'].includes(session.step) && (
             <AdminForm action={advanceAction} label="Continue" className="mt-4">
               <input type="hidden" name="token" value={token} />
               <input type="hidden" name="from" value={session.step} />

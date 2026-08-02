@@ -347,7 +347,7 @@ test('checkout step 1 creates an account with no password', async ({ page }) => 
   await page.getByLabel('City').fill('Austin')
   await page.getByLabel('State').fill('TX')
   await page.getByLabel('Zip code').fill('78704')
-  await page.getByRole('button', { name: 'Continue' }).click()
+  await page.getByRole('button', { name: 'Continue', exact: true }).click()
 
   // Step 2 confirms the unit that was already locked, and names it.
   await expect(page.getByRole('heading', { name: 'Your unit' })).toBeVisible()
@@ -372,7 +372,7 @@ test('checkout step 1 reports a bad field with a suggestion', async ({ page }) =
   await page.getByLabel('City').fill('Austin')
   await page.getByLabel('State').fill('TX')
   await page.getByLabel('Zip code').fill('78704')
-  await page.getByRole('button', { name: 'Continue' }).click()
+  await page.getByRole('button', { name: 'Continue', exact: true }).click()
 
   // 3.3.1/3.3.3: identified, tied to the field, and carrying a suggestion.
   await expect(page.getByRole('main').getByRole('alert')).toContainText('area code')
@@ -398,7 +398,7 @@ test('the checkout stepper advances server-side and resumes', async ({ page }) =
   await page.getByLabel('City').fill('Austin')
   await page.getByLabel('State').fill('TX')
   await page.getByLabel('Zip code').fill('78704')
-  await page.getByRole('button', { name: 'Continue' }).click()
+  await page.getByRole('button', { name: 'Continue', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Your unit' })).toBeVisible()
 
   // FR-4.1: resumable. Re-entering the same link lands on the step the renter
@@ -425,8 +425,8 @@ test('the protection step cannot be skipped and updates the total', async ({ pag
   await page.getByLabel('City').fill('Austin')
   await page.getByLabel('State').fill('TX')
   await page.getByLabel('Zip code').fill('78704')
-  await page.getByRole('button', { name: 'Continue' }).click()
-  await page.getByRole('button', { name: 'This is right — continue' }).click()
+  await page.getByRole('button', { name: 'Continue', exact: true }).click()
+  await page.getByRole('button', { name: 'This is right' }).click()
 
   await expect(page.getByRole('heading', { name: 'Protect what you store' })).toBeVisible()
   // US-501: the mid tier is preselected and changeable in one tap.
@@ -435,15 +435,65 @@ test('the protection step cannot be skipped and updates the total', async ({ pag
   // Choosing "my own cover" without the record is refused with a named error,
   // not a disabled button (3.3.1).
   await page.getByRole('radio', { name: /I have my own cover/ }).check()
-  await page.getByRole('button', { name: 'Continue' }).click()
+  await page.getByRole('button', { name: 'Continue', exact: true }).click()
   await expect(page.getByRole('main').getByRole('alert')).toBeVisible()
   await expect(page.getByLabel('Insurer')).toHaveAttribute('aria-invalid', 'true')
 
   // A plan instead, and the recurring total moves with a stated cause (§6.4).
   await page.getByRole('radio', { name: /\$5,000 cover/ }).check()
-  await page.getByRole('button', { name: 'Continue' }).click()
+  await page.getByRole('button', { name: 'Continue', exact: true }).click()
   await expect(page.getByRole('main')).toContainText('Your lease')
   await expect(page.getByRole('main')).toContainText('Protection')
+})
+
+test('the lease shows a summary first and signs with a typed name', async ({ page }) => {
+  await page.goto('/storage/tx/houston/demo-e2e')
+  await page
+    .getByRole('listitem')
+    .filter({ hasText: '10x10 Test' })
+    .first()
+    .getByRole('button', { name: 'Rent now' })
+    .click()
+
+  await page.getByLabel('First name').fill('Ada')
+  await page.getByLabel('Last name').fill('Renter')
+  await page.getByLabel('Email').fill(`e2e-lease-${Date.now()}@demo.example.com`)
+  await page.getByLabel('Mobile number').fill('512-555-0100')
+  await page.getByLabel('Street address').fill('2400 South Congress Ave')
+  await page.getByLabel('City').fill('Austin')
+  await page.getByLabel('State').fill('TX')
+  await page.getByLabel('Zip code').fill('78704')
+  // Each step is awaited before the next click. Two reasons: the server action
+  // has to land before the next page exists, and Playwright's `name` match is a
+  // case-insensitive SUBSTRING — so a bare "Continue" also matches
+  // "This is right — continue" and can re-click the previous step's button.
+  await page.getByRole('button', { name: 'Continue', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Your unit' })).toBeVisible()
+  await page.getByRole('button', { name: 'This is right' }).click()
+  await expect(page.getByRole('heading', { name: 'Protect what you store' })).toBeVisible()
+  await page.getByRole('button', { name: 'Continue', exact: true }).click()
+
+  // §6.4: the plain-language summary is real page content above the full text.
+  await expect(page.getByRole('heading', { name: 'The short version' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'The full agreement' })).toBeVisible()
+
+  // §6.4/§6.8.1: the signature control is available immediately — never gated
+  // on scrolling, which is broken for anyone who does not scroll.
+  const sign = page.getByRole('button', { name: 'Sign and continue' })
+  await expect(sign).toBeEnabled()
+
+  // Consent and signature are separate acts; missing either is a named error.
+  await sign.click()
+  await expect(page.getByRole('main').getByRole('alert')).toBeVisible()
+
+  await page.getByRole('checkbox').first().check()
+  await page.getByLabel('Type your full name to sign').fill('AR')
+  await sign.click()
+  await expect(page.getByRole('main').getByRole('alert')).toContainText('Ada Renter')
+
+  await page.getByLabel('Type your full name to sign').fill('Ada Renter')
+  await sign.click()
+  await expect(page.getByRole('heading', { name: 'Payment' })).toBeVisible()
 })
 
 test('an unknown checkout link says so and charges nothing', async ({ page }) => {

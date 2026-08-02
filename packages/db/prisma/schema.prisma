@@ -793,11 +793,43 @@ model Document {
   /// something a mis-click removes.
   deletedAt   DateTime?    @db.Timestamptz(6)
 
-  facility Facility @relation(fields: [facilityId], references: [id], onDelete: Restrict)
+  facility  Facility           @relation(fields: [facilityId], references: [id], onDelete: Restrict)
+  signature DocumentSignature?
 
   @@index([facilityId, type])
   @@index([subjectType, subjectId])
   @@map("document")
+}
+
+/// PRD 01 FR-4.2. The evidence that someone signed a specific document.
+///
+/// E-SIGN/UETA does not ask for a picture of a signature; it asks whether the
+/// signer consented to do business electronically, whether the record is
+/// attributable to them, and whether it has been retained unaltered. So this
+/// stores the consent, the attribution and the hash of exactly what was on
+/// screen — not an image.
+model DocumentSignature {
+  id                           String   @id @default(cuid())
+  documentId                   String   @unique
+  /// Typed name, exactly as the signer entered it. Compared against the name on
+  /// the lease at signing time, not normalised afterwards.
+  typedName                    String
+  /// Separate from the signature itself: consent to transact electronically is
+  /// its own affirmative act under E-SIGN, not something the signature implies.
+  consentedToElectronicRecords Boolean
+  /// What the signer's browser reported. Best-effort attribution, not identity.
+  ipAddress                    String?
+  userAgent                    String?
+  /// The hash of the document as rendered at the moment of signing. If the
+  /// stored document ever stops matching this, the signature no longer covers
+  /// what is on file — which is the entire point of recording it separately
+  /// from Document.contentHash.
+  signedContentHash            String
+  signedAt                     DateTime @default(now()) @db.Timestamptz(6)
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Restrict)
+
+  @@map("document_signature")
 }
 
 enum DocumentType {

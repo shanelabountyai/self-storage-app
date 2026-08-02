@@ -40,10 +40,10 @@
     // writing "file 2.ts" beside "file.ts". Inside .next/types that produces a
     // duplicate of every generated route type and fails `tsc` with TS2300 /
     // TS6200 — a failure that has nothing to do with the code and reappears
-    // after any build. Excluding the pattern is cheaper than deleting them by
-    // hand every time.
-    "**/* 2.ts",
-    "**/* 2.tsx",
-    "**/* 2.d.ts"
+    // after any build. The `?` matches any single character, because the
+    // counter keeps going: " 3.ts" showed up once " 2.ts" was excluded.
+    "**/* ?.ts",
+    "**/* ?.tsx",
+    "**/* ?.d.ts"
   ]
 }

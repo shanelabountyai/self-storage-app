@@ -486,6 +486,34 @@ No JavaScript PDF library available here emits tagged PDFs. `pdf-lib`, `pdfkit` 
 
 ---
 
+### B-024 — Lease template & e-signature ✅ `PENDING`
+
+The lease, the plain-language summary, and the signature evidence E-SIGN actually asks for.
+
+**The lease text is a draft and is not legal advice**, stated in the file itself rather than left implicit. D-10 makes Texas the default and everything per-state configurable. Three things are named as outstanding before it is used against a real tenant: the lien and notice language (Texas Property Code ch. 59), the rate-increase notice period (PRD 01 §10, still open), and the protection clause D-17's auto-enrolment depends on. Generated text acquires authority by looking official; saying so in the source is the cheapest guard against that.
+
+**Decided: signature evidence is consent, attribution and a hash — not a picture.** E-SIGN/UETA asks whether the signer agreed to transact electronically, whether the record is attributable to them, and whether it has been retained unaltered. So `DocumentSignature` stores the typed name, the consent as its own boolean, the IP and user agent as best-effort attribution, and **the hash of the document as rendered at the moment of signing**.
+
+That last field is separate from `Document.contentHash` on purpose, and the difference is the whole point: a check against the document's own current hash is fooled by anyone who updates the content and the hash together. Comparing against the hash captured *at signing* catches it. There is a test that does exactly that — rewrites both fields — and asserts `altered_since_signing`.
+
+**Consent is its own affirmative act**, unticked by default, with its own error message. It is never folded into the signature field and never expressed as a disabled button.
+
+**The signature control is not gated on scrolling.** §6.4 is explicit that "scrolled to bottom" is hostile, and it is simply broken for a screen-reader user who never scrolls at all. The gate is that the plain-language summary has rendered — which it always has, because it is ordinary page content above the full text rather than a tooltip or a collapsed panel. The lease itself renders as normal scrollable content, not a fixed-height box with hidden overflow and not an image.
+
+**Typed-name matching accepts a real signer and rejects a non-signature.** An included or omitted middle name passes; "AR", "yes" and "I agree" do not. Rejecting a genuine variant would send someone round a loop for no benefit; accepting "yes" would put a worthless mark on a legal document.
+
+**The hash is re-read from the stored document, never taken from the form.** A hash passed through a form is a hash the signer could choose. Signing is also refused outright if the stored document has already drifted from its own hash — a signature over a document that changed beforehand is worse than no signature.
+
+**Found — a stored document is not an embeddable fragment.** `renderDocument` produces a complete document (doctype, `<html lang>`, `<title>`, `<h1>`) because that is what gets stored, hashed, signed and emailed. Injecting that into a `<div>` leaves the markup in the DOM but unrendered — the headings were findable by role and invisible to `toBeVisible()`, which is a bug that presents as "the element exists but is not visible" and cost real time here. `RenderedDocument` now carries `bodyHtml` alongside `html`, with the distinction documented at the type.
+
+**Also found — Playwright's `name` matcher is a case-insensitive substring.** `{ name: 'Continue' }` also matches "This is right — continue" and "Sign and continue", so a click intended for one step could re-fire the previous step's button. Every checkout step click is now `exact: true` with an awaited heading between steps.
+
+**Verified:** 534 unit tests (11 new), 214 e2e (1 new, walking all five steps to payment), typecheck, lint and build clean. `DocumentSignature` joined the annotated facility-scoping exemptions — it is scoped through the document it signs.
+
+**Left behind:** the signed lease is **not emailed** (FR-4.2 asks for it) — comms is **B-030**/**B-031**, which is now the missing piece for the fourth consecutive item. There is no lease-template management UI: the template is a constant, and PRD 02 US-15's admin-managed templates want a real editor plus versioning, which is its own work — a facility cannot yet vary its lease. The signature is recorded against the checkout session's document; **B-026** links it to the `Lease` row when one exists. The renter cannot download a copy from the page yet, and the PDF question from **B-023** stands.
+
+---
+
 ## Feature PRDs added mid-build
 
 ### PRD 09 — Support impersonation ("log in as") 📋 specced, not built
