@@ -614,7 +614,7 @@ The `AccessGrant` state machine, the gate-command outbox, and the simulated adap
 
 ---
 
-### B-029 — Gate code issuance on move-in + confirmation screen, and the authorized-access list ✅ `<pending>`
+### B-029 — Gate code issuance on move-in + confirmation screen, and the authorized-access list ✅ `71e745b`
 
 Gate codes are now encrypted at rest and issued synchronously at payment, not just handed back once and forgotten. The confirmation screen shows a real code, address and today's hours instead of the "texted within 15 minutes" placeholder every prior item since B-026 had to leave in. `AccessGrant` widened to a real holder — tenant or a new named authorized person — with its own service, so US-9's list is staff-manageable end to end even though B-038 (the screen that will call it) does not exist yet.
 
