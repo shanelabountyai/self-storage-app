@@ -219,6 +219,53 @@ enum ConsentState {
   revoked
 }
 
+// ------------------------------------------------------------- comms (PRD 05) ----
+
+enum MessageChannel {
+  email
+  sms
+}
+
+/// PRD 05 §6.1. Drives the consent/suppression matrix: marketing needs consent
+/// and a working unsubscribe; transactional/operational do not, but a hard
+/// bounce or complaint still stops delivery on any channel.
+enum MessageClassification {
+  transactional
+  operational
+  marketing
+}
+
+/// PRD 05 FR-7. Only `email_only` is exercised in MVP (email-first, B-030);
+/// the SMS-bearing policies land with Twilio in Phase 2 (B-032+).
+enum ChannelPolicy {
+  email_only
+  sms_only
+  both
+  sms_preferred_email_fallback
+}
+
+/// PRD 05 FR-14 status machine. `bounced`/`delivered` are webhook-driven and
+/// arrive with FR-14/15 (a later item); B-030 writes up to `sent`.
+enum MessageStatus {
+  queued
+  sent
+  delivered
+  bounced
+  failed
+  suppressed
+  cancelled
+}
+
+enum SuppressionReason {
+  unsubscribe
+  stop
+  hard_bounce
+  complaint
+  manual
+  /// The org-level kill switch was on when this send was attempted (FR-20).
+  kill_switch
+}
+
 enum StaffUserStatus {
   active
   suspended
@@ -310,6 +357,9 @@ model Facility {
   taxComponents          TaxComponent[]
   feeSchedules           FeeSchedule[]
   unitTypeRates          UnitTypeRate[]
+  messageTemplates       MessageTemplate[]
+  notificationRules      NotificationRule[]
+  messages               Message[]
 
   @@index([state])
   @@map("facility")
@@ -505,6 +555,7 @@ model Tenant {
   checkoutSessions CheckoutSession[]
   leads            Lead[]
   consents         Consent[]
+  messages         Message[]
 
   @@index([lastName, firstName])
   @@map("tenant")
@@ -1319,6 +1370,137 @@ model Consent {
   @@map("consent")
 }
 
+// ------------------------------------------------------------- comms (PRD 05) ----
+//
+// The single outbound messaging service (B-030). Producers emit domain events;
+// nothing else sends. A rule maps an event to a template, channel and policy;
+// the pipeline resolves recipient → suppression/consent → render → provider →
+// `Message` log, idempotent by construction (FR-16). Rules and templates are
+// data (FR-2), seeded per event/facility by the items that own the content
+// (B-031 move-in path, later billing/dunning items) — B-030 ships the engine,
+// not the copy.
+
+/// PRD 05 §5.1. Versioned email/SMS template content, org default or per-facility
+/// override. New version = new row, never edited in place; the send records the
+/// version that rendered it (FR-21).
+model MessageTemplate {
+  id                  String                @id @default(cuid())
+  /// Stable identifier the rules reference, e.g. "move_in_welcome".
+  key                 String
+  channel             MessageChannel
+  classification      MessageClassification
+  /// null = org-level default; set = per-facility override.
+  facilityId          String?
+  version             Int                   @default(1)
+  active              Boolean               @default(true)
+  /// Email subject; null for SMS.
+  subject             String?
+  /// Email HTML body; null for SMS (which uses `bodyText` only).
+  bodyHtml            String?
+  /// Email plaintext part or the SMS body. Always present.
+  bodyText            String
+  /// Merge fields the render must have a non-empty value for, or it fails loudly
+  /// and blocks the send (FR-9, inherits PRD 02 FR-6).
+  requiredMergeFields String[]
+  createdAt           DateTime              @default(now()) @db.Timestamptz(6)
+
+  facility Facility? @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+
+  @@unique([key, channel, facilityId, version])
+  @@index([key, channel, facilityId, active])
+  @@map("message_template")
+}
+
+/// PRD 05 FR-2. Event → template/channel/policy mapping, as data. Org default or
+/// per-facility override; the facility-specific rule for a template key wins.
+model NotificationRule {
+  id             String                @id @default(cuid())
+  /// Catalog event name (packages/core/events/catalog.ts) that triggers this.
+  event          String
+  templateKey    String
+  channel        MessageChannel
+  channelPolicy  ChannelPolicy         @default(email_only)
+  classification MessageClassification
+  /// Predicate keys re-evaluated at send time; if any holds, the send is
+  /// skipped as stale (FR-18). Resolved by the skip-condition registry.
+  skipConditions String[]
+  /// Send-time offset the comms service owns within the day (FR-3). 0 = prompt.
+  delayMinutes   Int                   @default(0)
+  /// null = org default; set = per-facility override.
+  facilityId     String?
+  active         Boolean               @default(true)
+  createdAt      DateTime              @default(now()) @db.Timestamptz(6)
+
+  facility Facility? @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+
+  @@index([event, active])
+  @@index([facilityId])
+  @@map("notification_rule")
+}
+
+/// PRD 05 FR-21. One send attempt's whole lifecycle, append-only evidence.
+/// `eventId`/`ruleId`/`templateKey`/`templateVersion` are snapshotted as plain
+/// columns, not FKs, so the log outlives a pruned event or an edited rule.
+model Message {
+  id                String                @id @default(cuid())
+  /// FR-16 hard invariant: hash(eventId, ruleId, recipientId, channel). The
+  /// unique constraint is what makes "a tenant is never messaged twice for the
+  /// same event" true across retries, redeliveries and job restarts.
+  idempotencyKey    String                @unique
+  eventId           String
+  ruleId            String
+  templateKey       String
+  templateVersion   Int
+  classification    MessageClassification
+  channel           MessageChannel
+  recipientTenantId String?
+  facilityId        String?
+  /// The real destination at send time. Masked in admin views (CN-18); stored
+  /// whole because the log is the delivery evidence.
+  toAddress         String
+  subjectSnapshot   String?
+  bodySnapshot      String
+  status            MessageStatus         @default(queued)
+  /// Which consent record authorised an SMS (FR-21). Null for email.
+  consentId         String?
+  suppressionReason SuppressionReason?
+  providerMessageId String?
+  error             String?
+  sentAt            DateTime?             @db.Timestamptz(6)
+  createdAt         DateTime              @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime              @updatedAt @db.Timestamptz(6)
+
+  recipient Tenant?   @relation(fields: [recipientTenantId], references: [id], onDelete: SetNull)
+  facility  Facility? @relation(fields: [facilityId], references: [id], onDelete: SetNull)
+
+  @@index([eventId])
+  @@index([recipientTenantId, createdAt])
+  @@index([facilityId, createdAt])
+  @@index([status])
+  @@map("message")
+}
+
+/// PRD 05 §5.1 / CN-20. The shared suppression list (marketing + comms). One
+/// entry per channel × address; the pipeline refuses to send to a suppressed
+/// address per the classification matrix (hard bounce/complaint block all;
+/// unsubscribe/manual block marketing; STOP blocks SMS).
+model Suppression {
+  id               String            @id @default(cuid())
+  channel          MessageChannel
+  /// Normalised: lower-cased email, or the phone as stored. Unique per channel.
+  address          String
+  reason           SuppressionReason
+  note             String?
+  createdByStaffId String?
+  createdAt        DateTime          @default(now()) @db.Timestamptz(6)
+
+  createdByStaff StaffUser? @relation(fields: [createdByStaffId], references: [id], onDelete: SetNull)
+
+  @@unique([channel, address])
+  @@index([address])
+  @@map("suppression")
+}
+
 // ----------------------------------------------- documents, staff, audit ----
 
 /// Generated delinquency, lien and rate-change documents. Immutable once
@@ -1576,8 +1758,9 @@ model StaffUser {
   updatedAt       DateTime        @updatedAt @db.Timestamptz(6)
   deletedAt       DateTime?       @db.Timestamptz(6)
 
-  auditLogs   AuditLog[]
-  assignments StaffFacilityAssignment[]
+  auditLogs    AuditLog[]
+  assignments  StaffFacilityAssignment[]
+  suppressions Suppression[]
 
   @@map("staff_user")
 }

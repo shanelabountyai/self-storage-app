@@ -3,6 +3,7 @@ import { expireReservations } from '@/lib/reservations/reserve'
 import { expireCheckoutSessions } from '@/lib/checkout/session'
 import { drainGateCommands } from '@/lib/access/service'
 import { provisionAccessForLease } from '@/lib/access/provision'
+import { processCommsEvent } from '@/lib/comms/service'
 
 // Consumer and job registration. The machinery is B-006's; the things that use
 // it arrive with their own backlog items: reservation expiry (B-018, below),
@@ -21,6 +22,30 @@ export const CONSUMERS: readonly Consumer[] = [
     events: ['lease.moved_in'],
     handle: async ({ event }) => {
       await provisionAccessForLease(event.entityId)
+    },
+  },
+  {
+    // PRD 05 FR-1 (B-030). The single outbound messaging service: every event
+    // that any notification rule maps to routes through here. Rules are data
+    // (FR-2), so this subscribes to the full set of comms-relevant events the
+    // PRD specifies (§5.2) and no-ops the ones that have no rule yet — adding a
+    // rule needs no code change here. Idempotent per (event, rule, recipient,
+    // channel), so at-least-once redelivery never double-sends.
+    name: 'comms.dispatch',
+    events: [
+      'lease.moved_in',
+      'lease.moved_out',
+      'payment.succeeded',
+      'payment.failed',
+      'invoice.created',
+      'invoice.due_soon',
+      'invoice.due_today',
+      'delinquency.day_reached',
+      'delinquency.stage_changed',
+      'access.restored',
+    ],
+    handle: async ({ event }) => {
+      await processCommsEvent(event)
     },
   },
 ]
