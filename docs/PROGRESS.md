@@ -638,7 +638,7 @@ Gate codes are now encrypted at rest and issued synchronously at payment, not ju
 
 ---
 
-### B-030 — Comms core: the single outbound messaging service ✅ `<pending>`
+### B-030 — Comms core: the single outbound messaging service ✅ `0fdca2e`
 
 The engine every other module has been emitting events at since B-019: one place that turns a domain event into a sent, logged, idempotent message. B-030 ships the pipeline and the data model, not the copy — the rules and templates that light it up are seeded by the items that own the content (B-031's move-in path next, billing/dunning later). Email-only (Resend); SMS is Phase 2. Nothing else in the codebase sends; producers emit, this consumes.
 
