@@ -1,6 +1,7 @@
 import { type Prisma, prisma } from '@storage/db'
 import { emitEvent } from '@storage/core/events'
 import { recomputeUnitStatus } from '@/lib/admin/units'
+import { provisionAccessForLease } from '@/lib/access/provision'
 import { amountDueToday } from './payment'
 import { sessionById } from './session'
 
@@ -163,16 +164,31 @@ async function openingLedger(
 /// FR-4.5's downstream work: the gate code, the emails.
 ///
 /// Deliberately separate from `provisionMoveIn` and deliberately unable to fail
-/// it. Neither exists yet — the access-control service is B-027 and comms is
-/// B-030 — so this emits the event they will consume and returns. When they do
-/// exist, a failure here becomes a Task (B-095) and still never a dead end for
-/// someone who has already paid.
-export async function requestDownstream(leaseId: string, facilityId: string): Promise<void> {
-  await emitEvent({
-    name: 'access.granted',
-    facilityId,
-    entityType: 'Lease',
-    entityId: leaseId,
-    payload: { reason: 'move_in' },
+/// it. Called directly rather than only through the `lease.moved_in` consumer
+/// (registry.ts) that `provisionMoveIn` also queues: `dispatchEvents` only
+/// runs off the cron tick (api/cron/route.ts), and US-501 wants the code
+/// issued immediately, not on the next scheduled pass. `provisionAccessForLease`
+/// is idempotent by the credential it would create, so that consumer
+/// redelivering this is a safety net, not a second code. Comms (B-030) has
+/// nothing to call yet; a failure here becomes a Task (B-095) once it does,
+/// same as any other never-a-dead-end downstream step.
+export async function requestDownstream(leaseId: string): Promise<void> {
+  await provisionAccessForLease(leaseId)
+}
+
+/// The lease a now-provisioned session became. The confirmation page's own
+/// lookup — provisioning itself never needs this, since the transaction above
+/// already has `lease.id` in hand.
+export async function leaseIdForSession(sessionId: string): Promise<string | null> {
+  const row = await prisma.checkoutSession.findUnique({
+    where: { id: sessionId },
+    select: { tenantId: true, unitId: true },
   })
+  if (!row?.tenantId || !row.unitId) return null
+
+  const lease = await prisma.lease.findFirst({
+    where: { unitId: row.unitId, tenantId: row.tenantId, status: { not: 'ended' } },
+    select: { id: true },
+  })
+  return lease?.id ?? null
 }

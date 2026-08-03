@@ -1,8 +1,20 @@
-import { randomBytes, randomInt } from 'node:crypto'
+import { randomInt } from 'node:crypto'
 import { type Prisma, prisma } from '@storage/db'
 import { canTransition, type GrantCause, type GrantState } from '@storage/core/access'
 import { emitEvent } from '@storage/core/events'
+import { recordAudit } from '@storage/core/audit'
+import { requirePermission } from '@/lib/rbac/authorize'
+import type { Actor } from '@/lib/rbac/actor'
+import { toAuditActor } from '@/lib/rbac/audit-actor'
 import { adapterFor } from './adapter'
+import {
+  accessCodeEncryptionKey,
+  CodeNotRevealableError,
+  decryptCode,
+  encryptCode,
+  hashCode,
+  unrevealableRef,
+} from './secret'
 
 // PRD 03 FR-1 / FR-2 / FR-3. The access-control service.
 
@@ -25,49 +37,51 @@ export function generateCode(): string {
   }
 }
 
-/// What we store instead of the code.
-///
-/// SR-2 makes viewing the real code a separate, audited permission, so the
-/// credential row holds a reference and never the digits. Until a secret store
-/// exists (B-028), the reference is all there is — which means the plaintext
-/// code exists only in the moment it is generated and in whatever we send to
-/// the controller.
-function credentialRef(): string {
-  // randomBytes rather than randomInt: `randomInt` caps its range at 2^48, and
-  // a reference wants more entropy than that without needing to be a number.
-  return `pin:${randomBytes(16).toString('hex')}`
-}
-
 export type EnsureGrantResult = {
   grantId: string
   state: GrantState
   created: boolean
 }
 
-/// One grant per tenant × facility (FR-1). A tenant with two units at one site
-/// still holds one grant; the same tenant at two sites holds two.
-///
-/// B-029 widens this to one grant per *credential holder* — the tenant is one
-/// holder and each authorized person on their lease is another. The unique
-/// constraint is on (facilityId, tenantId) today, which is exactly that shape
-/// with a single holder.
+/// FR-1: one grant per credential holder × facility — the tenant is one
+/// holder, and each authorized person on one of their leases (US-9) is
+/// another. Exactly one of `tenantId`/`authorizedPersonId` is set; the DB CHECK
+/// constraint (migration 20260802110000) backstops that at write time too.
+export type AccessHolder = { tenantId: string } | { authorizedPersonId: string }
+
+export async function ensureGrantForHolder(
+  facilityId: string,
+  holder: AccessHolder,
+  cause: GrantCause,
+  client: Prisma.TransactionClient | typeof prisma = prisma,
+): Promise<EnsureGrantResult> {
+  const existing =
+    'tenantId' in holder
+      ? await client.accessGrant.findUnique({
+          where: { facilityId_tenantId: { facilityId, tenantId: holder.tenantId } },
+        })
+      : await client.accessGrant.findUnique({
+          where: { authorizedPersonId: holder.authorizedPersonId },
+        })
+  if (existing) {
+    return { grantId: existing.id, state: existing.state as GrantState, created: false }
+  }
+
+  const grant = await client.accessGrant.create({
+    data: { facilityId, ...holder, state: 'pending', stateCause: cause },
+  })
+  return { grantId: grant.id, state: 'pending', created: true }
+}
+
+/// A tenant with two units at one site still holds one grant; the same tenant
+/// at two sites holds two.
 export async function ensureGrant(
   facilityId: string,
   tenantId: string,
   cause: GrantCause,
   client: Prisma.TransactionClient | typeof prisma = prisma,
 ): Promise<EnsureGrantResult> {
-  const existing = await client.accessGrant.findUnique({
-    where: { facilityId_tenantId: { facilityId, tenantId } },
-  })
-  if (existing) {
-    return { grantId: existing.id, state: existing.state as GrantState, created: false }
-  }
-
-  const grant = await client.accessGrant.create({
-    data: { facilityId, tenantId, state: 'pending', stateCause: cause },
-  })
-  return { grantId: grant.id, state: 'pending', created: true }
+  return ensureGrantForHolder(facilityId, { tenantId }, cause, client)
 }
 
 export type TransitionResult =
@@ -136,20 +150,50 @@ export async function transitionGrant(
   return { ok: true, state: to, changed: true }
 }
 
+/// FR-2's uniqueness scope: no two active codes at the same facility. Bounded
+/// rather than infinite — the 6-digit keyspace minus the handful of banned
+/// patterns is around 9.9 million, so this many collisions in a row means a
+/// facility is nearly saturated, not bad luck, and a caller needs to know
+/// rather than spin forever.
+const MAX_CODE_ATTEMPTS = 20
+
+/// Exported (rather than kept private) so its retry-and-give-up behavior is
+/// directly testable without controlling `randomInt`'s output; `codeGenerator`
+/// defaults to the real policy and only tests pass anything else.
+export async function generateUniqueCode(
+  facilityId: string,
+  client: Prisma.TransactionClient | typeof prisma = prisma,
+  codeGenerator: () => string = generateCode,
+): Promise<{ code: string; codeHash: string }> {
+  for (let attempt = 0; attempt < MAX_CODE_ATTEMPTS; attempt++) {
+    const code = codeGenerator()
+    const codeHash = hashCode(code)
+    const collision = await client.accessCredential.findFirst({
+      where: { facilityId, codeHash, state: 'active' },
+      select: { id: true },
+    })
+    if (!collision) return { code, codeHash }
+  }
+  throw new Error(`No unique gate code available for facility ${facilityId} after ${MAX_CODE_ATTEMPTS} attempts`)
+}
+
 export type IssuedCredential = { credentialId: string; code: string }
 
 /// Issues a gate code for a grant and queues it for the controller.
 ///
-/// Returns the plaintext code exactly once, to its caller. It is never stored
-/// and never logged — the credential row holds a reference (SR-2), so this
-/// return value is the only chance to deliver it to the renter.
+/// Returns the plaintext code exactly once, to its caller, for immediate
+/// delivery (a confirmation screen, a counter receipt). The credential row
+/// itself stores it encrypted (`lib/access/secret.ts`) rather than as a bare
+/// reference, so a later, separately audited `revealCode()` can still recover
+/// it (SR-2) — never plaintext, never logged.
 export async function issueCredential(
   grantId: string,
   leaseId: string | null,
   client: Prisma.TransactionClient | typeof prisma = prisma,
 ): Promise<IssuedCredential> {
   const grant = await client.accessGrant.findUniqueOrThrow({ where: { id: grantId } })
-  const code = generateCode()
+  const { code, codeHash } = await generateUniqueCode(grant.facilityId, client)
+  const key = accessCodeEncryptionKey()
 
   const credential = await client.accessCredential.create({
     data: {
@@ -157,7 +201,8 @@ export async function issueCredential(
       grantId,
       leaseId,
       type: 'pin',
-      valueRef: credentialRef(),
+      valueRef: key ? encryptCode(code, key) : unrevealableRef(),
+      codeHash,
       state: 'active',
       syncStatus: 'pending',
     },
@@ -170,14 +215,54 @@ export async function issueCredential(
       credentialId: credential.id,
       type: 'set_credential',
       idempotencyKey: `credential:${credential.id}`,
-      // The code goes to the controller and nowhere else. It is not written to
-      // the credential row and must not reach a log line.
+      // Plaintext, because the controller needs the real digits — but it must
+      // not reach a log line, and command payloads are not audit-logged.
       payload: { code },
     },
     client,
   )
 
   return { credentialId: credential.id, code }
+}
+
+export type RevealedCode = { available: true; code: string } | { available: false; reason: string }
+
+/// SR-2: viewing a holder's actual code is a separate, audited action —
+/// distinct from issuing it, which already returned the plaintext once to its
+/// caller. `access.code_viewed` requires a reason code (audit catalog), same
+/// posture as any other look-behind-the-mask action.
+export async function revealCode(
+  actor: Actor,
+  credentialId: string,
+  reasonCode: string,
+): Promise<RevealedCode> {
+  const credential = await prisma.accessCredential.findUniqueOrThrow({ where: { id: credentialId } })
+  requirePermission(actor, 'access:view_codes', credential.facilityId)
+
+  const key = accessCodeEncryptionKey()
+  const result: RevealedCode = !key
+    ? { available: false, reason: 'No encryption key is configured for this environment.' }
+    : decryptOrUnavailable(credential.valueRef, key)
+
+  await recordAudit({
+    actor: toAuditActor(actor),
+    action: 'access.code_viewed',
+    entityType: 'AccessCredential',
+    entityId: credentialId,
+    facilityId: credential.facilityId,
+    reasonCode,
+  })
+
+  return result
+}
+
+function decryptOrUnavailable(valueRef: string, key: Buffer): RevealedCode {
+  try {
+    return { available: true, code: decryptCode(valueRef, key) }
+  } catch (err) {
+    if (err instanceof CodeNotRevealableError) return { available: false, reason: err.message }
+    throw err
+  }
 }
 
 async function enqueueCommand(

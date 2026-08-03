@@ -1,5 +1,6 @@
 import { prisma } from '@storage/db'
 import { ensureGrant, issueCredential, transitionGrant, drainGateCommands } from './service'
+import { accessCodeEncryptionKey, decryptCode } from './secret'
 
 // PRD 01 FR-4.5 / PRD 03 US-1. Giving a new tenant a way through the gate.
 
@@ -40,5 +41,30 @@ export async function provisionAccessForLease(leaseId: string): Promise<AccessPr
     grantId: grant.grantId,
     credentialId: credential.credentialId,
     code: credential.code,
+  }
+}
+
+/// US-501 step 7: the confirmation page's own read of the code it just had
+/// issued for it. Distinct from `revealCode()` in service.ts — that is staff
+/// auditing someone else's code; this is the renter reading the one just made
+/// for them, gated by the checkout token that already controls the whole
+/// page rather than a staff permission. Null whenever there is nothing to
+/// show (no key configured, no credential yet) — the page falls back to the
+/// "texted within 15 minutes" copy either way.
+export async function codeForLease(leaseId: string): Promise<string | null> {
+  const key = accessCodeEncryptionKey()
+  if (!key) return null
+
+  const credential = await prisma.accessCredential.findFirst({
+    where: { leaseId, state: 'active' },
+    orderBy: { createdAt: 'desc' },
+    select: { valueRef: true },
+  })
+  if (!credential) return null
+
+  try {
+    return decryptCode(credential.valueRef, key)
+  } catch {
+    return null
   }
 }

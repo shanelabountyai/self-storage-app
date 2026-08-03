@@ -117,13 +117,7 @@ export async function applyStripeEvent(event: Stripe.Event): Promise<void> {
       // paid; if this throws, the webhook retries and the money stays received.
       if (checkoutSessionId) {
         const result = await provisionMoveIn(checkoutSessionId)
-        if (result.ok && !result.alreadyProvisioned) {
-          const session = await prisma.checkoutSession.findUnique({
-            where: { id: checkoutSessionId },
-            select: { facilityId: true },
-          })
-          if (session) await requestDownstream(result.leaseId, session.facilityId)
-        }
+        if (result.ok) await requestDownstream(result.leaseId)
       }
       return
     }

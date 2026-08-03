@@ -18,6 +18,17 @@ import { buildLeaseDocument, existingLeaseDocument } from '@/lib/lease/build'
 import { renderTemplate } from '@/lib/documents/render'
 import { LEASE_SUMMARY_TEMPLATE } from '@/lib/lease/template'
 import { leaseValuesFor } from '@/lib/lease/build'
+import { leaseIdForSession } from '@/lib/checkout/provision'
+import { codeForLease } from '@/lib/access/provision'
+import {
+  directionsUrl,
+  facilityPath,
+  formatAddress,
+  formatTimeOfDay,
+  publicFacilityBySlug,
+  type PublicFacility,
+} from '@/lib/facility/public-facility'
+import type { DayOfWeek } from '@storage/core/facility-settings'
 import { advanceAction, extendLockAction, relockAction } from './actions'
 
 export const metadata = {
@@ -36,6 +47,22 @@ export const metadata = {
 
 function minutesLeft(lockExpiresAt: Date): number {
   return Math.max(0, Math.round((lockExpiresAt.getTime() - Date.now()) / 60_000))
+}
+
+/// The confirmation page's one line of hours: what matters right now, to
+/// someone about to drive to the unit they just paid for — not the full
+/// weekly table the facility page shows.
+function todaysGateHours(facility: PublicFacility): string {
+  if (!facility.gateHours) return 'Gate hours: call to confirm before you head over.'
+  const weekday = new Intl.DateTimeFormat('en-US', {
+    weekday: 'long',
+    timeZone: facility.timezone,
+  })
+    .format(new Date())
+    .toLowerCase() as DayOfWeek
+  const today = facility.gateHours[weekday]
+  if (today.closed) return 'The gate is closed today.'
+  return `Gate hours today: ${formatTimeOfDay(today.open)}–${formatTimeOfDay(today.close)}.`
 }
 
 export default async function CheckoutPage({
@@ -113,6 +140,18 @@ export default async function CheckoutPage({
 
   const payment = session.step === 'payment' ? await preparePayment(session) : null
   const due = session.step === 'payment' ? await amountDueToday(session) : null
+
+  // US-501 step 7: code, address, hours. `code` is null whenever there is
+  // nothing to reveal yet (no encryption key configured, or the synchronous
+  // issuance from the payment webhook hasn't landed) — the page falls back to
+  // "texted within 15 minutes" either way rather than distinguishing why.
+  let confirmationCode: string | null = null
+  let confirmationFacility = null
+  if (session.step === 'provisioned') {
+    const leaseId = await leaseIdForSession(session.id)
+    confirmationCode = leaseId ? await codeForLease(leaseId) : null
+    confirmationFacility = facility ? await publicFacilityBySlug(facility.slug) : null
+  }
 
   const remaining = minutesLeft(session.lockExpiresAt)
   const warning = !session.lockLapsed && remaining <= LOCK_WARNING_MINUTES
@@ -250,18 +289,55 @@ export default async function CheckoutPage({
                 Your unit is yours. We have emailed your lease and receipt to{' '}
                 <strong>{session.email}</strong>.
               </p>
-              {/* US-501 step 7 wants the gate code in large type with a copy
-                  button, the unit number, hours and a maps link. The gate code
-                  does not exist yet — access control is B-027 and B-029 — so
-                  this says what is true rather than showing a placeholder that
-                  looks like a code. */}
-              <p className="border-input mt-4 rounded-lg border p-4 text-pretty">
-                Your gate code will be texted to you within 15 minutes. If it has not arrived, call{' '}
-                <a href={`tel:${SITE.phone.href}`} className="font-medium underline underline-offset-4">
-                  {SITE.phone.display}
-                </a>{' '}
-                and we will read it to you — you can move in either way.
-              </p>
+
+              {/* US-501 step 7. `confirmationCode` is null whenever there is
+                  nothing to reveal yet (no encryption key configured, or
+                  issuance hasn't landed) — the fallback says what is true
+                  rather than showing a placeholder that looks like a code. */}
+              {confirmationCode ? (
+                <div className="border-input mt-4 rounded-lg border p-4">
+                  <p className="text-muted-foreground text-sm">Your gate code</p>
+                  <p className="mt-1 text-4xl font-semibold tracking-widest tabular-nums select-all">
+                    {confirmationCode}
+                  </p>
+                  {reservation?.unit?.number && (
+                    <p className="text-muted-foreground mt-2 text-sm">
+                      Unit {reservation.unit.number}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <p className="border-input mt-4 rounded-lg border p-4 text-pretty">
+                  Your gate code will be texted to you within 15 minutes. If it has not arrived,
+                  call{' '}
+                  <a href={`tel:${SITE.phone.href}`} className="font-medium underline underline-offset-4">
+                    {SITE.phone.display}
+                  </a>{' '}
+                  and we will read it to you — you can move in either way.
+                </p>
+              )}
+
+              {confirmationFacility && (
+                <div className="mt-4 text-sm text-pretty">
+                  <address className="not-italic">{formatAddress(confirmationFacility)}</address>
+                  <p className="mt-1">{todaysGateHours(confirmationFacility)}</p>
+                  <p className="mt-1">
+                    <a
+                      href={directionsUrl(confirmationFacility)}
+                      className="underline underline-offset-4"
+                    >
+                      Get directions
+                    </a>{' '}
+                    ·{' '}
+                    <Link
+                      href={facilityPath(confirmationFacility)}
+                      className="underline underline-offset-4"
+                    >
+                      Facility hours &amp; details
+                    </Link>
+                  </p>
+                </div>
+              )}
             </div>
           )}
 

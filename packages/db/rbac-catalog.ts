@@ -30,6 +30,10 @@ export const PERMISSIONS = [
   { key: 'delinquency:configure_timeline', name: 'Configure delinquency timelines', category: 'delinquency', description: 'Edit the per-facility delinquency timeline.' },
   { key: 'auctions:approve', name: 'Approve auction eligibility', category: 'delinquency', description: 'Mark a lien case eligible for auction.' },
 
+  // Access control (PRD 03 SR-2)
+  { key: 'access:manage_grants', name: 'Manage authorized access', category: 'access', description: 'Add and revoke people on a lease’s authorized-access list.' },
+  { key: 'access:view_codes', name: 'View gate codes', category: 'access', description: 'Reveal a tenant or authorized person’s actual gate code. Audited.' },
+
   // Administration
   { key: 'facility:settings', name: 'Edit facility settings', category: 'admin', description: 'Hours, fees, taxes, and facility configuration.' },
   { key: 'users:manage', name: 'Manage users and roles', category: 'admin', description: 'Create staff users and assign roles.' },
@@ -78,7 +82,14 @@ export const ROLES: readonly RoleSeed[] = [
     maxFeeWaiverCents: 0,
     maxRefundCents: 0,
     maxCreditCents: 0,
-    permissions: ['tenants:view', 'leases:move_in', 'payments:take', 'reports:operational'],
+    permissions: [
+      'tenants:view',
+      'leases:move_in',
+      'payments:take',
+      'access:manage_grants',
+      'access:view_codes',
+      'reports:operational',
+    ],
   },
   {
     key: 'bookkeeper',
@@ -112,6 +123,8 @@ export const ROLES: readonly RoleSeed[] = [
       'units:edit',
       'rates:street:propose',
       'delinquency:execute_step',
+      'access:manage_grants',
+      'access:view_codes',
       'reports:operational',
       'reports:financial',
     ],
@@ -141,6 +154,8 @@ export const ROLES: readonly RoleSeed[] = [
       'rates:tenant_increase',
       'delinquency:execute_step',
       'auctions:approve',
+      'access:manage_grants',
+      'access:view_codes',
       'facility:settings',
       'audit:view',
       'reports:operational',

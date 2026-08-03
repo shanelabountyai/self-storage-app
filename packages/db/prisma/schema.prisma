@@ -251,62 +251,65 @@ enum AuthTokenPurpose {
 // ------------------------------------------------------------ inventory ----
 
 model Facility {
-  id                 String         @id @default(cuid())
-  name               String
+  id                  String         @id @default(cuid())
+  name                String
   /// URL segment for location pages; SEO-sensitive, see PRD 04 OQ-7.
-  slug               String         @unique
-  status             FacilityStatus @default(active)
-  addressLine1       String
-  addressLine2       String?
-  city               String
+  slug                String         @unique
+  status              FacilityStatus @default(active)
+  addressLine1        String
+  addressLine2        String?
+  city                String
   /// Two-letter code. Drives compliance config; Texas is the seeded default (D-10).
-  state              String
-  postalCode         String
-  country            String         @default("US")
-  latitude           Float?
-  longitude          Float?
+  state               String
+  postalCode          String
+  country             String         @default("US")
+  latitude            Float?
+  longitude           Float?
   /// IANA name, e.g. "America/Chicago". All display time is derived from this.
-  timezone           String
-  phone              String?
-  email              String?
+  timezone            String
+  phone               String?
+  email               String?
   /// Weekly schedules land in B-008; held as JSON until that item defines them.
-  officeHours        Json?
-  gateHours          Json?
-  amenities          String[]       @default([])
+  officeHours         Json?
+  gateHours           Json?
+  amenities           String[]       @default([])
   /// US-44: protection **required** (a proof-of-insurance waiver is still
   /// permitted) vs optional. Texas practice is generally "required, or show
   /// proof", so that is the shipped default — configuration, not law (D-10).
-  protectionRequired Boolean        @default(true)
-  createdAt          DateTime       @default(now()) @db.Timestamptz(6)
-  updatedAt          DateTime       @updatedAt @db.Timestamptz(6)
+  protectionRequired  Boolean        @default(true)
+  /// US-9 AC1: default cap of 3 named people per lease, configurable.
+  authorizedAccessCap Int            @default(3)
+  createdAt           DateTime       @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime       @updatedAt @db.Timestamptz(6)
 
-  unitTypes             UnitType[]
-  units                 Unit[]
-  leases                Lease[]
-  invoices              Invoice[]
-  payments              Payment[]
-  ledgerEntries         LedgerEntry[]
-  accessGrants          AccessGrant[]
-  accessCredentials     AccessCredential[]
-  reservations          Reservation[]
-  checkoutSessions      CheckoutSession[]
-  protectionPlans       ProtectionPlan[]
-  protectionWaivers     ProtectionWaiver[]
-  documents             Document[]
-  gateCommands          GateCommand[]
-  accessEvents          AccessEvent[]
-  simulatedGateCodes    SimulatedGateCode[]
-  simulatedVendorEvents SimulatedVendorEvent[]
-  gateSimulatorConfig   GateSimulatorConfig?
-  leads                 Lead[]
-  notices               Notice[]
-  auditLogs             AuditLog[]
-  staffAssignments      StaffFacilityAssignment[]
-  domainEvents          DomainEvent[]
-  jobRuns               JobRun[]
-  taxComponents         TaxComponent[]
-  feeSchedules          FeeSchedule[]
-  unitTypeRates         UnitTypeRate[]
+  unitTypes              UnitType[]
+  units                  Unit[]
+  leases                 Lease[]
+  invoices               Invoice[]
+  payments               Payment[]
+  ledgerEntries          LedgerEntry[]
+  accessGrants           AccessGrant[]
+  accessCredentials      AccessCredential[]
+  reservations           Reservation[]
+  checkoutSessions       CheckoutSession[]
+  protectionPlans        ProtectionPlan[]
+  protectionWaivers      ProtectionWaiver[]
+  documents              Document[]
+  gateCommands           GateCommand[]
+  accessEvents           AccessEvent[]
+  simulatedGateCodes     SimulatedGateCode[]
+  simulatedVendorEvents  SimulatedVendorEvent[]
+  gateSimulatorConfig    GateSimulatorConfig?
+  authorizedAccessPeople AuthorizedAccessPerson[]
+  leads                  Lead[]
+  notices                Notice[]
+  auditLogs              AuditLog[]
+  staffAssignments       StaffFacilityAssignment[]
+  domainEvents           DomainEvent[]
+  jobRuns                JobRun[]
+  taxComponents          TaxComponent[]
+  feeSchedules           FeeSchedule[]
+  unitTypeRates          UnitTypeRate[]
 
   @@index([state])
   @@map("facility")
@@ -530,14 +533,15 @@ model Lease {
   deletedAt          DateTime?   @db.Timestamptz(6)
   version            Int         @default(0)
 
-  facility          Facility           @relation(fields: [facilityId], references: [id], onDelete: Restrict)
-  tenant            Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  unit              Unit               @relation(fields: [unitId], references: [id], onDelete: Restrict)
-  invoices          Invoice[]
-  ledgerEntries     LedgerEntry[]
-  accessCredentials AccessCredential[]
-  notices           Notice[]
-  rateChanges       LeaseRateChange[]
+  facility               Facility                 @relation(fields: [facilityId], references: [id], onDelete: Restrict)
+  tenant                 Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  unit                   Unit                     @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  invoices               Invoice[]
+  ledgerEntries          LedgerEntry[]
+  accessCredentials      AccessCredential[]
+  notices                Notice[]
+  rateChanges            LeaseRateChange[]
+  authorizedAccessPeople AuthorizedAccessPerson[]
 
   @@index([facilityId, status])
   @@index([tenantId])
@@ -1073,19 +1077,34 @@ model LedgerEntry {
 // --------------------------------------------------------------- access ----
 
 /// One grant per tenant × facility (PRD 03 FR-1).
+/// PRD 03 FR-1: "One AccessGrant per credential holder × facility — the
+/// tenant is one holder, and each authorized person on one of that tenant's
+/// leases is another (US-9)."
+///
+/// `tenantId` and `authorizedPersonId` are both nullable and exactly one is
+/// ever set — the holder is whichever one is not null. Prisma's schema
+/// language cannot express "exactly one of two columns," so that is a raw SQL
+/// CHECK constraint (migration 20260802110000_authorized_access), the same
+/// posture as this project's other cross-field invariants. Both FKs stay
+/// plain (not partial-unique) rather than a partial index, because Postgres
+/// already treats multiple NULLs in a unique/compound-unique index as
+/// distinct — a tenant grant and any number of authorized-person grants at
+/// the same facility never collide on `tenantId` being null.
 model AccessGrant {
-  id         String           @id @default(cuid())
-  facilityId String
-  tenantId   String
-  state      AccessGrantState @default(pending)
+  id                 String           @id @default(cuid())
+  facilityId         String
+  tenantId           String?
+  authorizedPersonId String?          @unique
+  state              AccessGrantState @default(pending)
   /// Why the grant last changed, e.g. "system:move_in", "staff:<userId>".
-  stateCause String?
-  createdAt  DateTime         @default(now()) @db.Timestamptz(6)
-  updatedAt  DateTime         @updatedAt @db.Timestamptz(6)
+  stateCause         String?
+  createdAt          DateTime         @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime         @updatedAt @db.Timestamptz(6)
 
-  facility    Facility           @relation(fields: [facilityId], references: [id], onDelete: Cascade)
-  tenant      Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  credentials AccessCredential[]
+  facility         Facility                @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  tenant           Tenant?                 @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  authorizedPerson AuthorizedAccessPerson? @relation(fields: [authorizedPersonId], references: [id], onDelete: Restrict)
+  credentials      AccessCredential[]
 
   @@unique([facilityId, tenantId])
   @@index([facilityId, state])
@@ -1098,9 +1117,23 @@ model AccessCredential {
   grantId    String
   leaseId    String?
   type       AccessCredentialType  @default(pin)
-  /// Never the plaintext gate code. Viewing the real code is a separate,
-  /// audited permission (PRD 03 SR-2) resolved through the secret store.
+  /// The gate code, encrypted at rest (AES-256-GCM, `lib/access/secret.ts`) —
+  /// never plaintext, and never merely an inert reference the way earlier
+  /// revisions of this comment described. PRD 03 SR-2 wants viewing the real
+  /// code to be a separate, audited, default-masked action; that is only
+  /// possible if something can eventually decrypt it back. Format is
+  /// `enc:<ciphertext>` when a real encryption key is configured, or
+  /// `unrevealable:<opaque>` when it is not (same degrade-honestly posture as
+  /// an unconfigured Stripe key) — `revealCode()` checks the tag rather than
+  /// guessing.
   valueRef   String
+  /// SHA-256 of the plaintext code, scoped to the facility. Not a secret in
+  /// itself — a 6-digit keyspace is brute-forceable regardless — it exists so
+  /// FR-2's "uniqueness scope" can be enforced with an indexed lookup instead
+  /// of decrypting every active credential at the facility on each issuance.
+  /// Nullable only because it postdates rows created before this column
+  /// existed; every credential `issueCredential` creates from here on sets it.
+  codeHash   String?
   state      AccessCredentialState @default(active)
   syncStatus HardwareSyncStatus    @default(pending)
   lastSyncAt DateTime?             @db.Timestamptz(6)
@@ -1114,7 +1147,48 @@ model AccessCredential {
 
   @@index([facilityId, state])
   @@index([grantId])
+  @@index([facilityId, codeHash])
   @@map("access_credential")
+}
+
+/// PRD 03 US-9. A named person on a lease who gets their own gate credential —
+/// never a copy of the tenant's code. Deliberately not a `Tenant`: they have no
+/// account, no email identifier, no lease of their own (FR-5.1's tenant
+/// concept does not fit them), and they exist only in the context of one
+/// lease.
+///
+/// Staff-managed at MVP (AC4) — there is no portal self-service caller yet,
+/// and none of these fields are customer-editable. The admin screen that
+/// manages this list is B-038's (the tenant/lease profile does not exist
+/// yet); this item ships the model and the service underneath it, the same
+/// split B-096 used for lease holds.
+model AuthorizedAccessPerson {
+  id               String    @id @default(cuid())
+  facilityId       String
+  leaseId          String
+  name             String
+  phone            String
+  relationship     String
+  /// Optional per AC1. A `WeeklySchedule`-shaped JSON when set, reusing the
+  /// validated shape facility hours already use (`parseWeeklySchedule`) rather
+  /// than inventing a second one. Nothing enforces it yet — gate-hours
+  /// enforcement including per-grant overrides is FR-5 / B-064's — so this is
+  /// captured and unread until that item exists.
+  accessHours      Json?
+  active           Boolean   @default(true)
+  createdByStaffId String
+  revokedAt        DateTime? @db.Timestamptz(6)
+  revokedByStaffId String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  facility Facility     @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  lease    Lease        @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+  grant    AccessGrant?
+
+  @@index([facilityId, leaseId])
+  @@map("authorized_access_person")
 }
 
 // ---------------------------------------------------- demand & marketing ----
