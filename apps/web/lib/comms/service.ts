@@ -1,5 +1,6 @@
 import { type Prisma, prisma } from '@storage/db'
 import type { DomainEvent, MessageClassification, SuppressionReason } from '@storage/db'
+import { codeForLease } from '@/lib/access/provision'
 import {
   commsEnabled,
   effectiveRecipient,
@@ -29,6 +30,7 @@ type RecipientFacility = {
   city: string
   state: string
   postalCode: string
+  timezone: string
 }
 
 type RecipientLease = {
@@ -37,13 +39,21 @@ type RecipientLease = {
   unit: { number: string; unitType: { name: string; widthFt: number; lengthFt: number } } | null
 }
 
+type RecipientReservation = { id: string; expiresAt: Date; unitType: { widthFt: number; lengthFt: number } }
+
 type Recipient = {
-  tenantId: string
+  /// Identifies the recipient for idempotency and `Message.recipientTenantId`.
+  /// Usually the tenant id — but a reservation is D-7's anonymous hold (no
+  /// account required), so this falls back to the reservation id, which is
+  /// just as stable an identity for "don't message this holder twice."
+  recipientKey: string
+  tenantId: string | null
   email: string | null
   firstName: string
   lastName: string
   facility: RecipientFacility | null
   lease: RecipientLease | null
+  reservation: RecipientReservation | null
 }
 
 const FACILITY_SELECT = {
@@ -55,14 +65,16 @@ const FACILITY_SELECT = {
   city: true,
   state: true,
   postalCode: true,
+  timezone: true,
 } as const
 
 /// Resolves who a message goes to from the event's entity. Keyed by entityType
 /// because that is what tells us how to reach the tenant — a lease points at one
-/// via `tenantId`, a payment via its own. B-030 ships the two resolvers its own
-/// events and B-031's move-in path need; later items (billing, delinquency) add
-/// Payment/Invoice resolvers when their rules arrive. An unhandled entity type
-/// is a no-op, not a crash — the event simply has no comms mapping yet.
+/// via `tenantId`, a reservation carries its own contact fields (D-7: no account
+/// required). B-030/B-031 ship the resolvers their own events need; later items
+/// (billing, delinquency) add Payment/Invoice resolvers when their rules arrive.
+/// An unhandled entity type is a no-op, not a crash — the event simply has no
+/// comms mapping yet.
 async function resolveRecipient(event: DomainEvent): Promise<Recipient | null> {
   if (event.entityType === 'Lease') {
     const lease = await prisma.lease.findUnique({
@@ -76,12 +88,14 @@ async function resolveRecipient(event: DomainEvent): Promise<Recipient | null> {
     })
     if (!lease) return null
     return {
+      recipientKey: lease.tenant.id,
       tenantId: lease.tenant.id,
       email: lease.tenant.email,
       firstName: lease.tenant.firstName,
       lastName: lease.tenant.lastName,
       facility: lease.facility,
       lease: { id: event.entityId, status: lease.status, unit: lease.unit },
+      reservation: null,
     }
   }
 
@@ -95,12 +109,41 @@ async function resolveRecipient(event: DomainEvent): Promise<Recipient | null> {
       ? await prisma.facility.findUnique({ where: { id: event.facilityId }, select: FACILITY_SELECT })
       : null
     return {
+      recipientKey: tenant.id,
       tenantId: tenant.id,
       email: tenant.email,
       firstName: tenant.firstName,
       lastName: tenant.lastName,
       facility,
       lease: null,
+      reservation: null,
+    }
+  }
+
+  if (event.entityType === 'Reservation') {
+    const reservation = await prisma.reservation.findUnique({
+      where: { id: event.entityId },
+      select: {
+        id: true,
+        tenantId: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        expiresAt: true,
+        facility: { select: FACILITY_SELECT },
+        unitType: { select: { widthFt: true, lengthFt: true } },
+      },
+    })
+    if (!reservation) return null
+    return {
+      recipientKey: reservation.id,
+      tenantId: reservation.tenantId,
+      email: reservation.email,
+      firstName: reservation.firstName,
+      lastName: reservation.lastName,
+      facility: reservation.facility,
+      lease: null,
+      reservation: { id: reservation.id, expiresAt: reservation.expiresAt, unitType: reservation.unitType },
     }
   }
 
@@ -112,6 +155,24 @@ function formatFacilityAddress(f: RecipientFacility): string {
   return `${street}, ${f.city}, ${f.state} ${f.postalCode}`
 }
 
+/// An absolute local date/time, never a countdown (PRD 01 §2.2.1 — a ticking
+/// clock in an email or on a page a renter may return to hours later reads as
+/// pressure, and drifts from reality the instant the render is stale anyway).
+function formatAbsoluteLocal(date: Date, timezone: string): string {
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(date)
+}
+
+function baseUrl(): string {
+  return (process.env.AUTH_URL ?? 'http://localhost:3000').replace(/\/$/, '')
+}
+
 /// FR-10 standard merge fields, built from current state — read here, at send
 /// time, not frozen at event time (FR-18). Fields that need billing
 /// (`balance.total`, `invoice.due_date`, `links.pay_now`) are intentionally
@@ -120,11 +181,10 @@ function formatFacilityAddress(f: RecipientFacility): string {
 /// than mailing a blank — which is exactly why those templates are not seeded
 /// until their data exists.
 function mergeContextFor(recipient: Recipient): MergeContext {
-  const base = (process.env.AUTH_URL ?? 'http://localhost:3000').replace(/\/$/, '')
   const context: MergeContext = {
     'tenant.first_name': recipient.firstName,
     'tenant.last_name': recipient.lastName,
-    'links.portal': `${base}/login`,
+    'links.portal': `${baseUrl()}/login`,
   }
   if (recipient.facility) {
     context['facility.name'] = recipient.facility.name
@@ -136,7 +196,64 @@ function mergeContextFor(recipient: Recipient): MergeContext {
     context['unit.number'] = recipient.lease.unit.number
     context['unit.size'] = `${widthFt}x${lengthFt}`
   }
+  if (recipient.reservation) {
+    const { widthFt, lengthFt } = recipient.reservation.unitType
+    context['unit.size'] = `${widthFt}x${lengthFt}`
+  }
   return context
+}
+
+/// PRD 05 FR-2's "extend the builder" seam: event-specific merge fields that
+/// need more than the recipient's own row (a gate code, a ledger amount, a
+/// reservation's hold time). Keyed by event name so an event with no extender
+/// just gets the standard context — most events (payment, delinquency) will
+/// add their own entry here without touching the pipeline itself.
+type ContextExtender = (event: DomainEvent, recipient: Recipient) => Promise<MergeContext>
+
+const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
+  // CN-7: the gate code line, only after the credential is actually issued —
+  // never a placeholder that looks like a code. `codeForLease` (B-029) already
+  // returns null whenever there is nothing to reveal (no key configured, or
+  // issuance genuinely hasn't landed yet), which is exactly the same fallback
+  // the confirmation page shows.
+  'lease.moved_in': async (event) => {
+    const code = await codeForLease(event.entityId)
+    const charge = await firstChargeLine(event.entityId)
+    return {
+      'access.gate_code_line': code
+        ? `Your gate code is ${code}.`
+        : 'Your gate code will be texted to you within 15 minutes.',
+      'billing.first_charge_line': charge,
+    }
+  },
+
+  'reservation.expiring_soon': async (_event, recipient) => {
+    if (!recipient.reservation || !recipient.facility) return {} as MergeContext
+    return {
+      'reservation.expires_at': formatAbsoluteLocal(recipient.reservation.expiresAt, recipient.facility.timezone),
+    }
+  },
+}
+
+/// The move-in charge line: what was actually charged today, and the ongoing
+/// rate. Reads `LedgerEntry` rather than an `Invoice` because nothing generates
+/// invoices yet (billing is B-044) — this is the one thing that does exist at
+/// move-in (B-026's opening ledger), read fresh rather than carried in the
+/// event payload (FR-18).
+async function firstChargeLine(leaseId: string): Promise<string> {
+  const lease = await prisma.lease.findUnique({
+    where: { id: leaseId },
+    select: { monthlyRateCents: true, billingDay: true },
+  })
+  const charge = await prisma.ledgerEntry.findFirst({
+    where: { leaseId, type: 'charge' },
+    orderBy: { occurredAt: 'asc' },
+    select: { amountCents: true },
+  })
+  if (!lease || !charge) return ''
+  const today = (charge.amountCents / 100).toFixed(2)
+  const monthly = (lease.monthlyRateCents / 100).toFixed(2)
+  return `You were charged $${today} today. After that, rent is $${monthly}/mo, billed on day ${lease.billingDay} of each month.`
 }
 
 type ResolvedRule = {
@@ -285,8 +402,13 @@ async function writeMessage(
   })
 }
 
-async function deliverForRule(event: DomainEvent, rule: ResolvedRule, recipient: Recipient): Promise<DeliveryOutcome> {
-  const idempotencyKey = messageIdempotencyKey(event.id, rule.id, recipient.tenantId, CHANNEL)
+async function deliverForRule(
+  event: DomainEvent,
+  rule: ResolvedRule,
+  recipient: Recipient,
+  context: MergeContext,
+): Promise<DeliveryOutcome> {
+  const idempotencyKey = messageIdempotencyKey(event.id, rule.id, recipient.recipientKey, CHANNEL)
 
   // Idempotent hit: a redelivery of an already-settled send does nothing. Only
   // queued/failed rows are re-attempted below.
@@ -363,7 +485,6 @@ async function deliverForRule(event: DomainEvent, rule: ResolvedRule, recipient:
     return 'failed'
   }
 
-  const context = mergeContextFor(recipient)
   let rendered
   try {
     rendered = renderEmail(template, context)
@@ -466,11 +587,115 @@ export async function processCommsEvent(event: DomainEvent): Promise<CommsResult
   // No recipient resolver for this entity type yet, or the entity is gone.
   if (!recipient) return result
 
+  // Computed once per event, not per rule — several rules on the same event
+  // would otherwise re-run the same extender query redundantly.
+  const extender = CONTEXT_EXTENDERS[event.name]
+  const context = { ...mergeContextFor(recipient), ...(extender ? await extender(event, recipient) : {}) }
+
   for (const rule of rules) {
-    const outcome = await deliverForRule(event, rule, recipient)
+    const outcome = await deliverForRule(event, rule, recipient, context)
     result[outcome] += 1
   }
   return result
+}
+
+// -- direct sends (bearer tokens that exist only once, in memory) ------------
+//
+// The rule/template pipeline above deliberately re-reads everything at send
+// time (FR-18) — which is exactly wrong for a magic link. A reservation's raw
+// token, a checkout session's resume token, an auth token: each exists only in
+// the moment it is minted and is never persisted in plaintext (same rule as
+// B-029's gate codes), so there is nothing for a later-run consumer to
+// re-derive. These sends have to happen synchronously, in the same call that
+// minted the token, with the token passed straight in — not through an event.
+//
+// `sendDirectEmail` reuses the pipeline's suppression check, provider and
+// Message log so these sends carry the same evidence and honour the same
+// kill switch/sandbox as everything else; it just skips the rule/template
+// resolution a caller who already has fully-composed content doesn't need.
+
+export type DirectEmailInput = {
+  /// Deterministic and caller-owned — e.g. `reservation-confirmation:{id}`.
+  /// There is no rule to derive one from, so the caller is the one thing that
+  /// knows "this must never be sent twice."
+  idempotencyKey: string
+  /// Free-form identifier stored as evidence (Message.eventId is a plain
+  /// snapshot column here, not a domain-event FK — see the model's own note).
+  eventId: string
+  templateKey: string
+  classification: MessageClassification
+  to: string
+  fromName: string
+  subject: string
+  html: string
+  text: string
+  facilityId?: string | null
+  recipientTenantId?: string | null
+}
+
+export type DirectSendResult = { sent: boolean; suppressed?: SuppressionReason }
+
+export async function sendDirectEmail(input: DirectEmailInput): Promise<DirectSendResult> {
+  // FR-20: the kill switch is a hard stop here too, with the same no-replay
+  // shape as the event pipeline — no Message row, so nothing to catch up on
+  // when it clears (the caller already returned its own success/failure to
+  // whatever triggered the send).
+  if (!commsEnabled()) return { sent: false }
+
+  const existing = await prisma.message.findUnique({
+    where: { idempotencyKey: input.idempotencyKey },
+    select: { status: true },
+  })
+  if (existing) return { sent: existing.status === 'sent' || existing.status === 'delivered' }
+
+  const address = input.to.toLowerCase()
+  const common = {
+    idempotencyKey: input.idempotencyKey,
+    eventId: input.eventId,
+    ruleId: 'direct',
+    templateKey: input.templateKey,
+    templateVersion: 1,
+    classification: input.classification,
+    channel: CHANNEL,
+    recipientTenantId: input.recipientTenantId ?? null,
+    facilityId: input.facilityId ?? null,
+    subjectSnapshot: input.subject,
+    bodySnapshot: input.text,
+  }
+
+  const suppression = await suppressionFor(address, input.classification)
+  if (suppression) {
+    await prisma.message.create({
+      data: { ...common, toAddress: address, status: 'suppressed', suppressionReason: suppression },
+    })
+    return { sent: false, suppressed: suppression }
+  }
+
+  const destination = effectiveRecipient(address)
+  await prisma.message.create({ data: { ...common, toAddress: destination, status: 'queued' } })
+
+  const provider = selectProvider()
+  const result = await provider.sendEmail({
+    to: destination,
+    from: fromAddress(input.fromName),
+    subject: input.subject,
+    html: input.html,
+    text: input.text,
+    idempotencyKey: input.idempotencyKey,
+  })
+
+  await prisma.message.update({
+    where: { idempotencyKey: input.idempotencyKey },
+    data: result.ok
+      ? { status: 'sent', providerMessageId: result.providerMessageId, sentAt: new Date() }
+      : { status: 'failed', error: result.message },
+  })
+
+  // No retry queue for a direct send (left behind, PROGRESS.md): a transient
+  // provider failure here does not throw, because the caller's primary action
+  // (the reservation, the checkout step) already succeeded and must not be
+  // undone by a mail blip. It is visible in the Message log as `failed`.
+  return { sent: result.ok }
 }
 
 // -- staff-facing helpers (thin; the management UIs are later items) ----------

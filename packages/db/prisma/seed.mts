@@ -1,5 +1,6 @@
 import { PrismaClient } from '../generated/client/index.js'
 import { PERMISSIONS, ROLES } from '../rbac-catalog.ts'
+import { COMMS_RULES, COMMS_TEMPLATES } from '../comms-catalog.ts'
 
 // Reference data, not demo data: roles and permissions must exist in every
 // environment for authorization to work at all. Idempotent, so it is safe to
@@ -43,6 +44,58 @@ async function main() {
     prisma.rolePermission.count(),
   ])
   console.info(`Seeded ${roles} roles, ${permissions} permissions, ${grants} grants.`)
+
+  // PRD 05 FR-2: org-default templates and the rules that reference them.
+  // facilityId: null throughout — a per-facility override is a row an admin
+  // screen (CN-16) writes later, never something this script touches.
+  for (const template of COMMS_TEMPLATES) {
+    // Not `upsert`: Prisma's generated compound-unique input does not accept a
+    // literal `null` for a nullable column in the key, even though the schema
+    // itself does (the same reason NotificationRule below uses findFirst).
+    const existing = await prisma.messageTemplate.findFirst({
+      where: { key: template.key, channel: 'email', facilityId: null, version: 1 },
+    })
+    const fields = {
+      classification: template.classification,
+      subject: template.subject,
+      bodyText: template.bodyText,
+      requiredMergeFields: template.requiredMergeFields,
+      active: true,
+    }
+    if (existing) {
+      await prisma.messageTemplate.update({ where: { id: existing.id }, data: fields })
+    } else {
+      await prisma.messageTemplate.create({
+        data: { key: template.key, channel: 'email', facilityId: null, version: 1, ...fields },
+      })
+    }
+  }
+
+  for (const rule of COMMS_RULES) {
+    const existing = await prisma.notificationRule.findFirst({
+      where: { event: rule.event, templateKey: rule.templateKey, channel: 'email', facilityId: null },
+    })
+    const fields = {
+      event: rule.event,
+      templateKey: rule.templateKey,
+      channel: 'email' as const,
+      facilityId: null,
+      classification: rule.classification,
+      skipConditions: rule.skipConditions ?? [],
+      active: true,
+    }
+    if (existing) {
+      await prisma.notificationRule.update({ where: { id: existing.id }, data: fields })
+    } else {
+      await prisma.notificationRule.create({ data: fields })
+    }
+  }
+
+  const [templates, rules] = await Promise.all([
+    prisma.messageTemplate.count({ where: { facilityId: null } }),
+    prisma.notificationRule.count({ where: { facilityId: null } }),
+  ])
+  console.info(`Seeded ${templates} org-default templates, ${rules} org-default rules.`)
 }
 
 main()

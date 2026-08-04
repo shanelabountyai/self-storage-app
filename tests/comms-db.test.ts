@@ -76,7 +76,7 @@ async function seedRule(input: {
 
 async function moveInEvent(): Promise<DomainEvent> {
   return prisma.domainEvent.create({
-    data: { name: 'lease.moved_in', entityType: 'Lease', entityId: leaseId, facilityId, payload: {} },
+    data: { name: 'test.lease_event', entityType: 'Lease', entityId: leaseId, facilityId, payload: {} },
   })
 }
 
@@ -145,7 +145,7 @@ describeDb('comms pipeline', () => {
   afterEach(async () => {
     vi.restoreAllMocks()
     await prisma.message.deleteMany({ where: { facilityId: { in: [facilityId, otherFacilityId] } } })
-    await prisma.notificationRule.deleteMany({ where: { OR: [{ facilityId }, { facilityId: null, event: { startsWith: 'lease.' } }] } })
+    await prisma.notificationRule.deleteMany({ where: { OR: [{ facilityId }, { templateKey: { contains: suffix } }] } })
     await prisma.messageTemplate.deleteMany({ where: { OR: [{ facilityId }, { facilityId: null }], key: { contains: suffix } } })
     await prisma.suppression.deleteMany({ where: { address: tenantEmail.toLowerCase() } })
     await prisma.domainEvent.deleteMany({ where: { facilityId } })
@@ -168,7 +168,7 @@ describeDb('comms pipeline', () => {
 
   it('renders and sends a message when a rule maps the event', async () => {
     await seedTemplate({ key: `welcome_${suffix}`, bodyText: 'Hi {{tenant.first_name}}, unit {{unit.number}} is yours.', requiredMergeFields: ['tenant.first_name', 'unit.number'] })
-    await seedRule({ event: 'lease.moved_in', templateKey: `welcome_${suffix}` })
+    await seedRule({ event: 'test.lease_event', templateKey: `welcome_${suffix}` })
 
     const result = await processCommsEvent(await moveInEvent())
     expect(result).toMatchObject({ sent: 1, paused: false })
@@ -182,7 +182,7 @@ describeDb('comms pipeline', () => {
 
   it('never sends twice for the same event — the hard invariant', async () => {
     await seedTemplate({ key: `welcome_${suffix}`, bodyText: 'Hi {{tenant.first_name}}' })
-    await seedRule({ event: 'lease.moved_in', templateKey: `welcome_${suffix}` })
+    await seedRule({ event: 'test.lease_event', templateKey: `welcome_${suffix}` })
     const event = await moveInEvent()
 
     await processCommsEvent(event)
@@ -202,7 +202,7 @@ describeDb('comms pipeline', () => {
 
   it('withholds to a hard-bounced address and records why', async () => {
     await seedTemplate({ key: `welcome_${suffix}`, bodyText: 'Hi {{tenant.first_name}}' })
-    await seedRule({ event: 'lease.moved_in', templateKey: `welcome_${suffix}` })
+    await seedRule({ event: 'test.lease_event', templateKey: `welcome_${suffix}` })
     await suppress({ channel: 'email', address: tenantEmail, reason: 'hard_bounce' })
 
     const result = await processCommsEvent(await moveInEvent())
@@ -217,7 +217,7 @@ describeDb('comms pipeline', () => {
     // CAN-SPAM's transactional carve-out: unsubscribe blocks marketing only.
     await suppress({ channel: 'email', address: tenantEmail, reason: 'unsubscribe' })
     await seedTemplate({ key: `txn_${suffix}`, classification: 'transactional', bodyText: 'Hi {{tenant.first_name}}' })
-    await seedRule({ event: 'lease.moved_in', templateKey: `txn_${suffix}`, classification: 'transactional' })
+    await seedRule({ event: 'test.lease_event', templateKey: `txn_${suffix}`, classification: 'transactional' })
 
     const txn = await processCommsEvent(await moveInEvent())
     expect(txn.sent).toBe(1)
@@ -230,7 +230,7 @@ describeDb('comms pipeline', () => {
     await prisma.domainEvent.deleteMany({ where: { facilityId } })
     sends = []
     await seedTemplate({ key: `mkt_${suffix}`, classification: 'marketing', bodyText: 'Deal {{tenant.first_name}}' })
-    await seedRule({ event: 'lease.moved_in', templateKey: `mkt_${suffix}`, classification: 'marketing' })
+    await seedRule({ event: 'test.lease_event', templateKey: `mkt_${suffix}`, classification: 'marketing' })
     const mkt = await processCommsEvent(await moveInEvent())
     expect(mkt.suppressed).toBe(1)
     expect(sends).toHaveLength(0)
@@ -238,7 +238,7 @@ describeDb('comms pipeline', () => {
 
   it('sends nothing while the kill switch is on', async () => {
     await seedTemplate({ key: `welcome_${suffix}`, bodyText: 'Hi {{tenant.first_name}}' })
-    await seedRule({ event: 'lease.moved_in', templateKey: `welcome_${suffix}` })
+    await seedRule({ event: 'test.lease_event', templateKey: `welcome_${suffix}` })
     process.env.COMMS_KILL_SWITCH = 'on'
 
     const result = await processCommsEvent(await moveInEvent())
@@ -250,7 +250,7 @@ describeDb('comms pipeline', () => {
   it('redirects every recipient to the sandbox inbox outside production', async () => {
     process.env.COMMS_SANDBOX_INBOX = 'catch-all@sandbox.test'
     await seedTemplate({ key: `welcome_${suffix}`, bodyText: 'Hi {{tenant.first_name}}' })
-    await seedRule({ event: 'lease.moved_in', templateKey: `welcome_${suffix}` })
+    await seedRule({ event: 'test.lease_event', templateKey: `welcome_${suffix}` })
 
     await processCommsEvent(await moveInEvent())
     expect(sends[0].to).toBe('catch-all@sandbox.test')
@@ -263,7 +263,7 @@ describeDb('comms pipeline', () => {
     // A billing template referencing a field that does not exist yet must not
     // mail a blank — it records a failure instead (FR-9).
     await seedTemplate({ key: `bill_${suffix}`, bodyText: 'You owe {{balance.total}}', requiredMergeFields: ['balance.total'] })
-    await seedRule({ event: 'lease.moved_in', templateKey: `bill_${suffix}` })
+    await seedRule({ event: 'test.lease_event', templateKey: `bill_${suffix}` })
 
     const result = await processCommsEvent(await moveInEvent())
     expect(result.failed).toBe(1)
@@ -278,7 +278,7 @@ describeDb('comms pipeline', () => {
     // tenant who has already moved out.
     await prisma.lease.update({ where: { id: leaseId }, data: { status: 'ended' } })
     await seedTemplate({ key: `welcome_${suffix}`, bodyText: 'Hi {{tenant.first_name}}' })
-    await seedRule({ event: 'lease.moved_in', templateKey: `welcome_${suffix}`, skipConditions: ['tenant_moved_out'] })
+    await seedRule({ event: 'test.lease_event', templateKey: `welcome_${suffix}`, skipConditions: ['tenant_moved_out'] })
 
     const result = await processCommsEvent(await moveInEvent())
     expect(result.cancelled).toBe(1)
@@ -292,7 +292,7 @@ describeDb('comms pipeline', () => {
   it('prefers a per-facility template override over the org default', async () => {
     await seedTemplate({ key: `welcome_${suffix}`, facilityId: null, bodyText: 'ORG {{tenant.first_name}}' })
     await seedTemplate({ key: `welcome_${suffix}`, facilityId, bodyText: 'FACILITY {{tenant.first_name}}' })
-    await seedRule({ event: 'lease.moved_in', templateKey: `welcome_${suffix}` })
+    await seedRule({ event: 'test.lease_event', templateKey: `welcome_${suffix}` })
 
     await processCommsEvent(await moveInEvent())
     const message = await prisma.message.findFirstOrThrow({ where: { facilityId } })
@@ -301,8 +301,8 @@ describeDb('comms pipeline', () => {
 
   it('prefers a per-facility rule over the org default for the same template key', async () => {
     await seedTemplate({ key: `welcome_${suffix}`, bodyText: 'Hi {{tenant.first_name}}' })
-    const orgRule = await seedRule({ event: 'lease.moved_in', templateKey: `welcome_${suffix}`, facilityId: null })
-    const facilityRule = await seedRule({ event: 'lease.moved_in', templateKey: `welcome_${suffix}`, facilityId })
+    const orgRule = await seedRule({ event: 'test.lease_event', templateKey: `welcome_${suffix}`, facilityId: null })
+    const facilityRule = await seedRule({ event: 'test.lease_event', templateKey: `welcome_${suffix}`, facilityId })
 
     const result = await processCommsEvent(await moveInEvent())
     expect(result.sent).toBe(1) // one message, not two — the override, not a duplicate

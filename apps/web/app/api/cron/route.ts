@@ -2,6 +2,7 @@ import { timingSafeEqual } from 'node:crypto'
 import { prisma } from '@storage/db'
 import { dispatchEvents } from '@storage/core/events'
 import { facilitiesDueAt, runJob } from '@storage/core/jobs'
+import { sendExpiringSoonReminders } from '@/lib/reservations/reserve'
 import { CONSUMERS, SCHEDULED_JOBS } from '@/lib/jobs/registry'
 
 // Vercel Cron hits this hourly (see vercel.json). Master PRD §5 lists Vercel
@@ -38,6 +39,12 @@ export async function GET(request: Request) {
   // more importantly a backlog of undelivered events is the more urgent debt.
   const dispatch = await dispatchEvents(CONSUMERS)
 
+  // PRD 01 US-801's 24h reminder is time-window-based, not a once-daily
+  // business-date job — a reservation can enter the window at any hour, so
+  // this runs every tick rather than through SCHEDULED_JOBS' once-per-day
+  // shape. `expiryReminderSentAt` (not a JobRun row) is what keeps it "once".
+  const reminders = await sendExpiringSoonReminders(now)
+
   const facilities = await prisma.facility.findMany({
     where: { status: 'active' },
     select: { id: true, timezone: true },
@@ -72,6 +79,7 @@ export async function GET(request: Request) {
     ranAt: now.toISOString(),
     durationMs: Date.now() - started,
     dispatch,
+    reminders,
     jobs: jobResults,
   })
 }

@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { formatRate } from '@/lib/format'
 import { SITE } from '@/lib/site-config'
 import { reservationByToken } from '@/lib/reservations/reserve'
-import { cancelReservationAction } from './actions'
+import { cancelReservationAction, completeMoveInFromReservationAction } from './actions'
 import { AdminForm } from '@/components/admin/form'
 
 export const metadata = {
@@ -143,6 +143,30 @@ export default async function ReservationPage({
         </a>{' '}
         if anything changes.
       </p>
+
+      {live && (
+        <section aria-labelledby="continue" className="mt-10">
+          <h2 id="continue" className="text-xl font-medium">
+            Ready to move in?
+          </h2>
+          <p className="text-muted-foreground mt-2 text-sm text-pretty">
+            Finish online in a few minutes — sign the lease, pay, and get your gate code today.
+          </p>
+          <AdminForm
+            action={completeMoveInFromReservationAction}
+            label="Complete move-in online"
+            className="mt-3"
+          >
+            <input type="hidden" name="token" value={token} />
+            <button
+              type="submit"
+              className="bg-primary text-primary-foreground inline-flex min-h-11 items-center rounded-md px-4 text-sm font-medium"
+            >
+              Complete move-in online
+            </button>
+          </AdminForm>
+        </section>
+      )}
 
       {live && (
         <section aria-labelledby="cancel" className="mt-10">

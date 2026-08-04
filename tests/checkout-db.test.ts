@@ -10,6 +10,7 @@ import {
   LOCK_MINUTES,
   nextStep,
   relock,
+  sendCheckoutResumeLink,
   sessionByToken,
   startCheckout,
   STEPS,
@@ -95,6 +96,7 @@ describeDb('checkout session', () => {
 
   afterAll(async () => {
     if (!hasDatabase) return
+    await prisma.message.deleteMany({ where: { facilityId } })
     await prisma.checkoutSession.deleteMany({ where: { facilityId } })
     await prisma.domainEvent.deleteMany({ where: { facilityId } })
     await prisma.reservation.deleteMany({ where: { facilityId } })
@@ -333,5 +335,56 @@ describeDb('checkout session', () => {
         },
       }),
     ).rejects.toThrow()
+  })
+
+  describe('sendCheckoutResumeLink (B-031 / PRD 05 CN-22)', () => {
+    it('sends a link that resolves back into this exact session', async () => {
+      const started = await start()
+      if (!started.ok) throw new Error('unreachable')
+      const email = `resume-link-${suffix}@example.com`
+      await advance(started.token, 'details', { email })
+
+      await sendCheckoutResumeLink(started.sessionId, started.token)
+
+      const message = await prisma.message.findUniqueOrThrow({
+        where: { idempotencyKey: `checkout-resume-link:${started.sessionId}` },
+      })
+      expect(message.status).toBe('sent')
+      expect(message.toAddress).toBe(email)
+      expect(message.bodySnapshot).toContain(started.token)
+
+      // The link is bare — no step encoded — because the session itself
+      // already resumes at whatever step it is on (B-020).
+      const resumed = await sessionByToken(started.token)
+      expect(resumed?.step).toBe('unit_assign')
+    })
+
+    it('is a no-op when the session has not captured an email yet', async () => {
+      const started = await start()
+      if (!started.ok) throw new Error('unreachable')
+
+      await sendCheckoutResumeLink(started.sessionId, started.token)
+
+      expect(
+        await prisma.message.findUnique({
+          where: { idempotencyKey: `checkout-resume-link:${started.sessionId}` },
+        }),
+      ).toBeNull()
+    })
+
+    it('sends at most once per session', async () => {
+      const started = await start()
+      if (!started.ok) throw new Error('unreachable')
+      await advance(started.token, 'details', { email: `once-${suffix}@example.com` })
+
+      await sendCheckoutResumeLink(started.sessionId, started.token)
+      await sendCheckoutResumeLink(started.sessionId, started.token)
+
+      expect(
+        await prisma.message.count({
+          where: { idempotencyKey: `checkout-resume-link:${started.sessionId}` },
+        }),
+      ).toBe(1)
+    })
   })
 })

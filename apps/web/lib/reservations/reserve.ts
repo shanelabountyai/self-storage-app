@@ -2,6 +2,7 @@ import { createHash, randomBytes } from 'node:crypto'
 import { Prisma, prisma } from '@storage/db'
 import { emitEvent } from '@storage/core/events'
 import { recomputeUnitStatus } from '@/lib/admin/units'
+import { sendDirectEmail } from '@/lib/comms/service'
 
 // PRD 01 §4.4 US-401 / FR-3. A free, no-card hold on a unit.
 //
@@ -224,12 +225,89 @@ export async function createReservation(input: ReserveInput): Promise<ReserveRes
     }
   })
 
+  // US-401 / US-801: outside the transaction and only for a genuinely new
+  // hold — an updated hold reuses its original token (see the comment above,
+  // "invalidating that link... is a worse experience than reusing it"), and
+  // there is no fresh token to build a link from, so no confirmation resends.
+  // A comms failure here must never undo the hold that already committed.
+  if (result.ok && !result.updated && result.token) {
+    try {
+      await sendReservationConfirmation(result.reservationId, result.token)
+    } catch {
+      // sendDirectEmail already records its own failure in the Message log;
+      // this guards only against something throwing before it gets that far.
+    }
+  }
+
   return result
+}
+
+/// US-401's confirmation email — the one send this module makes synchronously
+/// (PRD 05 CN-22 reasoning applies here too: a hold confirmation is exactly the
+/// kind of thing a renter is looking at their inbox for right now, not on the
+/// next hourly tick) and directly, not through the rule/template pipeline: the
+/// raw reservation token exists only in this call, never persisted (same rule
+/// as B-029's gate codes), so nothing later could re-derive the link anyway.
+async function sendReservationConfirmation(reservationId: string, token: string): Promise<void> {
+  const reservation = await prisma.reservation.findUnique({
+    where: { id: reservationId },
+    select: {
+      email: true,
+      firstName: true,
+      expiresAt: true,
+      quotedRateCents: true,
+      facility: { select: { id: true, name: true, phone: true, timezone: true } },
+      unitType: { select: { widthFt: true, lengthFt: true } },
+    },
+  })
+  if (!reservation) return
+
+  const base = (process.env.AUTH_URL ?? 'http://localhost:3000').replace(/\/$/, '')
+  const link = `${base}/reservations?token=${encodeURIComponent(token)}&new=1`
+  const holdUntil = new Intl.DateTimeFormat('en-US', {
+    timeZone: reservation.facility.timezone,
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(reservation.expiresAt)
+  const rate = (reservation.quotedRateCents / 100).toFixed(2)
+  const size = `${reservation.unitType.widthFt}x${reservation.unitType.lengthFt}`
+  const phoneLine = reservation.facility.phone ? ` or call ${reservation.facility.phone}` : ''
+
+  const text = [
+    `Hi ${reservation.firstName},`,
+    '',
+    `We're holding a ${size} unit for you at ${reservation.facility.name}, at $${rate}/mo. Nothing has been charged.`,
+    '',
+    `We'll hold it until ${holdUntil}.`,
+    '',
+    `Complete your move-in online, or cancel the hold, here: ${link}`,
+    '',
+    `Questions? Reply to this email${phoneLine}.`,
+  ].join('\n')
+
+  await sendDirectEmail({
+    idempotencyKey: `reservation-confirmation:${reservationId}`,
+    eventId: reservationId,
+    templateKey: 'reservation_confirmation',
+    classification: 'transactional',
+    to: reservation.email,
+    fromName: reservation.facility.name,
+    subject: `Your unit at ${reservation.facility.name} is reserved`,
+    html: `<p>${text.replace(/\n/g, '<br>')}</p>`,
+    text,
+    facilityId: reservation.facility.id,
+    recipientTenantId: null,
+  })
 }
 
 export type ReservationView = {
   id: string
   status: string
+  facilityId: string
+  unitTypeId: string
   firstName: string
   lastName: string
   email: string
@@ -334,4 +412,56 @@ export async function expireReservations(
   }
 
   return { expired }
+}
+
+/// PRD 01 US-801: "Reservation expiring reminder (24h before)". `expiresAt`
+/// falling inside the window is not enough to fire on, or every hourly tick
+/// while a hold sits in that window would re-send it — `expiryReminderSentAt`
+/// is the actual guard, stamped in the same transaction as the emit so a
+/// crash between the two cannot either skip the reminder or double-send it.
+export async function sendExpiringSoonReminders(
+  now: Date = new Date(),
+  windowMs: number = 24 * 60 * 60 * 1000,
+  facilityId?: string,
+): Promise<{ reminded: number }> {
+  const due = await prisma.reservation.findMany({
+    where: {
+      status: 'held',
+      expiresAt: { gt: now, lte: new Date(now.getTime() + windowMs) },
+      expiryReminderSentAt: null,
+      ...(facilityId ? { facilityId } : {}),
+    },
+    select: { id: true, facilityId: true, unitId: true },
+  })
+
+  let reminded = 0
+  for (const reservation of due) {
+    await prisma.$transaction(async (tx) => {
+      // Re-check under the transaction: cancelled, expired, or already
+      // reminded between the read above and here.
+      const fresh = await tx.reservation.findUnique({
+        where: { id: reservation.id },
+        select: { status: true, expiryReminderSentAt: true },
+      })
+      if (fresh?.status !== 'held' || fresh.expiryReminderSentAt) return
+
+      await tx.reservation.update({
+        where: { id: reservation.id },
+        data: { expiryReminderSentAt: now },
+      })
+      await emitEvent(
+        {
+          name: 'reservation.expiring_soon',
+          facilityId: reservation.facilityId,
+          entityType: 'Reservation',
+          entityId: reservation.id,
+          payload: {},
+        },
+        tx,
+      )
+      reminded += 1
+    })
+  }
+
+  return { reminded }
 }

@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { advance, extendLock, relock, type Step } from '@/lib/checkout/session'
+import { advance, extendLock, relock, sendCheckoutResumeLink, type Step } from '@/lib/checkout/session'
 import { upsertTenantForCheckout, validateDetails } from '@/lib/checkout/details'
 import { prisma } from '@storage/db'
 import { fieldError, type FormState } from '@/lib/admin/form-state'
@@ -64,6 +64,16 @@ export async function submitDetailsAction(
   // Linked after the transition so a validation failure never leaves a session
   // pointing at an account for a step the renter did not complete.
   await prisma.checkoutSession.update({ where: { id: result.session.id }, data: { tenantId } })
+
+  // CN-22: exactly the moment PRD 05 specifies — email just captured, session
+  // still open. A comms failure must never fail step 1, which has already
+  // succeeded and committed.
+  try {
+    await sendCheckoutResumeLink(result.session.id, token)
+  } catch {
+    // sendDirectEmail records its own failure in the Message log; this only
+    // guards against something throwing before it gets that far.
+  }
 
   revalidatePath('/checkout')
   return { status: 'success', message: 'Details saved. Next: confirm your unit.' }

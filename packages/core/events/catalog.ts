@@ -18,6 +18,11 @@ export const EVENT_NAMES = [
   'reservation.created',
   'reservation.expired',
   'reservation.cancelled',
+  /// PRD 01 US-801: a reminder 24h before the hold expires. Emitted once per
+  /// reservation (B-031's sweep stamps `expiryReminderSentAt`), never re-fired
+  /// on a later tick — the event outbox's own idempotency only dedupes per
+  /// event id, not per reservation, so the producer has to guarantee "once".
+  'reservation.expiring_soon',
 
   // Billing (PRD 02 US-17/US-18, drives the comms ladder in PRD 05)
   'invoice.created',

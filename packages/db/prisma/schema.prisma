@@ -1246,28 +1246,33 @@ model AuthorizedAccessPerson {
 
 /// Free hold, no card and no deposit (D-7).
 model Reservation {
-  id              String            @id @default(cuid())
-  facilityId      String
-  unitTypeId      String
-  unitId          String?
-  tenantId        String?
-  leadId          String?
-  status          ReservationStatus @default(held)
-  firstName       String
-  lastName        String
-  email           String
-  phone           String?
-  quotedRateCents Int
-  moveInDate      DateTime?         @db.Timestamptz(6)
-  expiresAt       DateTime          @db.Timestamptz(6)
+  id                   String            @id @default(cuid())
+  facilityId           String
+  unitTypeId           String
+  unitId               String?
+  tenantId             String?
+  leadId               String?
+  status               ReservationStatus @default(held)
+  firstName            String
+  lastName             String
+  email                String
+  phone                String?
+  quotedRateCents      Int
+  moveInDate           DateTime?         @db.Timestamptz(6)
+  expiresAt            DateTime          @db.Timestamptz(6)
+  /// PRD 01 US-801: the 24h-before-expiry reminder, sent at most once. This
+  /// column, not the event outbox, is what makes "once" true — the outbox
+  /// only dedupes a given event id, and a fresh id would be minted on every
+  /// tick a reservation is still inside the reminder window.
+  expiryReminderSentAt DateTime?         @db.Timestamptz(6)
   /// Signed-token deep links let a prospect complete or cancel without login
   /// (PRD 01 FR-3.2).
-  tokenHash       String            @unique
-  utmSource       String?
-  utmMedium       String?
-  utmCampaign     String?
-  createdAt       DateTime          @default(now()) @db.Timestamptz(6)
-  updatedAt       DateTime          @updatedAt @db.Timestamptz(6)
+  tokenHash            String            @unique
+  utmSource            String?
+  utmMedium            String?
+  utmCampaign          String?
+  createdAt            DateTime          @default(now()) @db.Timestamptz(6)
+  updatedAt            DateTime          @updatedAt @db.Timestamptz(6)
 
   facility Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
   unitType UnitType @relation(fields: [unitTypeId], references: [id], onDelete: Restrict)

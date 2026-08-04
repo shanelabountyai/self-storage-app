@@ -8,6 +8,7 @@ import {
   hashReservationToken,
   holdExpiryFor,
   reservationByToken,
+  sendExpiringSoonReminders,
   MAX_MOVE_IN_DAYS_AHEAD,
 } from '../apps/web/lib/reservations/reserve'
 import { publicInventoryForFacility } from '../apps/web/lib/inventory/public-inventory'
@@ -109,6 +110,7 @@ describeDb('reservation service', () => {
 
   afterAll(async () => {
     if (!hasDatabase) return
+    await prisma.message.deleteMany({ where: { facilityId } })
     await prisma.domainEvent.deleteMany({ where: { facilityId } })
     await prisma.reservation.deleteMany({ where: { facilityId } })
     await prisma.unit.deleteMany({ where: { facilityId } })
@@ -285,6 +287,35 @@ describeDb('reservation service', () => {
     expect(events.map((e) => e.name).sort()).toEqual(['reservation.cancelled', 'reservation.created'])
   })
 
+  it('B-031: sends a confirmation email with a working link for a genuinely new hold', async () => {
+    const result = await createReservation(input(`confirm-${suffix}@example.com`))
+    if (!result.ok || !result.token) throw new Error('unreachable')
+
+    const message = await prisma.message.findUniqueOrThrow({
+      where: { idempotencyKey: `reservation-confirmation:${result.reservationId}` },
+    })
+    expect(message.status).toBe('sent')
+    expect(message.toAddress).toBe(`confirm-${suffix}@example.com`)
+    // The raw token — which is never persisted anywhere else — has to travel
+    // from creation straight into the email body, in this one call.
+    expect(message.bodySnapshot).toContain(result.token)
+  })
+
+  it('B-031: does not resend a confirmation when an existing hold is only updated', async () => {
+    const email = `no-resend-${suffix}@example.com`
+    const first = await createReservation(input(email))
+    if (!first.ok) throw new Error('unreachable')
+
+    const laterDate = new Date()
+    laterDate.setDate(laterDate.getDate() + 3)
+    const second = await createReservation({ ...input(email), moveInDate: laterDate })
+    expect(second).toMatchObject({ ok: true, updated: true })
+
+    expect(
+      await prisma.message.count({ where: { templateKey: 'reservation_confirmation', toAddress: email } }),
+    ).toBe(1)
+  })
+
   it('refuses to double-hold a unit even if the claim is bypassed', async () => {
     // The database invariant behind the service. If a future code path skips
     // claimUnit, the write is rejected rather than quietly double-booking.
@@ -307,5 +338,75 @@ describeDb('reservation service', () => {
         },
       }),
     ).rejects.toThrow()
+  })
+
+  describe('sendExpiringSoonReminders (B-031 / PRD 01 US-801)', () => {
+    async function heldReservation(expiresAt: Date, email: string) {
+      const unit = await prisma.unit.create({ data: { facilityId, unitTypeId, number: `R-${randomUUID().slice(0, 6)}` } })
+      return prisma.reservation.create({
+        data: {
+          facilityId,
+          unitTypeId,
+          unitId: unit.id,
+          status: 'held',
+          firstName: 'Ada',
+          lastName: 'Prospect',
+          email,
+          quotedRateCents: 12_900,
+          expiresAt,
+          tokenHash: `reminder-${randomUUID()}`,
+        },
+      })
+    }
+
+    it('reminds a hold expiring inside the window, exactly once', async () => {
+      const now = new Date()
+      const reservation = await heldReservation(new Date(now.getTime() + 12 * 60 * 60_000), `remind-${suffix}@example.com`)
+
+      const first = await sendExpiringSoonReminders(now, 24 * 60 * 60_000, facilityId)
+      expect(first).toEqual({ reminded: 1 })
+
+      const stored = await prisma.reservation.findUniqueOrThrow({ where: { id: reservation.id } })
+      expect(stored.expiryReminderSentAt).not.toBeNull()
+
+      const events = await prisma.domainEvent.findMany({
+        where: { entityId: reservation.id, name: 'reservation.expiring_soon' },
+      })
+      expect(events).toHaveLength(1)
+
+      // Re-running the sweep (the next hourly tick) must not remind again —
+      // expiryReminderSentAt is the guard, not the event outbox.
+      const second = await sendExpiringSoonReminders(now, 24 * 60 * 60_000, facilityId)
+      expect(second).toEqual({ reminded: 0 })
+      expect(
+        await prisma.domainEvent.count({ where: { entityId: reservation.id, name: 'reservation.expiring_soon' } }),
+      ).toBe(1)
+    })
+
+    it('does not remind a hold that is not yet inside the window', async () => {
+      const now = new Date()
+      await heldReservation(new Date(now.getTime() + 3 * 24 * 60 * 60_000), `too-early-${suffix}@example.com`)
+
+      expect(await sendExpiringSoonReminders(now, 24 * 60 * 60_000, facilityId)).toEqual({ reminded: 0 })
+    })
+
+    it('does not remind a hold that has already expired', async () => {
+      const now = new Date()
+      // expiresAt must be after createdAt (a DB invariant) — so this creates a
+      // hold that is valid now but expired by the time the sweep looks at it,
+      // rather than an already-invalid row.
+      await heldReservation(new Date(now.getTime() + 1000), `already-gone-${suffix}@example.com`)
+      const later = new Date(now.getTime() + 2000)
+
+      expect(await sendExpiringSoonReminders(later, 24 * 60 * 60_000, facilityId)).toEqual({ reminded: 0 })
+    })
+
+    it('does not remind a cancelled hold', async () => {
+      const now = new Date()
+      const reservation = await heldReservation(new Date(now.getTime() + 60_000), `cancelled-${suffix}@example.com`)
+      await prisma.reservation.update({ where: { id: reservation.id }, data: { status: 'cancelled' } })
+
+      expect(await sendExpiringSoonReminders(now, 24 * 60 * 60_000, facilityId)).toEqual({ reminded: 0 })
+    })
   })
 })

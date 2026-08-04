@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { type Prisma, prisma } from '@storage/db'
 import { recomputeUnitStatus } from '@/lib/admin/units'
+import { sendDirectEmail } from '@/lib/comms/service'
 
 // PRD 01 FR-4.1. The server-side checkout state machine.
 //
@@ -234,6 +235,61 @@ export async function advance(
     })
 
     return { ok: true as const, session: toView(updated) }
+  })
+}
+
+/// PRD 05 CN-22 / PRD 01 FR-4.1. "Sent when the checkout session is created and
+/// the renter's email is captured (end of step 1)" — a real link back into a
+/// resumable draft, which FR-4.1 promises and nothing sent until this item.
+/// Direct and synchronous, not through the rule/template pipeline: the raw
+/// session token exists only in this call (never persisted — same rule as the
+/// reservation token and B-029's gate codes), and a renter mid-lease-step who
+/// closes the tab is exactly who is looking at their inbox right now, not
+/// waiting for the next hourly tick.
+///
+/// The link always resolves to whatever step the session is *currently* on —
+/// `sessionByToken` already resumes at `session.step` (B-020) — so there is no
+/// step to encode here, just the token.
+export async function sendCheckoutResumeLink(sessionId: string, token: string): Promise<void> {
+  const session = await prisma.checkoutSession.findUnique({
+    where: { id: sessionId },
+    select: {
+      email: true,
+      lockExpiresAt: true,
+      facility: { select: { id: true, name: true, timezone: true } },
+    },
+  })
+  if (!session?.email) return
+
+  const base = (process.env.AUTH_URL ?? 'http://localhost:3000').replace(/\/$/, '')
+  const link = `${base}/checkout?token=${encodeURIComponent(token)}`
+  const holdUntil = new Intl.DateTimeFormat('en-US', {
+    timeZone: session.facility.timezone,
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(session.lockExpiresAt)
+
+  const text = [
+    `We're holding this unit for you until ${holdUntil}. After that it goes back on sale.`,
+    '',
+    `Finish moving in where you left off: ${link}`,
+  ].join('\n')
+
+  await sendDirectEmail({
+    idempotencyKey: `checkout-resume-link:${sessionId}`,
+    eventId: sessionId,
+    templateKey: 'checkout_resume_link',
+    classification: 'transactional',
+    to: session.email,
+    fromName: session.facility.name,
+    subject: 'Finish moving in online',
+    html: `<p>${text.replace(/\n/g, '<br>')}</p>`,
+    text,
+    facilityId: session.facility.id,
+    recipientTenantId: null,
   })
 }
 
