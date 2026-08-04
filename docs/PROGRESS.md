@@ -658,7 +658,7 @@ The engine every other module has been emitting events at since B-019: one place
 
 ---
 
-### B-031 — Move-in path transactional emails ✅ `<pending>`
+### B-031 — Move-in path transactional emails ✅ `b7e9c9d`
 
 The first real content on B-030's engine: reservation confirmation and its 24h-before-expiry reminder, the move-in welcome (gate code, first charge), and the checkout resume link FR-4.1 has promised since B-020. Along the way, closed a real gap each of the three token-bearing sends exposed: a stale forward-reference in B-003's auth emails, a missing "complete move-in online" link on the reservation page itself, and — the actual bug — B-030's rule/template pipeline had no way to carry a one-time bearer token at all.
 
