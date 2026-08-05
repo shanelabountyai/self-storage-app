@@ -1,6 +1,7 @@
 import { type Prisma, prisma } from '@storage/db'
 import type { DomainEvent, MessageClassification, SuppressionReason } from '@storage/db'
 import { codeForLease } from '@/lib/access/provision'
+import { formatCents } from '@/lib/format'
 import {
   commsEnabled,
   effectiveRecipient,
@@ -231,6 +232,24 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
     if (!recipient.reservation || !recipient.facility) return {} as MergeContext
     return {
       'reservation.expires_at': formatAbsoluteLocal(recipient.reservation.expiresAt, recipient.facility.timezone),
+    }
+  },
+
+  // CN-8: how the account actually settled. Read from the event payload,
+  // which the move-out transaction wrote — not re-derived from the ledger
+  // here, because by send time a later adjustment could make this sentence
+  // disagree with the figure the tenant was shown at the counter.
+  'lease.moved_out': async (event) => {
+    const payload = (event.payload ?? {}) as { amountDueCents?: number; refundDueCents?: number }
+    const due = payload.amountDueCents ?? 0
+    const refund = payload.refundDueCents ?? 0
+    return {
+      'billing.settlement_line':
+        refund > 0
+          ? `We owe you ${formatCents(refund)} back — we'll be in touch about getting it to you.`
+          : due > 0
+            ? `There is ${formatCents(due)} still outstanding on the account.`
+            : 'Your account is settled in full — nothing further is owed.',
     }
   },
 }

@@ -10,6 +10,7 @@ import {
   DEMO_STAFF_PASSWORD,
   DEMO_TENANT_EMAIL,
   DEMO_TENANT_PASSWORD,
+  DEMO_POS_TENANT_EMAIL,
 } from './demo-credentials.ts'
 
 // Demo/dev data — two facilities and tenants in every lifecycle state
@@ -32,7 +33,7 @@ import {
 // recomputeUnitStatus() like everything else (B-010 US-8).
 
 export const DEMO_PREFIX = 'demo-'
-export { DEMO_EMAIL_DOMAIN, DEMO_STAFF_EMAIL, DEMO_STAFF_PASSWORD, DEMO_TENANT_EMAIL, DEMO_TENANT_PASSWORD }
+export { DEMO_EMAIL_DOMAIN, DEMO_STAFF_EMAIL, DEMO_STAFF_PASSWORD, DEMO_TENANT_EMAIL, DEMO_TENANT_PASSWORD, DEMO_POS_TENANT_EMAIL }
 
 /// A signed-in staff account for the e2e suite.
 ///
@@ -133,6 +134,17 @@ async function teardown() {
   })
 
   await prisma.consent.deleteMany({
+    where: { tenant: { email: { endsWith: DEMO_EMAIL_DOMAIN } } },
+  })
+  // TenantNote.tenantId is onDelete: Restrict (B-038), so a demo tenant that
+  // has ever been noted — which the e2e suite does on every run — cannot be
+  // deleted until its notes are. Without this the seed stops being re-runnable
+  // the first time that test passes, which is the worst possible moment for a
+  // fixture script to start failing.
+  await prisma.tenantNote.deleteMany({
+    where: { tenant: { email: { endsWith: DEMO_EMAIL_DOMAIN } } },
+  })
+  await prisma.tenantAddress.deleteMany({
     where: { tenant: { email: { endsWith: DEMO_EMAIL_DOMAIN } } },
   })
   await prisma.tenant.deleteMany({ where: { email: { endsWith: DEMO_EMAIL_DOMAIN } } })
@@ -308,8 +320,28 @@ async function seedStaffOwner(facilityIds: string[]) {
   return staffUser
 }
 
+/// The address of record every demo tenant should have had.
+///
+/// D-21 makes `TenantAddress` authoritative and the `Tenant.*` columns a
+/// cache of its newest row — so a fixture that writes only the columns leaves
+/// a tenant whose address exists but has no history, which is exactly the gap
+/// the decision exists to prevent. Every tenant this script creates gets the
+/// matching row, sourced `import` like the migration backfill.
+async function recordSeedAddress(tenantId: string, index: number) {
+  await prisma.tenantAddress.create({
+    data: {
+      tenantId,
+      addressLine1: `${100 + index} Demo Street`,
+      city: 'Austin',
+      state: 'TX',
+      postalCode: '78701',
+      source: 'import',
+    },
+  })
+}
+
 async function makeTenant(first: string, last: string, index: number) {
-  return prisma.tenant.create({
+  const tenant = await prisma.tenant.create({
     data: {
       email: `${first.toLowerCase()}.${last.toLowerCase()}${index}@${DEMO_EMAIL_DOMAIN}`,
       firstName: first,
@@ -321,6 +353,8 @@ async function makeTenant(first: string, last: string, index: number) {
       postalCode: '78701',
     },
   })
+  await recordSeedAddress(tenant.id, index)
+  return tenant
 }
 
 /// Creates a lease in a given lifecycle state, plus the access grant an
@@ -442,8 +476,27 @@ async function seedLifecycleStates(seeded: SeededFacility, startIndex: number, i
   note('pending')
 
   // --- active ×3 ----------------------------------------------------------
+  // At the primary facility the first of these carries a stable email, so
+  // tests that record real payments have a tenant whose balance nothing else
+  // asserts on (see DEMO_POS_TENANT_EMAIL).
   for (let i = 0; i < 3; i++) {
-    const tenant = await makeTenant('Alex', 'Active', index++)
+    const tenant =
+      isPrimaryFacility && i === 0
+        ? await prisma.tenant.create({
+            data: {
+              email: DEMO_POS_TENANT_EMAIL,
+              firstName: 'Alex',
+              lastName: 'Active',
+              phone: `512-555-${String(1000 + index).slice(-4)}`,
+              addressLine1: `${100 + index} Demo Street`,
+              city: 'Austin',
+              state: 'TX',
+              postalCode: '78701',
+            },
+          })
+        : await makeTenant('Alex', 'Active', index)
+    if (isPrimaryFacility && i === 0) await recordSeedAddress(tenant.id, index)
+    index++
     const slot = next()
     await makeLease(facility.id, slot.unit.id, tenant.id, 'active', slot.rate, 90 + i * 30)
     note('active')
@@ -468,6 +521,7 @@ async function seedLifecycleStates(seeded: SeededFacility, startIndex: number, i
         },
       })
     : await makeTenant('Dana', 'Delinquent', index)
+  await recordSeedAddress(delinquentTenant.id, index)
   index++
   const delinquentSlot = next()
   const delinquentLease = await makeLease(

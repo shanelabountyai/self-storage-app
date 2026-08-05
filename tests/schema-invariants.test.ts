@@ -53,7 +53,14 @@ const NO_FACILITY_ID: Record<string, string> = {
 /// Calendar dates, not instants. A business date is a facility-local day with
 /// no meaningful time component, so Timestamptz would imply precision it does
 /// not have. Anything added here must genuinely be a date rather than a moment.
-const CALENDAR_DATE_FIELDS = new Set(['JobRun.businessDate'])
+const CALENDAR_DATE_FIELDS = new Set([
+  'JobRun.businessDate',
+  // B-040. A move-out is a facility-local calendar day, not an instant: the
+  // tenant vacated "on the 14th", and a timestamp would imply a precision
+  // (and a timezone) the fact does not have.
+  'Lease.paidThroughDate',
+  'Lease.moveOutDate',
+])
 
 describe('prisma schema invariants', () => {
   it('parses the expected number of models', () => {

@@ -66,6 +66,29 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
       'facility.phone',
     ],
   },
+  {
+    key: 'lease_moved_out_confirmation',
+    classification: 'transactional',
+    subject: 'Your move-out from {{facility.name}} is confirmed',
+    bodyText: [
+      'Hi {{tenant.first_name}},',
+      '',
+      "You've moved out of unit {{unit.number}} at {{facility.name}}.",
+      '',
+      '{{billing.settlement_line}}',
+      '',
+      'Your gate code no longer works at this facility.',
+      '',
+      'Questions about anything above? Call {{facility.phone}}.',
+    ].join('\n'),
+    requiredMergeFields: [
+      'tenant.first_name',
+      'unit.number',
+      'facility.name',
+      'billing.settlement_line',
+      'facility.phone',
+    ],
+  },
 ]
 
 export const COMMS_RULES: readonly CommsRuleSeed[] = [
@@ -77,5 +100,10 @@ export const COMMS_RULES: readonly CommsRuleSeed[] = [
     // Never welcome a tenant whose lease has already ended by the time the
     // event is processed (a same-day move-in/move-out, or a delayed dispatch).
     skipConditions: ['tenant_moved_out'],
+  },
+  {
+    event: 'lease.moved_out',
+    templateKey: 'lease_moved_out_confirmation',
+    classification: 'transactional',
   },
 ]

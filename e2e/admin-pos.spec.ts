@@ -1,9 +1,15 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from '@playwright/test'
 import { signInAsDemoOwner } from './sign-in'
+import { DEMO_POS_TENANT_EMAIL } from '../apps/web/scripts/demo-credentials'
 
 // PRD 02 §4.8 US-32 (B-039). The counter: take a payment, or start a walk-in
 // move-in. Drawer sessions are B-078 and deliberately absent.
+//
+// Payments here are REAL and permanent — they move a ledger balance and are
+// never rolled back. So they are aimed at DEMO_POS_TENANT_EMAIL, whose
+// balance nothing else asserts on, rather than at the past-due demo tenant
+// the portal and tenant-profile suites depend on.
 
 test.describe('POS role gating', () => {
   test('redirects an unauthenticated visitor to /login', async ({ page }) => {
@@ -41,8 +47,8 @@ test.describe('signed in as the demo owner', () => {
   })
 
   test('taking cash records a receipt number and works out the change', async ({ page }) => {
-    await page.goto('/admin/pos?q=dana@demo.example.com')
-    await page.getByRole('link', { name: 'Dana Delinquent' }).first().click()
+    await page.goto(`/admin/pos?q=${DEMO_POS_TENANT_EMAIL}`)
+    await page.getByRole('link', { name: 'Alex Active' }).first().click()
 
     await page.getByLabel('Amount ($)').fill('20')
     await page.getByLabel('Cash tendered ($)').fill('50')
@@ -54,8 +60,8 @@ test.describe('signed in as the demo owner', () => {
   })
 
   test('a check with no number is refused', async ({ page }) => {
-    await page.goto('/admin/pos?q=dana@demo.example.com')
-    await page.getByRole('link', { name: 'Dana Delinquent' }).first().click()
+    await page.goto(`/admin/pos?q=${DEMO_POS_TENANT_EMAIL}`)
+    await page.getByRole('link', { name: 'Alex Active' }).first().click()
 
     await page.getByLabel('Method').selectOption('check')
     await page.getByLabel('Amount ($)').fill('25')
@@ -65,8 +71,8 @@ test.describe('signed in as the demo owner', () => {
   })
 
   test('cash short of the amount tendered is refused', async ({ page }) => {
-    await page.goto('/admin/pos?q=dana@demo.example.com')
-    await page.getByRole('link', { name: 'Dana Delinquent' }).first().click()
+    await page.goto(`/admin/pos?q=${DEMO_POS_TENANT_EMAIL}`)
+    await page.getByRole('link', { name: 'Alex Active' }).first().click()
 
     await page.getByLabel('Amount ($)').fill('40')
     await page.getByLabel('Cash tendered ($)').fill('10')

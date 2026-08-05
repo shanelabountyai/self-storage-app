@@ -15,7 +15,8 @@
     "./pricing": "./pricing/index.ts",
     "./access": "./access/index.ts",
     "./consent": "./consent/index.ts",
-    "./pos": "./pos/index.ts"
+    "./pos": "./pos/index.ts",
+    "./move-out": "./move-out/index.ts"
   },
   "dependencies": {
     "@storage/db": "*"

@@ -19,3 +19,12 @@ export const DEMO_STAFF_PASSWORD = 'demo-owner-password'
 // plain "everything's fine" tenant would not.
 export const DEMO_TENANT_EMAIL = `dana@${DEMO_EMAIL_DOMAIN}`
 export const DEMO_TENANT_PASSWORD = 'demo-tenant-password'
+
+// B-039. A separate tenant for tests that TAKE MONEY.
+//
+// The POS e2e test records a real payment, which permanently moves a ledger
+// balance — and pointed at DEMO_TENANT_EMAIL it silently paid off the $161
+// past-due balance that B-034/B-035/B-038 all assert on, over about nine
+// runs. Anything in the suite that mutates money has to aim at a tenant whose
+// balance nothing else depends on.
+export const DEMO_POS_TENANT_EMAIL = `pos-tenant@${DEMO_EMAIL_DOMAIN}`

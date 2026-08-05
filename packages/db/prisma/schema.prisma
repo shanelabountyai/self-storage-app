@@ -59,6 +59,14 @@ enum OperationalUnitStatus {
   unrentable
 }
 
+/// US-14. How a lease ended, which changes what is owed and what evidence
+/// backs the date — an abandonment is dated to the last occupancy evidence,
+/// not to a tenant's word, and forgives nothing.
+enum MoveOutReason {
+  tenant_request
+  abandonment
+}
+
 enum LeaseStatus {
   pending
   active
@@ -348,6 +356,16 @@ model Facility {
   /// US-32: a cash payment at or above this needs manager-or-above to take it.
   /// Configuration, not policy — $500 is a starting value, not a rule.
   cashApprovalThresholdCents Int      @default(50000)
+  /// US-14 move-out. Whether the final month is prorated to the move-out day,
+  /// or the tenant pays through the period they are in. Texas has no statute
+  /// either way and "no proration on move-out" is the common lease term, so
+  /// that is the shipped default — configuration, not law (D-10).
+  prorateOnMoveOut    Boolean        @default(false)
+  /// Days of notice the lease requires before a move-out. 0 means none.
+  moveOutNoticeDays   Int            @default(10)
+  /// A residual balance at or below this can be written off to close the
+  /// lease; anything above needs a manager (US-14's own AC).
+  writeOffThresholdCents Int         @default(1000)
   createdAt           DateTime       @default(now()) @db.Timestamptz(6)
   updatedAt           DateTime       @updatedAt @db.Timestamptz(6)
 
@@ -676,6 +694,15 @@ model Lease {
   /// the renter's own choice at checkout step 5 (§4.6/D-11a: default-on there,
   /// with the disclosure and a one-activation opt-out beside it).
   autopayEnabled     Boolean     @default(false)
+  /// US-14 move-out, recorded as three separate facts because they answer
+  /// three different questions and routinely disagree: when the tenant said
+  /// they were leaving, the last day they had paid for, and the day they
+  /// actually vacated. Collapsing them into `endDate` alone loses the ability
+  /// to tell a proper notice from an abandonment.
+  noticeGivenAt      DateTime?   @db.Timestamptz(6)
+  paidThroughDate    DateTime?   @db.Date
+  moveOutDate        DateTime?   @db.Date
+  moveOutReason      MoveOutReason?
   protectionPlanName String?
   protectionCents    Int         @default(0)
   /// Set when the tenant waives protection, with the attestation text shown.
