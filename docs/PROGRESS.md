@@ -812,7 +812,7 @@ Three new portal screens — documents and payment history, contact details, and
 
 ---
 
-### B-038 — Admin tenant profile ✅ `<pending>`
+### B-038 — Admin tenant profile ✅ `e28f7a8`
 
 "Any staffer can pick up any conversation": search by name/phone/email/unit number, then one profile — contact, address history, every lease and its balance, immutable notes, logged documents, and a shell of what has been sent. Counter-side address edits go through the exact same `recordAddressChange()` D-21 built for the portal in B-037, source `counter` instead of `portal`.
 
