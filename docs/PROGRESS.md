@@ -682,7 +682,7 @@ The first real content on B-030's engine: reservation confirmation and its 24h-b
 
 ---
 
-### B-032 — SMS consent capture at move-in ✅ `<pending>`
+### B-032 — SMS consent capture at move-in ✅ `2985eec`
 
 Two new consent records, captured at the two points in online move-in where they legally have to be: an unchecked-by-default SMS checkbox at checkout step 1 (right where the phone number itself is collected), and a distinct `notice_email` record at lease signing — not folded into `account_email`, per PRD 02 US-13's own reasoning that overloading the wrong channel destroys the ability to prove the specific agreement was made. First real writer of the `Consent` table D-8 reserved back at B-002.
 
