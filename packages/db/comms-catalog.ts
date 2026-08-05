@@ -89,6 +89,34 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
       'facility.phone',
     ],
   },
+  {
+    // PRD 01 US-707: "Confirmation email/SMS sent" the moment the tenant
+    // submits the request, distinct from the finalized move-out confirmation
+    // above (CN-8) — nothing here is final, no dollar figure is quoted (one
+    // could go stale before staff finalize), and it says plainly that a
+    // person still has to verify the unit before it is done.
+    key: 'lease_move_out_requested',
+    classification: 'transactional',
+    subject: 'Your move-out request for {{facility.name}} is received',
+    bodyText: [
+      'Hi {{tenant.first_name}},',
+      '',
+      "We've received your request to move out of unit {{unit.number}} at {{facility.name}} on {{lease.move_out_date}}.",
+      '',
+      'Your account stays active and your gate code keeps working until then. Our team will confirm the unit is empty and finish closing your account after your move-out date.',
+      '',
+      'Changed your mind? You can cancel this request from your account any time before {{lease.move_out_date}}.',
+      '',
+      'Questions? Call {{facility.phone}}.',
+    ].join('\n'),
+    requiredMergeFields: [
+      'tenant.first_name',
+      'unit.number',
+      'facility.name',
+      'lease.move_out_date',
+      'facility.phone',
+    ],
+  },
 ]
 
 export const COMMS_RULES: readonly CommsRuleSeed[] = [
@@ -104,6 +132,11 @@ export const COMMS_RULES: readonly CommsRuleSeed[] = [
   {
     event: 'lease.moved_out',
     templateKey: 'lease_moved_out_confirmation',
+    classification: 'transactional',
+  },
+  {
+    event: 'lease.move_out_requested',
+    templateKey: 'lease_move_out_requested',
     classification: 'transactional',
   },
 ]

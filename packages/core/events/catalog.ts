@@ -13,6 +13,13 @@ export const EVENT_NAMES = [
   'lease.moved_in',
   'lease.moved_out',
   'lease.transferred',
+  /// PRD 01 US-707: a tenant scheduled their own move-out from the portal.
+  /// Distinct from `lease.moved_out` — the lease is still `active`, nothing
+  /// is final, and this only drives the request confirmation (CN-8 covers
+  /// the finalized one). Cancelling a request has no event: it is a direct,
+  /// synchronous call from the same action that clears the lease fields, not
+  /// something anything else needs to react to asynchronously.
+  'lease.move_out_requested',
 
   // Reservations (PRD 01 FR-3.3)
   'reservation.created',

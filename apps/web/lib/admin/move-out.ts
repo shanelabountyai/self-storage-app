@@ -22,6 +22,11 @@ export type MoveOutPreview = {
   noticeShortfallDays: number
   prorateOnMoveOut: boolean
   writeOffThresholdCents: number
+  /// Set when the tenant already scheduled this themselves (B-041, still
+  /// `active` until this screen finalizes it) — what the date picker
+  /// defaults to, and what the screen tells staff the tenant already agreed
+  /// to rather than presenting as a blank form.
+  requestedMoveOutDate: Date | null
 }
 
 function rankAt(actor: Actor, facilityId: string): number {
@@ -46,6 +51,7 @@ async function loadLeaseForMoveOut(actor: Actor, leaseId: string) {
       monthlyRateCents: true,
       paidThroughDate: true,
       noticeGivenAt: true,
+      moveOutDate: true,
       facility: {
         select: {
           name: true,
@@ -102,6 +108,7 @@ export async function previewMoveOut(
     ),
     prorateOnMoveOut: lease.facility.prorateOnMoveOut,
     writeOffThresholdCents: lease.facility.writeOffThresholdCents,
+    requestedMoveOutDate: lease.status === 'ended' ? null : lease.moveOutDate,
   }
 }
 
@@ -205,6 +212,20 @@ export async function completeMoveOut(
     // derives the effective status from it now that no lease occupies the unit.
     await tx.unit.update({ where: { id: lease.unitId }, data: { operationalStatus: 'maintenance' } })
     await recomputeUnitStatus(lease.unitId, tx)
+
+    // If a portal request (B-041) raised a verification task for this lease,
+    // finalizing here IS the verification completing — not a second
+    // `completeTask` call with its own proof, since the real evidence is the
+    // move-out actually finishing.
+    await tx.task.updateMany({
+      where: { type: 'move_out_request_review', entityId: lease.id, status: 'open' },
+      data: {
+        status: 'completed',
+        completedByStaffId: actor.staffUserId,
+        completedAt: new Date(),
+        proof: { note: 'Move-out finalized.' },
+      },
+    })
 
     await recordAudit(
       {

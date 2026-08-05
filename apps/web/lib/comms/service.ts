@@ -252,6 +252,20 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
             : 'Your account is settled in full — nothing further is owed.',
     }
   },
+
+  // PRD 01 US-707. The date, from the request itself — not re-read off the
+  // lease, which a cancel-and-re-request between send and this render could
+  // have already changed to a different one.
+  'lease.move_out_requested': async (event, recipient) => {
+    const payload = (event.payload ?? {}) as { moveOutDate?: string }
+    const timezone = recipient.facility?.timezone ?? 'America/Chicago'
+    const date = payload.moveOutDate ? new Date(`${payload.moveOutDate}T00:00:00.000Z`) : null
+    return {
+      'lease.move_out_date': date
+        ? new Intl.DateTimeFormat('en-US', { timeZone: timezone, month: 'long', day: 'numeric', year: 'numeric' }).format(date)
+        : 'the date you requested',
+    }
+  },
 }
 
 /// The move-in charge line: what was actually charged today, and the ongoing

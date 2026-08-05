@@ -18,6 +18,10 @@ function todayIso(): string {
   return new Date().toISOString().slice(0, 10)
 }
 
+function isoDate(date: Date): string {
+  return date.toISOString().slice(0, 10)
+}
+
 export default async function MoveOutPage({
   params,
   searchParams,
@@ -41,8 +45,16 @@ export default async function MoveOutPage({
     )
   }
 
-  const moveOutDate = date ?? todayIso()
-  const preview = await previewMoveOut(actor, leaseId, new Date(`${moveOutDate}T00:00:00.000Z`))
+  let preview = await previewMoveOut(actor, leaseId, new Date(`${date ?? todayIso()}T00:00:00.000Z`))
+
+  // No explicit date in the URL yet: default to what the tenant already
+  // requested (B-041), if anything, rather than today — the whole point of a
+  // portal request is that staff see it pre-filled, not a blank form that
+  // happens to ignore what the tenant already told them.
+  if (!date && preview.requestedMoveOutDate) {
+    preview = await previewMoveOut(actor, leaseId, preview.requestedMoveOutDate)
+  }
+  const moveOutDate = date ?? (preview.requestedMoveOutDate ? isoDate(preview.requestedMoveOutDate) : todayIso())
   const { settlement } = preview
 
   return (
@@ -55,6 +67,13 @@ export default async function MoveOutPage({
           Move out — {preview.tenantName}, unit {preview.unitNumber}
         </h1>
       </div>
+
+      {preview.requestedMoveOutDate && (
+        <p role="status" className="border-input rounded-md border p-3 text-sm text-pretty">
+          The tenant requested this move-out from their account. Verify the unit is empty and clean,
+          then finalize below.
+        </p>
+      )}
 
       {/* Changing the date re-runs the whole settlement server-side, as a GET,
           so the page is linkable and the arithmetic never happens in the

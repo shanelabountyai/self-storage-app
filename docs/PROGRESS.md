@@ -912,6 +912,26 @@ The shared `Task` entity, built now rather than left as the gap it had been sinc
 
 ---
 
+### B-041 — Portal move-out request ✅ `<pending>`
+
+Pick a unit → pick a date → see what it settles to → confirm, gated by US-701's re-auth rule. Nothing here finalizes a lease — that stays entirely B-040's, behind a human actually verifying the unit is empty and clean. Recorded as **D-24**.
+
+**Decided (D-24): no new schema.** A pending request is `Lease.status = 'active'` with `moveOutDate`/`moveOutReason`/`noticeGivenAt` set — the exact three columns B-040 already built for the *finalized* case. `status` alone tells the two states apart (`ended` = finalized, `active` with a date = pending), so cancelling a request is just clearing those same three fields back to null, symmetric with never having asked.
+
+**Decided (D-24): the portal enforces the notice-days policy as a hard floor; the staff screen (B-040) still only reports a shortfall.** Deliberately asymmetric, not an oversight — staff route around real-world urgency (a tenant already gone, an abandonment with no notice at all) constantly, which is exactly why B-040 treats a shortfall as informational. A tenant scheduling ahead through self-service has no such urgency, so the date input simply refuses to offer a date the policy forbids, and `requestMoveOut` refuses server-side too if one arrives anyway.
+
+**Decided: B-095's Task queue gets its intended first outside consumer, and its first real use of `cancelled`.** `requestMoveOut` raises a `move_out_request_review` task the moment the tenant confirms; `cancelMoveOutRequest` withdraws it via the new `cancelOpenTask` primitive rather than leaving staff a task about a request that no longer exists — B-095's own "left behind" named this exact gap (`cancelled` set by nothing yet) three items ago. Finalizing on the staff side (B-040's existing screen, enhanced to default its date picker to what the tenant already asked for and to show a "the tenant requested this" banner) completes that same task directly, because the real evidence that the request was handled is the move-out actually finishing — not a second proof-note staff would have to type for something they just did.
+
+**Decided: the confirmation email says a date, not a dollar figure.** `lease.move_out_requested` (new event, new template, same rule/template pipeline B-030 built and B-040 already used for the finalized confirmation) tells the tenant their request was received and when they can expect their account to close — no settlement amount, because nothing is locked in until staff finalize, and a balance that changes between now and then would make the email wrong the moment it changed.
+
+**Verified:** 855 unit/DB tests (14 new — minimum-date computed from the facility's own notice policy; preview settling against the tenant's own lease and refusing one that is not theirs; request scheduling the lease, raising the task, and emitting the event; refusing a too-soon date and a second request while one is pending; cancel clearing the fields, withdrawing the task, refusing when nothing is scheduled and once the date has already arrived; and the staff-side pickup — the preview showing the tenant's requested date, and finalizing completing the same task). E2e: gated route, axe-clean, and the notice-floor/preview rendering confirmed on the demo tenant — deliberately **read-only** against that fixture (see below); full suite otherwise clean (one pre-existing parallel-load flake, confirmed by isolation, unrelated). Typecheck, lint, build clean. No migration — see D-24.
+
+**What the e2e suite does not cover, and why:** the actual request→task→cancel round trip is not driven through the browser against the shared demo tenant. That tenant's lease balance and status are asserted on directly by B-034, B-035, and B-038's own e2e specs — scheduling a real move-out against it would change `Lease.status`-adjacent state those suites depend on, the same class of shared-fixture mistake B-039's POS test made against this exact tenant's ledger balance two items ago. The full transactional behavior — including the parts a browser session can't easily observe, like the task's business-date idempotency — is covered directly and repeatably in `tests/move-out-request-db.test.ts` against disposable fixtures instead.
+
+**Left behind:** the "unit vacant and clean" verification itself is still a person walking over and looking — there is no photo-upload or checklist attached to the task beyond the free-text note every task type carries, same gap B-040 already left open pending a blob store. No SMS confirmation, only email — matching every other transactional send in this project, which is email-only until a provider is configured. A tenant cannot change the date on a pending request without cancelling and re-requesting; an "edit" path was considered and skipped, since cancel-then-request is the same number of taps and reuses the identical validation rather than a third code path for "change." Staff have no button to schedule a move-out *for* a tenant through this flow — that is what B-040's own screen already does, deliberately kept separate per D-24.
+
+---
+
 ---
 
 ## Feature PRDs added mid-build

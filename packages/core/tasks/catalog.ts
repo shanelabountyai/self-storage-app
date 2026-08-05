@@ -38,6 +38,17 @@ export const TASK_TYPES = [
     requiredProofFields: ['note'],
     sensitive: true,
   },
+  {
+    // PRD 01 US-707: "the request lands in the admin module for staff
+    // verification (unit vacant + clean) before finalization." The task is
+    // the verification queue itself; finalizing (B-040's move-out screen)
+    // completes it directly rather than through this catalog's own
+    // proof-gate, since the real evidence is the move-out completing at all.
+    type: 'move_out_request_review',
+    label: 'Tenant requested a move-out — verify and finalize',
+    requiredProofFields: ['note'],
+    sensitive: false,
+  },
 ] as const satisfies readonly TaskTypeSpec[]
 
 export type TaskType = (typeof TASK_TYPES)[number]['type']

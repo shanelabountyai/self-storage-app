@@ -247,3 +247,22 @@ export async function assignTask(actor: Actor, taskId: string, staffUserId: stri
   }
   await prisma.task.update({ where: { id: taskId }, data: { assigneeStaffId: staffUserId } })
 }
+
+/// Withdraws an open task without completing it — the request it was about
+/// stopped being true (B-041: a tenant cancelled their own move-out request
+/// before staff acted on it). No `Actor` parameter: this is called from
+/// trusted server-side code as a direct side effect of the same action that
+/// changed the underlying record, the same way `createTask` is, not from a
+/// staff-facing form that needs a permission check of its own. A no-op if no
+/// open task matches — cancelling a request that was never reviewed and one
+/// that never had a task at all look the same from here.
+export async function cancelOpenTask(
+  type: TaskType,
+  entityId: string,
+  client: Prisma.TransactionClient | typeof prisma = prisma,
+): Promise<void> {
+  await client.task.updateMany({
+    where: { type, entityId, status: 'open' },
+    data: { status: 'cancelled' },
+  })
+}
