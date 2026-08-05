@@ -103,6 +103,12 @@ export const LEASE_TEMPLATE = `
 export const ELECTRONIC_RECORDS_CONSENT =
   'I agree to sign this agreement electronically and to receive my lease, receipts and notices by email rather than on paper. I can ask for a paper copy at any time.'
 
+/// PRD 02 US-13 / B-032: this same sentence is what the `notice_email` consent
+/// record captures ("consent to receive notices by email is its own consent
+/// type... captured with the disclosure version at lease signing"). Bumped
+/// when the sentence above changes.
+export const ELECTRONIC_RECORDS_CONSENT_VERSION = 'v1'
+
 /// A typed name is a signature under E-SIGN when it is the signer's own act and
 /// is attributable to them. Comparing it to the name on the lease is the
 /// cheapest attribution check there is, and catches the common real error —

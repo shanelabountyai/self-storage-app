@@ -212,6 +212,12 @@ enum ConsentChannel {
   marketing_sms
   account_email
   account_sms
+  /// PRD 02 US-13 / B-032. Consent to receive *legal notices* by email — not
+  /// `account_email` (routine transactional mail) and not marketing. Texas
+  /// permits electronic notice only where the tenant agreed to it, so
+  /// overloading either of the other two channels would destroy the ability
+  /// to prove that specific agreement was ever made.
+  notice_email
 }
 
 enum ConsentState {

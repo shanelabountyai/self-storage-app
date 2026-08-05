@@ -1,7 +1,7 @@
 import { prisma } from '@storage/db'
 import { hashContent } from '@/lib/documents/render'
 import type { FieldErrors } from '@/lib/admin/form-state'
-import { ELECTRONIC_RECORDS_CONSENT, signatureMatchesName } from './template'
+import { ELECTRONIC_RECORDS_CONSENT, ELECTRONIC_RECORDS_CONSENT_VERSION, signatureMatchesName } from './template'
 
 // PRD 01 FR-4.2. Capturing a signature, and the evidence that goes with it.
 
@@ -108,4 +108,4 @@ export async function verifySignature(documentId: string): Promise<SignatureVerd
   }
 }
 
-export { ELECTRONIC_RECORDS_CONSENT }
+export { ELECTRONIC_RECORDS_CONSENT, ELECTRONIC_RECORDS_CONSENT_VERSION }

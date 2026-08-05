@@ -1,6 +1,6 @@
 import { AdminForm, Field } from '@/components/admin/form'
 import { submitDetailsAction } from '@/app/(public)/checkout/actions'
-import type { DetailsInput } from '@/lib/checkout/details'
+import { SMS_CONSENT_DISCLOSURE, type DetailsInput } from '@/lib/checkout/details'
 
 // PRD 01 US-501 step 1. One screen, and every field carries its autocomplete
 // token (1.3.5 Identify Input Purpose) and a keyboard that matches the data
@@ -62,6 +62,13 @@ export function DetailsStep({
         required
         className="flex flex-col gap-1 text-sm sm:col-span-2"
       />
+
+      <label className="flex items-start gap-2 text-sm sm:col-span-2">
+        {/* PRD 05 CN-15: unchecked by default, its own affirmative act — never
+            implied by entering a phone number above. */}
+        <input type="checkbox" name="smsConsent" value="yes" className="mt-1" />
+        <span>{SMS_CONSENT_DISCLOSURE}</span>
+      </label>
 
       <Field
         name="addressLine1"

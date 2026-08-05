@@ -2,8 +2,13 @@
 
 import { revalidatePath } from 'next/cache'
 import { advance, extendLock, relock, sendCheckoutResumeLink, type Step } from '@/lib/checkout/session'
-import { upsertTenantForCheckout, validateDetails } from '@/lib/checkout/details'
+import {
+  SMS_CONSENT_DISCLOSURE_VERSION,
+  upsertTenantForCheckout,
+  validateDetails,
+} from '@/lib/checkout/details'
 import { prisma } from '@storage/db'
+import { recordConsent } from '@storage/core/consent'
 import { fieldError, type FormState } from '@/lib/admin/form-state'
 import {
   currentPlans,
@@ -15,7 +20,24 @@ import {
 import { sessionByToken } from '@/lib/checkout/session'
 import { headers } from 'next/headers'
 import { existingLeaseDocument } from '@/lib/lease/build'
-import { signDocument, validateSignature } from '@/lib/lease/sign'
+import { ELECTRONIC_RECORDS_CONSENT_VERSION, signDocument, validateSignature } from '@/lib/lease/sign'
+
+/// Best-effort attribution, shared by every step that records consent or
+/// signature evidence (US-13, CN-15, FR-4.2). Behind a proxy the client
+/// address is the first entry of the forwarded chain; it is evidence, not
+/// identity — and genuinely best-effort, not required: `headers()` throws
+/// outside a real request scope (a direct test call, a future background
+/// re-run), and a record missing only its IP/user-agent is far better
+/// evidence than no record at all.
+async function requestMetadata(): Promise<{ ipAddress: string | null; userAgent: string | null }> {
+  try {
+    const bag = await headers()
+    const forwarded = bag.get('x-forwarded-for')
+    return { ipAddress: forwarded ? forwarded.split(',')[0].trim() : null, userAgent: bag.get('user-agent') }
+  } catch {
+    return { ipAddress: null, userAgent: null }
+  }
+}
 
 // B-020. The transitions a step's form can trigger. The individual steps'
 // validation lands with B-021..B-025; this item owns the machine they run on.
@@ -40,6 +62,7 @@ export async function submitDetailsAction(
     altContactPhone: String(formData.get('altContactPhone') ?? ''),
     activeDutyMilitary: formData.get('activeDutyMilitary') === 'yes',
   }
+  const smsConsentChecked = formData.get('smsConsent') === 'yes'
 
   const errors = validateDetails(input)
   if (Object.keys(errors).length > 0) return fieldError(errors)
@@ -64,6 +87,18 @@ export async function submitDetailsAction(
   // Linked after the transition so a validation failure never leaves a session
   // pointing at an account for a step the renter did not complete.
   await prisma.checkoutSession.update({ where: { id: result.session.id }, data: { tenantId } })
+
+  // PRD 05 CN-15: a record either way, not only when granted — "Stored: ...
+  // checkbox state" is the AC, and a declined checkbox is still evidence that
+  // the disclosure was shown and answered, not silence.
+  await recordConsent({
+    tenantId,
+    channel: 'account_sms',
+    state: smsConsentChecked ? 'granted' : 'revoked',
+    source: 'checkout_step_1',
+    disclosureVersion: SMS_CONSENT_DISCLOSURE_VERSION,
+    ipAddress: (await requestMetadata()).ipAddress,
+  })
 
   // CN-22: exactly the moment PRD 05 specifies — email just captured, session
   // still open. A comms failure must never fail step 1, which has already
@@ -174,18 +209,14 @@ export async function signLeaseAction(_prev: FormState, formData: FormData): Pro
   })
   if (Object.keys(errors).length > 0) return fieldError(errors)
 
-  // Best-effort attribution. Behind a proxy the client address is the first
-  // entry of the forwarded chain; it is evidence, not identity, and is recorded
-  // as what the browser reported rather than as a claim about who was there.
-  const headerBag = await headers()
-  const forwarded = headerBag.get('x-forwarded-for')
+  const { ipAddress, userAgent } = await requestMetadata()
   const signed = await signDocument({
     documentId: document.id,
     typedName: String(formData.get('typedName') ?? ''),
     legalName,
     consented: true,
-    ipAddress: forwarded ? forwarded.split(',')[0].trim() : null,
-    userAgent: headerBag.get('user-agent'),
+    ipAddress,
+    userAgent,
   })
 
   if (!signed.ok) {
@@ -197,6 +228,23 @@ export async function signLeaseAction(_prev: FormState, formData: FormData): Pro
           : 'We could not record your signature. Reload the page and try again.',
       fieldErrors: {},
     }
+  }
+
+  // PRD 02 US-13: distinct from the E-SIGN consent `signDocument` just
+  // recorded on the document itself — this is the specifically-typed record
+  // that proves *this* tenant agreed to receive legal notices electronically,
+  // which `account_email`/`marketing_email` cannot stand in for. Reaching
+  // here means `consented: true` (validateSignature refuses the sign
+  // otherwise), so this is always `granted`.
+  if (session.tenantId) {
+    await recordConsent({
+      tenantId: session.tenantId,
+      channel: 'notice_email',
+      state: 'granted',
+      source: 'checkout_lease_signing',
+      disclosureVersion: ELECTRONIC_RECORDS_CONSENT_VERSION,
+      ipAddress,
+    })
   }
 
   const result = await advance(token, 'lease', {

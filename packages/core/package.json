@@ -13,7 +13,8 @@
     "./facility-settings": "./facility-settings/index.ts",
     "./inventory": "./inventory/index.ts",
     "./pricing": "./pricing/index.ts",
-    "./access": "./access/index.ts"
+    "./access": "./access/index.ts",
+    "./consent": "./consent/index.ts"
   },
   "dependencies": {
     "@storage/db": "*"

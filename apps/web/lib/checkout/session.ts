@@ -145,6 +145,7 @@ export type CheckoutSessionView = {
   facilityId: string
   unitTypeId: string
   unitId: string | null
+  tenantId: string | null
   email: string | null
   quotedRateCents: number
   lockExpiresAt: Date
@@ -161,6 +162,7 @@ function toView(session: {
   facilityId: string
   unitTypeId: string
   unitId: string | null
+  tenantId: string | null
   email: string | null
   quotedRateCents: number
   lockExpiresAt: Date

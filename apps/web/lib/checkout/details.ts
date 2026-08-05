@@ -18,6 +18,19 @@ export type DetailsInput = {
   activeDutyMilitary?: boolean
 }
 
+/// PRD 05 CN-15 / §6.2. Unchecked by default (D-10: draft copy, attorney
+/// review pending — PRD 05 Q2). Covers every element CN-15's AC lists: who is
+/// texting, purpose, frequency, rates, opt-out, and that consent is not a
+/// condition of rental — the last one matters most, since the checkbox sits
+/// right next to fields that are required.
+export const SMS_CONSENT_DISCLOSURE =
+  'I agree to receive account and payment text messages (like payment reminders and gate codes) from this facility. Message frequency varies. Message and data rates may apply. Reply STOP to opt out, HELP for help. This is not required to rent a unit.'
+
+/// Bumped when the disclosure text above changes; recorded on every consent
+/// row so a later dispute reads exactly what the renter was shown, not
+/// whatever the copy currently says.
+export const SMS_CONSENT_DISCLOSURE_VERSION = 'v1'
+
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 /// Deliberately loose. This is a trust boundary, so the job is to reject
 /// obvious nonsense and typos, not to enforce a format that turns away a real
