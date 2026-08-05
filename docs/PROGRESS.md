@@ -740,7 +740,7 @@ The first working sign-in UI either audience has ever had — `/login` serves bo
 
 ---
 
-### B-035 — Portal one-time payment ✅ `<pending>`
+### B-035 — Portal one-time payment ✅ `0c3b336`
 
 "Pay $161 now" on the dashboard lands on `/portal/pay` with the full balance already prepared, and confirming in the Payment Element is the second tap — two for the common case, three if the tenant changes the amount (US-703 asks for ≤3, §6.5 for ≤2 from the past-due banner). Behind it: `lib/portal/payment.ts` decides how much money moves, `/portal/pay/done` is the instant receipt, and the ledger is what both read.
 
