@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { auth, signOut } from '@/auth'
 import { requireTenantActor } from '@/lib/rbac/session'
@@ -32,8 +33,22 @@ export default async function PortalLayout({ children }: { children: React.React
       </a>
 
       <header className="border-b">
-        <div className="mx-auto flex w-full max-w-4xl items-center gap-4 px-4 py-3">
+        <div className="mx-auto flex w-full max-w-4xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
           <span className="mr-auto text-sm font-medium">{userName}</span>
+          <nav aria-label="Your account" className="flex flex-wrap gap-4 text-sm">
+            <Link href="/portal" className="underline underline-offset-2">
+              Overview
+            </Link>
+            <Link href="/portal/documents" className="underline underline-offset-2">
+              Documents
+            </Link>
+            <Link href="/portal/methods" className="underline underline-offset-2">
+              Payment methods
+            </Link>
+            <Link href="/portal/contact" className="underline underline-offset-2">
+              Contact details
+            </Link>
+          </nav>
           <form
             action={async () => {
               'use server'

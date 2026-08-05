@@ -19,7 +19,17 @@ const appDir = fileURLToPath(new URL('../apps/web/app', import.meta.url))
 /// time. `forgot-password`/`reset-password`/`reauth` and the tenant `portal`
 /// (B-033) are the same kind of customer-facing surface as `login` — a leak
 /// there is exactly as readable by a tenant as one on the public site.
-const CUSTOMER_REACHABLE = ['(public)', 'login', 'forgot-password', 'reset-password', 'reauth', 'portal']
+const CUSTOMER_REACHABLE = [
+  '(public)',
+  'login',
+  'forgot-password',
+  'reset-password',
+  'reauth',
+  'portal',
+  // B-037. Reached from a link in an email, by someone who may not be signed
+  // in at all — as customer-facing as anything else here.
+  'confirm-email',
+]
 
 function filesUnder(dir: string): string[] {
   return readdirSync(dir).flatMap((entry) => {

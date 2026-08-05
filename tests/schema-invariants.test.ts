@@ -31,6 +31,8 @@ const NO_FACILITY_ID: Record<string, string> = {
   StaffUser: 'org-level identity; facility scoping is RoleAssignment in B-004',
   Promotion: 'targets facilities through facilityIds[]',
   Consent: 'scoped to a tenant or lead, not a facility',
+  TenantAddress:
+    'where a person receives post, like the Tenant it belongs to — one address of record serves every lease they hold, at any facility',
   InvoiceLineItem: 'scoped through its invoice',
   PaymentAllocation: 'scoped through its payment and invoice',
   AuditLog: 'facilityId is nullable — org-level actions have no facility',

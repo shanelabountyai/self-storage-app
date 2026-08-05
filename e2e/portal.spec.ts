@@ -135,6 +135,58 @@ test.describe('signed in as the demo tenant', () => {
   // `authTime` in the JWT, and the decision itself is already covered
   // directly by tests/reauth.test.ts's boundary cases. See PROGRESS.md.
 
+  for (const route of ['/portal/documents', '/portal/contact']) {
+    test(`${route} has no WCAG 2.1 AA violations`, async ({ page }) => {
+      await page.goto(route)
+      await expect(page.getByRole('main')).toBeVisible()
+
+      const { violations } = await new AxeBuilder({ page })
+        .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+        .analyze()
+
+      expect(
+        violations.map((v) => `${v.id}: ${v.help}`),
+        'axe found accessibility violations',
+      ).toEqual([])
+    })
+  }
+
+  test('saving an address keeps the previous one on file', async ({ page }) => {
+    // PRD 02 US-13: the address of record is a history, because "which
+    // address did the notice go to" has to be answerable from records.
+    await page.goto('/portal/contact')
+    // Unique per run: re-saving the same address is correctly a no-op, so a
+    // fixed value passes once and then reports "already your address".
+    await page.getByLabel('Street address').fill(`${Date.now() % 100000} Evidence Lane`)
+    await page.getByLabel('City').fill('Austin')
+    await page.getByLabel('State').fill('TX')
+    await page.getByLabel('ZIP code').fill('78704')
+    await page.getByRole('button', { name: 'Save address' }).click()
+
+    await expect(page.getByRole('main').getByRole('status').first()).toContainText('address is updated')
+    await expect(page.getByText('Previous addresses')).toBeVisible()
+  })
+
+  test('an email change is not applied until the link is opened', async ({ page }) => {
+    await page.goto('/portal/contact')
+    const before = await page.getByText(/Your email is/).textContent()
+
+    await page.getByLabel('New email address').fill(`changed-${Date.now()}@example.com`)
+    await page.getByRole('button', { name: 'Send confirmation link' }).click()
+
+    await expect(page.getByRole('main').getByRole('status').first()).toContainText(
+      'Nothing changes until you open it',
+    )
+    // Still the old address on the account.
+    await expect(page.getByText(/Your email is/)).toHaveText(before!)
+  })
+
+  test('a bad confirmation link changes nothing and says so', async ({ page }) => {
+    await page.goto('/confirm-email?token=not-a-real-token')
+    await expect(page.getByRole('heading', { name: /didn.t work/i })).toBeVisible()
+    await expect(page.getByText(/Nothing has changed/)).toBeVisible()
+  })
+
   // GateCodePanel's own reveal/copy interaction (the aria-expanded toggle,
   // the character-by-character sr-only text, and the "Copied" live region
   // §6.8 requires to pre-exist the click that fills it) is NOT covered here.

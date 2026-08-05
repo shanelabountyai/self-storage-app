@@ -5,6 +5,10 @@ import { prisma, type AuthAudience, type AuthTokenPurpose } from '@storage/db'
 export const TOKEN_TTL_MS: Record<AuthTokenPurpose, number> = {
   magic_link: 15 * 60 * 1000,
   password_reset: 60 * 60 * 1000,
+  // Longer than a password reset on purpose: this link goes to an address the
+  // person may not have open, and the failure mode of it expiring is that
+  // they cannot receive mail from us at all until they notice and retry.
+  email_change: 24 * 60 * 60 * 1000,
 }
 
 /// 256 bits of entropy, URL-safe. Well above the ≥128-bit floor the comms PRD

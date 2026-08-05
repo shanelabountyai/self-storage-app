@@ -13,19 +13,28 @@ import { sendDirectEmail } from '@/lib/comms/service'
 // the raw URL exists only in this call, never persisted, so there is nothing
 // for a later-run consumer to re-derive it from anyway.
 
+/// The purposes this generic "here is a link" email actually fits.
+///
+/// Narrower than `AuthTokenPurpose` on purpose: `email_change` is also a
+/// token-bearing auth flow, but it sends two different messages to two
+/// different addresses (lib/auth/email-change.ts) and neither is this shape.
+/// Typing it out rather than accepting the whole enum means adding a purpose
+/// that does not belong here is a compile error instead of a wrong email.
+type LinkEmailPurpose = Extract<AuthTokenPurpose, 'magic_link' | 'password_reset'>
+
 type SendArgs = {
   to: string
-  purpose: AuthTokenPurpose
+  purpose: LinkEmailPurpose
   url: string
   expiresAt: Date
 }
 
-const SUBJECT: Record<AuthTokenPurpose, string> = {
+const SUBJECT: Record<LinkEmailPurpose, string> = {
   magic_link: `Sign in to ${SITE.name}`,
   password_reset: `Reset your ${SITE.name} password`,
 }
 
-const INTRO: Record<AuthTokenPurpose, string> = {
+const INTRO: Record<LinkEmailPurpose, string> = {
   magic_link: 'Use this link to sign in:',
   password_reset: 'Use this link to choose a new password:',
 }

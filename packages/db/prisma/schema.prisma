@@ -299,6 +299,19 @@ enum AuthAudience {
 enum AuthTokenPurpose {
   magic_link
   password_reset
+  /// Confirms a new email address before it replaces the old one (US-706).
+  /// The token's `email` column carries the PENDING address — the change is
+  /// not applied anywhere until the link sent to that address is opened,
+  /// which is what proves the person asking can actually receive mail there.
+  email_change
+}
+
+/// Where an address of record came from (PRD 02 US-13).
+enum AddressSource {
+  portal
+  counter
+  mail_return
+  import
 }
 
 // ------------------------------------------------------------ inventory ----
@@ -555,6 +568,7 @@ model Tenant {
   version                      Int       @default(0)
 
   leases           Lease[]
+  addresses        TenantAddress[]
   payments         Payment[]
   accessGrants     AccessGrant[]
   reservations     Reservation[]
@@ -565,6 +579,45 @@ model Tenant {
 
   @@index([lastName, firstName])
   @@map("tenant")
+}
+
+/// PRD 02 US-13's address of record. Append-only: a change is a new row, never
+/// an edit, and the current address is the newest row.
+///
+/// Evidentiary, not tidiness. On day 40 of a lien cycle a tenant updates their
+/// address in the portal and "which address does the notice go to" has to be
+/// answerable from records rather than inference — mailing the old one when
+/// they can show they told us is a wrongful sale, mailing the new one when the
+/// lease states another may be a failure to use the address of record.
+///
+/// Each row holds the address as of that moment rather than an old/new pair:
+/// the previous row IS the old value, and storing it twice creates two things
+/// that can disagree about the same fact. `Tenant.addressLine1` and friends
+/// are a cache of the newest row, kept in the same transaction — this table is
+/// what a dispute reads (D-21).
+model TenantAddress {
+  id           String        @id @default(cuid())
+  tenantId     String
+  addressLine1 String
+  addressLine2 String?
+  city         String
+  state        String
+  postalCode   String
+  country      String        @default("US")
+  source       AddressSource
+  /// Who made the change. Exactly one is set for a human actor; both null
+  /// means a system path (an import), which the source already names.
+  actorTenantId String?
+  actorStaffId  String?
+  /// Set when post to this address came back. Makes the tenant's contact
+  /// details visibly stale everywhere they render, and B-095 raises the task.
+  returnedMailAt DateTime?   @db.Timestamptz(6)
+  createdAt    DateTime      @default(now()) @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+  @@map("tenant_address")
 }
 
 model Lease {
