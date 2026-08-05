@@ -834,7 +834,7 @@ Three new portal screens — documents and payment history, contact details, and
 
 ---
 
-### B-039 — Walk-in (POS) move-in + manual payments ✅ `<pending>`
+### B-039 — Walk-in (POS) move-in + manual payments ✅ `ffd26ec`
 
 The counter: record a cash, check or money-order payment against a tenant's unit, and start a walk-in move-in. Plus the cash-accountability block the backlog row put the emphasis on — attribution, gapless receipts, a manager threshold, and a printable daily deposit slip. Recorded as **D-22** for the numbering mechanism, because it is the kind of thing a later session would "tidy" into a sequence and silently break.
 
