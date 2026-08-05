@@ -722,7 +722,7 @@ The first working sign-in UI either audience has ever had — `/login` serves bo
 
 ---
 
-### B-034 — Portal dashboard ✅ `<pending>`
+### B-034 — Portal dashboard ✅ `25abe40`
 
 "What do I owe, when is it due, what's my gate code" (§6.5) — one card per occupying lease (`OCCUPYING_LEASE_STATUSES`, the same set units/inventory already treat as "occupied"), each showing size/rate, current balance, next payment and due date, autopay status (read-only), and the gate code behind a reveal button. All of it reads from data that was already real before this item — `LedgerEntry` for balance, `Lease.billingDay` for the next charge date, `Tenant.stripeDefaultPaymentMethodId` for autopay, `AccessGrant.state` for suspension — `lib/portal/dashboard.ts` is the first thing in the codebase that reads any of them back out.
 
