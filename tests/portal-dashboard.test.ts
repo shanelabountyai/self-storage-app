@@ -128,6 +128,11 @@ describeDb('portalDashboardForTenant', () => {
   })
 
   it('reads autopay on and a suspended grant as the panel needs to see them', async () => {
+    // B-036 changed what "autopay on" means. It was "this tenant has a card
+    // saved", which was wrong in both directions — a renter who opted out at
+    // checkout still read as On, and one who opted in read as Off because
+    // nothing ever recorded the choice. It is now the lease's own flag, and a
+    // saved card is only the thing it charges.
     await prisma.tenant.update({ where: { id: tenantId }, data: { stripeDefaultPaymentMethodId: 'pm_test' } })
     const grant = await prisma.accessGrant.create({
       data: { facilityId, tenantId, state: 'suspended', stateCause: 'system:delinquency' },
@@ -141,12 +146,14 @@ describeDb('portalDashboardForTenant', () => {
         startDate: new Date(),
         monthlyRateCents: 12_900,
         billingDay: 10,
+        autopayEnabled: true,
       },
     })
 
     const [summary] = await portalDashboardForTenant(tenantId)
 
     expect(summary.autopayEnabled).toBe(true)
+    expect(summary.autopayNeedsCard, 'a card is on file, so nothing is missing').toBe(false)
     expect(summary.accessSuspended).toBe(true)
 
     await prisma.lease.delete({ where: { id: lease.id } })

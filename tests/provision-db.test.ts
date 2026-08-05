@@ -124,6 +124,34 @@ describeDb('move-in provisioning', () => {
     expect(inventory?.unitTypes[0]?.availableCount ?? 0).toBe(0)
   })
 
+  it('carries the renter’s autopay choice from checkout onto the lease', async () => {
+    // B-036. This choice was written to the checkout session by step 5 and
+    // then dropped: nothing read it at provisioning, so a renter's own
+    // decision never reached the lease in either direction.
+    const optedOut = await startCheckout({ facilityId, unitTypeId, quotedRateCents: 12_900 })
+    if (!optedOut.ok) throw new Error('could not start checkout')
+    await prisma.checkoutSession.update({
+      where: { id: optedOut.sessionId },
+      data: { tenantId, data: { protection: 'waiver', autopay: false } },
+    })
+    const off = await provisionMoveIn(optedOut.sessionId)
+    if (!off.ok) throw new Error('unreachable')
+    expect(
+      (await prisma.lease.findUniqueOrThrow({ where: { id: off.leaseId } })).autopayEnabled,
+    ).toBe(false)
+  })
+
+  it('enrols in autopay by default when the renter left it alone', async () => {
+    // §4.6/D-11a: default-on at checkout, so anything short of an explicit
+    // opt-out enrols.
+    const started = await paidSession()
+    const result = await provisionMoveIn(started.sessionId)
+    if (!result.ok) throw new Error('unreachable')
+    expect(
+      (await prisma.lease.findUniqueOrThrow({ where: { id: result.leaseId } })).autopayEnabled,
+    ).toBe(true)
+  })
+
   it('starts the rate-increase clock at move-in', async () => {
     // US-11: this cannot be backfilled. A lease created without it is a tenant
     // permanently ineligible for a rules-based increase.

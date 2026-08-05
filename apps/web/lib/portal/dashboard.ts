@@ -40,6 +40,10 @@ export type PortalLeaseSummary = {
   balanceCents: number
   nextDueDate: Date
   autopayEnabled: boolean
+  /// Autopay is on for this unit but there is no card to charge — the state
+  /// that would otherwise read as "On" and quietly take nothing on the
+  /// billing day. Autopay needs both halves (see Lease.autopayEnabled).
+  autopayNeedsCard: boolean
   accessSuspended: boolean
   gateCode: string | null
 }
@@ -57,6 +61,7 @@ export async function portalDashboardForTenant(
         id: true,
         facilityId: true,
         billingDay: true,
+        autopayEnabled: true,
         monthlyRateCents: true,
         protectionCents: true,
         facility: { select: { name: true, phone: true, timezone: true } },
@@ -88,7 +93,8 @@ export async function portalDashboardForTenant(
         protectionCents: lease.protectionCents,
         balanceCents: balance._sum.amountCents ?? 0,
         nextDueDate: nextBillingDate(lease.billingDay, now),
-        autopayEnabled: Boolean(tenant.stripeDefaultPaymentMethodId),
+        autopayEnabled: lease.autopayEnabled,
+        autopayNeedsCard: lease.autopayEnabled && !tenant.stripeDefaultPaymentMethodId,
         accessSuspended: grant?.state === 'suspended',
         gateCode,
       }

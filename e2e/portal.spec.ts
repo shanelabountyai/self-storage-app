@@ -96,6 +96,45 @@ test.describe('signed in as the demo tenant', () => {
     await expect(page.getByText('$9,999.99')).toHaveCount(0)
   })
 
+  test('/portal/methods lists autopay per unit and has no WCAG 2.1 AA violations', async ({
+    page,
+  }) => {
+    await page.goto('/portal/methods')
+    await expect(page.getByRole('heading', { name: 'Payment methods' })).toBeVisible()
+    // §4.6 wants the amount and the date beside the control, not behind a link.
+    await expect(page.getByRole('heading', { name: 'Automatic payments' })).toBeVisible()
+    await expect(page.getByText(/day 1 of each month/i).first()).toBeVisible()
+
+    const { violations } = await new AxeBuilder({ page })
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+      .analyze()
+
+    expect(
+      violations.map((v) => `${v.id}: ${v.help}`),
+      'axe found accessibility violations',
+    ).toEqual([])
+  })
+
+  test('autopay cannot be turned on with no card to charge', async ({ page }) => {
+    // The guard that stops the dashboard reading "On" while the billing day
+    // takes nothing. The demo tenant has no saved method.
+    await page.goto('/portal/methods')
+    const turnOn = page.getByRole('button', { name: /turn on automatic payments/i }).first()
+    await expect(turnOn).toBeVisible()
+    await turnOn.click()
+
+    await expect(page.getByRole('main').getByRole('alert')).toContainText('Add a card first')
+    // Still off, and still offering to turn on rather than off.
+    await expect(page.getByRole('button', { name: /turn on automatic payments/i }).first()).toBeVisible()
+  })
+
+  // The re-auth gate on turning autopay ON (US-701) is NOT exercised here:
+  // every e2e session is minted seconds earlier by the sign-in helper, so it
+  // is genuinely fresh and the gate correctly declines to fire. Driving the
+  // stale branch would mean either a >15-minute-old session or forging
+  // `authTime` in the JWT, and the decision itself is already covered
+  // directly by tests/reauth.test.ts's boundary cases. See PROGRESS.md.
+
   // GateCodePanel's own reveal/copy interaction (the aria-expanded toggle,
   // the character-by-character sr-only text, and the "Copied" live region
   // §6.8 requires to pre-exist the click that fills it) is NOT covered here.

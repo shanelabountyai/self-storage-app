@@ -578,6 +578,20 @@ model Lease {
   monthlyRateCents   Int
   /// Day of month rent is billed, 1–28 to stay valid in every month.
   billingDay         Int
+  /// Whether this unit charges itself each month (PRD 01 US-704).
+  ///
+  /// Per lease, not per tenant: billing runs per lease (B-045), the portal
+  /// dashboard already reports it per unit, and a tenant with two units can
+  /// reasonably want one on autopay and one not. WHICH card it charges is a
+  /// tenant fact (`Tenant.stripeDefaultPaymentMethodId`) because Stripe's
+  /// saved methods belong to the customer — autopay needs both, and either
+  /// one missing means nothing is charged automatically.
+  ///
+  /// Default false so a lease created by any path that has not thought about
+  /// autopay does not silently enrol anyone; move-in sets it explicitly from
+  /// the renter's own choice at checkout step 5 (§4.6/D-11a: default-on there,
+  /// with the disclosure and a one-activation opt-out beside it).
+  autopayEnabled     Boolean     @default(false)
   protectionPlanName String?
   protectionCents    Int         @default(0)
   /// Set when the tenant waives protection, with the attestation text shown.

@@ -48,6 +48,12 @@ export async function provisionMoveIn(sessionId: string): Promise<ProvisionResul
   const data = session.data as Record<string, unknown>
   const premiumCents = typeof data.protectionPremiumCents === 'number' ? data.protectionPremiumCents : 0
   const protectionTier = typeof data.protection === 'string' ? data.protection : 'waiver'
+  // §4.6/D-11a: autopay is default-on at checkout step 5 with the disclosure
+  // beside it, so anything other than an explicit opt-out enrols. Read here
+  // because until B-036 this choice was written to the checkout session and
+  // then dropped on the floor — the renter's own decision never reached the
+  // lease, and nothing downstream could act on it either way.
+  const autopayEnabled = data.autopay !== false
 
   const leaseId = await prisma.$transaction(async (tx) => {
     const lease = await tx.lease.create({
@@ -62,6 +68,7 @@ export async function provisionMoveIn(sessionId: string): Promise<ProvisionResul
         startDate: new Date(),
         monthlyRateCents: session.quotedRateCents,
         billingDay: 1,
+        autopayEnabled,
         protectionPlanName: protectionTier === 'waiver' ? null : protectionTier,
         protectionCents: premiumCents,
         protectionWaivedAt: protectionTier === 'waiver' ? new Date() : null,

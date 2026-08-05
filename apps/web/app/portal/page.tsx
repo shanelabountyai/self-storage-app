@@ -109,7 +109,17 @@ function LeaseCard({ lease }: { lease: PortalLeaseSummary }) {
         </div>
         <div>
           <dt className="text-muted-foreground">Autopay</dt>
-          <dd className="font-medium">{lease.autopayEnabled ? 'On' : 'Off'}</dd>
+          <dd className="font-medium">
+            {lease.autopayEnabled ? 'On' : 'Off'}{' '}
+            <Link href="/portal/methods" className="font-normal underline underline-offset-4">
+              Change
+            </Link>
+          </dd>
+          {lease.autopayNeedsCard && (
+            <p role="alert" className="mt-1 text-sm text-pretty text-red-800">
+              No card on file — nothing will be charged automatically.
+            </p>
+          )}
         </div>
       </dl>
 
