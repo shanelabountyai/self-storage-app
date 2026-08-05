@@ -98,6 +98,15 @@ async function teardown() {
   const where = { facilityId: { in: facilityIds } }
 
   // Order matters: children before parents, since most FKs are Restrict.
+  //
+  // Task.facilityId is Restrict too (B-095), and Task has no real FK to
+  // whatever it is about (entityId is a loose string, same as
+  // Document.subjectId) — so a task created against a demo tenant survives
+  // that tenant being deleted and recreated below as an orphaned row that
+  // just sits on the stable facility forever, accumulating across every
+  // reseed. Without this, /admin/tasks in dev slowly fills with garbage from
+  // demo tenants that no longer exist.
+  await prisma.task.deleteMany({ where })
   await prisma.ledgerEntry.deleteMany({ where })
   await prisma.paymentAllocation.deleteMany({ where: { payment: { facilityId: { in: facilityIds } } } })
   await prisma.payment.deleteMany({ where })

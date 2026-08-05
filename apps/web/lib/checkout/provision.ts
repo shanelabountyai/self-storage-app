@@ -2,6 +2,7 @@ import { type Prisma, prisma } from '@storage/db'
 import { emitEvent } from '@storage/core/events'
 import { recomputeUnitStatus } from '@/lib/admin/units'
 import { provisionAccessForLease } from '@/lib/access/provision'
+import { createTask } from '@/lib/admin/tasks'
 import { amountDueToday } from './payment'
 import { sessionById } from './session'
 
@@ -176,11 +177,31 @@ async function openingLedger(
 /// runs off the cron tick (api/cron/route.ts), and US-501 wants the code
 /// issued immediately, not on the next scheduled pass. `provisionAccessForLease`
 /// is idempotent by the credential it would create, so that consumer
-/// redelivering this is a safety net, not a second code. Comms (B-030) has
-/// nothing to call yet; a failure here becomes a Task (B-095) once it does,
-/// same as any other never-a-dead-end downstream step.
+/// redelivering this is a safety net, not a second code.
+///
+/// FR-4.6, in these words: "failures create admin tasks, never customer-facing
+/// dead ends." A failure here is recorded (B-095) so a human sees it now
+/// rather than only when Stripe's own webhook retries eventually exhaust —
+/// then re-thrown, so the at-least-once redelivery this project already
+/// relies on everywhere else still gets its own chance to self-heal. Both are
+/// idempotent, so whichever resolves it first is fine; a task left open after
+/// a redelivery quietly fixed things is a spurious "go check" a human closes
+/// in one click, which costs far less than a failure no one saw for three days.
 export async function requestDownstream(leaseId: string): Promise<void> {
-  await provisionAccessForLease(leaseId)
+  try {
+    await provisionAccessForLease(leaseId)
+  } catch (error) {
+    const lease = await prisma.lease.findUnique({ where: { id: leaseId }, select: { facilityId: true } })
+    if (lease) {
+      await createTask({
+        facilityId: lease.facilityId,
+        type: 'move_in_provisioning_failed',
+        entityType: 'Lease',
+        entityId: leaseId,
+      })
+    }
+    throw error
+  }
 }
 
 /// The lease a now-provisioned session became. The confirmation page's own

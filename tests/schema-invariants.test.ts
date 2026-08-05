@@ -60,6 +60,8 @@ const CALENDAR_DATE_FIELDS = new Set([
   // (and a timezone) the fact does not have.
   'Lease.paidThroughDate',
   'Lease.moveOutDate',
+  // B-095. Which facility-local day a task belongs to, not an instant.
+  'Task.businessDate',
 ])
 
 describe('prisma schema invariants', () => {

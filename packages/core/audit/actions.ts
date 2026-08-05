@@ -28,6 +28,7 @@ export const AUDIT_ACTIONS = [
   { action: 'tenant.contact_updated', label: 'Tenant contact info updated', requiresReason: false },
   { action: 'tenant.note_added', label: 'Note added to tenant', requiresReason: false },
   { action: 'document.logged', label: 'Document logged', requiresReason: false },
+  { action: 'task.completed', label: 'Task completed', requiresReason: false },
 
   // Leases and units
   { action: 'lease.edited', label: 'Lease edited', requiresReason: false },

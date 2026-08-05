@@ -1,0 +1,73 @@
+// PRD 02 §4.9 US-41 (B-095). The catalog: what a `Task.type` string means,
+// what proof it needs before it can be completed, and whether completing it
+// is sensitive enough to audit. Same shape as `packages/core/audit/actions.ts`
+// — a data table is how a new consumer adds a task type without anyone
+// touching the completion logic.
+
+export type TaskTypeSpec = {
+  type: string
+  label: string
+  /// Keys that must be present and non-empty in `proof` before this task can
+  /// be completed. Every type requires at least a note: a queue item marked
+  /// "done" with nothing to show for it is how a task queue becomes noise
+  /// nobody trusts.
+  requiredProofFields: readonly string[]
+  /// Whether completing this type writes an AuditLog entry alongside marking
+  /// it done — for the types where "who resolved this and when" matters
+  /// beyond the task row itself.
+  sensitive: boolean
+}
+
+export const TASK_TYPES = [
+  {
+    // B-026's own comment named this the reason B-095 had to exist: gate
+    // provisioning failing after a paid move-in must not be a silent retry
+    // with no one watching.
+    type: 'move_in_provisioning_failed',
+    label: 'Move-in provisioning failed',
+    requiredProofFields: ['note'],
+    sensitive: false,
+  },
+  {
+    // PRD 02 US-13's own AC: returned mail "creates a task... rather than
+    // sitting in a folder." Sensitive because stale contact info can affect
+    // whether a legal notice is deemed delivered — worth a record of who
+    // reviewed it and when, not just that the row flipped to completed.
+    type: 'returned_mail_review',
+    label: 'Returned mail — contact info may be stale',
+    requiredProofFields: ['note'],
+    sensitive: true,
+  },
+] as const satisfies readonly TaskTypeSpec[]
+
+export type TaskType = (typeof TASK_TYPES)[number]['type']
+
+const BY_TYPE = new Map<string, TaskTypeSpec>(TASK_TYPES.map((spec) => [spec.type, spec]))
+
+export function taskTypeSpec(type: string): TaskTypeSpec | undefined {
+  return BY_TYPE.get(type)
+}
+
+/// Every type's floor: a note. Used verbatim for a registered type with no
+/// stricter requirements, and as the fail-closed default for a type the
+/// catalog has never heard of.
+const DEFAULT_REQUIRED_FIELDS: readonly string[] = ['note']
+
+/// Which of a type's required proof fields are missing or blank. Empty means
+/// the task can be completed.
+///
+/// An unrecognised `type` falls back to the same default floor rather than
+/// requiring nothing — the fail-closed direction, so a typo'd type string
+/// blocks completion instead of silently accepting an empty proof object.
+export function missingProofFields(type: string, proof: Record<string, unknown> | null): string[] {
+  const spec = taskTypeSpec(type)
+  const required = spec?.requiredProofFields ?? DEFAULT_REQUIRED_FIELDS
+  return required.filter((key) => {
+    const value = proof?.[key]
+    return typeof value !== 'string' || value.trim() === ''
+  })
+}
+
+export function taskTypeIsSensitive(type: string): boolean {
+  return taskTypeSpec(type)?.sensitive ?? false
+}

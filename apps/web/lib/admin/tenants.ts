@@ -17,6 +17,7 @@ import {
   type FieldProblems,
 } from '@/lib/portal/contact'
 import { logManualDocument, type DocumentType } from '@/lib/documents/store'
+import { createTask } from '@/lib/admin/tasks'
 
 // PRD 02 §4.4 US-13. "Any staffer can pick up any conversation" — search,
 // then one profile: contact, address history, leases and balance, notes,
@@ -350,8 +351,18 @@ export async function updateTenantAddress(
 }
 
 export async function flagTenantAddressReturned(actor: Actor, tenantId: string, addressId: string): Promise<void> {
-  await assertTenantAccess(actor, tenantId, 'tenants:edit')
+  const [facilityId] = await assertTenantAccess(actor, tenantId, 'tenants:edit')
   await flagReturnedMail(addressId)
+  // PRD 02 US-13's own AC: this "creates a task... rather than sitting in a
+  // folder." Attributed to whichever facility the flagging staffer reached
+  // this tenant through — TenantAddress itself carries no facility (D-21),
+  // so this is the only context that has one to hand.
+  await createTask({
+    facilityId,
+    type: 'returned_mail_review',
+    entityType: 'Tenant',
+    entityId: tenantId,
+  })
 }
 
 export async function addTenantNote(actor: Actor, tenantId: string, body: string): Promise<FieldProblems> {

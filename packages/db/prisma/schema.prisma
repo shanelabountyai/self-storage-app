@@ -384,6 +384,7 @@ model Facility {
   documents              Document[]
   tenantNotes            TenantNote[]
   receiptCounter         ReceiptCounter?
+  tasks                  Task[]
   gateCommands           GateCommand[]
   accessEvents           AccessEvent[]
   simulatedGateCodes     SimulatedGateCode[]
@@ -1927,13 +1928,81 @@ model StaffUser {
   updatedAt       DateTime        @updatedAt @db.Timestamptz(6)
   deletedAt       DateTime?       @db.Timestamptz(6)
 
-  auditLogs    AuditLog[]
-  assignments  StaffFacilityAssignment[]
-  suppressions Suppression[]
-  tenantNotes  TenantNote[]
-  paymentsTaken Payment[]
+  auditLogs      AuditLog[]
+  assignments    StaffFacilityAssignment[]
+  suppressions   Suppression[]
+  tenantNotes    TenantNote[]
+  paymentsTaken  Payment[]
+  tasksAssigned  Task[]                    @relation("TaskAssignee")
+  tasksCompleted Task[]                    @relation("TaskCompletedBy")
 
   @@map("staff_user")
+}
+
+enum TaskStatus {
+  open
+  completed
+  cancelled
+}
+
+enum TaskPriority {
+  normal
+  high
+}
+
+/// PRD 02 §4.9 US-41 (B-095). "One task queue, not seven": every backlog item
+/// that needs staff to see and act on something — a failed downstream step, a
+/// stale address, an overlock mismatch, a delinquency step due today — writes
+/// a row here instead of inventing its own table. `type` plus
+/// `packages/core/tasks`'s catalog is what tells a generic row what it means
+/// and what evidence completing it requires.
+model Task {
+  id         String   @id @default(cuid())
+  facilityId String
+  /// Looked up in the catalog (packages/core/tasks) for its label, required
+  /// proof fields, and whether completing it needs an audit entry. A loose
+  /// string rather than an enum for the same reason `Document.type` is: new
+  /// task types are a catalog entry, not a migration.
+  type       String
+  /// What this task is about, mirroring `Document.subjectType`/`subjectId` —
+  /// one pair rather than a nullable FK per possible subject, so the entity
+  /// stays one table as new task types add new kinds of subject.
+  entityType String
+  entityId   String
+  /// The facility-local calendar day this task belongs to — when it was
+  /// created, not a due date. Half of "idempotent creation" (below) and of
+  /// "today's list": a redelivered event on the same business day must not
+  /// duplicate the task, and "my day" is exactly the rows whose businessDate
+  /// is today.
+  businessDate DateTime      @db.Date
+  priority     TaskPriority  @default(normal)
+  /// Null means anyone at the facility can pick it up.
+  assigneeStaffId String?
+  status           TaskStatus @default(open)
+  /// Free-form per `type`'s required keys (packages/core/tasks). A note field
+  /// is universal; a tracking number or a photo reference (once there is a
+  /// blob store) are type-specific. Validated against the catalog at
+  /// completion time, not by the column.
+  proof Json?
+  /// The domain event that created this task, if any — lets a redelivered
+  /// event find (rather than duplicate) the row it already made, alongside
+  /// the (type, entityId, businessDate) uniqueness below.
+  sourceEventId      String?
+  completedByStaffId String?
+  completedAt        DateTime? @db.Timestamptz(6)
+  createdAt          DateTime  @default(now()) @db.Timestamptz(6)
+
+  facility    Facility   @relation(fields: [facilityId], references: [id], onDelete: Restrict)
+  assignee    StaffUser? @relation("TaskAssignee", fields: [assigneeStaffId], references: [id], onDelete: Restrict)
+  completedBy StaffUser? @relation("TaskCompletedBy", fields: [completedByStaffId], references: [id], onDelete: Restrict)
+
+  // The idempotency key US-41 asks for: a redelivered event that would create
+  // the same (type, entityId) on the same business day is a no-op, not a
+  // duplicate row in someone's list.
+  @@unique([type, entityId, businessDate])
+  @@index([facilityId, status, businessDate])
+  @@index([assigneeStaffId, status])
+  @@map("task")
 }
 
 /// Append-only. Every privileged action lands here with before/after values
