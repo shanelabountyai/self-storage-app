@@ -11,3 +11,11 @@
 export const DEMO_EMAIL_DOMAIN = 'demo.example.com'
 export const DEMO_STAFF_EMAIL = `owner@${DEMO_EMAIL_DOMAIN}`
 export const DEMO_STAFF_PASSWORD = 'demo-owner-password'
+
+// B-034. A known-password tenant so the portal can be signed into and
+// accessibility-scanned the same way DEMO_STAFF_EMAIL covers admin. Bound to
+// the seed's delinquent lease on purpose — that one tenant exercises the
+// past-due banner and the suspended gate-code panel in the same login a
+// plain "everything's fine" tenant would not.
+export const DEMO_TENANT_EMAIL = `dana@${DEMO_EMAIL_DOMAIN}`
+export const DEMO_TENANT_PASSWORD = 'demo-tenant-password'

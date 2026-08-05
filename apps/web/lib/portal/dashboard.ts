@@ -1,0 +1,97 @@
+import { prisma } from '@storage/db'
+import { OCCUPYING_LEASE_STATUSES } from '@storage/core/inventory'
+import { codeForLease } from '@/lib/access/provision'
+import { SITE } from '@/lib/site-config'
+
+// PRD 01 §4.7 US-702 / §6.5. "What do I owe, when is it due, what's my gate
+// code" — read-only, from the same sources the rest of the app already
+// trusts: LedgerEntry for balance (reconcile.ts's own comment calls it "the
+// tenant-facing source of truth"), AccessGrant.state for suspension, and
+// Lease's own frozen `monthlyRateCents`/`billingDay` rather than a fresh rate
+// lookup (a rate change must never reprice an existing lease).
+//
+// No delinquency engine and no invoicing engine exist yet (B-057, B-044) — a
+// dependency the backlog row itself calls out as acceptable to leave open
+// rather than pull forward. Everything below is built only from signals that
+// are already real: a positive ledger balance, and whatever AccessGrant.state
+// already holds (nothing but a human or a future B-098 job sets it to
+// `suspended` today, and this file doesn't care which one did).
+
+/// Pure so the boundary-day math is unit-testable without a database. Dates
+/// are date-only in intent (no time-of-day meaning), same as `moveInDate`
+/// elsewhere in the checkout path.
+export function nextBillingDate(billingDay: number, from: Date): Date {
+  const year = from.getUTCFullYear()
+  const month = from.getUTCMonth()
+  const thisMonth = new Date(Date.UTC(year, month, billingDay))
+  return from.getUTCDate() <= billingDay ? thisMonth : new Date(Date.UTC(year, month + 1, billingDay))
+}
+
+export type PortalLeaseSummary = {
+  leaseId: string
+  facilityName: string
+  facilityPhone: string
+  facilityTimezone: string
+  unitNumber: string
+  widthFt: number
+  lengthFt: number
+  monthlyRateCents: number
+  protectionCents: number
+  balanceCents: number
+  nextDueDate: Date
+  autopayEnabled: boolean
+  accessSuspended: boolean
+  gateCode: string | null
+}
+
+export async function portalDashboardForTenant(
+  tenantId: string,
+  now: Date = new Date(),
+): Promise<PortalLeaseSummary[]> {
+  const [tenant, leases] = await Promise.all([
+    prisma.tenant.findUniqueOrThrow({ where: { id: tenantId }, select: { stripeDefaultPaymentMethodId: true } }),
+    prisma.lease.findMany({
+      where: { tenantId, status: { in: [...OCCUPYING_LEASE_STATUSES] } },
+      orderBy: { startDate: 'asc' },
+      select: {
+        id: true,
+        facilityId: true,
+        billingDay: true,
+        monthlyRateCents: true,
+        protectionCents: true,
+        facility: { select: { name: true, phone: true, timezone: true } },
+        unit: { select: { number: true, unitType: { select: { widthFt: true, lengthFt: true } } } },
+      },
+    }),
+  ])
+
+  return Promise.all(
+    leases.map(async (lease) => {
+      const [balance, grant, gateCode] = await Promise.all([
+        prisma.ledgerEntry.aggregate({ where: { leaseId: lease.id }, _sum: { amountCents: true } }),
+        prisma.accessGrant.findUnique({
+          where: { facilityId_tenantId: { facilityId: lease.facilityId, tenantId } },
+          select: { state: true },
+        }),
+        codeForLease(lease.id),
+      ])
+
+      return {
+        leaseId: lease.id,
+        facilityName: lease.facility.name,
+        facilityPhone: lease.facility.phone ?? SITE.phone.display,
+        facilityTimezone: lease.facility.timezone,
+        unitNumber: lease.unit.number,
+        widthFt: lease.unit.unitType.widthFt,
+        lengthFt: lease.unit.unitType.lengthFt,
+        monthlyRateCents: lease.monthlyRateCents,
+        protectionCents: lease.protectionCents,
+        balanceCents: balance._sum.amountCents ?? 0,
+        nextDueDate: nextBillingDate(lease.billingDay, now),
+        autopayEnabled: Boolean(tenant.stripeDefaultPaymentMethodId),
+        accessSuspended: grant?.state === 'suspended',
+        gateCode,
+      }
+    }),
+  )
+}

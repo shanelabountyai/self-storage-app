@@ -4,7 +4,13 @@ import { prisma } from '@storage/db'
 import { CLOSED_ALL_WEEK, type WeeklySchedule } from '@storage/core/facility-settings'
 import { recomputeUnitStatus } from '@/lib/admin/units'
 import { setPassword } from '@/lib/auth/accounts'
-import { DEMO_EMAIL_DOMAIN, DEMO_STAFF_EMAIL, DEMO_STAFF_PASSWORD } from './demo-credentials.ts'
+import {
+  DEMO_EMAIL_DOMAIN,
+  DEMO_STAFF_EMAIL,
+  DEMO_STAFF_PASSWORD,
+  DEMO_TENANT_EMAIL,
+  DEMO_TENANT_PASSWORD,
+} from './demo-credentials.ts'
 
 // Demo/dev data — two facilities and tenants in every lifecycle state
 // (PRD 02 §7, PRD 03 US-7 AC4). Distinct from `npm run db:seed`, which seeds
@@ -26,7 +32,7 @@ import { DEMO_EMAIL_DOMAIN, DEMO_STAFF_EMAIL, DEMO_STAFF_PASSWORD } from './demo
 // recomputeUnitStatus() like everything else (B-010 US-8).
 
 export const DEMO_PREFIX = 'demo-'
-export { DEMO_EMAIL_DOMAIN, DEMO_STAFF_EMAIL, DEMO_STAFF_PASSWORD }
+export { DEMO_EMAIL_DOMAIN, DEMO_STAFF_EMAIL, DEMO_STAFF_PASSWORD, DEMO_TENANT_EMAIL, DEMO_TENANT_PASSWORD }
 
 /// A signed-in staff account for the e2e suite.
 ///
@@ -374,7 +380,7 @@ async function makeLease(
   return lease
 }
 
-async function seedLifecycleStates(seeded: SeededFacility, startIndex: number) {
+async function seedLifecycleStates(seeded: SeededFacility, startIndex: number, isPrimaryFacility: boolean) {
   const { facility, unitTypes } = seeded
   const pool = unitTypes.flatMap((t) => t.units.map((u) => ({ unit: u, rate: t.spec.street })))
   let cursor = 0
@@ -444,9 +450,50 @@ async function seedLifecycleStates(seeded: SeededFacility, startIndex: number) {
   }
 
   // --- delinquent ---------------------------------------------------------
-  const delinquentTenant = await makeTenant('Dana', 'Delinquent', index++)
+  // At the primary facility, this is also the demo tenant with a known
+  // password (B-034) — one login that exercises both the portal's normal
+  // dashboard and its past-due/suspended states, the way DEMO_STAFF_EMAIL
+  // covers the admin side.
+  const delinquentTenant = isPrimaryFacility
+    ? await prisma.tenant.create({
+        data: {
+          email: DEMO_TENANT_EMAIL,
+          firstName: 'Dana',
+          lastName: 'Delinquent',
+          phone: `512-555-${String(1000 + index).slice(-4)}`,
+          addressLine1: `${100 + index} Demo Street`,
+          city: 'Austin',
+          state: 'TX',
+          postalCode: '78701',
+        },
+      })
+    : await makeTenant('Dana', 'Delinquent', index)
+  index++
   const delinquentSlot = next()
-  await makeLease(facility.id, delinquentSlot.unit.id, delinquentTenant.id, 'delinquent', delinquentSlot.rate, 200)
+  const delinquentLease = await makeLease(
+    facility.id,
+    delinquentSlot.unit.id,
+    delinquentTenant.id,
+    'delinquent',
+    delinquentSlot.rate,
+    200,
+  )
+  if (isPrimaryFacility) {
+    await setPassword(delinquentTenant.id, 'tenant', DEMO_TENANT_PASSWORD)
+    // The only ledger write in this whole seed — a real unpaid charge so the
+    // portal dashboard's past-due banner and suspended gate-code panel
+    // (B-034) have a genuine signal to render instead of an empty $0.
+    await prisma.ledgerEntry.create({
+      data: {
+        facilityId: facility.id,
+        leaseId: delinquentLease.id,
+        type: 'charge',
+        amountCents: delinquentSlot.rate + delinquentLease.protectionCents,
+        description: 'Monthly rent + protection plan',
+        occurredAt: daysAgo(35),
+      },
+    })
+  }
   note('delinquent')
 
   // --- pending_auction: far enough along to demo the lien arc -------------
@@ -539,9 +586,9 @@ async function main() {
   // demonstrable — a manager assigned to one must not see the other's tenants.
   await seedStaffOwner([austin.facility.id, dallas.facility.id])
 
-  const first = await seedLifecycleStates(austin, 1)
+  const first = await seedLifecycleStates(austin, 1, true)
   // Indices continue from the first facility so tenant emails stay unique.
-  await seedLifecycleStates(dallas, first.nextIndex)
+  await seedLifecycleStates(dallas, first.nextIndex, false)
 
   const [facilityCount, unitCount, tenantCount, leaseCount] = await Promise.all([
     prisma.facility.count({ where: { slug: { startsWith: DEMO_PREFIX } } }),
