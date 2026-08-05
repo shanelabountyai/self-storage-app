@@ -766,7 +766,7 @@ The first working sign-in UI either audience has ever had — `/login` serves bo
 
 ---
 
-### B-036 — Payment methods & autopay management ✅ `<pending>`
+### B-036 — Payment methods & autopay management ✅ `5a3e52e`
 
 `/portal/methods`: the cards on file, which unit charges itself, what the next charge will be and when. Recorded as **D-20**, because where autopay lives and what re-auth guards are both things a later item must not quietly reverse.
 
