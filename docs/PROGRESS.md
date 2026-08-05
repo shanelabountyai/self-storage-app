@@ -860,7 +860,7 @@ The counter: record a cash, check or money-order payment against a tenant's unit
 
 ---
 
-### B-040 — Admin move-out ✅ `<pending>`
+### B-040 — Admin move-out ✅ `de72721`
 
 Ending a lease: preview the settlement, close it, release the unit to `maintenance`, revoke the gate, and send the CN-8 confirmation. Plus the former-tenant AR list and the "verified empty and clean" check that puts a unit back on sale.
 
