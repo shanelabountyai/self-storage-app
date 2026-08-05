@@ -788,7 +788,7 @@ The first working sign-in UI either audience has ever had — `/login` serves bo
 
 ---
 
-### B-037 — Portal documents & contact info ✅ `<pending>`
+### B-037 — Portal documents & contact info ✅ `f1957be`
 
 Three new portal screens — documents and payment history, contact details, and the address of record — plus `/confirm-email` for the one flow that has to work without a session. New `TenantAddress` model (**D-21**) and a new `email_change` token purpose.
 
