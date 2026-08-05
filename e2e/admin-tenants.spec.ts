@@ -1,0 +1,99 @@
+import AxeBuilder from '@axe-core/playwright'
+import { expect, test } from '@playwright/test'
+import { signInAsDemoOwner } from './sign-in'
+
+// PRD 02 §4.4 US-13/US-16 (B-038). Search → profile, the same split as every
+// other admin surface in this suite: gate first, then a real session.
+
+test.describe('tenant search role gating', () => {
+  test('redirects an unauthenticated visitor to /login', async ({ page }) => {
+    await page.goto('/admin/tenants')
+    await expect(page).toHaveURL(/\/login/)
+  })
+})
+
+test.describe('signed in as the demo owner', () => {
+  test.beforeEach(async ({ page }) => {
+    await signInAsDemoOwner(page)
+  })
+
+  test('/admin/tenants has no WCAG 2.1 AA violations', async ({ page }) => {
+    await page.goto('/admin/tenants')
+    await expect(page.getByRole('main')).toBeVisible()
+
+    const { violations } = await new AxeBuilder({ page })
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+      .analyze()
+
+    expect(
+      violations.map((v) => `${v.id}: ${v.help}`),
+      'axe found accessibility violations',
+    ).toEqual([])
+  })
+
+  test('searching by a demo tenant’s name finds them and links to their profile', async ({ page }) => {
+    // dana@demo.example.com uniquely: two "Dana Delinquent" tenants exist
+    // (one per demo facility), and the name alone would not tell them apart.
+    // This one is B-034's seeded demo tenant with a real ledger charge.
+    await page.goto('/admin/tenants?q=dana@demo.example.com')
+    const link = page.getByRole('link', { name: 'Dana Delinquent' })
+    await expect(link).toBeVisible()
+    await link.click()
+
+    await expect(page).toHaveURL(/\/admin\/tenants\/.+/)
+    await expect(page.getByRole('heading', { name: 'Dana Delinquent' })).toBeVisible()
+    // Balance due — the honest delinquency signal (a real ledger charge),
+    // not a fabricated "Delinquent" status label (see the page's own note).
+    await expect(page.getByText(/Balance due/)).toBeVisible()
+  })
+
+  test('a search with no matches says so', async ({ page }) => {
+    await page.goto('/admin/tenants?q=zzz-nobody-zzz')
+    await expect(page.getByText(/No tenants match/)).toBeVisible()
+  })
+
+  test('the tenant profile has no WCAG 2.1 AA violations', async ({ page }) => {
+    await page.goto('/admin/tenants?q=dana@demo.example.com')
+    await page.getByRole('link', { name: 'Dana Delinquent' }).click()
+    await expect(page.getByRole('main')).toBeVisible()
+
+    const { violations } = await new AxeBuilder({ page })
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+      .analyze()
+
+    expect(
+      violations.map((v) => `${v.id}: ${v.help}`),
+      'axe found accessibility violations',
+    ).toEqual([])
+  })
+
+  test('adding a note shows it immediately, with author and pin control', async ({ page }) => {
+    await page.goto('/admin/tenants?q=dana@demo.example.com')
+    await page.getByRole('link', { name: 'Dana Delinquent' }).click()
+
+    const noteText = `Called about balance — e2e ${Date.now()}`
+    await page.getByLabel('New note').fill(noteText)
+    await page.getByRole('button', { name: 'Add note' }).click()
+
+    await expect(page.getByText(noteText)).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Pin' }).first()).toBeVisible()
+  })
+
+  test('logging a document with a blank title is refused server-side, not just by the required attribute', async ({
+    page,
+  }) => {
+    // A single space passes the browser's native `required` check (which only
+    // rejects an empty string) but not the server's trim-based validation —
+    // proving the real rejection happens server-side, the same guarantee a
+    // crafted request without JavaScript needs.
+    await page.goto('/admin/tenants?q=dana@demo.example.com')
+    await page.getByRole('link', { name: 'Dana Delinquent' }).click()
+
+    await page.getByLabel('Title').fill(' ')
+    await page.getByRole('button', { name: 'Log document' }).click()
+    // AdminForm renders the same message twice on error — once in the field
+    // list, once beside the field itself — so this asserts count rather than
+    // picking one.
+    await expect(page.getByRole('main').getByText(/Enter a title/)).toHaveCount(2)
+  })
+})

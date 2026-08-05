@@ -24,6 +24,11 @@ export const AUDIT_ACTIONS = [
   { action: 'rate.street_changed', label: 'Street rate changed', requiresReason: false },
   { action: 'rate.tenant_increased', label: 'Tenant rate increased', requiresReason: true },
 
+  // Tenants
+  { action: 'tenant.contact_updated', label: 'Tenant contact info updated', requiresReason: false },
+  { action: 'tenant.note_added', label: 'Note added to tenant', requiresReason: false },
+  { action: 'document.logged', label: 'Document logged', requiresReason: false },
+
   // Leases and units
   { action: 'lease.edited', label: 'Lease edited', requiresReason: false },
   { action: 'lease.moved_out', label: 'Move-out completed', requiresReason: false },

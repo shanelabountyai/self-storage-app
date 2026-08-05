@@ -2,6 +2,13 @@ import { prisma, type AddressSource, type Prisma } from '@storage/db'
 
 // PRD 01 US-706 / PRD 02 US-13. Contact details a tenant can change about
 // themselves, and the address of record that has to survive them changing it.
+//
+// Despite the directory, this is not portal-only: `lib/admin/tenants.ts`
+// (B-038, the counter's side of US-13) imports it wholesale rather than
+// duplicating it — D-21 is explicit that every writer of an address goes
+// through `recordAddressChange` here, portal or counter alike. Left in
+// `lib/portal/` rather than moved, to avoid rewriting B-037's already-shipped
+// import paths for a rename with no functional effect.
 
 export type AddressInput = {
   addressLine1: string

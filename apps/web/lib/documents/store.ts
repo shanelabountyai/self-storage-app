@@ -137,3 +137,51 @@ export async function verifyDocument(documentId: string): Promise<
 // path would not survive a serverless deploy. Generated documents do not need
 // one: they are text, they are small, and keeping them in the row means the
 // hash and the content can never drift apart.
+
+export type LogManualDocumentInput = {
+  facilityId: string
+  type: Extract<DocumentType, 'id_copy' | 'insurance_proof' | 'other'>
+  subjectType: string
+  subjectId: string
+  title: string
+  /// What staff typed, not a file's bytes — see the note above. A blank note
+  /// still records that the document exists (e.g. "ID copy on file at the
+  /// counter"), which is real information even with nothing to view online.
+  note?: string
+  actor: AuditActor
+}
+
+/// Records that a document exists, without any bytes to back it (see above).
+/// The honest counterpart to `storeGeneratedDocument`: that function stores
+/// content this app rendered and can hash; this one stores what a staffer
+/// typed about something that physically exists elsewhere, typed exactly as
+/// entered rather than templated.
+export async function logManualDocument(
+  input: LogManualDocumentInput,
+): Promise<{ id: string }> {
+  const content = input.note?.trim() || null
+  const document = await prisma.document.create({
+    data: {
+      facilityId: input.facilityId,
+      type: input.type,
+      subjectType: input.subjectType,
+      subjectId: input.subjectId,
+      title: input.title,
+      content,
+      mimeType: 'text/plain; charset=utf-8',
+      byteSize: content ? Buffer.byteLength(content, 'utf8') : 0,
+      contentHash: hashContent(content ?? ''),
+    },
+  })
+
+  await recordAudit({
+    actor: input.actor,
+    facilityId: input.facilityId,
+    action: 'document.logged',
+    entityType: 'Document',
+    entityId: document.id,
+    context: { type: input.type, subjectType: input.subjectType, subjectId: input.subjectId },
+  })
+
+  return { id: document.id }
+}

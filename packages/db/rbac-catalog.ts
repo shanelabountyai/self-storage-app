@@ -8,6 +8,7 @@
 export const PERMISSIONS = [
   // Tenants & leases
   { key: 'tenants:view', name: 'View tenants and units', category: 'tenants', description: 'Read tenant and unit records for assigned facilities.' },
+  { key: 'tenants:edit', name: 'Edit tenant records', category: 'tenants', description: 'Update contact info and address, add notes, and log documents on a tenant profile.' },
   { key: 'leases:move_in', name: 'Move-in at the counter', category: 'tenants', description: 'Run the walk-in move-in wizard.' },
   { key: 'leases:move_out', name: 'Move out', category: 'tenants', description: 'Close a lease and release the unit.' },
   { key: 'leases:transfer', name: 'Transfer units', category: 'tenants', description: 'Move a tenant between units.' },
@@ -84,6 +85,7 @@ export const ROLES: readonly RoleSeed[] = [
     maxCreditCents: 0,
     permissions: [
       'tenants:view',
+      'tenants:edit',
       'leases:move_in',
       'payments:take',
       'access:manage_grants',
@@ -113,6 +115,7 @@ export const ROLES: readonly RoleSeed[] = [
     maxCreditCents: 5_000,
     permissions: [
       'tenants:view',
+      'tenants:edit',
       'leases:move_in',
       'leases:move_out',
       'leases:transfer',
@@ -140,6 +143,7 @@ export const ROLES: readonly RoleSeed[] = [
     maxCreditCents: 25_000,
     permissions: [
       'tenants:view',
+      'tenants:edit',
       'leases:move_in',
       'leases:move_out',
       'leases:transfer',
