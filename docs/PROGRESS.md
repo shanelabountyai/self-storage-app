@@ -890,7 +890,7 @@ Ending a lease: preview the settlement, close it, release the unit to `maintenan
 
 ---
 
-### B-095 — One task queue, not seven ✅ `<pending>`
+### B-095 — One task queue, not seven ✅ `0f6ec12`
 
 The shared `Task` entity, built now rather than left as the gap it had been since B-026: one table, a loose `type` string resolved against a catalog for its label/required proof/audit sensitivity, idempotent creation on `(type, entityId, businessDate)`, a mobile-first "my day" list with text-based overdue escalation, a regional roll-up, and proof-gated completion. Recorded as **D-23**.
 
