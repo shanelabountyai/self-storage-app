@@ -14,7 +14,8 @@
     "./inventory": "./inventory/index.ts",
     "./pricing": "./pricing/index.ts",
     "./access": "./access/index.ts",
-    "./consent": "./consent/index.ts"
+    "./consent": "./consent/index.ts",
+    "./pos": "./pos/index.ts"
   },
   "dependencies": {
     "@storage/db": "*"

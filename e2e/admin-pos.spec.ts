@@ -1,0 +1,86 @@
+import AxeBuilder from '@axe-core/playwright'
+import { expect, test } from '@playwright/test'
+import { signInAsDemoOwner } from './sign-in'
+
+// PRD 02 §4.8 US-32 (B-039). The counter: take a payment, or start a walk-in
+// move-in. Drawer sessions are B-078 and deliberately absent.
+
+test.describe('POS role gating', () => {
+  test('redirects an unauthenticated visitor to /login', async ({ page }) => {
+    await page.goto('/admin/pos')
+    await expect(page).toHaveURL(/\/login/)
+  })
+})
+
+test.describe('signed in as the demo owner', () => {
+  test.beforeEach(async ({ page }) => {
+    await signInAsDemoOwner(page)
+  })
+
+  for (const route of ['/admin/pos', '/admin/pos/summary']) {
+    test(`${route} has no WCAG 2.1 AA violations`, async ({ page }) => {
+      await page.goto(route)
+      await expect(page.getByRole('main')).toBeVisible()
+
+      const { violations } = await new AxeBuilder({ page })
+        .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+        .analyze()
+
+      expect(
+        violations.map((v) => `${v.id}: ${v.help}`),
+        'axe found accessibility violations',
+      ).toEqual([])
+    })
+  }
+
+  test('offers a walk-in move-in priced at the in-store rate', async ({ page }) => {
+    await page.goto('/admin/pos')
+    await expect(page.getByRole('heading', { name: 'Walk-in move-in' })).toBeVisible()
+    await expect(page.getByText(/in store/).first()).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Start move-in' }).first()).toBeVisible()
+  })
+
+  test('taking cash records a receipt number and works out the change', async ({ page }) => {
+    await page.goto('/admin/pos?q=dana@demo.example.com')
+    await page.getByRole('link', { name: 'Dana Delinquent' }).first().click()
+
+    await page.getByLabel('Amount ($)').fill('20')
+    await page.getByLabel('Cash tendered ($)').fill('50')
+    await page.getByRole('button', { name: 'Record payment' }).click()
+
+    const status = page.getByRole('main').getByRole('status').first()
+    await expect(status).toContainText(/Receipt #\d+/)
+    await expect(status).toContainText('Change due: $30.00')
+  })
+
+  test('a check with no number is refused', async ({ page }) => {
+    await page.goto('/admin/pos?q=dana@demo.example.com')
+    await page.getByRole('link', { name: 'Dana Delinquent' }).first().click()
+
+    await page.getByLabel('Method').selectOption('check')
+    await page.getByLabel('Amount ($)').fill('25')
+    await page.getByRole('button', { name: 'Record payment' }).click()
+
+    await expect(page.getByRole('main').getByRole('alert')).toContainText(/check or money-order number/i)
+  })
+
+  test('cash short of the amount tendered is refused', async ({ page }) => {
+    await page.goto('/admin/pos?q=dana@demo.example.com')
+    await page.getByRole('link', { name: 'Dana Delinquent' }).first().click()
+
+    await page.getByLabel('Amount ($)').fill('40')
+    await page.getByLabel('Cash tendered ($)').fill('10')
+    await page.getByRole('button', { name: 'Record payment' }).click()
+
+    await expect(page.getByRole('main').getByRole('alert')).toContainText(/less than the amount/i)
+  })
+
+  test('the deposit slip lists the day’s payments with who took them', async ({ page }) => {
+    await page.goto('/admin/pos/summary')
+    await expect(page.getByRole('heading', { level: 1, name: 'Daily payments' })).toBeVisible()
+    // The cash payment taken above is on today's slip, attributed to the
+    // signed-in staffer rather than to nobody.
+    await expect(page.getByText('Demo Owner').first()).toBeVisible()
+    await expect(page.getByRole('columnheader', { name: 'Taken by' })).toBeVisible()
+  })
+})

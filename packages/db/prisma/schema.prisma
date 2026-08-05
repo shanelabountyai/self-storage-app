@@ -345,6 +345,9 @@ model Facility {
   protectionRequired  Boolean        @default(true)
   /// US-9 AC1: default cap of 3 named people per lease, configurable.
   authorizedAccessCap Int            @default(3)
+  /// US-32: a cash payment at or above this needs manager-or-above to take it.
+  /// Configuration, not policy — $500 is a starting value, not a rule.
+  cashApprovalThresholdCents Int      @default(50000)
   createdAt           DateTime       @default(now()) @db.Timestamptz(6)
   updatedAt           DateTime       @updatedAt @db.Timestamptz(6)
 
@@ -362,6 +365,7 @@ model Facility {
   protectionWaivers      ProtectionWaiver[]
   documents              Document[]
   tenantNotes            TenantNote[]
+  receiptCounter         ReceiptCounter?
   gateCommands           GateCommand[]
   accessEvents           AccessEvent[]
   simulatedGateCodes     SimulatedGateCode[]
@@ -764,19 +768,52 @@ model Payment {
   failureReason         String?
   /// Set on a refund payment, pointing at the payment being refunded.
   refundOfPaymentId     String?
+  /// US-32 attribution. The staff member who physically took the money, read
+  /// from the session actor and never from a form field. Required for cash,
+  /// check and money order (enforced in `lib/admin/pos.ts`, not by the column,
+  /// because a card payment taken online legitimately has no one behind the
+  /// counter). A cash payment with a facility, a timestamp and no human
+  /// attached is how money walks out of a storage facility unnoticed.
+  receivedByStaffId     String?
+  /// US-32: gapless per-facility receipt number, assigned in the same
+  /// transaction as the payment (see ReceiptCounter). Null for payments that
+  /// never went through a counter — the Stripe-driven online path — because a
+  /// receipt book with holes where the web rentals were is not gapless, it is
+  /// just confusing.
+  receiptNumber         Int?
   createdAt             DateTime      @default(now()) @db.Timestamptz(6)
   updatedAt             DateTime      @updatedAt @db.Timestamptz(6)
 
-  facility      Facility            @relation(fields: [facilityId], references: [id], onDelete: Restrict)
-  tenant        Tenant              @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  refundOf      Payment?            @relation("PaymentRefund", fields: [refundOfPaymentId], references: [id], onDelete: Restrict)
-  refunds       Payment[]           @relation("PaymentRefund")
-  allocations   PaymentAllocation[]
-  ledgerEntries LedgerEntry[]
+  facility       Facility            @relation(fields: [facilityId], references: [id], onDelete: Restrict)
+  tenant         Tenant              @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  receivedByStaff StaffUser?         @relation(fields: [receivedByStaffId], references: [id], onDelete: Restrict)
+  refundOf       Payment?            @relation("PaymentRefund", fields: [refundOfPaymentId], references: [id], onDelete: Restrict)
+  refunds        Payment[]           @relation("PaymentRefund")
+  allocations    PaymentAllocation[]
+  ledgerEntries  LedgerEntry[]
 
+  @@unique([facilityId, receiptNumber])
   @@index([facilityId, receivedAt])
   @@index([tenantId])
   @@map("payment")
+}
+
+/// US-32's gapless receipt numbering, one row per facility.
+///
+/// Gapless is a stronger guarantee than a Postgres sequence gives: a sequence
+/// does not roll back, so an aborted transaction leaves a hole. Here the
+/// number is handed out by an UPDATE ... RETURNING inside the same
+/// transaction that writes the payment, so the row lock serialises concurrent
+/// counter staff AND a rollback returns the number to the pool. A hole in a
+/// receipt book is the thing an auditor asks about.
+model ReceiptCounter {
+  facilityId String   @id
+  nextNumber Int      @default(1)
+  updatedAt  DateTime @updatedAt @db.Timestamptz(6)
+
+  facility Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+
+  @@map("receipt_counter")
 }
 
 /// A payment can settle several invoices; allocation order is configurable in B-048.
@@ -1867,6 +1904,7 @@ model StaffUser {
   assignments  StaffFacilityAssignment[]
   suppressions Suppression[]
   tenantNotes  TenantNote[]
+  paymentsTaken Payment[]
 
   @@map("staff_user")
 }
