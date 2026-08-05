@@ -13,10 +13,13 @@ import { describe, expect, it } from 'vitest'
 
 const appDir = fileURLToPath(new URL('../apps/web/app', import.meta.url))
 
-/// Routes a customer can reach without signing in. `(public)` is the route
-/// group behind the site chrome; `/login` is outside it but is linked from
-/// every page header, which is exactly how it got missed.
-const CUSTOMER_REACHABLE = ['(public)', 'login']
+/// Every route a customer (not staff) can reach, signed in or not. `(public)`
+/// is the route group behind the site chrome; `login` is outside it but is
+/// linked from every page header, which is exactly how it got missed the first
+/// time. `forgot-password`/`reset-password`/`reauth` and the tenant `portal`
+/// (B-033) are the same kind of customer-facing surface as `login` — a leak
+/// there is exactly as readable by a tenant as one on the public site.
+const CUSTOMER_REACHABLE = ['(public)', 'login', 'forgot-password', 'reset-password', 'reauth', 'portal']
 
 function filesUnder(dir: string): string[] {
   return readdirSync(dir).flatMap((entry) => {

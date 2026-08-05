@@ -3,7 +3,7 @@ import type { AuthAudience } from '@storage/db'
 
 declare module 'next-auth' {
   interface Session {
-    user: { id: string; audience: AuthAudience } & DefaultSession['user']
+    user: { id: string; audience: AuthAudience; authTime: number } & DefaultSession['user']
   }
 }
 
@@ -51,6 +51,14 @@ export const authConfig = {
         // screen that displays "signed in as ___" sees undefined.
         token.name = user.name ?? null
         token.email = user.email ?? null
+        // B-033's re-auth freshness check (lib/auth/reauth.ts) needs "when did
+        // this person last actually authenticate" — which is NOT the JWT's own
+        // `iat`. Auth.js silently re-issues the token (refreshing `iat`) as the
+        // session rolls forward per `session.updateAge`, with no new sign-in
+        // involved. This block only runs when `user` is present, which only
+        // happens on a real `signIn()` call — a fresh password entry or a
+        // freshly consumed magic link, never a background token refresh.
+        token.authTime = Math.floor(Date.now() / 1000)
       }
       return token
     },
@@ -59,6 +67,7 @@ export const authConfig = {
       session.user.audience = audienceOf(token.audience)
       session.user.name = (token.name as string | null) ?? null
       session.user.email = (token.email as string | null) ?? session.user.email
+      session.user.authTime = typeof token.authTime === 'number' ? token.authTime : 0
       return session
     },
   },

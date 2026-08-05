@@ -28,3 +28,9 @@ export async function requireStaffActor(): Promise<Extract<Actor, { kind: 'staff
   if (actor.kind !== 'staff') throw new ForbiddenError('Staff access required')
   return actor
 }
+
+export async function requireTenantActor(): Promise<Extract<Actor, { kind: 'tenant' }>> {
+  const actor = await requireActor()
+  if (actor.kind !== 'tenant') throw new ForbiddenError('Tenant access required')
+  return actor
+}

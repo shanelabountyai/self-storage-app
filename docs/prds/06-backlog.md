@@ -67,7 +67,7 @@ Tenants can self-serve; staff can run the counter. Also unlocks saved payment me
 
 | # | ID | Item | PRD/Feature | Size | Depends on | Phase |
 |---|---|---|---|---|---|---|
-| 33 | B-033 | Portal login: email/password + magic link, forgot password, 30-day sessions with re-auth for sensitive actions | PRD 01 §4.7 US-701 | M | B-003 | MVP |
+| 33 | B-033 ✅ | Portal login: email/password + magic link, forgot password, 30-day sessions with re-auth for sensitive actions | PRD 01 §4.7 US-701 | M | B-003 | MVP |
 | 34 | B-034 | Portal dashboard: balance/due date, autopay status, gate code behind "show" tap with copy (reveal is a `<button aria-expanded>`, code announced character by character, "Copied" announced from a persistent region). **Plus the past-due state** — problem/consequence/action banner above everything else, pay-now ≤2 taps, and the gate-code panel saying access is suspended rather than showing a code that will fail at the gate. Display-only: it renders whatever delinquency signal the ledger exposes and never computes delinquency. If no signal exists by this item, record that as an explicit dependency rather than pulling Phase-2 delinquency forward | PRD 01 US-702/US-708, §6.5, §6.8.1 | M | B-033, B-029 | MVP |
 | 35 | B-035 | Portal one-time payment: pay balance in ≤3 taps, saved or new method, instant receipt | PRD 01 US-703 | M | B-034, B-019 | MVP |
 | 36 | B-036 | Payment methods & autopay management: toggle autopay, add/remove/update cards, default method, next scheduled charge | PRD 01 US-704 | M | B-035 | MVP |
