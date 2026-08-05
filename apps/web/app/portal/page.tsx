@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import Link from 'next/link'
 import { requireTenantActor } from '@/lib/rbac/session'
 import { portalDashboardForTenant, type PortalLeaseSummary } from '@/lib/portal/dashboard'
 import { formatRate } from '@/lib/format'
@@ -12,12 +13,23 @@ export const metadata: Metadata = { title: 'My account' }
 // comment) — this page never decides delinquency, it only renders whatever
 // LedgerEntry/AccessGrant already say.
 //
-// "Pay now" (US-703/B-035) isn't built yet, so a past-due balance points to
-// the office phone number rather than a payment link that doesn't exist.
-// Autopay is shown read-only — toggling it is B-036.
+// "Pay now" goes to /portal/pay with the full balance already prepared, so
+// paying is two taps from here (US-703's ≤3, and §6.5's ≤2 for the past-due
+// banner). Autopay is shown read-only — toggling it is B-036.
 
 function formatDueDate(date: Date, timezone: string): string {
   return new Intl.DateTimeFormat('en-US', { timeZone: timezone, month: 'long', day: 'numeric' }).format(date)
+}
+
+function PayNowButton({ lease }: { lease: PortalLeaseSummary }) {
+  return (
+    <Link
+      href={`/portal/pay?lease=${lease.leaseId}`}
+      className="bg-primary text-primary-foreground mt-2 inline-flex min-h-11 items-center justify-center rounded-md px-4 text-sm font-medium"
+    >
+      Pay {formatRate(lease.balanceCents)} now
+    </Link>
+  )
 }
 
 function LeaseCard({ lease }: { lease: PortalLeaseSummary }) {
@@ -29,24 +41,36 @@ function LeaseCard({ lease }: { lease: PortalLeaseSummary }) {
   return (
     <section className="border-input flex flex-col gap-4 rounded-lg border p-4">
       {owesMoney && lease.accessSuspended && (
-        <p role="alert" className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-pretty text-red-900">
-          Your account is past due. Your gate code won&apos;t open the gate until the balance is paid.{' '}
-          <strong>Pay {formatRate(lease.balanceCents)} now</strong> and access starts working again, usually within
-          a couple of minutes. Call {lease.facilityName} at{' '}
-          <a href={telHref} className="underline underline-offset-4">
-            {lease.facilityPhone}
-          </a>{' '}
-          to pay by phone.
-        </p>
+        <div role="alert" className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-pretty text-red-900">
+          <p>
+            Your account is past due. Your gate code won&apos;t open the gate until the balance is
+            paid. Pay your full balance of <strong>{formatRate(lease.balanceCents)}</strong> and
+            your gate code starts working again, usually within a couple of minutes.
+          </p>
+          <PayNowButton lease={lease} />
+          <p className="mt-2">
+            Or call{' '}
+            <a href={telHref} className="underline underline-offset-4">
+              {lease.facilityPhone}
+            </a>{' '}
+            to pay by phone.
+          </p>
+        </div>
       )}
       {owesMoney && !lease.accessSuspended && (
-        <p role="status" className="border-input rounded-md border p-3 text-sm text-pretty">
-          You have a balance of <strong>{formatRate(lease.balanceCents)}</strong>. Call{' '}
-          <a href={telHref} className="underline underline-offset-4">
-            {lease.facilityPhone}
-          </a>{' '}
-          to pay by phone.
-        </p>
+        <div role="status" className="border-input rounded-md border p-3 text-sm text-pretty">
+          <p>
+            You have a balance of <strong>{formatRate(lease.balanceCents)}</strong>.
+          </p>
+          <PayNowButton lease={lease} />
+          <p className="mt-2">
+            Or call{' '}
+            <a href={telHref} className="underline underline-offset-4">
+              {lease.facilityPhone}
+            </a>{' '}
+            to pay by phone.
+          </p>
+        </div>
       )}
 
       <div>
@@ -67,7 +91,15 @@ function LeaseCard({ lease }: { lease: PortalLeaseSummary }) {
       <dl className="grid grid-cols-2 gap-4 text-sm">
         <div>
           <dt className="text-muted-foreground">Current balance</dt>
-          <dd className="font-medium">{formatRate(lease.balanceCents)}</dd>
+          {/* A negative ledger sum is a credit, not a debt of minus-something:
+              formatRate would render it "$-39", which reads as an amount owed
+              with a typo. Nothing writes a credit today (payments are capped
+              at the balance), but a refund can, so it renders honestly. */}
+          <dd className="font-medium">
+            {lease.balanceCents < 0
+              ? `${formatRate(-lease.balanceCents)} in credit`
+              : formatRate(lease.balanceCents)}
+          </dd>
         </div>
         <div>
           <dt className="text-muted-foreground">Next payment</dt>

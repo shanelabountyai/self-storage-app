@@ -34,6 +34,12 @@ export function isHandled(type: string): type is HandledEvent {
   return (HANDLED_EVENTS as readonly string[]).includes(type)
 }
 
+/// The lease a PaymentIntent was raised against, when its creator knew.
+/// Set by `createChargeIntent`'s `leaseId` input (B-035).
+function referenceLeaseId(intent: Stripe.PaymentIntent): string | null {
+  return intent.metadata?.leaseId ?? null
+}
+
 /// Posts a payment to the ledger, if it belongs to a lease.
 ///
 /// Ledger entries require a lease, and at B-019 nothing creates one yet —
@@ -41,15 +47,38 @@ export function isHandled(type: string): type is HandledEvent {
 /// as a Payment row and left unposted rather than invented against a lease it
 /// does not have. The reconciliation report is what surfaces those; making one
 /// up would be worse than leaving it visible.
+///
+/// `explicitLeaseId` is the lease the payer actually chose (B-035's portal
+/// payment says which unit it is for). It is preferred over the fallback
+/// below, but still checked against this payment's own tenant and facility
+/// first: it arrives via Stripe metadata, and money must not move to a lease
+/// on the strength of a round trip through a third party. A mismatch posts
+/// nothing rather than guessing — an unposted payment is visible in the
+/// reconciliation report, a misposted one is not.
 async function postPaymentToLedger(
   tx: Prisma.TransactionClient,
   payment: { id: string; facilityId: string; tenantId: string; amountCents: number },
+  explicitLeaseId?: string | null,
 ): Promise<void> {
-  const lease = await tx.lease.findFirst({
-    where: { tenantId: payment.tenantId, facilityId: payment.facilityId, status: { not: 'ended' } },
-    select: { id: true },
-    orderBy: { startDate: 'desc' },
-  })
+  const lease = explicitLeaseId
+    ? await tx.lease.findFirst({
+        where: { id: explicitLeaseId, tenantId: payment.tenantId, facilityId: payment.facilityId },
+        select: { id: true },
+      })
+    : // No stated lease: the only remaining option is the tenant's occupying
+      // lease at this facility. Correct for move-in, where the payment
+      // predates the lease it will pay for, and safe while a tenant has one
+      // lease per facility — which is exactly why a caller that DOES know
+      // states it rather than relying on this.
+      await tx.lease.findFirst({
+        where: {
+          tenantId: payment.tenantId,
+          facilityId: payment.facilityId,
+          status: { not: 'ended' },
+        },
+        select: { id: true },
+        orderBy: { startDate: 'desc' },
+      })
   if (!lease) return
 
   // Already posted? Stripe redelivering the same event must not double-credit.
@@ -96,7 +125,7 @@ export async function applyStripeEvent(event: Stripe.Event): Promise<void> {
           where: { id: payment.id },
           data: { status: 'succeeded', receivedAt: new Date(intent.created * 1000) },
         })
-        await postPaymentToLedger(tx, payment)
+        await postPaymentToLedger(tx, payment, referenceLeaseId(intent))
         // FR-4.4: finalisation is webhook-driven. The reference carries which
         // checkout this was, so a renter who closed the tab still gets moved in.
         checkoutSessionId = referenceSessionId(intent)

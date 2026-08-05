@@ -13,6 +13,11 @@ test.describe('portal role gating', () => {
     await expect(page).toHaveURL(/\/login/)
     await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible()
   })
+
+  test('redirects an unauthenticated visitor away from the pay screen too', async ({ page }) => {
+    await page.goto('/portal/pay?lease=anything')
+    await expect(page).toHaveURL(/\/login/)
+  })
 })
 
 test.describe('signed in as the demo tenant', () => {
@@ -42,6 +47,53 @@ test.describe('signed in as the demo tenant', () => {
     await expect(page.getByRole('main').getByRole('alert')).toContainText('past due')
     await expect(page.getByText('Access is suspended until the balance is paid')).toBeVisible()
     await expect(page.getByRole('button', { name: /show gate code/i })).toHaveCount(0)
+  })
+
+  test('pay now reaches the pay screen in one tap, with the balance prefilled', async ({ page }) => {
+    // US-703's ≤3 taps: this link is tap one, confirming in the Payment
+    // Element is tap two.
+    await page.goto('/portal')
+    await page.getByRole('link', { name: /pay \$.* now/i }).first().click()
+
+    await expect(page).toHaveURL(/\/portal\/pay\?lease=/)
+    await expect(page.getByRole('heading', { name: 'Pay your balance' })).toBeVisible()
+    // The amount to be charged is stated before anything can charge it (3.3.4).
+    await expect(page.getByText('Paying today')).toBeVisible()
+  })
+
+  test('the pay screen refuses a lease that is not on this account', async ({ page }) => {
+    // The lease id is in the URL, so this is the check that matters.
+    await page.goto('/portal/pay?lease=not-this-tenants-lease')
+    await expect(page.getByText(/couldn.t find that unit/i)).toBeVisible()
+  })
+
+  test('/portal/pay has no WCAG 2.1 AA violations', async ({ page }) => {
+    await page.goto('/portal')
+    await page.getByRole('link', { name: /pay \$.* now/i }).first().click()
+    await expect(page.getByRole('main')).toBeVisible()
+
+    const { violations } = await new AxeBuilder({ page })
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+      .analyze()
+
+    expect(
+      violations.map((v) => `${v.id}: ${v.help}`),
+      'axe found accessibility violations',
+    ).toEqual([])
+  })
+
+  test('an over-payment is refused server-side and falls back to the balance', async ({ page }) => {
+    // The amount is a query param, so this is a crafted request rather than
+    // one the form would produce — which is exactly the case that has to hold.
+    await page.goto('/portal')
+    await page.getByRole('link', { name: /pay \$.* now/i }).first().click()
+    await expect(page).toHaveURL(/\/portal\/pay\?lease=/)
+    const leaseId = new URL(page.url()).searchParams.get('lease')
+
+    await page.goto(`/portal/pay?lease=${leaseId}&amount=999999`)
+    await expect(page.getByRole('main').getByRole('alert')).toContainText('more than you owe')
+    // And it did not quietly prepare a charge for the crafted amount.
+    await expect(page.getByText('$9,999.99')).toHaveCount(0)
   })
 
   // GateCodePanel's own reveal/copy interaction (the aria-expanded toggle,
