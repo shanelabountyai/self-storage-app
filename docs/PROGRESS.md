@@ -912,7 +912,7 @@ The shared `Task` entity, built now rather than left as the gap it had been sinc
 
 ---
 
-### B-041 — Portal move-out request ✅ `<pending>`
+### B-041 — Portal move-out request ✅ `62bd5c2`
 
 Pick a unit → pick a date → see what it settles to → confirm, gated by US-701's re-auth rule. Nothing here finalizes a lease — that stays entirely B-040's, behind a human actually verifying the unit is empty and clean. Recorded as **D-24**.
 
