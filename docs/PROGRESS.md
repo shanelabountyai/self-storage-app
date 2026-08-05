@@ -702,7 +702,7 @@ Two new consent records, captured at the two points in online move-in where they
 
 ---
 
-### B-033 — Portal login ✅ `<pending>`
+### B-033 — Portal login ✅ `d6bd421`
 
 The first working sign-in UI either audience has ever had — `/login` serves both, inferring which one from a `?from=` query param (`lib/auth/login-audience.ts`): a signed-out `/admin/*` visit lands here the same way a signed-out `/portal/*` visit now does (`proxy.ts` extended from staff-only to check `/admin` vs `/portal` against the JWT's `audience` claim and redirect to `/login?from=<path>` on mismatch), each with an explicit cross-link to the other. Password sign-in, an "email me a link instead" magic-link disclosure, forgot/reset password, a re-auth page for sensitive actions, and a minimal `/portal` landing page (placeholder content — B-034 replaces it) all built on B-003's existing `Tenant`/`StaffUser` auth primitives, none of which had a UI in front of them before this.
 
