@@ -40,6 +40,11 @@ function referenceLeaseId(intent: Stripe.PaymentIntent): string | null {
   return intent.metadata?.leaseId ?? null
 }
 
+/// The invoice a PaymentIntent settles, when its creator named one (B-045).
+function referenceInvoiceId(intent: Stripe.PaymentIntent): string | null {
+  return intent.metadata?.invoiceId ?? null
+}
+
 /// Posts a payment to the ledger, if it belongs to a lease.
 ///
 /// Ledger entries require a lease, and at B-019 nothing creates one yet —
@@ -102,6 +107,67 @@ async function postPaymentToLedger(
 }
 
 
+/// Settles the invoice a payment was raised against, when it named one.
+///
+/// B-045's autopay charges exactly one invoice, and the whole "never
+/// double-charge" guarantee rests on the invoice reading as paid afterwards:
+/// without this the charge would succeed, post to the ledger, and leave the
+/// invoice open for the next night's run to charge again.
+///
+/// Idempotent on the `(paymentId, invoiceId)` unique constraint, because
+/// Stripe redelivers. `amountPaidCents` is recomputed from the allocations
+/// rather than incremented — an increment applied twice is exactly the bug the
+/// redelivery would cause, and the sum is the fact anyway.
+///
+/// B-048 generalises this to a payment spread across several invoices in a
+/// configurable order. This is the single-invoice case the billing engine
+/// creates on its own, and it deliberately does not invent an allocation for a
+/// payment that never named one.
+async function settleNamedInvoice(
+  tx: Prisma.TransactionClient,
+  payment: { id: string; facilityId: string; tenantId: string; amountCents: number },
+  invoiceId: string | null,
+): Promise<void> {
+  if (!invoiceId) return
+
+  // Checked against this payment's own tenant and facility: the id arrives
+  // through Stripe metadata, and money must not settle an invoice on the
+  // strength of a round trip through a third party.
+  const invoice = await tx.invoice.findFirst({
+    where: {
+      id: invoiceId,
+      facilityId: payment.facilityId,
+      lease: { tenantId: payment.tenantId },
+    },
+    select: { id: true, totalCents: true },
+  })
+  if (!invoice) return
+
+  const existing = await tx.paymentAllocation.findUnique({
+    where: { paymentId_invoiceId: { paymentId: payment.id, invoiceId: invoice.id } },
+    select: { id: true },
+  })
+  if (!existing) {
+    await tx.paymentAllocation.create({
+      data: { paymentId: payment.id, invoiceId: invoice.id, amountCents: payment.amountCents },
+    })
+  }
+
+  const allocations = await tx.paymentAllocation.aggregate({
+    where: { invoiceId: invoice.id, payment: { status: 'succeeded' } },
+    _sum: { amountCents: true },
+  })
+  const paid = allocations._sum.amountCents ?? 0
+
+  await tx.invoice.update({
+    where: { id: invoice.id },
+    data: {
+      amountPaidCents: paid,
+      status: paid >= invoice.totalCents ? 'paid' : paid > 0 ? 'partially_paid' : 'open',
+    },
+  })
+}
+
 /// Applies one Stripe event to our records. Assumes the caller has already
 /// verified the signature and claimed the event id.
 export async function applyStripeEvent(event: Stripe.Event): Promise<void> {
@@ -126,6 +192,9 @@ export async function applyStripeEvent(event: Stripe.Event): Promise<void> {
           data: { status: 'succeeded', receivedAt: new Date(intent.created * 1000) },
         })
         await postPaymentToLedger(tx, payment, referenceLeaseId(intent))
+        // Order matters: the allocation sums only SUCCEEDED payments, and the
+        // status update above is what makes this one count.
+        await settleNamedInvoice(tx, payment, referenceInvoiceId(intent))
         // FR-4.4: finalisation is webhook-driven. The reference carries which
         // checkout this was, so a renter who closed the tab still gets moved in.
         checkoutSessionId = referenceSessionId(intent)

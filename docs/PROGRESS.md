@@ -1028,6 +1028,36 @@ The billing engine's first half: `packages/core/billing` (periods, proration, in
 
 ---
 
+### B-045 — Autopay run ✅ `PENDING`
+
+The nightly `billing.autopay` job, the settlement that makes it safe, and two latent defects in the shared payment path that only became reachable once something charged a card without a person watching. Recorded as **D-28**.
+
+**Decided (D-28): "never double-charges" is four layered guards, and one of them is load-bearing in a way that is easy to undo by accident.** `JobRun`'s uniqueness on (job, facility, business date) is what serialises the run against itself, so the read-then-charge below is safe rather than merely unlikely. The query excludes any invoice with a payment attempt already pending or succeeded. Stripe's idempotency key is derived from the invoice **and** the business date — so a forced admin re-run tonight is deduplicated, while B-046's retries on +1/+3/+5 are genuinely new attempts rather than Stripe replaying the first decline. And `createChargeIntent` now recognises a deduplicated intent instead of colliding on it.
+
+**The load-bearing part: the `PaymentAllocation` is written before Stripe is called, not after.** If Stripe charges the card and the process dies before the webhook lands, the allocation already exists — so the next run sees an attempt in flight and skips, instead of charging a second time. Writing it after the call would leave a window in which a real charge is invisible to the guard that exists to notice it. A pending allocation counts toward nothing, because the paid total sums *succeeded* payments only, so this cannot make an unpaid invoice read as paid.
+
+**Found and fixed: a succeeded card payment never settled its invoice.** The webhook posted to the ledger and stopped there. `Invoice.amountPaidCents` stayed 0 and the status stayed `open` — so autopay would have charged the same invoice again the following night, and every night after that. `settleNamedInvoice` writes the allocation and recomputes the paid total; **recomputed, never incremented**, because Stripe redelivers and an increment applied twice is precisely the bug redelivery causes. Both properties are asserted directly.
+
+**Found and fixed: Stripe's idempotency window would have thrown on a retried charge.** `createChargeIntent` writes its pending `Payment` row before calling Stripe. Stripe deduplicates by idempotency key for 24 hours and returns the *original* intent — which another `Payment` row already points at, and `stripePaymentIntentId` is unique. The update then threw, leaving the caller with a half-written charge that had in fact already been made. It now discards the duplicate row and returns the original payment with `deduplicated: true`, which the run reports as skipped rather than counting as a charge. Unreachable before this item because every previous caller was interactive.
+
+**Found and fixed: a Stripe error left an orphan `pending` payment forever.** If the intent creation threw, the row written a moment earlier was never touched again — it sat in the tenant's history as pending, counting against nothing and reconciling to nothing. It is now marked `failed` with the reason before the error is rethrown.
+
+**Decided: an off-session decline is recorded by the run, not waited for.** A confirmed off-session charge declines **synchronously** — Stripe throws, and there is no `payment_intent.payment_failed` webhook coming, because the confirmation happened inside the request. So the run emits `payment.failed` itself, carrying Stripe's decline code, the invoice and the lease. B-046 reads that code: `expired_card` short-circuits the retry schedule (US-20), because retrying a card that has expired three times just annoys the tenant three times.
+
+**Decided: a declined invoice stays collectable.** The failed attempt's allocation must not read as in flight, or one decline would permanently exempt an invoice from every future run and B-046 would have nothing to retry. The in-flight query filters to `pending` and `succeeded`; a test asserts the second night charges.
+
+**Decided: invoices due on or before the business date are collected, not only those due exactly today.** An invoice whose due date passed while the scheduler was down must still be collected on the catch-up run, rather than silently becoming a delinquency the tenant did not earn.
+
+**Decided: skips are named, not counted.** US-19's AC is "succeeded / failed / skipped **with reasons**" on the Billing Runs screen. "Skipped: 41" tells an operator nothing, so each one records which of the four it was — autopay off, no saved card, attempt in flight, nothing outstanding.
+
+**Fixed a test-harness defect that cost three separate diagnoses this evening.** Repeated full Playwright runs exhausted the demo-e2e facility's 60 units: every run leaks a few 30-minute checkout locks, `global-teardown` takes ~27 seconds against the remote database, and a teardown cut short as the dev server shuts down never releases them. What that looks like from the outside is a dozen unrelated tests failing with "no Reserve for free link" — which reads exactly like a code regression and is not one. There is now a `global-setup` that releases stale locks **before** the suite, which is the end that is guaranteed to happen; the teardown stays. Two consecutive full runs then passed, which is what "repeatable" means and was not true before.
+
+**Verified:** 1002 unit/DB tests (17 new — the run charging the outstanding amount rather than the total, collecting an overdue invoice, ignoring one not yet due, all four named skips, a decline recorded as failed with the code on the event, a declined invoice still collectable the next night, one card failing not stopping the next tenant, the deduplicated charge reported as skipped, and the same invoice never charged across two runs; plus settlement driven through `applyStripeEvent` with real event shapes — allocation written, invoice paid, ledger posted, idempotent under redelivery, partial payment landing as `partially_paid`, and a metadata-supplied invoice belonging to another tenant refused). E2e: 320 passing, twice in a row. Typecheck, lint, build clean. No migration.
+
+**Left behind.** **No real off-session charge has ever been made** — this project has no Stripe key outside production, so the run's selection, skip, decline and settlement logic are tested against a mocked `createChargeIntent` and real event shapes, but nothing has watched Stripe actually decline a card off-session. That is the same wall B-035, B-036 and B-043's card scan documented, and it is the one thing a staging key would close. **ACH is not supported** — US-19 says "card/ACH" and only card is built; `PaymentMethod` has the enum value and nothing creates one. **Failures do not retry yet**: the run emits `payment.failed` and stops, which is B-046's cue — there is no schedule, no attempt counter and no failed-payments queue until then, so today a decline is visible on the Billing Runs screen and nowhere else. **Nothing enforces a lease hold**: B-096's `LeaseHold` would halt autopay for a bankruptcy or SCRA tenant, and it does not exist, so a held lease would still be charged. **No receipt is sent** for a successful autopay charge — PRD 05 CN-6 is B-050's.
+
+---
+
 ---
 
 ## Feature PRDs added mid-build

@@ -4,7 +4,9 @@ const baseURL = 'http://localhost:3000'
 
 export default defineConfig({
   testDir: './e2e',
-  // Releases the units the checkout tests locked (see the file for why).
+  // Releases the units the checkout tests lock, at both ends of the run. The
+  // setup is the one that is guaranteed to happen — see e2e/global-setup.ts.
+  globalSetup: './e2e/global-setup.ts',
   globalTeardown: './e2e/global-teardown.ts',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,

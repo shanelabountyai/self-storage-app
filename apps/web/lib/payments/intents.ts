@@ -33,6 +33,21 @@ export type ChargeIntentInput = {
   /// one-time payment passes false — the tenant asked to pay a bill, not to
   /// store a card, and B-036 owns method management.
   saveMethod?: boolean
+  /// The invoice this charge settles, when it settles exactly one (B-045's
+  /// autopay run always does). Travels as metadata and comes back on the
+  /// webhook, where it is what writes the `PaymentAllocation` and moves the
+  /// invoice to paid. Without it an autopay charge would succeed, post to the
+  /// ledger, and leave the invoice reading unpaid — so the next night's run
+  /// would charge the same card again. B-048 generalises this to several
+  /// invoices with a configurable allocation order; this is the single-invoice
+  /// case the billing engine creates on its own.
+  invoiceId?: string
+  /// The saved method to charge. Only meaningful with `offSession` — an
+  /// on-session intent lets the renter pick in the Payment Element. Autopay
+  /// states it explicitly rather than relying on the customer's Stripe-side
+  /// default, because that default and `Tenant.stripeDefaultPaymentMethodId`
+  /// are two fields that can disagree, and the tenant chose ours (B-036).
+  paymentMethodId?: string
 }
 
 export type ChargeIntent = {
@@ -40,6 +55,9 @@ export type ChargeIntent = {
   paymentIntentId: string
   /// Handed to the Payment Element in the browser. Not a secret we store.
   clientSecret: string
+  /// True when Stripe's idempotency window returned an intent we had already
+  /// recorded — the charge exists and this call did not create a second one.
+  deduplicated: boolean
 }
 
 /// Creates a PaymentIntent and the local `pending` Payment row that mirrors it.
@@ -57,37 +75,98 @@ export async function createChargeIntent(input: ChargeIntentInput): Promise<Char
   const stripe = requireStripe()
   const customerId = await ensureStripeCustomer(input.tenantId)
 
-  const payment = await prisma.payment.create({
-    data: {
-      facilityId: input.facilityId,
-      tenantId: input.tenantId,
-      amountCents: input.amountCents,
-      method: 'card',
-      status: 'pending',
-    },
-  })
-
-  const intent = await stripe.paymentIntents.create(
-    {
-      amount: input.amountCents,
-      currency: 'usd',
-      customer: customerId,
-      description: input.description,
-      // Lets a later autopay run charge this method without the renter there.
-      setup_future_usage:
-        input.offSession || input.saveMethod === false ? undefined : 'off_session',
-      off_session: input.offSession ?? undefined,
-      confirm: input.offSession ?? undefined,
-      metadata: {
-        paymentId: payment.id,
+  // The pending row and — when this charge is for one named invoice — its
+  // allocation are written together, BEFORE Stripe is called.
+  //
+  // The order is the point. If Stripe charges the card and this process dies
+  // before the webhook arrives, the allocation already exists, so B-045's
+  // autopay run sees an attempt in flight and skips the invoice instead of
+  // charging it again. Writing the allocation after the call would leave a
+  // window in which a real charge is invisible to the very guard that exists
+  // to notice it. A `pending` allocation counts toward nothing — the paid
+  // total sums succeeded payments only — so this cannot make an unpaid invoice
+  // read as paid.
+  const payment = await prisma.$transaction(async (tx) => {
+    const row = await tx.payment.create({
+      data: {
         facilityId: input.facilityId,
         tenantId: input.tenantId,
-        reference: input.reference,
-        ...(input.leaseId ? { leaseId: input.leaseId } : {}),
+        amountCents: input.amountCents,
+        method: 'card',
+        status: 'pending',
       },
-    },
-    { idempotencyKey: idempotencyKey('charge', input.reference) },
-  )
+    })
+    if (input.invoiceId) {
+      await tx.paymentAllocation.create({
+        data: { paymentId: row.id, invoiceId: input.invoiceId, amountCents: input.amountCents },
+      })
+    }
+    return row
+  })
+
+  let intent: Awaited<ReturnType<typeof stripe.paymentIntents.create>>
+  try {
+    intent = await stripe.paymentIntents.create(
+      {
+        amount: input.amountCents,
+        currency: 'usd',
+        customer: customerId,
+        description: input.description,
+        // Lets a later autopay run charge this method without the renter there.
+        setup_future_usage:
+          input.offSession || input.saveMethod === false ? undefined : 'off_session',
+        off_session: input.offSession ?? undefined,
+        confirm: input.offSession ?? undefined,
+        ...(input.paymentMethodId ? { payment_method: input.paymentMethodId } : {}),
+        metadata: {
+          paymentId: payment.id,
+          facilityId: input.facilityId,
+          tenantId: input.tenantId,
+          reference: input.reference,
+          ...(input.leaseId ? { leaseId: input.leaseId } : {}),
+          ...(input.invoiceId ? { invoiceId: input.invoiceId } : {}),
+        },
+      },
+      { idempotencyKey: idempotencyKey('charge', input.reference) },
+    )
+  } catch (error) {
+    // The pending row was written first on purpose (see above), but if Stripe
+    // never created an intent there is nothing to reconcile it against — an
+    // orphan `pending` payment would sit in the tenant's history forever and
+    // count against nothing. Mark it failed with the reason and rethrow, so the
+    // caller decides what to do and the row explains itself.
+    await prisma.payment.update({
+      where: { id: payment.id },
+      data: {
+        status: 'failed',
+        failureReason: error instanceof Error ? error.message.slice(0, 500) : 'stripe_error',
+      },
+    })
+    throw error
+  }
+
+  // Stripe deduplicates by idempotency key for 24 hours, so a retried charge
+  // for the same reference returns the ORIGINAL intent — which another Payment
+  // row already points at, and `stripePaymentIntentId` is unique. Before this,
+  // the update below threw and left the caller with a half-written charge that
+  // had in fact already been made. Now the duplicate row is discarded and the
+  // original payment is returned, which is the truthful answer: this charge
+  // already exists.
+  const alreadyRecorded = await prisma.payment.findUnique({
+    where: { stripePaymentIntentId: intent.id },
+    select: { id: true },
+  })
+  if (alreadyRecorded && alreadyRecorded.id !== payment.id) {
+    // Cascades to the allocation written above, so the discarded attempt
+    // leaves nothing pointing at the invoice.
+    await prisma.payment.delete({ where: { id: payment.id } })
+    return {
+      paymentId: alreadyRecorded.id,
+      paymentIntentId: intent.id,
+      clientSecret: intent.client_secret!,
+      deduplicated: true,
+    }
+  }
 
   await prisma.payment.update({
     where: { id: payment.id },
@@ -98,6 +177,7 @@ export async function createChargeIntent(input: ChargeIntentInput): Promise<Char
     paymentId: payment.id,
     paymentIntentId: intent.id,
     clientSecret: intent.client_secret!,
+    deduplicated: false,
   }
 }
 

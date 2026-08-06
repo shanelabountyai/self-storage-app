@@ -6,6 +6,7 @@ import { provisionAccessForLease } from '@/lib/access/provision'
 import { processCommsEvent } from '@/lib/comms/service'
 import { scanExpiringCards, scanExpiringProtectionProofs } from '@/lib/billing/scans'
 import { emitDueReminders, generateInvoices } from '@/lib/billing/invoices'
+import { runAutopay } from '@/lib/billing/autopay'
 
 // Consumer and job registration. The machinery is B-006's; the things that use
 // it arrive with their own backlog items: reservation expiry (B-018, below),
@@ -158,6 +159,24 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
       // to execute in. PRD 05 CN-3 wants these driven by billing, and this is
       // the billing run.
       await emitDueReminders(facilityId!, businessDate, recordItem)
+    },
+  },
+  {
+    // B-045 / PRD 02 US-19. The nightly autopay run.
+    //
+    // At 3am local, AFTER invoice generation at 1am: on a catch-up tick that
+    // walks several business dates, an invoice generated for a past due date
+    // must be collectable on the same pass rather than waiting another night.
+    //
+    // The (jobName, facilityId, businessDate) uniqueness on `JobRun` is load-
+    // bearing here in a way it is not for the read-only scans — it is what
+    // makes the run's read-then-charge safe from a second concurrent run of
+    // itself. See the four guards documented in lib/billing/autopay.ts.
+    name: 'billing.autopay',
+    localHour: 3,
+    scope: 'per_facility',
+    handler: async ({ facilityId, businessDate, recordItem }) => {
+      await runAutopay(facilityId!, businessDate, recordItem)
     },
   },
   {
