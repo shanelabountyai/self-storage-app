@@ -77,6 +77,18 @@ export const TASK_TYPES = [
     requiredProofFields: ['note'],
     sensitive: false,
   },
+  {
+    // PRD 05 CN-19 / FR-15. A hard bounce means we can no longer reach this
+    // tenant by email, and every notice this system sends is email-only until
+    // B-074. Somebody has to get a working address by another route.
+    //
+    // Sensitive: whether a tenant was reachable bears directly on whether a
+    // notice was properly served, which is a question a lien dispute turns on.
+    type: 'no_reachable_channel',
+    label: 'Email is bouncing — no way to reach this tenant',
+    requiredProofFields: ['note'],
+    sensitive: true,
+  },
 ] as const satisfies readonly TaskTypeSpec[]
 
 export type TaskType = (typeof TASK_TYPES)[number]['type']

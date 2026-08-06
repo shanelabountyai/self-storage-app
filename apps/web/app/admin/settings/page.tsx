@@ -634,9 +634,12 @@ export default async function AdminSettingsPage() {
           />
           <Button type="submit">Save email identity</Button>
         </AdminForm>
-        <p className="text-sm">
+        <p className="flex flex-wrap gap-4 text-sm">
           <Link href="/admin/settings/templates" className="underline underline-offset-2">
             Edit message templates
+          </Link>
+          <Link href="/admin/settings/suppressions" className="underline underline-offset-2">
+            Suppressions — who we no longer write to
           </Link>
         </p>
       </section>

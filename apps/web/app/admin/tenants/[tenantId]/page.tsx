@@ -120,6 +120,20 @@ export default async function TenantProfilePage({
           control that could act on the account — a manager must never be able
           to approve a sale, or send a notice, without the hold in view. Never
           colour alone (1.4.1): the label and the note carry the meaning. */}
+      {profile.emailUndeliverableAt && (
+        // FR-15. Not colour alone (WCAG 1.4.1): the heading says "cannot be
+        // reached", which is the whole message even in greyscale.
+        <div role="note" className="rounded-lg border-2 border-red-500 bg-red-50 p-4 text-red-950">
+          <p className="font-semibold">Email cannot be reached</p>
+          <p className="mt-1 text-sm text-pretty">
+            Mail to {profile.email} bounced on {formatWhen(profile.emailUndeliverableAt)} and is now
+            suppressed, so no further notices will go out by email. There is an open task for this.
+            Reach them by phone; once the address is working again, lift the suppression under
+            Settings → Suppressions and this clears.
+          </p>
+        </div>
+      )}
+
       {profile.holds.length > 0 && (
         <section aria-labelledby="holds-heading" className="flex flex-col gap-3">
           <h2 id="holds-heading" className="sr-only">
@@ -610,16 +624,49 @@ export default async function TenantProfilePage({
         <h2 id="comms-heading" className="font-medium">
           Communication history
         </h2>
-        <ul className="flex flex-col gap-2">
+<ul className="flex flex-col gap-2">
           {profile.messages.map((message) => (
-            <li key={message.id} className="border-input flex justify-between gap-2 rounded-lg border p-3 text-sm">
-              <span>
-                <span className="font-medium">{message.subjectSnapshot ?? message.templateKey}</span>{' '}
-                <span className="text-muted-foreground uppercase">{message.channel}</span>
-              </span>
-              <span className="text-muted-foreground capitalize">
-                {message.status} · {formatWhen(message.createdAt)}
-              </span>
+            <li key={message.id} className="border-input rounded-lg border p-3 text-sm">
+              {/* A native <details>: the exact text that went out is what makes
+                  this a record rather than a summary, but twenty full bodies on
+                  one page is unreadable. No JS, keyboard-operable as shipped. */}
+              <details>
+                <summary className="flex cursor-pointer flex-wrap items-baseline justify-between gap-2">
+                  <span>
+                    <span className="font-medium">
+                      {message.subjectSnapshot ?? message.templateKey}
+                    </span>{' '}
+                    <span className="text-muted-foreground uppercase">{message.channel}</span>
+                  </span>
+                  <span className="text-muted-foreground capitalize">
+                    {message.status} · {formatWhen(message.createdAt)}
+                  </span>
+                </summary>
+                <dl className="text-muted-foreground mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+                  <dt>To</dt>
+                  <dd className="text-foreground">{message.toAddressMasked}</dd>
+                  <dt>Template</dt>
+                  <dd className="text-foreground">
+                    {message.templateKey} · v{message.templateVersion}
+                  </dd>
+                  <dt>Triggered by</dt>
+                  <dd className="text-foreground">{message.eventType ?? 'Sent directly by staff'}</dd>
+                  {message.sentAt && (
+                    <>
+                      <dt>Handed to provider</dt>
+                      <dd className="text-foreground">{formatWhen(message.sentAt)}</dd>
+                    </>
+                  )}
+                </dl>
+                {message.problem && (
+                  <p role="note" className="mt-2 rounded-md border border-red-300 bg-red-50 p-2 text-xs text-red-900">
+                    {message.problem}
+                  </p>
+                )}
+                <pre className="bg-muted mt-2 max-h-64 overflow-auto rounded-md p-3 text-xs whitespace-pre-wrap">
+                  {message.bodySnapshot}
+                </pre>
+              </details>
             </li>
           ))}
           {profile.messages.length === 0 && (

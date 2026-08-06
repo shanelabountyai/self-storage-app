@@ -691,6 +691,11 @@ model Tenant {
   /// onboarding (PRD 01 FR-5.1). Never a plaintext or reversible value.
   passwordHash                 String?
   emailVerifiedAt              DateTime? @db.Timestamptz(6)
+  /// PRD 05 FR-15. Set when a hard bounce or a spam complaint proves this
+  /// address is unusable. A flag rather than clearing the address: the address
+  /// is still what we last had, and losing it would make "which address did we
+  /// write to" unanswerable — which is exactly the question a lien file asks.
+  emailUndeliverableAt         DateTime? @db.Timestamptz(6)
   phone                        String?
   firstName                    String
   lastName                     String

@@ -79,6 +79,12 @@ export const AUDIT_ACTIONS = [
   /// CN-16. A published template changes what every future tenant is told, and
   /// the version it records is what makes an old `Message` reproducible.
   { action: 'template.published', label: 'Message template published', requiresReason: false },
+  /// CN-20. Adding one stops every future notice to that address; removing one
+  /// resumes mailing somebody the system had decided not to mail. Removal
+  /// requires a reason — it is the direction that can put mail in front of a
+  /// person who did not want it.
+  { action: 'suppression.added', label: 'Address suppressed', requiresReason: false },
+  { action: 'suppression.removed', label: 'Suppression lifted', requiresReason: true },
   { action: 'user.created', label: 'Staff user created', requiresReason: false },
   { action: 'user.role_changed', label: 'Staff role changed', requiresReason: true },
   { action: 'user.deactivated', label: 'Staff user deactivated', requiresReason: true },

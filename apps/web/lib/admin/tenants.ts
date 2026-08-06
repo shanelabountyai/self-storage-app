@@ -16,6 +16,7 @@ import {
   type ContactDetails,
   type FieldProblems,
 } from '@/lib/portal/contact'
+import { maskAddress } from '@storage/core/comms'
 import { logManualDocument, type DocumentType } from '@/lib/documents/store'
 import { createTask } from '@/lib/admin/tasks'
 import { activeHolds, type ActiveHold } from '@/lib/admin/holds'
@@ -159,13 +160,31 @@ export type TenantDocumentRow = {
   hasContent: boolean
 }
 
+/// CN-18's row: "timestamp, channel, template + version, triggering event,
+/// rendered content snapshot, delivery status, payment attribution."
+///
+/// The snapshot is the whole point of keeping this rather than re-rendering:
+/// templates are versioned and edited (CN-16), so the only honest answer to
+/// "what did we actually tell them" is the bytes that went out.
 export type TenantMessageRow = {
   id: string
   channel: string
   status: string
   templateKey: string
+  templateVersion: number
+  /// The domain event that caused it — "why did they get this".
+  eventType: string | null
   subjectSnapshot: string | null
+  bodySnapshot: string
+  /// Masked. The full address is on the row (it is the delivery evidence) but
+  /// a support screen showing it in full is a shoulder-surfing surface for no
+  /// benefit; staff already have the tenant's contact block above.
+  toAddressMasked: string
+  /// Why it did not go, when it did not: a suppression reason or a provider
+  /// error. Null on a normal send.
+  problem: string | null
   createdAt: Date
+  sentAt: Date | null
 }
 
 export type TenantProfile = {
@@ -184,6 +203,10 @@ export type TenantProfile = {
   notes: TenantNoteRow[]
   documents: TenantDocumentRow[]
   messages: TenantMessageRow[]
+  /// FR-15. Set when a hard bounce or complaint proved the address unusable.
+  /// On the profile because it changes what a staffer should do next: writing
+  /// again will not reach them, so somebody has to phone.
+  emailUndeliverableAt: Date | null
   /// Late fees still outstanding on this tenant's leases (B-047), so a manager
   /// can waive one from the profile rather than from a database client.
   waivableFees: WaivableFee[]
@@ -226,6 +249,7 @@ export async function tenantProfile(actor: Actor, tenantId: string): Promise<Ten
         altContactName: true,
         altContactPhone: true,
         altContactEmail: true,
+        emailUndeliverableAt: true,
       },
     }),
     prisma.lease.findMany({
@@ -264,11 +288,31 @@ export async function tenantProfile(actor: Actor, tenantId: string): Promise<Ten
         channel: true,
         status: true,
         templateKey: true,
+        templateVersion: true,
+        eventId: true,
         subjectSnapshot: true,
+        bodySnapshot: true,
+        toAddress: true,
+        suppressionReason: true,
+        error: true,
         createdAt: true,
+        sentAt: true,
       },
     }),
   ])
+
+  // CN-18's "triggering event". A second query rather than a relation: Message
+  // holds `eventId` as a plain string (the outbox is written by a different
+  // path and a FK would couple retention of the two), so this resolves the
+  // handful of ids the page actually shows.
+  const eventTypes = new Map(
+    (
+      await prisma.domainEvent.findMany({
+        where: { id: { in: [...new Set(messages.map((message) => message.eventId))] } },
+        select: { id: true, name: true },
+      })
+    ).map((event) => [event.id, event.name]),
+  )
 
   const leaseBalances = await Promise.all(
     leases.map((lease) =>
@@ -404,7 +448,23 @@ export async function tenantProfile(actor: Actor, tenantId: string): Promise<Ten
       createdAt: document.createdAt,
       hasContent: document.content !== null,
     })),
-    messages,
+    messages: messages.map((message) => ({
+      id: message.id,
+      channel: message.channel,
+      status: message.status,
+      templateKey: message.templateKey,
+      templateVersion: message.templateVersion,
+      eventType: eventTypes.get(message.eventId) ?? null,
+      subjectSnapshot: message.subjectSnapshot,
+      bodySnapshot: message.bodySnapshot,
+      toAddressMasked: maskAddress(message.toAddress),
+      problem: message.suppressionReason
+        ? `Not sent — ${message.suppressionReason.replace(/_/g, ' ')}`
+        : message.error,
+      createdAt: message.createdAt,
+      sentAt: message.sentAt,
+    })),
+    emailUndeliverableAt: tenant.emailUndeliverableAt,
     editableFacilityIds,
   }
 }

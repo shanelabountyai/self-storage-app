@@ -1383,6 +1383,28 @@ CN-16's editor and CN-17's identity. The item that makes every word written acro
 
 ---
 
+### B-054 — Delivery events, the suppression list, and the send log ✅ `PENDING`
+
+FR-14's provider webhook, FR-15's consequences, CN-18's message history and CN-20's suppression screen. Until this, `Message.status` stopped at `sent` — meaning "we handed it to Resend", which is not the same claim as "the tenant received it". A send log that says `sent` for an address that hard-bounced eight months ago is worse than no log: it asserts something untrue about service of notice.
+
+**What it built.** `/api/comms/webhook` verifying Resend's Svix signature against the raw body, with a five-minute replay window. A normalised status state machine in `packages/core/comms/delivery.ts`. The bounce consequence chain — suppression, tenant flag, `Task` — in `apps/web/lib/comms/delivery.ts`. CN-18's message history expanded from four fields to the full shape, with the rendered body in a native `<details>`. CN-20's suppression screen at **Settings → Suppressions**: search, manual add, and lift-with-a-reason where lifting is allowed.
+
+**Decided: idempotency comes from the status ranking, not from a table of seen event ids.** FR-14 asks that "provider retries must not duplicate status rows"; a `processed_events` table would deliver that and nothing else. Ranking statuses so one never moves backwards delivers it *and* handles the case an id table cannot — **events arriving out of order**, which providers do routinely. A `delivered` webhook regularly lands before the `sent` it followed, and a handler that wrote whatever arrived would leave the log claiming less than we know. `suppressed` and `cancelled` outrank everything: those are decisions we made before sending, and a provider callback has no standing to revise them.
+
+**Decided: only a hard bounce and a spam complaint carry consequences.** A soft bounce — full mailbox, temporary server failure — deliberately does nothing. Suppressing on one would silently cut a paying tenant off from every notice this system sends, on the strength of a mailbox being full on a Tuesday.
+
+**Decided: a complaint is recorded as `delivered`, and raises no task.** It arrived; the recipient reported us. Its real consequence is a suppression CN-20 forbids removing. No task, because the tenant asked not to hear from us and a staff task saying "call them about it" is the opposite of honouring that. A hard bounce is the reverse — it raises a **high-priority `no_reachable_channel` task**, because email is the only channel this system has until B-074, and "we cannot reach this tenant at all" is not something to leave in a queue nobody is told about.
+
+**Decided: lifting a `hard_bounce` suppression is the only way the tenant flag comes off.** The primary email is the login identity and is not editable from the admin side, so there is no "they gave us a new address" path that could clear it. Leaving it set forever would put a permanent red banner on the profile, and a banner that is always there is one nobody reads.
+
+**Decided: no `svix` dependency.** The scheme is one `createHmac`. The verifier lives in `apps/web/lib/comms/webhook-signature.ts`, split out of the route for the same reason B-028 split the hardware one — it is the entire security boundary of a public unauthenticated endpoint and deserves tests that do not need a running server. A forged `email.bounced` is a quiet denial of service against exactly the person a lien notice has to reach.
+
+**Verified:** 1326 unit/DB tests (35 new — 17 on the state machine, event mapping, consequences and masking; 9 on the signature and replay window, including a genuine signature accepted, a tampered body rejected, and rotation-style multi-signature headers; 9 against real rows for the bounce chain, its idempotency under redelivery, the two refusals CN-20 requires, and the flag clearing on lift). Typecheck and lint clean. One migration.
+
+**Left behind.** **Unexercised against real Resend** — `RESEND_API_KEY` is unset, so no live delivery event has ever hit this route; the signature scheme is verified against payloads this repo signs itself. Same constraint Stripe had until B-053's afternoon. **No SMS half**: `email.*` events only, and `no_reachable_channel` currently means email — there is no SMS channel until **B-074**. **`filtered` is unmapped** — FR-14 names it as a terminal state but Resend has no corresponding event, so nothing produces it. **No dashboard**: rates, detectors and the dead-letter surface are **B-075**, which is why the failure queue here is a `Task` and not a screen. **History is capped at 20 messages** with no paging, and the CSV export a lien file would want is not there.
+
+---
+
 ---
 
 ## Feature PRDs added mid-build
