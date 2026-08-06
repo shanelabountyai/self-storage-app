@@ -1028,7 +1028,7 @@ The billing engine's first half: `packages/core/billing` (periods, proration, in
 
 ---
 
-### B-045 — Autopay run ✅ `PENDING`
+### B-045 — Autopay run ✅ `be48a33`
 
 The nightly `billing.autopay` job, the settlement that makes it safe, and two latent defects in the shared payment path that only became reachable once something charged a card without a person watching. Recorded as **D-28**.
 
