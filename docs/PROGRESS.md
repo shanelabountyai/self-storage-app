@@ -932,7 +932,7 @@ Pick a unit → pick a date → see what it settles to → confirm, gated by US-
 
 ---
 
-### B-042 — MVP reporting ✅ `<pending>`
+### B-042 — MVP reporting ✅ `f0f8b7b`
 
 The shared `metrics` module, the portfolio dashboard, the rent roll (which doubles as the rate-variance worklist), the move-in/move-out report US-39 called orphaned, and CSV export. Recorded as **D-25**, because the definitions are the deliverable — the screens are a thin rendering of them.
 
