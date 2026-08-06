@@ -1383,7 +1383,7 @@ CN-16's editor and CN-17's identity. The item that makes every word written acro
 
 ---
 
-### B-054 — Delivery events, the suppression list, and the send log ✅ `PENDING`
+### B-054 — Delivery events, the suppression list, and the send log ✅ `fecf25a`
 
 FR-14's provider webhook, FR-15's consequences, CN-18's message history and CN-20's suppression screen. Until this, `Message.status` stopped at `sent` — meaning "we handed it to Resend", which is not the same claim as "the tenant received it". A send log that says `sent` for an address that hard-bounced eight months ago is worse than no log: it asserts something untrue about service of notice.
 
