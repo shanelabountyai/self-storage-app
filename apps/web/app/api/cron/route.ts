@@ -1,7 +1,7 @@
 import { timingSafeEqual } from 'node:crypto'
 import { prisma } from '@storage/db'
 import { dispatchEvents } from '@storage/core/events'
-import { facilitiesDueAt, runJob } from '@storage/core/jobs'
+import { facilitiesDueAt, lastSuccessfulRun, missedBusinessDates, runJob } from '@storage/core/jobs'
 import { sendExpiringSoonReminders } from '@/lib/reservations/reserve'
 import { CONSUMERS, SCHEDULED_JOBS } from '@/lib/jobs/registry'
 
@@ -50,7 +50,12 @@ export async function GET(request: Request) {
     select: { id: true, timezone: true },
   })
 
-  const jobResults: { job: string; facilityId: string | null; status: string }[] = []
+  const jobResults: {
+    job: string
+    facilityId: string | null
+    status: string
+    caughtUp?: string
+  }[] = []
 
   for (const job of SCHEDULED_JOBS) {
     const due =
@@ -62,16 +67,35 @@ export async function GET(request: Request) {
         : facilitiesDueAt(facilities, job.localHour, now)
 
     for (const { facility, businessDate } of due) {
-      const result = await runJob(
-        { jobName: job.name, facilityId: facility?.id ?? null, businessDate },
-        async ({ facilityId, recordItem }) =>
-          job.handler({ facilityId, businessDate, recordItem }),
-      )
-      jobResults.push({
-        job: job.name,
-        facilityId: facility?.id ?? null,
-        status: result.status === 'skipped' ? `skipped:${result.reason}` : result.run.status,
-      })
+      // PRD 02 FR-4's catch-up. `due` only ever contains facilities whose
+      // local clock is AT the target hour right now — so an outage spanning
+      // that hour meant the run was skipped and never revisited, silently and
+      // permanently. Every missed business date since the last successful run
+      // is run first, oldest first, then today's.
+      //
+      // Safe to do unconditionally: runJob is idempotent per (job, facility,
+      // business date), so a date that did run is skipped rather than
+      // repeated. On the normal path `missedBusinessDates` returns exactly
+      // today, and this is the same single call it always was.
+      const timezone = facility?.timezone ?? 'UTC'
+      const previous = await lastSuccessfulRun(job.name, facility?.id ?? null)
+      const dates = missedBusinessDates(previous?.businessDate ?? null, now, timezone)
+
+      for (const date of dates) {
+        const result = await runJob(
+          { jobName: job.name, facilityId: facility?.id ?? null, businessDate: date },
+          async ({ facilityId, recordItem }) =>
+            job.handler({ facilityId, businessDate: date, recordItem }),
+        )
+        jobResults.push({
+          job: job.name,
+          facilityId: facility?.id ?? null,
+          // Distinguishes a catch-up run from today's in the response, so an
+          // operator reading the log can see the backlog draining.
+          ...(date.getTime() === businessDate.getTime() ? {} : { caughtUp: date.toISOString().slice(0, 10) }),
+          status: result.status === 'skipped' ? `skipped:${result.reason}` : result.run.status,
+        })
+      }
     }
   }
 

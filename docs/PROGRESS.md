@@ -954,6 +954,25 @@ The shared `metrics` module, the portfolio dashboard, the rent roll (which doubl
 
 ---
 
+### B-043 — Billing scheduler ⏳ PARTIAL — catch-up only `<pending>`
+
+**Not a completed item.** One part of B-043 shipped and is fully tested; three remain. Marked partial in the backlog rather than ✅, and written up here so the next session starts with the scope straight rather than rediscovering it.
+
+**Found and fixed: catch-up after downtime was specified, built, and never wired.** `missedBusinessDates` shipped with B-006 — tested, documented, and with **zero callers**. The cron route only ever ran facilities whose local clock was *at* the target hour on that tick, so any facility whose nightly hour elapsed during an outage was skipped and never revisited: silently, permanently, and with no error anywhere to notice. For a scheduler that will shortly be generating invoices and running autopay, a missed night that never comes back is the failure mode that matters most. The route now reads the last successful run per (job, facility), asks `missedBusinessDates` what was missed, and runs each date oldest-first before today's.
+
+**Decided: catch-up runs unconditionally, not behind an "are we behind?" check.** `runJob`'s idempotency is the unique constraint on `(jobName, facilityId, businessDate)`, so a date that already ran is skipped rather than repeated. On the normal path `missedBusinessDates` returns exactly today and the behaviour is identical to before — which means the catch-up path is exercised every single tick rather than only during the rare outage it exists for, and cannot rot unnoticed.
+
+**Decided: a `partial` run counts as history and is not re-run.** A run that finished with some failed items recorded those items; re-running the date would duplicate the ones that succeeded. Catching up resumes from the day *after* the last attempted date, not the last flawless one.
+
+**Verified:** 914 unit/DB tests (6 new, driving the exact shape the route uses against real `JobRun` rows: today-only with no history, four missed days run oldest-first, an already-succeeded date not re-run, two ticks in the same hour being a no-op the second time, a year-long gap capped rather than attempting 365 jobs in one request, and resumption from a `partial` run). Typecheck, lint, build clean. The 30-day cap test asserts boundedness rather than an exact count — the first caught-up date depends on how a stored `DATE` lands once shifted into the facility's timezone, and pinning it would assert an implementation detail rather than the property that matters.
+
+**Still open in B-043, for the next session:**
+1. **Billing Runs screen** (FR-4's "logged to a Billing Runs screen with per-item outcomes, and manually re-runnable by admin"). The data is all there — `JobRun` carries status, item counts, per-item `details` and `lastError`, and `runJob` already accepts `force` for admin re-runs. This is a read screen plus one action, and nothing else blocks it.
+2. **Card-expiring-within-30-days scan** (retrigger at 7, suppressed on replacement). Needs Stripe to know expiry dates, and this project still has no Stripe key — so it can be built but not verified end to end, the same constraint B-035/B-036 documented.
+3. **Proof-of-insurance expiring scan + D-17 auto-enrolment** into the facility's default protection tier on lapse, notifying the tenant of the enrolment and its cost. D-17 explicitly flags this as needing an attorney pass before it runs against a real tenant; the mechanism is still to build.
+
+---
+
 ---
 
 ## Feature PRDs added mid-build
