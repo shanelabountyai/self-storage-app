@@ -38,6 +38,12 @@ type RecipientLease = {
   id: string
   status: string
   unit: { number: string; unitType: { name: string; widthFt: number; lengthFt: number } } | null
+  /// Whether this unit will genuinely charge itself. BOTH halves, because they
+  /// live in two places (B-036): the lease says the unit is enrolled, the
+  /// tenant says which card. Either missing and nothing is charged
+  /// automatically — which is exactly when a "your rent is due" reminder is the
+  /// right message rather than the wrong one.
+  autopayActive: boolean
 }
 
 type RecipientReservation = { id: string; expiresAt: Date; unitType: { widthFt: number; lengthFt: number } }
@@ -56,6 +62,13 @@ type Recipient = {
   lease: RecipientLease | null
   reservation: RecipientReservation | null
 }
+
+const LEASE_SELECT = {
+  id: true,
+  status: true,
+  autopayEnabled: true,
+  unit: { select: { number: true, unitType: { select: { name: true, widthFt: true, lengthFt: true } } } },
+} as const
 
 const FACILITY_SELECT = {
   id: true,
@@ -82,7 +95,16 @@ async function resolveRecipient(event: DomainEvent): Promise<Recipient | null> {
       where: { id: event.entityId },
       select: {
         status: true,
-        tenant: { select: { id: true, email: true, firstName: true, lastName: true } },
+        autopayEnabled: true,
+        tenant: {
+          select: {
+            id: true,
+            email: true,
+            firstName: true,
+            lastName: true,
+            stripeDefaultPaymentMethodId: true,
+          },
+        },
         facility: { select: FACILITY_SELECT },
         unit: { select: { number: true, unitType: { select: { name: true, widthFt: true, lengthFt: true } } } },
       },
@@ -95,7 +117,12 @@ async function resolveRecipient(event: DomainEvent): Promise<Recipient | null> {
       firstName: lease.tenant.firstName,
       lastName: lease.tenant.lastName,
       facility: lease.facility,
-      lease: { id: event.entityId, status: lease.status, unit: lease.unit },
+      lease: {
+        id: event.entityId,
+        status: lease.status,
+        unit: lease.unit,
+        autopayActive: lease.autopayEnabled && Boolean(lease.tenant.stripeDefaultPaymentMethodId),
+      },
       reservation: null,
     }
   }
@@ -117,6 +144,88 @@ async function resolveRecipient(event: DomainEvent): Promise<Recipient | null> {
       lastName: tenant.lastName,
       facility,
       lease: null,
+      reservation: null,
+    }
+  }
+
+  // B-050. Billing events name an Invoice or a Payment; both reach the tenant
+  // through the lease, and both carry the lease forward so the autopay skip and
+  // the unit line have something to read.
+  if (event.entityType === 'Invoice') {
+    const invoice = await prisma.invoice.findUnique({
+      where: { id: event.entityId },
+      select: {
+        facility: { select: FACILITY_SELECT },
+        lease: {
+          select: {
+            ...LEASE_SELECT,
+            tenant: {
+              select: {
+                id: true,
+                email: true,
+                firstName: true,
+                lastName: true,
+                stripeDefaultPaymentMethodId: true,
+              },
+            },
+          },
+        },
+      },
+    })
+    if (!invoice) return null
+    return recipientFromLease(invoice.lease, invoice.facility)
+  }
+
+  if (event.entityType === 'Payment') {
+    const payment = await prisma.payment.findUnique({
+      where: { id: event.entityId },
+      select: {
+        facility: { select: FACILITY_SELECT },
+        tenant: {
+          select: {
+            id: true,
+            email: true,
+            firstName: true,
+            lastName: true,
+            stripeDefaultPaymentMethodId: true,
+          },
+        },
+        // The lease this money was for, through the invoice it settled. A
+        // payment that named no invoice (a move-in, a counter payment) falls
+        // back to the tenant's occupying lease at this facility below.
+        allocations: {
+          take: 1,
+          orderBy: { createdAt: 'asc' },
+          select: { invoice: { select: { lease: { select: LEASE_SELECT } } } },
+        },
+      },
+    })
+    if (!payment) return null
+
+    const lease =
+      payment.allocations[0]?.invoice.lease ??
+      (await prisma.lease.findFirst({
+        where: { tenantId: payment.tenant.id, facilityId: payment.facility.id, status: { not: 'ended' } },
+        orderBy: { startDate: 'desc' },
+        select: LEASE_SELECT,
+      }))
+
+    return {
+      recipientKey: payment.tenant.id,
+      tenantId: payment.tenant.id,
+      email: payment.tenant.email,
+      firstName: payment.tenant.firstName,
+      lastName: payment.tenant.lastName,
+      facility: payment.facility,
+      lease: lease
+        ? {
+            id: lease.id,
+            status: lease.status,
+            unit: lease.unit,
+            autopayActive:
+              lease.autopayEnabled && Boolean(payment.tenant.stripeDefaultPaymentMethodId),
+          }
+        : null,
       reservation: null,
     }
   }
@@ -149,6 +258,40 @@ async function resolveRecipient(event: DomainEvent): Promise<Recipient | null> {
   }
 
   return null
+}
+
+/// Shared shape for the two resolvers that reach a tenant through a lease.
+function recipientFromLease(
+  lease: {
+    id: string
+    status: string
+    autopayEnabled: boolean
+    unit: { number: string; unitType: { name: string; widthFt: number; lengthFt: number } } | null
+    tenant: {
+      id: string
+      email: string | null
+      firstName: string
+      lastName: string
+      stripeDefaultPaymentMethodId: string | null
+    }
+  },
+  facility: RecipientFacility,
+): Recipient {
+  return {
+    recipientKey: lease.tenant.id,
+    tenantId: lease.tenant.id,
+    email: lease.tenant.email,
+    firstName: lease.tenant.firstName,
+    lastName: lease.tenant.lastName,
+    facility,
+    lease: {
+      id: lease.id,
+      status: lease.status,
+      unit: lease.unit,
+      autopayActive: lease.autopayEnabled && Boolean(lease.tenant.stripeDefaultPaymentMethodId),
+    },
+    reservation: null,
+  }
 }
 
 function formatFacilityAddress(f: RecipientFacility): string {
@@ -211,6 +354,27 @@ function mergeContextFor(recipient: Recipient): MergeContext {
 /// add their own entry here without touching the pipeline itself.
 type ContextExtender = (event: DomainEvent, recipient: Recipient) => Promise<MergeContext>
 
+/// Shared by both due-date reminders: the same figures, a different subject.
+const invoiceContext: ContextExtender = async (event, recipient) => {
+  const invoice = await prisma.invoice.findUnique({
+    where: { id: event.entityId },
+    select: { number: true, dueDate: true, totalCents: true, amountPaidCents: true },
+  })
+  if (!invoice) return {} as MergeContext
+  const timezone = recipient.facility?.timezone ?? 'America/Chicago'
+  return {
+    'invoice.number': invoice.number,
+    'invoice.due_date': new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric',
+    }).format(invoice.dueDate),
+    'invoice.amount': formatCents(invoice.totalCents - invoice.amountPaidCents),
+    'links.pay_now': `${baseUrl()}/portal/pay`,
+  }
+}
+
 const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
   // CN-7: the gate code line, only after the credential is actually issued —
   // never a placeholder that looks like a code. `codeForLease` (B-029) already
@@ -266,6 +430,122 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
         : 'the date you requested',
     }
   },
+
+  // ── B-050: the payment lifecycle ────────────────────────────────────────────
+  //
+  // Every figure below is read at SEND time (FR-18), not carried from the
+  // event, so a tenant who paid an hour ago is told what is true now.
+
+  'invoice.due_soon': invoiceContext,
+  'invoice.due_today': invoiceContext,
+
+  // CN-6's receipt. The amount comes off the Payment row rather than the event
+  // payload for the same reason — a partial refund between the charge and the
+  // send would otherwise be invisible in a document the tenant keeps.
+  'payment.succeeded': async (event, recipient) => {
+    const payment = await prisma.payment.findUnique({
+      where: { id: event.entityId },
+      select: { amountCents: true, receivedAt: true, method: true },
+    })
+    if (!payment) return {} as MergeContext
+    const timezone = recipient.facility?.timezone ?? 'America/Chicago'
+    return {
+      'payment.amount': formatCents(payment.amountCents),
+      'payment.date': new Intl.DateTimeFormat('en-US', {
+        timeZone: timezone,
+        dateStyle: 'long',
+      }).format(payment.receivedAt),
+      'payment.method': payment.method === 'card' ? 'card' : payment.method.replace('_', ' '),
+      'balance.total': formatCents(await leaseBalanceCents(recipient.lease?.id ?? null)),
+    }
+  },
+
+  // US-20's "fix path ≤5 min". The decline reason is deliberately NOT quoted
+  // verbatim — Stripe's message is written for a developer, and "your card was
+  // declined: do_not_honor" tells a tenant nothing they can act on. What they
+  // need is the amount, the unit, and one link.
+  'payment.failed': async (event) => {
+    const payload = (event.payload ?? {}) as { amountCents?: number; code?: string }
+    const expired = payload.code === 'expired_card'
+    return {
+      'payment.amount': formatCents(payload.amountCents ?? 0),
+      'payment.failure_line': expired
+        ? 'The card we have on file has expired, so we could not take the payment.'
+        : 'Your bank declined the payment. That is usually a temporary block or a limit, not anything wrong with your account here.',
+      'links.update_card': `${baseUrl()}/portal/methods`,
+      'links.pay_now': `${baseUrl()}/portal/pay`,
+    }
+  },
+
+  // D-29's daily reminder. Says which of the three it is and what happens next,
+  // rather than repeating one sentence for three days.
+  'payment.retry_reminder': async (event) => {
+    const payload = (event.payload ?? {}) as {
+      outstandingCents?: number
+      reminderNumber?: number
+      remindersTotal?: number
+    }
+    const number = payload.reminderNumber ?? 1
+    const total = payload.remindersTotal ?? 3
+    return {
+      'payment.amount': formatCents(payload.outstandingCents ?? 0),
+      'links.pay_now': `${baseUrl()}/portal/pay`,
+      'links.update_card': `${baseUrl()}/portal/methods`,
+      'payment.retry_line':
+        number >= total
+          ? 'This is the last reminder we will send about this payment. If it stays unpaid, someone from the office will be in touch.'
+          : 'We will try the card again automatically, so if you update it or add funds there is nothing else to do.',
+    }
+  },
+
+  // CN-10a. The card has not failed yet — this is the whole point, and the
+  // wording has to stay out of dunning territory or a three-year on-time tenant
+  // reads it as a collections letter.
+  'payment_method.expiring': async (event) => {
+    const payload = (event.payload ?? {}) as { expMonth?: number; expYear?: number; stage?: number }
+    const month = payload.expMonth
+    const year = payload.expYear
+    return {
+      'card.expires': month && year ? `${String(month).padStart(2, '0')}/${year}` : 'soon',
+      'card.urgency_line':
+        payload.stage === 7
+          ? 'It expires within the week, so this is worth doing today.'
+          : 'There is no rush — any time in the next few weeks is fine.',
+      'links.update_card': `${baseUrl()}/portal/methods`,
+    }
+  },
+
+  // D-17. Two notices the owner's decision explicitly assigned to this item.
+  'protection.proof_expiring': async (event) => {
+    const payload = (event.payload ?? {}) as { expiresOn?: string }
+    return {
+      'protection.expires_on': payload.expiresOn
+        ? new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', dateStyle: 'long' }).format(
+            new Date(`${payload.expiresOn}T00:00:00.000Z`),
+          )
+        : 'soon',
+      'links.portal': `${baseUrl()}/login`,
+    }
+  },
+
+  'protection.auto_enrolled': async (event) => {
+    const payload = (event.payload ?? {}) as { planName?: string; premiumCents?: number }
+    return {
+      'protection.plan_name': payload.planName ?? 'our standard cover',
+      'protection.premium': formatCents(payload.premiumCents ?? 0),
+    }
+  },
+}
+
+/// What the lease owes right now, from the ledger — PRD 01 §7.3 makes the
+/// ledger the source of truth for balance, not a sum of invoice remainders.
+async function leaseBalanceCents(leaseId: string | null): Promise<number> {
+  if (!leaseId) return 0
+  const sum = await prisma.ledgerEntry.aggregate({
+    where: { leaseId },
+    _sum: { amountCents: true },
+  })
+  return Math.max(0, sum._sum.amountCents ?? 0)
 }
 
 /// The move-in charge line: what was actually charged today, and the ongoing
@@ -370,15 +650,45 @@ async function suppressionFor(
 /// the one predicate provable against what exists today; billing/dunning items
 /// register `invoice_paid`, `payment_processing`, `autopay_enabled`, etc. as
 /// their events arrive.
-const SKIP_PREDICATES: Record<string, (recipient: Recipient) => boolean> = {
+const SKIP_PREDICATES: Record<
+  string,
+  (recipient: Recipient, event: DomainEvent) => boolean | Promise<boolean>
+> = {
   // Don't welcome or chase a tenant whose lease has already ended.
   tenant_moved_out: (recipient) => recipient.lease?.status === 'ended',
+
+  // B-050 / CN-1, CN-2. The autopay skip.
+  //
+  // Telling a tenant to go and pay a bill their own saved card is about to
+  // cover is the message that teaches people to ignore every other one we
+  // send — and the ones who act on it pay twice and then ring the office.
+  // "Autopay is on" is deliberately BOTH halves (see `autopayActive`): a lease
+  // enrolled with no card on file will not be charged, and that tenant does
+  // need telling.
+  autopay_covers_it: (recipient) => recipient.lease?.autopayActive === true,
+
+  // FR-18 staleness. An invoice settled between the event and the send — a
+  // counter payment this morning, an autopay run that beat the dispatcher —
+  // must not still produce "your rent is due".
+  invoice_paid: async (_recipient, event) => {
+    if (event.entityType !== 'Invoice') return false
+    const invoice = await prisma.invoice.findUnique({
+      where: { id: event.entityId },
+      select: { totalCents: true, amountPaidCents: true, status: true },
+    })
+    if (!invoice) return true
+    return invoice.status === 'paid' || invoice.amountPaidCents >= invoice.totalCents
+  },
 }
 
-function firstFiringSkip(rule: ResolvedRule, recipient: Recipient): string | null {
+async function firstFiringSkip(
+  rule: ResolvedRule,
+  recipient: Recipient,
+  event: DomainEvent,
+): Promise<string | null> {
   for (const key of rule.skipConditions) {
     const predicate = SKIP_PREDICATES[key]
-    if (predicate && predicate(recipient)) return key
+    if (predicate && (await predicate(recipient, event))) return key
   }
   return null
 }
@@ -459,7 +769,7 @@ async function deliverForRule(
   }
 
   // FR-18: premise still valid?
-  const skip = firstFiringSkip(rule, recipient)
+  const skip = await firstFiringSkip(rule, recipient, event)
   if (skip) {
     await writeMessage(idempotencyKey, {
       ...base,

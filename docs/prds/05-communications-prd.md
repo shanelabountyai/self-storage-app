@@ -102,6 +102,15 @@ Personas (from siblings): **Tara — Tenant**, **Priya — Facility Manager**, *
 - AC: the scan is idempotent per (tenant, payment method, stage) — a re-run sends nothing twice.
 - AC: replacing the method cancels the 7-day retrigger; there is no message telling a tenant to fix something they have already fixed.
 - AC: measured against PRD 02 §7's ≥92% autopay success target. A card that silently expires puts a tenant who has paid on time for three years into the dunning ladder over something visible 30 days ahead.
+- **Built: the scan in B-043, the notice in B-050.** The template names no unit — a saved card belongs to the tenant rather than a unit (B-036), so a tenant renting two units gets one email rather than two naming different doors — and it says outright that nothing has failed, because a long-standing on-time tenant reading a payment email assumes the worst.
+
+### Built in B-050 (2026-08-06)
+
+CN-1, CN-2, CN-6 and CN-10a ship as eight org-default rules and templates in `packages/db/comms-catalog.ts`, alongside the D-17 protection notices and D-29's retry reminder. Three things worth not re-deciding:
+
+- **The autopay skip requires BOTH halves of autopay** — the lease enrolled *and* a saved card on file. A lease enrolled with no card will not be charged, and that tenant does need the reminder; a naive `autopayEnabled` check silences exactly the person who needs telling.
+- **The receipt has no autopay skip.** For most autopay tenants it is the only thing that tells them the charge went through.
+- **House style:** amount and date in the first two lines, one link per action, never a consequence that has not happened. These reach people who are paying on time far more often than not, and a reminder that reads like a collections letter teaches good tenants to stop opening their email — after which CN-3's ladder has nobody listening.
 
 **CN-22 [MVP]** **Checkout resume link.** *(Added 2026-07-31 from the UX review.)* PRD 01 FR-4.1 promises a checkout restored "via emailed link", and nothing sends one — the abandonment sequence that would (CN, marketing side) is Phase 2. So a renter interrupted at the lease step, the longest step and the one most likely to be interrupted, has a server-side draft they cannot reach.
 - AC: sent when the checkout session is created **and the renter's email is captured** (end of step 1) — not on abandonment detection.

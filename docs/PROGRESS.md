@@ -1094,6 +1094,34 @@ The tenant cadence is `payment.retry_reminder`, one a day for three days **from 
 
 ---
 
+### B-050 — Payment lifecycle notices ✅ `PENDING`
+
+**Pulled forward past B-047 on the owner's instruction**, because B-046 had just built a retry schedule whose whole purpose is to buy a tenant time to act, and nothing was telling them to. Its dependencies (B-030, B-043, B-044, B-046) were all shipped, so nothing was jumped.
+
+Eight rules and eight templates, the two recipient resolvers billing events needed, and two skip predicates. No migration and no new engine — B-030 built the pipeline and the deliverable here is content plus the seams it plugs into.
+
+**Found and fixed: every billing event this project emits resolved to nobody.** `resolveRecipient` handled `Lease`, `Tenant` and `Reservation`. `invoice.due_soon`, `invoice.due_today`, `payment.succeeded` and `payment.failed` all name an `Invoice` or a `Payment`, so each one fell through and returned null — a silent no-op with a `Message` row that never existed. B-044 and B-045 had been emitting into that hole for two items. Both resolvers now exist, and a `Payment` reaches its lease through the allocation it settled, falling back to the tenant's occupying lease for a payment that named no invoice (a move-in, a counter payment).
+
+**Decided: the autopay skip needs BOTH halves of autopay to be true.** `autopay_covers_it` skips the due-soon and due-today reminders only when the lease is enrolled **and** the tenant has a saved card — the two facts live in two places by B-036's design, and a lease enrolled with no card on file will not be charged. That tenant is exactly the one who needs telling, and a naive `autopayEnabled` check would have silenced them. Asserted directly, because it is the difference between a reminder that is helpful and one that is actively wrong.
+
+**Decided: the receipt has no autopay skip.** A receipt is precisely what an autopay tenant should get — for most of them it is the only thing that tells them the charge went through at all.
+
+**Decided: `invoice_paid` is re-evaluated at send time, not trusted from the event.** FR-18's staleness rule, and the concrete case is ordinary: a counter payment this morning, or an autopay run that beat the dispatcher. Without it a tenant who has already paid gets chased.
+
+**Decided: the tenant never sees the provider's decline wording.** Stripe's message is written for a developer — "your card was declined: do_not_honor" tells a tenant nothing they can act on. The template says either "the card we have on file has expired" or "your bank declined the payment; that is usually a temporary block or a limit", chosen from the decline code B-046 stored. A test asserts the raw code never appears in the body.
+
+**Decided: the card-expiring notice names no unit.** A saved card belongs to the tenant, not a unit (B-036), so that event names a `Tenant` and its recipient has no lease to read a unit number from — and a tenant renting two units should get one email rather than two naming different doors. Found by the render failing loudly on the missing merge field, which is FR-9 working as intended.
+
+**House style, applied deliberately and worth keeping.** Amount and date in the first two lines; exactly one link per action; never a consequence that has not happened. These go to people who are paying on time far more often than not, and a due-date reminder that reads like a collections letter is how an operator teaches good tenants to stop opening their email — after which the dunning ladder (B-052) has nobody listening. The card-expiring notice says outright "nothing is wrong with your account, and no payment has failed", because a three-year on-time tenant reading a payment email assumes the worst.
+
+**Two catalog invariants are now tested rather than hoped for.** Every seeded rule points at a template that exists (a rule with no template is a silent no-send), and every template declares each merge field its body actually uses (FR-9 fails the render otherwise, so an undeclared field means the message never goes out). Both would have caught the card-expiring mistake above before it reached a test run.
+
+**Verified:** 1044 unit/DB tests (16 new, driven against the REAL seeded catalog rather than test-local rules — the deliverable is the content, and a test that seeded its own would prove only that B-030's engine works: the reminder sent to a hand-paying tenant, skipped for autopay, still sent when autopay has no card, skipped for an invoice paid in between, skipped after move-out; the receipt with its ledger-read balance and the receipt an autopay tenant still gets; the decline notice naming the cause in plain words with both fix links and no raw code; the escalation on the last of the three daily reminders; the card notice reading as a heads-up at 30 days and sharpening at 7; and D-17's two notices, including the premium in the subject line the owner's decision requires). E2e: 320 passing. Typecheck, lint, build clean. No migration.
+
+**Left behind.** **`links.pay_now` points at `/portal/pay`, which requires a login** — US-20's "fix path ≤5 min" is met by a tenant who knows their password and not by one who does not. **B-051**'s magic links are what make that a single click, and they are the next thing worth doing in this area. **Still email-only**: every one of these is a text the moment B-074 configures the channel, and until then a tenant who gave only a mobile number gets nothing. **No per-facility overrides and no editor** — these are org-level defaults (`facilityId: null`); the template editor with preview and test-send is B-053, so changing a word today means changing this file and re-seeding. **A move-in sends two emails** — the welcome (which already states what was charged) and a receipt. Both are defensible on their own and the overlap is one day, so it is left rather than papered over with a heuristic that would go wrong later. **Nothing is scheduled by these rules**: every send is driven by an event a billing job already emits (PRD 05 CN-3), so a notice for something no job emits yet — a late fee, a delinquency step — arrives with B-047 and B-052.
+
+---
+
 ---
 
 ## Feature PRDs added mid-build
