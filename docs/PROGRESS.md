@@ -1326,7 +1326,7 @@ CN-3's ladder, CN-5's halts, and the tone escalation as content. Everything it n
 
 ---
 
-### Integration pass — the money loop against real Stripe ✅ `PENDING`
+### Integration pass — the money loop against real Stripe ✅ `a4c65c4`
 
 **Not a backlog item.** Nine nightly jobs had been built over one session, each tested alone against disposable fixtures, and the chain had never run. Every genuine defect found this session lived at a seam — `billingDay` hardcoded where checkout meets billing, billing events resolving to no comms recipient, `access.granted` emitted on a restore, counter payments never allocated — and none of them was findable by a unit test. This is the test shaped like those bugs.
 
