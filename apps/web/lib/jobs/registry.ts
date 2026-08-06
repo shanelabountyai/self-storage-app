@@ -7,6 +7,7 @@ import { processCommsEvent } from '@/lib/comms/service'
 import { scanExpiringCards, scanExpiringProtectionProofs } from '@/lib/billing/scans'
 import { emitDueReminders, generateInvoices } from '@/lib/billing/invoices'
 import { emitRetryReminders, runAutopay } from '@/lib/billing/autopay'
+import { assessLateFees } from '@/lib/billing/late-fees'
 
 // Consumer and job registration. The machinery is B-006's; the things that use
 // it arrive with their own backlog items: reservation expiry (B-018, below),
@@ -160,6 +161,21 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
       // to execute in. PRD 05 CN-3 wants these driven by billing, and this is
       // the billing run.
       await emitDueReminders(facilityId!, businessDate, recordItem)
+    },
+  },
+  {
+    // B-047 / PRD 02 US-21. Late fees.
+    //
+    // At 2am local: after invoices are generated at 1am, and before autopay at
+    // 3am, so a fee raised tonight is collected tonight rather than sitting
+    // uncharged for a day. US-21 assigns this to the delinquency engine, which
+    // is B-057 in Phase 2 — this is the MVP path, and B-057 drives the same
+    // functions from a timeline stage rather than reimplementing them.
+    name: 'billing.assess-late-fees',
+    localHour: 2,
+    scope: 'per_facility',
+    handler: async ({ facilityId, businessDate, recordItem }) => {
+      await assessLateFees(facilityId!, businessDate, recordItem)
     },
   },
   {

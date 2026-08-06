@@ -1,7 +1,8 @@
-import { prisma, type Prisma } from '@storage/db'
+import { prisma } from '@storage/db'
 import { emitEvent } from '@storage/core/events'
 import { effectiveByGroup } from '@storage/core/facility-settings'
 import { OCCUPYING_LEASE_STATUSES } from '@storage/core/inventory'
+import { nextInvoiceNumber } from '@/lib/billing/numbering'
 import {
   buildInvoice,
   formatInvoiceNumber,
@@ -23,24 +24,6 @@ import {
 // date that already generated must be unforgeable rather than merely checked.
 
 type RecordItem = (outcome: { itemId: string; ok: boolean; message?: string }) => void
-
-/// Hands out the next invoice number for a facility.
-///
-/// Must run inside the transaction that writes the invoice: the UPDATE takes a
-/// row lock that serialises concurrent runs, and a rollback returns the number
-/// to the pool. That is the difference between "unique" and "gapless" (US-17),
-/// and why this is not `autoincrement()`. Same shape as `nextReceiptNumber`
-/// (D-22) — deliberately, so there is one pattern to understand, not two.
-async function nextInvoiceNumber(tx: Prisma.TransactionClient, facilityId: string): Promise<number> {
-  const rows = await tx.$queryRaw<{ nextNumber: number }[]>`
-    INSERT INTO "invoice_counter" ("facilityId", "nextNumber", "updatedAt")
-    VALUES (${facilityId}, 2, NOW())
-    ON CONFLICT ("facilityId")
-    DO UPDATE SET "nextNumber" = "invoice_counter"."nextNumber" + 1, "updatedAt" = NOW()
-    RETURNING "nextNumber" - 1 AS "nextNumber"
-  `
-  return rows[0].nextNumber
-}
 
 /// The recurring charges on a lease.
 ///

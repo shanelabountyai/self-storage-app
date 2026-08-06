@@ -80,6 +80,11 @@ enum BillingPolicy {
   first_of_month
 }
 
+enum InvoiceKind {
+  rent
+  fee
+}
+
 enum InvoiceStatus {
   draft
   open
@@ -296,11 +301,28 @@ enum ActorType {
   system
 }
 
+/// US-21's AC: "the fee catalogue covers what a facility actually charges".
+/// The last six were added in B-047 — uncharged lock-cut and cleaning is
+/// $50–75 per move-out, and a fee with nowhere to post is a fee nobody charges.
 enum FeeType {
   admin
   late
   nsf
   lien
+  lock_cut
+  cleaning
+  damage
+  transfer
+  certified_mail
+  auction_cost
+}
+
+/// How a late-fee step computes its amount (US-21: "$X or Y% (greater/lesser)").
+enum LateFeeBasis {
+  flat
+  percent
+  greater
+  lesser
 }
 
 /// One auth system, two audiences (master PRD §7.1).
@@ -439,6 +461,7 @@ model Facility {
   domainEvents           DomainEvent[]
   jobRuns                JobRun[]
   taxComponents          TaxComponent[]
+  lateFeeRules           LateFeeRule[]
   feeSchedules           FeeSchedule[]
   unitTypeRates          UnitTypeRate[]
   messageTemplates       MessageTemplate[]
@@ -492,6 +515,42 @@ model FeeSchedule {
   @@unique([facilityId, feeType, effectiveFrom])
   @@index([facilityId, feeType, effectiveFrom])
   @@map("fee_schedule")
+}
+
+/// US-21. One row per step of a facility's late-fee ladder — "$X or Y%
+/// (greater/lesser) at N days late; second fee at M days".
+///
+/// Effective-dated per step rather than per ladder (FR-9): the group key is
+/// `step`, so changing only the second fee inserts one row and leaves the first
+/// alone. Rows are never edited, like every other price in this system.
+///
+/// Separate from `FeeSchedule`, which holds flat amounts for fees a person
+/// decides to charge. A late fee is computed from a balance and applied by a
+/// job, so it needs a basis, a percentage and a cap that a flat amount cannot
+/// express.
+model LateFeeRule {
+  id                 String       @id @default(cuid())
+  facilityId         String
+  /// 1 is the first fee, 2 the second. Ordering, not identity.
+  step               Int
+  /// Days past due at which this step becomes chargeable, measured from the
+  /// oldest unpaid rent invoice's ORIGINAL due date (D-25).
+  daysPastDue        Int
+  amountCents        Int          @default(0)
+  /// Hundredths of a percent, so 10% is 1000 — the same unit as tax rates.
+  percentBasisPoints Int          @default(0)
+  basis              LateFeeBasis @default(flat)
+  /// The most this step may ever charge. Null means uncapped, which is a real
+  /// operator choice for a flat fee and a dangerous one for a percentage.
+  capCents           Int?
+  effectiveFrom      DateTime     @db.Timestamptz(6)
+  createdAt          DateTime     @default(now()) @db.Timestamptz(6)
+
+  facility Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+
+  @@unique([facilityId, step, effectiveFrom])
+  @@index([facilityId, effectiveFrom])
+  @@map("late_fee_rule")
 }
 
 model UnitType {
@@ -797,6 +856,15 @@ model Invoice {
   /// to be unforgeable rather than merely checked.
   periodStart     DateTime      @db.Date
   periodEnd       DateTime      @db.Date
+  /// What this invoice is for. `rent` is a recurring service period; `fee` is a
+  /// charge raised on its own (B-047's late fees).
+  ///
+  /// The distinction is load-bearing rather than cosmetic: a fee invoice must
+  /// never itself become the base for another late fee, or a facility charges
+  /// fees on fees and the balance compounds on its own. Late-fee assessment
+  /// reads `rent` invoices only, for both the base amount and the days-past-due
+  /// anchor.
+  kind            InvoiceKind   @default(rent)
   subtotalCents   Int           @default(0)
   taxCents        Int           @default(0)
   discountCents   Int           @default(0)
