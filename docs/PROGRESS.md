@@ -1146,7 +1146,7 @@ The screen that falls out of that shows no gate code, no other unit, no contact 
 
 ---
 
-### B-047 — Late fee schedule ✅ `PENDING`
+### B-047 — Late fee schedule ✅ `463a5d8`
 
 Back on backlog order after the B-050/B-051 detour. The ladder, the wider fee catalogue, automatic nightly assessment, and the waiver. No new decision number — the two calls worth recording are consequences of **D-25**'s anchoring rule rather than new choices.
 
