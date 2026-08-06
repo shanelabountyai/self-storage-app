@@ -23,6 +23,7 @@ import {
   addTaxComponent,
   parseRetryDays,
   updateBillingPolicy,
+  updateOperationsPolicy,
   updateFacilityDetails,
   updateFacilityHours,
 } from '@/lib/admin/facility-settings'
@@ -571,4 +572,75 @@ export async function addLateFeeStepAction(
 
   revalidatePath('/admin/settings')
   return success(`Step ${step.value} added — ${describe} at ${daysPastDue.value} days past due.`)
+}
+
+/// US-9, US-14 and US-32's limits, given a screen.
+export async function updateOperationsPolicyAction(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const actor = await requireStaffActor()
+  const facilityId = String(formData.get('facilityId'))
+  requirePermission(actor, 'facility:settings', facilityId)
+
+  // Minimum 1: a cap of zero would mean nobody but the tenant may be named,
+  // which is a real policy but is expressed by not adding anyone rather than by
+  // a cap that reads as a misconfiguration.
+  const accessCap = parseScaled(formData.get('authorizedAccessCap'), {
+    scale: 1,
+    min: 1,
+    max: 20,
+    unit: 'people',
+  })
+  // Zero means every cash payment needs a manager — a real choice for a site
+  // that takes very little cash.
+  const cashApproval = parseScaled(formData.get('cashApprovalThresholdDollars'), {
+    scale: 100,
+    min: 0,
+    max: 10_000,
+    unit: 'dollars',
+  })
+  const writeOff = parseScaled(formData.get('writeOffThresholdDollars'), {
+    scale: 100,
+    min: 0,
+    max: 1_000,
+    unit: 'dollars',
+  })
+  const noticeDays = parseScaled(formData.get('moveOutNoticeDays'), {
+    scale: 1,
+    min: 0,
+    max: 90,
+    unit: 'days',
+  })
+
+  const errors: FieldErrors = {}
+  if ('error' in accessCap) errors.authorizedAccessCap = accessCap.error
+  if ('error' in cashApproval) errors.cashApprovalThresholdDollars = cashApproval.error
+  if ('error' in writeOff) errors.writeOffThresholdDollars = writeOff.error
+  if ('error' in noticeDays) errors.moveOutNoticeDays = noticeDays.error
+  if (Object.keys(errors).length > 0) return fieldError(errors)
+  if (
+    'error' in accessCap ||
+    'error' in cashApproval ||
+    'error' in writeOff ||
+    'error' in noticeDays
+  ) {
+    return fieldError(errors)
+  }
+
+  try {
+    await updateOperationsPolicy(actor, facilityId, {
+      authorizedAccessCap: accessCap.value,
+      cashApprovalThresholdCents: cashApproval.value,
+      writeOffThresholdCents: writeOff.value,
+      moveOutNoticeDays: noticeDays.value,
+    })
+  } catch (error) {
+    return asFormError(error, 'Could not save the operations policy.')
+  }
+
+  revalidatePath('/admin/settings')
+  return success(
+    `Saved. Up to ${accessCap.value} named people per lease, cash at ${formatCents(cashApproval.value)} or more needs a manager, and ${noticeDays.value === 0 ? 'no notice is required to move out' : `${noticeDays.value} days' notice is required to move out`}.`,
+  )
 }

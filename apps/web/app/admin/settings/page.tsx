@@ -12,6 +12,7 @@ import {
   addFeeScheduleEntryAction,
   addLateFeeStepAction,
   updateBillingPolicyAction,
+  updateOperationsPolicyAction,
   addProtectionPlanAction,
   setProtectionPolicyAction,
   addTaxComponentAction,
@@ -556,6 +557,58 @@ export default async function AdminSettingsPage() {
           />
           <Field name="effectiveFrom" label="Effective from" type="date" defaultValue={todayIso()} required />
           <Button type="submit">Add step</Button>
+        </AdminForm>
+      </section>
+
+      <section aria-labelledby="operations-heading" className="flex flex-col gap-3">
+        <h2 id="operations-heading" className="text-base font-medium">
+          Operations policy
+        </h2>
+        <p className="text-muted-foreground max-w-prose text-xs text-pretty">
+          The limits this facility puts on its own staff and tenants. Texas practice as shipped —
+          configuration, not law.
+        </p>
+        <AdminForm
+          action={updateOperationsPolicyAction}
+          label="Operations policy"
+          className="flex flex-wrap items-end gap-3"
+        >
+          <input type="hidden" name="facilityId" value={facilityId} />
+          <Field
+            name="authorizedAccessCap"
+            label="Named people per lease"
+            type="number"
+            min={1}
+            max={20}
+            defaultValue={facility.authorizedAccessCap}
+            hint="Besides the tenant themselves."
+          />
+          <Field
+            name="cashApprovalThresholdDollars"
+            label="Cash needing a manager, at or above ($)"
+            type="text"
+            inputMode="decimal"
+            defaultValue={(facility.cashApprovalThresholdCents / 100).toFixed(2)}
+            hint="0.00 means every cash payment needs one."
+          />
+          <Field
+            name="writeOffThresholdDollars"
+            label="Write off a leftover balance up to ($)"
+            type="text"
+            inputMode="decimal"
+            defaultValue={(facility.writeOffThresholdCents / 100).toFixed(2)}
+            hint="Anything above this needs a manager at move-out."
+          />
+          <Field
+            name="moveOutNoticeDays"
+            label="Notice required to move out (days)"
+            type="number"
+            min={0}
+            max={90}
+            defaultValue={facility.moveOutNoticeDays}
+            hint="0 means none. The portal enforces this; staff can override."
+          />
+          <Button type="submit">Save operations policy</Button>
         </AdminForm>
       </section>
 

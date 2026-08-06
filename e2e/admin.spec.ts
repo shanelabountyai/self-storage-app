@@ -205,6 +205,17 @@ test.describe('billing settings, given a screen', () => {
     await expect(form.getByText(/increasing order/)).toHaveCount(2)
   })
 
+  test('the last four column-only settings are reachable', async ({ page }) => {
+    await page.goto('/admin/settings')
+    await expect(page.getByRole('heading', { name: 'Operations policy' })).toBeVisible()
+
+    const form = page.getByRole('form', { name: 'Operations policy' })
+    await form.getByLabel('Named people per lease').fill('4')
+    await form.getByRole('button', { name: 'Save operations policy' }).click()
+
+    await expect(form.getByText(/Up to 4 named people per lease/)).toBeVisible()
+  })
+
   test('the late-fee ladder is editable and refuses an uncapped percentage', async ({ page }) => {
     await page.goto('/admin/settings')
     await expect(page.getByRole('heading', { name: 'Late fees' })).toBeVisible()

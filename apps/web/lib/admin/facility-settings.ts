@@ -335,3 +335,46 @@ export async function addLateFeeStep(
     context: { ...input, effectiveFrom: input.effectiveFrom.toISOString() },
   })
 }
+
+// ── Operations policy (US-9, US-14, US-32) ──────────────────────────────────
+//
+// The four remaining columns an operator could not reach. Kept apart from the
+// billing policy above because they are not billing: they are the limits a
+// facility puts on its own staff and its own tenants, and grouping them with
+// invoicing would mean nobody looking for "how many people can be on a lease"
+// finds it.
+
+export type OperationsPolicyInput = {
+  authorizedAccessCap: number
+  cashApprovalThresholdCents: number
+  writeOffThresholdCents: number
+  moveOutNoticeDays: number
+}
+
+export async function updateOperationsPolicy(
+  actor: Actor,
+  facilityId: string,
+  input: OperationsPolicyInput,
+): Promise<void> {
+  requirePermission(actor, 'facility:settings', facilityId)
+
+  const before = await prisma.facility.findUniqueOrThrow({ where: { id: facilityId } })
+  const after = await prisma.facility.update({ where: { id: facilityId }, data: input })
+
+  const fields = (row: typeof before) => ({
+    authorizedAccessCap: row.authorizedAccessCap,
+    cashApprovalThresholdCents: row.cashApprovalThresholdCents,
+    writeOffThresholdCents: row.writeOffThresholdCents,
+    moveOutNoticeDays: row.moveOutNoticeDays,
+  })
+
+  await recordAudit({
+    actor: toAuditActor(actor),
+    action: 'facility.settings_changed',
+    entityType: 'Facility',
+    entityId: facilityId,
+    facilityId,
+    before: fields(before),
+    after: fields(after),
+  })
+}
