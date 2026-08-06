@@ -1246,7 +1246,7 @@ D-16's single threshold, moved forward out of the Phase-2 pipeline. No new decis
 
 ---
 
-### B-048 — Partial payments and refunds ✅ `PENDING`
+### B-048 — Partial payments and refunds ✅ `ffa77cd`
 
 US-22's configurable allocation order and US-23's refunds. No new decision number — D-28 already settled the settlement direction and this generalises it.
 
