@@ -1168,7 +1168,7 @@ Back on backlog order after the B-050/B-051 detour. The ladder, the wider fee ca
 
 ---
 
-### Billing settings, given a screen ✅ `PENDING`
+### Billing settings, given a screen ✅ `1721979`
 
 **Not a backlog item** — a gap-fill the owner called for after B-047's write-up flagged it. Five items had each shipped a defensible database column with no way for an operator to reach it, and together they had become the largest cluster of developer-only configuration in the project. A setting only a developer can change is one an operator has to ring someone about.
 
