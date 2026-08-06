@@ -89,6 +89,32 @@ export default async function TenantProfilePage({
         )}
       </div>
 
+      {/* US-45's plain-English access line. Beside the hold banner because
+          they answer the same question — why can this tenant not get in — and a
+          staffer on the phone should not have to hunt for either. */}
+      {profile.accessState.length > 0 && (
+        <section aria-labelledby="access-heading" className="flex flex-col gap-2">
+          <h2 id="access-heading" className="sr-only">
+            Gate access
+          </h2>
+          {profile.accessState.map((row) => (
+            <p
+              key={row.facilityName}
+              className={
+                row.suspended
+                  ? 'rounded-lg border-2 border-red-600 bg-red-50 p-3 text-sm font-medium text-red-950'
+                  : 'text-muted-foreground text-sm'
+              }
+            >
+              {/* 1.4.1: the words carry it, not the border. */}
+              {row.suspended ? 'Gate access suspended' : 'Gate access active'} — {row.facilityName}
+              {row.summary ? `. ${row.summary}` : ''}
+              {row.suspended ? '. It turns back on automatically when the balance reaches zero.' : ''}
+            </p>
+          ))}
+        </section>
+      )}
+
       {/* US-42's persistent banner. First thing under the heading, before any
           control that could act on the account — a manager must never be able
           to approve a sale, or send a notice, without the hold in view. Never

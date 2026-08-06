@@ -1218,6 +1218,32 @@ Built ahead of B-098, which needs it: the day-6 access suspension must never fir
 
 ---
 
+### B-098 — Gate access suspension & restore on non-payment ✅ `PENDING`
+
+D-16's single threshold, moved forward out of the Phase-2 pipeline. No new decision number: D-16 settled the behaviour and this implements it.
+
+**Decided: the rule is evaluated per TENANT, not per lease.** `AccessGrant` is one row per (facility, tenant) by PRD 03 FR-1's design, and that matches the physical reality — a shared gate either opens for someone or it does not, and there is no way to admit them for unit A while refusing unit B. So the decision reads the **highest day count** across that tenant's leases at the facility and the **sum** of their balances. Suspending on any one delinquent lease would lock a tenant out of a unit they had paid for; requiring every lease to be delinquent would let them hold the gate open indefinitely by keeping one cheap unit current. A hold on any one lease blocks the whole grant, because the grant cannot be partially suspended and that is the safe direction.
+
+**Decided: suspension needs the day count AND an outstanding balance.** A lease showing days-past-due with a zero balance is a rounding artefact or a credit. Locking someone out over it is the version of this feature that produces a complaint instead of a payment, and it is a single `&&` away at all times.
+
+**Decided: the hold check runs first, and a hold does not restore.** First, so no later branch can be reached past it and a hold placed mid-cycle takes effect on the very next evaluation rather than after the next payment. And a hold holds a *suspended* grant where it is rather than letting it back in — a hold is not a payment, and restoring on one would make it a free pass. Both asserted.
+
+**Decided: restore is inline, and the nightly pass is only the net.** US-45 wants restore "within ~2 minutes of a qualifying payment, with no staff action", which a 4am job cannot do. `restoreAccessIfSettled` is called directly from the two paths that settle money — the Stripe webhook and the counter payment — inside the same request, so a tenant who pays at the counter can reach their unit before they have walked back to the car. Both calls are best-effort and outside the money transaction: a gate controller being unreachable must never roll back a payment already taken. The 4am pass catches a balance that reached zero some other way — a credit, a waiver, a write-off.
+
+**Decided: the nightly pass runs last, at 4am.** After invoices (1am), late fees (2am) and autopay (3am), so the balance it reads is tonight's settled figure. A tenant whose autopay succeeded an hour earlier must not be suspended for a balance that no longer exists.
+
+**Found and fixed: a restore emitted the wrong event, so CN-11's restore notice could never have fired.** `transitionGrant` chose `access.granted` for any transition into `active`, including suspended→active — even though it correctly distinguished `resume_access` from `grant_access` for the hardware command three lines above. The event catalog has had `access.restored` since B-006 and the comms consumer has subscribed to it since B-030; nothing ever emitted it. Fixed at the source rather than worked around, and a test asserts the restore emits `restored` and not `granted`.
+
+**Also fixed: this item nearly shipped a duplicate notification.** The first draft emitted its own `access.suspended` alongside the one `transitionGrant` already emits, which would have told the tenant twice. The events are now emitted in exactly one place and the figures the notice needs — the day count and the balance — are recomputed at send time (FR-18) rather than carried on the event, so a tenant who paid between the suspension and the dispatch sees what is true now.
+
+**The copy is the hardest in the catalog and was written deliberately.** It tells someone they cannot reach their own property. It leads with what is safe ("your belongings are safe and nothing has been sold or moved"), says exactly what makes it stop, gives the one-tap pay link from B-051, and offers a phone number for "if that is wrong". It does not moralise — the tenant already knows they are behind, and a lecture makes the payment less likely.
+
+**Verified:** 1164 unit/DB tests (29 new — 15 on the pure decision: the threshold boundary either side, the balance requirement, the disabled rule, pending and revoked grants left alone, the hold blocking both directions, restore on zero and on a relaxed threshold and on a credit balance, no restore on a partial payment, and US-45's exact sentence including the singular day; 14 against real grants: nothing at five days, suspension at six with the sentence verbatim, the audit entry carrying the triggering invoice and day count, a real `suspend_access` command enqueued rather than a column flipped, one notification and not two, `access.restored` rather than `access.granted`, no second suspension on the following night, the hold block, restore both nightly and inline, no restore on a partial, no action for a tenant never suspended, the disabled rule, and — the one that matters most for B-047's interaction — **a fee invoice alone never ages the clock**, so nobody is locked out over a $20 fee raised this morning). E2e: 334 passing. Typecheck, lint, build clean. One migration.
+
+**Left behind.** **The two new settings are column-only** — `accessSuspendDaysPastDue` and `accessRestoreAtOrBelowCents` did not make it into yesterday's settings pass because they did not exist yet, which is exactly how that cluster formed the first time. They belong in the billing policy form and should go there before the next item. **No staff override**: a manager cannot restore access manually from the profile for a tenant they have made an arrangement with — the honest path today is placing a `payment_plan` hold, which is arguably the better record anyway, but it is not the same thing as "let them in now". **The suspension is not surfaced on the delinquency queue** (B-059) or anywhere but the tenant profile. **`daysPastDue` is read per lease and maxed**, which is right, but a tenant with leases at two facilities is evaluated independently at each — correct, and worth knowing. **Nothing tests the ~2-minute SLA end to end**: the inline call is asserted directly, but no test drives a Stripe webhook through to a gate command, because that needs the Stripe key this project still does not have.
+
+---
+
 ---
 
 ## Feature PRDs added mid-build

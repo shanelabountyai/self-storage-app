@@ -117,6 +117,52 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
       'facility.phone',
     ],
   },
+  {
+    // PRD 05 CN-11 / US-45 (B-098). The tenant is told on both transitions.
+    //
+    // The hardest copy in the catalog: this tells someone they cannot reach
+    // their own property. It says the day count, the amount, and exactly what
+    // makes it stop — and it does not moralise, because the tenant already
+    // knows they are behind and a lecture makes the payment less likely, not
+    // more.
+    key: 'access_suspended',
+    classification: 'transactional',
+    subject: 'Your gate access at {{facility.name}} is paused',
+    bodyText: [
+      'Hi {{tenant.first_name}},',
+      '',
+      'Your gate code for unit {{unit.number}} at {{facility.name}} has stopped working because the account is {{access.days_past_due}} days past due.',
+      '',
+      'Your belongings are safe and nothing has been sold or moved.',
+      '',
+      'Paying the balance of {{balance.total}} turns your code back on automatically, usually within a couple of minutes: {{links.pay_now}}',
+      '',
+      'If that is wrong, or you need to reach your unit urgently, call {{facility.phone}} and we will sort it out.',
+    ].join('\n'),
+    requiredMergeFields: [
+      'tenant.first_name',
+      'unit.number',
+      'facility.name',
+      'access.days_past_due',
+      'balance.total',
+      'links.pay_now',
+      'facility.phone',
+    ],
+  },
+  {
+    key: 'access_restored',
+    classification: 'transactional',
+    subject: 'Your gate access at {{facility.name}} is back on',
+    bodyText: [
+      'Hi {{tenant.first_name}},',
+      '',
+      'Thank you — your account is settled and your gate code for unit {{unit.number}} at {{facility.name}} works again.',
+      '',
+      'If it does not let you in within a few minutes, call {{facility.phone}} and we will open the gate for you.',
+    ].join('\n'),
+    requiredMergeFields: ['tenant.first_name', 'unit.number', 'facility.name', 'facility.phone'],
+  },
+
   // ── B-050: the payment lifecycle (PRD 05 §3.1 CN-1, CN-2, CN-6, CN-10a) ────
   //
   // House style for everything below, and the reason for it: say the amount and
@@ -373,6 +419,20 @@ export const COMMS_RULES: readonly CommsRuleSeed[] = [
     event: 'lease.move_out_requested',
     templateKey: 'lease_move_out_requested',
     classification: 'transactional',
+  },
+
+  // ── B-098 (D-16). Both transitions are notified — US-45's own AC. ──────────
+  {
+    event: 'access.suspended',
+    templateKey: 'access_suspended',
+    classification: 'transactional',
+    skipConditions: ['tenant_moved_out'],
+  },
+  {
+    event: 'access.restored',
+    templateKey: 'access_restored',
+    classification: 'transactional',
+    skipConditions: ['tenant_moved_out'],
   },
 
   // ── B-050 ───────────────────────────────────────────────────────────────────

@@ -11,6 +11,7 @@ import {
 import { assertFacilityAccess, can, ForbiddenError } from '@/lib/rbac/authorize'
 import { toAuditActor } from '@/lib/rbac/audit-actor'
 import type { Actor } from '@/lib/rbac/actor'
+import { restoreAccessIfSettled } from '@/lib/access/delinquency-gate'
 
 // PRD 02 §4.8 US-32. Money taken across the counter.
 //
@@ -149,6 +150,17 @@ export async function recordCounterPayment(
 
     return { paymentId: payment.id, receiptNumber }
   })
+
+  // US-45's ~2-minute restore. A tenant who has just paid at the counter must
+  // be able to reach their unit before they have walked back to the car —
+  // waiting for the 4am pass is the version of this that generates a phone
+  // call. Best-effort and outside the transaction: a gate controller being
+  // unreachable must never roll back money already in the drawer.
+  try {
+    await restoreAccessIfSettled(input.tenantId, input.facilityId)
+  } catch {
+    // Swallowed deliberately; the nightly pass is the net.
+  }
 
   return { ok: true, ...result, changeCents: settled.changeCents }
 }

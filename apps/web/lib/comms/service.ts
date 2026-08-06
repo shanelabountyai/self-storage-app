@@ -3,6 +3,7 @@ import type { DomainEvent, MessageClassification, SuppressionReason } from '@sto
 import { codeForLease } from '@/lib/access/provision'
 import { mintPayLink, payLinkUrl } from '@/lib/portal/pay-links'
 import { leaseHasEffect } from '@/lib/admin/holds'
+import { daysPastDue } from '@storage/core/metrics'
 import { formatCents } from '@/lib/format'
 import {
   commsEnabled,
@@ -232,6 +233,37 @@ async function resolveRecipient(event: DomainEvent): Promise<Recipient | null> {
     }
   }
 
+  // B-098. Access events name the grant, which is per (facility, tenant). The
+  // unit comes from that tenant's occupying lease at the facility — a tenant
+  // with two units there sees one of them named, which is honest: the gate is
+  // shared and both are affected.
+  if (event.entityType === 'AccessGrant') {
+    const grant = await prisma.accessGrant.findUnique({
+      where: { id: event.entityId },
+      select: { facilityId: true, tenantId: true, facility: { select: FACILITY_SELECT } },
+    })
+    if (!grant?.tenantId) return null
+
+    const lease = await prisma.lease.findFirst({
+      where: { tenantId: grant.tenantId, facilityId: grant.facilityId, status: { not: 'ended' } },
+      orderBy: { startDate: 'desc' },
+      select: {
+        ...LEASE_SELECT,
+        tenant: {
+          select: {
+            id: true,
+            email: true,
+            firstName: true,
+            lastName: true,
+            stripeDefaultPaymentMethodId: true,
+          },
+        },
+      },
+    })
+    if (!lease) return null
+    return recipientFromLease(lease, grant.facility)
+  }
+
   if (event.entityType === 'Reservation') {
     const reservation = await prisma.reservation.findUnique({
       where: { id: event.entityId },
@@ -456,6 +488,27 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
   //
   // Every figure below is read at SEND time (FR-18), not carried from the
   // event, so a tenant who paid an hour ago is told what is true now.
+
+  // B-098. The day count and the balance the tenant has to clear, read at send
+  // time — a tenant who paid between the suspension and the send sees the
+  // figure that is true now.
+  'access.suspended': async (event, recipient) => {
+    // Recomputed at send time (FR-18), not carried on the event: a tenant who
+    // paid between the suspension and the dispatch must see the figure that is
+    // true now, and `transitionGrant`'s payload carries the transition rather
+    // than the arithmetic behind it.
+    const invoices = recipient.lease
+      ? await prisma.invoice.findMany({
+          where: { leaseId: recipient.lease.id, kind: 'rent' },
+          select: { dueDate: true, totalCents: true, amountPaidCents: true },
+        })
+      : []
+    return {
+      'access.days_past_due': String(daysPastDue(invoices, new Date())),
+      'balance.total': formatCents(await leaseBalanceCents(recipient.lease?.id ?? null)),
+      'links.pay_now': await payNowLink(recipient, event),
+    }
+  },
 
   'invoice.due_soon': invoiceContext,
   'invoice.due_today': invoiceContext,

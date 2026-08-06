@@ -8,6 +8,7 @@ import { scanExpiringCards, scanExpiringProtectionProofs } from '@/lib/billing/s
 import { emitDueReminders, generateInvoices } from '@/lib/billing/invoices'
 import { emitRetryReminders, runAutopay } from '@/lib/billing/autopay'
 import { assessLateFees } from '@/lib/billing/late-fees'
+import { evaluateAccessSuspensions } from '@/lib/access/delinquency-gate'
 
 // Consumer and job registration. The machinery is B-006's; the things that use
 // it arrive with their own backlog items: reservation expiry (B-018, below),
@@ -47,6 +48,7 @@ export const CONSUMERS: readonly Consumer[] = [
       'delinquency.day_reached',
       'delinquency.stage_changed',
       'access.restored',
+      'access.suspended',
       // B-043's scans and B-046's retry reminder. Subscribed here so B-050's
       // notices are a rule and a template — data — rather than another edit to
       // this list. All of them resolve to a recipient already (Tenant or
@@ -176,6 +178,24 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
     scope: 'per_facility',
     handler: async ({ facilityId, businessDate, recordItem }) => {
       await assessLateFees(facilityId!, businessDate, recordItem)
+    },
+  },
+  {
+    // B-098 / PRD 02 US-45, decided as D-16. The single access threshold.
+    //
+    // At 4am local, LAST in the night: after invoices (1am), late fees (2am)
+    // and autopay (3am), so the balance it reads is tonight's settled figure
+    // rather than one that changes an hour later. A tenant whose autopay just
+    // succeeded must not be suspended for a balance that no longer exists.
+    //
+    // This is the safety net, not the restore mechanism — US-45's ~2-minute
+    // restore is called inline from the payment paths (see
+    // lib/access/delinquency-gate.ts).
+    name: 'access.evaluate-suspensions',
+    localHour: 4,
+    scope: 'per_facility',
+    handler: async ({ facilityId, businessDate, recordItem }) => {
+      await evaluateAccessSuspensions(facilityId!, businessDate, recordItem)
     },
   },
   {

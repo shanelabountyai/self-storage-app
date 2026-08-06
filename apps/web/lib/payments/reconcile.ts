@@ -3,6 +3,7 @@ import { type Prisma, prisma } from '@storage/db'
 import { emitEvent } from '@storage/core/events'
 import { provisionMoveIn, requestDownstream } from '@/lib/checkout/provision'
 import { cancelOpenTask } from '@/lib/admin/tasks'
+import { restoreAccessIfSettled } from '@/lib/access/delinquency-gate'
 
 /// The checkout session a PaymentIntent belongs to, from the reference B-025
 /// set when it created the intent (`checkout:<sessionId>`).
@@ -183,6 +184,10 @@ export async function applyStripeEvent(event: Stripe.Event): Promise<void> {
     case 'payment_intent.succeeded': {
       const intent = event.data.object as Stripe.PaymentIntent
       let checkoutSessionId: string | null = null
+      // A one-element box rather than a `let`: TypeScript narrows a variable
+      // only ever assigned inside a callback to `never` at the point it is
+      // read, and the cast that silences that would also silence a real error.
+      const settled: { tenantId: string; facilityId: string }[] = []
 
       await prisma.$transaction(async (tx) => {
         const payment = await tx.payment.findUnique({
@@ -203,6 +208,7 @@ export async function applyStripeEvent(event: Stripe.Event): Promise<void> {
         // Order matters: the allocation sums only SUCCEEDED payments, and the
         // status update above is what makes this one count.
         await settleNamedInvoice(tx, payment, referenceInvoiceId(intent))
+        settled.push({ tenantId: payment.tenantId, facilityId: payment.facilityId })
         // FR-4.4: finalisation is webhook-driven. The reference carries which
         // checkout this was, so a renter who closed the tab still gets moved in.
         checkoutSessionId = referenceSessionId(intent)
@@ -217,6 +223,21 @@ export async function applyStripeEvent(event: Stripe.Event): Promise<void> {
           tx,
         )
       })
+
+      // US-45's ~2-minute restore, outside the transaction and deliberately
+      // after it: the balance this reads must include the payment that just
+      // committed. Failing here must not roll back money we have taken, so it
+      // is best-effort like provisioning below — the nightly pass at 4am is the
+      // net if it throws.
+      if (settled[0]) {
+        try {
+          await restoreAccessIfSettled(settled[0].tenantId, settled[0].facilityId)
+        } catch {
+          // Swallowed on purpose. A gate that stays shut an extra few hours is
+          // recoverable; a payment rolled back because a gate controller was
+          // unreachable is not.
+        }
+      }
 
       // Outside the payment transaction on purpose (FR-4.6): provisioning
       // failing must not roll back a payment that succeeded. The renter has

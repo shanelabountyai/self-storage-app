@@ -190,6 +190,10 @@ export type TenantProfile = {
   /// On the profile rather than only the lease row because a staffer opening
   /// the tenant must see it before they do anything at all.
   holds: (ActiveHold & { leaseId: string; unitNumber: string })[]
+  /// US-45's plain-English line: "Access suspended, 12 days past due,
+  /// 2026-07-18". Read from the audit entry the rule wrote rather than
+  /// recomputed, so the screen says what actually happened and when.
+  accessState: { facilityName: string; suspended: boolean; summary: string }[]
   /// Facilities the viewing actor may act through for this tenant — what a
   /// mutation form needs to attribute a new note or document to.
   editableFacilityIds: string[]
@@ -323,6 +327,24 @@ export async function tenantProfile(actor: Actor, tenantId: string): Promise<Ten
     ),
   )
 
+  const grants = await prisma.accessGrant.findMany({
+    where: { tenantId, facilityId: { in: [...new Set(leases.map((lease) => lease.facilityId))] } },
+    select: { id: true, state: true, facility: { select: { name: true } } },
+  })
+  const accessAudits = await prisma.auditLog.findMany({
+    where: {
+      entityType: 'AccessGrant',
+      entityId: { in: grants.map((grant) => grant.id) },
+      action: { in: ['access.suspended', 'access.restored'] },
+    },
+    orderBy: { occurredAt: 'desc' },
+    select: { entityId: true, action: true, after: true },
+  })
+  const latestByGrant = new Map<string, (typeof accessAudits)[number]>()
+  for (const entry of accessAudits) {
+    if (!latestByGrant.has(entry.entityId)) latestByGrant.set(entry.entityId, entry)
+  }
+
   return {
     tenantId,
     firstName: tenant.firstName,
@@ -350,6 +372,20 @@ export async function tenantProfile(actor: Actor, tenantId: string): Promise<Ten
       }))
       .filter((fee) => fee.outstandingCents > 0),
     holds: holdsByLease.flat(),
+    accessState: grants
+      .map((grant) => {
+        const latest = latestByGrant.get(grant.id)
+        const summary = (latest?.after as { summary?: string } | null)?.summary
+        return {
+          facilityName: grant.facility.name,
+          suspended: grant.state === 'suspended',
+          // No audit entry means nothing automatic has ever touched this grant,
+          // which is the ordinary case and reads as nothing rather than as a
+          // reassuring sentence nobody asked for.
+          summary: summary ?? '',
+        }
+      })
+      .filter((row) => row.suspended || row.summary !== ''),
     notes: notes.map((note) => ({
       id: note.id,
       body: note.body,

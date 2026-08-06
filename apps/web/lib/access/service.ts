@@ -138,7 +138,19 @@ export async function transitionGrant(
 
   await emitEvent(
     {
-      name: to === 'active' ? 'access.granted' : to === 'suspended' ? 'access.suspended' : 'access.revoked',
+      // `restored` and `granted` are different facts and the catalog has both:
+      // one is a move-in, the other is a tenant who paid and is being let back
+      // in. They mirror the command types chosen just above. Before B-098 this
+      // emitted `granted` for a restore, so the restore notice CN-11 asks for
+      // had no event to fire on.
+      name:
+        to === 'active'
+          ? from === 'suspended'
+            ? 'access.restored'
+            : 'access.granted'
+          : to === 'suspended'
+            ? 'access.suspended'
+            : 'access.revoked',
       facilityId: grant.facilityId,
       entityType: 'AccessGrant',
       entityId: grantId,
