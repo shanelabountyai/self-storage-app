@@ -1355,7 +1355,7 @@ CN-3's ladder, CN-5's halts, and the tone escalation as content. Everything it n
 
 ---
 
-### B-053 — Template editor + per-facility sender identity ✅ `PENDING`
+### B-053 — Template editor + per-facility sender identity ✅ `4cfbc3e`
 
 CN-16's editor and CN-17's identity. The item that makes every word written across B-050, B-052 and B-098 changeable without a deploy.
 
