@@ -1218,7 +1218,7 @@ Built ahead of B-098, which needs it: the day-6 access suspension must never fir
 
 ---
 
-### B-098 — Gate access suspension & restore on non-payment ✅ `PENDING`
+### B-098 — Gate access suspension & restore on non-payment ✅ `b33d9c8`
 
 D-16's single threshold, moved forward out of the Phase-2 pipeline. No new decision number: D-16 settled the behaviour and this implements it.
 
