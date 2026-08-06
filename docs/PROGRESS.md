@@ -1122,7 +1122,7 @@ Eight rules and eight templates, the two recipient resolvers billing events need
 
 ---
 
-### B-051 — Pay-now magic links ✅ `PENDING`
+### B-051 — Pay-now magic links ✅ `70b411e`
 
 The one-tap way to pay from a reminder, which is what B-050's `links.pay_now` was standing in for. Recorded as **D-30**, because what the link grants is the whole design and a later session must not "simplify" it into a portal session.
 
