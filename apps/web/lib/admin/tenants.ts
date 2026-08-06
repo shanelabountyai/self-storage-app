@@ -18,6 +18,7 @@ import {
 } from '@/lib/portal/contact'
 import { logManualDocument, type DocumentType } from '@/lib/documents/store'
 import { createTask } from '@/lib/admin/tasks'
+import { activeHolds, type ActiveHold } from '@/lib/admin/holds'
 
 // PRD 02 §4.4 US-13. "Any staffer can pick up any conversation" — search,
 // then one profile: contact, address history, leases and balance, notes,
@@ -185,6 +186,10 @@ export type TenantProfile = {
   /// Late fees still outstanding on this tenant's leases (B-047), so a manager
   /// can waive one from the profile rather than from a database client.
   waivableFees: WaivableFee[]
+  /// US-42's banner data: every hold in force on any of this tenant's leases.
+  /// On the profile rather than only the lease row because a staffer opening
+  /// the tenant must see it before they do anything at all.
+  holds: (ActiveHold & { leaseId: string; unitNumber: string })[]
   /// Facilities the viewing actor may act through for this tenant — what a
   /// mutation form needs to attribute a new note or document to.
   editableFacilityIds: string[]
@@ -308,6 +313,16 @@ export async function tenantProfile(actor: Actor, tenantId: string): Promise<Ten
   })
   const unitByLease = new Map(leases.map((lease) => [lease.id, lease.unit.number]))
 
+  const holdsByLease = await Promise.all(
+    leases.map(async (lease) =>
+      (await activeHolds(lease.id)).map((hold) => ({
+        ...hold,
+        leaseId: lease.id,
+        unitNumber: lease.unit.number,
+      })),
+    ),
+  )
+
   return {
     tenantId,
     firstName: tenant.firstName,
@@ -334,6 +349,7 @@ export async function tenantProfile(actor: Actor, tenantId: string): Promise<Ten
         description: invoice.lineItems[0]?.description ?? 'Fee',
       }))
       .filter((fee) => fee.outstandingCents > 0),
+    holds: holdsByLease.flat(),
     notes: notes.map((note) => ({
       id: note.id,
       body: note.body,

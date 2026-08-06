@@ -9,9 +9,23 @@ import {
   logDocumentAction,
   setNotePinnedAction,
   updateAddressAction,
+  liftHoldAction,
+  placeHoldAction,
   updateContactAction,
   waiveFeeAction,
 } from './actions'
+import { HOLD_TYPES, type HoldEffect } from '@storage/core/holds'
+
+/// The effects in an operator's words, on the banner. The catalog names them
+/// for code; a staffer needs to know what stopped.
+const EFFECT_LABELS: Record<HoldEffect, string> = {
+  halt_dunning: 'collections chasing',
+  halt_late_fees: 'late fees',
+  halt_access_suspension: 'gate suspension',
+  block_auction: 'auction',
+  suppress_marketing: 'marketing',
+  halt_autopay: 'automatic card payments',
+}
 
 /// The reason vocabulary from the audit catalog, narrowed to the ones that
 /// actually explain a waived fee. Free text stays available in the note beside
@@ -74,6 +88,69 @@ export default async function TenantProfilePage({
           </p>
         )}
       </div>
+
+      {/* US-42's persistent banner. First thing under the heading, before any
+          control that could act on the account — a manager must never be able
+          to approve a sale, or send a notice, without the hold in view. Never
+          colour alone (1.4.1): the label and the note carry the meaning. */}
+      {profile.holds.length > 0 && (
+        <section aria-labelledby="holds-heading" className="flex flex-col gap-3">
+          <h2 id="holds-heading" className="sr-only">
+            Holds on this account
+          </h2>
+          {profile.holds.map((hold) => (
+            <div
+              key={hold.id}
+              role="note"
+              className="rounded-lg border-2 border-amber-500 bg-amber-50 p-4 text-amber-950"
+            >
+              <p className="font-semibold">
+                On hold — {hold.label} · Unit {hold.unitNumber}
+              </p>
+              <p className="mt-1 text-sm text-pretty">{hold.bannerNote}</p>
+              <p className="mt-2 text-sm text-pretty">
+                <span className="font-medium">Reason given:</span> {hold.reason}
+              </p>
+              {hold.estateContactName && (
+                <p className="mt-1 text-sm text-pretty">
+                  <span className="font-medium">Estate contact:</span> {hold.estateContactName}
+                  {hold.estateContactPhone ? ` · ${hold.estateContactPhone}` : ''}
+                  {hold.estateContactEmail ? ` · ${hold.estateContactEmail}` : ''}
+                </p>
+              )}
+              <p className="mt-2 text-xs">
+                Placed by {hold.placedByName} on {formatWhen(hold.effectiveFrom)}
+                {hold.effectiveTo ? ` · ends ${formatWhen(hold.effectiveTo)}` : ' · no end date'}
+              </p>
+              <p className="mt-1 text-xs">
+                Stops: {hold.effects.map((effect) => EFFECT_LABELS[effect] ?? effect).join(', ')}
+              </p>
+
+              <AdminForm
+                action={liftHoldAction}
+                label={`Lift the ${hold.label} hold`}
+                className="mt-3 flex flex-wrap items-end gap-2"
+              >
+                <input type="hidden" name="tenantId" value={profile.tenantId} />
+                <input type="hidden" name="holdId" value={hold.id} />
+                <Field name="liftReason" label="Reason for lifting" />
+                <button
+                  type="submit"
+                  className="border-input hover:bg-accent inline-flex min-h-11 items-center justify-center rounded-md border bg-white px-4 text-sm font-medium"
+                >
+                  Lift hold
+                  <span className="sr-only"> — {hold.label} on unit {hold.unitNumber}</span>
+                </button>
+                {hold.liftRequiresManager && (
+                  <p className="w-full text-xs">
+                    Lifting this hold needs a manager or above.
+                  </p>
+                )}
+              </AdminForm>
+            </div>
+          ))}
+        </section>
+      )}
 
       <section aria-labelledby="contact-heading" className="flex flex-col gap-3">
         <h2 id="contact-heading" className="font-medium">
@@ -290,6 +367,44 @@ export default async function TenantProfilePage({
           </ul>
         </section>
       )}
+
+      <section aria-labelledby="place-hold-heading" className="flex flex-col gap-3">
+        <h2 id="place-hold-heading" className="font-medium">
+          Place a hold
+        </h2>
+        <p className="text-muted-foreground max-w-prose text-xs text-pretty">
+          A hold stops automated collections on one lease from tonight. What each type stops is
+          fixed — it is shown on the banner once placed. Placing and lifting are both audited.
+        </p>
+        <AdminForm action={placeHoldAction} label="Place a hold" className="flex flex-wrap items-end gap-3">
+          <input type="hidden" name="tenantId" value={profile.tenantId} />
+          <Field name="leaseId" label="Unit" as="select" defaultValue={profile.leases[0]?.leaseId ?? ''}>
+            {profile.leases.map((lease) => (
+              <option key={lease.leaseId} value={lease.leaseId}>
+                {lease.unitNumber} — {lease.facilityName}
+              </option>
+            ))}
+          </Field>
+          <Field name="type" label="Type" as="select" defaultValue="">
+            <option value="">Choose a type…</option>
+            {HOLD_TYPES.map((type) => (
+              <option key={type.type} value={type.type}>
+                {type.label}
+              </option>
+            ))}
+          </Field>
+          <Field name="reason" label="Reason" hint="What you were told, and by whom." />
+          <Field name="effectiveTo" label="Ends (optional)" type="date" hint="Leave empty for open-ended." />
+          <Field name="estateContactName" label="Estate contact" hint="Required for a deceased tenant." />
+          <Field name="estateContactPhone" label="Estate contact phone" type="tel" />
+          <button
+            type="submit"
+            className="border-input hover:bg-accent inline-flex min-h-11 items-center justify-center rounded-md border px-4 text-sm font-medium"
+          >
+            Place hold
+          </button>
+        </AdminForm>
+      </section>
 
       <section aria-labelledby="notes-heading" className="flex flex-col gap-3">
         <h2 id="notes-heading" className="font-medium">

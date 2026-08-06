@@ -2,6 +2,7 @@ import { type Prisma, prisma } from '@storage/db'
 import type { DomainEvent, MessageClassification, SuppressionReason } from '@storage/db'
 import { codeForLease } from '@/lib/access/provision'
 import { mintPayLink, payLinkUrl } from '@/lib/portal/pay-links'
+import { leaseHasEffect } from '@/lib/admin/holds'
 import { formatCents } from '@/lib/format'
 import {
   commsEnabled,
@@ -688,6 +689,18 @@ const SKIP_PREDICATES: Record<
   // enrolled with no card on file will not be charged, and that tenant does
   // need telling.
   autopay_covers_it: (recipient) => recipient.lease?.autopayActive === true,
+
+  // US-42 (B-096). A hold declaring `halt_dunning` stops the past-due chasing:
+  // the retry reminders, and B-052's ladder when it lands. Deliberately NOT the
+  // ordinary "rent is due on the 1st" reminder — a tenant on a payment plan
+  // still has rent due, and going silent about it would be its own problem.
+  lease_on_hold_dunning: async (recipient) =>
+    recipient.lease ? leaseHasEffect(recipient.lease.id, 'halt_dunning') : false,
+
+  // The channel instruction rather than the forbearance: `do_not_contact` and
+  // every broader hold carry this.
+  lease_on_hold_marketing: async (recipient) =>
+    recipient.lease ? leaseHasEffect(recipient.lease.id, 'suppress_marketing') : false,
 
   // FR-18 staleness. An invoice settled between the event and the send — a
   // counter payment this morning, an autopay run that beat the dispatcher —

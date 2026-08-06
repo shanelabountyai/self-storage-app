@@ -19,7 +19,8 @@
     "./move-out": "./move-out/index.ts",
     "./tasks": "./tasks/index.ts",
     "./metrics": "./metrics/index.ts",
-    "./billing": "./billing/index.ts"
+    "./billing": "./billing/index.ts",
+    "./holds": "./holds/index.ts"
   },
   "dependencies": {
     "@storage/db": "*"

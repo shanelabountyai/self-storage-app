@@ -4,6 +4,7 @@ import { OCCUPYING_LEASE_STATUSES } from '@storage/core/inventory'
 import { retryDecision } from '@storage/core/billing'
 import { daysBetween } from '@storage/core/jobs'
 import { createTask } from '@/lib/admin/tasks'
+import { effectsByLease } from '@/lib/admin/holds'
 import { createChargeIntent } from '@/lib/payments/intents'
 import { stripeClient } from '@/lib/payments/stripe'
 
@@ -79,6 +80,7 @@ type SkipReason =
   | 'not_due_yet'
   | 'retries_exhausted'
   | 'terminal_decline'
+  | 'lease_on_hold'
 
 const SKIP_MESSAGE: Record<SkipReason, string> = {
   autopay_off: 'autopay is off for this lease',
@@ -88,6 +90,7 @@ const SKIP_MESSAGE: Record<SkipReason, string> = {
   not_due_yet: 'the next retry is not due yet',
   retries_exhausted: 'the retry schedule is finished — staff task raised',
   terminal_decline: 'the card cannot be retried — staff task raised',
+  lease_on_hold: 'the lease is on hold',
 }
 
 /// Charges every invoice due at this facility on or before the business date.
@@ -140,7 +143,27 @@ export async function runAutopay(
     },
   })
 
+  // US-42. A hold declaring `halt_autopay` stops us taking money at all — an
+  // automatic stay under Chapter 7 makes a charge against a debtor a violation,
+  // and halting the chasing while still helping ourselves to the balance would
+  // be the worst of both.
+  const onHold = await effectsByLease(
+    invoices.map((invoice) => invoice.leaseId),
+    'halt_autopay',
+    businessDate,
+  )
+
   for (const invoice of invoices) {
+    if (onHold.has(invoice.leaseId)) {
+      result.skipped += 1
+      recordItem({
+        itemId: invoice.id,
+        ok: true,
+        message: `${invoice.number} skipped — ${SKIP_MESSAGE.lease_on_hold}`,
+      })
+      continue
+    }
+
     const outstanding = invoice.totalCents - invoice.amountPaidCents
     const failures = await declineHistory(invoice.id)
     const skip = await skipReasonFor(

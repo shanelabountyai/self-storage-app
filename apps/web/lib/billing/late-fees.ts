@@ -5,6 +5,7 @@ import { OCCUPYING_LEASE_STATUSES } from '@storage/core/inventory'
 import { daysPastDue, outstandingCents } from '@storage/core/metrics'
 import { formatInvoiceNumber, lateFeeAmount, stepsDue, type LateFeeStep } from '@storage/core/billing'
 import { recordAudit } from '@storage/core/audit'
+import { effectsByLease } from '@/lib/admin/holds'
 import { nextInvoiceNumber } from '@/lib/billing/numbering'
 import { checkMonetaryAuthority } from '@/lib/rbac/authorize'
 import { toAuditActor } from '@/lib/rbac/audit-actor'
@@ -82,7 +83,23 @@ export async function assessLateFees(
     },
   })
 
+  // US-42. One query for the whole facility rather than one per lease.
+  const onHold = await effectsByLease(
+    leases.map((lease) => lease.id),
+    'halt_late_fees',
+    businessDate,
+  )
+
   for (const lease of leases) {
+    // A hold declaring `halt_late_fees` stops assessment outright — a tenant on
+    // a payment plan, in a billing dispute, or under an automatic stay does not
+    // accrue fees while it stands (US-42).
+    if (onHold.has(lease.id)) {
+      result.skipped += 1
+      recordItem({ itemId: lease.id, ok: true, message: 'late fee skipped — lease is on hold' })
+      continue
+    }
+
     // Rent only, for the base AND the anchor. See the note at the top.
     const rentInvoices = lease.invoices.filter((invoice) => invoice.kind === 'rent')
     const overdue = rentInvoices

@@ -402,13 +402,18 @@ export const COMMS_RULES: readonly CommsRuleSeed[] = [
     event: 'payment.failed',
     templateKey: 'payment_failed',
     classification: 'transactional',
+    // Not `lease_on_hold_dunning`: a declined card is a fact the tenant needs
+    // whatever else is true, and on a hold that halts autopay there will be no
+    // decline to report anyway.
     skipConditions: ['tenant_moved_out'],
   },
   {
     event: 'payment.retry_reminder',
     templateKey: 'payment_retry_reminder',
     classification: 'transactional',
-    skipConditions: ['invoice_paid', 'tenant_moved_out'],
+    // US-42: chasing stops on a hold. This is the one send in the current
+    // catalog that is genuinely dunning rather than ordinary billing.
+    skipConditions: ['invoice_paid', 'tenant_moved_out', 'lease_on_hold_dunning'],
   },
   {
     // CN-10a. Operational rather than transactional: nothing has been charged

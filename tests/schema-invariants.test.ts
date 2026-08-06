@@ -49,6 +49,7 @@ const NO_FACILITY_ID: Record<string, string> = {
   LeaseRateChange: 'scoped through its lease',
   Suppression: 'the shared suppression list is org-wide by address (PRD 05 CN-20); an opt-out spans facilities',
   PayLink: 'scoped through the lease it lets someone pay',
+  LeaseHold: 'scoped through the lease it holds',
 }
 
 /// Calendar dates, not instants. A business date is a facility-local day with

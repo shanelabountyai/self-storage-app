@@ -827,6 +827,7 @@ model Lease {
   rateChanges            LeaseRateChange[]
   authorizedAccessPeople AuthorizedAccessPerson[]
   payLinks               PayLink[]
+  holds                  LeaseHold[]
 
   @@index([facilityId, status])
   @@index([tenantId])
@@ -2093,6 +2094,45 @@ model PayLink {
   @@map("pay_link")
 }
 
+/// PRD 02 §4.4 US-42 (B-096). A reason automated collections stop on a lease.
+///
+/// The effects are NOT stored here — they are declared per type in
+/// `packages/core/holds`, because US-42 requires that adding a hold type be a
+/// configuration change rather than six code changes. This row records the
+/// fact and the evidence; the catalog says what it does.
+model LeaseHold {
+  id            String    @id @default(cuid())
+  leaseId       String
+  /// One of `packages/core/holds`' types. A string rather than an enum so a new
+  /// type is a catalog entry and a seed, not a migration.
+  type          String
+  effectiveFrom DateTime  @db.Timestamptz(6)
+  /// Null means open-ended, which is the common case — a bankruptcy ends when
+  /// someone learns it has, not on a date known in advance.
+  effectiveTo   DateTime? @db.Timestamptz(6)
+  reason        String
+  /// US-16's document store: the deployment order, the bankruptcy notice.
+  documentId    String?
+  placedByStaffId String
+  liftedAt      DateTime? @db.Timestamptz(6)
+  liftedByStaffId String?
+  liftReason    String?
+  /// US-42: "the `deceased` type records an estate contact". Held on the hold
+  /// rather than the tenant because it is true for as long as the hold is, and
+  /// a dead tenant's record should not acquire a second live contact.
+  estateContactName  String?
+  estateContactPhone String?
+  estateContactEmail String?
+  createdAt     DateTime  @default(now()) @db.Timestamptz(6)
+
+  lease         Lease      @relation(fields: [leaseId], references: [id], onDelete: Restrict)
+  placedByStaff StaffUser  @relation("HoldPlacedBy", fields: [placedByStaffId], references: [id], onDelete: Restrict)
+  liftedByStaff StaffUser? @relation("HoldLiftedBy", fields: [liftedByStaffId], references: [id], onDelete: Restrict)
+
+  @@index([leaseId, liftedAt])
+  @@map("lease_hold")
+}
+
 model LoginAttempt {
   id          String       @id @default(cuid())
   email       String
@@ -2124,6 +2164,8 @@ model StaffUser {
   suppressions   Suppression[]
   tenantNotes    TenantNote[]
   paymentsTaken  Payment[]
+  holdsPlaced    LeaseHold[] @relation("HoldPlacedBy")
+  holdsLifted    LeaseHold[] @relation("HoldLiftedBy")
   tasksAssigned  Task[]                    @relation("TaskAssignee")
   tasksCompleted Task[]                    @relation("TaskCompletedBy")
 

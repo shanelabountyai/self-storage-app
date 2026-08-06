@@ -1192,6 +1192,32 @@ Back on backlog order after the B-050/B-051 detour. The ladder, the wider fee ca
 
 ---
 
+### B-096 — Lease holds ✅ `PENDING`
+
+Built ahead of B-098, which needs it: the day-6 access suspension must never fire on a servicemember or a debtor under a stay, and there was nothing to ask. Recorded as **D-31** for the one effect added beyond US-42's list.
+
+**The gap this closed was older than the item.** US-25 said the delinquency pipeline halts on "payment/move-out/hold" and nothing anywhere defined a hold. B-052's row says the same. Every automated money path built since — late fees, autopay, the retry ladder — has been running with no way to stop it for a tenant who is legally protected from it.
+
+**Decided: effects are declared per type in a catalog, and no consumer switches on the type.** US-42 is explicit — "a new hold type is a configuration row, not six code changes" — so `packages/core/holds` holds seven types, each declaring its effects, whether lifting needs a manager, and whether it needs an estate contact. Consumers ask `leaseHasEffect(leaseId, 'halt_late_fees')`. Adding a type is an entry; changing what `bankruptcy` stops is one line, in one file, with the tests that already cover it.
+
+**Decided (D-31): a sixth effect, `halt_autopay`.** Every effect US-42 lists stops us *asking* — dunning, fees, suspension, auction, marketing. None of them stops us *taking*. An automatic stay under Chapter 7 makes a charge against a debtor a violation, and charging a dead person's card is its own problem; halting the chasing while continuing to help ourselves to the balance on the same lease would be the worst of both and would look deliberate. Carried by `military_scra`, `bankruptcy` and `deceased`. Deliberately **not** by `dispute` — a disagreement about one charge is not a reason to refuse a payment the tenant chose to make — nor by `do_not_contact`, which is a channel instruction rather than forbearance.
+
+**Decided: concurrent holds union their effects.** US-42 says each is evaluated independently, so a narrow hold sitting beside a broad one can never weaken it. A test asserts the inverse too: when the broad one is lifted, the narrow one does not inherit its reach.
+
+**Decided: placing is counter-level, lifting is where the restriction lives.** US-42 restricts lifting `military_scra` and `bankruptcy` to manager-or-above and says nothing about placing — correctly, because the staffer who takes the call from a deploying servicemember is exactly the person who should be able to stop collections that night. Making placement managerial would mean the protection waits for someone to be free. The manager gate is declared per type in the catalog rather than checked against a hardcoded pair, so a later type that needs it says so.
+
+**Decided: a lifted hold stays lifted, whatever its end date says.** `holdIsActive` checks all three of not-yet-started, expired and lifted. The bug that guards against is concrete: a manager lifts a hold early, someone had also set an end date next year, and the hold comes back to life.
+
+**Decided: an unknown type contributes no effects rather than all of them.** Failing closed sounds safer and is wrong here — a typo would silently freeze an account with no explanation on any screen. The catalog is code rather than user input, so the typo is caught at the placement boundary, which refuses an unrecognised type outright.
+
+**The banner is the first thing under the tenant's name.** US-42 wants it before any control that could act on the account — "a manager must never be able to approve a sale without the hold in view". It carries the type, the reason given, who placed it, the estate contact where there is one, and **what it stops in plain words** ("collections chasing, late fees, gate suspension, auction, marketing, automatic card payments") rather than the effect keys. Never colour alone (1.4.1): the label and the note carry it.
+
+**Verified:** 1135 unit/DB tests (31 new — 17 on the catalog and evaluation: every type declaring effects, the two US-42 protects, auction blocked wherever a sale would be the unrecoverable mistake, the dispute type kept narrow, do-not-contact stopping the sending and not the owing, the union across concurrent holds, a lifted hold staying lifted against a future end date, and an unknown type contributing nothing; 14 against real rows: the audit row carrying the type as its reason code, counter staff placing but not lifting an SCRA hold, the estate contact enforced for `deceased`, two concurrent holds, lifting refused twice and without a reason, **late-fee assessment actually halting**, the effects B-098 and B-052 will ask about, and a hold on one lease not leaking to the same tenant's other unit). E2e: 334 passing. Typecheck, lint, build clean. One migration (`20260806130000_lease_hold`).
+
+**Left behind.** **The banner is on the tenant profile only.** US-42 also wants it on the delinquency queue row and on **every** notice-generation and auction-approval screen — none of which exist yet (B-059, B-061, Phase 2). The data is there and each of those items has to render it; nothing enforces that they do, and that is the AC most likely to be quietly missed. **`block_auction` and `halt_access_suspension` have no consumers yet** — B-098 is the first, which is why this went first. **Supporting documents are a column, not an upload**: `documentId` exists and there is no way to attach the deployment order or the bankruptcy notice, because the blob store still does not exist (the same gap B-040, B-041 and B-043 all left). **Nothing warns when a hold is about to expire**, so an `effectiveTo` set six months out lapses silently and collections resume with no one told. **The `deceased` type does not yet make portal access staff-only** — US-42's last AC — because that decision lives in the access path B-098 and B-058 own.
+
+---
+
 ---
 
 ## Feature PRDs added mid-build

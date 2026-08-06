@@ -33,6 +33,13 @@ export const AUDIT_ACTIONS = [
   // Leases and units
   { action: 'lease.edited', label: 'Lease edited', requiresReason: false },
   { action: 'lease.moved_out', label: 'Move-out completed', requiresReason: false },
+  /// US-42. `requiresReason: true` on both: a hold that stops collections with
+  /// no recorded why is indistinguishable from a mistake six months later, and
+  /// lifting one is the act that resumes them against a possibly-protected
+  /// tenant. The reason code carries the hold TYPE on placement, which is what
+  /// makes "how many SCRA holds did we place last year" answerable.
+  { action: 'hold.placed', label: 'Hold placed on lease', requiresReason: true },
+  { action: 'hold.lifted', label: 'Hold lifted from lease', requiresReason: true },
   /// D-17. The system, not a person, put a recurring charge on a lease because
   /// the tenant's own cover lapsed. `requiresReason: false` because the reason
   /// is structural rather than discretionary — the entry carries the waiver,

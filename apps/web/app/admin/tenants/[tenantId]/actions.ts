@@ -14,6 +14,7 @@ import {
 import { fieldError, success, type FormState } from '@/lib/admin/form-state'
 import { waiveFeeInvoice } from '@/lib/billing/late-fees'
 import { formatCents } from '@/lib/format'
+import { liftHold, placeHold } from '@/lib/admin/holds'
 
 // PRD 02 §4.4 US-13/US-16. Thin session wrappers; every real decision lives
 // in lib/admin/tenants.ts (and lib/portal/contact.ts underneath it), which
@@ -155,4 +156,76 @@ export async function waiveFeeAction(_prev: FormState, formData: FormData): Prom
 
   revalidateProfile(tenantId)
   return success(`${formatCents(result.amountCents)} fee waived. The credit is on the ledger.`)
+}
+
+/// US-42. Placing a hold — the act that stops collections that night.
+export async function placeHoldAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const actor = await requireStaffActor()
+  const tenantId = String(formData.get('tenantId') ?? '')
+
+  const result = await placeHold(actor, String(formData.get('leaseId') ?? ''), {
+    type: String(formData.get('type') ?? ''),
+    reason: String(formData.get('reason') ?? ''),
+    effectiveTo: formData.get('effectiveTo') ? new Date(String(formData.get('effectiveTo'))) : null,
+    estateContactName: String(formData.get('estateContactName') ?? '') || null,
+    estateContactPhone: String(formData.get('estateContactPhone') ?? '') || null,
+    estateContactEmail: String(formData.get('estateContactEmail') ?? '') || null,
+  })
+
+  if (!result.ok) {
+    switch (result.reason) {
+      case 'missing_reason':
+        return fieldError({ reason: 'Say why this hold is being placed — it is the record.' })
+      case 'missing_estate_contact':
+        return fieldError({
+          estateContactName: 'Record who to speak to about this account. That is what this hold type is for.',
+        })
+      case 'unknown_type':
+        return fieldError({ type: 'Choose a hold type.' })
+      case 'forbidden':
+        return { status: 'error', message: 'You cannot place a hold on this lease.', fieldErrors: {} }
+      default:
+        return { status: 'error', message: 'That lease could not be found.', fieldErrors: {} }
+    }
+  }
+
+  revalidateProfile(tenantId)
+  return success('Hold placed. Automated collections stop on this lease tonight.')
+}
+
+/// US-42. Lifting one — which resumes collections against a tenant who may
+/// still be protected, hence the reason and the manager gate on SCRA and
+/// bankruptcy.
+export async function liftHoldAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const actor = await requireStaffActor()
+  const tenantId = String(formData.get('tenantId') ?? '')
+
+  const result = await liftHold(
+    actor,
+    String(formData.get('holdId') ?? ''),
+    String(formData.get('liftReason') ?? ''),
+  )
+
+  if (!result.ok) {
+    switch (result.reason) {
+      case 'missing_reason':
+        return fieldError({ liftReason: 'Say why this hold is being lifted.' })
+      case 'needs_manager':
+        return {
+          status: 'error',
+          message:
+            'Lifting this hold needs a manager or above. Ask one to do it — do not work around it.',
+          fieldErrors: {},
+        }
+      case 'already_lifted':
+        return { status: 'error', message: 'That hold has already been lifted.', fieldErrors: {} }
+      case 'forbidden':
+        return { status: 'error', message: 'You cannot lift a hold on this lease.', fieldErrors: {} }
+      default:
+        return { status: 'error', message: 'That hold could not be found.', fieldErrors: {} }
+    }
+  }
+
+  revalidateProfile(tenantId)
+  return success('Hold lifted. Automated collections resume on this lease.')
 }
