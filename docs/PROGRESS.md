@@ -1278,7 +1278,7 @@ US-22's configurable allocation order and US-23's refunds. No new decision numbe
 
 ---
 
-### B-049 — Tenant ledger screen ✅ `PENDING`
+### B-049 — Tenant ledger screen ✅ `dac5527`
 
 The first screen that renders what the last eight items have been writing. US-24's chronological ledger, its totals, its reconciliation, and a CSV export.
 
