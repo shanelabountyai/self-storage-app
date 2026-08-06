@@ -163,6 +163,50 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
     requiredMergeFields: ['tenant.first_name', 'unit.number', 'facility.name', 'facility.phone'],
   },
 
+  {
+    // PRD 05 CN-3 (B-052). The dunning ladder.
+    //
+    // **Tone escalation is template content, not code** — CN-3 says so
+    // explicitly, and the mechanism is `dunning.tone_line` plus
+    // `dunning.consequence_line`, both chosen from the step's position. That
+    // keeps one rule and one template, which is what B-053's editor will hand
+    // an operator to change; splitting into four templates would mean four
+    // things to keep in step with each other.
+    //
+    // The house style from B-050 still holds and matters more here: these reach
+    // people who are behind, not people who are dishonest. Every step states
+    // the amount, gives one way to fix it, and says what happens next without
+    // threatening anything that has not been decided.
+    key: 'dunning_step',
+    classification: 'transactional',
+    subject: '{{dunning.subject_line}} — unit {{unit.number}}',
+    bodyText: [
+      'Hi {{tenant.first_name}},',
+      '',
+      '{{dunning.tone_line}}',
+      '',
+      'The balance on unit {{unit.number}} at {{facility.name}} is {{balance.total}}, {{dunning.days_past_due}} days past due.',
+      '',
+      'Pay now: {{links.pay_now}}',
+      '',
+      '{{dunning.consequence_line}}',
+      '',
+      'If you have already paid, or something is wrong, call {{facility.phone}} — we would rather sort it out than chase you.',
+    ].join('\n'),
+    requiredMergeFields: [
+      'tenant.first_name',
+      'unit.number',
+      'facility.name',
+      'balance.total',
+      'dunning.subject_line',
+      'dunning.tone_line',
+      'dunning.consequence_line',
+      'dunning.days_past_due',
+      'links.pay_now',
+      'facility.phone',
+    ],
+  },
+
   // ── B-050: the payment lifecycle (PRD 05 §3.1 CN-1, CN-2, CN-6, CN-10a) ────
   //
   // House style for everything below, and the reason for it: say the amount and
@@ -419,6 +463,17 @@ export const COMMS_RULES: readonly CommsRuleSeed[] = [
     event: 'lease.move_out_requested',
     templateKey: 'lease_move_out_requested',
     classification: 'transactional',
+  },
+
+  {
+    // CN-3. Driven by the billing engine's day events, never a comms-side
+    // calendar. The emitter already checks the holds, so this skip condition is
+    // the second guard rather than the only one — a redelivered event from
+    // before a hold was placed must not still send.
+    event: 'delinquency.day_reached',
+    templateKey: 'dunning_step',
+    classification: 'transactional',
+    skipConditions: ['lease_on_hold_dunning', 'tenant_moved_out'],
   },
 
   // ── B-098 (D-16). Both transitions are notified — US-45's own AC. ──────────

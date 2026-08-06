@@ -20,6 +20,7 @@ let facilityId = ''
 let tenantId = ''
 let leaseId = ''
 let unitTypeId = ''
+let holdStaffId = ''
 let unitCounter = 0
 
 const sends: { to: string; subject: string; body: string }[] = []
@@ -96,6 +97,11 @@ describeDb('billing notices', () => {
     })
     tenantId = tenant.id
 
+    const staff = await prisma.staffUser.create({
+      data: { email: `comms-hold-${suffix}@example.com`, firstName: 'Mo', lastName: 'Manager' },
+    })
+    holdStaffId = staff.id
+
     const unitType = await prisma.unitType.create({
       data: { facilityId, name: `10x10 ${suffix}`, widthFt: 10, lengthFt: 10 },
     })
@@ -133,6 +139,7 @@ describeDb('billing notices', () => {
     vi.restoreAllMocks()
     // Lease before unit: the FK is RESTRICT, deliberately (a unit that has ever
     // been rented cannot be deleted out from under its lease).
+    await prisma.leaseHold.deleteMany({ where: { lease: { facilityId } } })
     await prisma.lease.deleteMany({ where: { facilityId } })
     await prisma.unit.deleteMany({ where: { facilityId } })
     await prisma.unitType.deleteMany({ where: { facilityId } })
@@ -348,6 +355,66 @@ describeDb('billing notices', () => {
         remindersTotal: 3,
       })
       expect(sends[0].body).toContain('last reminder')
+    })
+  })
+
+  describe('the dunning ladder (B-052)', () => {
+    it('escalates its tone from the step, and never threatens a date it cannot keep', async () => {
+      await emit('delinquency.day_reached', 'Lease', leaseId, {
+        day: 1,
+        position: 1,
+        totalSteps: 4,
+      })
+      expect(sends[0].body).toContain('it happens, and it is quick to put right')
+      expect(sends[0].subject).toContain('We missed your payment')
+
+      sends.length = 0
+      await emit('delinquency.day_reached', 'Lease', leaseId, {
+        day: 10,
+        position: 3,
+        totalSteps: 4,
+      })
+      // Day 10 warns about access because B-098 genuinely suspends it.
+      expect(sends[0].body).toContain('gate code will stop working')
+
+      sends.length = 0
+      await emit('delinquency.day_reached', 'Lease', leaseId, {
+        day: 30,
+        position: 4,
+        totalSteps: 4,
+      })
+      // The last rung says "we would have to begin" rather than naming a date:
+      // the lien pipeline is Phase 2 and promising a date we cannot keep is
+      // worse than saying less.
+      expect(sends[0].body).toContain('would have to begin')
+      expect(sends[0].body).not.toMatch(/\bon \d{1,2} [A-Z][a-z]+\b/)
+    })
+
+    it('carries the one-tap pay link', async () => {
+      await emit('delinquency.day_reached', 'Lease', leaseId, { day: 5, position: 2, totalSteps: 4 })
+      expect(sends[0].body).toMatch(/\/pay\/[A-Za-z0-9_-]{20,}/)
+    })
+
+    it('says nothing to a lease on a hold that halts dunning', async () => {
+      // The emitter checks this too; the rule is the second guard, for an event
+      // redelivered from before the hold was placed.
+      await prisma.leaseHold.create({
+        data: {
+          leaseId,
+          type: 'military_scra',
+          reason: 'Deployment orders.',
+          effectiveFrom: new Date('2020-01-01T00:00:00.000Z'),
+          placedByStaffId: holdStaffId,
+        },
+      })
+
+      await emit('delinquency.day_reached', 'Lease', leaseId, { day: 5, position: 2, totalSteps: 4 })
+
+      expect(sends).toEqual([])
+      const message = await prisma.message.findFirstOrThrow({ where: { facilityId } })
+      expect(message.error).toBe('skipped: lease_on_hold_dunning')
+
+      await prisma.leaseHold.deleteMany({ where: { leaseId } })
     })
   })
 

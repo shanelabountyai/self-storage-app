@@ -1302,6 +1302,30 @@ The first screen that renders what the last eight items have been writing. US-24
 
 ---
 
+### B-052 — Past-due dunning ladder ✅ `PENDING`
+
+CN-3's ladder, CN-5's halts, and the tone escalation as content. Everything it needed was already built — B-050 owns the template pipeline, B-096's holds already declare `halt_dunning`, B-051 supplies the one-tap link, and `daysPastDue` has been the shared clock since D-25. This item is mostly the wiring, and that is the point.
+
+**Decided: there is no scheduler in comms, and that is the whole architectural constraint.** CN-3 is explicit — steps are driven by the billing engine's day events "not by an independent comms-side calendar, so comms can never disagree with billing about what day a tenant is on". The nightly `billing.dunning` job computes the day count from the same `daysPastDue` every other consumer reads and emits one event per step; comms react through the ordinary rule pipeline. A second calendar here is exactly what would let a tenant be told they are on day 10 while billing believes day 5.
+
+**Decided: at-most-once is keyed on the anchor invoice, and on the DAY rather than the position.** The day count is measured from the oldest unpaid invoice's original due date, so that invoice is what the ladder is about — and when it is cleared and a later one becomes the anchor, the ladder starts again for that invoice. That is what "at most once per invoice per step" asks for, and a test drives it: a tenant who clears September and falls behind on October is chased about October. Keying on the day rather than the position means an operator inserting a step between two existing ones does not re-fire the ones already sent.
+
+**Decided: the settled-balance halt is checked on the money, not the day count.** CN-3 says "a payment at 11:58pm must suppress the midnight step", and that only works if the balance is what is checked — the day count is a historical fact about when someone fell behind and does not decrease when they pay. The other two halts, move-out and a hold, are checked *before* the arithmetic, in the order a person would.
+
+**Decided: a lease with nothing due yet is not a halt.** Distinct states with distinct meanings: nothing has stopped, the ladder simply has not reached a rung. Reporting it as a halt would put a line on the Billing Runs screen for every current tenant every night and drown the two that matter.
+
+**Decided: tone escalation is one template, not four.** CN-3 requires the escalation be content rather than code, and the mechanism is two merge fields chosen from the step's position. One rule and one template is what B-053's editor will hand an operator; four templates would be four things to keep in step with each other. A position beyond the four written rungs reuses the firmest rather than rendering an empty paragraph.
+
+**The copy was written to the same rule as B-050's, and it matters more here.** These reach people who are behind, not people who are dishonest. Day 1 says "it happens, and it is quick to put right". Day 10 warns about gate access — which it can, because B-098 genuinely suspends it. Day 30 says "we would have to begin the formal collection steps our lease and state law allow" and deliberately **names no date**: the lien pipeline is Phase 2, and a threat with a date we cannot keep is worse than saying less. A test asserts no date appears in that rung.
+
+**Decided: the hold check is in both places.** The emitter skips a held lease, and the notification rule carries `lease_on_hold_dunning` as well. Not redundancy for its own sake — an event emitted before a hold was placed can still be sitting in the outbox when it is, and the send-time check is the one that catches that.
+
+**Verified:** 1255 unit/DB tests (32 new — 16 pure: the default ladder, sorting and discarding nonsense days, at-most-once, catching up missed rungs in order, the day-keyed insert case, all three halts with move-out and hold checked before the money, the credit balance, and "nothing due yet" distinguished from a halt; 13 against real rows: nothing before the first rung, day 1 on the first day, no repeat on later nights, idempotent on a re-run, a month-long catch-up emitting all four in order, the settled halt mid-ladder, the hold and move-out halts with their reasons, a fee invoice never anchoring the ladder, the ladder restarting for the next invoice, the position carried for the template, a facility with different days, and one with no ladder at all; 3 in comms: the tone escalating across rungs, the last rung naming no date, the pay link present, and a held lease skipped at send time). E2e: 342 passing. Typecheck, lint, build clean. One migration.
+
+**Left behind.** **No per-step channel or template override.** CN-3 says each step defines "channels, email template, SMS template, and skip conditions"; today every step uses one template and one channel, and the step's identity reaches it only as a position. Splitting is a rule-per-step change once **B-053**'s editor exists to manage them. **SMS is still absent** (B-074), so the whole ladder is email. **CN-3's "restart ladder" option on partial payment is not built** — the default (re-render the remaining balance in later steps) is what happens, and the alternative has no setting. **CN-5's promise-to-pay pause is a `payment_plan` hold** rather than the P2 "pause dunning N days" control, which is arguably the better record but is not the same thing. **The deferral to lien-stage notices** (CN-5's last AC — no chirpy reminder the same day as a lien notice) has nothing to defer to yet; it belongs with **B-063**.
+
+---
+
 ---
 
 ## Feature PRDs added mid-build

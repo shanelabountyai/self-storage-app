@@ -227,6 +227,8 @@ export type BillingPolicyInput = {
   accessRestoreAtOrBelowCents: number
   /// US-22's allocation order, as category keys.
   paymentAllocationOrder: string[]
+  /// CN-3's ladder: days past due at which the tenant is chased.
+  dunningDays: number[]
 }
 
 export class InvalidRetryScheduleError extends Error {
@@ -269,6 +271,13 @@ export function parseRetryDays(raw: string): number[] {
   return days
 }
 
+/// The ladder days, parsed with the same rule as the retry schedule: whole
+/// days, increasing, counted from the invoice's original due date. Empty means
+/// no automated chasing, which is a real choice for a site that phones.
+export function parseDunningDays(raw: string): number[] {
+  return parseRetryDays(raw)
+}
+
 export async function updateBillingPolicy(
   actor: Actor,
   facilityId: string,
@@ -294,6 +303,7 @@ export async function updateBillingPolicy(
       accessSuspendDaysPastDue: before.accessSuspendDaysPastDue,
       accessRestoreAtOrBelowCents: before.accessRestoreAtOrBelowCents,
       paymentAllocationOrder: before.paymentAllocationOrder,
+      dunningDays: before.dunningDays,
     },
     after: {
       billingPolicy: after.billingPolicy,
@@ -304,6 +314,7 @@ export async function updateBillingPolicy(
       accessSuspendDaysPastDue: after.accessSuspendDaysPastDue,
       accessRestoreAtOrBelowCents: after.accessRestoreAtOrBelowCents,
       paymentAllocationOrder: after.paymentAllocationOrder,
+      dunningDays: after.dunningDays,
     },
   })
 }

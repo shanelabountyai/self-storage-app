@@ -510,6 +510,49 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
     }
   },
 
+  // CN-3's tone escalation, as content rather than code. Four rungs, and the
+  // wording gets firmer without ever threatening something that has not been
+  // decided — the day-10 line warns about access because B-098 genuinely
+  // suspends it, and the day-30 line says "we would have to begin" rather than
+  // naming a date, because the lien pipeline is Phase 2 and promising a date we
+  // cannot keep is worse than saying less.
+  'delinquency.day_reached': async (event, recipient) => {
+    const payload = (event.payload ?? {}) as { day?: number; position?: number; totalSteps?: number }
+    const position = payload.position ?? 1
+    const total = payload.totalSteps ?? 4
+    const last = position >= total
+
+    const tone = [
+      'It looks like this month’s payment did not go through — it happens, and it is quick to put right.',
+      'Your balance is still outstanding, and a late fee may now have been added.',
+      'This account is far enough behind that your gate access is at risk.',
+      'This account is seriously overdue and we need to hear from you.',
+    ]
+    const consequence = [
+      'Paying today avoids any late fee.',
+      'Please settle it when you can, or call us and we will work something out.',
+      'If it stays unpaid, your gate code will stop working until the balance is cleared. Your belongings stay where they are.',
+      'If we do not hear from you, we would have to begin the formal collection steps our lease and state law allow. We would much rather arrange something with you.',
+    ]
+    // Position beyond the written rungs reuses the last one rather than
+    // rendering blank: an operator who adds a fifth step gets the firmest
+    // wording, not an empty paragraph.
+    const rung = Math.min(Math.max(position, 1), tone.length) - 1
+
+    return {
+      'dunning.subject_line': last
+        ? 'Your account is seriously overdue'
+        : position === 1
+          ? 'We missed your payment'
+          : 'Your balance is still outstanding',
+      'dunning.tone_line': tone[rung],
+      'dunning.consequence_line': consequence[rung],
+      'dunning.days_past_due': String(payload.day ?? 0),
+      'balance.total': formatCents(await leaseBalanceCents(recipient.lease?.id ?? null)),
+      'links.pay_now': await payNowLink(recipient, event),
+    }
+  },
+
   'invoice.due_soon': invoiceContext,
   'invoice.due_today': invoiceContext,
 

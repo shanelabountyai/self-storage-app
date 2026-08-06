@@ -21,6 +21,7 @@ import {
   addFeeScheduleEntry,
   addLateFeeStep,
   addTaxComponent,
+  parseDunningDays,
   parseRetryDays,
   updateBillingPolicy,
   updateOperationsPolicy,
@@ -439,6 +440,14 @@ export async function updateBillingPolicyAction(
       error instanceof InvalidRetryScheduleError ? error.message : 'Enter the days like "1, 3, 5".'
   }
 
+  let dunningDays: number[] = []
+  try {
+    dunningDays = parseDunningDays(String(formData.get('dunningDays') ?? ''))
+  } catch (error) {
+    errors.dunningDays =
+      error instanceof InvalidRetryScheduleError ? error.message : 'Enter the days like "1, 5, 10, 30".'
+  }
+
   if (Object.keys(errors).length > 0) return fieldError(errors)
   if ('error' in leadDays || 'error' in suspendDays || 'error' in restoreAtOrBelow) {
     return fieldError(errors)
@@ -454,6 +463,7 @@ export async function updateBillingPolicyAction(
       accessSuspendDaysPastDue: suspendDays.value,
       accessRestoreAtOrBelowCents: restoreAtOrBelow.value,
       paymentAllocationOrder: allocationOrder,
+      dunningDays,
     })
   } catch (error) {
     return asFormError(error, 'Could not save the billing policy.')

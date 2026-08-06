@@ -494,6 +494,12 @@ export default async function AdminSettingsPage() {
             </div>
           </fieldset>
           <Field
+            name="dunningDays"
+            label="Chase a past-due balance on days"
+            defaultValue={facility.dunningDays.join(', ')}
+            hint="Days past due, increasing. Empty means no automated chasing. The wording gets firmer at each step."
+          />
+          <Field
             name="accessSuspendDaysPastDue"
             label="Suspend gate access at"
             type="number"

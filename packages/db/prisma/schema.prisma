@@ -428,6 +428,10 @@ model Facility {
   /// never, so a misconfigured order degrades to a worse sequence rather than
   /// making money uncollectable.
   paymentAllocationOrder String[]  @default(["tax", "fee", "protection", "rent"])
+  /// PRD 05 CN-3's dunning ladder: days past due at which the tenant is
+  /// chased. Empty means no automated chasing, which is a real operator
+  /// choice for a site that phones instead.
+  dunningDays            Int[]     @default([1, 5, 10, 30])
   /// Days of notice the lease requires before a move-out. 0 means none.
   moveOutNoticeDays   Int            @default(10)
   /// A residual balance at or below this can be written off to close the

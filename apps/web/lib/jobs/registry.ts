@@ -9,6 +9,7 @@ import { emitDueReminders, generateInvoices } from '@/lib/billing/invoices'
 import { emitRetryReminders, runAutopay } from '@/lib/billing/autopay'
 import { assessLateFees } from '@/lib/billing/late-fees'
 import { evaluateAccessSuspensions } from '@/lib/access/delinquency-gate'
+import { runDunning } from '@/lib/billing/dunning'
 
 // Consumer and job registration. The machinery is B-006's; the things that use
 // it arrive with their own backlog items: reservation expiry (B-018, below),
@@ -178,6 +179,23 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
     scope: 'per_facility',
     handler: async ({ facilityId, businessDate, recordItem }) => {
       await assessLateFees(facilityId!, businessDate, recordItem)
+    },
+  },
+  {
+    // B-052 / PRD 05 CN-3. The past-due dunning ladder.
+    //
+    // At 5am local, last in the night and after the access rule at 4am: the day
+    // count and the balance it reads must be tonight's settled figures, and a
+    // tenant whose autopay succeeded at 3am must not be chased at 5.
+    //
+    // Emits events only. Comms react through the ordinary rule pipeline, which
+    // is CN-3's requirement that the ladder be driven by billing rather than by
+    // a calendar of its own.
+    name: 'billing.dunning',
+    localHour: 5,
+    scope: 'per_facility',
+    handler: async ({ facilityId, businessDate, recordItem }) => {
+      await runDunning(facilityId!, businessDate, recordItem)
     },
   },
   {
