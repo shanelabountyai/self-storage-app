@@ -24,6 +24,13 @@ export const LEASE_MERGE_FIELDS = [
   'protectionSummary',
   'moveInDate',
   'billingDay',
+  /// B-044. What the first payment bought, in the facility's actual billing
+  /// policy. This was a fixed sentence promising proration until the billing
+  /// engine existed to contradict it — under the default `anniversary` policy
+  /// nothing is prorated on the way in, because the tenant's period starts on
+  /// the day they moved in. A signed agreement saying otherwise is a term the
+  /// operator would have to honour.
+  'firstPaymentSummary',
   'lateFeeSummary',
   'gateHoursSummary',
 ] as const
@@ -67,7 +74,7 @@ export const LEASE_TEMPLATE = `
 <p>We rent you unit {{unitNumber}}, approximately {{unitSize}}, at the facility named above. You rent space only. We are not a warehouse and we do not take custody of what you store.</p>
 
 <h3>2. Rent</h3>
-<p>Rent is {{monthlyRate}} per month, payable in advance on day {{billingDay}} of each month. Your first payment covers the period from {{moveInDate}}. If you move in part-way through a month, that first payment is prorated for the days you actually have the unit.</p>
+<p>Rent is {{monthlyRate}} per month, payable in advance on day {{billingDay}} of each month. {{firstPaymentSummary}}</p>
 
 <h3>3. Term</h3>
 <p>This agreement runs month to month. Either of us may end it by giving notice as described in section 8. There is no fixed term and no penalty for leaving.</p>

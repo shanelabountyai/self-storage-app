@@ -4,6 +4,8 @@ import { PriceSummary } from '@/components/checkout/price-summary'
 import { Stepper } from '@/components/checkout/stepper'
 import { SITE } from '@/lib/site-config'
 import { prisma } from '@storage/db'
+import { billingDayFor } from '@storage/core/billing'
+import { businessDateFor } from '@storage/core/jobs'
 import { publicInventoryForFacility } from '@/lib/inventory/public-inventory'
 import { LOCK_WARNING_MINUTES, sessionByToken } from '@/lib/checkout/session'
 import { prefillFromReservation } from '@/lib/checkout/details'
@@ -117,7 +119,7 @@ export default async function CheckoutPage({
   const plans = session.step === 'insurance' ? await currentPlans(session.facilityId) : []
   const facilityPolicy = await prisma.facility.findUnique({
     where: { id: session.facilityId },
-    select: { protectionRequired: true },
+    select: { protectionRequired: true, billingPolicy: true, timezone: true },
   })
 
   // The lease is built once and reused. Re-rendering on every page view would
@@ -279,7 +281,13 @@ export default async function CheckoutPage({
               payment={payment}
               autopayOn={session.data.autopay !== false}
               returnUrl={`${process.env.AUTH_URL ?? 'http://localhost:3000'}/checkout?token=${encodeURIComponent(token!)}`}
-              billingDay={1}
+              // B-044: the day this renter will actually be billed on, not a
+              // constant. Under anniversary billing (the default) that is the
+              // day they are moving in.
+              billingDay={billingDayFor(
+                facilityPolicy?.billingPolicy ?? 'anniversary',
+                businessDateFor(new Date(), facilityPolicy?.timezone ?? 'UTC'),
+              )}
             />
           )}
 

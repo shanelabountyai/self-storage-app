@@ -533,7 +533,15 @@ test('the payment step itemises before it charges and discloses autopay', async 
   // control and the opt-out one activation away.
   const autopay = page.getByRole('checkbox', { name: /Pay automatically each month/ })
   await expect(autopay).toBeChecked()
-  await expect(page.locator('#autopay-disclosure')).toContainText('day 1 of each month')
+  // B-044 / D-27: anniversary billing, so the day is the renter's own move-in
+  // day in the FACILITY's timezone — not a constant 1, and not the UTC day,
+  // which is already tomorrow when this suite runs late in the evening here.
+  const billingDay = Number(
+    new Intl.DateTimeFormat('en-US', { day: 'numeric', timeZone: 'America/Chicago' }).format(new Date()),
+  )
+  await expect(page.locator('#autopay-disclosure')).toContainText(
+    `day ${Math.min(billingDay, 28)} of each month`,
+  )
   await expect(autopay).toHaveAttribute('aria-describedby', 'autopay-disclosure')
 
   // No Stripe keys are configured, so the honest fallback is what renders —

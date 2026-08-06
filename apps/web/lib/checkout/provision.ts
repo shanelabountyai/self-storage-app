@@ -1,5 +1,7 @@
 import { type Prisma, prisma } from '@storage/db'
 import { emitEvent } from '@storage/core/events'
+import { billingDayFor } from '@storage/core/billing'
+import { businessDateFor } from '@storage/core/jobs'
 import { recomputeUnitStatus } from '@/lib/admin/units'
 import { provisionAccessForLease } from '@/lib/access/provision'
 import { createTask } from '@/lib/admin/tasks'
@@ -56,6 +58,23 @@ export async function provisionMoveIn(sessionId: string): Promise<ProvisionResul
   // lease, and nothing downstream could act on it either way.
   const autopayEnabled = data.autopay !== false
 
+  // B-044. The billing day comes from the facility's policy, not a constant.
+  // Under `anniversary` (the default, D-27) it is the move-in day, which is
+  // what makes the full month charged at checkout buy a whole period starting
+  // today — with a hardcoded 1 the tenant paid for a month from the 20th and
+  // the nightly run would have invoiced them again on the 1st.
+  //
+  // The day comes from the FACILITY-LOCAL calendar date, not the UTC one. At
+  // 10pm in Texas the UTC date is already tomorrow, so a `new Date()` read
+  // would give that renter an anniversary one day after the day they actually
+  // moved in — and every invoice for the life of the lease would carry it.
+  const facility = await prisma.facility.findUniqueOrThrow({
+    where: { id: session.facilityId },
+    select: { billingPolicy: true, timezone: true },
+  })
+  const startDate = new Date()
+  const localToday = businessDateFor(startDate, facility.timezone)
+
   const leaseId = await prisma.$transaction(async (tx) => {
     const lease = await tx.lease.create({
       data: {
@@ -66,9 +85,9 @@ export async function provisionMoveIn(sessionId: string): Promise<ProvisionResul
         // open the gate. A pending lease here would leave the unit reading as
         // occupied while nothing bills it.
         status: 'active',
-        startDate: new Date(),
+        startDate,
         monthlyRateCents: session.quotedRateCents,
-        billingDay: 1,
+        billingDay: billingDayFor(facility.billingPolicy, localToday),
         autopayEnabled,
         protectionPlanName: protectionTier === 'waiver' ? null : protectionTier,
         protectionCents: premiumCents,

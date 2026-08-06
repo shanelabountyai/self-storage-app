@@ -75,6 +75,11 @@ enum LeaseStatus {
   ended
 }
 
+enum BillingPolicy {
+  anniversary
+  first_of_month
+}
+
 enum InvoiceStatus {
   draft
   open
@@ -361,6 +366,17 @@ model Facility {
   /// either way and "no proration on move-out" is the common lease term, so
   /// that is the shipped default — configuration, not law (D-10).
   prorateOnMoveOut    Boolean        @default(false)
+  /// US-17. Whether every lease bills on the 1st, or each on its own move-in
+  /// anniversary. **Anniversary is the default (D-27)** — the move-in payment
+  /// buys a full period starting that day, so nothing is prorated on the way
+  /// in, and the tenant's due date never moves.
+  billingPolicy       BillingPolicy  @default(anniversary)
+  /// US-17: "invoices generate N days before due (configurable, default 5)".
+  invoiceLeadDays     Int            @default(5)
+  /// US-18's other half. Only ever reachable under `first_of_month`: under
+  /// anniversary billing there is no partial first period to prorate, because
+  /// the period starts on the day the tenant moved in.
+  prorateOnMoveIn     Boolean        @default(true)
   /// Days of notice the lease requires before a move-out. 0 means none.
   moveOutNoticeDays   Int            @default(10)
   /// A residual balance at or below this can be written off to close the
@@ -398,6 +414,7 @@ model Facility {
   documents              Document[]
   tenantNotes            TenantNote[]
   receiptCounter         ReceiptCounter?
+  invoiceCounter         InvoiceCounter?
   tasks                  Task[]
   gateCommands           GateCommand[]
   accessEvents           AccessEvent[]
@@ -757,6 +774,17 @@ model Invoice {
   status          InvoiceStatus @default(draft)
   issueDate       DateTime      @db.Timestamptz(6)
   dueDate         DateTime      @db.Timestamptz(6)
+  /// The service period this invoice bills, half-open: `periodStart` inclusive,
+  /// `periodEnd` exclusive, so consecutive invoices tile the calendar with no
+  /// day billed twice. Calendar dates, not instants — a tenant occupies a unit
+  /// for days, and a timezone here would imply a precision the fact lacks.
+  ///
+  /// `(leaseId, periodStart)` is the generator's idempotency key, and it is a
+  /// database constraint rather than a check-then-insert: the nightly run is
+  /// re-runnable and catches up missed dates (FR-4), so "already billed" has
+  /// to be unforgeable rather than merely checked.
+  periodStart     DateTime      @db.Date
+  periodEnd       DateTime      @db.Date
   subtotalCents   Int           @default(0)
   taxCents        Int           @default(0)
   discountCents   Int           @default(0)
@@ -772,9 +800,26 @@ model Invoice {
   ledgerEntries LedgerEntry[]
 
   @@unique([facilityId, number])
+  @@unique([leaseId, periodStart])
   @@index([leaseId, dueDate])
   @@index([facilityId, status])
   @@map("invoice")
+}
+
+/// Gapless sequential invoice numbers per facility (US-17's AC).
+///
+/// The same row-lock counter as `ReceiptCounter` (D-22) and for the same
+/// reason: a Postgres sequence is unique but NOT gapless, because a rolled-back
+/// transaction never returns its number. An invoice series with holes is one an
+/// auditor has to be talked through.
+model InvoiceCounter {
+  facilityId String   @id
+  nextNumber Int      @default(1)
+  updatedAt  DateTime @updatedAt @db.Timestamptz(6)
+
+  facility Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+
+  @@map("invoice_counter")
 }
 
 model InvoiceLineItem {

@@ -3,6 +3,8 @@ import { formatRate } from '@/lib/format'
 import { storeGeneratedDocument } from '@/lib/documents/store'
 import { renderTemplate } from '@/lib/documents/render'
 import { currentPlans } from '@/lib/protection/plans'
+import { billingDayFor } from '@storage/core/billing'
+import { businessDateFor } from '@storage/core/jobs'
 import { LEASE_SUMMARY_TEMPLATE, LEASE_TEMPLATE } from './template'
 import type { CheckoutSessionView } from '@/lib/checkout/session'
 
@@ -25,6 +27,8 @@ export async function leaseValuesFor(session: CheckoutSessionView): Promise<Reco
       postalCode: true,
       gateHours: true,
       timezone: true,
+      billingPolicy: true,
+      prorateOnMoveIn: true,
     },
   })
   const unitType = await prisma.unitType.findUniqueOrThrow({
@@ -50,6 +54,24 @@ export async function leaseValuesFor(session: CheckoutSessionView): Promise<Reco
     ? `You have chosen our ${plan.name} protection plan at ${formatRate(plan.premiumCents)} per month, which is added to your rent. This is a protection plan we provide, not an insurance policy.`
     : 'You told us you have your own insurance covering these belongings. You must keep that cover in place for as long as you rent, and tell us if it ends.'
 
+  // The day the tenant is moving in, as a calendar date — the same value the
+  // lease will carry as `startDate` and the anchor for the billing day.
+  const moveInDate = new Date()
+  // The facility-local calendar day, which is what the billing anniversary is
+  // anchored to — see the note in checkout/provision.ts.
+  const localToday = businessDateFor(moveInDate, facility.timezone)
+
+  // B-044. What the first payment actually bought, per the facility's billing
+  // policy. Under `anniversary` the period starts today and the tenant pays a
+  // full one; the old fixed sentence promised proration and would have been a
+  // term the operator had signed up to and does not do.
+  const firstPaymentSummary =
+    facility.billingPolicy === 'anniversary'
+      ? `Your first payment covers a full month from ${new Intl.DateTimeFormat('en-US', { dateStyle: 'long', timeZone: facility.timezone }).format(moveInDate)}, and every payment after it falls on the same day of the month.`
+      : facility.prorateOnMoveIn
+        ? 'Your first payment covers the days between your move-in and the first of next month, charged pro rata; after that you pay a full month on the 1st.'
+        : 'Your first payment covers a full month; after that you pay on the 1st of each month.'
+
   const tenantName = `${data.firstName ?? ''} ${data.lastName ?? ''}`.trim()
   const tenantAddress = [data.addressLine1, data.addressLine2, data.city, data.state, data.postalCode]
     .filter((part) => typeof part === 'string' && part.trim() !== '')
@@ -74,8 +96,9 @@ export async function leaseValuesFor(session: CheckoutSessionView): Promise<Reco
     moveInDate: new Intl.DateTimeFormat('en-US', {
       dateStyle: 'long',
       timeZone: facility.timezone,
-    }).format(new Date()),
-    billingDay: '1',
+    }).format(moveInDate),
+    billingDay: String(billingDayFor(facility.billingPolicy, localToday)),
+    firstPaymentSummary,
     lateFeeSummary: lateFee
       ? `If your rent is not paid on time we charge a late fee of ${formatRate(lateFee.amountCents)}.`
       : 'If your rent is not paid on time we may charge a late fee.',

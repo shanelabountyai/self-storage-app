@@ -5,6 +5,7 @@ import { drainGateCommands } from '@/lib/access/service'
 import { provisionAccessForLease } from '@/lib/access/provision'
 import { processCommsEvent } from '@/lib/comms/service'
 import { scanExpiringCards, scanExpiringProtectionProofs } from '@/lib/billing/scans'
+import { emitDueReminders, generateInvoices } from '@/lib/billing/invoices'
 
 // Consumer and job registration. The machinery is B-006's; the things that use
 // it arrive with their own backlog items: reservation expiry (B-018, below),
@@ -135,6 +136,28 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
         ok: true,
         message: `expired ${expired} checkout session${expired === 1 ? '' : 's'}`,
       })
+    },
+  },
+  {
+    // B-044 / PRD 02 US-17. Recurring invoices.
+    //
+    // Runs at 1am local, BEFORE the expiry scans at 2am and after the midnight
+    // sweeps: an invoice generated tonight is what the due-soon reminder and
+    // the autopay run both read, so it goes first in the night.
+    //
+    // Re-runnable and catch-up-safe by construction — idempotency is the
+    // unique constraint on (leaseId, periodStart), so a caught-up date for
+    // last Tuesday generates exactly what Tuesday would have.
+    name: 'billing.generate-invoices',
+    localHour: 1,
+    scope: 'per_facility',
+    handler: async ({ facilityId, businessDate, recordItem }) => {
+      await generateInvoices(facilityId!, businessDate, recordItem)
+      // Same job, deliberately: a reminder for an invoice generated moments
+      // ago in a separate job would depend on the order two JobRuns happened
+      // to execute in. PRD 05 CN-3 wants these driven by billing, and this is
+      // the billing run.
+      await emitDueReminders(facilityId!, businessDate, recordItem)
     },
   },
   {

@@ -62,6 +62,9 @@ const CALENDAR_DATE_FIELDS = new Set([
   'Lease.moveOutDate',
   // B-095. Which facility-local day a task belongs to, not an instant.
   'Task.businessDate',
+  // B-044. A billing period is a range of DAYS a tenant occupies a unit.
+  'Invoice.periodStart',
+  'Invoice.periodEnd',
 ])
 
 describe('prisma schema invariants', () => {
