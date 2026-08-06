@@ -1246,6 +1246,38 @@ D-16's single threshold, moved forward out of the Phase-2 pipeline. No new decis
 
 ---
 
+### B-048 — Partial payments and refunds ✅ `PENDING`
+
+US-22's configurable allocation order and US-23's refunds. No new decision number — D-28 already settled the settlement direction and this generalises it.
+
+**Found and fixed: counter payments were never allocated at all.** B-039 posted a `payment` ledger entry and stopped there, so however much cash came across the desk, every invoice stayed `open`. The balance moved and the invoices did not — which is the exact split that makes autopay re-charge an invoice a tenant paid in person, and makes AR ageing report money that is already in the till. It had been true since B-039 and became reachable the moment B-044 created invoices. Counter payments now allocate inside the same transaction as the payment.
+
+**Decided: the order is a permutation of four fixed categories, edited as four selects.** Free text would invite a typo that silently demotes a category to last. And a category genuinely left out is paid **last rather than never** — a misconfigured order should degrade to a worse sequence, not turn money uncollectable.
+
+**Decided: within a category, oldest first, then by invoice id.** The tiebreak is not fussiness: two invoices due the same day must allocate identically on every run, or a receipt reprinted tomorrow disagrees with the one the tenant was handed today.
+
+**Decided: an over-payment is reported, never placed.** Where surplus money goes — refuse it, hold it as a credit, refund it — is a decision, and the allocator does not make it silently. Money allocated to "the oldest thing" is how it ends up somewhere nobody can explain.
+
+**Decided: an explicitly named invoice still wins.** Autopay raises a charge *for* one invoice (B-045), and settling a different one would leave the invoice autopay believes it paid still open — so the next night's run charges the card again. The named invoice is still checked against the payment's own tenant and facility first, because it arrives through Stripe metadata.
+
+**Decided: a refund is its own `Payment` row, never an edit of the original.** The original is a fact — money arrived on a date, against a receipt number a tenant is holding — and editing it would make the receipt disagree with the record. The card refund is made **before** the local write: a refund we recorded and Stripe never made would tell a tenant they had their money back when they did not.
+
+**Decided: cash and cheque refunds are recorded `pending` — a payable.** The money has not left until somebody opens the drawer or writes the cheque, and marking it succeeded would put a refund in the books that has not happened. Cheques require a number so the payable can be reconciled against the bank.
+
+**Decided: refunding unwinds the allocation.** An invoice left reading `paid` on money that went back is uncollected forever and invisible to every ageing report. The allocation rows are trimmed and the invoice totals recomputed, so the invoices reopen exactly as far as the refund went.
+
+**Decided: refunding a card payment as cash is allowed, and audited as a changed method.** It is a real counter case — the card is closed and the tenant wants cash — and it is also the shape an internal fraud takes. The log says it happened rather than leaving it to be inferred.
+
+**Found by a test I wrote, and fixed: a partial refund zeroed the invoice.** `recomputeInvoices` summed allocations on `succeeded` payments only. The moment a partial refund flipped the original payment to `partially_refunded`, the money the tenant had **not** been given back stopped counting, and an invoice they had part-paid snapped to `amountPaidCents: 0`. The allocations are the truth; the payment's status is a summary of the payment, not of what it settled. `partially_refunded` and `refunded` now count — a fully refunded payment has no allocations left and contributes zero either way.
+
+**Also fixed: three of my own audit assertions were passing on luck.** `audit_log` is append-only and never cleaned between tests, so several tests in a file leave rows on the same lease or grant. An unordered `findFirstOrThrow` returned an arbitrary one — `holds-db` failed on roughly one run in three, and two siblings in `holds-db` and `access-suspension-db` had the same latent fragility. They are now scoped to the specific hold via the audit context, or ordered newest-first. Two consecutive clean full runs after.
+
+**Verified:** 1198 unit/DB tests (34 new — 16 on the pure allocator: the default order paying tax then fees before rent, oldest-first within a category, stability across input order, a configured order honoured, a missing category paid last, splitting, never over-allocating a claim, the over-payment reported, and the sum-back property; 18 against real rows: a partial payment splitting across categories, an older invoice cleared before a newer, a fee cleared before older rent under the default order, a facility that puts rent first, idempotency on reapply, a waived fee never resurrected, the cash refund as a payable, the ledger entry that increases what is owed, full and partial unwinding, the audit with its changed-method flag, and the five refusals — no reason, no permission, over limit, over the original across several refunds, and a payment that never succeeded). E2e: 338 passing. Typecheck, lint, build clean. One migration.
+
+**Left behind.** **No portal-side allocation display** — US-22 wants it "at payment time and on the receipt", and the counter path returns it but the POS screen and the portal receipt do not yet render it; the data is there and it is a rendering job. **No credit balance**: an over-payment is refused at the portal (B-035's existing rule) and reported as unapplied at the counter, but there is nowhere to bank it — prepayment needs a credit concept nothing has built. **`refunds:request` is unused**: US-23 distinguishes requesting from approving, and only the approve path exists — an over-limit refund tells the actor to ask a manager rather than creating an approval request, which is the workflow B-079's org hardening would carry. **No card refund has been made against real Stripe**, the same wall every payment item has hit. **A cash refund payable has no settlement step** — nothing marks it paid when the drawer opens, so it sits `pending` forever; that belongs with B-078's drawer sessions.
+
+---
+
 ---
 
 ## Feature PRDs added mid-build

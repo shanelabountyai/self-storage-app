@@ -19,6 +19,7 @@ import {
 import { logManualDocument, type DocumentType } from '@/lib/documents/store'
 import { createTask } from '@/lib/admin/tasks'
 import { activeHolds, type ActiveHold } from '@/lib/admin/holds'
+import { refundablePayments } from '@/lib/billing/refunds'
 
 // PRD 02 §4.4 US-13. "Any staffer can pick up any conversation" — search,
 // then one profile: contact, address history, leases and balance, notes,
@@ -194,6 +195,8 @@ export type TenantProfile = {
   /// 2026-07-18". Read from the audit entry the rule wrote rather than
   /// recomputed, so the screen says what actually happened and when.
   accessState: { facilityName: string; suspended: boolean; summary: string }[]
+  /// US-23. Payments with something left to give back.
+  refundable: Awaited<ReturnType<typeof refundablePayments>>
   /// Facilities the viewing actor may act through for this tenant — what a
   /// mutation form needs to attribute a new note or document to.
   editableFacilityIds: string[]
@@ -372,6 +375,7 @@ export async function tenantProfile(actor: Actor, tenantId: string): Promise<Ten
       }))
       .filter((fee) => fee.outstandingCents > 0),
     holds: holdsByLease.flat(),
+    refundable: await refundablePayments(tenantId),
     accessState: grants
       .map((grant) => {
         const latest = latestByGrant.get(grant.id)

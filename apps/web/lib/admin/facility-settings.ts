@@ -225,6 +225,8 @@ export type BillingPolicyInput = {
   /// policy" for the same reason.
   accessSuspendDaysPastDue: number
   accessRestoreAtOrBelowCents: number
+  /// US-22's allocation order, as category keys.
+  paymentAllocationOrder: string[]
 }
 
 export class InvalidRetryScheduleError extends Error {
@@ -291,6 +293,7 @@ export async function updateBillingPolicy(
       paymentRetryDays: before.paymentRetryDays,
       accessSuspendDaysPastDue: before.accessSuspendDaysPastDue,
       accessRestoreAtOrBelowCents: before.accessRestoreAtOrBelowCents,
+      paymentAllocationOrder: before.paymentAllocationOrder,
     },
     after: {
       billingPolicy: after.billingPolicy,
@@ -300,6 +303,7 @@ export async function updateBillingPolicy(
       paymentRetryDays: after.paymentRetryDays,
       accessSuspendDaysPastDue: after.accessSuspendDaysPastDue,
       accessRestoreAtOrBelowCents: after.accessRestoreAtOrBelowCents,
+      paymentAllocationOrder: after.paymentAllocationOrder,
     },
   })
 }

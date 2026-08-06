@@ -20,6 +20,15 @@ import {
   updateFacilityHoursAction,
 } from './actions'
 
+import { ALLOCATION_CATEGORIES } from '@storage/core/billing'
+
+const ALLOCATION_LABELS: Record<string, string> = {
+  tax: 'Tax',
+  fee: 'Fees',
+  protection: 'Protection plan',
+  rent: 'Rent',
+}
+
 const TIMEZONES = Intl.supportedValuesOf('timeZone')
 // The full catalogue B-047 added to the enum. `late` stays listed because a
 // flat late amount is still a fee a facility may want on the schedule for
@@ -459,6 +468,31 @@ export default async function AdminSettingsPage() {
             defaultValue={facility.paymentRetryDays.join(', ')}
             hint="Days after the original due date, increasing. Leave empty for no retries."
           />
+          <fieldset className="w-full">
+            <legend className="text-sm font-medium">A partial payment pays off, in this order</legend>
+            <p className="text-muted-foreground mt-1 text-xs text-pretty">
+              Shipped as tax first (money held for the state rather than earned), then fees (an
+              unpaid fee is what ages into the next one), then the protection plan, then rent —
+              oldest first within each.
+            </p>
+            <div className="mt-2 flex flex-wrap gap-3">
+              {[1, 2, 3, 4].map((position) => (
+                <Field
+                  key={position}
+                  name={`allocation${position}`}
+                  label={`${position}${position === 1 ? 'st' : position === 2 ? 'nd' : position === 3 ? 'rd' : 'th'}`}
+                  as="select"
+                  defaultValue={facility.paymentAllocationOrder[position - 1] ?? ALLOCATION_CATEGORIES[position - 1]}
+                >
+                  {ALLOCATION_CATEGORIES.map((category) => (
+                    <option key={category} value={category}>
+                      {ALLOCATION_LABELS[category]}
+                    </option>
+                  ))}
+                </Field>
+              ))}
+            </div>
+          </fieldset>
           <Field
             name="accessSuspendDaysPastDue"
             label="Suspend gate access at"

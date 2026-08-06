@@ -3,6 +3,7 @@ import { type Prisma, prisma } from '@storage/db'
 import { emitEvent } from '@storage/core/events'
 import { provisionMoveIn, requestDownstream } from '@/lib/checkout/provision'
 import { cancelOpenTask } from '@/lib/admin/tasks'
+import { applyPayment } from '@/lib/billing/allocation'
 import { restoreAccessIfSettled } from '@/lib/access/delinquency-gate'
 
 /// The checkout session a PaymentIntent belongs to, from the reference B-025
@@ -109,72 +110,44 @@ async function postPaymentToLedger(
 }
 
 
-/// Settles the invoice a payment was raised against, when it named one.
+/// Applies a succeeded payment across what the tenant owes (US-22, B-048).
 ///
-/// B-045's autopay charges exactly one invoice, and the whole "never
-/// double-charge" guarantee rests on the invoice reading as paid afterwards:
-/// without this the charge would succeed, post to the ledger, and leave the
-/// invoice open for the next night's run to charge again.
+/// Replaces B-045's single-invoice settlement: autopay still names its invoice
+/// and that still wins, but a counter or portal payment that named none is now
+/// allocated across the open invoices in the facility's configured order rather
+/// than only posting to the ledger and leaving every invoice open.
 ///
-/// Idempotent on the `(paymentId, invoiceId)` unique constraint, because
-/// Stripe redelivers. `amountPaidCents` is recomputed from the allocations
-/// rather than incremented — an increment applied twice is exactly the bug the
-/// redelivery would cause, and the sum is the fact anyway.
-///
-/// B-048 generalises this to a payment spread across several invoices in a
-/// configurable order. This is the single-invoice case the billing engine
-/// creates on its own, and it deliberately does not invent an allocation for a
-/// payment that never named one.
-async function settleNamedInvoice(
+/// Also withdraws the failed-payment task once an invoice is fully settled —
+/// staff must not be chasing a tenant who has already paid.
+async function settlePayment(
   tx: Prisma.TransactionClient,
   payment: { id: string; facilityId: string; tenantId: string; amountCents: number },
-  invoiceId: string | null,
+  explicitInvoiceId: string | null,
 ): Promise<void> {
-  if (!invoiceId) return
+  // The named invoice is checked against this payment's own tenant and
+  // facility before it is trusted: it arrives through Stripe metadata, and
+  // money must not settle an invoice on the strength of a round trip through a
+  // third party.
+  const named = explicitInvoiceId
+    ? await tx.invoice.findFirst({
+        where: {
+          id: explicitInvoiceId,
+          facilityId: payment.facilityId,
+          lease: { tenantId: payment.tenantId },
+        },
+        select: { id: true },
+      })
+    : null
 
-  // Checked against this payment's own tenant and facility: the id arrives
-  // through Stripe metadata, and money must not settle an invoice on the
-  // strength of a round trip through a third party.
-  const invoice = await tx.invoice.findFirst({
-    where: {
-      id: invoiceId,
-      facilityId: payment.facilityId,
-      lease: { tenantId: payment.tenantId },
-    },
-    select: { id: true, totalCents: true },
-  })
-  if (!invoice) return
+  const applied = await applyPayment(tx, payment, { explicitInvoiceId: named?.id ?? null })
 
-  const existing = await tx.paymentAllocation.findUnique({
-    where: { paymentId_invoiceId: { paymentId: payment.id, invoiceId: invoice.id } },
-    select: { id: true },
-  })
-  if (!existing) {
-    await tx.paymentAllocation.create({
-      data: { paymentId: payment.id, invoiceId: invoice.id, amountCents: payment.amountCents },
+  for (const line of applied.lines) {
+    const invoice = await tx.invoice.findUnique({
+      where: { id: line.invoiceId },
+      select: { status: true },
     })
+    if (invoice?.status === 'paid') await cancelOpenTask('failed_payment', line.invoiceId, tx)
   }
-
-  const allocations = await tx.paymentAllocation.aggregate({
-    where: { invoiceId: invoice.id, payment: { status: 'succeeded' } },
-    _sum: { amountCents: true },
-  })
-  const paid = allocations._sum.amountCents ?? 0
-
-  const settled = paid >= invoice.totalCents
-  await tx.invoice.update({
-    where: { id: invoice.id },
-    data: {
-      amountPaidCents: paid,
-      status: settled ? 'paid' : paid > 0 ? 'partially_paid' : 'open',
-    },
-  })
-
-  // B-046. The failed-payment task exists because autopay gave up on this
-  // invoice; the invoice being paid is exactly the thing that resolves it, and
-  // leaving it open would have staff chasing a tenant who has already paid.
-  // Withdrawn rather than completed — nobody did the work, the reason went away.
-  if (settled) await cancelOpenTask('failed_payment', invoice.id, tx)
 }
 
 /// Applies one Stripe event to our records. Assumes the caller has already
@@ -207,7 +180,7 @@ export async function applyStripeEvent(event: Stripe.Event): Promise<void> {
         await postPaymentToLedger(tx, payment, referenceLeaseId(intent))
         // Order matters: the allocation sums only SUCCEEDED payments, and the
         // status update above is what makes this one count.
-        await settleNamedInvoice(tx, payment, referenceInvoiceId(intent))
+        await settlePayment(tx, payment, referenceInvoiceId(intent))
         settled.push({ tenantId: payment.tenantId, facilityId: payment.facilityId })
         // FR-4.4: finalisation is webhook-driven. The reference carries which
         // checkout this was, so a renter who closed the tab still gets moved in.

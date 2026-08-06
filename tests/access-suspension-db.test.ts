@@ -196,8 +196,12 @@ describeDb('access suspension', () => {
     await overdueRent(d('2026-09-01'))
     await evaluateAccessSuspensions(facilityId, d('2026-09-07'), recordItem)
 
+    // Newest first: the grant is shared across the tests in this file and
+    // `audit_log` is append-only, so an unordered read could return an earlier
+    // test's suspension with a different day count.
     const audit = await prisma.auditLog.findFirstOrThrow({
       where: { action: 'access.suspended', entityId: grantId },
+      orderBy: { occurredAt: 'desc' },
     })
     const context = audit.after as { daysPastDue: number; triggeringInvoiceNumber: string | null }
     expect(context.daysPastDue).toBe(6)

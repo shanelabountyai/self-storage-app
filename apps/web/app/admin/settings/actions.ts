@@ -416,7 +416,17 @@ export async function updateBillingPolicyAction(
     unit: 'dollars',
   })
 
+  // A select per position rather than free text: the order is a permutation of
+  // four fixed categories, and a text field would invite a typo that silently
+  // demotes a category to last.
+  const allocationOrder = [1, 2, 3, 4]
+    .map((position) => String(formData.get(`allocation${position}`) ?? ''))
+    .filter(Boolean)
+
   const errors: FieldErrors = {}
+  if (new Set(allocationOrder).size !== allocationOrder.length) {
+    errors.allocation1 = 'Each of the four can only appear once. Check for a repeat.'
+  }
   if ('error' in leadDays) errors.invoiceLeadDays = leadDays.error
   if ('error' in suspendDays) errors.accessSuspendDaysPastDue = suspendDays.error
   if ('error' in restoreAtOrBelow) errors.accessRestoreAtOrBelowDollars = restoreAtOrBelow.error
@@ -443,6 +453,7 @@ export async function updateBillingPolicyAction(
       paymentRetryDays: retryDays,
       accessSuspendDaysPastDue: suspendDays.value,
       accessRestoreAtOrBelowCents: restoreAtOrBelow.value,
+      paymentAllocationOrder: allocationOrder,
     })
   } catch (error) {
     return asFormError(error, 'Could not save the billing policy.')

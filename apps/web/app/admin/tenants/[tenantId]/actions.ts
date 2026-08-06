@@ -15,6 +15,8 @@ import { fieldError, success, type FormState } from '@/lib/admin/form-state'
 import { waiveFeeInvoice } from '@/lib/billing/late-fees'
 import { formatCents } from '@/lib/format'
 import { liftHold, placeHold } from '@/lib/admin/holds'
+import { refundPayment } from '@/lib/billing/refunds'
+import { parseScaled } from '@/lib/admin/form-state'
 
 // PRD 02 §4.4 US-13/US-16. Thin session wrappers; every real decision lives
 // in lib/admin/tenants.ts (and lib/portal/contact.ts underneath it), which
@@ -228,4 +230,71 @@ export async function liftHoldAction(_prev: FormState, formData: FormData): Prom
 
   revalidateProfile(tenantId)
   return success('Hold lifted. Automated collections resume on this lease.')
+}
+
+/// US-23's refund, from the profile.
+///
+/// Like the waiver above, every gate stays in the domain function — permission,
+/// refund limit and reason code — and this only turns its refusals into
+/// sentences. The over-limit message names the limit because RBAC-2 routes to
+/// the next role up and "not allowed" tells a manager nothing to ask for.
+export async function refundAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const actor = await requireStaffActor()
+  const tenantId = String(formData.get('tenantId') ?? '')
+  const amount = parseScaled(formData.get('amountDollars'), {
+    scale: 100,
+    min: 0.01,
+    max: 100_000,
+    unit: 'dollars',
+  })
+  if ('error' in amount) return fieldError({ amountDollars: amount.error })
+
+  const method = String(formData.get('method') ?? 'card') as 'card' | 'cash' | 'check'
+  if (method === 'check' && !String(formData.get('checkNumber') ?? '').trim()) {
+    return fieldError({ checkNumber: 'Enter the cheque number so this can be reconciled.' })
+  }
+
+  const result = await refundPayment(actor, String(formData.get('paymentId') ?? ''), {
+    amountCents: amount.value,
+    reasonCode: String(formData.get('reasonCode') ?? ''),
+    note: String(formData.get('note') ?? '') || undefined,
+    checkNumber: String(formData.get('checkNumber') ?? '') || null,
+    asMethod: method,
+  })
+
+  if (!result.ok) {
+    switch (result.reason) {
+      case 'missing_reason':
+        return fieldError({ reasonCode: 'Choose why this is being refunded.' })
+      case 'over_original':
+        return fieldError({ amountDollars: 'That is more than is left on this payment.' })
+      case 'over_limit':
+        return {
+          status: 'error',
+          message: `That is more than your refund limit of ${formatCents(result.limitCents ?? 0)}. Ask a manager to approve it.`,
+          fieldErrors: {},
+        }
+      case 'forbidden':
+        return { status: 'error', message: 'You do not have permission to refund payments here.', fieldErrors: {} }
+      case 'not_refundable':
+        return { status: 'error', message: 'That payment never completed, so there is nothing to refund.', fieldErrors: {} }
+      case 'card_unavailable':
+        return {
+          status: 'error',
+          message: 'Card refunds are unavailable — refund as cash or cheque and record it here.',
+          fieldErrors: {},
+        }
+      case 'provider_error':
+        return { status: 'error', message: result.message ?? 'The card refund was declined.', fieldErrors: {} }
+      default:
+        return { status: 'error', message: 'That payment could not be found.', fieldErrors: {} }
+    }
+  }
+
+  revalidateProfile(tenantId)
+  return success(
+    result.method === 'card'
+      ? `${formatCents(result.amountCents)} refunded to the card. It reaches them in a few days.`
+      : `${formatCents(result.amountCents)} recorded as a ${result.method} refund payable — it is not paid until someone hands it over.`,
+  )
 }

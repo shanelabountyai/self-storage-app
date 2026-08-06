@@ -423,6 +423,11 @@ model Facility {
   /// the gate, every month, which converts a collections tool into a
   /// subscription for the delinquent.
   accessRestoreAtOrBelowCents Int    @default(0)
+  /// US-22's configurable allocation order. Categories from
+  /// `packages/core/billing`; a category left out is paid last rather than
+  /// never, so a misconfigured order degrades to a worse sequence rather than
+  /// making money uncollectable.
+  paymentAllocationOrder String[]  @default(["tax", "fee", "protection", "rent"])
   /// Days of notice the lease requires before a move-out. 0 means none.
   moveOutNoticeDays   Int            @default(10)
   /// A residual balance at or below this can be written off to close the

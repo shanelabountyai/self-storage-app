@@ -126,8 +126,16 @@ describeDb('lease holds', () => {
       expect(hold.placedByName).toBe('Cal Counter')
       expect(hold.reason).toContain('Deployment orders')
 
+      // Scoped to THIS hold, not just this lease. `audit_log` is append-only
+      // and never cleaned between tests, so several tests in this file leave
+      // `hold.placed` rows on the same lease — an unordered `findFirst` picked
+      // an arbitrary one and passed on luck.
       const audit = await prisma.auditLog.findFirstOrThrow({
-        where: { action: 'hold.placed', entityId: leaseId },
+        where: {
+          action: 'hold.placed',
+          entityId: leaseId,
+          after: { path: ['holdId'], equals: result.ok ? result.holdId : '' },
+        },
       })
       // The reason code carries the TYPE, which is what makes "how many SCRA
       // holds did we place last year" answerable.
@@ -242,7 +250,11 @@ describeDb('lease holds', () => {
       await liftHold(actor(managerId, 20), placed.holdId, 'Credit issued, dispute closed.')
 
       const audit = await prisma.auditLog.findFirstOrThrow({
-        where: { action: 'hold.lifted', entityId: leaseId },
+        where: {
+          action: 'hold.lifted',
+          entityId: leaseId,
+          after: { path: ['holdId'], equals: placed.holdId },
+        },
       })
       expect(audit.actorStaffId).toBe(managerId)
     })

@@ -11,6 +11,7 @@ import {
   updateAddressAction,
   liftHoldAction,
   placeHoldAction,
+  refundAction,
   updateContactAction,
   waiveFeeAction,
 } from './actions'
@@ -386,6 +387,74 @@ export default async function TenantProfilePage({
                       {' '}
                       fee {fee.number} of {formatCents(fee.outstandingCents)}
                     </span>
+                  </button>
+                </AdminForm>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {profile.refundable.length > 0 && (
+        <section aria-labelledby="refunds-heading" className="flex flex-col gap-3">
+          <h2 id="refunds-heading" className="font-medium">
+            Refund a payment
+          </h2>
+          <p className="text-muted-foreground max-w-prose text-xs text-pretty">
+            A card refund goes back to the card the tenant paid with. Cash and cheque refunds are
+            recorded as a payable — the money is not paid until someone hands it over. Refunding
+            unwinds what the payment settled, so the invoices reopen.
+          </p>
+          <ul className="flex flex-col gap-3">
+            {profile.refundable.map((payment) => (
+              <li key={payment.paymentId} className="border-input rounded-lg border p-4">
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <span className="font-medium">{formatCents(payment.refundableCents)} refundable</span>
+                  <span className="text-muted-foreground text-xs">
+                    {formatCents(payment.amountCents)} by {payment.method} on{' '}
+                    {formatWhen(payment.receivedAt)}
+                    {payment.receiptNumber ? ` · receipt #${payment.receiptNumber}` : ''}
+                    {payment.refundedCents > 0
+                      ? ` · ${formatCents(payment.refundedCents)} already refunded`
+                      : ''}
+                  </span>
+                </div>
+
+                <AdminForm
+                  action={refundAction}
+                  label={`Refund payment ${payment.paymentId}`}
+                  className="mt-3 flex flex-wrap items-end gap-2"
+                >
+                  <input type="hidden" name="tenantId" value={profile.tenantId} />
+                  <input type="hidden" name="paymentId" value={payment.paymentId} />
+                  <Field
+                    name="amountDollars"
+                    label="Amount ($)"
+                    type="text"
+                    inputMode="decimal"
+                    defaultValue={(payment.refundableCents / 100).toFixed(2)}
+                  />
+                  <Field name="method" label="Back as" as="select" defaultValue={payment.method === 'card' ? 'card' : 'cash'}>
+                    <option value="card">Card (original method)</option>
+                    <option value="cash">Cash</option>
+                    <option value="check">Cheque</option>
+                  </Field>
+                  <Field name="checkNumber" label="Cheque number" hint="Cheques only." />
+                  <Field name="reasonCode" label="Reason" as="select" defaultValue="">
+                    <option value="">Choose a reason…</option>
+                    {WAIVER_REASONS.map((reason) => (
+                      <option key={reason.value} value={reason.value}>
+                        {reason.label}
+                      </option>
+                    ))}
+                  </Field>
+                  <Field name="note" label="Note (optional)" />
+                  <button
+                    type="submit"
+                    className="border-input hover:bg-accent inline-flex min-h-11 items-center justify-center rounded-md border px-4 text-sm font-medium"
+                  >
+                    Refund
+                    <span className="sr-only"> up to {formatCents(payment.refundableCents)}</span>
                   </button>
                 </AdminForm>
               </li>

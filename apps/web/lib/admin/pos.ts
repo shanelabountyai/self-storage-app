@@ -12,6 +12,7 @@ import { assertFacilityAccess, can, ForbiddenError } from '@/lib/rbac/authorize'
 import { toAuditActor } from '@/lib/rbac/audit-actor'
 import type { Actor } from '@/lib/rbac/actor'
 import { restoreAccessIfSettled } from '@/lib/access/delinquency-gate'
+import { applyPayment, type AppliedPayment } from '@/lib/billing/allocation'
 
 // PRD 02 §4.8 US-32. Money taken across the counter.
 //
@@ -49,7 +50,18 @@ export type CounterPaymentInput = {
 }
 
 export type CounterPaymentResult =
-  | { ok: true; paymentId: string; receiptNumber: number; changeCents: number | null }
+  | {
+      ok: true
+      paymentId: string
+      receiptNumber: number
+      changeCents: number | null
+      /// US-22: what this payment settled, by category, for the screen and the
+      /// receipt.
+      allocation: { label: string; amountCents: number }[]
+      /// Money the tenant handed over beyond what they owe. Surfaced rather
+      /// than silently allocated — see the note in packages/core/billing.
+      unappliedCents: number
+    }
   | { ok: false; problem: TenderProblem | 'lease_not_found' | 'needs_manager' | 'card_not_supported' }
 
 /// Records a payment taken at the counter, posts it to the ledger, and issues
@@ -98,6 +110,11 @@ export async function recordCounterPayment(
     if (rank < MANAGER_RANK) return { ok: false, problem: 'needs_manager' }
   }
 
+  // A one-element box rather than a `let`: TypeScript narrows a variable only
+  // ever assigned inside a callback to `never` where it is read. Same shape as
+  // the settlement path in lib/payments/reconcile.ts.
+  const allocation: AppliedPayment[] = []
+
   const result = await prisma.$transaction(async (tx) => {
     const receiptNumber = await nextReceiptNumber(tx, input.facilityId)
 
@@ -131,6 +148,21 @@ export async function recordCounterPayment(
       },
     })
 
+    // US-22 (B-048). Counter payments were posting to the ledger and nothing
+    // else, so every invoice stayed open however much cash came across the
+    // desk — the balance moved and the invoices did not, which is exactly the
+    // split that makes autopay re-charge and AR ageing lie. Allocated here in
+    // the same transaction as the payment.
+    //
+    // `status: 'succeeded'` is already set on a counter payment (money is in
+    // hand), so the recompute counts it immediately.
+    allocation.push(await applyPayment(tx, {
+      id: payment.id,
+      tenantId: input.tenantId,
+      facilityId: input.facilityId,
+      amountCents: settled.amountCents,
+    }))
+
     await recordAudit(
       {
         actor: toAuditActor(actor),
@@ -162,7 +194,13 @@ export async function recordCounterPayment(
     // Swallowed deliberately; the nightly pass is the net.
   }
 
-  return { ok: true, ...result, changeCents: settled.changeCents }
+  return {
+    ok: true,
+    ...result,
+    changeCents: settled.changeCents,
+    allocation: allocation[0]?.summary ?? [],
+    unappliedCents: allocation[0]?.unappliedCents ?? 0,
+  }
 }
 
 export type DailySummaryRow = {
