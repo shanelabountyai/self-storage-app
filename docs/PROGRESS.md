@@ -1326,6 +1326,35 @@ CN-3's ladder, CN-5's halts, and the tone escalation as content. Everything it n
 
 ---
 
+### Integration pass — the money loop against real Stripe ✅ `PENDING`
+
+**Not a backlog item.** Nine nightly jobs had been built over one session, each tested alone against disposable fixtures, and the chain had never run. Every genuine defect found this session lived at a seam — `billingDay` hardcoded where checkout meets billing, billing events resolving to no comms recipient, `access.granted` emitted on a restore, counter payments never allocated — and none of them was findable by a unit test. This is the test shaped like those bugs.
+
+**Prerequisite closed:** Stripe test-mode keys are configured for the first time. Six items had shipped on the strength of mocks (B-035, B-036, B-043's card scan, B-045's autopay, B-046's decline codes, B-048's refunds); none had ever made a real call.
+
+**What it drives.** One seeded lease across eight phases and roughly six weeks of business dates, with a live `stripe listen` forwarding real webhooks to the dev server:
+
+1. September rent generated five days ahead
+2. A **real off-session charge** on `pm_card_visa` — and the ledger stays open until the **webhook** comes back and settles it
+3. October **declines for real** on `pm_card_chargeCustomerFail`, with Stripe's own code on `payment.failed`
+4. The second decline flags a manager; retries land on +1 and +3 and **not** on +2
+5. A late fee on day 5, on its own invoice, at the greater of $20 or 10%
+6. Access suspended on day 6, with a real `suspend_access` command enqueued to the gate
+7. The dunning ladder chasing on days 1, 5 and 10
+8. A good card clearing rent **and** the fee, every invoice closing, the ledger returning to zero, and access restoring with nobody deciding to act
+
+**All eight passed on the first run**, which was not the expected outcome and is worth stating plainly rather than dressing up: the seams held. Verified independently against Stripe's own API rather than trusting the assertions — six PaymentIntents, three `generic_decline`s and three successes, matching the run log exactly.
+
+**One false alarm, checked rather than assumed.** Stripe's API reports `off_session: false` on every intent. It is not a defect and not a field Stripe returns — `off_session` is request-only. The real evidence the charges were off-session is that they succeeded with no browser, no client confirmation and a stored `payment_method` set at create.
+
+**Found and fixed: the suite's default 5-second timeout was too tight for the DB tests.** Four failed in one afternoon — three in `autopay-db`, one in `cron-catchup-db` — every one passing in isolation, every one a `Test timed out in 5000ms` rather than a failed assertion. They make dozens of sequential round-trips to a **remote** Postgres, and a multi-night billing walk legitimately takes six or seven seconds; adding a dev server and a webhook listener holding connections tipped them over. `testTimeout` is now 20s and `hookTimeout` 30s — headroom rather than indulgence, still far below anything a genuine hang would need. Two consecutive clean full runs after.
+
+**The test is opt-in.** `npm run test:integration`, gated behind `RUN_LIVE_INTEGRATION=1`, because it makes real Stripe calls and needs two background processes. A test that fails for reasons unrelated to your change is one nobody trusts, and a red suite nobody trusts is worse than no suite.
+
+**Left behind.** **The webhook signing secret is per `stripe listen` session** — it reissues on every start, so `STRIPE_WEBHOOK_SECRET` goes stale whenever the listener restarts and every webhook then fails signature verification silently from the app's side. That is a footgun for the next session and is written into the test's own header. **No refund is exercised** — B-048's card refund path still has never run against real Stripe. **The portal and checkout payment screens are not driven**: this pass goes through the job layer, so the Payment Element itself is still only covered by the e2e "call us" fallback. **One tenant, one facility, one card**: no multi-unit tenant, no partial payment, no hold interrupting mid-ladder.
+
+---
+
 ---
 
 ## Feature PRDs added mid-build
