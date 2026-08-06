@@ -1302,7 +1302,7 @@ The first screen that renders what the last eight items have been writing. US-24
 
 ---
 
-### B-052 — Past-due dunning ladder ✅ `PENDING`
+### B-052 — Past-due dunning ladder ✅ `aa421bc`
 
 CN-3's ladder, CN-5's halts, and the tone escalation as content. Everything it needed was already built — B-050 owns the template pipeline, B-096's holds already declare `halt_dunning`, B-051 supplies the one-tap link, and `daysPastDue` has been the shared clock since D-25. This item is mostly the wiring, and that is the point.
 
