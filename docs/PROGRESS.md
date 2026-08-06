@@ -996,7 +996,7 @@ The three parts left open above: the Billing Runs screen, the card-expiring scan
 
 ---
 
-### B-044 — Recurring invoice generation + proration ✅ `PENDING`
+### B-044 — Recurring invoice generation + proration ✅ `0d21bed`
 
 The billing engine's first half: `packages/core/billing` (periods, proration, invoice lines, numbering), the nightly `billing.generate-invoices` job, and the due-date reminder events. Recorded as **D-27**, because the billing policy and what the billing day is anchored to are decisions a later session must not silently reverse.
 
