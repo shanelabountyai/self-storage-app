@@ -2,6 +2,7 @@ import { prisma } from '@storage/db'
 import { emitEvent } from '@storage/core/events'
 import { OCCUPYING_LEASE_STATUSES } from '@storage/core/inventory'
 import { retryDecision } from '@storage/core/billing'
+import { daysBetween } from '@storage/core/jobs'
 import { createTask } from '@/lib/admin/tasks'
 import { createChargeIntent } from '@/lib/payments/intents'
 import { stripeClient } from '@/lib/payments/stripe'
@@ -42,6 +43,24 @@ import { stripeClient } from '@/lib/payments/stripe'
 // decline instead of converging.
 
 type RecordItem = (outcome: { itemId: string; ok: boolean; message?: string }) => void
+
+/// How many declines put an invoice in front of the site manager.
+///
+/// Two, not four: waiting for the whole +1/+3/+5 schedule to finish means
+/// nobody looks at it for six days, by which time the tenant is most of the way
+/// to a late fee over something a phone call fixes. The schedule keeps running
+/// after the flag — a person and a retry are not alternatives.
+const MANAGER_FLAG_AFTER_DECLINES = 2
+
+/// The tenant-facing reminder cadence after a card first declines: one message
+/// a day for three days.
+///
+/// Deliberately NOT tied to the retry attempts. Retries land on +1/+3/+5, so
+/// attempt-driven messages would arrive on days 1, 3 and 5 with silence in
+/// between, and the day the tenant is most likely to act — the day after they
+/// first hear — would say nothing. One a day for three days is a cadence a
+/// person can act on, and it stops whether or not the retries have.
+const REMINDER_DAYS = 3
 
 export type AutopayResult = {
   charged: number
@@ -123,15 +142,26 @@ export async function runAutopay(
 
   for (const invoice of invoices) {
     const outstanding = invoice.totalCents - invoice.amountPaidCents
-    const skip = await skipReasonFor(invoice, outstanding, businessDate, facility.paymentRetryDays)
+    const failures = await declineHistory(invoice.id)
+    const skip = await skipReasonFor(
+      invoice,
+      outstanding,
+      businessDate,
+      facility.paymentRetryDays,
+      failures,
+    )
     if (skip) {
       result.skipped += 1
-      // The two "we have stopped trying" reasons put the invoice in front of a
-      // person. Raised here rather than at the moment of the last decline
-      // because that decline may have arrived on a webhook hours later, and
-      // this is the one place that knows the schedule is finished.
+      // Three ways an invoice lands in front of a person: the schedule ran out,
+      // the card cannot be retried at all, or it has now declined enough times
+      // that waiting for the schedule to finish is the wrong call. Raised here
+      // rather than at the moment of the last decline because that decline may
+      // have arrived on a webhook hours later, and this is the one place that
+      // knows where the schedule stands.
       if (skip === 'retries_exhausted' || skip === 'terminal_decline') {
-        await raiseFailedPaymentTask(facilityId, invoice, skip)
+        await raiseFailedPaymentTask(facilityId, invoice)
+      } else if (failures.length >= MANAGER_FLAG_AFTER_DECLINES) {
+        await raiseFailedPaymentTask(facilityId, invoice)
       }
       recordItem({ itemId: invoice.id, ok: true, message: `${invoice.number} skipped — ${SKIP_MESSAGE[skip]}` })
       continue
@@ -205,6 +235,11 @@ export async function runAutopay(
         })
       }
 
+      // The decline that just happened is not in `failures` yet.
+      if (failures.length + 1 >= MANAGER_FLAG_AFTER_DECLINES) {
+        await raiseFailedPaymentTask(facilityId, invoice)
+      }
+
       recordItem({
         itemId: invoice.id,
         ok: false,
@@ -216,6 +251,20 @@ export async function runAutopay(
   return result
 }
 
+/// Every failed charge on an invoice, newest first. One query, read by the
+/// retry decision (how many, and what the last code was) and by the
+/// manager-flag threshold, so the two can never disagree about the count.
+async function declineHistory(
+  invoiceId: string,
+): Promise<{ createdAt: Date; failureCode: string | null }[]> {
+  const rows = await prisma.paymentAllocation.findMany({
+    where: { invoiceId, payment: { status: 'failed' } },
+    orderBy: { createdAt: 'desc' },
+    select: { createdAt: true, payment: { select: { failureCode: true } } },
+  })
+  return rows.map((row) => ({ createdAt: row.createdAt, failureCode: row.payment.failureCode }))
+}
+
 async function skipReasonFor(
   invoice: {
     id: string
@@ -225,6 +274,7 @@ async function skipReasonFor(
   outstanding: number,
   businessDate: Date,
   retryDays: readonly number[],
+  failures: { failureCode: string | null }[],
 ): Promise<SkipReason | null> {
   if (outstanding <= 0) return 'nothing_outstanding'
   if (!invoice.lease.autopayEnabled) return 'autopay_off'
@@ -243,21 +293,14 @@ async function skipReasonFor(
   })
   if (inFlight) return 'attempt_in_flight'
 
-  // US-20's schedule. Every failed attempt on this invoice, newest first — the
-  // count decides which retry is next and the newest one's code decides whether
-  // there should be a next at all.
-  const failures = await prisma.paymentAllocation.findMany({
-    where: { invoiceId: invoice.id, payment: { status: 'failed' } },
-    orderBy: { createdAt: 'desc' },
-    select: { payment: { select: { failureCode: true } } },
-  })
-
+  // US-20's schedule: the count decides which retry is next, and the newest
+  // decline's code decides whether there should be a next at all.
   const decision = retryDecision({
     dueDate: invoice.dueDate,
     businessDate,
     failedAttempts: failures.length,
     retryDays,
-    lastDeclineCode: failures[0]?.payment.failureCode ?? null,
+    lastDeclineCode: failures[0]?.failureCode ?? null,
   })
 
   return decision.attempt ? null : decision.reason
@@ -273,7 +316,6 @@ async function skipReasonFor(
 async function raiseFailedPaymentTask(
   facilityId: string,
   invoice: { id: string; number: string },
-  reason: 'retries_exhausted' | 'terminal_decline',
 ): Promise<void> {
   const open = await prisma.task.findFirst({
     where: { type: 'failed_payment', entityId: invoice.id, status: 'open' },
@@ -286,9 +328,10 @@ async function raiseFailedPaymentTask(
     type: 'failed_payment',
     entityType: 'Invoice',
     entityId: invoice.id,
-    // A card that cannot be retried needs a person sooner than one that simply
-    // ran out of attempts: nothing automatic will ever fix it.
-    priority: reason === 'terminal_decline' ? 'high' : 'normal',
+    // High regardless of which trigger raised it. By the time this exists the
+    // automatic path has either stopped or is two declines in, and both are
+    // "somebody should call this tenant today".
+    priority: 'high',
   })
 }
 
@@ -308,4 +351,102 @@ function iso(date: Date): string {
 
 function formatCents(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`
+}
+
+/// The tenant-facing reminder after a declined card: one a day for three days.
+///
+/// Anchored to the FIRST decline on an invoice, not to the retry attempts.
+/// Retries land on +1/+3/+5, so an attempt-driven message would reach the
+/// tenant on days 1, 3 and 5 with silence in between — and the day they are
+/// most likely to act, the day after they first hear, would say nothing.
+///
+/// Runs as its own pass rather than inside the charge loop because day 2 has no
+/// retry attempt at all, so there is no charge for the message to hang off.
+///
+/// Idempotency is the event log, the same record B-043's scans use: at most one
+/// reminder per invoice per business date, and never more than three in total.
+/// Two guards rather than one because they fail differently — the per-date key
+/// stops a re-run of tonight sending twice, and the count stops a catch-up walk
+/// across a long outage sending eight.
+///
+/// **This sends email today.** MVP comms is email-only (PRD 05 FR-4); the SMS
+/// channel, its quiet hours and STOP/HELP handling are B-074. Because the
+/// message is an event and the channel is a rule, this becomes a text when that
+/// item configures one, with no change here.
+export async function emitRetryReminders(
+  facilityId: string,
+  businessDate: Date,
+  recordItem: RecordItem,
+): Promise<void> {
+  const invoices = await prisma.invoice.findMany({
+    where: {
+      facilityId,
+      status: { in: ['open', 'partially_paid'] },
+      lease: { status: { in: [...OCCUPYING_LEASE_STATUSES] } },
+      // Only invoices a charge has actually failed on. A tenant who has simply
+      // not been charged yet has nothing to be reminded about.
+      allocations: { some: { payment: { status: 'failed' } } },
+    },
+    select: { id: true, number: true, leaseId: true, totalCents: true, amountPaidCents: true },
+  })
+  if (invoices.length === 0) return
+
+  const sent = await prisma.domainEvent.findMany({
+    where: { name: 'payment.retry_reminder', entityId: { in: invoices.map((i) => i.leaseId) } },
+    select: { entityId: true, payload: true },
+  })
+
+  const byLease = new Map<string, { dates: Set<string>; count: number }>()
+  for (const event of sent) {
+    const payload = (event.payload ?? {}) as { invoiceId?: unknown; businessDate?: unknown }
+    const bucket = byLease.get(event.entityId) ?? { dates: new Set<string>(), count: 0 }
+    bucket.dates.add(`${String(payload.invoiceId)}:${String(payload.businessDate)}`)
+    bucket.count += 1
+    byLease.set(event.entityId, bucket)
+  }
+
+  for (const invoice of invoices) {
+    if (invoice.totalCents - invoice.amountPaidCents <= 0) continue
+
+    const failures = await declineHistory(invoice.id)
+    if (failures.length === 0) continue
+
+    // The oldest decline is the anchor — `declineHistory` returns newest first.
+    const firstDecline = failures[failures.length - 1].createdAt
+    const day = daysBetween(startOfUtcDay(firstDecline), businessDate)
+    if (day < 0 || day >= REMINDER_DAYS) continue
+
+    const history = byLease.get(invoice.leaseId)
+    if (history && history.count >= REMINDER_DAYS) continue
+    if (history?.dates.has(`${invoice.id}:${iso(businessDate)}`)) continue
+
+    await emitEvent({
+      name: 'payment.retry_reminder',
+      // Against the Lease, not the Invoice: the comms service resolves a
+      // recipient from a lease already, and the tenant identifies with the unit
+      // rather than an invoice number.
+      entityType: 'Lease',
+      entityId: invoice.leaseId,
+      facilityId,
+      payload: {
+        invoiceId: invoice.id,
+        number: invoice.number,
+        businessDate: iso(businessDate),
+        outstandingCents: invoice.totalCents - invoice.amountPaidCents,
+        // Which of the three this is, so the message can escalate its wording
+        // rather than repeating itself verbatim for three days.
+        reminderNumber: (history?.count ?? 0) + 1,
+        remindersTotal: REMINDER_DAYS,
+      },
+    })
+    recordItem({
+      itemId: invoice.id,
+      ok: true,
+      message: `${invoice.number} reminder ${(history?.count ?? 0) + 1} of ${REMINDER_DAYS} sent`,
+    })
+  }
+}
+
+function startOfUtcDay(date: Date): Date {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()))
 }

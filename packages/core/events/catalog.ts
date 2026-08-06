@@ -40,6 +40,14 @@ export const EVENT_NAMES = [
   /// Emitted from the Stripe reconciler for full and partial refunds alike —
   /// the payload says which (B-019). Refund *authorisation* is B-048.
   'payment.refunded',
+  /// B-046. A card declined and the tenant has not fixed it yet — one a day
+  /// for three days from the FIRST decline, not one per retry attempt.
+  ///
+  /// Distinct from `payment.failed`, which fires on each actual decline
+  /// (+1/+3/+5, so days 1, 3 and 5 with silence in between). This is the
+  /// cadence a person can act on, and it carries how many days are left before
+  /// the retries stop so the message can say so.
+  'payment.retry_reminder',
   /// PRD 05 CN-10a (B-043's scan, B-050's notice). The tenant's default card
   /// runs out soon. Fired at 30 days and again at 7 — the payload's `stage`
   /// says which, and the payment-method id in the payload is what makes

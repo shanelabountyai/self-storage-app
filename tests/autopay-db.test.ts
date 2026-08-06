@@ -86,7 +86,7 @@ vi.mock('../apps/web/lib/payments/stripe', async (importOriginal) => {
   return { ...actual, stripeClient: () => ({}) as never }
 })
 
-const { runAutopay } = await import('../apps/web/lib/billing/autopay')
+const { emitRetryReminders, runAutopay } = await import('../apps/web/lib/billing/autopay')
 
 let facilityId = ''
 let tenantId = ''
@@ -151,6 +151,24 @@ async function makeLeaseWithInvoice(options: {
   })
 
   return { leaseId: lease.id, invoiceId: invoice.id }
+}
+
+/// Runs autopay for a business date and dates the attempt it made to that same
+/// day.
+///
+/// In production the allocation's `createdAt` IS the moment of the attempt, so
+/// the reminder cadence measures from it directly. These tests drive fictional
+/// business dates in September against a real clock, so without this the
+/// cadence would measure from today and never fire.
+async function declineOn(day: string, invoiceId?: string): Promise<void> {
+  await runAutopay(facilityId, d(day), recordItem)
+  await prisma.paymentAllocation.updateMany({
+    where: {
+      payment: { status: 'failed', facilityId },
+      ...(invoiceId ? { invoiceId } : {}),
+    },
+    data: { createdAt: d(day) },
+  })
 }
 
 /// A `payment_intent.succeeded` event shaped the way Stripe sends it.
@@ -383,7 +401,7 @@ describeDb('autopay', () => {
 
     const tasks = await prisma.task.findMany({ where: { entityId: invoiceId } })
     expect(tasks).toHaveLength(1)
-    expect(tasks[0].priority).toBe('normal')
+    expect(tasks[0].priority).toBe('high')
   })
 
   it('withdraws the failed-payment task once the invoice is paid', async () => {
@@ -410,6 +428,115 @@ describeDb('autopay', () => {
 
     const task = await prisma.task.findFirstOrThrow({ where: { entityId: invoiceId } })
     expect(task.status).toBe('cancelled')
+  })
+
+  // ── The site-manager flag and the tenant reminder cadence ─────────────────
+
+  it('flags the site manager on the second decline, not at the end of the schedule', async () => {
+    const { invoiceId } = await makeLeaseWithInvoice({})
+    nextChargeBehaviour = 'decline'
+
+    await runAutopay(facilityId, d('2026-09-01'), recordItem)
+    expect(
+      await prisma.task.count({ where: { entityId: invoiceId } }),
+      'one decline is not yet a manager’s problem',
+    ).toBe(0)
+
+    await runAutopay(facilityId, d('2026-09-02'), recordItem)
+
+    const task = await prisma.task.findFirstOrThrow({ where: { entityId: invoiceId } })
+    expect(task.type).toBe('failed_payment')
+    expect(task.priority).toBe('high')
+  })
+
+  it('keeps retrying after the manager is flagged', async () => {
+    // A person looking at it and the schedule continuing are not alternatives.
+    await makeLeaseWithInvoice({})
+    nextChargeBehaviour = 'decline'
+    await runAutopay(facilityId, d('2026-09-01'), recordItem)
+    await runAutopay(facilityId, d('2026-09-02'), recordItem)
+    await runAutopay(facilityId, d('2026-09-04'), recordItem)
+
+    expect(charges).toHaveLength(3)
+  })
+
+  it('texts the tenant once a day for three days from the first decline', async () => {
+    const { leaseId } = await makeLeaseWithInvoice({})
+    nextChargeBehaviour = 'decline'
+    await declineOn('2026-09-01')
+
+    // Day 0, 1, 2 — including day 2, which has no retry attempt of its own.
+    for (const day of ['2026-09-01', '2026-09-02', '2026-09-03']) {
+      await emitRetryReminders(facilityId, d(day), recordItem)
+    }
+    // Day 3 is past the cadence.
+    await emitRetryReminders(facilityId, d('2026-09-04'), recordItem)
+
+    const events = await prisma.domainEvent.findMany({
+      where: { facilityId, name: 'payment.retry_reminder' },
+      orderBy: { occurredAt: 'asc' },
+    })
+    expect(events).toHaveLength(3)
+    expect(events.every((event) => event.entityId === leaseId)).toBe(true)
+    expect(events.map((event) => (event.payload as { reminderNumber: number }).reminderNumber)).toEqual([
+      1, 2, 3,
+    ])
+  })
+
+  it('sends one reminder a day however many times the run is re-run', async () => {
+    await makeLeaseWithInvoice({})
+    nextChargeBehaviour = 'decline'
+    await declineOn('2026-09-01')
+
+    await emitRetryReminders(facilityId, d('2026-09-01'), recordItem)
+    await emitRetryReminders(facilityId, d('2026-09-01'), recordItem)
+    await emitRetryReminders(facilityId, d('2026-09-01'), recordItem)
+
+    expect(
+      await prisma.domainEvent.count({ where: { facilityId, name: 'payment.retry_reminder' } }),
+    ).toBe(1)
+  })
+
+  it('never sends more than three even across a long catch-up', async () => {
+    // A catch-up walk over a fortnight must not send a fortnight of reminders.
+    await makeLeaseWithInvoice({})
+    nextChargeBehaviour = 'decline'
+    await declineOn('2026-09-01')
+
+    for (let day = 1; day <= 14; day++) {
+      await emitRetryReminders(facilityId, new Date(Date.UTC(2026, 8, day)), recordItem)
+    }
+
+    expect(
+      await prisma.domainEvent.count({ where: { facilityId, name: 'payment.retry_reminder' } }),
+    ).toBe(3)
+  })
+
+  it('stops reminding once the invoice is paid', async () => {
+    const { invoiceId } = await makeLeaseWithInvoice({})
+    nextChargeBehaviour = 'decline'
+    await declineOn('2026-09-01')
+    await emitRetryReminders(facilityId, d('2026-09-01'), recordItem)
+
+    await prisma.invoice.update({
+      where: { id: invoiceId },
+      data: { status: 'paid', amountPaidCents: 12_900 },
+    })
+    await emitRetryReminders(facilityId, d('2026-09-02'), recordItem)
+
+    expect(
+      await prisma.domainEvent.count({ where: { facilityId, name: 'payment.retry_reminder' } }),
+    ).toBe(1)
+  })
+
+  it('says nothing to a tenant whose card has not declined', async () => {
+    await makeLeaseWithInvoice({})
+    await runAutopay(facilityId, d('2026-09-01'), recordItem)
+    await emitRetryReminders(facilityId, d('2026-09-01'), recordItem)
+
+    expect(
+      await prisma.domainEvent.count({ where: { facilityId, name: 'payment.retry_reminder' } }),
+    ).toBe(0)
   })
 
   it('honours a facility that does not retry at all', async () => {

@@ -1,5 +1,6 @@
 import { prisma } from '../packages/db'
 import { expireCheckoutSessions } from '../apps/web/lib/checkout/session'
+import { expireReservations } from '../apps/web/lib/reservations/reserve'
 
 // Releases stale checkout locks BEFORE the suite runs.
 //
@@ -21,11 +22,36 @@ import { expireCheckoutSessions } from '../apps/web/lib/checkout/session'
 export default async function globalSetup(): Promise<void> {
   if (!process.env.DATABASE_URL) return
   try {
-    // Far enough ahead that every lock any previous run took has lapsed.
+    // Far enough ahead that every hold any previous run took has lapsed.
     const wellPastEveryLock = new Date(Date.now() + 24 * 60 * 60 * 1000)
+
     const { expired } = await expireCheckoutSessions(wellPastEveryLock)
     if (expired > 0) {
       console.info(`[e2e setup] released ${expired} stale checkout lock(s) from a previous run`)
+    }
+
+    // Reservations too, and scoped to the sandbox facility alone.
+    //
+    // The checkout release above was not enough on its own: a full run consumes
+    // roughly 52 of the sandbox's 60 units in checkout locks, so the handful of
+    // held reservations each run leaves behind — the specs cancel most but not
+    // all of theirs — took the facility to exactly zero within a couple of
+    // runs, and the reserve tests then failed with no unit to hold.
+    //
+    // Safe to expire every hold here: nothing in the suite reads a pre-seeded
+    // reservation (the reservation specs create and cancel their own), and any
+    // hold that exists when SETUP runs is by definition from a previous run.
+    // Scoped by slug so the demo facility the admin and portal specs assert
+    // against is never touched.
+    const sandbox = await prisma.facility.findUnique({
+      where: { slug: 'demo-e2e' },
+      select: { id: true },
+    })
+    if (sandbox) {
+      const { expired: holds } = await expireReservations(wellPastEveryLock, sandbox.id)
+      if (holds > 0) {
+        console.info(`[e2e setup] released ${holds} stale reservation hold(s) from a previous run`)
+      }
     }
   } finally {
     await prisma.$disconnect()

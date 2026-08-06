@@ -6,7 +6,7 @@ import { provisionAccessForLease } from '@/lib/access/provision'
 import { processCommsEvent } from '@/lib/comms/service'
 import { scanExpiringCards, scanExpiringProtectionProofs } from '@/lib/billing/scans'
 import { emitDueReminders, generateInvoices } from '@/lib/billing/invoices'
-import { runAutopay } from '@/lib/billing/autopay'
+import { emitRetryReminders, runAutopay } from '@/lib/billing/autopay'
 
 // Consumer and job registration. The machinery is B-006's; the things that use
 // it arrive with their own backlog items: reservation expiry (B-018, below),
@@ -46,10 +46,11 @@ export const CONSUMERS: readonly Consumer[] = [
       'delinquency.day_reached',
       'delinquency.stage_changed',
       'access.restored',
-      // B-043's scans. Subscribed here so B-050 and the D-17 notice are a rule
-      // and a template — data — rather than another edit to this list. Both
-      // resolve to a recipient already (Tenant and Lease), and an event with
-      // no rule yet is a no-op by design.
+      // B-043's scans and B-046's retry reminder. Subscribed here so B-050's
+      // notices are a rule and a template — data — rather than another edit to
+      // this list. All of them resolve to a recipient already (Tenant or
+      // Lease), and an event with no rule yet is a no-op by design.
+      'payment.retry_reminder',
       'payment_method.expiring',
       'protection.proof_expiring',
       'protection.auto_enrolled',
@@ -177,6 +178,10 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
     scope: 'per_facility',
     handler: async ({ facilityId, businessDate, recordItem }) => {
       await runAutopay(facilityId!, businessDate, recordItem)
+      // Same job: the reminder cadence is driven by the declines this run
+      // records, and splitting it into a second JobRun would make "did the
+      // tenant get told today" depend on which of two jobs ran first.
+      await emitRetryReminders(facilityId!, businessDate, recordItem)
     },
   },
   {

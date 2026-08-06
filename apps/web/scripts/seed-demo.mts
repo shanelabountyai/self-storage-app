@@ -634,6 +634,13 @@ async function main() {
   // reason that had nothing to do with the code. Houston keeps it out of the
   // 78704 search-ranking assertions, and it carries no lifecycle states, so
   // every unit is genuinely available.
+  //
+  // The count is headroom, not inventory realism. One full run takes about 52
+  // units in 30-minute checkout locks plus a handful of reservation holds —
+  // roughly 60, which is exactly what this used to have. With zero margin the
+  // suite passed or failed on which tests happened to finish first, and a
+  // handful of leaked holds pushed it over for good. 250 gives a full run four
+  // times the room it needs, so cleanup between runs stops being load-bearing.
   await seedFacility({
     slug: `${DEMO_PREFIX}e2e`,
     name: 'Demo — E2E Sandbox',
@@ -641,7 +648,7 @@ async function main() {
     postalCode: '77002',
     addressLine1: '900 Bagby Street',
     unitTypes: [
-      { name: '10x10 Test', widthFt: 10, lengthFt: 10, climate: true, driveUp: false, street: 14_900, web: 12_900, count: 60 },
+      { name: '10x10 Test', widthFt: 10, lengthFt: 10, climate: true, driveUp: false, street: 14_900, web: 12_900, count: 250 },
     ],
   })
 
