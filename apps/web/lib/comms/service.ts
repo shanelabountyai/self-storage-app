@@ -1,6 +1,7 @@
 import { type Prisma, prisma } from '@storage/db'
 import type { DomainEvent, MessageClassification, SuppressionReason } from '@storage/db'
 import { codeForLease } from '@/lib/access/provision'
+import { mintPayLink, payLinkUrl } from '@/lib/portal/pay-links'
 import { formatCents } from '@/lib/format'
 import {
   commsEnabled,
@@ -354,6 +355,25 @@ function mergeContextFor(recipient: Recipient): MergeContext {
 /// add their own entry here without touching the pipeline itself.
 type ContextExtender = (event: DomainEvent, recipient: Recipient) => Promise<MergeContext>
 
+/// B-051. A one-tap pay link for this message, or the portal login as a
+/// fallback.
+///
+/// Minted per event, so a payment made through it is attributable to the
+/// message that prompted it (CN-4). Falls back to `/portal/pay` — which needs a
+/// password — whenever there is no lease to scope a link to, rather than
+/// omitting the line and leaving a reminder with no way to act on it.
+async function payNowLink(recipient: Recipient, event: DomainEvent): Promise<string> {
+  const fallback = `${baseUrl()}/portal/pay`
+  if (!recipient.tenantId || !recipient.lease) return fallback
+
+  const link = await mintPayLink({
+    tenantId: recipient.tenantId,
+    leaseId: recipient.lease.id,
+    eventId: event.id,
+  })
+  return link ? payLinkUrl(link.token, baseUrl()) : fallback
+}
+
 /// Shared by both due-date reminders: the same figures, a different subject.
 const invoiceContext: ContextExtender = async (event, recipient) => {
   const invoice = await prisma.invoice.findUnique({
@@ -371,7 +391,7 @@ const invoiceContext: ContextExtender = async (event, recipient) => {
       day: 'numeric',
     }).format(invoice.dueDate),
     'invoice.amount': formatCents(invoice.totalCents - invoice.amountPaidCents),
-    'links.pay_now': `${baseUrl()}/portal/pay`,
+    'links.pay_now': await payNowLink(recipient, event),
   }
 }
 
@@ -464,7 +484,7 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
   // verbatim — Stripe's message is written for a developer, and "your card was
   // declined: do_not_honor" tells a tenant nothing they can act on. What they
   // need is the amount, the unit, and one link.
-  'payment.failed': async (event) => {
+  'payment.failed': async (event, recipient) => {
     const payload = (event.payload ?? {}) as { amountCents?: number; code?: string }
     const expired = payload.code === 'expired_card'
     return {
@@ -472,14 +492,16 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
       'payment.failure_line': expired
         ? 'The card we have on file has expired, so we could not take the payment.'
         : 'Your bank declined the payment. That is usually a temporary block or a limit, not anything wrong with your account here.',
+      // Updating a card genuinely needs the portal — it changes what autopay
+      // charges from then on, which is more than this link is scoped to grant.
       'links.update_card': `${baseUrl()}/portal/methods`,
-      'links.pay_now': `${baseUrl()}/portal/pay`,
+      'links.pay_now': await payNowLink(recipient, event),
     }
   },
 
   // D-29's daily reminder. Says which of the three it is and what happens next,
   // rather than repeating one sentence for three days.
-  'payment.retry_reminder': async (event) => {
+  'payment.retry_reminder': async (event, recipient) => {
     const payload = (event.payload ?? {}) as {
       outstandingCents?: number
       reminderNumber?: number
@@ -489,7 +511,7 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
     const total = payload.remindersTotal ?? 3
     return {
       'payment.amount': formatCents(payload.outstandingCents ?? 0),
-      'links.pay_now': `${baseUrl()}/portal/pay`,
+      'links.pay_now': await payNowLink(recipient, event),
       'links.update_card': `${baseUrl()}/portal/methods`,
       'payment.retry_line':
         number >= total

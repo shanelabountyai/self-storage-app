@@ -9,6 +9,7 @@ import { toAuditActor } from '@/lib/rbac/audit-actor'
 import type { Actor } from '@/lib/rbac/actor'
 import { recomputeUnitStatus } from '@/lib/admin/units'
 import { transitionGrant } from '@/lib/access/service'
+import { revokePayLinksForLease } from '@/lib/portal/pay-links'
 
 // PRD 02 US-14 (move-out) / PRD 03 US-2 / PRD 05 CN-8.
 
@@ -205,6 +206,11 @@ export async function completeMoveOut(
         moveOutReason: input.reason,
       },
     })
+
+    // CN-4: pay links are "revoked on move-out". In the same transaction as
+    // the lease ending, so a move-out that rolls back does not leave a tenant
+    // with links we have already killed.
+    await revokePayLinksForLease(lease.id, tx)
 
     // US-14's AC, in one line: a unit that goes back on sale before anyone
     // opened the door rents on Saturday with the last tenant's padlock still

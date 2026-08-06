@@ -118,6 +118,7 @@ describeDb('billing notices', () => {
   afterEach(async () => {
     sends.length = 0
     await prisma.message.deleteMany({ where: { facilityId } })
+    await prisma.payLink.deleteMany({ where: { leaseId } })
     await prisma.paymentAllocation.deleteMany({ where: { payment: { facilityId } } })
     await prisma.ledgerEntry.deleteMany({ where: { facilityId } })
     await prisma.payment.deleteMany({ where: { facilityId } })
@@ -160,6 +161,34 @@ describeDb('billing notices', () => {
         const undeclared = [...used].filter((field) => !declared.has(field))
         expect(undeclared, `${template.key} uses fields it does not declare`).toEqual([])
       }
+    })
+  })
+
+  describe('the pay-now link (B-051)', () => {
+    it('puts a real one-tap link in the reminder, not the password-gated portal', async () => {
+      const invoiceId = await makeInvoice()
+      await emit('invoice.due_soon', 'Invoice', invoiceId)
+
+      expect(sends[0].body).toMatch(/\/pay\/[A-Za-z0-9_-]{20,}/)
+      expect(sends[0].body).not.toContain('/portal/pay')
+
+      const link = await prisma.payLink.findFirstOrThrow({ where: { leaseId } })
+      expect(link.revokedAt).toBeNull()
+    })
+
+    it('keeps the update-card link on the portal, which genuinely needs a password', async () => {
+      // Changing the card autopay charges is more than this link is scoped to
+      // grant, so that one deliberately still asks someone to sign in.
+      const payment = await prisma.payment.create({
+        data: { facilityId, tenantId, amountCents: 12_900, method: 'card', status: 'failed' },
+      })
+      await emit('payment.failed', 'Payment', payment.id, {
+        amountCents: 12_900,
+        code: 'card_declined',
+      })
+
+      expect(sends[0].body).toContain('/portal/methods')
+      expect(sends[0].body).toMatch(/\/pay\/[A-Za-z0-9_-]{20,}/)
     })
   })
 
@@ -286,7 +315,8 @@ describeDb('billing notices', () => {
       expect(sends).toHaveLength(1)
       expect(sends[0].body).toContain('expired')
       expect(sends[0].body).toContain('/portal/methods')
-      expect(sends[0].body).toContain('/portal/pay')
+      // B-051 replaced the password-gated pay URL with a one-tap link.
+      expect(sends[0].body).toMatch(/\/pay\/[A-Za-z0-9_-]{20,}/)
       // Never the provider's own wording — it is written for a developer.
       expect(sends[0].body).not.toContain('expired_card')
     })

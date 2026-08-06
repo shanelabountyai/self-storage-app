@@ -1122,6 +1122,30 @@ Eight rules and eight templates, the two recipient resolvers billing events need
 
 ---
 
+### B-051 — Pay-now magic links ✅ `PENDING`
+
+The one-tap way to pay from a reminder, which is what B-050's `links.pay_now` was standing in for. Recorded as **D-30**, because what the link grants is the whole design and a later session must not "simplify" it into a portal session.
+
+**Decided (D-30): a pay link is not a session.** CN-4 asks for a link that authenticates a tenant "into the tenant portal's payment screen ... without a password", and the literal reading — mint a portal session — is the dangerous one. `/portal/*` reveals gate codes (PRD 03 SR-2), lets a tenant change their address of record, and lets them detach the card autopay runs on. These links travel in email: forwarded to a family member, sitting in a shared inbox, read over a shoulder.
+
+Scoping by a session flag would mean every portal page had to remember to check it — fail-**open**, and wrong the first time somebody adds a page. So the link is not a session at all: it grants exactly one route, `/pay/<token>`, for exactly one lease, and nothing else in the application knows the token exists. Every other route sees an anonymous visitor. The e2e suite asserts that directly — visiting a pay URL and then `/portal` still redirects to the login.
+
+The screen that falls out of that shows no gate code, no other unit, no contact details and no way to remove a card. That is the point rather than an omission. The deviation from CN-4's wording is deliberate and written at the top of `lib/portal/pay-links.ts`.
+
+**Decided: deliberately multi-use, unlike every `AuthToken` in this project.** Magic links are single-use with a 15-minute life; this is multi-use for seven days. CN-4 wants the balance "as of page load, not as of send", which only means something if the link can be re-opened — and a tenant who opens it, gets distracted, and comes back an hour later must not find a dead link, since that is the precise failure the item exists to remove. It is safe to be long-lived *because* it is not a session: the worst a stale one does is show a balance and offer to pay it. It is still 256 bits (CN-4 asks for ≥128), still stored only as a SHA-256, and still revoked on move-out — in the same transaction as the lease ending, so a rolled-back move-out does not kill links it should not have.
+
+**Decided: the update-card link stays password-gated.** The failed-payment notice carries both a pay link and an update-card link, and only the first is one-tap. Changing the card autopay charges from then on is more than this token is scoped to grant, so that one asks the tenant to sign in. Asserted in a test, because it is the kind of inconsistency a later "make it all one-tap" tidy-up would remove without noticing what it was for.
+
+**Decided: attribution is recorded when the attempt is raised, not when it succeeds.** "This link produced an attempt" and "this link produced money" are different questions and PRD 05 §7 wants both, so `paymentId` is written as the PaymentIntent is created. The link carries the `eventId` rather than a message id, because it is minted while the body is being rendered and the `Message` row does not exist yet — the send log joins on `Message.eventId`.
+
+**Decided: one live link per event, not per lease.** One event can fire several notification rules and those are one message from the tenant's point of view, so they share a link; two different events get different links, because a shared one could not say which message earned the payment. Re-minting for the same event revokes the previous row rather than leaving two live links for one message — the plaintext is unrecoverable by design, so a re-render cannot hand back the original.
+
+**Verified:** 1062 unit/DB tests (18 new — 256 bits of entropy and the plaintext absent from every stored row, uniqueness across mints, the seven-day default, a live link accepted, the same link accepted three times running, click counting with `firstClickedAt` set once, expired and revoked and never-existed all refused identically, a lease that ended refused even with nothing revoked, revocation reporting its count and being idempotent, payment attribution with the event id, one live link per event, different links per event; plus two in the comms suite asserting a real `/pay/<token>` reaches the reminder body while the update-card link stays on the portal). E2e: 328 passing, including that a pay URL never opens the portal and that the expired-link landing is axe-clean. Typecheck, lint, build clean. One migration (`20260806090000_pay_link`).
+
+**Left behind.** **No e2e drives a valid token end to end** — minting one needs a real lease with a balance, and the lifecycle fixtures are shared with the admin and portal specs, which is the class of mistake B-039 and B-041 both recorded. The valid path is covered against disposable rows instead; what the browser tests is the boundary, which is the part that is about security rather than arithmetic. **Expiry is a constant, not a per-facility setting** — CN-4 says "configurable (default 7 days)" and 7 is hardcoded in `PAY_LINK_TTL_DAYS`; there is no facility column and no UI, the same posture as `prorateOnMoveOut` and friends. **No staff-facing revocation** beyond move-out: nothing lets a manager kill a link they know was forwarded, and there is no screen showing which links are live. **The attribution is not reported anywhere** — the data is captured (clicks, first click, payment) but PRD 05 §7's ROI figure needs the delivery dashboard, which is **B-075**. **Rate limiting**: `/pay/<token>` has none of its own; a 256-bit token is not brute-forceable, but a flood of guesses still costs a database lookup each, and the login throttle does not cover this route.
+
+---
+
 ---
 
 ## Feature PRDs added mid-build

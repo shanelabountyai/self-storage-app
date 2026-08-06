@@ -633,6 +633,7 @@ model Tenant {
   version                      Int       @default(0)
 
   leases           Lease[]
+  payLinks         PayLink[]
   addresses        TenantAddress[]
   notes            TenantNote[]
   payments         Payment[]
@@ -766,6 +767,7 @@ model Lease {
   notices                Notice[]
   rateChanges            LeaseRateChange[]
   authorizedAccessPeople AuthorizedAccessPerson[]
+  payLinks               PayLink[]
 
   @@index([facilityId, status])
   @@index([tenantId])
@@ -895,6 +897,7 @@ model Payment {
   refunds        Payment[]           @relation("PaymentRefund")
   allocations    PaymentAllocation[]
   ledgerEntries  LedgerEntry[]
+  payLink        PayLink?
 
   @@unique([facilityId, receiptNumber])
   @@index([facilityId, receivedAt])
@@ -1978,6 +1981,50 @@ model AuthToken {
 
 /// Feeds the login throttle. Rows are written for successes too, so a
 /// successful sign-in can clear the counter for that identity.
+/// PRD 05 CN-4 / FR-12. A one-tap way to pay from a reminder, without a
+/// password.
+///
+/// Deliberately NOT an `AuthToken`. Those are single-use, short-lived and grant
+/// a full session; this is multi-use for a week, revocable, tracked for
+/// attribution, and grants access to exactly one screen for exactly one lease.
+/// Overloading the auth token would have meant either weakening it for every
+/// other purpose or carrying four nullable columns on it that only one purpose
+/// reads.
+///
+/// The plaintext token is never stored — only its SHA-256, the same discipline
+/// as `AuthToken.tokenHash`. A leaked database gives an attacker no working
+/// links.
+model PayLink {
+  id             String    @id @default(cuid())
+  tokenHash      String    @unique
+  tenantId       String
+  leaseId        String
+  /// The event that produced the message carrying this link. CN-4's
+  /// attribution: "payment completed via a deep link is attributed to the
+  /// originating message in the send log". Joined to `Message.eventId` rather
+  /// than holding a message id, because the link is minted while the body is
+  /// being rendered and the Message row does not exist yet.
+  eventId        String?
+  expiresAt      DateTime  @db.Timestamptz(6)
+  /// Set on move-out, and by any later staff action that needs to kill a link.
+  revokedAt      DateTime? @db.Timestamptz(6)
+  firstClickedAt DateTime? @db.Timestamptz(6)
+  lastClickedAt  DateTime? @db.Timestamptz(6)
+  clickCount     Int       @default(0)
+  /// The payment made through this link. The other half of CN-4's attribution,
+  /// and the number that proves the module earns its keep (PRD 05 §7).
+  paymentId      String?   @unique
+  createdAt      DateTime  @default(now()) @db.Timestamptz(6)
+
+  tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  lease   Lease    @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+  payment Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+
+  @@index([leaseId, expiresAt])
+  @@index([eventId])
+  @@map("pay_link")
+}
+
 model LoginAttempt {
   id          String       @id @default(cuid())
   email       String
