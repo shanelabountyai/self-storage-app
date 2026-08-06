@@ -1058,7 +1058,7 @@ The nightly `billing.autopay` job, the settlement that makes it safe, and two la
 
 ---
 
-### B-046 — Failed-payment retry ✅ `PENDING`
+### B-046 — Failed-payment retry ✅ `58f8b99`
 
 US-20's schedule, the card-expired short-circuit, the failed-payments queue as a `Task` view, and the `daysPastDue` consumer wiring the backlog assigned here. No new decision number — the anchoring rule this turns on was already settled as **D-25**, and this item is the second consumer of it.
 
