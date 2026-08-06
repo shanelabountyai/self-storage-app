@@ -4,6 +4,7 @@ import { expireCheckoutSessions } from '@/lib/checkout/session'
 import { drainGateCommands } from '@/lib/access/service'
 import { provisionAccessForLease } from '@/lib/access/provision'
 import { processCommsEvent } from '@/lib/comms/service'
+import { scanExpiringCards, scanExpiringProtectionProofs } from '@/lib/billing/scans'
 
 // Consumer and job registration. The machinery is B-006's; the things that use
 // it arrive with their own backlog items: reservation expiry (B-018, below),
@@ -43,6 +44,13 @@ export const CONSUMERS: readonly Consumer[] = [
       'delinquency.day_reached',
       'delinquency.stage_changed',
       'access.restored',
+      // B-043's scans. Subscribed here so B-050 and the D-17 notice are a rule
+      // and a template — data — rather than another edit to this list. Both
+      // resolve to a recipient already (Tenant and Lease), and an event with
+      // no rule yet is a no-op by design.
+      'payment_method.expiring',
+      'protection.proof_expiring',
+      'protection.auto_enrolled',
     ],
     handle: async ({ event }) => {
       await processCommsEvent(event)
@@ -127,6 +135,30 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
         ok: true,
         message: `expired ${expired} checkout session${expired === 1 ? '' : 's'}`,
       })
+    },
+  },
+  {
+    // B-043 / PRD 05 CN-10a. Cards expiring within 30 days, retriggered at 7.
+    //
+    // Per-facility and at 2am local so it lands after the midnight sweeps and
+    // well before anyone opens the office. Two separate jobs rather than one
+    // "pre-emptive scans" job, because a JobRun row per scan is what makes the
+    // Billing Runs screen able to say which one failed.
+    name: 'billing.scan-expiring-cards',
+    localHour: 2,
+    scope: 'per_facility',
+    handler: async ({ facilityId, businessDate, recordItem }) => {
+      await scanExpiringCards(facilityId!, businessDate, recordItem)
+    },
+  },
+  {
+    // B-043 / PRD 02 US-44, D-17. Proof of insurance expiring within 30 days,
+    // and enrolment into the facility's default tier once it lapses.
+    name: 'billing.scan-protection-proofs',
+    localHour: 2,
+    scope: 'per_facility',
+    handler: async ({ facilityId, businessDate, recordItem }) => {
+      await scanExpiringProtectionProofs(facilityId!, businessDate, recordItem)
     },
   },
 ]

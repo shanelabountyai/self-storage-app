@@ -32,6 +32,32 @@ export function businessDateFor(instant: Date, timezone: string): Date {
   return new Date(Date.UTC(year, month - 1, day))
 }
 
+/// Whole days between two business dates (both UTC-midnight, as
+/// `businessDateFor` returns). Exact integer arithmetic, not a duration —
+/// business dates carry no time component and no offset, so there is no DST
+/// hour to lose.
+export function daysBetween(from: Date, to: Date): number {
+  return Math.round((to.getTime() - from.getTime()) / 86_400_000)
+}
+
+/// Which reminder threshold a countdown has reached, or null if none has.
+///
+/// Given thresholds in days (any order), returns the SMALLEST one that
+/// `daysUntil` has fallen to or below — so a card 20 days out is at the 30-day
+/// stage, one 5 days out is at the 7-day stage, and one already expired stays
+/// at 7 rather than falling off the end. Callers dedupe on the returned stage,
+/// which is what stops a "within 30 days" scan from re-sending every night for
+/// a month (PRD 05 CN-10a: notice at 30, retrigger at 7 — two sends, not
+/// thirty).
+export function reminderStage(daysUntil: number, thresholds: readonly number[]): number | null {
+  let stage: number | null = null
+  for (const threshold of thresholds) {
+    if (daysUntil > threshold) continue
+    if (stage === null || threshold < stage) stage = threshold
+  }
+  return stage
+}
+
 export type SchedulableFacility = { id: string; timezone: string }
 
 /// Facilities whose local time is currently the target hour. Called once per

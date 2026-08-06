@@ -366,6 +366,20 @@ model Facility {
   /// A residual balance at or below this can be written off to close the
   /// lease; anything above needs a manager (US-14's own AC).
   writeOffThresholdCents Int         @default(1000)
+  /// D-17. What happens when a tenant's proof of insurance lapses: enrol the
+  /// lease into `defaultProtectionTier`, or only raise a staff task.
+  ///
+  /// Defaults to **false** deliberately. D-17 chose auto-enrolment as the
+  /// behaviour and it is built — but the same decision records that it charges
+  /// a tenant for a term the lease may not have captured, and "warrants an
+  /// attorney pass before it runs against a real tenant". A default of true
+  /// would start charging the moment a facility is seeded; false means the
+  /// switch is thrown deliberately, per facility, once that pass is done.
+  autoEnrolProtectionOnLapse Boolean @default(false)
+  /// The `ProtectionPlan.tier` a lapsed waiver enrols into. Null means no tier
+  /// has been chosen, and the lapse raises a task rather than a charge even
+  /// when the switch above is on.
+  defaultProtectionTier String?
   createdAt           DateTime       @default(now()) @db.Timestamptz(6)
   updatedAt           DateTime       @updatedAt @db.Timestamptz(6)
 

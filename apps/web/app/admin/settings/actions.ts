@@ -318,15 +318,42 @@ export async function setProtectionPolicyAction(
   requirePermission(actor, 'facility:settings', facilityId)
 
   const required = formData.get('protectionRequired') === 'yes'
+  // D-17's lapse policy rides the same form: both answer "what cover does this
+  // facility insist on", and splitting them into two saves would let a facility
+  // switch auto-enrolment on with no tier chosen and never see the two settings
+  // side by side.
+  const autoEnrol = formData.get('autoEnrolProtectionOnLapse') === 'yes'
+  const tierInput = String(formData.get('defaultProtectionTier') ?? '').trim()
+  const defaultProtectionTier = tierInput === '' ? null : tierInput
+
+  if (autoEnrol && !defaultProtectionTier) {
+    return {
+      status: 'error',
+      message: 'Choose the tier a lapsed proof enrols into before turning auto-enrolment on.',
+      fieldErrors: { defaultProtectionTier: 'Pick a tier.' },
+    }
+  }
+
   try {
-    await prisma.facility.update({ where: { id: facilityId }, data: { protectionRequired: required } })
+    await prisma.facility.update({
+      where: { id: facilityId },
+      data: {
+        protectionRequired: required,
+        autoEnrolProtectionOnLapse: autoEnrol,
+        defaultProtectionTier,
+      },
+    })
     await recordAudit({
       actor: toAuditActor(actor),
       facilityId,
       action: 'facility.settings_updated',
       entityType: 'Facility',
       entityId: facilityId,
-      context: { protectionRequired: required },
+      context: {
+        protectionRequired: required,
+        autoEnrolProtectionOnLapse: autoEnrol,
+        defaultProtectionTier,
+      },
     })
   } catch (error) {
     return asFormError(error, 'Could not save the policy.')
@@ -334,8 +361,14 @@ export async function setProtectionPolicyAction(
 
   revalidatePath('/admin/settings')
   return success(
-    required
-      ? 'Protection is now required at this facility — a tenant may still show their own cover.'
-      : 'Protection is now optional at this facility.',
+    `${
+      required
+        ? 'Protection is now required at this facility — a tenant may still show their own cover.'
+        : 'Protection is now optional at this facility.'
+    } ${
+      autoEnrol
+        ? `A lapsed proof of insurance now enrols the lease in ${defaultProtectionTier}.`
+        : 'A lapsed proof of insurance raises a staff task and charges nothing.'
+    }`,
   )
 }

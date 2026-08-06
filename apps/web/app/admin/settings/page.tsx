@@ -375,8 +375,38 @@ export default async function AdminSettingsPage() {
             <option value="yes">Required — a plan, or proof of the tenant&apos;s own cover</option>
             <option value="no">Optional</option>
           </Field>
+          {/* D-17. Off by default and deliberately worded as what it does to
+              the tenant's bill, not as a toggle name. */}
+          <Field
+            name="autoEnrolProtectionOnLapse"
+            label="When a tenant's proof of insurance lapses"
+            as="select"
+            defaultValue={facility.autoEnrolProtectionOnLapse ? 'yes' : 'no'}
+          >
+            <option value="no">Raise a staff task — charge nothing</option>
+            <option value="yes">Enrol the lease in the default tier and charge for it</option>
+          </Field>
+          <Field
+            name="defaultProtectionTier"
+            label="Tier a lapsed proof enrols into"
+            as="select"
+            defaultValue={facility.defaultProtectionTier ?? ''}
+          >
+            <option value="">None chosen</option>
+            {plans.map((plan) => (
+              <option key={plan.tier} value={plan.tier}>
+                {plan.name} — {formatCents(plan.premiumCents)}/mo
+              </option>
+            ))}
+          </Field>
           <Button type="submit">Save policy</Button>
         </AdminForm>
+        <p className="text-muted-foreground max-w-prose text-xs text-pretty">
+          Enrolling on lapse charges a tenant for cover their lease may not have explicitly agreed
+          to. It is off until someone turns it on, per facility, and the wording of the notice and
+          the lease clause behind it need a lawyer&apos;s eyes before it runs against a real tenant
+          (D-17). Either way the tenant is notified, and the lapse raises a task for staff.
+        </p>
 
         {plans.length > 0 && (
           <div className="overflow-x-auto">

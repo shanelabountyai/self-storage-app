@@ -49,6 +49,20 @@ export const TASK_TYPES = [
     requiredProofFields: ['note'],
     sensitive: false,
   },
+  {
+    // PRD 02 US-44 / D-17. A tenant's own cover ran out and no replacement
+    // declaration page arrived. Raised whether or not the facility auto-enrols
+    // — with the switch off this task IS the whole mechanism, and with it on
+    // somebody still has to know a tenant just started being charged.
+    //
+    // Sensitive: whether a unit was covered on the day it flooded is exactly
+    // the question a coverage argument turns on, so who saw this and what they
+    // did about it belongs in the audit trail, not only on the task row.
+    type: 'insurance_proof_lapsed',
+    label: 'Proof of insurance lapsed — no current cover on file',
+    requiredProofFields: ['note'],
+    sensitive: true,
+  },
 ] as const satisfies readonly TaskTypeSpec[]
 
 export type TaskType = (typeof TASK_TYPES)[number]['type']

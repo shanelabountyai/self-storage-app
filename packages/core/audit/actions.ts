@@ -33,6 +33,12 @@ export const AUDIT_ACTIONS = [
   // Leases and units
   { action: 'lease.edited', label: 'Lease edited', requiresReason: false },
   { action: 'lease.moved_out', label: 'Move-out completed', requiresReason: false },
+  /// D-17. The system, not a person, put a recurring charge on a lease because
+  /// the tenant's own cover lapsed. `requiresReason: false` because the reason
+  /// is structural rather than discretionary — the entry carries the waiver,
+  /// its expiry date and the premium instead, which is what a tenant disputing
+  /// the charge will actually ask to see.
+  { action: 'lease.protection_auto_enrolled', label: 'Protection auto-enrolled on lapsed proof', requiresReason: false },
   { action: 'lease.move_out_overridden', label: 'Move-out charges overridden', requiresReason: true },
   { action: 'unit.created', label: 'Unit created', requiresReason: false },
   { action: 'unit.updated', label: 'Unit updated', requiresReason: false },

@@ -40,6 +40,20 @@ export const EVENT_NAMES = [
   /// Emitted from the Stripe reconciler for full and partial refunds alike —
   /// the payload says which (B-019). Refund *authorisation* is B-048.
   'payment.refunded',
+  /// PRD 05 CN-10a (B-043's scan, B-050's notice). The tenant's default card
+  /// runs out soon. Fired at 30 days and again at 7 — the payload's `stage`
+  /// says which, and the payment-method id in the payload is what makes
+  /// "suppressed on replacement" free: a new card is a new id, and a new id
+  /// that is not expiring is never scanned into a notice at all.
+  'payment_method.expiring',
+
+  // Protection / proof of insurance (PRD 02 US-44, D-17)
+  /// A recorded proof-of-insurance waiver runs out within 30 days.
+  'protection.proof_expiring',
+  /// D-17: the proof lapsed without replacement and the lease was enrolled
+  /// into the facility's default tier. The payload carries the plan and the
+  /// premium, because the tenant must be told what they are now paying.
+  'protection.auto_enrolled',
 
   // Delinquency (PRD 02 FR-5). The dunning ladder is driven by these, never by
   // a comms-side calendar (PRD 05 CN-3).

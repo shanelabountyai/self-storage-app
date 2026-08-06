@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
   businessDateFor,
+  daysBetween,
   facilitiesDueAt,
   localDayBounds,
   localParts,
   missedBusinessDates,
+  reminderStage,
 } from '../packages/core/jobs/schedule'
 
 const CHICAGO = 'America/Chicago'
@@ -176,5 +178,54 @@ describe('catch-up after downtime', () => {
       30,
     )
     expect(dates).toHaveLength(30)
+  })
+})
+
+// B-043's pre-emptive scans (PRD 05 CN-10a, D-17). The scans themselves are
+// DB-bound; this is the day-maths they both turn on.
+
+describe('daysBetween', () => {
+  const d = (iso: string) => new Date(`${iso}T00:00:00.000Z`)
+
+  it('counts whole days forwards and backwards', () => {
+    expect(daysBetween(d('2026-08-05'), d('2026-09-04'))).toBe(30)
+    expect(daysBetween(d('2026-08-05'), d('2026-08-05'))).toBe(0)
+    expect(daysBetween(d('2026-08-05'), d('2026-08-04'))).toBe(-1)
+  })
+
+  it('is unaffected by a DST transition in between', () => {
+    // US DST ends 2026-11-01. Business dates carry no offset, so the count is
+    // exactly the number of calendar days regardless.
+    expect(daysBetween(d('2026-10-25'), d('2026-11-08'))).toBe(14)
+  })
+})
+
+describe('reminderStage', () => {
+  const STAGES = [30, 7]
+
+  it('reports nothing before the first threshold', () => {
+    expect(reminderStage(31, STAGES)).toBeNull()
+  })
+
+  it('reports the 30-day stage on the day it is reached and while it holds', () => {
+    expect(reminderStage(30, STAGES)).toBe(30)
+    expect(reminderStage(20, STAGES)).toBe(30)
+    expect(reminderStage(8, STAGES)).toBe(30)
+  })
+
+  it('drops to the 7-day stage once the countdown crosses it', () => {
+    expect(reminderStage(7, STAGES)).toBe(7)
+    expect(reminderStage(1, STAGES)).toBe(7)
+  })
+
+  it('stays at the last stage once the date has passed rather than falling off the end', () => {
+    // A card that already expired is not suddenly un-notified; the caller's
+    // dedupe is what stops it re-sending.
+    expect(reminderStage(0, STAGES)).toBe(7)
+    expect(reminderStage(-40, STAGES)).toBe(7)
+  })
+
+  it('does not care what order the thresholds are given in', () => {
+    expect(reminderStage(20, [7, 30])).toBe(30)
   })
 })
