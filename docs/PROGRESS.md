@@ -970,7 +970,7 @@ The shared `metrics` module, the portfolio dashboard, the rent roll (which doubl
 
 ---
 
-### B-043 — Billing scheduler ✅ completed `PENDING`
+### B-043 — Billing scheduler ✅ completed `8e615a7`
 
 The three parts left open above: the Billing Runs screen, the card-expiring scan, and the proof-of-insurance scan with D-17's enrolment on lapse. Recorded as **D-26**, because how the last of those *ships* is a decision, not an implementation detail.
 
