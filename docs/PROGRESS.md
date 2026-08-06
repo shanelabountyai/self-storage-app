@@ -1192,7 +1192,7 @@ Back on backlog order after the B-050/B-051 detour. The ladder, the wider fee ca
 
 ---
 
-### B-096 — Lease holds ✅ `PENDING`
+### B-096 — Lease holds ✅ `a8b8ec1`
 
 Built ahead of B-098, which needs it: the day-6 access suspension must never fire on a servicemember or a debtor under a stay, and there was nothing to ask. Recorded as **D-31** for the one effect added beyond US-42's list.
 
