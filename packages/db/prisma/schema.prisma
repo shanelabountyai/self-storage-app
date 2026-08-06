@@ -377,6 +377,16 @@ model Facility {
   /// anniversary billing there is no partial first period to prorate, because
   /// the period starts on the day the tenant moved in.
   prorateOnMoveIn     Boolean        @default(true)
+  /// US-20's retry schedule: days AFTER the invoice's original due date on
+  /// which a failed autopay is tried again. The default is US-20's own
+  /// +1/+3/+5, which with the attempt on the due date itself is four tries.
+  /// Empty means one attempt and no retries.
+  ///
+  /// Offsets from the ORIGINAL due date, never from the last attempt — the
+  /// same anchoring rule `daysPastDue` uses (D-25), and for the same reason:
+  /// measuring from the previous try stretches the schedule further on every
+  /// decline instead of converging.
+  paymentRetryDays    Int[]          @default([1, 3, 5])
   /// Days of notice the lease requires before a move-out. 0 means none.
   moveOutNoticeDays   Int            @default(10)
   /// A residual balance at or below this can be written off to close the
@@ -853,6 +863,13 @@ model Payment {
   checkNumber           String?
   receivedAt            DateTime      @default(now()) @db.Timestamptz(6)
   failureReason         String?
+  /// The provider's machine-readable decline code, e.g. `expired_card`. Kept
+  /// beside the human message because they answer different questions: the
+  /// message is what a manager reads, and this is what US-20's retry schedule
+  /// branches on. A card that has expired must not be retried three more
+  /// times, and deciding that by matching on prose would be a bug waiting for
+  /// Stripe to reword something.
+  failureCode           String?
   /// Set on a refund payment, pointing at the payment being refunded.
   refundOfPaymentId     String?
   /// US-32 attribution. The staff member who physically took the money, read

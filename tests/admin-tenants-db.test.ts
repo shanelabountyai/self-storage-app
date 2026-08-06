@@ -111,7 +111,13 @@ describeDb('admin tenant profile', () => {
       data: {
         email: `admin-tenants-${suffix}@example.com`,
         firstName: 'Ada',
-        lastName: 'Renter',
+        // Suffixed, because `searchTenants` caps at 25 results ordered by name
+        // and twenty other DB suites create a tenant called "Ada Renter". The
+        // full-name assertions below are about multi-word search working at
+        // all; asserting this tenant ranks in the top 25 of a name two dozen
+        // fixtures share is asserting something the code does not promise, and
+        // it started failing the moment B-046 added three more suites.
+        lastName: `Renter-${suffix}`,
         phone: '512-555-0177',
       },
     })
@@ -159,7 +165,7 @@ describeDb('admin tenant profile', () => {
   describe('searchTenants', () => {
     it('matches by name, email, phone, and unit number', async () => {
       const owner = ownerAllFacilities
-      expect((await searchTenants(owner, 'Ada Renter')).map((r) => r.tenantId)).toContain(tenantId)
+      expect((await searchTenants(owner, `Ada Renter-${suffix}`)).map((r) => r.tenantId)).toContain(tenantId)
       expect((await searchTenants(owner, `admin-tenants-${suffix}`)).map((r) => r.tenantId)).toContain(tenantId)
       expect((await searchTenants(owner, '512-555-0177')).map((r) => r.tenantId)).toContain(tenantId)
       expect((await searchTenants(owner, 'A-9')).map((r) => r.tenantId)).toContain(tenantId)
@@ -167,12 +173,12 @@ describeDb('admin tenant profile', () => {
 
     it('never surfaces a tenant outside the searcher’s facilities', async () => {
       // The whole point of scoping search through the lease, not the tenant.
-      const results = await searchTenants(managerAt(facilityBId), 'Ada Renter')
+      const results = await searchTenants(managerAt(facilityBId), `Ada Renter-${suffix}`)
       expect(results.map((r) => r.tenantId)).not.toContain(tenantId)
     })
 
     it('finds the tenant for a manager actually assigned to their facility', async () => {
-      const results = await searchTenants(managerAt(facilityAId), 'Ada Renter')
+      const results = await searchTenants(managerAt(facilityAId), `Ada Renter-${suffix}`)
       expect(results.map((r) => r.tenantId)).toContain(tenantId)
     })
 

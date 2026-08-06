@@ -60,6 +60,14 @@ export type ChargeIntent = {
   deduplicated: boolean
 }
 
+/// Stripe's machine-readable decline code, when the error carries one.
+function declineCodeOf(error: unknown): string | null {
+  if (error && typeof error === 'object' && 'code' in error && typeof error.code === 'string') {
+    return error.code
+  }
+  return null
+}
+
 /// Creates a PaymentIntent and the local `pending` Payment row that mirrors it.
 ///
 /// The Payment row is written FIRST, in the same reference namespace as the
@@ -140,6 +148,8 @@ export async function createChargeIntent(input: ChargeIntentInput): Promise<Char
       data: {
         status: 'failed',
         failureReason: error instanceof Error ? error.message.slice(0, 500) : 'stripe_error',
+        // US-20's short-circuit reads this, not the prose above.
+        failureCode: declineCodeOf(error),
       },
     })
     throw error

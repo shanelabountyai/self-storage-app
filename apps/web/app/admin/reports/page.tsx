@@ -12,6 +12,16 @@ export const metadata = { title: 'Reports' }
 // count comes from @storage/core/metrics via lib/admin/reports.ts (§4.11:
 // "No screen, tile, or export computes any of these inline").
 
+// US-39.4's buckets, in the order the PRD lists them. Labels say "days" once,
+// in the header, rather than repeating it in five column titles.
+const AR_BUCKET_LABELS = [
+  ['d0to10', '0–10'],
+  ['d11to30', '11–30'],
+  ['d31to60', '31–60'],
+  ['d61to90', '61–90'],
+  ['over90', 'Over 90'],
+] as const
+
 function percent(ratio: number): string {
   return `${(ratio * 100).toFixed(1)}%`
 }
@@ -185,33 +195,55 @@ export default async function ReportsPage({
 
       <section aria-labelledby="ar-heading" className="flex flex-col gap-3">
         <h2 id="ar-heading" className="font-medium">
-          Outstanding balances
+          Outstanding balances by age
         </h2>
-        <table className="w-full text-sm">
-          <caption className="sr-only">Outstanding balances per facility</caption>
-          <thead>
-            <tr className="border-b text-left">
-              <th scope="col" className="py-2 font-medium">Facility</th>
-              <th scope="col" className="py-2 text-right font-medium">Total outstanding</th>
-            </tr>
-          </thead>
-          <tbody>
-            {delinquency.rows.map((row) => (
-              <tr key={row.facilityId} className="border-b">
-                <td className="py-2">{row.facilityName}</td>
-                <td className="py-2 text-right tabular-nums">{formatCents(row.aging.totalCents)}</td>
+        {/* Wide table: scrolls inside its own container rather than pushing the
+            page sideways. */}
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <caption className="sr-only">
+              Outstanding balances per facility, aged into 0–10, 11–30, 31–60, 61–90 and over-90-day
+              buckets
+            </caption>
+            <thead>
+              <tr className="border-b text-left">
+                <th scope="col" className="py-2 font-medium">Facility</th>
+                {AR_BUCKET_LABELS.map(([key, label]) => (
+                  <th key={key} scope="col" className="py-2 text-right font-medium">
+                    {label}
+                  </th>
+                ))}
+                <th scope="col" className="py-2 text-right font-medium">Total</th>
               </tr>
-            ))}
-            <tr className="font-medium">
-              <td className="py-2">All facilities</td>
-              <td className="py-2 text-right tabular-nums">{formatCents(delinquency.total.totalCents)}</td>
-            </tr>
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {delinquency.rows.map((row) => (
+                <tr key={row.facilityId} className="border-b">
+                  <td className="py-2">{row.facilityName}</td>
+                  {AR_BUCKET_LABELS.map(([key]) => (
+                    <td key={key} className="py-2 text-right tabular-nums">
+                      {formatCents(row.aging[key])}
+                    </td>
+                  ))}
+                  <td className="py-2 text-right tabular-nums">{formatCents(row.aging.totalCents)}</td>
+                </tr>
+              ))}
+              <tr className="font-medium">
+                <td className="py-2">All facilities</td>
+                {AR_BUCKET_LABELS.map(([key]) => (
+                  <td key={key} className="py-2 text-right tabular-nums">
+                    {formatCents(delinquency.total[key])}
+                  </td>
+                ))}
+                <td className="py-2 text-right tabular-nums">{formatCents(delinquency.total.totalCents)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
         <p className="text-muted-foreground text-sm text-pretty">
-          Ageing these balances into 0–10 / 11–30 / 31–60 / 61–90 / 90+ buckets needs invoices with
-          due dates, which the billing engine hasn&apos;t built yet. The totals above are real; the
-          buckets are deliberately not shown rather than shown as all-current.
+          Days past due are counted from the oldest unpaid invoice&apos;s original due date — not
+          from the last card retry, so a lease that has declined several times keeps ageing instead
+          of resetting to current.
         </p>
       </section>
     </div>

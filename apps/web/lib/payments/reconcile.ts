@@ -2,6 +2,7 @@ import type Stripe from 'stripe'
 import { type Prisma, prisma } from '@storage/db'
 import { emitEvent } from '@storage/core/events'
 import { provisionMoveIn, requestDownstream } from '@/lib/checkout/provision'
+import { cancelOpenTask } from '@/lib/admin/tasks'
 
 /// The checkout session a PaymentIntent belongs to, from the reference B-025
 /// set when it created the intent (`checkout:<sessionId>`).
@@ -159,13 +160,20 @@ async function settleNamedInvoice(
   })
   const paid = allocations._sum.amountCents ?? 0
 
+  const settled = paid >= invoice.totalCents
   await tx.invoice.update({
     where: { id: invoice.id },
     data: {
       amountPaidCents: paid,
-      status: paid >= invoice.totalCents ? 'paid' : paid > 0 ? 'partially_paid' : 'open',
+      status: settled ? 'paid' : paid > 0 ? 'partially_paid' : 'open',
     },
   })
+
+  // B-046. The failed-payment task exists because autopay gave up on this
+  // invoice; the invoice being paid is exactly the thing that resolves it, and
+  // leaving it open would have staff chasing a tenant who has already paid.
+  // Withdrawn rather than completed — nobody did the work, the reason went away.
+  if (settled) await cancelOpenTask('failed_payment', invoice.id, tx)
 }
 
 /// Applies one Stripe event to our records. Assumes the caller has already
@@ -235,6 +243,8 @@ export async function applyStripeEvent(event: Stripe.Event): Promise<void> {
             // Stripe's decline message, kept verbatim. The dunning ladder and
             // the failed-payment queue (B-046) both need to tell a manager why.
             failureReason: intent.last_payment_error?.message ?? 'declined',
+            // B-046's retry schedule branches on the code, never the message.
+            failureCode: intent.last_payment_error?.code ?? null,
           },
         })
         await emitEvent(

@@ -3,7 +3,8 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 import { prisma } from '../packages/db'
 import { applyStripeEvent } from '../apps/web/lib/payments/reconcile'
 
-// B-045 / PRD 02 US-19. The autopay run and the settlement it depends on.
+// B-045 / PRD 02 US-19, and B-046 / US-20's retry schedule. The autopay run,
+// the settlement it depends on, and when it stops trying.
 //
 // Two halves, tested differently:
 //
@@ -23,6 +24,7 @@ const suffix = randomUUID().slice(0, 8)
 
 const charges: { reference: string; amountCents: number; invoiceId?: string }[] = []
 let nextChargeBehaviour: 'succeed' | 'decline' | 'deduplicate' = 'succeed'
+let nextDeclineCode = 'card_declined'
 
 // Mocked at the module the run imports, so the run's own logic — which invoice
 // it picks, what it skips, how it reacts to a decline — is what is under test.
@@ -31,7 +33,7 @@ vi.mock('../apps/web/lib/payments/intents', () => ({
     charges.push({ reference: input.reference, amountCents: input.amountCents, invoiceId: input.invoiceId })
     if (nextChargeBehaviour === 'decline') {
       // Shaped like a Stripe card error: a `code` the retry schedule reads.
-      const error = Object.assign(new Error('Your card was declined.'), { code: 'card_declined' })
+      const error = Object.assign(new Error('Your card was declined.'), { code: nextDeclineCode })
       // The real function marks its own row failed before rethrowing, and the
       // run finds that row through the allocation — so the mock has to leave
       // the same evidence behind or it would be testing a fiction.
@@ -43,6 +45,7 @@ vi.mock('../apps/web/lib/payments/intents', () => ({
           method: 'card',
           status: 'failed',
           failureReason: 'Your card was declined.',
+          failureCode: nextDeclineCode,
         },
       })
       if (input.invoiceId) {
@@ -189,6 +192,8 @@ describeDb('autopay', () => {
     collected.length = 0
     charges.length = 0
     nextChargeBehaviour = 'succeed'
+    nextDeclineCode = 'card_declined'
+    await prisma.task.deleteMany({ where: { facilityId } })
     await prisma.paymentAllocation.deleteMany({ where: { payment: { facilityId } } })
     await prisma.ledgerEntry.deleteMany({ where: { facilityId } })
     await prisma.payment.deleteMany({ where: { facilityId } })
@@ -309,6 +314,114 @@ describeDb('autopay', () => {
       code: 'card_declined',
       source: 'autopay',
     })
+  })
+
+  // ── B-046: US-20's retry schedule ──────────────────────────────────────────
+
+  it('waits for the retry day instead of charging again the next night', async () => {
+    // B-045 collected any unpaid invoice on every run, which is a retry
+    // schedule of "forever, nightly". US-20 wants +1/+3/+5.
+    await makeLeaseWithInvoice({})
+    nextChargeBehaviour = 'decline'
+    await runAutopay(facilityId, d('2026-09-01'), recordItem)
+    expect(charges).toHaveLength(1)
+
+    // Due date +1 IS a retry day, so this one goes.
+    await runAutopay(facilityId, d('2026-09-02'), recordItem)
+    expect(charges).toHaveLength(2)
+
+    // +2 is not.
+    collected.length = 0
+    await runAutopay(facilityId, d('2026-09-03'), recordItem)
+    expect(charges).toHaveLength(2)
+    expect(collected[0].message).toContain('not due yet')
+  })
+
+  it('runs the whole +1/+3/+5 schedule and then stops', async () => {
+    await makeLeaseWithInvoice({})
+    nextChargeBehaviour = 'decline'
+
+    for (const day of ['2026-09-01', '2026-09-02', '2026-09-04', '2026-09-06']) {
+      await runAutopay(facilityId, d(day), recordItem)
+    }
+    expect(charges).toHaveLength(4)
+
+    collected.length = 0
+    await runAutopay(facilityId, d('2026-09-07'), recordItem)
+    expect(charges).toHaveLength(4)
+    expect(collected[0].message).toContain('retry schedule is finished')
+  })
+
+  it('stops immediately on an expired card and raises a high-priority task', async () => {
+    const { invoiceId } = await makeLeaseWithInvoice({})
+    nextChargeBehaviour = 'decline'
+    nextDeclineCode = 'expired_card'
+    await runAutopay(facilityId, d('2026-09-01'), recordItem)
+
+    collected.length = 0
+    await runAutopay(facilityId, d('2026-09-02'), recordItem)
+
+    expect(charges, 'an expired card must not be retried').toHaveLength(1)
+    expect(collected[0].message).toContain('cannot be retried')
+
+    const task = await prisma.task.findFirstOrThrow({ where: { entityId: invoiceId } })
+    expect(task.type).toBe('failed_payment')
+    expect(task.priority).toBe('high')
+    expect(task.entityType).toBe('Invoice')
+  })
+
+  it('raises one task when the schedule finishes, and not one per night after', async () => {
+    const { invoiceId } = await makeLeaseWithInvoice({})
+    nextChargeBehaviour = 'decline'
+    for (const day of ['2026-09-01', '2026-09-02', '2026-09-04', '2026-09-06']) {
+      await runAutopay(facilityId, d(day), recordItem)
+    }
+
+    await runAutopay(facilityId, d('2026-09-07'), recordItem)
+    await runAutopay(facilityId, d('2026-09-08'), recordItem)
+    await runAutopay(facilityId, d('2026-09-09'), recordItem)
+
+    const tasks = await prisma.task.findMany({ where: { entityId: invoiceId } })
+    expect(tasks).toHaveLength(1)
+    expect(tasks[0].priority).toBe('normal')
+  })
+
+  it('withdraws the failed-payment task once the invoice is paid', async () => {
+    // Withdrawn, not completed: nobody did the work, the reason went away.
+    const { invoiceId } = await makeLeaseWithInvoice({})
+    nextChargeBehaviour = 'decline'
+    nextDeclineCode = 'expired_card'
+    await runAutopay(facilityId, d('2026-09-01'), recordItem)
+    await runAutopay(facilityId, d('2026-09-02'), recordItem)
+    expect(await prisma.task.count({ where: { entityId: invoiceId, status: 'open' } })).toBe(1)
+
+    // The tenant pays at the counter — a payment that names the invoice.
+    const payment = await prisma.payment.create({
+      data: {
+        facilityId,
+        tenantId,
+        amountCents: 12_900,
+        method: 'card',
+        status: 'pending',
+        stripePaymentIntentId: `pi_paid_${suffix}`,
+      },
+    })
+    await applyStripeEvent(succeededEvent(payment.stripePaymentIntentId!, { invoiceId, tenantId }))
+
+    const task = await prisma.task.findFirstOrThrow({ where: { entityId: invoiceId } })
+    expect(task.status).toBe('cancelled')
+  })
+
+  it('honours a facility that does not retry at all', async () => {
+    await prisma.facility.update({ where: { id: facilityId }, data: { paymentRetryDays: [] } })
+    const { invoiceId } = await makeLeaseWithInvoice({})
+    nextChargeBehaviour = 'decline'
+    await runAutopay(facilityId, d('2026-09-01'), recordItem)
+    await runAutopay(facilityId, d('2026-09-02'), recordItem)
+
+    expect(charges).toHaveLength(1)
+    expect(await prisma.task.count({ where: { entityId: invoiceId } })).toBe(1)
+    await prisma.facility.update({ where: { id: facilityId }, data: { paymentRetryDays: [1, 3, 5] } })
   })
 
   it('leaves a declined invoice collectable rather than blocking it forever', async () => {

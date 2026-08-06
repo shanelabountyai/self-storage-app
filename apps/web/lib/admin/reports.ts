@@ -315,15 +315,19 @@ export type DelinquencyReport = {
   total: ArAging
 }
 
-/// US-39.4's aging, to the extent the data allows.
+/// US-39.4's aging.
 ///
-/// **`daysPastDue` needs invoices and nothing creates them yet (B-044.)** The
-/// definition itself is built and tested (@storage/core/metrics), because it
-/// is the shared one every later consumer must use — but with no `Invoice`
-/// rows, every lease reports 0 days past due and lands in the first bucket.
-/// The total is real (it is the ledger balance); the *aging* is not yet, and
-/// this is documented rather than faked with a ledger-entry age that would
-/// look plausible and mean something different.
+/// Live since B-044: `Invoice` rows with real original due dates now exist, so
+/// the buckets report rather than collapsing every lease into the first one.
+/// The ageing is `daysPastDue` from @storage/core/metrics — the single shared
+/// definition (D-25), anchored to the OLDEST unpaid invoice's ORIGINAL due
+/// date and never to a retry attempt, which is what keeps a lease that has
+/// declined four times (B-046) ageing rather than resetting to current.
+///
+/// The outstanding figure is still the ledger balance rather than a sum of
+/// invoice remainders. They agree once every charge is invoiced, and the
+/// ledger is the source of truth for balance by PRD 01 §7.3 — so a lease
+/// carrying a pre-billing move-in charge still shows the money it owes.
 export async function delinquencyReport(actor: Actor): Promise<DelinquencyReport> {
   const facilities = await reportableFacilities(actor)
   for (const facility of facilities) assertCanReport(actor, facility.id)

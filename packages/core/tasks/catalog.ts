@@ -63,6 +63,20 @@ export const TASK_TYPES = [
     requiredProofFields: ['note'],
     sensitive: true,
   },
+  {
+    // PRD 02 US-20 / US-41. The "failed payments queue" the AC asks for is a
+    // filtered view of this list, not a table of its own — §4.9 is explicit
+    // that every later queue reads `Task`.
+    //
+    // Raised only when the retry schedule is FINISHED with an invoice: either
+    // the card gave a decline no retry will fix, or the last scheduled attempt
+    // failed. A task per failed attempt would put four rows in front of staff
+    // for one tenant and train them to ignore the queue.
+    type: 'failed_payment',
+    label: 'Payment failed — autopay has stopped retrying',
+    requiredProofFields: ['note'],
+    sensitive: false,
+  },
 ] as const satisfies readonly TaskTypeSpec[]
 
 export type TaskType = (typeof TASK_TYPES)[number]['type']

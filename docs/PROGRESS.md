@@ -1058,6 +1058,30 @@ The nightly `billing.autopay` job, the settlement that makes it safe, and two la
 
 ---
 
+### B-046 — Failed-payment retry ✅ `PENDING`
+
+US-20's schedule, the card-expired short-circuit, the failed-payments queue as a `Task` view, and the `daysPastDue` consumer wiring the backlog assigned here. No new decision number — the anchoring rule this turns on was already settled as **D-25**, and this item is the second consumer of it.
+
+**Found and fixed: B-045 shipped a retry schedule of "forever, nightly".** The autopay run collected any unpaid invoice on every pass, so a declining card was charged again every single night, indefinitely — four times the intended attempts in the first week and no end at all. It was correct for the item it shipped in (collect what is owed) and wrong the moment US-20 defined what "retry" means. `retryDecision` in `packages/core/billing` now gates it.
+
+**Decided: every retry offset is measured from the invoice's original due date, never from the last attempt.** Measuring from the previous try slides the whole schedule forward on each decline — a +1/+3/+5 schedule becomes a 9-day one after four failures, and the tenant drifts further past due while the system believes it is being patient. This is the same anchoring rule `daysPastDue` is built on (D-25), and stating it in one place twice is deliberate: the two would otherwise be free to disagree, and the disagreement would be invisible.
+
+**Decided: a terminal decline stops the schedule wherever it is, and is reported ahead of exhaustion.** US-20 names the expired card; eight sibling codes behave identically (`stolen_card`, `invalid_number`, and so on) — declines no amount of waiting changes. When a card has expired *and* the retries are used up, the reported reason is the expiry, because "the card has expired" is something a person can act on and "we ran out of retries" is not.
+
+**Found and fixed: the decline code was never stored.** B-045 kept Stripe's prose in `failureReason` and put the code only on an event payload. Deciding "has this card expired?" by matching on a provider's wording is a bug waiting for Stripe to reword something, so `Payment.failureCode` now holds it, written on both failure paths — the synchronous off-session throw and the webhook.
+
+**Decided: one task when the schedule finishes, not one per failed attempt.** Four rows in front of staff for one tenant is how a queue becomes noise nobody reads. The task is raised by the run rather than at the moment of the last decline, because that decline can arrive on a webhook hours later and the run is the one place that knows the schedule is finished. It is **withdrawn**, not completed, when the invoice is paid — nobody did the work, the reason went away — which also means staff are never chasing a tenant who has already paid.
+
+**Wired up: AR ageing now reports for real.** B-042 built and tested `daysPastDue` before there were invoices to feed it, and the reports screen said so in plain words rather than rendering an all-current ageing. B-044 created the invoices; this item takes the caveat down and renders the 0–10 / 11–30 / 31–60 / 61–90 / 90+ buckets the PRD asks for, with a line explaining that the count is from the oldest unpaid invoice's original due date rather than the last retry — which is exactly the property this item exists to preserve.
+
+**Found and fixed: a pre-existing test asserted something the code does not promise.** `admin-tenants-db.test.ts` searched for "Ada Renter" and asserted its own fixture was in the results — but `searchTenants` caps at 25 rows ordered by name, and twenty DB suites create a tenant with that exact name. It passed on luck and stopped passing the moment this item added another suite. The fixture is now suffixed so the multi-word-search assertion is about multi-word search, which is what it was for.
+
+**Verified:** 1021 unit/DB tests (19 new — 13 on the schedule itself: four attempts and no more, offsets that do not slide, an attempt whose day passed while nothing ran still made, holding until the day arrives, the terminal short-circuit taking precedence over exhaustion, an ordinary decline still retried, a facility that retries once, and a facility that does not retry at all; 6 driving the real run across business dates: waiting for the retry day rather than charging nightly, the whole +1/+3/+5 sequence then stopping, an expired card stopping after one attempt with a high-priority task, one task rather than one per night, the task withdrawn when the invoice is paid, and the no-retry facility). Full suite run twice to confirm the parallel-load fix. E2e: 320 passing. Typecheck, lint, build clean. One migration (`20260805210000_payment_retry`).
+
+**Left behind.** **The tenant is not told.** `payment.failed` carries the decline code and B-050 owns the notice — so today a tenant whose card expired finds out by noticing, and US-20's "notify the tenant to update the card (deep link to portal)" needs B-050 for the message and B-051 for the link. That is the single most valuable thing left in this area: the retry schedule exists to buy time for a tenant to act, and nothing currently tells them to. **The failed-payment task has no dedicated screen** — it appears in the ordinary `/admin/tasks` list, which is what US-41 asks for ("every later queue is a filtered view of this list"), but there is no filter control to show only failed payments; that arrives with B-059's queue filtering. **Still no real off-session charge has been made** — the schedule is tested against a mocked `createChargeIntent`, so nothing has watched a real Stripe decline carry a real code into the branch that reads it. A Stripe test-mode key remains the one external thing that would close this, B-043's card scan and B-045 together. **Retries do not respect a lease hold** (B-096) or quiet periods, and there is no cap on how long a terminal-decline task sits open before it escalates — escalation is the delinquency engine's, B-057.
+
+---
+
 ---
 
 ## Feature PRDs added mid-build

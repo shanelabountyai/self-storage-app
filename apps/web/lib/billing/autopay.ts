@@ -1,10 +1,13 @@
 import { prisma } from '@storage/db'
 import { emitEvent } from '@storage/core/events'
 import { OCCUPYING_LEASE_STATUSES } from '@storage/core/inventory'
+import { retryDecision } from '@storage/core/billing'
+import { createTask } from '@/lib/admin/tasks'
 import { createChargeIntent } from '@/lib/payments/intents'
 import { stripeClient } from '@/lib/payments/stripe'
 
-// PRD 02 US-19 (B-045). The nightly autopay run.
+// PRD 02 US-19 (B-045) and US-20's retry schedule (B-046). The nightly autopay
+// run.
 //
 // ── Why this cannot double-charge ────────────────────────────────────────────
 //
@@ -28,6 +31,15 @@ import { stripeClient } from '@/lib/payments/stripe'
 // Guard 2 is only durable because the webhook writes a `PaymentAllocation` and
 // moves the invoice to `paid` (see `settleNamedInvoice`). Without that the
 // invoice would read open forever and guard 2 would pass every night.
+//
+// ── And why it does not retry every night either ─────────────────────────────
+//
+// B-045 collected any unpaid invoice on every run, which is a retry schedule of
+// "forever, nightly". US-20 wants +1/+3/+5 and then a person. `retryDecision`
+// (packages/core/billing) is what gates it, counting the failed attempts on the
+// invoice and measuring offsets from the invoice's ORIGINAL due date — never
+// from the last attempt, which would stretch the schedule further on every
+// decline instead of converging.
 
 type RecordItem = (outcome: { itemId: string; ok: boolean; message?: string }) => void
 
@@ -45,12 +57,18 @@ type SkipReason =
   | 'no_saved_card'
   | 'attempt_in_flight'
   | 'nothing_outstanding'
+  | 'not_due_yet'
+  | 'retries_exhausted'
+  | 'terminal_decline'
 
 const SKIP_MESSAGE: Record<SkipReason, string> = {
   autopay_off: 'autopay is off for this lease',
   no_saved_card: 'no saved card on file',
   attempt_in_flight: 'a charge for this invoice is already in flight',
   nothing_outstanding: 'nothing outstanding',
+  not_due_yet: 'the next retry is not due yet',
+  retries_exhausted: 'the retry schedule is finished — staff task raised',
+  terminal_decline: 'the card cannot be retried — staff task raised',
 }
 
 /// Charges every invoice due at this facility on or before the business date.
@@ -73,6 +91,11 @@ export async function runAutopay(
     return result
   }
 
+  const facility = await prisma.facility.findUniqueOrThrow({
+    where: { id: facilityId },
+    select: { paymentRetryDays: true },
+  })
+
   const invoices = await prisma.invoice.findMany({
     where: {
       facilityId,
@@ -84,6 +107,7 @@ export async function runAutopay(
     select: {
       id: true,
       number: true,
+      dueDate: true,
       totalCents: true,
       amountPaidCents: true,
       leaseId: true,
@@ -99,9 +123,16 @@ export async function runAutopay(
 
   for (const invoice of invoices) {
     const outstanding = invoice.totalCents - invoice.amountPaidCents
-    const skip = await skipReasonFor(invoice, outstanding)
+    const skip = await skipReasonFor(invoice, outstanding, businessDate, facility.paymentRetryDays)
     if (skip) {
       result.skipped += 1
+      // The two "we have stopped trying" reasons put the invoice in front of a
+      // person. Raised here rather than at the moment of the last decline
+      // because that decline may have arrived on a webhook hours later, and
+      // this is the one place that knows the schedule is finished.
+      if (skip === 'retries_exhausted' || skip === 'terminal_decline') {
+        await raiseFailedPaymentTask(facilityId, invoice, skip)
+      }
       recordItem({ itemId: invoice.id, ok: true, message: `${invoice.number} skipped — ${SKIP_MESSAGE[skip]}` })
       continue
     }
@@ -188,9 +219,12 @@ export async function runAutopay(
 async function skipReasonFor(
   invoice: {
     id: string
+    dueDate: Date
     lease: { autopayEnabled: boolean; tenant: { stripeDefaultPaymentMethodId: string | null } }
   },
   outstanding: number,
+  businessDate: Date,
+  retryDays: readonly number[],
 ): Promise<SkipReason | null> {
   if (outstanding <= 0) return 'nothing_outstanding'
   if (!invoice.lease.autopayEnabled) return 'autopay_off'
@@ -207,7 +241,55 @@ async function skipReasonFor(
     where: { invoiceId: invoice.id, payment: { status: { in: ['pending', 'succeeded'] } } },
     select: { id: true },
   })
-  return inFlight ? 'attempt_in_flight' : null
+  if (inFlight) return 'attempt_in_flight'
+
+  // US-20's schedule. Every failed attempt on this invoice, newest first — the
+  // count decides which retry is next and the newest one's code decides whether
+  // there should be a next at all.
+  const failures = await prisma.paymentAllocation.findMany({
+    where: { invoiceId: invoice.id, payment: { status: 'failed' } },
+    orderBy: { createdAt: 'desc' },
+    select: { payment: { select: { failureCode: true } } },
+  })
+
+  const decision = retryDecision({
+    dueDate: invoice.dueDate,
+    businessDate,
+    failedAttempts: failures.length,
+    retryDays,
+    lastDeclineCode: failures[0]?.payment.failureCode ?? null,
+  })
+
+  return decision.attempt ? null : decision.reason
+}
+
+/// Puts an invoice autopay has given up on in front of a person (US-20's
+/// "failed payments queue", US-41's one task list).
+///
+/// Idempotent twice over: `createTask` dedupes on (type, entityId, business
+/// day), and the open-task check stops a fresh row appearing every night for as
+/// long as the invoice stays unpaid — which, once the schedule is finished, is
+/// every night until someone acts.
+async function raiseFailedPaymentTask(
+  facilityId: string,
+  invoice: { id: string; number: string },
+  reason: 'retries_exhausted' | 'terminal_decline',
+): Promise<void> {
+  const open = await prisma.task.findFirst({
+    where: { type: 'failed_payment', entityId: invoice.id, status: 'open' },
+    select: { id: true },
+  })
+  if (open) return
+
+  await createTask({
+    facilityId,
+    type: 'failed_payment',
+    entityType: 'Invoice',
+    entityId: invoice.id,
+    // A card that cannot be retried needs a person sooner than one that simply
+    // ran out of attempts: nothing automatic will ever fix it.
+    priority: reason === 'terminal_decline' ? 'high' : 'normal',
+  })
 }
 
 /// Stripe's own decline code, which is what tells B-046 whether to retry at all
