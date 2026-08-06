@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { prisma } from '../packages/db'
+import { businessDateFor } from '../packages/core/jobs'
 import {
   assignTask,
   completeTask,
@@ -325,7 +326,17 @@ describeDb('task queue', () => {
       await flagTenantAddressReturned(actorAt(counterId, facilityId), tenantId, address.id)
 
       const task = await prisma.task.findFirstOrThrow({
-        where: { type: 'returned_mail_review', entityId: tenantId, businessDate: { gte: todayUtc() } },
+        // The facility's OWN business date, not UTC's. These differ for the
+        // last few hours of every Central day — after 7pm CDT the UTC date
+        // has already rolled over, so a `gte: todayUtc()` filter looks for a
+        // business date a day ahead of the one `createTask` actually stamps,
+        // and finds nothing. The bug was in this assertion, not the code, and
+        // it only ever failed if the suite happened to run in the evening.
+        where: {
+          type: 'returned_mail_review',
+          entityId: tenantId,
+          businessDate: businessDateFor(new Date(), 'America/Chicago'),
+        },
       })
       expect(task.entityType).toBe('Tenant')
       expect((await prisma.tenantAddress.findUniqueOrThrow({ where: { id: address.id } })).returnedMailAt).toBeInstanceOf(
@@ -336,8 +347,3 @@ describeDb('task queue', () => {
     })
   })
 })
-
-function todayUtc(): Date {
-  const now = new Date()
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
-}

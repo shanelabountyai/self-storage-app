@@ -17,7 +17,8 @@
     "./consent": "./consent/index.ts",
     "./pos": "./pos/index.ts",
     "./move-out": "./move-out/index.ts",
-    "./tasks": "./tasks/index.ts"
+    "./tasks": "./tasks/index.ts",
+    "./metrics": "./metrics/index.ts"
   },
   "dependencies": {
     "@storage/db": "*"
