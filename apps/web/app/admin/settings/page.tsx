@@ -458,6 +458,29 @@ export default async function AdminSettingsPage() {
             defaultValue={facility.paymentRetryDays.join(', ')}
             hint="Days after the original due date, increasing. Leave empty for no retries."
           />
+          <Field
+            name="accessSuspendDaysPastDue"
+            label="Suspend gate access at"
+            type="number"
+            min={0}
+            max={180}
+            defaultValue={facility.accessSuspendDaysPastDue}
+            hint="Days past due. Enter 0 to never suspend for non-payment."
+          />
+          <Field
+            name="accessRestoreAtOrBelowDollars"
+            label="Restore access once the balance is at or below ($)"
+            type="text"
+            inputMode="decimal"
+            defaultValue={(facility.accessRestoreAtOrBelowCents / 100).toFixed(2)}
+            hint="0.00 means the balance must be fully paid."
+          />
+          <p className="text-muted-foreground w-full max-w-prose text-xs text-pretty">
+            Suspending stops a tenant reaching their own unit, so it is the setting on this page
+            worth being sure about. It never applies to a lease on hold, and access comes back
+            automatically within a couple of minutes of the balance clearing — no one has to do
+            anything.
+          </p>
           <Button type="submit">Save billing policy</Button>
         </AdminForm>
       </section>

@@ -400,8 +400,25 @@ export async function updateBillingPolicyAction(
     unit: 'days',
   })
 
+  // Zero disables the rule outright, which is a real operator choice — so the
+  // floor is 0 rather than 1, and the copy says what zero means.
+  const suspendDays = parseScaled(formData.get('accessSuspendDaysPastDue'), {
+    scale: 1,
+    min: 0,
+    max: 180,
+    unit: 'days',
+  })
+  const restoreAtOrBelow = parseScaled(formData.get('accessRestoreAtOrBelowDollars'), {
+    scale: 100,
+    min: 0,
+    max: 1_000,
+    unit: 'dollars',
+  })
+
   const errors: FieldErrors = {}
   if ('error' in leadDays) errors.invoiceLeadDays = leadDays.error
+  if ('error' in suspendDays) errors.accessSuspendDaysPastDue = suspendDays.error
+  if ('error' in restoreAtOrBelow) errors.accessRestoreAtOrBelowDollars = restoreAtOrBelow.error
 
   let retryDays: number[] = []
   try {
@@ -412,7 +429,9 @@ export async function updateBillingPolicyAction(
   }
 
   if (Object.keys(errors).length > 0) return fieldError(errors)
-  if ('error' in leadDays) return fieldError(errors)
+  if ('error' in leadDays || 'error' in suspendDays || 'error' in restoreAtOrBelow) {
+    return fieldError(errors)
+  }
 
   try {
     await updateBillingPolicy(actor, facilityId, {
@@ -421,17 +440,25 @@ export async function updateBillingPolicyAction(
       prorateOnMoveIn: formData.get('prorateOnMoveIn') === 'yes',
       prorateOnMoveOut: formData.get('prorateOnMoveOut') === 'yes',
       paymentRetryDays: retryDays,
+      accessSuspendDaysPastDue: suspendDays.value,
+      accessRestoreAtOrBelowCents: restoreAtOrBelow.value,
     })
   } catch (error) {
     return asFormError(error, 'Could not save the billing policy.')
   }
 
   revalidatePath('/admin/settings')
-  return success(
+  const billingLine =
     billingPolicy === 'anniversary'
-      ? `Each lease now bills on its own move-in day, ${leadDays.value} days after the invoice is raised.`
-      : `Every lease now bills on the 1st, invoiced ${leadDays.value} days ahead.`,
-  )
+      ? `Each lease now bills on its own move-in day, invoiced ${leadDays.value} days ahead.`
+      : `Every lease now bills on the 1st, invoiced ${leadDays.value} days ahead.`
+  // Says what the access rule now does in the same breath, because it is the
+  // setting on this form that locks a paying customer out of their property.
+  const accessLine =
+    suspendDays.value === 0
+      ? 'Gate access is never suspended for non-payment.'
+      : `Gate access is suspended at ${suspendDays.value} days past due and restored once the balance is ${formatCents(restoreAtOrBelow.value)} or less.`
+  return success(`${billingLine} ${accessLine}`)
 }
 
 /// Adds a step to the late-fee ladder (US-21).

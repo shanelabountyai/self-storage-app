@@ -249,6 +249,7 @@ Design informed by the commonly described US lien-sale process: default → deni
 - **Restore is inline, not nightly.** The ~2-minute SLA is met by calling `restoreAccessIfSettled` directly from the paths that settle money — the Stripe webhook and the counter payment — inside the same request. Both calls are best-effort and outside the money transaction: a gate controller being unreachable must never roll back a payment. The 4am pass is the safety net for a balance that reached zero some other way (a credit, a waiver, a write-off), not the mechanism.
 - **The hold check is first**, so no later branch can be reached past it, and a hold placed mid-cycle takes effect on the very next evaluation. A hold also holds a *suspended* grant where it is rather than restoring it — a hold is not a payment, and letting one lift a suspension would make it a free pass.
 - **Found and fixed while building it:** `transitionGrant` emitted `access.granted` for a suspended→active transition, so CN-11's restore notice had no event to fire on. It now emits `access.restored`, mirroring the command type it already chose correctly.
+- **Both settings are editable** in the facility billing policy form (US-3), not database-only: the day threshold with zero meaning "never suspend", and the restore balance with 0.00 meaning "paid in full".
 
 **US-25 [MVP]** As an owner, I configure a delinquency timeline per facility as an ordered set of steps keyed to days-past-due, e.g.:
 

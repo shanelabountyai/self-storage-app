@@ -167,6 +167,27 @@ test.describe('billing settings, given a screen', () => {
     await expect(page.getByLabel('Billing day')).toBeVisible()
     await expect(page.getByLabel('Invoice this many days ahead')).toBeVisible()
     await expect(page.getByLabel('Retry a failed card on days')).toBeVisible()
+    // B-098's two settings, which shipped column-only and are now reachable.
+    await expect(page.getByLabel('Suspend gate access at')).toBeVisible()
+    await expect(
+      page.getByLabel('Restore access once the balance is at or below ($)'),
+    ).toBeVisible()
+  })
+
+  test('the access threshold saves, and says what it now does', async ({ page }) => {
+    await page.goto('/admin/settings')
+    const form = page.getByRole('form', { name: 'Billing policy' })
+
+    await form.getByLabel('Suspend gate access at').fill('0')
+    await form.getByRole('button', { name: 'Save billing policy' }).click()
+
+    // Zero disables the rule, and the confirmation says so rather than echoing
+    // a number that reads like a threshold of nought days.
+    await expect(form.getByText(/never suspended for non-payment/)).toBeVisible()
+
+    await form.getByLabel('Suspend gate access at').fill('6')
+    await form.getByRole('button', { name: 'Save billing policy' }).click()
+    await expect(form.getByText(/suspended at 6 days past due/)).toBeVisible()
   })
 
   test('a retry schedule out of order is refused with the reason', async ({ page }) => {

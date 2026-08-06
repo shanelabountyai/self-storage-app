@@ -218,6 +218,13 @@ export type BillingPolicyInput = {
   prorateOnMoveIn: boolean
   prorateOnMoveOut: boolean
   paymentRetryDays: number[]
+  /// D-16 / US-45. Days past due at which gate access is suspended; zero
+  /// disables the rule. In this form rather than a section of its own because
+  /// it is driven by the same days-past-due clock as everything above it, and
+  /// D-16 puts the restore threshold "alongside the partial-payment allocation
+  /// policy" for the same reason.
+  accessSuspendDaysPastDue: number
+  accessRestoreAtOrBelowCents: number
 }
 
 export class InvalidRetryScheduleError extends Error {
@@ -282,6 +289,8 @@ export async function updateBillingPolicy(
       prorateOnMoveIn: before.prorateOnMoveIn,
       prorateOnMoveOut: before.prorateOnMoveOut,
       paymentRetryDays: before.paymentRetryDays,
+      accessSuspendDaysPastDue: before.accessSuspendDaysPastDue,
+      accessRestoreAtOrBelowCents: before.accessRestoreAtOrBelowCents,
     },
     after: {
       billingPolicy: after.billingPolicy,
@@ -289,6 +298,8 @@ export async function updateBillingPolicy(
       prorateOnMoveIn: after.prorateOnMoveIn,
       prorateOnMoveOut: after.prorateOnMoveOut,
       paymentRetryDays: after.paymentRetryDays,
+      accessSuspendDaysPastDue: after.accessSuspendDaysPastDue,
+      accessRestoreAtOrBelowCents: after.accessRestoreAtOrBelowCents,
     },
   })
 }
