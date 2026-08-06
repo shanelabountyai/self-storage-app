@@ -10,6 +10,8 @@ import { CLOSED_ALL_WEEK, DAYS_OF_WEEK } from '@storage/core/facility-settings'
 import { currentPlans } from '@/lib/protection/plans'
 import {
   addFeeScheduleEntryAction,
+  addLateFeeStepAction,
+  updateBillingPolicyAction,
   addProtectionPlanAction,
   setProtectionPolicyAction,
   addTaxComponentAction,
@@ -18,7 +20,54 @@ import {
 } from './actions'
 
 const TIMEZONES = Intl.supportedValuesOf('timeZone')
-const FEE_TYPES = ['admin', 'late', 'nsf', 'lien'] as const
+// The full catalogue B-047 added to the enum. `late` stays listed because a
+// flat late amount is still a fee a facility may want on the schedule for
+// reference, but the ladder above is what actually charges it.
+const FEE_TYPES = [
+  'admin',
+  'late',
+  'nsf',
+  'lien',
+  'lock_cut',
+  'cleaning',
+  'damage',
+  'transfer',
+  'certified_mail',
+  'auction_cost',
+] as const
+
+const FEE_TYPE_LABELS: Record<(typeof FEE_TYPES)[number], string> = {
+  admin: 'Admin fee',
+  late: 'Late fee (reference amount)',
+  nsf: 'Returned payment (NSF)',
+  lien: 'Lien processing',
+  lock_cut: 'Lock cut',
+  cleaning: 'Cleaning',
+  damage: 'Damage',
+  transfer: 'Unit transfer',
+  certified_mail: 'Certified mail',
+  auction_cost: 'Auction costs',
+}
+
+/// The ladder row in the operator's own words, not the enum's.
+function describeLateFee(row: {
+  basis: string
+  amountCents: number
+  percentBasisPoints: number
+}): string {
+  const amount = formatCents(row.amountCents)
+  const percent = `${row.percentBasisPoints / 100}%`
+  switch (row.basis) {
+    case 'flat':
+      return amount
+    case 'percent':
+      return `${percent} of the overdue balance`
+    case 'greater':
+      return `the greater of ${amount} or ${percent}`
+    default:
+      return `the lesser of ${amount} or ${percent}`
+  }
+}
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10)
@@ -51,6 +100,7 @@ export default async function AdminSettingsPage() {
   const settings = await getFacilitySettings(facilityId)
   const { facility } = settings
   const plans = await currentPlans(facilityId)
+  const lateFeeSteps = settings.currentLateFeeSteps
   const officeHours = settings.officeHours ?? CLOSED_ALL_WEEK
   const gateHours = settings.gateHours ?? CLOSED_ALL_WEEK
 
@@ -325,8 +375,8 @@ export default async function AdminSettingsPage() {
             className="flex flex-col gap-1 text-sm capitalize"
           >
             {FEE_TYPES.map((type) => (
-              <option key={type} value={type} className="capitalize">
-                {type}
+              <option key={type} value={type}>
+                {FEE_TYPE_LABELS[type]}
               </option>
             ))}
           </Field>
@@ -347,6 +397,142 @@ export default async function AdminSettingsPage() {
             required
           />
           <Button type="submit">Add fee</Button>
+        </AdminForm>
+      </section>
+
+      <section aria-labelledby="billing-heading" className="flex flex-col gap-3">
+        <h2 id="billing-heading" className="text-base font-medium">
+          Billing policy
+        </h2>
+        <p className="text-muted-foreground max-w-prose text-xs text-pretty">
+          When rent is billed, how far ahead the invoice goes out, and what happens when a card
+          fails. These drive the nightly jobs — you can see every run on the Billing runs screen.
+        </p>
+
+        <AdminForm
+          action={updateBillingPolicyAction}
+          label="Billing policy"
+          className="flex flex-wrap items-end gap-3"
+        >
+          <input type="hidden" name="facilityId" value={facilityId} />
+          <Field
+            name="billingPolicy"
+            label="Billing day"
+            as="select"
+            defaultValue={facility.billingPolicy}
+            hint="Anniversary means each lease bills on the day that tenant moved in."
+          >
+            <option value="anniversary">Each lease on its own move-in day</option>
+            <option value="first_of_month">Every lease on the 1st</option>
+          </Field>
+          <Field
+            name="invoiceLeadDays"
+            label="Invoice this many days ahead"
+            type="number"
+            min={0}
+            max={28}
+            defaultValue={facility.invoiceLeadDays}
+          />
+          <Field
+            name="prorateOnMoveOut"
+            label="On move-out"
+            as="select"
+            defaultValue={facility.prorateOnMoveOut ? 'yes' : 'no'}
+          >
+            <option value="no">Charge the full period they are in</option>
+            <option value="yes">Charge only the days used</option>
+          </Field>
+          <Field
+            name="prorateOnMoveIn"
+            label="On move-in"
+            as="select"
+            defaultValue={facility.prorateOnMoveIn ? 'yes' : 'no'}
+            hint="Only applies when every lease bills on the 1st."
+          >
+            <option value="yes">Charge only the days used</option>
+            <option value="no">Charge a full month</option>
+          </Field>
+          <Field
+            name="paymentRetryDays"
+            label="Retry a failed card on days"
+            defaultValue={facility.paymentRetryDays.join(', ')}
+            hint="Days after the original due date, increasing. Leave empty for no retries."
+          />
+          <Button type="submit">Save billing policy</Button>
+        </AdminForm>
+      </section>
+
+      <section aria-labelledby="latefee-heading" className="flex flex-col gap-3">
+        <h2 id="latefee-heading" className="text-base font-medium">
+          Late fees
+        </h2>
+        <p className="text-muted-foreground max-w-prose text-xs text-pretty">
+          Charged automatically overnight once a lease reaches the days past due below, counted
+          from the oldest unpaid rent invoice&apos;s original due date. Late fees never earn late
+          fees, and a fee never exceeds what is owed. With no steps configured, nothing is charged.
+        </p>
+
+        {lateFeeSteps.length > 0 && (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <caption className="sr-only">The late-fee ladder in force today</caption>
+              <thead>
+                <tr className="text-muted-foreground">
+                  <th scope="col" className="pb-1 font-normal">Step</th>
+                  <th scope="col" className="pb-1 font-normal">Charged at</th>
+                  <th scope="col" className="pb-1 font-normal">Amount</th>
+                  <th scope="col" className="pb-1 font-normal">Cap</th>
+                  <th scope="col" className="pb-1 font-normal">Since</th>
+                </tr>
+              </thead>
+              <tbody>
+                {lateFeeSteps.map((row) => (
+                  <tr key={row.step}>
+                    <th scope="row" className="py-1 text-left font-normal">{row.step}</th>
+                    <td className="py-1">{row.daysPastDue} days past due</td>
+                    <td className="py-1">{describeLateFee(row)}</td>
+                    <td className="py-1">{row.capCents === null ? 'none' : formatCents(row.capCents)}</td>
+                    <td className="py-1 tabular-nums">{row.effectiveFrom.toISOString().slice(0, 10)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <AdminForm
+          action={addLateFeeStepAction}
+          label="Add a late-fee step"
+          className="flex flex-wrap items-end gap-3"
+        >
+          <input type="hidden" name="facilityId" value={facilityId} />
+          <Field name="step" label="Step" type="number" min={1} max={5} defaultValue={1} />
+          <Field
+            name="daysPastDue"
+            label="Days past due"
+            type="number"
+            min={1}
+            max={180}
+            defaultValue={5}
+          />
+          <Field name="basis" label="Charge" as="select" defaultValue="greater">
+            <option value="greater">The greater of the amount or the percentage</option>
+            <option value="lesser">The lesser of the amount or the percentage</option>
+            <option value="flat">A flat amount</option>
+            <option value="percent">A percentage of what is overdue</option>
+          </Field>
+          <Field name="amountDollars" label="Amount ($)" type="text" inputMode="decimal" defaultValue="20" />
+          <Field name="percent" label="Percentage (%)" type="text" inputMode="decimal" defaultValue="10" />
+          <Field
+            name="capDollars"
+            label="Cap ($)"
+            type="text"
+            inputMode="decimal"
+            defaultValue="50"
+            hint="Required for anything using a percentage."
+          />
+          <Field name="effectiveFrom" label="Effective from" type="date" defaultValue={todayIso()} required />
+          <Button type="submit">Add step</Button>
         </AdminForm>
       </section>
 

@@ -17,8 +17,12 @@ import { recordAudit } from '@storage/core/audit'
 import { toAuditActor } from '@/lib/rbac/audit-actor'
 import { requirePermission } from '@/lib/rbac/authorize'
 import {
+  InvalidRetryScheduleError,
   addFeeScheduleEntry,
+  addLateFeeStep,
   addTaxComponent,
+  parseRetryDays,
+  updateBillingPolicy,
   updateFacilityDetails,
   updateFacilityHours,
 } from '@/lib/admin/facility-settings'
@@ -371,4 +375,173 @@ export async function setProtectionPolicyAction(
         : 'A lapsed proof of insurance raises a staff task and charges nothing.'
     }`,
   )
+}
+
+/// The billing policy B-044 through B-047 shipped as columns.
+///
+/// One form for the five settings that decide when a tenant is billed and what
+/// happens when a card fails, because they are read together and a screen that
+/// split them across five saves would let a facility end up in a combination
+/// nobody looked at as a whole.
+export async function updateBillingPolicyAction(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const actor = await requireStaffActor()
+  const facilityId = String(formData.get('facilityId'))
+  requirePermission(actor, 'facility:settings', facilityId)
+
+  const billingPolicy =
+    formData.get('billingPolicy') === 'first_of_month' ? 'first_of_month' : 'anniversary'
+  const leadDays = parseScaled(formData.get('invoiceLeadDays'), {
+    scale: 1,
+    min: 0,
+    max: 28,
+    unit: 'days',
+  })
+
+  const errors: FieldErrors = {}
+  if ('error' in leadDays) errors.invoiceLeadDays = leadDays.error
+
+  let retryDays: number[] = []
+  try {
+    retryDays = parseRetryDays(String(formData.get('paymentRetryDays') ?? ''))
+  } catch (error) {
+    errors.paymentRetryDays =
+      error instanceof InvalidRetryScheduleError ? error.message : 'Enter the days like "1, 3, 5".'
+  }
+
+  if (Object.keys(errors).length > 0) return fieldError(errors)
+  if ('error' in leadDays) return fieldError(errors)
+
+  try {
+    await updateBillingPolicy(actor, facilityId, {
+      billingPolicy,
+      invoiceLeadDays: leadDays.value,
+      prorateOnMoveIn: formData.get('prorateOnMoveIn') === 'yes',
+      prorateOnMoveOut: formData.get('prorateOnMoveOut') === 'yes',
+      paymentRetryDays: retryDays,
+    })
+  } catch (error) {
+    return asFormError(error, 'Could not save the billing policy.')
+  }
+
+  revalidatePath('/admin/settings')
+  return success(
+    billingPolicy === 'anniversary'
+      ? `Each lease now bills on its own move-in day, ${leadDays.value} days after the invoice is raised.`
+      : `Every lease now bills on the 1st, invoiced ${leadDays.value} days ahead.`,
+  )
+}
+
+/// Adds a step to the late-fee ladder (US-21).
+///
+/// Confirmed before it is written, like the protection tier above: this decides
+/// what a tenant is charged automatically at 2am, and it cannot be edited or
+/// deleted afterwards — changing it is another row with a later date.
+export async function addLateFeeStepAction(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const actor = await requireStaffActor()
+  const facilityId = String(formData.get('facilityId'))
+  requirePermission(actor, 'facility:settings', facilityId)
+
+  const basis = String(formData.get('basis') ?? 'flat') as 'flat' | 'percent' | 'greater' | 'lesser'
+  const step = parseScaled(formData.get('step'), { scale: 1, min: 1, max: 5, unit: 'steps' })
+  const daysPastDue = parseScaled(formData.get('daysPastDue'), {
+    scale: 1,
+    min: 1,
+    max: 180,
+    unit: 'days',
+  })
+  const amount = parseScaled(formData.get('amountDollars'), {
+    scale: 100,
+    min: 0,
+    max: 1_000,
+    unit: 'dollars',
+  })
+  const percent = parseScaled(formData.get('percent'), {
+    scale: 100,
+    min: 0,
+    max: 100,
+    unit: 'percent',
+  })
+  const capRaw = String(formData.get('capDollars') ?? '').trim()
+  const cap =
+    capRaw === ''
+      ? { value: null as number | null }
+      : parseScaled(capRaw, { scale: 100, min: 0, max: 1_000, unit: 'dollars' })
+  const effectiveFrom = parseDate(formData.get('effectiveFrom'))
+
+  const errors: FieldErrors = {}
+  if ('error' in step) errors.step = step.error
+  if ('error' in daysPastDue) errors.daysPastDue = daysPastDue.error
+  if ('error' in amount) errors.amountDollars = amount.error
+  if ('error' in percent) errors.percent = percent.error
+  if ('error' in cap) errors.capDollars = cap.error
+  if ('error' in effectiveFrom) errors.effectiveFrom = effectiveFrom.error
+
+  // An uncapped percentage is the one shape that can run away — a 10% fee on a
+  // tenant three months behind is a fee nobody intended to set. Refused rather
+  // than warned about, because the warning would be dismissed.
+  if (
+    !('error' in percent) &&
+    percent.value > 0 &&
+    basis !== 'flat' &&
+    !('error' in cap) &&
+    cap.value === null
+  ) {
+    errors.capDollars = 'A percentage fee needs a cap. Enter the most this step may ever charge.'
+  }
+
+  if (Object.keys(errors).length > 0) return fieldError(errors)
+  if (
+    'error' in step ||
+    'error' in daysPastDue ||
+    'error' in amount ||
+    'error' in percent ||
+    'error' in cap ||
+    'error' in effectiveFrom
+  ) {
+    return fieldError(errors)
+  }
+
+  const describe =
+    basis === 'flat'
+      ? formatCents(amount.value)
+      : basis === 'percent'
+        ? `${percent.value / 100}% of the overdue balance`
+        : `the ${basis} of ${formatCents(amount.value)} or ${percent.value / 100}%`
+
+  if (formData.get('confirmed') !== 'yes') {
+    return {
+      status: 'confirm',
+      message: 'This charges tenants automatically. Check it before it is published.',
+      echo: [
+        { label: 'Step', value: String(step.value) },
+        { label: 'Charged at', value: `${daysPastDue.value} days past due` },
+        { label: 'Amount', value: describe },
+        { label: 'Cap', value: cap.value === null ? 'none' : formatCents(cap.value) },
+        { label: 'Effective from', value: effectiveFrom.value.toISOString().slice(0, 10) },
+      ],
+    }
+  }
+
+  try {
+    await addLateFeeStep(actor, facilityId, {
+      step: step.value,
+      daysPastDue: daysPastDue.value,
+      amountCents: amount.value,
+      percentBasisPoints: percent.value,
+      basis,
+      capCents: cap.value,
+      effectiveFrom: effectiveFrom.value,
+    })
+  } catch (error) {
+    return asFormError(error, 'Could not add that step.')
+  }
+
+  revalidatePath('/admin/settings')
+  return success(`Step ${step.value} added — ${describe} at ${daysPastDue.value} days past due.`)
 }

@@ -12,6 +12,8 @@ import {
   type LoggableDocumentType,
 } from '@/lib/admin/tenants'
 import { fieldError, success, type FormState } from '@/lib/admin/form-state'
+import { waiveFeeInvoice } from '@/lib/billing/late-fees'
+import { formatCents } from '@/lib/format'
 
 // PRD 02 §4.4 US-13/US-16. Thin session wrappers; every real decision lives
 // in lib/admin/tenants.ts (and lib/portal/contact.ts underneath it), which
@@ -104,4 +106,53 @@ export async function logDocumentAction(_prev: FormState, formData: FormData): P
 
   revalidateProfile(tenantId)
   return success('Document logged.')
+}
+
+/// US-21's waiver, from the profile rather than a database client.
+///
+/// Every gate is `waiveFeeInvoice`'s — the permission, the monetary limit and
+/// the reason code all live in the domain function, so this only translates its
+/// refusals into sentences a person can act on. An over-limit refusal names the
+/// amount rather than saying "not allowed", because RBAC-2 routes it to the
+/// next role up and the manager reading it needs to know what to ask for.
+export async function waiveFeeAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const actor = await requireStaffActor()
+  const tenantId = String(formData.get('tenantId') ?? '')
+  const invoiceId = String(formData.get('invoiceId') ?? '')
+  const reasonCode = String(formData.get('reasonCode') ?? '')
+
+  const result = await waiveFeeInvoice(actor, invoiceId, {
+    reasonCode,
+    note: String(formData.get('note') ?? '') || undefined,
+  })
+
+  if (!result.ok) {
+    switch (result.reason) {
+      case 'missing_reason':
+        return fieldError({ reasonCode: 'Choose why this fee is being waived.' })
+      case 'forbidden':
+        return {
+          status: 'error',
+          message: 'You do not have permission to waive fees at this facility.',
+          fieldErrors: {},
+        }
+      case 'over_limit':
+        return {
+          status: 'error',
+          message: `This fee is more than your waiver limit of ${formatCents(result.limitCents ?? 0)}. Ask a manager to approve it.`,
+          fieldErrors: {},
+        }
+      case 'already_settled':
+        return {
+          status: 'error',
+          message: 'That fee has already been paid or waived.',
+          fieldErrors: {},
+        }
+      default:
+        return { status: 'error', message: 'That fee could not be found.', fieldErrors: {} }
+    }
+  }
+
+  revalidateProfile(tenantId)
+  return success(`${formatCents(result.amountCents)} fee waived. The credit is on the ledger.`)
 }

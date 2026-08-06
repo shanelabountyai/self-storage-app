@@ -150,3 +150,50 @@ test.describe('signed in as the demo owner', () => {
   // matters (a crafted POST skips it entirely), so the server-side range check
   // is unit-tested directly in tests/form-state.test.ts.
 })
+
+test.describe('billing settings, given a screen', () => {
+  test.beforeEach(async ({ page }) => {
+    await signInAsDemoOwner(page)
+  })
+
+  // Every field here shipped as a database column with no way to reach it.
+  // These assert the screen exists and that its one piece of real parsing —
+  // the retry schedule — reports a bad value beside the field rather than
+  // throwing (FR-19/3.3.3).
+  test('the billing policy is editable, not database-only', async ({ page }) => {
+    await page.goto('/admin/settings')
+
+    await expect(page.getByRole('heading', { name: 'Billing policy' })).toBeVisible()
+    await expect(page.getByLabel('Billing day')).toBeVisible()
+    await expect(page.getByLabel('Invoice this many days ahead')).toBeVisible()
+    await expect(page.getByLabel('Retry a failed card on days')).toBeVisible()
+  })
+
+  test('a retry schedule out of order is refused with the reason', async ({ page }) => {
+    await page.goto('/admin/settings')
+
+    const form = page.getByRole('form', { name: 'Billing policy' })
+    await form.getByLabel('Retry a failed card on days').fill('5, 1')
+    await form.getByRole('button', { name: 'Save billing policy' }).click()
+
+    // The days count from the original due date, so a decreasing list is not a
+    // faster schedule — it is one whose later attempt is already in the past.
+    // Twice over, which is the AdminForm pattern: once in the error summary at
+    // the top and once beside the field itself.
+    await expect(form.getByText(/increasing order/).first()).toBeVisible()
+    await expect(form.getByText(/increasing order/)).toHaveCount(2)
+  })
+
+  test('the late-fee ladder is editable and refuses an uncapped percentage', async ({ page }) => {
+    await page.goto('/admin/settings')
+    await expect(page.getByRole('heading', { name: 'Late fees' })).toBeVisible()
+
+    const form = page.getByRole('form', { name: 'Add a late-fee step' })
+    await form.getByLabel('Cap ($)').fill('')
+    await form.getByRole('button', { name: 'Add step' }).click()
+
+    // An uncapped percentage is the one shape that can run away, so it is
+    // refused rather than warned about.
+    await expect(form.getByText(/needs a cap/).first()).toBeVisible()
+  })
+})

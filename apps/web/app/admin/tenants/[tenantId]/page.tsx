@@ -10,7 +10,20 @@ import {
   setNotePinnedAction,
   updateAddressAction,
   updateContactAction,
+  waiveFeeAction,
 } from './actions'
+
+/// The reason vocabulary from the audit catalog, narrowed to the ones that
+/// actually explain a waived fee. Free text stays available in the note beside
+/// it — the code is what keeps the audit log filterable.
+const WAIVER_REASONS = [
+  { value: 'customer_goodwill', label: 'Customer goodwill' },
+  { value: 'billing_error', label: 'Billing error' },
+  { value: 'system_error', label: 'System error' },
+  { value: 'management_approval', label: 'Management approval' },
+  { value: 'duplicate', label: 'Duplicate charge' },
+  { value: 'other', label: 'Other (explain in the note)' },
+] as const
 
 export const metadata = { title: 'Tenant profile' }
 
@@ -224,6 +237,59 @@ export default async function TenantProfilePage({
           </table>
         )}
       </section>
+
+      {profile.waivableFees.length > 0 && (
+        <section aria-labelledby="fees-heading" className="flex flex-col gap-3">
+          <h2 id="fees-heading" className="font-medium">
+            Outstanding fees
+          </h2>
+          <p className="text-muted-foreground max-w-prose text-xs text-pretty">
+            Waiving posts a credit and voids the fee — the charge and the credit both stay on the
+            ledger. It is audited with your name and the reason you pick.
+          </p>
+          <ul className="flex flex-col gap-3">
+            {profile.waivableFees.map((fee) => (
+              <li key={fee.invoiceId} className="border-input rounded-lg border p-4">
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <span className="font-medium">{formatCents(fee.outstandingCents)}</span>
+                  <span className="text-muted-foreground text-xs">
+                    Invoice {fee.number} · Unit {fee.unitNumber} · {formatWhen(fee.issuedOn)}
+                  </span>
+                </div>
+                <p className="text-muted-foreground mt-1 text-sm text-pretty">{fee.description}</p>
+
+                <AdminForm
+                  action={waiveFeeAction}
+                  label={`Waive fee ${fee.number}`}
+                  className="mt-3 flex flex-wrap items-end gap-2"
+                >
+                  <input type="hidden" name="tenantId" value={profile.tenantId} />
+                  <input type="hidden" name="invoiceId" value={fee.invoiceId} />
+                  <Field name="reasonCode" label="Reason" as="select" defaultValue="">
+                    <option value="">Choose a reason…</option>
+                    {WAIVER_REASONS.map((reason) => (
+                      <option key={reason.value} value={reason.value}>
+                        {reason.label}
+                      </option>
+                    ))}
+                  </Field>
+                  <Field name="note" label="Note (optional)" />
+                  <button
+                    type="submit"
+                    className="border-input hover:bg-accent inline-flex min-h-11 items-center justify-center rounded-md border px-4 text-sm font-medium"
+                  >
+                    Waive
+                    <span className="sr-only">
+                      {' '}
+                      fee {fee.number} of {formatCents(fee.outstandingCents)}
+                    </span>
+                  </button>
+                </AdminForm>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <section aria-labelledby="notes-heading" className="flex flex-col gap-3">
         <h2 id="notes-heading" className="font-medium">

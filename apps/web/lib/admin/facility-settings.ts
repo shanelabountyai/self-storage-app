@@ -13,6 +13,8 @@ import { toAuditActor } from '@/lib/rbac/audit-actor'
 
 export type FacilitySettingsView = {
   facility: NonNullable<Awaited<ReturnType<typeof prisma.facility.findUnique>>>
+  currentLateFeeSteps: { step: number; daysPastDue: number; amountCents: number; percentBasisPoints: number; basis: string; capCents: number | null; effectiveFrom: Date }[]
+  lateFeeHistory: Awaited<ReturnType<typeof prisma.lateFeeRule.findMany>>
   officeHours: WeeklySchedule | null
   gateHours: WeeklySchedule | null
   currentTaxComponents: { jurisdiction: string; rateBasisPoints: number; effectiveFrom: Date }[]
@@ -22,10 +24,11 @@ export type FacilitySettingsView = {
 }
 
 export async function getFacilitySettings(facilityId: string): Promise<FacilitySettingsView> {
-  const [facility, taxComponentHistory, feeScheduleHistory] = await Promise.all([
+  const [facility, taxComponentHistory, feeScheduleHistory, lateFeeHistory] = await Promise.all([
     prisma.facility.findUniqueOrThrow({ where: { id: facilityId } }),
     prisma.taxComponent.findMany({ where: { facilityId }, orderBy: { effectiveFrom: 'desc' } }),
     prisma.feeSchedule.findMany({ where: { facilityId }, orderBy: { effectiveFrom: 'desc' } }),
+    prisma.lateFeeRule.findMany({ where: { facilityId }, orderBy: [{ step: 'asc' }, { effectiveFrom: 'desc' }] }),
   ])
 
   const now = new Date()
@@ -42,6 +45,11 @@ export async function getFacilitySettings(facilityId: string): Promise<FacilityS
     currentFeeSchedule: [...currentFee.values()].sort((a, b) => a.feeType.localeCompare(b.feeType)),
     taxComponentHistory,
     feeScheduleHistory,
+    // The ladder in force today, one row per step — the same effective-dating
+    // the tax and fee tables above use.
+    currentLateFeeSteps: [...effectiveByGroup(lateFeeHistory, now, (row) => String(row.step)).values()]
+      .sort((a, b) => a.step - b.step),
+    lateFeeHistory,
   }
 }
 
@@ -193,5 +201,126 @@ export async function addFeeScheduleEntry(
     entityId: created.id,
     facilityId,
     context: { feeType: input.feeType, amountCents: input.amountCents, effectiveFrom: input.effectiveFrom },
+  })
+}
+
+// ── Billing policy (B-044/B-045/B-046/B-047's settings, given a screen) ──────
+//
+// Every field below shipped as a database column with no way for an operator to
+// reach it. Each was defensible on its own — the defaults are right for a Texas
+// facility — but together they had become the largest cluster of
+// developer-only configuration in the project, and a setting only a developer
+// can change is one an operator has to ring someone about.
+
+export type BillingPolicyInput = {
+  billingPolicy: 'anniversary' | 'first_of_month'
+  invoiceLeadDays: number
+  prorateOnMoveIn: boolean
+  prorateOnMoveOut: boolean
+  paymentRetryDays: number[]
+}
+
+export class InvalidRetryScheduleError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'InvalidRetryScheduleError'
+  }
+}
+
+/// Parses "1, 3, 5" into retry offsets.
+///
+/// Strictly increasing, because the offsets are days after the ORIGINAL due
+/// date (D-25's anchoring rule) rather than gaps between attempts — "1, 3, 2"
+/// is not a schedule that retries sooner, it is one whose third attempt is
+/// already in the past when its second fires. Empty means one attempt and no
+/// retries, which is a real operator choice.
+export function parseRetryDays(raw: string): number[] {
+  const text = raw.trim()
+  if (text === '') return []
+
+  const parts = text.split(/[,\s]+/).filter(Boolean)
+  const days: number[] = []
+  for (const part of parts) {
+    const value = Number(part)
+    if (!Number.isInteger(value) || value < 1 || value > 90) {
+      throw new InvalidRetryScheduleError(
+        `"${part}" is not a whole number of days between 1 and 90. Enter them like "1, 3, 5".`,
+      )
+    }
+    if (days.length > 0 && value <= days[days.length - 1]) {
+      throw new InvalidRetryScheduleError(
+        'List the days in increasing order — they count from the original due date, not from the last attempt.',
+      )
+    }
+    days.push(value)
+  }
+  if (days.length > 6) {
+    throw new InvalidRetryScheduleError('Six retries is already more than a card will forgive.')
+  }
+  return days
+}
+
+export async function updateBillingPolicy(
+  actor: Actor,
+  facilityId: string,
+  input: BillingPolicyInput,
+): Promise<void> {
+  requirePermission(actor, 'facility:settings', facilityId)
+
+  const before = await prisma.facility.findUniqueOrThrow({ where: { id: facilityId } })
+  const after = await prisma.facility.update({ where: { id: facilityId }, data: input })
+
+  await recordAudit({
+    actor: toAuditActor(actor),
+    action: 'facility.settings_changed',
+    entityType: 'Facility',
+    entityId: facilityId,
+    facilityId,
+    before: {
+      billingPolicy: before.billingPolicy,
+      invoiceLeadDays: before.invoiceLeadDays,
+      prorateOnMoveIn: before.prorateOnMoveIn,
+      prorateOnMoveOut: before.prorateOnMoveOut,
+      paymentRetryDays: before.paymentRetryDays,
+    },
+    after: {
+      billingPolicy: after.billingPolicy,
+      invoiceLeadDays: after.invoiceLeadDays,
+      prorateOnMoveIn: after.prorateOnMoveIn,
+      prorateOnMoveOut: after.prorateOnMoveOut,
+      paymentRetryDays: after.paymentRetryDays,
+    },
+  })
+}
+
+export type LateFeeStepInput = {
+  step: number
+  daysPastDue: number
+  amountCents: number
+  percentBasisPoints: number
+  basis: 'flat' | 'percent' | 'greater' | 'lesser'
+  capCents: number | null
+  effectiveFrom: Date
+}
+
+/// Adds a late-fee step. Never edits or deletes, like every other price here —
+/// changing a step is a new effective-dated row, so a fee already assessed is
+/// never retroactively a different amount (FR-9).
+export async function addLateFeeStep(
+  actor: Actor,
+  facilityId: string,
+  input: LateFeeStepInput,
+): Promise<void> {
+  requirePermission(actor, 'facility:settings', facilityId)
+
+  const created = await prisma.lateFeeRule.create({ data: { facilityId, ...input } })
+
+  await recordAudit({
+    actor: toAuditActor(actor),
+    action: 'facility.settings_changed',
+    entityType: 'LateFeeRule',
+    entityId: created.id,
+    facilityId,
+    context: { ...input, effectiveFrom: input.effectiveFrom.toISOString() },
   })
 }

@@ -182,9 +182,22 @@ export type TenantProfile = {
   notes: TenantNoteRow[]
   documents: TenantDocumentRow[]
   messages: TenantMessageRow[]
+  /// Late fees still outstanding on this tenant's leases (B-047), so a manager
+  /// can waive one from the profile rather than from a database client.
+  waivableFees: WaivableFee[]
   /// Facilities the viewing actor may act through for this tenant — what a
   /// mutation form needs to attribute a new note or document to.
   editableFacilityIds: string[]
+}
+
+export type WaivableFee = {
+  invoiceId: string
+  number: string
+  facilityId: string
+  unitNumber: string
+  outstandingCents: number
+  issuedOn: Date
+  description: string
 }
 
 export async function tenantProfile(actor: Actor, tenantId: string): Promise<TenantProfile> {
@@ -275,6 +288,26 @@ export async function tenantProfile(actor: Actor, tenantId: string): Promise<Ten
     select: { id: true, type: true, title: true, createdAt: true, content: true },
   })
 
+  const feeInvoices = await prisma.invoice.findMany({
+    where: {
+      kind: 'fee',
+      leaseId: { in: leases.map((lease) => lease.id) },
+      status: { in: ['open', 'partially_paid'] },
+    },
+    orderBy: { issueDate: 'desc' },
+    select: {
+      id: true,
+      number: true,
+      facilityId: true,
+      leaseId: true,
+      issueDate: true,
+      totalCents: true,
+      amountPaidCents: true,
+      lineItems: { select: { description: true }, take: 1 },
+    },
+  })
+  const unitByLease = new Map(leases.map((lease) => [lease.id, lease.unit.number]))
+
   return {
     tenantId,
     firstName: tenant.firstName,
@@ -290,6 +323,17 @@ export async function tenantProfile(actor: Actor, tenantId: string): Promise<Ten
     // A tenant with leases at two facilities sums both — the profile is one
     // person's picture, and a partial total would understate what they owe.
     totalBalanceCents: leaseSummaries.reduce((sum, lease) => sum + lease.balanceCents, 0),
+    waivableFees: feeInvoices
+      .map((invoice) => ({
+        invoiceId: invoice.id,
+        number: invoice.number,
+        facilityId: invoice.facilityId,
+        unitNumber: unitByLease.get(invoice.leaseId) ?? '—',
+        outstandingCents: invoice.totalCents - invoice.amountPaidCents,
+        issuedOn: invoice.issueDate,
+        description: invoice.lineItems[0]?.description ?? 'Fee',
+      }))
+      .filter((fee) => fee.outstandingCents > 0),
     notes: notes.map((note) => ({
       id: note.id,
       body: note.body,

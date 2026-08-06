@@ -1168,6 +1168,30 @@ Back on backlog order after the B-050/B-051 detour. The ladder, the wider fee ca
 
 ---
 
+### Billing settings, given a screen ✅ `PENDING`
+
+**Not a backlog item** — a gap-fill the owner called for after B-047's write-up flagged it. Five items had each shipped a defensible database column with no way for an operator to reach it, and together they had become the largest cluster of developer-only configuration in the project. A setting only a developer can change is one an operator has to ring someone about.
+
+**What it closed, and which item left it.** `billingPolicy`, `invoiceLeadDays`, `prorateOnMoveIn` (**B-044**), `paymentRetryDays` (**B-046**), the late-fee ladder (**B-047**), and the fee-waiver action (**B-047**). `prorateOnMoveOut` came along with them — it had been column-only since **B-040**, which predates all of this.
+
+**Decided: one form for the whole billing policy, not five saves.** The five settings are read together and they interact — anniversary billing makes `prorateOnMoveIn` unreachable, and the invoice lead time decides when a due-soon reminder fires. Splitting them across separate saves would let a facility end up in a combination nobody looked at as a whole. The `prorateOnMoveIn` field says on its face that it only applies under first-of-month billing, rather than being hidden, because a hidden control is one an operator later swears they set.
+
+**Decided: an uncapped percentage late fee is refused, not warned about.** A percentage with no cap is the one shape that can run away — 10% of a balance three months deep is a fee nobody intended to set. The form refuses to publish it and says what to enter instead. A warning would be dismissed; this is 3.3.4's error prevention on something that charges tenants automatically at 2am.
+
+**Decided: the retry schedule is typed as "1, 3, 5" and validated as increasing.** The offsets count from the invoice's original due date (D-25), not from the last attempt, so a decreasing list is not a faster schedule — it is one whose third attempt is already in the past when its second fires. The refusal explains that rather than only rejecting it (3.3.3), because the rule is genuinely non-obvious.
+
+**Decided: the late-fee ladder is append-only with a confirm step, like every other price here.** Adding a step echoes back what was parsed — the step, the trigger, the amount in words ("the greater of $20.00 or 10%"), the cap, the effective date — and asks for agreement before writing (3.3.4). It cannot be edited or deleted afterwards; changing it is another row with a later date (FR-9), so a fee already assessed is never retroactively a different amount.
+
+**The waive control reuses B-047's domain function rather than reimplementing its gates.** Permission, monetary limit and reason code all stay in `waiveFeeInvoice`; the action only translates its refusals into sentences. The over-limit message names the actor's limit and says to ask a manager, because RBAC-2 routes over-limit to the next role up and a manager reading "not allowed" cannot tell what to ask for. Reason codes come from the audit catalog's vocabulary with a free-text note beside them — the code is what keeps the log filterable, the note is what explains this particular case.
+
+**Also fixed: the fee-type dropdown still offered four types.** B-047 added six more to the enum — `lock_cut`, `cleaning`, `damage`, `transfer`, `certified_mail`, `auction_cost` — and the settings form had not caught up, so the fees that item existed to make chargeable were unreachable from the screen that sets their amounts. They now list with readable labels rather than raw enum keys.
+
+**Verified:** 1104 unit/DB tests (8 new on the retry-schedule parser: separators, empty meaning no retries, the increasing rule with its explanation, non-integers and out-of-range values, the length cap, and the offending value named so a person can find it). E2e: 334 passing, including three new specs — the policy form rendering, the out-of-order retry schedule reporting beside the field *and* in the summary, and the uncapped percentage refused — plus the existing axe sweep over `/admin/settings`, which now covers all of it. Typecheck, lint, build clean. No migration.
+
+**Left behind.** **The waive control has no axe coverage in the browser** — it only renders when a tenant has an outstanding fee and the demo tenant has none, so the a11y sweep never reaches it. It is built from the same `AdminForm`/`Field` primitives every audited screen uses, but "same primitives" is an argument, not a test. **No edit or delete anywhere**, by design (FR-9) — a mistyped late-fee step is corrected by adding another row dated today, and there is no UI that explains that beyond the hint text. **The ladder shows only what is in force today**, not its history; the tax and fee tables have the same limitation. **Settings still missing a screen**: `authorizedAccessCap`, `cashApprovalThresholdCents`, `writeOffThresholdCents` and `moveOutNoticeDays` are all still column-only — they belong to US-3 and US-14 rather than billing, and were left out to keep this pass to the cluster the owner named.
+
+---
+
 ---
 
 ## Feature PRDs added mid-build
