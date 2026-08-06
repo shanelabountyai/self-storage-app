@@ -1355,6 +1355,34 @@ CN-3's ladder, CN-5's halts, and the tone escalation as content. Everything it n
 
 ---
 
+### B-053 — Template editor + per-facility sender identity ✅ `PENDING`
+
+CN-16's editor and CN-17's identity. The item that makes every word written across B-050, B-052 and B-098 changeable without a deploy.
+
+**Decided: one field schema, in core, serving three consumers.** The picker, the preview's sample data and the publish gate all read `packages/core/comms` — because three separate lists of "what fields exist" is three lists that drift, and the one that drifts silently is the gate. Before this, the only statement of what a template *could* use was the `requiredMergeFields` array saying what it *did*; publishing was unguarded.
+
+**Decided: publishing is blocked, not warned.** A template referencing a field its event cannot supply fails at **send** time — inside a job, hours later, with the tenant simply never hearing from us and nothing on any screen saying why. That is the failure CN-16's gate exists to prevent, so it refuses the save. A known-but-*undeclared* field is reported and allowed: a line that renders empty is a legitimate choice, and the render guard already refuses to mail a surviving placeholder.
+
+**Decided: the preview renders through the same `renderEmail` a real send uses.** A lenient preview is worse than none — it would tell an operator the template is fine when it is not. Anything that would fail at 2am fails here instead, in front of the person who can fix it.
+
+**Decided: saving is append-only.** A new version, the previous deactivated, never an edit in place — because `Message` records the version it sent, and that is what lets a message from last Tuesday be reproduced exactly as it went out after three subsequent edits. A lien file may depend on that.
+
+**Decided: test-send goes to the actor's own signed-in address, never a typed one.** A test-send that accepted an arbitrary address is an open relay wearing an admin screen: anyone with settings access could mail anyone, from the facility's authenticated domain, with content they wrote. It also runs through the real provider selection, so the sandbox rules and the kill switch apply exactly as they do to a tenant send.
+
+**Decided (CN-17): the display name is per facility; the address is not.** Every facility sends from the one authenticated domain, because SPF, DKIM and DMARC are configured there — giving each site its own sending address would need a DNS setup per facility, and until that was done its mail would fail authentication and land in spam. CN-17's own wording puts the facility identity in the *name* and routes the human reply to `replyTo` for exactly this reason. The **postal footer is appended by the pipeline**, not written into each template, because it is a CAN-SPAM requirement and a template author forgetting it is the failure that rule exists to catch.
+
+**Found and fixed — a real bug, latent since B-035 and invisible until Stripe was configured this afternoon.** `createChargeIntent` derived its Stripe idempotency key from the stable `reference` but put the **freshly-created local `Payment` id** in the request metadata. Same key, different parameters on every call — which Stripe rejects with `StripeIdempotencyError`. In practice: **reloading the portal pay screen returned a 500**, and two tenants could never be on it at once. It had been unreachable for the project's entire life because no Stripe key existed; it surfaced within ninety minutes of one arriving, via the e2e suite, one item later. Nothing ever read that metadata — the link exists in the other direction on `Payment.stripePaymentIntentId`. Verified the corrected shape is genuinely idempotent by issuing two identical requests under one key against real Stripe and confirming the same intent came back. The key is namespaced `v2` because Stripe remembers a key's parameters for 24 hours, so the old shape would otherwise keep conflicting until it aged out.
+
+**Also fixed: three e2e tests encoded "Stripe is not configured" as the expected state.** True for the whole project until this afternoon, false the moment a key arrived. One asserted the "call us" fallback rather than the control that charges; one broke on a strict-mode violation because the Payment Element renders an alert region of its own; one used a selector for an element that lives inside a Stripe iframe. All three now assert the behaviour rather than the environment — the itemisation before the charging control, whichever control that is.
+
+**Also fixed: a running dev server holds a stale Prisma client.** Adding the two CN-17 columns and regenerating left the server returning `Unknown field emailFromName` while every unit test passed, because vitest reloads the client each run and a long-running dev server does not. Added to `CLAUDE.md` as a third hard-won rule, since it will cost the next session twenty minutes otherwise.
+
+**Verified:** 1291 unit/DB tests (36 new — 27 on the schema and gate, including a parameterised guard that **every one of the 15 seeded templates passes its own publish gate**, which is what catches the catalog drifting from what the service actually supplies; 9 against real rows for listing, preview, the two refusals, override-without-touching-the-default, append-only versioning, and the audit). E2e: 348 passing, including an axe-clean editor and the publish gate refusing from the browser. Typecheck, lint, build clean. One migration.
+
+**Left behind.** **No SMS half** — CN-16 asks for an SMS body with a segment counter and a 160-character warning; there is no SMS channel until **B-074**, so the editor is email-only. **No version history UI**: old versions are kept and a `Message` can still name one, but nothing shows them or offers a revert — the data is there and it is a screen. **No diff or draft state** — saving publishes immediately; there is no "save without publishing", which CN-16 does not ask for but an operator will. **The picker does not insert** — it lists fields with descriptions rather than clicking them into the body at the cursor, which needs client-side state this server-rendered form does not have. **Test-send always renders sample data**, never a real tenant's, so it proves the wording rather than the merge.
+
+---
+
 ---
 
 ## Feature PRDs added mid-build

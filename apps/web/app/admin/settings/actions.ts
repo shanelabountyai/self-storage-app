@@ -24,6 +24,7 @@ import {
   parseDunningDays,
   parseRetryDays,
   updateBillingPolicy,
+  updateEmailIdentity,
   updateOperationsPolicy,
   updateFacilityDetails,
   updateFacilityHours,
@@ -663,5 +664,43 @@ export async function updateOperationsPolicyAction(
   revalidatePath('/admin/settings')
   return success(
     `Saved. Up to ${accessCap.value} named people per lease, cash at ${formatCents(cashApproval.value)} or more needs a manager, and ${noticeDays.value === 0 ? 'no notice is required to move out' : `${noticeDays.value} days' notice is required to move out`}.`,
+  )
+}
+
+/// CN-17's sender identity. Its own action rather than a branch inside the
+/// operations form: that one parses four numeric limits this form does not
+/// submit, so sharing it would have failed validation on every save.
+export async function updateEmailIdentityAction(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const actor = await requireStaffActor()
+  const facilityId = String(formData.get('facilityId'))
+  requirePermission(actor, 'facility:settings', facilityId)
+
+  const fromName = String(formData.get('emailFromName') ?? '').trim()
+  const replyTo = String(formData.get('emailReplyTo') ?? '').trim()
+
+  // A reply-to that does not parse is worse than none: it silently bounces
+  // every reply a tenant sends, and nobody finds out because the bounce goes
+  // to an address that does not exist either.
+  if (replyTo && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(replyTo)) {
+    return fieldError({ emailReplyTo: 'Enter a full email address, for example office@example.com.' })
+  }
+
+  try {
+    await updateEmailIdentity(actor, facilityId, {
+      emailFromName: fromName || null,
+      emailReplyTo: replyTo || null,
+    })
+  } catch (error) {
+    return asFormError(error, 'Could not save the email identity.')
+  }
+
+  revalidatePath('/admin/settings')
+  return success(
+    replyTo
+      ? `Tenants will see “${fromName || 'the facility name'}” and replies go to ${replyTo}.`
+      : `Tenants will see “${fromName || 'the facility name'}”. Replies have nowhere to go until you set a reply-to.`,
   )
 }

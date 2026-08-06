@@ -432,6 +432,15 @@ model Facility {
   /// chased. Empty means no automated chasing, which is a real operator
   /// choice for a site that phones instead.
   dunningDays            Int[]     @default([1, 5, 10, 30])
+  /// PRD 05 CN-17. The name a tenant sees in their inbox. Null falls back to
+  /// the facility name, which is the sensible default and what shipped before
+  /// this was configurable.
+  emailFromName          String?
+  /// Where a reply goes. The From address stays on the shared authenticated
+  /// sending domain — moving it to a facility's own mailbox would break SPF
+  /// and DKIM for every send — so the facility's real inbox is reached by
+  /// reply-to instead. That split is CN-17's own design.
+  emailReplyTo           String?
   /// Days of notice the lease requires before a move-out. 0 means none.
   moveOutNoticeDays   Int            @default(10)
   /// A residual balance at or below this can be written off to close the

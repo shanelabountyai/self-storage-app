@@ -393,3 +393,25 @@ export async function updateOperationsPolicy(
     after: fields(after),
   })
 }
+
+/// PRD 05 CN-17. Per-facility sender identity.
+export async function updateEmailIdentity(
+  actor: Actor,
+  facilityId: string,
+  input: { emailFromName: string | null; emailReplyTo: string | null },
+): Promise<void> {
+  requirePermission(actor, 'facility:settings', facilityId)
+
+  const before = await prisma.facility.findUniqueOrThrow({ where: { id: facilityId } })
+  const after = await prisma.facility.update({ where: { id: facilityId }, data: input })
+
+  await recordAudit({
+    actor: toAuditActor(actor),
+    action: 'facility.settings_changed',
+    entityType: 'Facility',
+    entityId: facilityId,
+    facilityId,
+    before: { emailFromName: before.emailFromName, emailReplyTo: before.emailReplyTo },
+    after: { emailFromName: after.emailFromName, emailReplyTo: after.emailReplyTo },
+  })
+}

@@ -18,7 +18,8 @@ Multi-facility self-storage platform. Learning project, built to professional st
 - Also update the same-day PRD when an item settles something the PRD left open, and append owner decisions to `07-decisions.md` with a new D-number rather than resolving them silently.
 - Commit after every completed item with a message like `B-012: unit CRUD`, then push.
 
-## Two rules this codebase learned the hard way
+## Three rules this codebase learned the hard way
 
 - **A new column that configures behaviour gets its control in the same item.** Each one is individually defensible to defer, and they accumulate: `billingPolicy`, `invoiceLeadDays`, `prorateOnMoveIn`, `paymentRetryDays` and the late-fee ladder all shipped reachable only from a database client, and took two separate clean-up passes to close. If an operator would ever need to change it, it needs a form field before the item is done.
+- **Restart `npm run dev` after a schema change.** A running dev server holds the Prisma client it started with, so `db:generate` alone leaves it serving `Unknown field ... for select statement` while the unit tests pass — they reload the client each run. Costs twenty minutes if you go looking for the bug in your own code.
 - **Test isolation is not free on a shared database.** `audit_log` is append-only and never cleaned between tests, so an assertion like `findFirst({ where: { action, entityId: leaseId } })` can return a row an earlier test in the same file wrote — scope it to the specific entity (the audit context carries the ids) or order newest-first. The same applies to fixture names: twenty suites create a tenant called "Ada Renter", and `searchTenants` caps at 25 results. A suite that passes once has not been shown to be repeatable; if a test touches shared state, run the suite twice before calling it green.

@@ -10,6 +10,7 @@ import {
   effectiveRecipient,
   fromAddress,
   selectProvider,
+  withPostalFooter,
 } from './provider'
 import { type MergeContext, messageIdempotencyKey, RenderError, renderEmail } from './render'
 
@@ -28,6 +29,8 @@ const CHANNEL = 'email' as const
 type RecipientFacility = {
   id: string
   name: string
+  emailFromName: string | null
+  emailReplyTo: string | null
   phone: string | null
   addressLine1: string
   addressLine2: string | null
@@ -76,6 +79,8 @@ const LEASE_SELECT = {
 const FACILITY_SELECT = {
   id: true,
   name: true,
+  emailFromName: true,
+  emailReplyTo: true,
   phone: true,
   addressLine1: true,
   addressLine2: true,
@@ -993,13 +998,26 @@ async function deliverForRule(
     status: 'queued',
   })
 
+  // CN-17. The facility's own identity in the name and the reply-to; the
+  // postal footer appended here rather than left to each template, so an edited
+  // template cannot drop a CAN-SPAM requirement.
+  const facility = recipient.facility
+  const footerTarget = facility
+    ? { name: facility.name, address: formatFacilityAddress(facility) }
+    : null
+  const text = withPostalFooter(rendered.text, footerTarget)
+  const html = footerTarget
+    ? `${rendered.html}<hr><p>${footerTarget.name}<br>${footerTarget.address}</p>`
+    : rendered.html
+
   const provider = selectProvider()
   const result = await provider.sendEmail({
     to: effectiveRecipient(address),
-    from: fromAddress(recipient.facility?.name ?? 'Storage'),
+    from: fromAddress(facility?.emailFromName ?? facility?.name ?? 'Storage'),
+    replyTo: facility?.emailReplyTo ?? null,
     subject: rendered.subject,
-    html: rendered.html,
-    text: rendered.text,
+    html,
+    text,
     idempotencyKey,
   })
 

@@ -544,9 +544,20 @@ test('the payment step itemises before it charges and discloses autopay', async 
   )
   await expect(autopay).toHaveAttribute('aria-describedby', 'autopay-disclosure')
 
-  // No Stripe keys are configured, so the honest fallback is what renders —
-  // a phone number rather than a card form that cannot submit.
-  await expect(page.getByRole('main')).toContainText("can't take card payments online just now")
+  // Whichever of the two payment affordances is correct for this environment.
+  // This test's subject is that everything is itemised BEFORE the control that
+  // charges (3.3.4) — not which control that is. It asserted the unconfigured
+  // fallback for the project's whole life, and started failing the hour a real
+  // Stripe key arrived, which is the test encoding the environment rather than
+  // the behaviour.
+  // The Payment Element itself lives in a Stripe iframe with no selector of
+  // ours, so this asserts on the control that CHARGES — which is the thing
+  // 3.3.4 is actually about, and is ours.
+  // "Pay and complete move-in" at checkout; "Pay $X" in the portal. Either is
+  // the control that charges.
+  const payButton = page.getByRole('button', { name: /^Pay\b/ })
+  const callInstead = page.getByText("can't take card payments online just now")
+  await expect(payButton.or(callInstead).first()).toBeVisible()
 })
 
 test('an unknown checkout link says so and charges nothing', async ({ page }) => {

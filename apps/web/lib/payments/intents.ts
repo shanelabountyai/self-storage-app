@@ -127,7 +127,20 @@ export async function createChargeIntent(input: ChargeIntentInput): Promise<Char
         confirm: input.offSession ?? undefined,
         ...(input.paymentMethodId ? { payment_method: input.paymentMethodId } : {}),
         metadata: {
-          paymentId: payment.id,
+          // `paymentId` is deliberately NOT here, and this is not an omission.
+          //
+          // Stripe rejects a reused idempotency key whose PARAMETERS differ.
+          // The key comes from `reference`, which is stable for a given logical
+          // charge — but a fresh local `Payment` row is written on every call,
+          // so including its id made the metadata differ every time and Stripe
+          // refused the second attempt with a `StripeIdempotencyError`. In
+          // practice that meant simply RELOADING the portal pay screen returned
+          // a 500, and two tenants could never be on it at once.
+          //
+          // Latent since B-035 and invisible for the whole project's life
+          // because Stripe was unconfigured; it surfaced within minutes of a
+          // real key. Nothing ever read this field — the link exists in the
+          // other direction, on `Payment.stripePaymentIntentId`.
           facilityId: input.facilityId,
           tenantId: input.tenantId,
           reference: input.reference,
@@ -135,7 +148,13 @@ export async function createChargeIntent(input: ChargeIntentInput): Promise<Char
           ...(input.invoiceId ? { invoiceId: input.invoiceId } : {}),
         },
       },
-      { idempotencyKey: idempotencyKey('charge', input.reference) },
+      // `v2` namespaces the key. Stripe remembers the PARAMETERS a key was
+      // first used with for 24 hours, so removing `paymentId` from the metadata
+      // above would otherwise keep conflicting with keys recorded under the old
+      // shape until they aged out. Bumping the namespace when the request shape
+      // changes is the standard move, and cheap: the worst case is that one
+      // charge is not deduplicated against a pre-change attempt.
+      { idempotencyKey: idempotencyKey('charge', 'v2', input.reference) },
     )
   } catch (error) {
     // The pending row was written first on purpose (see above), but if Stripe

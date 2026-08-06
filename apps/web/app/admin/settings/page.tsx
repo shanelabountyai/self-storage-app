@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { AdminForm, Field } from '@/components/admin/form'
 import { DayScheduleRow } from '@/components/admin/day-schedule-row'
@@ -12,6 +13,7 @@ import {
   addFeeScheduleEntryAction,
   addLateFeeStepAction,
   updateBillingPolicyAction,
+  updateEmailIdentityAction,
   updateOperationsPolicyAction,
   addProtectionPlanAction,
   setProtectionPolicyAction,
@@ -598,6 +600,45 @@ export default async function AdminSettingsPage() {
           <Field name="effectiveFrom" label="Effective from" type="date" defaultValue={todayIso()} required />
           <Button type="submit">Add step</Button>
         </AdminForm>
+      </section>
+
+      <section aria-labelledby="identity-heading" className="flex flex-col gap-3">
+        <h2 id="identity-heading" className="text-base font-medium">
+          Email identity
+        </h2>
+        <p className="text-muted-foreground max-w-prose text-xs text-pretty">
+          Tenants see this name in their inbox. The sending address itself stays on the shared
+          authenticated domain — SPF and DKIM are set up there, and a per-facility address would
+          need its own DNS before mail from it stopped landing in spam — so replies are routed by
+          reply-to instead. Every email also carries this facility&apos;s postal address in the
+          footer automatically.
+        </p>
+        <AdminForm
+          action={updateEmailIdentityAction}
+          label="Email identity"
+          className="flex flex-wrap items-end gap-3"
+        >
+          <input type="hidden" name="facilityId" value={facilityId} />
+          <Field
+            name="emailFromName"
+            label="From name"
+            defaultValue={facility.emailFromName ?? ''}
+            hint={`Empty uses the facility name: ${facility.name}`}
+          />
+          <Field
+            name="emailReplyTo"
+            label="Reply-to address"
+            type="email"
+            defaultValue={facility.emailReplyTo ?? ''}
+            hint="Where a tenant's reply lands. Empty means replies go nowhere useful."
+          />
+          <Button type="submit">Save email identity</Button>
+        </AdminForm>
+        <p className="text-sm">
+          <Link href="/admin/settings/templates" className="underline underline-offset-2">
+            Edit message templates
+          </Link>
+        </p>
       </section>
 
       <section aria-labelledby="operations-heading" className="flex flex-col gap-3">

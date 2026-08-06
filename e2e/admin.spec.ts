@@ -229,3 +229,48 @@ test.describe('billing settings, given a screen', () => {
     await expect(form.getByText(/needs a cap/).first()).toBeVisible()
   })
 })
+
+test.describe('template editor (B-053)', () => {
+  test.beforeEach(async ({ page }) => {
+    await signInAsDemoOwner(page)
+  })
+
+  test('lists templates, shows the field picker and a rendered preview', async ({ page }) => {
+    await page.goto('/admin/settings/templates')
+
+    await expect(page.getByRole('heading', { name: /^Message templates/ })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Fields you can use' })).toBeVisible()
+
+    // The preview renders sample data, so an operator reads the sentence rather
+    // than the placeholders.
+    const preview = page.getByRole('region', { name: 'Preview' })
+    await expect(page.getByText('{{tenant.first_name}}').first()).toBeVisible()
+    await expect(preview.getByText(/From:/)).toBeVisible()
+  })
+
+  test('has no WCAG 2.1 AA violations', async ({ page }) => {
+    await page.goto('/admin/settings/templates')
+    await expect(page.getByRole('main')).toBeVisible()
+
+    const { violations } = await new AxeBuilder({ page })
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+      .analyze()
+
+    expect(
+      violations.map((v) => `${v.id}: ${v.help}`),
+      'axe found accessibility violations',
+    ).toEqual([])
+  })
+
+  test('blocks publishing a field the event cannot supply', async ({ page }) => {
+    await page.goto('/admin/settings/templates')
+
+    const form = page.getByRole('form', { name: /^Edit / })
+    await form.getByLabel('Message').fill('Hi {{tenant.middle_name}}, your rent is due.')
+    await form.getByRole('button', { name: 'Publish new version' }).click()
+
+    // Blocked rather than warned: this would fail at send time, in a job, with
+    // the tenant simply never hearing from us.
+    await expect(form.getByText(/tenant\.middle_name/).first()).toBeVisible()
+  })
+})

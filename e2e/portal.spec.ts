@@ -91,7 +91,12 @@ test.describe('signed in as the demo tenant', () => {
     const leaseId = new URL(page.url()).searchParams.get('lease')
 
     await page.goto(`/portal/pay?lease=${leaseId}&amount=999999`)
-    await expect(page.getByRole('main').getByRole('alert')).toContainText('more than you owe')
+    // Scoped to THIS alert: the Payment Element renders an (empty) alert region
+    // of its own once Stripe is configured, so an unscoped `getByRole('alert')`
+    // matches two and fails on strict mode rather than on behaviour.
+    await expect(
+      page.getByRole('main').getByRole('alert').filter({ hasText: 'more than you owe' }),
+    ).toBeVisible()
     // And it did not quietly prepare a charge for the crafted amount.
     await expect(page.getByText('$9,999.99')).toHaveCount(0)
   })

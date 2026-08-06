@@ -14,6 +14,10 @@
 export type OutboundEmail = {
   to: string
   from: string
+  /// CN-17. Where a reply goes. The From address stays on the shared
+  /// authenticated domain — moving it to a facility mailbox would break SPF and
+  /// DKIM for every send — so a facility's real inbox is reached this way.
+  replyTo?: string | null
   subject: string
   html: string
   text: string
@@ -109,12 +113,37 @@ export function commsEnabled(): boolean {
   return process.env.COMMS_KILL_SWITCH !== 'on'
 }
 
-/// FR-4 sender identity. Per-facility From is CN-17 (a later item); for now one
-/// org-level From derived from the sending domain, defaulting to something
-/// obviously non-deliverable so an unconfigured prod cannot look configured.
-export function fromAddress(facilityName: string): string {
+/// FR-4 / CN-17 sender identity.
+///
+/// The display name is per facility; the ADDRESS is not. Every facility sends
+/// from the one authenticated domain because SPF, DKIM and DMARC are configured
+/// there — giving each site its own sending address would mean a DNS setup per
+/// facility and, until that was done, mail that fails authentication and lands
+/// in spam. CN-17's own wording puts the facility identity in the name and
+/// routes the human reply to `replyTo` for exactly this reason.
+///
+/// The domain defaults to something obviously non-deliverable so an
+/// unconfigured production cannot look configured.
+export function fromAddress(displayName: string): string {
   const domain = process.env.COMMS_EMAIL_DOMAIN ?? 'mail.example.com'
-  return `${facilityName} <notifications@${domain}>`
+  // A comma or angle bracket in the display name would break the header; a
+  // facility called "Austin, South" is not hypothetical.
+  const safe = displayName.replace(/[<>,;"]/g, ' ').replace(/\s+/g, ' ').trim()
+  return `${safe} <notifications@${domain}>`
+}
+
+/// CN-17: "email footer auto-injects the facility's physical address."
+///
+/// Appended by the pipeline rather than written into each template, because a
+/// postal address is a CAN-SPAM requirement on commercial mail and a template
+/// author forgetting it is exactly the failure that rule exists to catch. One
+/// place to get right, and no way for an edited template to drop it.
+export function withPostalFooter(
+  body: string,
+  facility: { name: string; address: string } | null,
+): string {
+  if (!facility) return body
+  return `${body}\n\n—\n${facility.name}\n${facility.address}`
 }
 
 /// FR-20 sandbox redirect. The single guarantee: **no real tenant address is

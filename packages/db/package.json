@@ -7,7 +7,8 @@
   "types": "./index.ts",
   "exports": {
     ".": "./index.ts",
-    "./rbac-catalog": "./rbac-catalog.ts"
+    "./rbac-catalog": "./rbac-catalog.ts",
+    "./comms-catalog": "./comms-catalog.ts"
   },
   "prisma": {
     "seed": "node prisma/seed.mts"

@@ -76,6 +76,9 @@ export const AUDIT_ACTIONS = [
 
   // Administration
   { action: 'facility.settings_changed', label: 'Facility settings changed', requiresReason: false },
+  /// CN-16. A published template changes what every future tenant is told, and
+  /// the version it records is what makes an old `Message` reproducible.
+  { action: 'template.published', label: 'Message template published', requiresReason: false },
   { action: 'user.created', label: 'Staff user created', requiresReason: false },
   { action: 'user.role_changed', label: 'Staff role changed', requiresReason: true },
   { action: 'user.deactivated', label: 'Staff user deactivated', requiresReason: true },
