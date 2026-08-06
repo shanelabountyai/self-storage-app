@@ -954,7 +954,7 @@ The shared `metrics` module, the portfolio dashboard, the rent roll (which doubl
 
 ---
 
-### B-043 — Billing scheduler ⏳ PARTIAL — catch-up only `<pending>`
+### B-043 — Billing scheduler ⏳ PARTIAL — catch-up only `4c30a6a`
 
 **Not a completed item.** One part of B-043 shipped and is fully tested; three remain. Marked partial in the backlog rather than ✅, and written up here so the next session starts with the scope straight rather than rediscovering it.
 
