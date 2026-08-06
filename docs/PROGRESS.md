@@ -1094,7 +1094,7 @@ The tenant cadence is `payment.retry_reminder`, one a day for three days **from 
 
 ---
 
-### B-050 — Payment lifecycle notices ✅ `PENDING`
+### B-050 — Payment lifecycle notices ✅ `297b52b`
 
 **Pulled forward past B-047 on the owner's instruction**, because B-046 had just built a retry schedule whose whole purpose is to buy a tenant time to act, and nothing was telling them to. Its dependencies (B-030, B-043, B-044, B-046) were all shipped, so nothing was jumped.
 
