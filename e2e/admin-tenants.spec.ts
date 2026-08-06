@@ -97,3 +97,56 @@ test.describe('signed in as the demo owner', () => {
     await expect(page.getByRole('main').getByText(/Enter a title/)).toHaveCount(2)
   })
 })
+
+test.describe('the tenant ledger (B-049)', () => {
+  test.beforeEach(async ({ page }) => {
+    await signInAsDemoOwner(page)
+  })
+
+  test('reaches a ledger from the profile, reconciled, and exports it', async ({ page }) => {
+    await page.goto('/admin/tenants?q=dana@demo.example.com')
+    await page.getByRole('link', { name: 'Dana Delinquent' }).click()
+    await page.getByRole('link', { name: /^Ledger/ }).first().click()
+
+    await expect(page.getByRole('heading', { name: /^Ledger — unit/ })).toBeVisible()
+    await expect(page.getByRole('columnheader', { name: 'Balance' })).toBeVisible()
+
+    // US-24's AC is stated on the screen rather than left in a document.
+    await expect(page.getByRole('heading', { name: /Reconciled|Does not reconcile/ })).toBeVisible()
+
+    // The export comes from the same call as the screen, so the closing
+    // balance on the last row must be the balance the page reports.
+    const balance = await page
+      .getByRole('term')
+      .filter({ hasText: 'Balance' })
+      .locator('xpath=following-sibling::dd[1]')
+      .innerText()
+
+    const response = await page.request.get(`${page.url()}/ledger.csv`)
+    expect(response.headers()['content-type']).toContain('text/csv')
+    // Per-tenant money must never be cached by a shared proxy.
+    expect(response.headers()['cache-control']).toContain('no-store')
+
+    const rows = (await response.text()).trim().split('\r\n')
+    if (rows.length > 1) {
+      const lastBalance = rows[rows.length - 1].split(',').at(-1)!.replace(/"/g, '')
+      expect(balance.replace(/[$,]/g, '')).toBe(lastBalance)
+    }
+  })
+
+  test('the ledger has no WCAG 2.1 AA violations', async ({ page }) => {
+    await page.goto('/admin/tenants?q=dana@demo.example.com')
+    await page.getByRole('link', { name: 'Dana Delinquent' }).click()
+    await page.getByRole('link', { name: /^Ledger/ }).first().click()
+    await expect(page.getByRole('main')).toBeVisible()
+
+    const { violations } = await new AxeBuilder({ page })
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+      .analyze()
+
+    expect(
+      violations.map((v) => `${v.id}: ${v.help}`),
+      'axe found accessibility violations',
+    ).toEqual([])
+  })
+})

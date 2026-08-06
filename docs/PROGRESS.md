@@ -1278,6 +1278,30 @@ US-22's configurable allocation order and US-23's refunds. No new decision numbe
 
 ---
 
+### B-049 — Tenant ledger screen ✅ `PENDING`
+
+The first screen that renders what the last eight items have been writing. US-24's chronological ledger, its totals, its reconciliation, and a CSV export.
+
+**Decided: the reconciliation is a function with a test, not a sentence in a document.** US-24's AC is "ledger totals always reconcile to invoice totals and reported AR", and that is the whole item. A ledger a tenant reads and an AR figure a manager reports have to be the same number arrived at two ways; the moment they drift the operator stops trusting both — the failure D-25 recorded for the metrics module, in a different place. So `reconcile()` lives in core beside the running balance, and the screen states the result rather than assuming it.
+
+**Decided: a discrepancy is reported with its likely cause, and the two directions read differently.** Too much ledger means something was charged without an invoice behind it; too much invoice means a payment is posted against the wrong lease, or an invoice was raised without its ledger charge. A manager needs to know which before they ring anyone, and "does not reconcile: $29.00" tells them neither.
+
+**Decided: a charge with no invoice behind it reconciles rather than alarming.** B-026 posts the move-in charge before the billing engine exists, by design. A reconciliation that called that a discrepancy would cry wolf on every tenant who ever moved in, and an alarm that is always on is not an alarm. Both the charge and anything settling it are counted, so a move-in paid at the counter nets to zero rather than reading as a discrepancy in the other direction.
+
+**Decided: entries are never re-signed.** A payment stays −$50.00 in the row, because the ledger is append-only (FR-8) and a screen that flipped signs to make a column look tidy would be presenting something other than the record. The *summary* turns them round — payments, credits and write-offs as positive magnitudes — because "Payments: −$129.00" reads as a payment that went the wrong way. The balance is still computed from the signs, so the two cannot disagree, and a test asserts the summary's balance equals the last running-balance line.
+
+**Decided: ordering breaks ties on id.** A charge and the payment settling it are routinely written in one transaction with identical timestamps. Without a stable second key the running balance renders one way today and the other tomorrow — and a tenant can hold two statements up and show that they disagree. Tested by feeding the same rows in both orders.
+
+**Decided: an adjustment sits in neither summary column but inside the balance.** It can go either way and bucketing it as a charge or a credit would be a guess; what it must not do is fall out of the number that has to reconcile.
+
+**The export is generated from the identical call as the screen** — the structural guarantee B-042 established, rather than a second query shaped close enough — and it is `private, no-store`: per-tenant money has no business in a shared cache. The e2e asserts the closing balance on the page equals the last balance in the file.
+
+**Verified:** 1223 unit/DB tests (25 new — 16 pure: accumulation in date order, the id tiebreak proving a reprint is identical, signs preserved, a settled lease ending at zero, reductions summarised as positive magnitudes, a refund still an increase, the summary balance agreeing with the last line, an adjustment in the balance but not the columns, and every reconciliation branch including the credit balance; 9 against real rows: order and running balance, the invoice number named, a matching lease reconciling, the uninvoiced move-in charge reconciling both before and after payment, a real discrepancy reported with the right cause, and three authorization refusals). E2e: 342 passing, including an axe-clean ledger and the CSV-matches-screen assertion. Typecheck, lint, build clean. No migration.
+
+**Left behind.** **No PDF.** US-24 says "CSV/PDF" and only CSV exists — there is no document renderer in this project, and the first one arrives with **B-061**'s notice generation. **The ledger is per lease, not per tenant**: a tenant with two units has two ledgers, which is right (the ledger is the lease's record and the balance that ages is per lease) but means there is no single statement for a tenant with several units. **No date filtering or paging** — a lease five years old renders every row; fine now, and a filter belongs with **B-084**'s reporting depth. **Nothing links to it from the delinquency or billing screens**, only the tenant profile. **The reconciliation is computed on read and not recorded**: nothing alerts on a lease that stops reconciling, so a discrepancy is only seen by whoever happens to open that ledger — a scheduled check belongs with the monthly close in B-084.
+
+---
+
 ---
 
 ## Feature PRDs added mid-build

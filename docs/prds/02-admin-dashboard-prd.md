@@ -234,6 +234,11 @@ Grouped by feature area. AC = acceptance criteria. Stories tagged **[MVP]** or *
 - AC: Refund cannot exceed the original payment; partial refunds supported; refunds appear on deposits reconciliation and the audit log.
 
 **US-24 [MVP]** Tenant ledger: a single chronological ledger per lease showing every charge, tax, payment, credit, refund, and write-off with running balance. AC: ledger totals always reconcile to invoice totals and reported AR; exportable to CSV/PDF.
+- **Built in B-049.** The running balance, the totals and the reconciliation all come from `packages/core/billing` — no figure is computed in the page, the same rule D-25 set for metrics. **The reconciliation is a function with a test, not a claim in a document**, and it is stated on the screen: reconciled, or the difference with its likely cause in plain English, because a manager who sees a discrepancy needs to know whether it is expected before they ring anyone.
+- **Entries are never re-signed** — a payment stays negative, because the ledger is append-only (FR-8) and a screen that flipped signs to tidy a column would be presenting something other than the record. The *summary* reports payments, credits and write-offs as positive magnitudes, since "Payments: −$129.00" reads as a payment that went the wrong way.
+- **Ordering breaks ties on id**, because a charge and the payment settling it are routinely written in one transaction with identical timestamps — without a stable second key a reprinted statement would disagree with the one the tenant was handed.
+- **A charge with no invoice behind it reconciles rather than alarming**: B-026 posts the move-in charge before the billing engine exists, and a system that called that a discrepancy would cry wolf on every tenant who ever moved in.
+- **CSV export only.** US-24 says "CSV/PDF" and the PDF is not built — there is no document renderer in this project, and B-061's notice generation is where one arrives.
 
 ### 4.6 Delinquency & Lien Workflow
 
