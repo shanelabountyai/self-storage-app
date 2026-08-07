@@ -1332,6 +1332,11 @@ enum GateCommandType {
   suspend_access
   resume_access
   set_credential
+  /// PRD 03 US-4 AC1/AC2: where the adapter reports `timeWindows: true`,
+  /// enforcement is hardware-side, so the schedule has to reach the controller
+  /// rather than being checked here. Editing a facility's gate hours
+  /// propagates one of these per active grant.
+  set_time_window
 }
 
 enum GateCommandStatus {
@@ -1361,6 +1366,15 @@ model AccessEvent {
   credentialId  String?
   result        AccessEventResult
   reason        String
+  /// PRD 03 US-5 AC3's anomaly flags, computed at ingestion (see
+  /// packages/core/access/anomalies.ts) rather than derived on read.
+  ///
+  /// Stored because the flag is evidence: what the system thought at the time
+  /// is what a manager is later asked about, and a flag recomputed under
+  /// today's thresholds would quietly rewrite that. `denied_repeated` also
+  /// depends on a window of neighbouring events, which is not something to
+  /// re-derive per row on every page of a filtered list.
+  flags         String[]          @default([])
   occurredAt    DateTime          @db.Timestamptz(6)
   createdAt     DateTime          @default(now()) @db.Timestamptz(6)
 
@@ -1368,6 +1382,7 @@ model AccessEvent {
   credential AccessCredential? @relation(fields: [credentialId], references: [id], onDelete: SetNull)
 
   @@index([facilityId, occurredAt])
+  @@index([credentialId, occurredAt])
   @@map("access_event")
 }
 
@@ -1387,6 +1402,15 @@ model SimulatedGateCode {
   credentialId String   @unique
   code         String
   active       Boolean  @default(true)
+  /// The vendor's copy of the time window (PRD 03 US-4 AC2). Held HERE, on the
+  /// simulated controller's own row, rather than read from `Facility` at
+  /// keypad time — because a real vendor enforces the window from what it was
+  /// last told, and a simulator that peeked at our database would never
+  /// reproduce the one bug this design has: a schedule edited but never
+  /// propagated. Null means no window was ever pushed: unrestricted.
+  windowSchedule Json?
+  /// Mirrors `AccessGrant.extendedHours`, for the same reason.
+  windowExempt   Boolean @default(false)
   createdAt    DateTime @default(now()) @db.Timestamptz(6)
   updatedAt    DateTime @updatedAt @db.Timestamptz(6)
 
@@ -1499,6 +1523,14 @@ model AccessGrant {
   state              AccessGrantState @default(pending)
   /// Why the grant last changed, e.g. "system:move_in", "staff:<userId>".
   stateCause         String?
+  /// PRD 03 US-4 AC3. 24-hour access, sold as a paid add-on: this grant
+  /// ignores the facility's gate hours.
+  ///
+  /// A boolean rather than a per-grant schedule. "24h access" is the product a
+  /// storage facility actually sells; a second full schedule per tenant would
+  /// be a configuration surface with no customer behind it, and every one of
+  /// them would drift out of step with the facility's own hours.
+  extendedHours      Boolean          @default(false)
   createdAt          DateTime         @default(now()) @db.Timestamptz(6)
   updatedAt          DateTime         @updatedAt @db.Timestamptz(6)
 

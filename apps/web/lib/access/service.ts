@@ -1,5 +1,5 @@
 import { randomInt } from 'node:crypto'
-import { type Prisma, prisma } from '@storage/db'
+import { type GateCommandType, type Prisma, prisma } from '@storage/db'
 import { canTransition, type GrantCause, type GrantState } from '@storage/core/access'
 import { emitEvent } from '@storage/core/events'
 import { recordAudit } from '@storage/core/audit'
@@ -277,16 +277,18 @@ function decryptOrUnavailable(valueRef: string, key: Buffer): RevealedCode {
   }
 }
 
-async function enqueueCommand(
+/// Exported for B-064's gate-hours propagation, which enqueues one command per
+/// grant from outside this file. Everything else here calls it directly.
+export async function enqueueCommand(
   input: {
     facilityId: string
     grantId?: string
     credentialId?: string
-    type: 'grant_access' | 'revoke_access' | 'suspend_access' | 'resume_access' | 'set_credential'
+    type: GateCommandType
     idempotencyKey: string
     payload: Record<string, unknown>
   },
-  client: Prisma.TransactionClient | typeof prisma,
+  client: Prisma.TransactionClient | typeof prisma = prisma,
 ): Promise<void> {
   // A duplicate key means the same effect was already asked for; the outbox
   // swallows it rather than the caller having to check first.

@@ -17,6 +17,7 @@ import {
   type FieldProblems,
 } from '@/lib/portal/contact'
 import { maskAddress } from '@storage/core/comms'
+import { tenantAccessHistory } from '@/lib/access/event-log'
 import { logManualDocument, type DocumentType } from '@/lib/documents/store'
 import { createTask } from '@/lib/admin/tasks'
 import { activeHolds, type ActiveHold } from '@/lib/admin/holds'
@@ -218,6 +219,19 @@ export type TenantProfile = {
   /// 2026-07-18". Read from the audit entry the rule wrote rather than
   /// recomputed, so the screen says what actually happened and when.
   accessState: { facilityName: string; suspended: boolean; summary: string }[]
+  /// PRD 03 US-4 AC3. One row per grant, so the 24-hour-access add-on can be
+  /// turned on from the profile rather than from a database client — this
+  /// codebase's first hard-won rule.
+  gateAccess: {
+    grantId: string
+    facilityId: string
+    facilityName: string
+    state: string
+    extendedHours: boolean
+  }[]
+  /// PRD 03 US-5 AC2: "Tenant detail page shows that tenant's recent access
+  /// history."
+  accessHistory: Awaited<ReturnType<typeof tenantAccessHistory>>
   /// US-23. Payments with something left to give back.
   refundable: Awaited<ReturnType<typeof refundablePayments>>
   /// Facilities the viewing actor may act through for this tenant — what a
@@ -376,7 +390,13 @@ export async function tenantProfile(actor: Actor, tenantId: string): Promise<Ten
 
   const grants = await prisma.accessGrant.findMany({
     where: { tenantId, facilityId: { in: [...new Set(leases.map((lease) => lease.facilityId))] } },
-    select: { id: true, state: true, facility: { select: { name: true } } },
+    select: {
+      id: true,
+      state: true,
+      extendedHours: true,
+      facilityId: true,
+      facility: { select: { name: true } },
+    },
   })
   const accessAudits = await prisma.auditLog.findMany({
     where: {
@@ -420,6 +440,14 @@ export async function tenantProfile(actor: Actor, tenantId: string): Promise<Ten
       .filter((fee) => fee.outstandingCents > 0),
     holds: holdsByLease.flat(),
     refundable: await refundablePayments(tenantId),
+    gateAccess: grants.map((grant) => ({
+      grantId: grant.id,
+      facilityId: grant.facilityId,
+      facilityName: grant.facility.name,
+      state: grant.state,
+      extendedHours: grant.extendedHours,
+    })),
+    accessHistory: await tenantAccessHistory(actor, tenantId),
     accessState: grants
       .map((grant) => {
         const latest = latestByGrant.get(grant.id)

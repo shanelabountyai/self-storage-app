@@ -1,6 +1,7 @@
 import { prisma } from '@storage/db'
 import { recordAudit } from '@storage/core/audit'
 import { effectiveByGroup, parseWeeklySchedule, type WeeklySchedule } from '@storage/core/facility-settings'
+import { propagateGateHours } from '@/lib/access/time-windows'
 import { requirePermission } from '@/lib/rbac/authorize'
 import type { Actor } from '@/lib/rbac/actor'
 import { toAuditActor } from '@/lib/rbac/audit-actor'
@@ -121,7 +122,7 @@ export async function updateFacilityHours(
   actor: Actor,
   facilityId: string,
   input: FacilityHoursInput,
-): Promise<void> {
+): Promise<{ gateCommandsEnqueued: number }> {
   requirePermission(actor, 'facility:settings', facilityId)
 
   // Re-validate rather than trusting the caller's type: this is the boundary
@@ -145,6 +146,17 @@ export async function updateFacilityHours(
     before: { officeHours: before.officeHours, gateHours: before.gateHours },
     after: { officeHours: after.officeHours, gateHours: after.gateHours },
   })
+
+  // PRD 03 US-4 AC1: "changes propagate to all active grants." Saving hours in
+  // a database column changes nothing at the fence — the controller enforces
+  // the window it was last told about, so the save has to push. Enqueued
+  // rather than sent: the controller may be offline, and B-027's retry and
+  // dead-letter path is what makes "the gate never got the memo" visible.
+  //
+  // Office hours are not propagated: they are when a human is behind the desk,
+  // and no hardware enforces them.
+  const { enqueued } = await propagateGateHours(facilityId)
+  return { gateCommandsEnqueued: enqueued }
 }
 
 export type AddTaxComponentInput = {

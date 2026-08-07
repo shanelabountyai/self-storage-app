@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { prisma } from '@storage/db'
+import { gateHoursDecision } from '@storage/core/access'
+import { parseWeeklySchedule } from '@storage/core/facility-settings'
 import { applyHardwareWebhookEvent, type HardwareWebhookPayload } from './webhook-handler'
 import { hardwareWebhookSecret, signHardwarePayload } from './webhook-signature'
 
@@ -14,7 +16,7 @@ function delay(ms: number): Promise<void> {
 
 export type KeypadOutcome = {
   result: 'granted' | 'denied'
-  reason: 'ok' | 'unknown_code' | 'inactive'
+  reason: 'ok' | 'unknown_code' | 'inactive' | 'outside_hours'
   /// Whether the resulting event actually reached our webhook, or is sitting
   /// in the vendor's undelivered backlog (US-7 AC3's webhook-failure fault).
   delivered: boolean
@@ -44,24 +46,66 @@ async function deliver(payload: HardwareWebhookPayload): Promise<void> {
 /// controller's own database (`SimulatedGateCode` — the vendor's, never
 /// ours), and attempts to deliver the resulting event through the signed
 /// webhook path, respecting whatever fault injection is configured.
-export async function evaluateKeypadEntry(facilityId: string, code: string): Promise<KeypadOutcome> {
+/// `at` is the moment somebody stood at the keypad. It defaults to now and is
+/// only ever passed explicitly by tests — but it is a parameter rather than a
+/// `Date.now()` buried in the window check, because "was the gate open then"
+/// is the question this function answers and a caller has to be able to ask it
+/// about 3am without waiting until 3am.
+export async function evaluateKeypadEntry(
+  facilityId: string,
+  code: string,
+  at: Date = new Date(),
+): Promise<KeypadOutcome> {
   const config = await prisma.gateSimulatorConfig.findUnique({ where: { facilityId } })
   if (config?.latencyMs) await delay(config.latencyMs)
 
   const matches = await prisma.simulatedGateCode.findMany({ where: { facilityId, code } })
   const active = matches.find((row) => row.active)
 
-  const result: KeypadOutcome['result'] = active ? 'granted' : 'denied'
-  const reason: KeypadOutcome['reason'] = active ? 'ok' : matches.length > 0 ? 'inactive' : 'unknown_code'
+  // US-4 AC2: "simulated keypad denies out-of-window attempts as
+  // `denied: outside_hours`." Evaluated against the window the controller was
+  // last PUSHED (`windowSchedule`), never against `Facility.gateHours` — see
+  // the adapter's `set_time_window` case for why that distinction is the
+  // whole design.
+  //
+  // The facility's timezone is read here rather than pushed, because a real
+  // controller is physically at the facility and knows what time it is. What
+  // it does not know, and has to be told, is the schedule.
+  let outsideHours = false
+  if (active && !active.windowExempt) {
+    const facility = await prisma.facility.findUnique({
+      where: { id: facilityId },
+      select: { timezone: true },
+    })
+    const decision = gateHoursDecision(
+      parseWeeklySchedule(active.windowSchedule),
+      at,
+      facility?.timezone ?? 'UTC',
+    )
+    outsideHours = !decision.open
+  }
+
+  const result: KeypadOutcome['result'] = active && !outsideHours ? 'granted' : 'denied'
+  const reason: KeypadOutcome['reason'] = outsideHours
+    ? 'outside_hours'
+    : active
+      ? 'ok'
+      : matches.length > 0
+        ? 'inactive'
+        : 'unknown_code'
 
   const vendorEventId = randomUUID()
   const payload: HardwareWebhookPayload = {
     facilityId,
     vendorEventId,
+    // The credential is named even on an out-of-hours denial: it is a known
+    // tenant at the gate at the wrong time, which is a different fact from a
+    // stranger trying numbers, and the flags downstream need to tell them
+    // apart.
     credentialId: active?.credentialId ?? null,
     result,
     reason,
-    occurredAt: new Date().toISOString(),
+    occurredAt: at.toISOString(),
   }
 
   await prisma.simulatedVendorEvent.create({

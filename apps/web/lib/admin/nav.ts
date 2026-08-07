@@ -28,6 +28,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { key: 'pos', label: 'POS / Drawer', href: '/admin/pos', anyOf: ['payments:take'] },
   // No Task entity yet (B-060) — gated the same as Tenants for now.
   { key: 'tasks', label: 'Tasks', href: '/admin/tasks', anyOf: ['tenants:view'] },
+  { key: 'access', label: 'Gate Activity', href: '/admin/access', anyOf: ['access:events'] },
   { key: 'reports', label: 'Reports', href: '/admin/reports', anyOf: ['reports:operational', 'reports:financial', 'reports:rollup'] },
   { key: 'settings', label: 'Settings', href: '/admin/settings', anyOf: ['facility:settings'] },
   { key: 'audit-log', label: 'Audit Log', href: '/admin/audit-log', anyOf: ['audit:view'] },

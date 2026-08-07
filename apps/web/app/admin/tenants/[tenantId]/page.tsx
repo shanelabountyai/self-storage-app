@@ -12,6 +12,7 @@ import {
   liftHoldAction,
   placeHoldAction,
   refundAction,
+  setExtendedHoursAction,
   updateContactAction,
   waiveFeeAction,
 } from './actions'
@@ -618,6 +619,76 @@ export default async function TenantProfilePage({
             Log document
           </button>
         </AdminForm>
+      </section>
+
+      {profile.gateAccess.length > 0 && (
+        <section aria-labelledby="gate-heading" className="flex flex-col gap-3">
+          <h2 id="gate-heading" className="font-medium">
+            Gate access
+          </h2>
+          {profile.gateAccess.map((grant) => (
+            <form
+              key={grant.grantId}
+              action={setExtendedHoursAction}
+              className="border-input flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3 text-sm"
+            >
+              <input type="hidden" name="grantId" value={grant.grantId} />
+              <input type="hidden" name="facilityId" value={grant.facilityId} />
+              <input type="hidden" name="tenantId" value={profile.tenantId} />
+              <span>
+                <span className="font-medium">{grant.facilityName}</span>
+                <span className="text-muted-foreground"> · {grant.state}</span>
+              </span>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  name="extendedHours"
+                  defaultChecked={grant.extendedHours}
+                  className="size-4"
+                />
+                24-hour access (paid add-on)
+              </label>
+              <button
+                type="submit"
+                className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
+              >
+                Save
+              </button>
+            </form>
+          ))}
+          <p className="text-muted-foreground text-xs text-pretty">
+            Off means this tenant&apos;s code works only during the facility&apos;s published gate
+            hours. Saving queues the change to the gate controller — it is not instant if the
+            controller is offline.
+          </p>
+        </section>
+      )}
+
+      <section aria-labelledby="gate-history-heading" className="flex flex-col gap-3">
+        <h2 id="gate-history-heading" className="font-medium">
+          Recent gate activity
+        </h2>
+        <ul className="flex flex-col gap-2">
+          {profile.accessHistory.map((event) => (
+            <li
+              key={event.id}
+              className="border-input flex flex-wrap justify-between gap-2 rounded-lg border p-3 text-sm"
+            >
+              <span>
+                {event.result === 'granted' ? 'Opened' : 'Denied'}
+                <span className="text-muted-foreground"> · {event.facilityName}</span>
+                {event.unitNumber && <span className="text-muted-foreground"> · {event.unitNumber}</span>}
+              </span>
+              <span className="text-muted-foreground">
+                {event.flags.length > 0 && <span>{event.flags.join(', ')} · </span>}
+                {formatWhen(event.occurredAt)}
+              </span>
+            </li>
+          ))}
+          {profile.accessHistory.length === 0 && (
+            <li className="text-muted-foreground text-sm">No gate activity recorded.</li>
+          )}
+        </ul>
       </section>
 
       <section aria-labelledby="comms-heading" className="flex flex-col gap-3">

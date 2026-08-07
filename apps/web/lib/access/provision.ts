@@ -1,6 +1,7 @@
 import { prisma } from '@storage/db'
 import { ensureGrant, issueCredential, transitionGrant, drainGateCommands } from './service'
 import { accessCodeEncryptionKey, decryptCode } from './secret'
+import { pushGateHoursForGrant } from './time-windows'
 
 // PRD 01 FR-4.5 / PRD 03 US-1. Giving a new tenant a way through the gate.
 
@@ -30,6 +31,13 @@ export async function provisionAccessForLease(leaseId: string): Promise<AccessPr
   const grant = await ensureGrant(lease.facilityId, lease.tenantId, 'system:move_in')
   await transitionGrant(grant.grantId, 'active', 'system:move_in')
   const credential = await issueCredential(grant.grantId, leaseId)
+
+  // PRD 03 US-4. Push the facility's gate hours to this grant now. Without it a
+  // tenant who moved in on Tuesday would have unrestricted access until the
+  // next time somebody happened to save the settings form — the controller
+  // enforces the window it was told about, and it has not been told anything
+  // about this credential yet.
+  await pushGateHoursForGrant(grant.grantId)
 
   // Try immediately rather than waiting for the scheduled drain — US-501 wants
   // the code in the renter's hand at the end of checkout, and the queue is the

@@ -89,6 +89,33 @@ async function applyToSimulatedController(command: GateCommandInput): Promise<Ad
       return { ok: true }
     }
 
+    case 'set_time_window': {
+      // US-4 AC1: "changes propagate to all active grants via `setTimeWindow`."
+      //
+      // Written onto the CONTROLLER's rows, which is the point — a real vendor
+      // enforces the window it was last told about. A simulator that instead
+      // read `Facility.gateHours` at keypad time could never reproduce the one
+      // failure this design has to be able to show: hours edited, command
+      // dead-lettered, gate still running last week's schedule.
+      if (!command.grantId) {
+        return { ok: false, retryable: false, message: 'set_time_window requires a grantId' }
+      }
+      const credentials = await prisma.accessCredential.findMany({
+        where: { grantId: command.grantId },
+        select: { id: true },
+      })
+      if (credentials.length === 0) return { ok: true }
+
+      await prisma.simulatedGateCode.updateMany({
+        where: { credentialId: { in: credentials.map((c) => c.id) } },
+        data: {
+          windowSchedule: (command.payload.schedule ?? null) as never,
+          windowExempt: command.payload.extendedHours === true,
+        },
+      })
+      return { ok: true }
+    }
+
     default:
       return { ok: false, retryable: false, message: `Unhandled command type: ${command.type}` }
   }

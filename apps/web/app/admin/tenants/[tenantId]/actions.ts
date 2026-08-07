@@ -17,6 +17,8 @@ import { formatCents } from '@/lib/format'
 import { liftHold, placeHold } from '@/lib/admin/holds'
 import { refundPayment } from '@/lib/billing/refunds'
 import { parseScaled } from '@/lib/admin/form-state'
+import { setExtendedHours } from '@/lib/access/time-windows'
+import { requirePermission } from '@/lib/rbac/authorize'
 
 // PRD 02 §4.4 US-13/US-16. Thin session wrappers; every real decision lives
 // in lib/admin/tenants.ts (and lib/portal/contact.ts underneath it), which
@@ -297,4 +299,24 @@ export async function refundAction(_prev: FormState, formData: FormData): Promis
       ? `${formatCents(result.amountCents)} refunded to the card. It reaches them in a few days.`
       : `${formatCents(result.amountCents)} recorded as a ${result.method} refund payable — it is not paid until someone hands it over.`,
   )
+}
+
+/// PRD 03 US-4 AC3. The 24-hour-access add-on, from the tenant profile.
+///
+/// A new column that configures behaviour gets its control in the same item —
+/// this codebase's first hard-won rule. `extendedHours` would otherwise be
+/// reachable only from a database client, which is how `billingPolicy`,
+/// `invoiceLeadDays` and the late-fee ladder each cost a clean-up pass.
+export async function setExtendedHoursAction(formData: FormData): Promise<void> {
+  const actor = await requireStaffActor()
+  const grantId = String(formData.get('grantId') ?? '')
+  const facilityId = String(formData.get('facilityId') ?? '')
+  const tenantId = String(formData.get('tenantId') ?? '')
+
+  // Same key that governs adding and revoking people on a lease — deciding who
+  // gets through the gate at 3am is the same kind of decision.
+  requirePermission(actor, 'access:manage_grants', facilityId)
+
+  await setExtendedHours(grantId, formData.get('extendedHours') === 'on')
+  revalidatePath(`/admin/tenants/${tenantId}`)
 }

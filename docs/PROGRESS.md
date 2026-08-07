@@ -1464,6 +1464,32 @@ The night-by-night narrative it prints, and every step of it is asserted:
 
 ---
 
+### B-064 — Gate hours enforcement and the access event log ✅ `PENDING`
+
+PRD 03 US-4 and US-5. The schedule data and the settings form already existed from B-008; nothing enforced them, nothing propagated them, and no screen showed what happened at the gate.
+
+**What it built.** DST-safe schedule evaluation in `packages/core/access/gate-hours.ts`. A `set_time_window` gate command, propagated to every grant on a settings save and on provisioning. `AccessGrant.extendedHours` — the 24-hour add-on — with its control on the tenant profile. Anomaly flags computed at ingestion. `/admin/access`: a filterable gate log with flag counters. Recent gate activity on the tenant profile. A new `access:events` permission.
+
+**Decided: the UTC offset is never stored or derived.** Every evaluation asks `Intl.DateTimeFormat` what the wall clock reads in the facility's zone at that instant. The bug this avoids is specific: a facility on `America/Chicago` is UTC-5 in July and UTC-6 in January, so any code that subtracts a cached offset is correct for eight months and locks every tenant out an hour early for the other four — and gets both transition days wrong in both directions. Six tests pin the two 2026 transitions from both sides.
+
+**Decided: an unconfigured schedule means OPEN, not closed.** A facility that has never filled the form in has not opted into enforcement. Defaulting the other way would have locked every tenant out of every unconfigured facility the moment this shipped.
+
+**Decided: the window lives on the controller's row, not read from `Facility` at keypad time.** `SimulatedGateCode.windowSchedule` holds what the vendor was last *told*. Peeking at our own database instead would have been fewer lines and would have made one failure impossible to reproduce — hours edited, command dead-lettered, fence still running last week's schedule. That is the failure the whole propagation path exists for, so the simulator has to be able to exhibit it.
+
+**Decided: propagation is a queued command per grant, not a write.** Same outbox, retry, backoff and dead-letter path as every other gate instruction (FR-3). Saving hours to a column changes nothing at the fence, and a direct write would "succeed" while the gate disagreed. The settings save now returns how many commands it enqueued.
+
+**Decided: flags are computed at ingestion and stored, never derived on read.** Two reasons, and the second is the one that matters: `denied_repeated` is a property of a window of neighbouring events, so deriving it while rendering a filtered list means re-reading neighbours per row per page; and the flag is *evidence* — what the system thought at the time is what a manager is later asked about, and recomputing under today's thresholds would quietly rewrite it. A redelivered webhook explicitly does not recompute, or a replayed backlog (US-7 AC3) would re-count its own denials and invent a `denied_repeated` that never happened at the gate.
+
+**Decided: an event carries every flag that applies, not the most severe.** A suspended tenant trying an old code at 3am for the sixth time is four separate observations, and collapsing them would hide three from the filter somebody is using to find exactly that pattern. `denied_repeated` counts facility-wide rather than per credential: five denials across five different codes at one gate is a stranger working through numbers, which is the more alarming version and the one a per-credential count would miss.
+
+**Decided: `access:events` is its own permission.** A gate log says where a named person physically was and at what hour — a sharper fact than their billing history, and one somebody should be given deliberately. Granted to the three roles that already hold `access:view_codes`.
+
+**Verified:** 1405 unit/DB tests (40 new — 19 on schedule evaluation including both 2026 DST transitions from either side, 10 on the flag rules, 11 against real rows for the full loop: hours saved → command queued → controller told → 3am denial → flagged event → filtered log, plus the 24-hour override and the permission refusal). Two consecutive clean full-suite runs. Typecheck, lint and build clean. One migration, and a re-seed — `rbac-db.test.ts` correctly caught the new permission being in the catalog but not in the database.
+
+**Left behind.** **No holiday exceptions** — FR-5 names them; the weekly schedule has no date overrides, so a facility closing on Christmas has to edit that weekday. **No per-gate or per-zone hours**: US-4 says "and optionally per gate/zone" and there is one gate per facility in the model. **No `long_dwell` flag** — it needs entry/exit direction data the simulator does not produce, and AC3 says to degrade gracefully where the vendor cannot distinguish in from out. **No manager notifications on a flag** (AC4): PRD 03's own phasing puts "full anomaly flags + manager notifications" in Phase 2, and this shipped the MVP subset. **The log shows times in UTC**, not facility-local, which is wrong on a screen and is the next thing to fix. **No CSV export** for the gate log. **Overnight windows are impossible** — `DaySchedule` requires `open < close`, so a gate open 22:00–06:00 cannot be expressed; 24-hour access is the override rather than a schedule.
+
+---
+
 ---
 
 ## Feature PRDs added mid-build

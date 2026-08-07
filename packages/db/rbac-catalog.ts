@@ -34,6 +34,11 @@ export const PERMISSIONS = [
   // Access control (PRD 03 SR-2)
   { key: 'access:manage_grants', name: 'Manage authorized access', category: 'access', description: 'Add and revoke people on a lease’s authorized-access list.' },
   { key: 'access:view_codes', name: 'View gate codes', category: 'access', description: 'Reveal a tenant or authorized person’s actual gate code. Audited.' },
+  /// PRD 03 US-5 (B-064). Separate from `tenants:view` on purpose: a gate log
+  /// says where a named person physically was and at what hour, which is a
+  /// sharper fact about someone than their billing history and deserves a key
+  /// somebody has to be given deliberately.
+  { key: 'access:events', name: 'View gate activity', category: 'access', description: 'Who came through the gate, when, and which attempts were denied.' },
 
   // Administration
   { key: 'facility:settings', name: 'Edit facility settings', category: 'admin', description: 'Hours, fees, taxes, and facility configuration.' },
@@ -90,6 +95,7 @@ export const ROLES: readonly RoleSeed[] = [
       'payments:take',
       'access:manage_grants',
       'access:view_codes',
+      'access:events',
       'reports:operational',
     ],
   },
@@ -128,6 +134,7 @@ export const ROLES: readonly RoleSeed[] = [
       'delinquency:execute_step',
       'access:manage_grants',
       'access:view_codes',
+      'access:events',
       'reports:operational',
       'reports:financial',
     ],
@@ -160,6 +167,7 @@ export const ROLES: readonly RoleSeed[] = [
       'auctions:approve',
       'access:manage_grants',
       'access:view_codes',
+      'access:events',
       'facility:settings',
       'audit:view',
       'reports:operational',
