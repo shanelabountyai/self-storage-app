@@ -1405,7 +1405,7 @@ FR-14's provider webhook, FR-15's consequences, CN-18's message history and CN-2
 
 ---
 
-### B-055 — Revenue and delinquency-aging reports ✅ `PENDING`
+### B-055 — Revenue and delinquency-aging reports ✅ `485aa97`
 
 US-39.4 and US-39.5, the last two MVP reports. Both are money, and both had a specific failure mode the PRD names rather than leaves to be inferred.
 
