@@ -1490,7 +1490,7 @@ PRD 03 US-4 and US-5. The schedule data and the settings form already existed fr
 
 ---
 
-### B-065 — The ManualAdapter work queue ✅ `PENDING`
+### B-065 — The ManualAdapter work queue ✅ `5998c56`
 
 PRD 03 US-6. A site with a legacy keypad nobody can integrate, or a vendor mid-outage: every access change becomes a task with the exact buttons to press, instead of a command to a controller that is not listening.
 
