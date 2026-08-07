@@ -15,4 +15,7 @@ export async function completeTaskAction(formData: FormData): Promise<void> {
 
   await completeTask(actor, taskId, { note })
   revalidatePath('/admin/tasks')
+  // B-065's keypad queue renders the same tasks; completing one there has to
+  // clear it there too.
+  revalidatePath('/admin/access/queue')
 }

@@ -370,6 +370,18 @@ model Facility {
   timezone            String
   phone               String?
   email               String?
+  /// PRD 03 FR-3 / US-6. Which gate controller this facility talks to.
+  ///
+  /// `simulated` is the integrated path (and, per CLAUDE.md and D-4, the only
+  /// real driver until there is a controller on a bench). `manual` is the
+  /// fallback for a legacy keypad nobody can integrate, or for a vendor outage:
+  /// every command becomes a task with the exact keypad action instead.
+  gateAdapter         String         @default("simulated")
+  /// PRD 03 US-6 AC2: "Overdue manual tasks (configurable, default 4 business
+  /// hours) escalate in the dashboard." Business hours, counted against this
+  /// facility's own `officeHours` — a task raised at 6pm on Friday is not four
+  /// hours overdue on Saturday morning, because nobody was there.
+  manualTaskSlaHours  Int            @default(4)
   /// Weekly schedules land in B-008; held as JSON until that item defines them.
   officeHours         Json?
   gateHours           Json?
@@ -1344,6 +1356,12 @@ enum GateCommandStatus {
   succeeded
   failed
   dead_lettered
+  /// PRD 03 US-6. Handed to a human: the ManualAdapter turned this command into
+  /// a `Task` and there is nothing more the software can do until somebody
+  /// walks to the keypad. Distinct from `pending` because the retry loop must
+  /// NOT keep re-sending it — five retries would make five tasks — and distinct
+  /// from `dead_lettered` because nothing has gone wrong.
+  awaiting_manual
 }
 
 /// PRD 03 FR-4 (minimal slice) / US-7 AC2. A real access event, produced by

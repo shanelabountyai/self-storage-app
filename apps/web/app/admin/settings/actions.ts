@@ -21,6 +21,7 @@ import {
   addFeeScheduleEntry,
   addLateFeeStep,
   addTaxComponent,
+  updateGateAdapter,
   parseDunningDays,
   parseRetryDays,
   updateBillingPolicy,
@@ -702,5 +703,34 @@ export async function updateEmailIdentityAction(
     replyTo
       ? `Tenants will see “${fromName || 'the facility name'}” and replies go to ${replyTo}.`
       : `Tenants will see “${fromName || 'the facility name'}”. Replies have nowhere to go until you set a reply-to.`,
+  )
+}
+
+/// PRD 03 FR-3 / US-6. Which gate controller this facility talks to, and how
+/// long a manual instruction may sit before the queue escalates it.
+export async function updateGateAdapterAction(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const actor = await requireStaffActor()
+  const facilityId = String(formData.get('facilityId') ?? '')
+  const adapter = formData.get('gateAdapter') === 'manual' ? 'manual' : 'simulated'
+
+  const hours = Number(formData.get('manualTaskSlaHours'))
+  if (!Number.isFinite(hours) || hours < 0) {
+    return fieldError({ manualTaskSlaHours: 'Enter a number of hours, or 0 to never escalate.' })
+  }
+
+  const { rerouted } = await updateGateAdapter(actor, facilityId, {
+    gateAdapter: adapter,
+    manualTaskSlaHours: Math.round(hours),
+  })
+
+  revalidatePath('/admin/settings')
+  revalidatePath('/admin/access/queue')
+  return success(
+    rerouted > 0
+      ? `Saved. ${rerouted} outstanding ${rerouted === 1 ? 'change is' : 'changes are'} back with the controller, and the keypad tasks for them are cancelled.`
+      : 'Saved.',
   )
 }

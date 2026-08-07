@@ -14,6 +14,7 @@ import {
   addLateFeeStepAction,
   updateBillingPolicyAction,
   updateEmailIdentityAction,
+  updateGateAdapterAction,
   updateOperationsPolicyAction,
   addProtectionPlanAction,
   setProtectionPolicyAction,
@@ -642,6 +643,45 @@ export default async function AdminSettingsPage() {
             Suppressions — who we no longer write to
           </Link>
         </p>
+      </section>
+
+      <section aria-labelledby="gate-adapter-heading" className="flex flex-col gap-3">
+        <h2 id="gate-adapter-heading" className="text-base font-medium">
+          Gate controller
+        </h2>
+        <p className="text-muted-foreground max-w-prose text-xs text-pretty">
+          How access changes reach the keypad. On <strong>manual</strong>, nothing is sent to a
+          controller — every change becomes a task in the{' '}
+          <Link href="/admin/access/queue" className="underline underline-offset-2">
+            keypad queue
+          </Link>{' '}
+          for somebody to key in. Switching back hands outstanding changes to the controller and
+          cancels their tasks; grants and codes are never touched either way.
+        </p>
+        <AdminForm action={updateGateAdapterAction} label="Gate controller" className="flex flex-col gap-3">
+          <input type="hidden" name="facilityId" value={facility.id} />
+          <Field
+            name="gateAdapter"
+            label="Controller"
+            as="select"
+            defaultValue={facility.gateAdapter}
+          >
+            <option value="simulated">Integrated controller</option>
+            <option value="manual">Manual — staff key changes in</option>
+          </Field>
+          <Field
+            name="manualTaskSlaHours"
+            label="Escalate a keypad task after"
+            type="number"
+            min={0}
+            max={72}
+            defaultValue={String(facility.manualTaskSlaHours)}
+            hint="Business hours, counted against the office hours above — a change raised after closing is not late until somebody has had a chance to do it. 0 never escalates."
+          />
+          <Button type="submit" className="self-start">
+            Save gate controller
+          </Button>
+        </AdminForm>
       </section>
 
       <section aria-labelledby="operations-heading" className="flex flex-col gap-3">

@@ -89,6 +89,19 @@ export const TASK_TYPES = [
     requiredProofFields: ['note'],
     sensitive: true,
   },
+  {
+    // PRD 03 US-6 AC1. A gate command at a facility running the ManualAdapter:
+    // there is no controller to talk to, so somebody walks to the keypad.
+    //
+    // Sensitive: this is the only record that a person, rather than the
+    // system, changed who can get through a gate — and "was the code actually
+    // removed after they moved out" is a question that gets asked after
+    // something goes missing.
+    type: 'gate_manual_action',
+    label: 'Key an access change into the keypad',
+    requiredProofFields: ['note'],
+    sensitive: true,
+  },
 ] as const satisfies readonly TaskTypeSpec[]
 
 export type TaskType = (typeof TASK_TYPES)[number]['type']

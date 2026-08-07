@@ -2,6 +2,7 @@ import { prisma } from '@storage/db'
 import { recordAudit } from '@storage/core/audit'
 import { effectiveByGroup, parseWeeklySchedule, type WeeklySchedule } from '@storage/core/facility-settings'
 import { propagateGateHours } from '@/lib/access/time-windows'
+import { switchGateAdapter } from '@/lib/access/manual-adapter'
 import { requirePermission } from '@/lib/rbac/authorize'
 import type { Actor } from '@/lib/rbac/actor'
 import { toAuditActor } from '@/lib/rbac/audit-actor'
@@ -426,4 +427,52 @@ export async function updateEmailIdentity(
     before: { emailFromName: before.emailFromName, emailReplyTo: before.emailReplyTo },
     after: { emailFromName: after.emailFromName, emailReplyTo: after.emailReplyTo },
   })
+}
+
+export type GateAdapterInput = {
+  gateAdapter: 'simulated' | 'manual'
+  manualTaskSlaHours: number
+}
+
+/// PRD 03 FR-3 / US-6. Which gate controller this facility talks to, and how
+/// long a manual instruction may sit before the queue starts shouting.
+///
+/// Both are new columns that configure behaviour, so both get their control in
+/// the same item — this codebase's first hard-won rule, learned when
+/// `billingPolicy`, `invoiceLeadDays` and the late-fee ladder all shipped
+/// reachable only from a database client.
+export async function updateGateAdapter(
+  actor: Actor,
+  facilityId: string,
+  input: GateAdapterInput,
+): Promise<{ rerouted: number }> {
+  requirePermission(actor, 'facility:settings', facilityId)
+
+  const before = await prisma.facility.findUniqueOrThrow({ where: { id: facilityId } })
+
+  await prisma.facility.update({
+    where: { id: facilityId },
+    // The SLA is a plain column write; the adapter is not. Switching adapters
+    // has to move the queue as well (US-6 AC3), so it goes through
+    // `switchGateAdapter` rather than being set here.
+    data: { manualTaskSlaHours: Math.max(0, Math.min(72, input.manualTaskSlaHours)) },
+  })
+  const { rerouted } = await switchGateAdapter(facilityId, input.gateAdapter)
+
+  const after = await prisma.facility.findUniqueOrThrow({ where: { id: facilityId } })
+  await recordAudit({
+    actor: toAuditActor(actor),
+    action: 'facility.settings_changed',
+    entityType: 'Facility',
+    entityId: facilityId,
+    facilityId,
+    before: { gateAdapter: before.gateAdapter, manualTaskSlaHours: before.manualTaskSlaHours },
+    after: {
+      gateAdapter: after.gateAdapter,
+      manualTaskSlaHours: after.manualTaskSlaHours,
+      reroutedCommands: rerouted,
+    },
+  })
+
+  return { rerouted }
 }

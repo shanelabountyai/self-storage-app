@@ -1490,6 +1490,30 @@ PRD 03 US-4 and US-5. The schedule data and the settings form already existed fr
 
 ---
 
+### B-065 — The ManualAdapter work queue ✅ `PENDING`
+
+PRD 03 US-6. A site with a legacy keypad nobody can integrate, or a vendor mid-outage: every access change becomes a task with the exact buttons to press, instead of a command to a controller that is not listening.
+
+**What it built.** `Facility.gateAdapter` (`simulated` | `manual`) with its control in facility settings. A `GateCommandStatus.awaiting_manual`. Instruction generation in `apps/web/lib/access/manual-adapter.ts`. Business-hours arithmetic in `packages/core/access/business-hours.ts`. `/admin/access/queue`, the list a manager works from. `gate_manual_action` in the task catalog. Adapter switching that re-routes the queue.
+
+**Decided: a parked command gets its own status, not `pending` and not `dead_lettered`.** The retry loop exists to re-send to a controller; pointing it at a human would produce five tasks for one keypad trip. And nothing has gone wrong, so dead-lettering would fire the staff alert FR-3 reserves for genuine failure. `awaiting_manual` is the third thing that is actually true: handed over, waiting.
+
+**Decided: the instruction is derived at render time, never stored on the task.** `Task.proof` is what staff supply on completion, and completing *replaces* it — an instruction parked there would be overwritten by the note saying it was done. The task points at its `GateCommand` through `entityId`, so the queue re-derives from the command. Nothing to keep in step, and rewording an instruction improves every open task rather than only the next one.
+
+**Decided: overdue is measured in business hours, against `officeHours`.** AC2 says "4 business hours" and the distinction is the whole point: a change raised at 6pm on Friday is not four hours late on Friday night, because nobody was there. Wall-clock hours would escalate every after-closing task every day, and a queue that shouts on every overnight item is one staff learn to scroll past. Counted against office hours (when a human is at the desk), never gate hours (when a tenant can reach their unit) — different schedules for a reason. The general task-overdue rule is untouched: only `gate_manual_action` uses the tighter SLA.
+
+**Decided: no escalation job.** Overdue is computed when the queue is read, so it cannot go stale and there is no nightly pass to fall behind. An unset office schedule counts every hour rather than none — the silent-failure direction would be a queue where nothing ever escalates.
+
+**Decided: switching adapters moves the queue and nothing else.** Grants and credentials are the record of who is entitled to what and no adapter owns them (AC3). Switching back to the controller returns parked commands to `pending` and **cancels their tasks** — leaving them open would have staff keying in a change the controller is about to make. `attempts` is deliberately not reset: a command that already failed three times has not earned a fresh five. A dead-lettered command stays dead, because it gave up for a reason somebody has already been alerted about.
+
+**Decided: the suspend instruction says "do not delete".** On some legacy panels suspend and delete are the same button, and deleting loses the code history US-3 AC3 requires be kept. The wording is tested.
+
+**Verified:** 1437 unit/DB tests (32 new — 20 on business-hours arithmetic including a weekend skip, a DST crossing and the instruction wording; 12 against real rows for the full loop: command → task → parked → completed → settled, plus the SLA, the re-route, grant preservation and the dead-letter rule). Two consecutive clean full-suite runs. Typecheck, lint and build clean. One migration.
+
+**Left behind.** **No per-command retry from the queue** — a task completed in error has to be fixed by re-triggering whatever raised the command; there is no "put this back". **The plaintext code is rendered on the queue screen**, which is unavoidable (somebody has to key it in) but is the one place outside the audited reveal path where a code appears, and it is not itself audited — worth revisiting with SR-2. **No notification when a task escalates** (AC2 says "escalate in the dashboard", which it does; a push to a manager is Phase 2 with the rest of US-5's notifications). **`ManualAdapter` is a facility-level switch, not per gate or zone.** **Switching to manual does not sweep already-`failed` commands into tasks immediately** — they arrive on the next drain, which is correct but means the queue can look empty for up to an hour after the switch.
+
+---
+
 ---
 
 ## Feature PRDs added mid-build

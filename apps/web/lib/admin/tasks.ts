@@ -5,6 +5,9 @@ import { missingProofFields, taskTypeIsSensitive, taskTypeSpec, type TaskType } 
 import { assertFacilityAccess, can, facilityAccess, ForbiddenError } from '@/lib/rbac/authorize'
 import { toAuditActor } from '@/lib/rbac/audit-actor'
 import type { Actor } from '@/lib/rbac/actor'
+import { isOverdue } from '@storage/core/access'
+import { parseWeeklySchedule, type WeeklySchedule } from '@storage/core/facility-settings'
+import { settleCommandForTask } from '@/lib/access/manual-adapter'
 
 // PRD 02 §4.9 US-41 (B-095). One task queue. Every function here is generic
 // over `type` — the catalog (packages/core/tasks) is what a caller adds to,
@@ -92,10 +95,47 @@ export type TaskRow = {
   status: 'open' | 'completed' | 'cancelled'
 }
 
+/// Whether a task has gone overdue.
+///
+/// Two rules, because two kinds of task are involved.
+///
+/// The general rule is B-095's: the row's own business day has passed while it
+/// is still open. A returned-mail review raised this morning is not late this
+/// afternoon.
+///
+/// `gate_manual_action` is different, and PRD 03 US-6 AC2 says so: "overdue
+/// manual tasks (configurable, default 4 **business hours**) escalate."
+/// Somebody is standing at a gate that will not open, and waiting until
+/// tomorrow to say so is not an escalation. Business hours rather than clock
+/// hours, counted against the facility's own office hours — a task raised at
+/// 6pm on Friday is not four hours late on Friday night, because nobody was
+/// there to do it.
+function isTaskOverdue(
+  task: { status: string; type: string; businessDate: Date; createdAt: Date },
+  context: {
+    today: Date
+    now: Date
+    officeHours: WeeklySchedule | null
+    timezone: string
+    slaHours: number
+  },
+): boolean {
+  if (task.status !== 'open') return false
+
+  if (task.type === 'gate_manual_action') {
+    return isOverdue({
+      schedule: context.officeHours,
+      createdAt: task.createdAt,
+      now: context.now,
+      slaHours: context.slaHours,
+      timezone: context.timezone,
+    })
+  }
+
+  return task.businessDate.getTime() < context.today.getTime()
+}
+
 /// "My day": open tasks at a facility, today's business date by default.
-/// Overdue means the row's own business day has already passed while it is
-/// still open — a task never becomes overdue by clock time within the day it
-/// was created.
 export async function facilityTasks(
   actor: Actor,
   facilityId: string,
@@ -108,9 +148,16 @@ export async function facilityTasks(
 
   const facility = await prisma.facility.findUniqueOrThrow({
     where: { id: facilityId },
-    select: { name: true, timezone: true },
+    select: {
+      name: true,
+      timezone: true,
+      officeHours: true,
+      manualTaskSlaHours: true,
+    },
   })
-  const today = businessDateFor(new Date(), facility.timezone)
+  const now = new Date()
+  const today = businessDateFor(now, facility.timezone)
+  const officeHours = parseWeeklySchedule(facility.officeHours)
   const businessDate = options.businessDate ?? today
 
   const tasks = await prisma.task.findMany({
@@ -129,6 +176,7 @@ export async function facilityTasks(
       businessDate: true,
       priority: true,
       status: true,
+      createdAt: true,
       assignee: { select: { firstName: true, lastName: true } },
     },
   })
@@ -143,7 +191,13 @@ export async function facilityTasks(
     entityId: task.entityId,
     businessDate: task.businessDate,
     priority: task.priority,
-    overdue: task.status === 'open' && task.businessDate.getTime() < today.getTime(),
+    overdue: isTaskOverdue(task, {
+      today,
+      now,
+      officeHours,
+      timezone: facility.timezone,
+      slaHours: facility.manualTaskSlaHours,
+    }),
     assigneeName: task.assignee ? `${task.assignee.firstName} ${task.assignee.lastName}` : null,
     status: task.status,
   }))
@@ -216,6 +270,13 @@ export async function completeTask(
         completedAt: new Date(),
       },
     })
+
+    // PRD 03 US-6 AC1: "completing the task confirms the grant state."
+    // Inside the same transaction as the completion, so a task can never read
+    // as done while the command it was raised for is still parked.
+    if (task.type === 'gate_manual_action') {
+      await settleCommandForTask(taskId, tx)
+    }
 
     if (taskTypeIsSensitive(task.type)) {
       await recordAudit(

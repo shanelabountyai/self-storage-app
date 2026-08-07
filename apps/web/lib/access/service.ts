@@ -6,6 +6,7 @@ import { recordAudit } from '@storage/core/audit'
 import { requirePermission } from '@/lib/rbac/authorize'
 import type { Actor } from '@/lib/rbac/actor'
 import { toAuditActor } from '@/lib/rbac/audit-actor'
+import { raiseManualTask, usesManualAdapter } from '@/lib/access/manual-adapter'
 import { adapterFor } from './adapter'
 import {
   accessCodeEncryptionKey,
@@ -316,7 +317,16 @@ function backoffMs(attempts: number): number {
   return Math.min(60_000 * 2 ** attempts, 30 * 60_000)
 }
 
-export type DrainResult = { attempted: number; succeeded: number; failed: number; deadLettered: number }
+export type DrainResult = {
+  attempted: number
+  succeeded: number
+  failed: number
+  deadLettered: number
+  /// Handed to a person rather than a controller (US-6). Not a failure and not
+  /// a success — the counter is separate so a manual site's drain does not read
+  /// as either.
+  manual: number
+}
 
 /// Sends queued commands to the controller.
 ///
@@ -337,10 +347,40 @@ export async function drainGateCommands(
     take: 100,
   })
 
-  const result: DrainResult = { attempted: 0, succeeded: 0, failed: 0, deadLettered: 0 }
+  const result: DrainResult = { attempted: 0, succeeded: 0, failed: 0, deadLettered: 0, manual: 0 }
+
+  // PRD 03 US-6. A facility running the ManualAdapter has no controller to
+  // talk to, so its commands become tasks instead of sends. Resolved once per
+  // drain rather than per command: a drain covering fifty commands at one site
+  // would otherwise ask the same question fifty times.
+  const manualFacilities = new Set<string>()
+  for (const facilityId of new Set(due.map((command) => command.facilityId))) {
+    if (await usesManualAdapter(facilityId)) manualFacilities.add(facilityId)
+  }
 
   for (const command of due) {
     result.attempted += 1
+
+    if (manualFacilities.has(command.facilityId)) {
+      await raiseManualTask({
+        id: command.id,
+        type: command.type,
+        facilityId: command.facilityId,
+        grantId: command.grantId,
+        credentialId: command.credentialId,
+        payload: (command.payload ?? {}) as Record<string, unknown>,
+      })
+      // Parked, not retried. `awaiting_manual` exists precisely so the backoff
+      // loop leaves it alone — five retries against a human would make five
+      // tasks — and so it is distinguishable from a command that failed.
+      await prisma.gateCommand.update({
+        where: { id: command.id },
+        data: { status: 'awaiting_manual' },
+      })
+      result.manual += 1
+      continue
+    }
+
     const adapter = adapterFor(command.facilityId)
     const outcome = await adapter.send({
       type: command.type,
