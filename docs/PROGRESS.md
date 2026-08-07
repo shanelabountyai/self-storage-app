@@ -1464,7 +1464,7 @@ The night-by-night narrative it prints, and every step of it is asserted:
 
 ---
 
-### B-064 — Gate hours enforcement and the access event log ✅ `PENDING`
+### B-064 — Gate hours enforcement and the access event log ✅ `7bf86ae`
 
 PRD 03 US-4 and US-5. The schedule data and the settings form already existed from B-008; nothing enforced them, nothing propagated them, and no screen showed what happened at the gate.
 
