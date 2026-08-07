@@ -1429,7 +1429,7 @@ US-39.4 and US-39.5, the last two MVP reports. Both are money, and both had a sp
 
 ---
 
-### Golden path 2 — demo checkpoint ✅ `PENDING`
+### Golden path 2 — demo checkpoint ✅ `9d94742`
 
 The backlog's second demo checkpoint, placed after B-055: *nightly run invoices a seeded lease → due-soon reminder → simulated failed payment → dunning step 1 → magic-link payment halts the ladder.* Run, and **kept** as `tests/golden-path-2-db.test.ts`.
 
