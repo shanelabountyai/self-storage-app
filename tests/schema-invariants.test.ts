@@ -50,6 +50,8 @@ const NO_FACILITY_ID: Record<string, string> = {
   Suppression: 'the shared suppression list is org-wide by address (PRD 05 CN-20); an opt-out spans facilities',
   PayLink: 'scoped through the lease it lets someone pay',
   LeaseHold: 'scoped through the lease it holds',
+  UrlRedirect:
+    'a URL is a site-wide address, and the lookup happens on a request before anything knows which facility it was for — a facilityId here could not be supplied at the only moment it would be read (PRD 04 FR-SEO-2)',
 }
 
 /// Calendar dates, not instants. A business date is a facility-local day with

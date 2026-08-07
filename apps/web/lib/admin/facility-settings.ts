@@ -3,6 +3,7 @@ import { recordAudit } from '@storage/core/audit'
 import { effectiveByGroup, parseWeeklySchedule, type WeeklySchedule } from '@storage/core/facility-settings'
 import { propagateGateHours } from '@/lib/access/time-windows'
 import { switchGateAdapter } from '@/lib/access/manual-adapter'
+import { recordFacilityMove } from '@/lib/marketing/redirects'
 import { requirePermission } from '@/lib/rbac/authorize'
 import type { Actor } from '@/lib/rbac/actor'
 import { toAuditActor } from '@/lib/rbac/audit-actor'
@@ -95,6 +96,16 @@ export async function updateFacilityDetails(
 
   const before = await prisma.facility.findUniqueOrThrow({ where: { id: facilityId } })
   const after = await prisma.facility.update({ where: { id: facilityId }, data: input })
+
+  // PRD 04 FR-SEO-2: "facility slug changes auto-create redirects." The public
+  // URL is `/storage/{state}/{city}/{slug}`, so editing the CITY or the STATE
+  // moves the page just as surely as renaming the slug would — and that is the
+  // edit an operator actually makes, usually to fix a typo, without any idea
+  // they have just 404'd every link and every printed sign.
+  //
+  // Recorded here rather than swept up later because the old path cannot be
+  // reconstructed once the row has been updated.
+  await recordFacilityMove(before, after)
 
   await recordAudit({
     actor: toAuditActor(actor),

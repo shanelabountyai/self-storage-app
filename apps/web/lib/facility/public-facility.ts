@@ -1,4 +1,5 @@
 import { cache } from 'react'
+import { citySlug } from '@storage/core/marketing'
 import { prisma } from '@storage/db'
 import { parseWeeklySchedule, type WeeklySchedule } from '@storage/core/facility-settings'
 
@@ -35,12 +36,11 @@ export type PublicFacility = {
 /// there for humans and search engines. That makes them forgeable, which is why
 /// the page redirects anything that isn't the canonical spelling (B-066 owns the
 /// wider canonical/301 policy).
-export function citySlug(city: string): string {
-  return city
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '')
-}
+// Re-exported rather than redefined: B-066 moved the canonical implementation
+// into @storage/core/marketing so the sitemap, the redirect map and the city
+// page all slugify identically. A second copy here is how two of them would
+// eventually disagree about "Fort Worth".
+export { citySlug }
 
 export function facilityPath(facility: { state: string; city: string; slug: string }): string {
   return `/storage/${facility.state.toLowerCase()}/${citySlug(facility.city)}/${facility.slug}`

@@ -1514,6 +1514,42 @@ PRD 03 US-6. A site with a legacy keypad nobody can integrate, or a vendor mid-o
 
 ---
 
+### B-066 — SEO infrastructure ✅ `PENDING`
+
+PRD 04 FR-SEO-1 through 7. The facility page has been server-rendered and canonical-tagged since B-016; what was missing was everything that makes a crawler able to find it, trust it, and keep finding it after somebody edits a city name.
+
+**What it built.** `packages/core/marketing`: NAP formatting, meta templates, `SelfStorage`/`FAQPage`/`ItemList`/`BreadcrumbList` JSON-LD, URL canonicalisation, and generated facility FAQs. A `UrlRedirect` table with auto-recording on facility moves and retirements. `sitemap.xml` and `robots.txt` generated from the records. Canonical enforcement in `proxy.ts`. An FAQ block on the facility page. A Lighthouse gate on the facility template.
+
+**Decided (D-32): the URL stays `/storage/…`.** PRD 04 US-1 AC1 says `/storage-units/…`; PRD 01 US-103 says `/storage/…`, which is what shipped. Two PRDs disagreeing on a detail neither argues for, resolved toward the one already indexed and linked. Recorded as a decision rather than silently followed.
+
+**Decided: canonicalisation is pure string work on the edge; the redirect map is not.** `proxy.ts` handles casing, trailing slashes, doubled slashes and tracking parameters without touching a database, because it runs on every request. The renamed/retired-slug lookup needs a query, so it lives on the 404 path in the facility page — only requests that were already going to fail pay for it.
+
+**Decided: tracking parameters are an explicit strip-list, never a keep-list.** `?q=`, `?size=` and `?sort=` change what the page shows; stripping them to tidy the address bar would redirect a search for 78704 to an empty results page, which is worse than any duplicate-content problem. Remaining parameters are sorted, so `?a=1&b=2` and `?b=2&a=1` are one URL.
+
+**Decided: 308, not 301.** Unlike 301, it is guaranteed to preserve the method. A POST to a URL with a stray trailing slash — which a hand-typed form action produces — must not silently become a GET, or the form appears to submit and does nothing.
+
+**Decided: structured data is generated from the record, never hand-authored.** Schema that contradicts the visible page is what gets penalised, and the only way to guarantee it cannot is for both to read the same source through the same formatter (FR-SEO-7). Concretely: `priceRange` is derived from the cheapest live rate, `makesOffer` lists only sizes with `availableCount > 0`, and every price carries `unitCode: 'MON'` — without which a crawler reads "$129" as a one-off purchase price, a much better-sounding offer than the one being made.
+
+**Decided: absent and empty are different claims.** `prune` drops undefined values and empty arrays recursively, because `"telephone": null` positively asserts the business has no phone and `makesOffer: []` says it rents nothing. Tested in both directions.
+
+**Decided: `renderJsonLd` escapes `<`.** Operator copy reaches this function; a description containing `</script>` would otherwise close the tag early and drop the rest into the document as markup — an XSS hole wearing a structured-data hat.
+
+**Decided: no `aggregateRating`, ever, until there are real reviews.** US-6 AC3 gates it, and a fabricated one is the fastest available route to a manual action against the whole domain. Asserted as absent in a test so nobody adds one by accident.
+
+**Decided: FAQs are generated from the facility record.** US-1 AC2 wants five facility-specific FAQs and there was no FAQ block at all. Generated ones cannot contradict the hours table above them; B-067 lets a marketer replace any of them. `faqPageJsonLd` refuses to mark up fewer than two questions — a single Q&A dressed as a page-level FAQ is the shape that gets ignored.
+
+**Decided: the sitemap's `lastmod` is the facility's `updatedAt`, not the build time.** Stamping every URL with "now" on every deploy tells crawlers every page changed every deploy, which trains them to ignore the field.
+
+**Decided: a facility move records redirects for its sub-pages too, and first write wins.** A renter with `/…/reserve` bookmarked is further along than one on the landing page. And a slug renamed twice leaves `a → b` alone rather than rewriting it to `a → c`: two hops resolve fine, and blind rewriting is how a rename cycle becomes a redirect loop.
+
+**Found: the `facilityId` schema invariant caught the new table**, correctly. `UrlRedirect` is exempted with a stated reason — a URL is a site-wide address, and the lookup happens on a request before anything knows which facility it was for, so a `facilityId` could not be supplied at the only moment it would be read.
+
+**Verified:** 1496 unit/DB tests (59 new — 18 on canonicalisation and noindex prefixes, 32 on NAP/meta/JSON-LD including the script-tag escape and the absent-vs-empty rule, 9 against real rows for the redirect map). E2e 325 passing. Checked live against a running server: 308s for casing, trailing slash, tracking params and doubled slashes; `X-Robots-Tag` on `/login` and `/checkout` and absent on `/storage/search`; `robots.txt` and `sitemap.xml` rendering; and all three JSON-LD blocks present on the facility page. Two consecutive clean full-suite runs. Typecheck, lint and build clean. One migration.
+
+**Left behind.** **City pages do not exist** — `/storage/{state}/{city}` is a valid redirect target and a retired facility now points at it, but **B-071** builds the page; until then that redirect lands on a 404, which is a worse outcome than the 404 it replaced for those specific URLs and is the first thing B-071 fixes. **No per-facility meta overrides** (US-2 AC1) — the templates are in place and B-067 adds the editable fields, the character counters and the duplicate-description warning. **No images in the schema**: `image: []` until B-067's photo management, and `SelfStorage` without a photo is a weaker rich result. **One flat sitemap** — FR-SEO-5 wants segmentation above 1,000 URLs and we are two orders of magnitude away; the trigger is noted in the file. **No IndexNow ping** (FR-SEO-5 calls it nice-to-have). **The redirect map has no admin screen** — entries are created automatically and readable only from the database.
+
+---
+
 ---
 
 ## Feature PRDs added mid-build

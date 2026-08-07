@@ -20,6 +20,19 @@ import {
 } from '@/lib/inventory/public-inventory'
 import { calculateMoveInCost } from '@storage/core/pricing'
 import {
+  absoluteUrl,
+  breadcrumbJsonLd,
+  defaultFacilityFaqs,
+  facilityDescription,
+  facilityTitle,
+  faqPageJsonLd,
+  renderJsonLd,
+  selfStorageJsonLd,
+} from '@storage/core/marketing'
+import { siteOrigin } from '@/lib/marketing/origin'
+import { redirectFor } from '@/lib/marketing/redirects'
+import { citySlugPath } from '@/lib/marketing/paths'
+import {
   applyFilters,
   FEATURE_FILTERS,
   hasActiveFilters,
@@ -53,13 +66,34 @@ export async function generateMetadata({
   const facility = await publicFacilityBySlug(slug)
   if (!facility) return { title: 'Facility not found' }
 
+  // FR-SEO-3's template, verbatim: `{Facility Name} | Storage Units in {City},
+  // {State}`. B-067 makes both fields overridable per facility (US-2 AC1);
+  // until then every page gets a title and description built from the record,
+  // which beats the alternative — an engine inventing its own from page text,
+  // where what it picks is usually the cookie banner.
+  const title = facilityTitle(facility)
+  const description = facilityDescription(facility)
+  const canonical = facilityPath(facility)
+  const url = absoluteUrl(siteOrigin(), canonical)
+
   return {
-    title: `${facility.name} — self storage in ${facility.city}, ${facility.state}`,
-    description: `Storage units at ${formatAddress(facility)}. See sizes, prices and gate hours, and rent online.`,
+    title,
+    description,
     // The slug alone resolves the facility, so a wrong state/city still renders.
     // Declaring the canonical keeps that from reading as duplicate content.
-    // B-066 owns the wider canonical/301 policy and the JSON-LD that goes with it.
-    alternates: { canonical: facilityPath(facility) },
+    alternates: { canonical },
+    // FR-SEO-3's Open Graph and Twitter tags. Same title and description as the
+    // page itself — a share card that says something different from the search
+    // result is two claims about one page.
+    openGraph: {
+      type: 'website',
+      title,
+      description,
+      url,
+      siteName: SITE.name,
+      locale: 'en_US',
+    },
+    twitter: { card: 'summary_large_image', title, description },
   }
 }
 
@@ -594,7 +628,19 @@ export default async function FacilityPage({
   const filters = parseFilters(query)
 
   const facility = await publicFacilityBySlug(slug)
-  if (!facility) notFound()
+  if (!facility) {
+    // PRD 04 US-3 AC4 before 404ing: a facility that was renamed or retired has
+    // an entry in the redirect map, and a 301 to where it went is worth far
+    // more than a tidy 404 — every link, every printed sign and every index
+    // entry pointing at the old URL keeps working.
+    //
+    // The lookup is here rather than in middleware on purpose: middleware runs
+    // on every request and must not touch the database, while this path is only
+    // reached by a request that was already going to fail.
+    const moved = await redirectFor(`/storage/${state}/${city}/${slug}`)
+    if (moved) permanentRedirect(moved.toPath)
+    notFound()
+  }
 
   // The slug is the real identifier, so /storage/ca/nowhere/{slug} would happily
   // render. A permanent redirect to the canonical path means one URL per
@@ -613,6 +659,36 @@ export default async function FacilityPage({
   const embed = mapEmbedUrl(facility)
   const phone = phoneFor(facility)
 
+  // FR-SEO-4. Built from the facility record and the live inventory, never
+  // hand-authored — structured data that contradicts the visible page is the
+  // thing that gets penalised, and the only way to guarantee it cannot is for
+  // both to read the same source.
+  const canonicalUrl = absoluteUrl(siteOrigin(), canonical)
+  const faqs = defaultFacilityFaqs(facility)
+  const schema = [
+    selfStorageJsonLd({
+      facility,
+      url: canonicalUrl,
+      images: [],
+      unitTypes: (unitTypes ?? []).map((unitType) => ({
+        name: unitType.name,
+        sqFt: unitType.sqFt,
+        webRateCents: unitType.webRateCents,
+        availableCount: unitType.availableCount,
+        description: unitType.description,
+      })),
+    }),
+    faqPageJsonLd(faqs),
+    breadcrumbJsonLd([
+      { name: 'Storage', url: absoluteUrl(siteOrigin(), '/storage/search') },
+      {
+        name: `${facility.city}, ${facility.state}`,
+        url: absoluteUrl(siteOrigin(), citySlugPath(facility.state, facility.city)),
+      },
+      { name: facility.name, url: canonicalUrl },
+    ]),
+  ].filter((node): node is NonNullable<typeof node> => node !== null)
+
   // US-101 → US-103: a comparer arriving from a search should be able to get
   // back to it without retyping their zip. `from` carries the original query;
   // absent, the back link is omitted rather than pointing at an empty results
@@ -621,6 +697,14 @@ export default async function FacilityPage({
 
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-12">
+      {schema.map((node, index) => (
+        <script
+          key={index}
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: renderJsonLd(node) }}
+        />
+      ))}
+
       {backToSearch && (
         <p className="mb-4 text-sm">
           <Link href={backToSearch} className="underline underline-offset-4">
@@ -746,6 +830,26 @@ export default async function FacilityPage({
           </details>
         </section>
       )}
+
+      {/* US-1 AC2: "at least 5 facility-specific FAQs." Generated from the
+          facility record (packages/core/marketing/faqs.ts) so an answer can
+          never contradict the hours table above it; B-067 lets a marketer
+          replace any of them. Native <details> — no JavaScript, keyboard
+          operable as shipped, and the answers are in the HTML whether or not
+          they are open, which is what the FAQPage schema is describing. */}
+      <section aria-labelledby="faq" className="mt-10">
+        <h2 id="faq" className="text-xl font-medium">
+          Questions people ask
+        </h2>
+        <div className="mt-4 flex flex-col gap-2">
+          {faqs.map((entry) => (
+            <details key={entry.question} className="border-input rounded-lg border p-4">
+              <summary className="cursor-pointer font-medium">{entry.question}</summary>
+              <p className="text-muted-foreground mt-2 text-sm text-pretty">{entry.answer}</p>
+            </details>
+          ))}
+        </div>
+      </section>
 
       <p className="text-muted-foreground mt-10 text-sm text-pretty">
         Not sure what size you need? Read the{' '}

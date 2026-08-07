@@ -61,6 +61,24 @@
               }
             ]
           }
+        },
+        {
+          "matchingUrlPattern": ".*/storage/[^/]+/[^/]+/[^/]+$",
+          "assertions": {
+            "categories:performance": [
+              "error",
+              {
+                "minScore": 0.9
+              }
+            ],
+            "categories:seo": [
+              "error",
+              {
+                "minScore": 1
+              }
+            ],
+            "structured-data": "off"
+          }
         }
       ]
     },

@@ -1414,6 +1414,35 @@ enum AccessEventResult {
 /// A real vendor's controller holds the code; we hold only a reference to it.
 /// This table exists to play that vendor's part in the simulation, and a real
 /// integration would have no equivalent row on our side at all.
+/// PRD 04 FR-SEO-2 (B-066). The 301 map.
+///
+/// "301 redirect map maintained for renamed/retired slugs; facility slug
+/// changes auto-create redirects." A slug that has ever been public has been
+/// linked to, indexed, and printed on something. Changing it without a redirect
+/// throws away every link pointing at the old one and hands a renter a 404 —
+/// which is the single most expensive SEO mistake available, because it is
+/// invisible until traffic has already gone.
+model UrlRedirect {
+  id String @id @default(cuid())
+  /// The path that no longer resolves, lower-cased, no trailing slash, no
+  /// query. Canonical form per `canonicalPath`, so a lookup is one indexed
+  /// equality check on the edge rather than a scan with normalisation.
+  fromPath String @unique
+  /// Where to send them. Relative, so the map survives a domain change.
+  toPath   String
+  /// 301 by default. 302 exists for a genuinely temporary move; a permanent
+  /// redirect is cached by browsers effectively forever and is very hard to
+  /// take back, so choosing it is a decision rather than a default nobody saw.
+  permanent Boolean @default(true)
+  /// Why, for whoever finds this in two years. "facility slug changed",
+  /// "facility retired — nearest city page".
+  reason    String
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([fromPath])
+  @@map("url_redirect")
+}
+
 model SimulatedGateCode {
   id           String   @id @default(cuid())
   facilityId   String

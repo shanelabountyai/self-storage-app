@@ -21,7 +21,8 @@
     "./metrics": "./metrics/index.ts",
     "./billing": "./billing/index.ts",
     "./holds": "./holds/index.ts",
-    "./comms": "./comms/index.ts"
+    "./comms": "./comms/index.ts",
+    "./marketing": "./marketing/index.ts"
   },
   "dependencies": {
     "@storage/db": "*"
