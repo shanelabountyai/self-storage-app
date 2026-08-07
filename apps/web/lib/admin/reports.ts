@@ -32,7 +32,7 @@ import type { Actor } from '@/lib/rbac/actor'
 
 /// Facilities this actor may report on. Everything below scopes through here,
 /// so a roll-up can never include a facility the viewer cannot open.
-async function reportableFacilities(actor: Actor): Promise<{ id: string; name: string }[]> {
+export async function reportableFacilities(actor: Actor): Promise<{ id: string; name: string }[]> {
   const access = facilityAccess(actor)
   return prisma.facility.findMany({
     where: access.all ? {} : { id: { in: access.facilityIds } },
@@ -41,7 +41,24 @@ async function reportableFacilities(actor: Actor): Promise<{ id: string; name: s
   })
 }
 
-function assertCanReport(actor: Actor, facilityId: string): void {
+/// Facilities this actor may see MONEY for.
+///
+/// A narrower list than `reportableFacilities`, and the distinction is the
+/// catalog's own: `reports:financial` is described as "Revenue, AR, and
+/// delinquency aging", while `reports:operational` is "Occupancy, move-ins,
+/// and daily activity". A role holding only the operational key — the counter
+/// agent — has no business reading the portfolio's receivables.
+///
+/// Filters rather than throwing, because a regional manager can legitimately
+/// hold financial access at one site and operational at another; throwing
+/// would deny them the report entirely instead of showing the half they are
+/// entitled to.
+export async function financialFacilities(actor: Actor): Promise<{ id: string; name: string }[]> {
+  const facilities = await reportableFacilities(actor)
+  return facilities.filter((facility) => can(actor, 'reports:financial', facility.id))
+}
+
+export function assertCanReport(actor: Actor, facilityId: string): void {
   if (!can(actor, 'reports:operational', facilityId) && !can(actor, 'reports:financial', facilityId)) {
     throw new ForbiddenError('Missing permission to run reports', 'reports:operational', facilityId)
   }
@@ -329,8 +346,10 @@ export type DelinquencyReport = {
 /// ledger is the source of truth for balance by PRD 01 §7.3 — so a lease
 /// carrying a pre-billing move-in charge still shows the money it owes.
 export async function delinquencyReport(actor: Actor): Promise<DelinquencyReport> {
-  const facilities = await reportableFacilities(actor)
-  for (const facility of facilities) assertCanReport(actor, facility.id)
+  // Financial, not operational: AR is money. Before B-055 this used the looser
+  // either-or check, which put the portfolio's receivables in front of a role
+  // whose only reporting key is `reports:operational`.
+  const facilities = await financialFacilities(actor)
 
   const rows = await Promise.all(
     facilities.map(async (facility) => {

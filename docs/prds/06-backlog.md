@@ -99,7 +99,7 @@ Recurring invoices, autopay, retries, fees — and the comms centerpiece: due-so
 | 52 | B-052 ✅ | Past-due dunning ladder: configurable day 1/5/10/30 steps driven by billing-engine events (never a comms-side calendar), at-most-once per invoice per step, instant halt on qualifying payment/move-out/**hold — the hold being B-096's `LeaseHold`, evaluated by its declared effects rather than a per-screen check** | PRD 05 CN-3/CN-5; PRD 02 US-42 | M | B-050, B-051, B-096 | MVP |
 | 53 | B-053 ✅ | Template editor + per-facility sender identity: merge-field picker, preview + test-send, versioned saves, publish blocked on unknown fields; per-facility From address/reply-to, auto postal-address footer | PRD 05 CN-16/CN-17 | M | B-030 | MVP |
 | 54 | B-054 ✅ | Message history on tenant record + shared suppression list + failure queue (hard bounce → tenant flag + **`Task`**, not a private queue table) | PRD 05 CN-18/CN-19/CN-20, FR-14/FR-15; PRD 02 US-41 | M | B-030, B-038, B-095 | MVP |
-| 55 | B-055 | Revenue + delinquency-aging reports (billed vs collected by category; AR aging buckets with tenant detail, **including ended leases still carrying a balance** — former-tenant AR never disappears from the aging view), CSV export, all definitions read from B-042's metrics module | PRD 02 US-39(4–5), §8 | M | B-042, B-044 | MVP |
+| 55 | B-055 ✅ | Revenue + delinquency-aging reports (billed vs collected by category; AR aging buckets with tenant detail, **including ended leases still carrying a balance** — former-tenant AR never disappears from the aging view), CSV export, all definitions read from B-042's metrics module | PRD 02 US-39(4–5), §8 | M | B-042, B-044 | MVP |
 
 ## Milestone 5: Delinquency pipeline, access sync & field ops
 

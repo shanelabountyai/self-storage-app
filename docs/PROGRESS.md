@@ -1405,6 +1405,30 @@ FR-14's provider webhook, FR-15's consequences, CN-18's message history and CN-2
 
 ---
 
+### B-055 — Revenue and delinquency-aging reports ✅ `PENDING`
+
+US-39.4 and US-39.5, the last two MVP reports. Both are money, and both had a specific failure mode the PRD names rather than leaves to be inferred.
+
+**What it built.** `/admin/reports/revenue` — billed vs collected by category (rent, fees, protection, tax) with discounts given, write-offs and refunds, over a picked date range. `/admin/reports/delinquency` — every lease carrying a balance, aged, with tenant detail, per-facility buckets, dunning-step distribution and total exposure. CSV for both, from the same functions the screens call. `REVENUE_CATEGORIES`, `billedByCategory` and `collectedByCategory` in `packages/core/metrics`.
+
+**Decided: collected-by-category replays the allocation order, it does not split proportionally.** `Invoice` stores one paid total, not a paid amount per line, so the per-category figure has to be derived. A $30 payment against $10.64 tax + $25 fee + $129 rent reports as tax $10.64 and fee $19.36 — because that is what `allocatePayment` actually did with the money. A proportional split would report $2, $4.55 and $23.45: tidier, and contradicting the tenant's own ledger the first time anyone checked. `collectedByCategory` calls `allocatePayment` rather than restating the rule, so a facility that reorders its categories gets a report that follows.
+
+**Decided: the split is computed on a running total, not per payment.** An invoice paid $30 in March and $50 in April cannot have April's categories worked out from April alone — the order had already consumed the tax. April's share is `split($80) − split($30)`, which means the report reads every allocation on a touched invoice including the ones outside the range. Verified against exactly that case.
+
+**Decided: billed is accrual, collected is cash, and the gap is the point.** Billed is what invoices *issued* in the range charged; collected is what payments *received* in the range settled. A facility whose collected trails its billed month after month is not having a bad month, it is accumulating AR — the same money the aging report is looking at from the other end, which is why the two screens link to each other.
+
+**Decided: refunds are informational, not a subtracted line.** A refund unwinds the original payment's allocation rows (B-048), so collected is *already* net of it. Showing it again as a deduction would double-count, so it sits in its own tile saying so. A consequence worth knowing: **re-running last month's revenue report after a refund shows less collected than it did before.** That is what the data says, and US-39 defers frozen month-end snapshots to P2 explicitly.
+
+**Decided: an ended lease with a balance stays in the aging report.** US-14's AC in its own words, and the report filters on the *balance*, never on the lease status — with `Moved out` shown as a column so a former tenant is visible as one rather than absent. A move-out is when a balance is least likely to be paid and most likely to be forgotten; a `status: 'active'` filter would write off every former tenant's debt by omission. There is a separate former-tenant exposure figure beside the total for the same reason.
+
+**Found and fixed: the AR aging tiles were readable with only `reports:operational`.** The permission catalog's own description of `reports:financial` is "Revenue, AR, and delinquency aging", but `delinquencyReport` (B-042) used a check that passed on *either* reporting key — so a counter agent, whose role holds only the operational one, could read the portfolio's receivables from the reports page. Added `financialFacilities`, which filters rather than throwing: a regional manager can legitimately hold financial access at one site and operational at another, and throwing would deny them the whole report instead of showing the half they are entitled to. Both new reports and the existing tiles now scope through it.
+
+**Verified:** 1355 unit/DB tests (29 new — 11 on the category split including a property test that no cent is lost at any payment amount, 6 on the half-open range parser, 12 against real rows for both reports, the cross-period running total, the roll-up rule, the ended-lease AC and the permission scoping). Typecheck, lint and build clean. No migration.
+
+**Left behind.** **No merchandise category** — US-39.5 names one and nothing in the system sells merchandise, so an always-zero column would suggest a number is being tracked when nothing produces it; it arrives with retail POS. **No trend or comparison** — each report is one range, with no prior-period column, which is the first thing an owner will ask for. **No month-end freeze**: figures move when a refund or a backdated payment lands, deferred to P2 by US-39 itself. **Aging is point-in-time only** — there is no "as of last month end", which a close process needs. **Report 6, deposits reconciliation, is still unbuilt** and belongs to **B-078** with the drawer. **Unapplied money is a single figure**, not a list of which payments are sitting unallocated.
+
+---
+
 ---
 
 ## Feature PRDs added mid-build

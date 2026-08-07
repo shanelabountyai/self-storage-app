@@ -82,6 +82,24 @@ export default async function ReportsPage({
         </form>
       </div>
 
+      {/* The two money reports live on their own pages: both need a date range
+          rather than a month, and the aging one is a per-lease list that would
+          swamp this overview. */}
+      <nav aria-label="Financial reports" className="flex flex-wrap gap-3">
+        <Link
+          href="/admin/reports/revenue"
+          className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
+        >
+          Revenue — billed vs collected
+        </Link>
+        <Link
+          href="/admin/reports/delinquency"
+          className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
+        >
+          Delinquency aging — tenant detail
+        </Link>
+      </nav>
+
       <section aria-labelledby="occupancy-heading" className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 id="occupancy-heading" className="font-medium">
@@ -193,10 +211,19 @@ export default async function ReportsPage({
         </p>
       </section>
 
+      {/* Financial only. `delinquencyReport` scopes to the facilities the
+          actor holds `reports:financial` at, so a counter agent with only the
+          operational key gets an empty table rather than the portfolio's AR —
+          this hides the empty table too. */}
       <section aria-labelledby="ar-heading" className="flex flex-col gap-3">
-        <h2 id="ar-heading" className="font-medium">
-          Outstanding balances by age
-        </h2>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 id="ar-heading" className="font-medium">
+            Outstanding balances by age
+          </h2>
+          <Link href="/admin/reports/delinquency" className="text-sm underline underline-offset-2">
+            Tenant detail and CSV
+          </Link>
+        </div>
         {/* Wide table: scrolls inside its own container rather than pushing the
             page sideways. */}
         <div className="overflow-x-auto">
