@@ -95,15 +95,35 @@ describe.skipIf(!hasDatabase)('createOwnerAccount', () => {
       data: { deletedAt: new Date(), status: 'suspended' },
     })
 
-    // With every other owner also deactivated, a fresh bootstrap must succeed
-    // without --force.
+    // With every owner THIS SUITE created also deactivated, a fresh bootstrap
+    // must not be blocked by any of them.
     await prisma.staffUser.updateMany({
       where: { id: { in: createdStaffIds } },
       data: { deletedAt: new Date(), status: 'suspended' },
     })
+    const ours = new Set(
+      (
+        await prisma.staffUser.findMany({
+          where: { id: { in: createdStaffIds } },
+          select: { email: true },
+        })
+      ).map((staff) => staff.email),
+    )
+
     const recovery = await createOwnerAccount({ email: `owner-recovery-${suffix}@example.com` })
-    expect(recovery.created).toBe(true)
-    if (recovery.created) createdStaffIds.push(recovery.staffUserId)
+
+    // Two outcomes are both correct, and asserting only the first is what made
+    // this suite fail roughly one run in three. The database is shared and
+    // vitest runs files in parallel, so a LIVE owner belonging to another suite
+    // may exist at this instant — and refusing then is the right behaviour, not
+    // a regression. What this test actually cares about either way is that none
+    // of OUR deactivated owners was the one doing the blocking.
+    if (recovery.created) {
+      createdStaffIds.push(recovery.staffUserId)
+    } else {
+      expect(recovery.reason).toBe('owner_exists')
+      expect(ours.has(recovery.existingEmail ?? '')).toBe(false)
+    }
   })
 
   it('refuses to reuse an email that belongs to a non-owner staff user', async () => {

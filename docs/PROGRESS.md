@@ -1429,6 +1429,41 @@ US-39.4 and US-39.5, the last two MVP reports. Both are money, and both had a sp
 
 ---
 
+### Golden path 2 — demo checkpoint ✅ `PENDING`
+
+The backlog's second demo checkpoint, placed after B-055: *nightly run invoices a seeded lease → due-soon reminder → simulated failed payment → dunning step 1 → magic-link payment halts the ladder.* Run, and **kept** as `tests/golden-path-2-db.test.ts`.
+
+**Decided: the checkpoint is a test, not a script.** A demo that ran once proves the flow worked that afternoon. This one drives the real `SCHEDULED_JOBS` registry — every per-facility job in `localHour` order (invoices 1am, fees 2am, autopay 3am, access 4am, dunning 5am), with the event outbox drained between nights — so it fails a pull request the day somebody breaks the chain between two links. Only Stripe and the clock are substituted, and the clock only because the runner takes a business date as an argument anyway.
+
+The night-by-night narrative it prints, and every step of it is asserted:
+
+```
+27 May · invoices raised for June — 000001 $129.00 due 1 June (+ 1 more)
+27 May · due-soon reminder sent — "Rent for unit M-e745 is due Sunday, May 31"
+27 May · no reminder to the autopay tenant — FR-18: autopay covers it
+ 1 Jun · autopay declined (card_declined) — tenant told, balance still $129.00
+ 2 Jun · one day past due — dunning step 1 sent
+ 2 Jun · retry one declined; 3 Jun · nothing scheduled, card untouched
+ 4 Jun · retry two declined
+ 6 Jun · five days past due — dunning step 2, retry three declined
+ 6 Jun · retries exhausted — a failed_payment task is raised for staff
+ 7 Jun · paid $129.00 through the emailed link — balance $0.00, invoice settled
+8–12 Jun · ladder silent, card untouched — a paid tenant is left alone
+      — access never suspended: paid on day 6, threshold is 6 (D-16)
+```
+
+**The golden path as written needs two tenants, not one.** The first run surfaced this: FR-18's premise check deliberately *cancels* the due-soon reminder for an autopay tenant, with `skipped: autopay_covers_it`. Telling somebody to go and pay a bill the system is about to collect itself is precisely the noise that rule exists to stop — so a single autopay tenant cannot produce both a due-soon reminder and a failed autopay. The checkpoint now seeds a second, manual-pay lease at the same facility, and asserts the cancellation on the autopay one as a behaviour rather than working around it. This is a facility's night, not one tenant's.
+
+**Found and fixed — a real robustness bug in the event dispatcher.** `dispatchEvents` ends its catch block with the comment *"One bad event must not stop the rest of the batch"*, and the implementation had a hole in exactly that promise: the bookkeeping `prisma.eventDelivery.update()` inside the catch throws when the row has gone, and that throw escapes the loop and aborts the whole tick — leaving every remaining event undelivered until the next one. Both bookkeeping calls are now `updateMany`, which matches zero rows and moves on. Only reachable today when a delivery row vanishes mid-flight (cascade from a deleted `DomainEvent`, which nothing prunes in production, but which a parallel test suite does), and closed anyway because the cost is one word and the failure mode is a silently skipped batch of tenant notifications.
+
+**Found and fixed — a test that failed about one run in three.** `bootstrap-owner.test.ts` deactivated the owners it had created and then asserted a fresh bootstrap succeeds *without* `--force` — which only holds if no live owner exists **anywhere** in the shared database, a precondition another parallel suite can invalidate at any moment. It now accepts both outcomes and asserts the one thing it actually cares about: that whatever blocked the bootstrap, it was not one of the owners it had just deactivated. The third hard-won rule in `CLAUDE.md`, met again.
+
+**Verified:** the checkpoint's 10 assertions, plus **two consecutive clean full-suite runs** — 1365 tests, 102 files — because a suite that passes once has not been shown to be repeatable. Typecheck and lint clean.
+
+**Left behind.** **No live Stripe** — the decline is the same mock every billing suite uses; the real-money version of this arc is `npm run test:integration`, which was run against Stripe test mode during B-053. **The pay-link payment goes through the portal's functions, not its HTTP route** — `mintPayLink` → `checkPayLink` → `applyPayment` → `attributePayment`, which is everything but the request handler; the browser half is covered by e2e. **No late-fee step**: the seeded facility has no fee ladder configured, so the 2am job runs and correctly does nothing. **Access suspension is asserted as absent**, not exercised — the tenant pays on day 6 and the threshold is 6, so the arc that leads to a suspended gate is still only covered by its own suite.
+
+---
+
 ---
 
 ## Feature PRDs added mid-build

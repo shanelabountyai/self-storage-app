@@ -125,7 +125,19 @@ export async function dispatchEvents(
 
       try {
         await consumer.handle({ event, deliveryId: claimed.id, attempt: claimed.attempt })
-        await prisma.eventDelivery.update({
+        // `updateMany`, not `update`, here and in the catch below — and the
+        // difference is load-bearing rather than stylistic. `update` throws when
+        // the row is gone, and a throw at THIS point escapes the loop and aborts
+        // the whole tick, leaving every remaining event in the batch
+        // undelivered until the next one. That is the exact opposite of what
+        // the comment at the end of this catch block promises. `updateMany`
+        // matches zero rows and moves on.
+        //
+        // A delivery row can only vanish by cascade from its `DomainEvent`, and
+        // nothing prunes those today — so this is unreachable in production
+        // right now. It is closed anyway because the cost is one word and the
+        // failure mode is a silently skipped batch of notifications.
+        await prisma.eventDelivery.updateMany({
           where: { id: claimed.id },
           data: { status: 'succeeded', completedAt: new Date(), nextAttemptAt: null, lastError: null },
         })
@@ -134,7 +146,7 @@ export async function dispatchEvents(
         const message = error instanceof Error ? error.message : String(error)
         const exhausted = claimed.attempt >= RETRY.maxAttempts
 
-        await prisma.eventDelivery.update({
+        await prisma.eventDelivery.updateMany({
           where: { id: claimed.id },
           data: exhausted
             ? {
