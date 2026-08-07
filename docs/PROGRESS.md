@@ -1514,7 +1514,7 @@ PRD 03 US-6. A site with a legacy keypad nobody can integrate, or a vendor mid-o
 
 ---
 
-### B-066 — SEO infrastructure ✅ `PENDING`
+### B-066 — SEO infrastructure ✅ `2513de6`
 
 PRD 04 FR-SEO-1 through 7. The facility page has been server-rendered and canonical-tagged since B-016; what was missing was everything that makes a crawler able to find it, trust it, and keep finding it after somebody edits a city name.
 
