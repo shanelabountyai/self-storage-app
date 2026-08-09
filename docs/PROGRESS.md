@@ -1646,7 +1646,7 @@ PRD 04 §3.5 US-8, US-10, FR-LEAD-1..3. B-097 built the counter half — a staff
 
 ---
 
-### B-069 — Analytics, the funnel, and the consent banner ✅ `PENDING`
+### B-069 — Analytics, the funnel, and the consent banner ✅ `0559b21`
 
 PRD 04 §3.8 US-15, FR-AN-1..4, and PRD 01 §6.8.1's row for the consent banner.
 
