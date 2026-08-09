@@ -642,6 +642,9 @@ export default async function AdminSettingsPage() {
           <Link href="/admin/settings/suppressions" className="underline underline-offset-2">
             Suppressions — who we no longer write to
           </Link>
+          <Link href="/admin/settings/marketing" className="underline underline-offset-2">
+            Marketing profile — copy, photos, FAQs, Google
+          </Link>
         </p>
       </section>
 

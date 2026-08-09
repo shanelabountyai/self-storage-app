@@ -5,6 +5,14 @@ import { createOwnerAccount, StaffEmailInUseError } from '../apps/web/lib/admin/
 
 // Exercises the one path that can create a StaffUser before B-007's admin UI
 // exists at all — a bug here means nobody can bootstrap into admin.
+//
+// **This suite must never assume it owns the global owner state.** It shares a
+// database with everything else and vitest runs files in parallel, so "is there
+// an owner anywhere" is not a fact this file can control — and worse, an
+// interrupted run leaves a live owner behind whose existence then fails the
+// first test of every subsequent run, permanently, until somebody deletes the
+// row by hand. That has happened twice. Every assertion below is therefore
+// written to hold whether or not another live owner exists.
 const hasDatabase = Boolean(process.env.DATABASE_URL)
 
 const suffix = randomUUID().slice(0, 8)
@@ -14,14 +22,38 @@ const createdStaffIds: string[] = []
 
 afterAll(async () => {
   if (!hasDatabase) return
-  await prisma.staffFacilityAssignment.deleteMany({ where: { staffUserId: { in: createdStaffIds } } })
-  await prisma.staffUser.deleteMany({ where: { id: { in: createdStaffIds } } })
+  // By email shape rather than only by `createdStaffIds`, because the ids array
+  // is lost when a run is interrupted — and a leaked LIVE owner is not an inert
+  // leftover, it changes the behaviour of every later run. Narrow enough that a
+  // real owner account can never match: this suite's own prefixes, at
+  // example.com.
+  const fixtures = await prisma.staffUser.findMany({
+    where: {
+      email: { endsWith: '@example.com' },
+      OR: [
+        { email: { startsWith: 'owner-a-' } },
+        { email: { startsWith: 'owner-b-' } },
+        { email: { startsWith: 'owner-case-' } },
+        { email: { startsWith: 'owner-deactivated-' } },
+        { email: { startsWith: 'owner-recovery-' } },
+        { email: { startsWith: 'non-owner-' } },
+      ],
+    },
+    select: { id: true },
+  })
+  const ids = [...new Set([...createdStaffIds, ...fixtures.map((row) => row.id)])]
+  await prisma.staffFacilityAssignment.deleteMany({ where: { staffUserId: { in: ids } } })
+  await prisma.staffUser.deleteMany({ where: { id: { in: ids } } })
   await prisma.$disconnect()
 })
 
 describe.skipIf(!hasDatabase)('createOwnerAccount', () => {
   it('creates a staff user with an all-facilities owner assignment', async () => {
-    const result = await createOwnerAccount({ email: emailA, firstName: 'Ada' })
+    // `force` because this test is about the SHAPE of what gets created, not
+    // about the refusal — which is its own test below. Without it, a live owner
+    // belonging to another suite (or leaked by an interrupted run) makes this
+    // fail for a reason that has nothing to do with what it checks.
+    const result = await createOwnerAccount({ email: emailA, firstName: 'Ada', force: true })
     expect(result.created).toBe(true)
     if (!result.created) throw new Error('unreachable')
     createdStaffIds.push(result.staffUserId)
@@ -52,9 +84,12 @@ describe.skipIf(!hasDatabase)('createOwnerAccount', () => {
 
   it('refuses a second owner without --force', async () => {
     const result = await createOwnerAccount({ email: emailB })
-    expect(result).toEqual({ created: false, reason: 'owner_exists', existingEmail: emailA })
 
-    // And definitely did not create anything.
+    // The refusal and the no-op are what this test is about. Which email it
+    // names as the incumbent is NOT asserted: any live owner is a valid answer,
+    // and pinning it to this suite's own fixture is what made this file depend
+    // on owning the database.
+    expect(result).toMatchObject({ created: false, reason: 'owner_exists' })
     expect(await prisma.staffUser.findUnique({ where: { email: emailB } })).toBeNull()
   })
 
@@ -79,7 +114,7 @@ describe.skipIf(!hasDatabase)('createOwnerAccount', () => {
 
   it('reports owner_exists (not a crash) when re-run for the same email with no --force', async () => {
     const result = await createOwnerAccount({ email: emailA })
-    expect(result).toEqual({ created: false, reason: 'owner_exists', existingEmail: emailA })
+    expect(result).toMatchObject({ created: false, reason: 'owner_exists' })
   })
 
   it('ignores an owner whose staff account has been deactivated', async () => {

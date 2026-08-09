@@ -71,8 +71,10 @@ export async function generateMetadata({
   // until then every page gets a title and description built from the record,
   // which beats the alternative — an engine inventing its own from page text,
   // where what it picks is usually the cookie banner.
-  const title = facilityTitle(facility)
-  const description = facilityDescription(facility)
+  // B-067: the marketer's own copy wins where they have written any; the
+  // generated template is the floor, not the ceiling.
+  const title = facility.seoTitle ?? facilityTitle(facility)
+  const description = facility.metaDescription ?? facilityDescription(facility)
   const canonical = facilityPath(facility)
   const url = absoluteUrl(siteOrigin(), canonical)
 
@@ -664,12 +666,17 @@ export default async function FacilityPage({
   // thing that gets penalised, and the only way to guarantee it cannot is for
   // both to read the same source.
   const canonicalUrl = absoluteUrl(siteOrigin(), canonical)
-  const faqs = defaultFacilityFaqs(facility)
+  // A facility's own FAQs replace the generated set outright rather than
+  // appending to it: a marketer who has written four answers has decided what
+  // this page says, and quietly padding it back to five with boilerplate would
+  // put words in their mouth. US-1 AC2's "at least 5" is why the generated set
+  // is still the fallback when they have written none.
+  const faqs = facility.faqs.length > 0 ? facility.faqs : defaultFacilityFaqs(facility)
   const schema = [
     selfStorageJsonLd({
       facility,
       url: canonicalUrl,
-      images: [],
+      images: facility.photos.map((photo) => photo.url),
       unitTypes: (unitTypes ?? []).map((unitType) => ({
         name: unitType.name,
         sqFt: unitType.sqFt,
@@ -727,6 +734,15 @@ export default async function FacilityPage({
       )}
 
       <h1 className="text-3xl font-semibold tracking-tight text-balance">{facility.name}</h1>
+
+      {/* US-2 AC1's hero copy — the first thing a renter reads after the name.
+          Absent for a facility nobody has written copy for, and the page reads
+          fine without it, which is why it is not backfilled with a generated
+          sentence that would be the same on every site. */}
+      {facility.heroCopy && (
+        <p className="mt-3 text-lg text-pretty">{facility.heroCopy}</p>
+      )}
+
       <ContactBlock facility={facility} phone={phone} />
 
       {/* §6.6: the commitment terms belong next to the decision, not buried in
@@ -828,6 +844,61 @@ export default async function FacilityPage({
               className="mt-4 aspect-video w-full rounded-lg border"
             />
           </details>
+        </section>
+      )}
+
+      {/* US-2 AC1's long-form description. The single biggest lever on whether
+          this page reads as its own page rather than a template with the city
+          swapped — which is what a thin-content penalty is. Rendered as
+          paragraphs split on blank lines: a marketer typing into a textarea
+          expects a blank line to make a paragraph, and the alternative is
+          either one wall of text or a rich-text editor nobody asked for. */}
+      {facility.longDescription && (
+        <section aria-labelledby="about" className="mt-10">
+          <h2 id="about" className="text-xl font-medium">
+            About this location
+          </h2>
+          <div className="mt-2 flex flex-col gap-3">
+            {facility.longDescription
+              .split(/\n\s*\n/)
+              .map((paragraph) => paragraph.trim())
+              .filter(Boolean)
+              .map((paragraph, index) => (
+                <p key={index} className="text-muted-foreground text-pretty">
+                  {paragraph}
+                </p>
+              ))}
+          </div>
+        </section>
+      )}
+
+      {/* US-2 AC1's photo set. Alt text is a required column, so there is no
+          decorative-image branch here — every one of these describes something
+          a renter is trying to judge from a screen. `loading="lazy"` on all but
+          the first, which is above the fold and is the LCP candidate. */}
+      {facility.photos.length > 0 && (
+        <section aria-labelledby="photos" className="mt-10">
+          <h2 id="photos" className="text-xl font-medium">
+            Photos
+          </h2>
+          <ul className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+            {facility.photos.map((photo, index) => (
+              <li key={photo.url}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={photo.url}
+                  alt={photo.alt}
+                  loading={index === 0 ? 'eager' : 'lazy'}
+                  decoding="async"
+                  // A fixed aspect ratio reserves the space before the bytes
+                  // arrive. Without it every photo that loads shoves the page
+                  // down, which is exactly the CLS the performance budget
+                  // (FR-SEO-6) fails on.
+                  className="aspect-4/3 w-full rounded-lg border object-cover"
+                />
+              </li>
+            ))}
+          </ul>
         </section>
       )}
 

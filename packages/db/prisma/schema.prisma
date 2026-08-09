@@ -370,6 +370,30 @@ model Facility {
   timezone            String
   phone               String?
   email               String?
+  // ── PRD 04 US-2 (B-067). The marketing profile: the unique content blocks
+  // a marketer edits without a deploy. Nullable throughout, and every one of
+  // them falls back to the generated default from B-066 — a facility nobody
+  // has written copy for still has a title, a description and five true FAQs.
+  /// Overrides FR-SEO-3's generated title. ~60 characters is what a result
+  /// renders; the editor counts, it does not truncate.
+  seoTitle            String?
+  /// Overrides the generated meta description. ~155 characters.
+  metaDescription     String?
+  /// One or two sentences under the facility name. The first thing a renter
+  /// reads after the price.
+  heroCopy            String?
+  /// The long-form unique description. The single biggest lever on whether a
+  /// facility page reads as its own page rather than a template with the city
+  /// swapped, which is what a thin-content penalty is.
+  longDescription     String?
+  /// PRD 04 US-5 AC2. When staff last confirmed the Google Business Profile
+  /// matches this record. The system flags anything unverified for >90 days.
+  gbpVerifiedAt       DateTime?      @db.Timestamptz(6)
+  /// Which checklist items were ticked at that verification. A string array
+  /// rather than six booleans: the checklist is US-5 AC1's list today and will
+  /// grow, and each addition would otherwise be a migration.
+  gbpCheckedItems     String[]       @default([])
+
   /// PRD 03 FR-3 / US-6. Which gate controller this facility talks to.
   ///
   /// `simulated` is the integrated path (and, per CLAUDE.md and D-4, the only
@@ -494,6 +518,8 @@ model Facility {
   tasks                  Task[]
   gateCommands           GateCommand[]
   accessEvents           AccessEvent[]
+  marketingFaqs          FacilityFaq[]
+  photos                 FacilityPhoto[]
   simulatedGateCodes     SimulatedGateCode[]
   simulatedVendorEvents  SimulatedVendorEvent[]
   gateSimulatorConfig    GateSimulatorConfig?
@@ -1414,6 +1440,70 @@ enum AccessEventResult {
 /// A real vendor's controller holds the code; we hold only a reference to it.
 /// This table exists to play that vendor's part in the simulation, and a real
 /// integration would have no equivalent row on our side at all.
+/// PRD 04 US-2 AC1 (B-067). A facility's own FAQ, question by question.
+///
+/// A table rather than JSON on `Facility` because these are individually
+/// ordered, individually edited, and individually rendered into `FAQPage`
+/// structured data — all three of which are awkward against a JSON blob and
+/// none of which needs a join anywhere else.
+///
+/// A facility with no rows here falls back to `defaultFacilityFaqs` (B-066),
+/// so US-1 AC2's "at least 5" holds whether or not anybody has written any.
+model FacilityFaq {
+  id         String   @id @default(cuid())
+  facilityId String
+  question   String
+  answer     String
+  /// Display order, ascending. Sparse on purpose (10, 20, 30…) so inserting
+  /// between two entries does not renumber the rest.
+  position   Int
+  createdAt  DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt  DateTime @updatedAt @db.Timestamptz(6)
+
+  facility Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+
+  @@index([facilityId, position])
+  @@map("facility_faq")
+}
+
+/// PRD 04 US-2 AC1 (B-067). Facility photos, with alt text that is not optional.
+///
+/// `alt` is a required column rather than a nullable one with a lint rule,
+/// because WCAG 1.1.1 is an acceptance criterion on customer-facing work here
+/// and a photo set where three of eleven have alt text is the normal outcome of
+/// making it optional.
+///
+/// No blob store is configured yet (the same B-023 note `Document.storageRef`
+/// carries), so `url` is a reference to wherever the operator's photos already
+/// live. When an upload path exists it writes this same column.
+model FacilityPhoto {
+  id         String            @id @default(cuid())
+  facilityId String
+  url        String
+  /// Required. WCAG 1.1.1, and also what makes the image findable.
+  alt        String
+  kind       FacilityPhotoKind @default(other)
+  position   Int
+  createdAt  DateTime          @default(now()) @db.Timestamptz(6)
+
+  facility Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+
+  @@index([facilityId, position])
+  @@map("facility_photo")
+}
+
+/// The shot types PRD 01 US-103 asks for by name: "exterior, gate, hallway,
+/// sample unit, security feature". `exterior` is called out separately because
+/// B-067's launch gate is specifically about having one.
+enum FacilityPhotoKind {
+  exterior
+  gate
+  hallway
+  unit
+  security
+  other
+}
+
 /// PRD 04 FR-SEO-2 (B-066). The 301 map.
 ///
 /// "301 redirect map maintained for renamed/retired slugs; facility slug

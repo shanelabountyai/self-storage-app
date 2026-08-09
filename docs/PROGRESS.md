@@ -1550,6 +1550,36 @@ PRD 04 FR-SEO-1 through 7. The facility page has been server-rendered and canoni
 
 ---
 
+### B-067 — Facility marketing profile editor ✅ `PENDING`
+
+PRD 04 US-2 and US-5. B-066 generated a title, a description and five FAQs for every facility from its record; this is where a marketer replaces any of them without a deploy.
+
+**What it built.** Four nullable copy fields on `Facility`, plus `FacilityFaq` and `FacilityPhoto` tables. `/admin/settings/marketing`: copy editor with character guidance and a duplicate-description warning, photo management with required alt text, per-facility FAQs, a readiness checklist, and US-5's GBP card with a copy-paste NAP block. The public page renders hero copy, long-form description, a photo grid and the facility's own FAQs.
+
+**Decided: every field is optional and falls back to the generated default.** That is the design, not a convenience — "the marketer has not got to this site yet" must never mean "this page is broken". Saving an empty title stores `null` rather than an empty string, so clearing a field is a real action that restores the generated one.
+
+**Decided: a facility's own FAQs replace the generated set outright, never append to it.** A marketer who has written four answers has decided what the page says; padding back to five with boilerplate would put words in their mouth. US-1 AC2's "at least five" is why the generated set remains the fallback at zero.
+
+**Decided: character guidance warns, it does not block.** ~60 and ~155 are what a result renders, not limits an engine enforces; a marketer who wants 70 characters has a reason, and refusing would move the copy into a spreadsheet. Only the hard maxima (90 / 200) refuse, and the message names what they really are — a paste that ran on.
+
+**Decided: `alt` is a NOT NULL column, not a nullable one with a lint rule.** WCAG 1.1.1 is an acceptance criterion on customer-facing work here, and a photo set where three of eleven have alt text is the normal outcome of making it optional. The save also rejects whitespace typed to get past the field.
+
+**Decided: duplicate detection is trigram similarity at 0.8, not exact match.** The real case is somebody pasting Austin's description into Dallas and changing the city, which an exact-match check misses entirely. 0.8 rather than 0.95 because two genuinely different storage descriptions still share a lot of vocabulary — the floor has to sit above ordinary shared language and below a copy-paste. Computed against **every** facility, not just the ones the editor can see: a collision between two sites they cannot both access still cannibalises both.
+
+**Decided: the launch gate is reported, not enforced.** The backlog asks for "at least one exterior photo per active facility". Blocking a facility from going active over a missing photo would take a rentable unit off sale to fix a marketing problem, so it is a checklist a person clears.
+
+**Decided: no file upload.** There is no blob store (the same gap `Document.storageRef` carries), so a photo is a URL an operator pastes plus required alt text. When an upload path exists it writes the same column, and nothing else changes.
+
+**Decided: revalidation is immediate, and the path is looked up rather than posted.** US-2 AC2's "within 5 minutes" is a ceiling; `revalidatePath` is instant. The facility path is resolved server-side from the id, because a form field naming which path to purge is a field somebody can point at another facility's page.
+
+**Found and fixed — a test that had bitten twice.** `bootstrap-owner.test.ts` assumed it owned the global owner state: its first test expected `created: true` without `--force`, and two others asserted *which* email was the incumbent. A run of this suite that is interrupted leaves a **live** owner behind, and from then on every subsequent run of that first test fails — permanently, until somebody deletes the row by hand. That is exactly what happened here (one leaked fixture from an interrupted run, since removed). The first test now forces, because it is about the shape of what gets created rather than the refusal; the refusal tests assert the refusal without pinning the incumbent; and teardown now sweeps by email shape as well as by id, because the id list is what an interrupted run loses. The file carries a comment saying why, since this is the second fix in two items.
+
+**Verified:** 1535 unit/DB tests (39 new — 22 on character guidance, duplicate similarity, the readiness gate and the GBP staleness rule; 17 against real rows for the fallback behaviour, the alt-text refusal, cross-facility delete scoping and the checklist dating). E2e 328 passing. **Two consecutive clean full-suite runs with nothing else touching the database** — the earlier noisy runs were my own build competing for it, and are not evidence of anything. Typecheck, lint and build clean. One migration.
+
+**Left behind.** **No file upload, no image optimisation** — photos are external URLs rendered through a plain `<img>`, so FR-SEO-6's responsive `srcset` and modern formats do not apply to them; the aspect-ratio box reserves space so they cost no CLS. **No reordering** — photos and FAQs append at the end, and changing the order means removing and re-adding; positions are sparse so a drag handle is a screen, not a migration. **No per-facility review entry** (US-6) and therefore still no `aggregateRating`. **The duplicate check runs at read time over every facility's description** — fine at this scale, a query to revisit in the hundreds. **The GBP checklist is six booleans and a date**; nothing verifies any of it, which US-5 AC2 states plainly as the MVP position.
+
+---
+
 ---
 
 ## Feature PRDs added mid-build

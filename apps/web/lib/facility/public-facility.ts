@@ -29,6 +29,16 @@ export type PublicFacility = {
   /// times a renter might drive out for.
   officeHours: WeeklySchedule | null
   gateHours: WeeklySchedule | null
+  // ── PRD 04 US-2 (B-067). The marketer's own copy, where they have written
+  // any. Null throughout means "use B-066's generated default", which is what
+  // keeps an unedited facility from rendering as a page with holes in it.
+  seoTitle: string | null
+  metaDescription: string | null
+  heroCopy: string | null
+  longDescription: string | null
+  photos: { url: string; alt: string; kind: string }[]
+  /// A facility's own FAQs. Empty means the generated five are shown instead.
+  faqs: { question: string; answer: string }[]
 }
 
 /// US-103's crawlable URL scheme: `/storage/{state}/{city}/{facility-slug}`.
@@ -83,11 +93,23 @@ export const publicFacilityBySlug = cache(async function publicFacilityBySlug(
       officeHours: true,
       gateHours: true,
       status: true,
+      seoTitle: true,
+      metaDescription: true,
+      heroCopy: true,
+      longDescription: true,
+      photos: {
+        orderBy: { position: 'asc' },
+        select: { url: true, alt: true, kind: true },
+      },
+      marketingFaqs: {
+        orderBy: { position: 'asc' },
+        select: { question: true, answer: true },
+      },
     },
   })
   if (!facility) return null
 
-  const { status, officeHours, gateHours, ...rest } = facility
+  const { status, officeHours, gateHours, marketingFaqs, ...rest } = facility
   // An inactive facility is not open for business, so it is a 404 rather than a
   // page with everything greyed out — matching publicInventoryForFacility.
   if (status !== 'active') return null
@@ -96,6 +118,7 @@ export const publicFacilityBySlug = cache(async function publicFacilityBySlug(
     ...rest,
     officeHours: parseWeeklySchedule(officeHours),
     gateHours: parseWeeklySchedule(gateHours),
+    faqs: marketingFaqs,
   }
 })
 
