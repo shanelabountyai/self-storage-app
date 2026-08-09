@@ -1612,6 +1612,40 @@ PRD 02 §4.8 US-43. "Do you have a 10x10 and how much?" is a ninety-second call 
 
 ---
 
+### B-068 — Lead capture and attribution ✅ `PENDING`
+
+PRD 04 §3.5 US-8, US-10, FR-LEAD-1..3. B-097 built the counter half — a staffer taking a call. This is the same `Lead` entity reached by an anonymous stranger over the public internet, which changes exactly three things: nobody is authenticated, the input is hostile, and the same person will submit twice.
+
+**What it built.** A quote/callback form on the facility page. `packages/core/marketing/attribution.ts` — channel derivation, the 90-day first/last-touch cookie, and dedup keys. `apps/web/lib/marketing/lead-capture.ts` with honeypot, per-submitter rate limiting and FR-LEAD-1's dedup. A `LeadActivity` table. Attribution cookies written at the edge. A `lead.created` consumer raising a high-priority task.
+
+**Found and fixed — B-066 was silently eating every ad click.** The canonical-URL policy strips `utm_*` and `gclid` as tracking parameters and 308s. That meant a genuine ad click *always* arrived as a non-canonical URL and left as a redirect, and the cookie was only written on the non-redirect branch — so **100% of paid traffic would have recorded as `direct`**, which is precisely the misattribution the channel derivation exists to prevent. Attribution is now captured on the redirect response, before the parameters are stripped. Caught by checking the running server rather than by a test, which is the argument for doing that.
+
+**Also fixed: the cookie was double-encoded.** `encodeTouch` percent-encoded and Next's cookie API encoded again — correct on the round trip only because two layers cancelled, and unreadable to anything else (`%257B`). Now plain JSON, with the decoder tolerating both shapes so a visitor carrying a 90-day-old cookie does not lose their first touch.
+
+**Decided: a gclid outranks every other signal.** It is only ever set by an ad click, and trusting a stripped `utm_medium` over it files paid traffic as organic — the most expensive single misattribution available here.
+
+**Decided: paid vs organic is read from `utm_medium`, not `utm_source`.** `utm_source: google` says nothing about whether money changed hands.
+
+**Decided: aggregators get their own channel.** PRD 04 §2 names SpareFoot and Storable as charging per completed move-in. Letting the most expensive channel there is hide inside `referral` would understate exactly the cost the module exists to make visible.
+
+**Decided: search hosts are a list, not a heuristic.** `researchgate.net` contains "research" and is not a search engine; a substring rule would inflate the organic number this is meant to protect.
+
+**Decided: first touch is written once and never overwritten.** The ad that closed somebody and the search that found them are different spend. The proxy also skips writing entirely on an internal click — no campaign tags and a referrer that is us — because otherwise the second page of every session overwrites a genuine last touch with `direct`, which is the most common way this kind of cookie ends up useless.
+
+**Decided: rate limiting keys on a keyed hash of the IP, never the address.** It answers exactly one question — "five in ten minutes?" — which a one-way digest answers just as well. Keyed with `AUTH_SECRET`, because the IPv4 space is small enough to enumerate against a plain SHA-256: an unkeyed hash of an IP *is* an IP. With no address the limit disables rather than bucketing every visitor under one constant hash, which would lock the form for everybody.
+
+**Decided: the honeypot returns the success page.** Telling a bot it was detected is how it learns to try again without filling that field. The field is hidden from assistive technology too — `aria-hidden` plus `tabIndex={-1}` — because a blind visitor who filled it would be silently discarded.
+
+**Decided: dedup re-checks the phone match exactly.** The indexed query is a coarse `contains` on the last four digits; without the exact re-check, somebody whose number merely ends the same way would be folded into a stranger's lead.
+
+**Decided: the "dashboard inbox" is `Task`.** US-8 AC2 asks for email plus a dashboard inbox in real time. §4.9 US-41 is explicit that every queue reads the one task entity, and a separate lead inbox would be the eighth screen that item exists to prevent. Raised at `high`, higher than a counter lead's follow-up, because nobody has spoken to this person at all.
+
+**Verified:** 1591 unit/DB tests (39 new — 22 on channel derivation, cookie round-tripping and dedup keys; 17 against real rows for validation, honeypot, rate limiting, dedup including the near-miss phone case and the 30-day boundary, first/last-touch separation, and the event → task hand-off). E2e 326. **Two consecutive clean full-suite runs.** Checked live against a running server: an ad click through the canonical redirect now stores `{"s":"google","m":"cpc","c":"spring","ch":"paid_search"}`, and an internal click leaves it alone. Typecheck, lint and build clean. Two migrations.
+
+**Left behind.** **No email to the manager** — US-8 AC2 asks for one, and the comms pipeline resolves tenants only: `resolveRecipient` has no notion of a staff recipient, and bolting one on would route around the suppression list and the kill switch. The dashboard task is real and immediate; the email needs staff-recipient support in the comms service and is worth its own item. **No form on city pages** (they arrive with **B-071**) and none on the home page. **No CAPTCHA escalation path** — AC4 explicitly makes it the escalation, and there is no trigger that would turn it on. **The rate limit trusts `x-forwarded-for`**, which a determined attacker sets freely; it is a brake on naive floods, not a gate. **No confirmation email to the prospect** (AC2's other half) — same comms gap, and it also wants marketing-consent capture from **B-072**. **`moved_in` is not a lead status**: US-10 AC2 lists it, the enum has `converted`, and nothing yet moves a lead there when its reservation becomes a lease.
+
+---
+
 ---
 
 ## Feature PRDs added mid-build

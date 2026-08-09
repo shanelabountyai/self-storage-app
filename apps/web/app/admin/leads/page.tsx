@@ -122,6 +122,9 @@ export default async function LeadsPage() {
                 {lead.phone}
                 {lead.unitTypeName ? ` · wants a ${lead.unitTypeName}` : ''}
                 {lead.takenByName ? ` · taken by ${lead.takenByName}` : ''}
+                {lead.channel ? ` · ${lead.channel.replace(/_/g, ' ')}` : ''}
+                {/* FR-LEAD-1's point, made visible: one row, several asks. */}
+                {lead.askedTimes > 1 ? ` · asked ${lead.askedTimes} times` : ''}
               </p>
               {lead.message && <p className="mt-1 text-pretty">{lead.message}</p>}
             </li>

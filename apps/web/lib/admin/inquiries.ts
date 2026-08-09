@@ -247,6 +247,14 @@ export type LeadRow = {
   /// Uncontacted past the facility's window. US-43: "a lead with no disposition
   /// is visible, never silently ageing in `new`."
   overdue: boolean
+  /// B-068. The derived marketing channel for a web lead — `paid_search`,
+  /// `organic`, `aggregator`. Null for a counter lead, where `source` already
+  /// says everything.
+  channel: string | null
+  /// PRD 04 FR-LEAD-1. How many times this person has asked. One means once;
+  /// more means the dedup rule folded repeats into this row rather than
+  /// creating a second lead for somebody to call in parallel.
+  askedTimes: number
 }
 
 export async function facilityLeads(
@@ -274,6 +282,7 @@ export async function facilityLeads(
     include: {
       unitType: { select: { name: true } },
       createdByStaff: { select: { firstName: true, lastName: true } },
+      _count: { select: { activities: true } },
     },
   })
 
@@ -300,6 +309,9 @@ export async function facilityLeads(
       ? `${lead.createdByStaff.firstName} ${lead.createdByStaff.lastName}`
       : null,
     overdue: lead.contactedAt === null && lead.createdAt.getTime() < cutoff,
+    channel: lead.channel,
+    // The lead itself is the first ask; each activity row is a repeat.
+    askedTimes: lead._count.activities + 1,
   }))
 }
 

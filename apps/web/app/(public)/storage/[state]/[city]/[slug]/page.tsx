@@ -31,6 +31,8 @@ import {
 } from '@storage/core/marketing'
 import { siteOrigin } from '@/lib/marketing/origin'
 import { redirectFor } from '@/lib/marketing/redirects'
+import { LeadForm } from '@/components/marketing/lead-form'
+import { submitLeadAction } from './lead-actions'
 import { citySlugPath } from '@/lib/marketing/paths'
 import {
   applyFilters,
@@ -901,6 +903,30 @@ export default async function FacilityPage({
           </ul>
         </section>
       )}
+
+      {/* PRD 04 US-8 (B-068). For the prospect who is not ready to reserve —
+          which is most of them. Placed after the units and before the FAQ:
+          somebody who has read the prices and not clicked Rent is exactly the
+          person this catches. */}
+      <section aria-labelledby="ask" className="mt-10">
+        <h2 id="ask" className="text-xl font-medium">
+          Not ready yet? Ask us
+        </h2>
+        <p className="text-muted-foreground mt-2 max-w-prose text-sm text-pretty">
+          A quote or a call back, no account needed. We will not use this to sign you up for
+          anything.
+        </p>
+        <div className="mt-4">
+          <LeadForm
+            facilityId={facility.id}
+            unitTypes={(unitTypes ?? []).map((unitType) => ({
+              id: unitType.unitTypeId,
+              label: `${unitType.name} — ${unitType.sqFt} sq ft`,
+            }))}
+            action={submitLeadAction}
+          />
+        </div>
+      </section>
 
       {/* US-1 AC2: "at least 5 facility-specific FAQs." Generated from the
           facility record (packages/core/marketing/faqs.ts) so an answer can

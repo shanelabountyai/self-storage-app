@@ -1454,6 +1454,32 @@ enum AccessEventResult {
 /// A real vendor's controller holds the code; we hold only a reference to it.
 /// This table exists to play that vendor's part in the simulation, and a real
 /// integration would have no equivalent row on our side at all.
+/// PRD 04 FR-LEAD-1 (B-068). "New inquiries appended as activities rather than
+/// duplicate leads."
+///
+/// The same person asking twice in a fortnight is one lead with two things to
+/// say, not two leads — and two leads means two staff calling them, which is
+/// the outcome the dedup rule exists to prevent. Each repeat ask lands here.
+model LeadActivity {
+  id        String   @id @default(cuid())
+  leadId    String
+  /// `inquiry` for a repeat form submission, `note` for anything a staffer
+  /// adds. A loose string for the usual reason — a new kind is a value, not a
+  /// migration.
+  type      String   @default("inquiry")
+  body      String
+  /// The attribution of THIS ask, which may differ from the lead's first
+  /// touch: somebody who arrived organically in March and clicked an ad in
+  /// April is one lead whose second visit was paid.
+  channel   String?
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([leadId, createdAt])
+  @@map("lead_activity")
+}
+
 /// PRD 04 US-2 AC1 (B-067). A facility's own FAQ, question by question.
 ///
 /// A table rather than JSON on `Facility` because these are individually
@@ -1862,6 +1888,34 @@ model Lead {
   lastTouchSource       String?
   lastTouchMedium       String?
   lastTouchCampaign     String?
+  /// PRD 04 FR-LEAD-2 (B-068). Where the last visit landed. First touch has
+  /// had one of these since B-002; last touch needs its own, because "which
+  /// page were they on when they finally asked" is a different question from
+  /// "which page brought them here originally", and they answer to different
+  /// spend.
+  lastTouchLandingPage  String?
+  /// The derived channel (`paid_search`, `organic`, `aggregator`…). Stored
+  /// rather than derived on read: the rules will change, and a report of last
+  /// quarter must not silently re-file last quarter's leads under this
+  /// quarter's rules.
+  channel               String?
+  /// The `Referer` as sent, kept whole. The channel above is the answer; this
+  /// is the evidence, and it is what anyone will want when the answer looks
+  /// wrong.
+  referrer              String?
+  /// Google's click id. Proof of a paid click even when a redirect stripped
+  /// the UTM tags — which happens.
+  gclid                 String?
+  /// PRD 04 US-8 AC1. Which page the form was on.
+  landingPage           String?
+  /// PRD 04 US-8 AC4's rate limiting, per submitter.
+  ///
+  /// A keyed SHA-256 of the IP, never the address itself. An IP is personal
+  /// data and this needs to answer exactly one question — "has this submitter
+  /// been here five times in ten minutes" — which a one-way hash answers just
+  /// as well. Keyed rather than plain because the IPv4 space is small enough to
+  /// enumerate against an unkeyed digest.
+  submitterHash         String?
   createdAt             DateTime   @default(now()) @db.Timestamptz(6)
   updatedAt             DateTime   @updatedAt @db.Timestamptz(6)
 
@@ -1871,9 +1925,11 @@ model Lead {
   createdByStaff StaffUser?    @relation(fields: [createdByStaffId], references: [id], onDelete: SetNull)
   reservations   Reservation[]
   consents       Consent[]
+  activities     LeadActivity[]
 
   @@index([facilityId, status])
   @@index([facilityId, contactedAt])
+  @@index([submitterHash, createdAt])
   @@index([email])
   @@index([phone])
   @@map("lead")

@@ -1,6 +1,14 @@
 import NextAuth from 'next-auth'
 import { NextResponse, type NextRequest } from 'next/server'
-import { canonicalPath, isNoindexPath } from '@storage/core/marketing'
+import {
+  ATTRIBUTION_COOKIE_DAYS,
+  canonicalPath,
+  encodeTouch,
+  FIRST_TOUCH_COOKIE,
+  isNoindexPath,
+  LAST_TOUCH_COOKIE,
+  touchFrom,
+} from '@storage/core/marketing'
 import { authConfig } from '@/auth.config'
 
 // The edge layer. Two unrelated jobs share it because Next allows exactly one
@@ -38,10 +46,34 @@ function seoResponse(request: NextRequest): NextResponse {
     // method. A POST to a URL with a stray trailing slash — which a hand-typed
     // form action produces — must not silently become a GET, because the form
     // would appear to submit and quietly do nothing.
-    return NextResponse.redirect(url, 308)
+    const redirect = NextResponse.redirect(url, 308)
+    // Attribution is captured BEFORE the redirect, and this ordering is
+    // load-bearing rather than incidental. B-066's canonicalisation strips
+    // exactly the parameters B-068 needs — `utm_*` and `gclid` are on the
+    // tracking-param list — so every genuine ad click arrives as a
+    // non-canonical URL and leaves as a 308. Writing the cookie only on the
+    // second request would record `direct` for 100% of paid traffic, which is
+    // the misattribution the whole channel-derivation exists to prevent.
+    writeAttributionCookies(request, redirect)
+    return redirect
   }
 
   const response = NextResponse.next()
+
+  // PRD 04 FR-LEAD-2 (B-068): "First-touch UTMs + landing page persisted 90
+  // days; last-touch updated each session."
+  //
+  // Written here rather than in a page, because a visitor who lands on a
+  // facility page from an ad and then browses to three others must keep the
+  // touch from the FIRST of those. A page-level writer would only see the page
+  // it is on, and the honest first touch would be lost the moment they clicked
+  // anything.
+  //
+  // First-party, `lax`, and not marked `httpOnly`: B-069's analytics wrapper
+  // reads the same values client-side, and there is nothing here worth
+  // protecting from a script that could not already be read off the URL.
+  writeAttributionCookies(request, response)
+
   if (isNoindexPath(pathname)) {
     // A header rather than a meta tag, because it also covers routes that
     // return something other than HTML: a CSV export or a JSON response has
@@ -49,6 +81,48 @@ function seoResponse(request: NextRequest): NextResponse {
     response.headers.set('X-Robots-Tag', 'noindex, nofollow')
   }
   return response
+}
+
+/// Records where this visit came from, if it is a visit worth recording.
+function writeAttributionCookies(request: NextRequest, response: NextResponse): void {
+  const params = request.nextUrl.searchParams
+  const referrer = request.headers.get('referer')
+
+  const touch = touchFrom({
+    utmSource: params.get('utm_source'),
+    utmMedium: params.get('utm_medium'),
+    utmCampaign: params.get('utm_campaign'),
+    gclid: params.get('gclid'),
+    referrer,
+    selfHost: request.nextUrl.hostname,
+    landingPage: request.nextUrl.pathname,
+  })
+
+  // An internal click carries no new information: no campaign tags and a
+  // referrer that is us. Writing it would overwrite a genuine last touch with
+  // `direct` on the second page of every session — which is the single most
+  // common way this kind of cookie ends up useless.
+  const hasTags = Boolean(params.get('utm_source') || params.get('gclid'))
+  const fromElsewhere =
+    Boolean(referrer) && !referrer!.toLowerCase().includes(request.nextUrl.hostname.toLowerCase())
+  if (!hasTags && !fromElsewhere) return
+
+  const encoded = encodeTouch(touch)
+  const options = {
+    maxAge: ATTRIBUTION_COOKIE_DAYS * 86_400,
+    sameSite: 'lax' as const,
+    path: '/',
+    secure: request.nextUrl.protocol === 'https:',
+  }
+
+  // First touch is written once and never overwritten — it is the whole reason
+  // to keep two. The ad that closed somebody and the search that found them are
+  // different spend, and letting the last one claim both is how an owner
+  // defunds the channel that was working.
+  if (!request.cookies.get(FIRST_TOUCH_COOKIE)) {
+    response.cookies.set(FIRST_TOUCH_COOKIE, encoded, options)
+  }
+  response.cookies.set(LAST_TOUCH_COOKIE, encoded, options)
 }
 
 const gated = auth((request) => {

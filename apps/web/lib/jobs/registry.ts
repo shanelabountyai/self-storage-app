@@ -9,13 +9,51 @@ import { emitDueReminders, generateInvoices } from '@/lib/billing/invoices'
 import { emitRetryReminders, runAutopay } from '@/lib/billing/autopay'
 import { assessLateFees } from '@/lib/billing/late-fees'
 import { evaluateAccessSuspensions } from '@/lib/access/delinquency-gate'
+import { prisma } from '@storage/db'
 import { runDunning } from '@/lib/billing/dunning'
+import { createTask } from '@/lib/admin/tasks'
 import { raiseLeadFollowUps } from '@/lib/admin/lead-follow-up'
 
 // Consumer and job registration. The machinery is B-006's; the things that use
 // it arrive with their own backlog items: reservation expiry (B-018, below),
 // Stripe reconciliation (B-019), gate command outbox (B-027), comms (B-030),
 // billing scheduler (B-043).
+
+/// PRD 04 US-8 AC2 / FR-LEAD-3 (B-068): a web lead "notifies the facility
+/// manager (email + dashboard inbox) in real time."
+///
+/// The dashboard inbox is `Task` — §4.9 US-41 is explicit that every queue
+/// reads the one entity, and a separate lead inbox would be the eighth screen
+/// that item exists to prevent. Raised immediately rather than by B-097's
+/// morning sweep, because the two cases are genuinely different: a phone caller
+/// has just spoken to somebody, while a web submitter is a stranger sitting on
+/// a page waiting to hear back.
+///
+/// The email half is NOT here — see the note in the consumer.
+export const LEAD_CONSUMER: Consumer = {
+  name: 'leads.notify-on-created',
+  events: ['lead.created'],
+  handle: async ({ event }) => {
+    const lead = await prisma.lead.findUnique({
+      where: { id: event.entityId },
+      select: { facilityId: true, source: true },
+    })
+    // Counter leads are excluded: the staffer who took the call IS the person
+    // this would notify, and B-097's window sweep covers them if nobody acts.
+    if (!lead?.facilityId || lead.source !== 'web') return
+
+    await createTask({
+      facilityId: lead.facilityId,
+      type: 'lead_follow_up',
+      entityType: 'Lead',
+      entityId: event.entityId,
+      sourceEventId: event.id,
+      // Higher than a counter lead's follow-up, deliberately: nobody has spoken
+      // to this person at all.
+      priority: 'high',
+    })
+  },
+}
 
 export const CONSUMERS: readonly Consumer[] = [
   {
@@ -64,6 +102,7 @@ export const CONSUMERS: readonly Consumer[] = [
       await processCommsEvent(event)
     },
   },
+  LEAD_CONSUMER,
 ]
 
 export type ScheduledJob = {
