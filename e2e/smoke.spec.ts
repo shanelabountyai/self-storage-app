@@ -188,7 +188,10 @@ test('"What you\'d pay today" itemizes and foots', async ({ page }) => {
 test('filters narrow the list and survive into the URL', async ({ page }) => {
   await page.goto('/storage/tx/austin/demo-austin-south')
 
-  await page.getByLabel('Size').selectOption('small')
+  // `exact` because B-068's lead form added a "Size you are interested in"
+  // select further down the page — two controls may legitimately mention size,
+  // so the filter is addressed precisely rather than by substring.
+  await page.getByLabel('Size', { exact: true }).selectOption('small')
   // 3.2.2: selecting must not navigate on its own.
   await expect(page).not.toHaveURL(/size=small/)
 

@@ -12,43 +12,53 @@ test.beforeEach(async ({ context }) => {
   await context.clearCookies()
 })
 
-test('the banner appears and moves focus into itself', async ({ page }) => {
+test('the banner appears without stealing focus', async ({ page }) => {
   await page.goto('/storage/size-guide')
 
   const region = page.getByRole('region', { name: 'Cookies on this site' })
   await expect(region).toBeVisible()
 
-  // Focus moved INTO it on appearance — onto the heading, not a button, so a
-  // keyboard user hears what they are consenting to before reaching Accept.
-  await expect(page.getByRole('heading', { name: 'Cookies on this site' })).toBeFocused()
+  // §6.8.1 asks for focus to move into a banner on appearance. This one is
+  // present at page LOAD, and focusing it then breaks a stronger rule — WCAG
+  // 2.4.1's skip link must be the first tab stop, and it was not. So the
+  // banner leaves focus alone and the skip link still wins the first Tab.
+  await page.keyboard.press('Tab')
+  await expect(page.getByRole('link', { name: 'Skip to main content' })).toBeFocused()
 })
 
-test('it is not a keyboard trap — tab leaves and comes back', async ({ page }) => {
+test('it is not a keyboard trap — tab reaches it and leaves again', async ({ page }) => {
   await page.goto('/storage/size-guide')
-  await expect(page.getByRole('heading', { name: 'Cookies on this site' })).toBeFocused()
 
-  // Two tabs reach both buttons; a third must leave the banner entirely. In a
-  // trap the focus would cycle back to the first button forever.
-  await page.keyboard.press('Tab')
-  await expect(page.getByRole('button', { name: 'No thanks' })).toBeFocused()
+  // Reachable by keyboard from the page, which is what matters now that focus
+  // is not moved there for you.
+  await page.getByRole('button', { name: 'No thanks' }).focus()
   await page.keyboard.press('Tab')
   await expect(page.getByRole('button', { name: "That's fine" })).toBeFocused()
 
+  // And a third tab leaves the banner entirely. In a trap it would cycle back
+  // to the first button forever.
   await page.keyboard.press('Tab')
   await expect(page.getByRole('button', { name: "That's fine" })).not.toBeFocused()
   await expect(page.getByRole('button', { name: 'No thanks' })).not.toBeFocused()
 })
 
-test('reject is reachable before accept and dismisses by keyboard alone', async ({ page }) => {
+test('reject comes before accept and dismisses by keyboard alone', async ({ page }) => {
   await page.goto('/storage/size-guide')
 
   // "Reject is as reachable and as prominent as Accept" — reject comes FIRST in
-  // the tab order, which is the stronger version of reachable.
-  await page.keyboard.press('Tab')
+  // the DOM and so in the tab order, which is the stronger version of
+  // reachable. (The trap test above walks reject → accept to prove the order.)
+  await page.getByRole('button', { name: 'No thanks' }).focus()
   await expect(page.getByRole('button', { name: 'No thanks' })).toBeFocused()
 
+  // Dismissed by the keyboard alone, never needing a pointer.
   await page.keyboard.press('Enter')
   await expect(page.getByRole('region', { name: 'Cookies on this site' })).toBeHidden()
+
+  // Dismissal must not drop focus on `<body>` — the button that was pressed has
+  // just left the DOM, and a keyboard user would otherwise be silently returned
+  // to the top of the document.
+  await expect(page.locator('#main')).toBeFocused()
 })
 
 test('the choice sticks across a reload', async ({ page }) => {

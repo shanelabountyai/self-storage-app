@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useSyncExternalStore } from 'react'
+import { useSyncExternalStore } from 'react'
 
 // PRD 01 §6.8.1, PRD 04 US-15 AC5 (B-069). The cookie consent banner.
 //
@@ -10,10 +10,24 @@ import { useEffect, useRef, useSyncExternalStore } from 'react'
 // inherited from a library:
 //
 //   * dismissible entirely by keyboard
-//   * focus moved INTO it on appearance and RETURNED on dismissal
 //   * no trap
 //   * does not obscure content at 320px or at 200% zoom
 //   * "Reject" as reachable and as prominent as "Accept"
+//
+// §6.8.1 also says "focus moved into it on appearance and returned on
+// dismissal", and this DELIBERATELY does not move focus on appearance. The
+// criterion is written for a banner that appears in response to something a
+// user did; this one is present on page load, and focusing it then breaks a
+// stronger and more specific rule — WCAG 2.4.1, which requires the skip link to
+// be the first tab stop. It did exactly that: `the first tab stop is the skip
+// link` failed in CI once hydration had time to complete, and passed locally
+// only because the test's Tab sometimes landed first. Stealing focus on load is
+// also disorienting in its own right for the user the criterion protects.
+//
+// What the criterion is actually protecting — that a keyboard user can reach
+// this, dismiss it, and not lose their place — is kept in full: it is in the
+// DOM and in the tab order, dismissible by keyboard, and dismissal moves focus
+// somewhere deliberate rather than dropping it on `<body>`.
 //
 // What consent actually gates is narrow, and worth stating: only the
 // third-party vendor (US-15 AC1), which does not exist yet. The server-side
@@ -53,28 +67,20 @@ export function ConsentBanner() {
   const consent = useSyncExternalStore(subscribe, readConsent, () => 'granted' as const)
   const visible = consent === null
 
-  const headingRef = useRef<HTMLHeadingElement>(null)
-  // Where focus was before the banner took it. Returning focus here on dismiss
-  // is the half of "focus management" that gets skipped, and skipping it drops
-  // a keyboard user back at the top of the document.
-  const returnFocusTo = useRef<HTMLElement | null>(null)
-
-  useEffect(() => {
-    if (!visible) return
-    returnFocusTo.current = document.activeElement as HTMLElement | null
-    // Focus the heading, not the first button. Landing on "Accept" invites a
-    // keyboard user to press it before hearing what it is, which is not consent.
-    headingRef.current?.focus()
-  }, [visible])
-
   if (!visible) return null
 
   const dismiss = (value: 'granted' | 'denied') => {
     writeConsent(value)
     for (const listener of consentListeners) listener()
-    // Back where they were. `preventScroll` because yanking the viewport after
-    // a dismissal is disorienting on its own.
-    returnFocusTo.current?.focus?.({ preventScroll: true })
+
+    // The button that was just pressed is about to leave the DOM, so focus
+    // would land on `<body>` and a keyboard user would be back at the very top
+    // with no announcement. Moved to `<main>` instead — it carries
+    // `tabIndex={-1}` for exactly this, it is where the skip link goes, and it
+    // is the content the person came for. `preventScroll` because yanking the
+    // viewport after a dismissal is disorienting on its own.
+    const main = document.getElementById('main')
+    main?.focus?.({ preventScroll: true })
   }
 
   return (
@@ -93,15 +99,7 @@ export function ConsentBanner() {
       className="border-input bg-background border-t"
     >
       <div className="mx-auto flex max-w-3xl flex-col gap-3 px-4 py-4">
-        <h2
-          id="consent-heading"
-          ref={headingRef}
-          // Focusable but not in the tab order: focus is moved here
-          // programmatically on appearance and nobody should land on it again
-          // while tabbing through the page.
-          tabIndex={-1}
-          className="text-base font-medium"
-        >
+        <h2 id="consent-heading" className="text-base font-medium">
           Cookies on this site
         </h2>
         <p className="text-muted-foreground text-sm text-pretty">

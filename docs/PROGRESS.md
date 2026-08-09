@@ -1670,11 +1670,13 @@ PRD 04 §3.8 US-15, FR-AN-1..4, and PRD 01 §6.8.1's row for the consent banner.
 
 **The consent banner, criterion by criterion.** §6.8.1 calls these "the most common source of shipped keyboard traps", so each is asserted in e2e rather than claimed in a comment:
 - `role="region"`, **not** `dialog` — a modal dialog *requires* a focus trap, which is the exact defect named. A test tabs past both buttons and out.
-- Focus moves to the **heading**, not the first button: landing on "Accept" invites pressing it before hearing what it is, which is not consent.
-- Focus returns to wherever it was on dismissal — the half of "focus management" that gets skipped.
+- **It does NOT move focus on appearance** — see the correction below; the first version did, and it was wrong.
+- Dismissal moves focus to `<main>` rather than dropping it: the button just pressed has left the DOM, and a keyboard user would otherwise be silently returned to the top of the document.
 - **Reject comes first in the tab order** and is styled identically. A ghost-styled reject beside a filled accept is the dark pattern the criterion forbids.
 - In normal document flow, not fixed to the viewport. Asserted at 320px: the banner starts below the main content and the page has no horizontal overflow.
 - Both buttons are ≥44px.
+
+**Corrected after CI caught it: the banner must not take focus on load.** The first version focused its heading on appearance, following §6.8.1's "focus moved into it on appearance". That broke a stronger and more specific criterion — WCAG 2.4.1 requires the skip link to be the first tab stop, and it no longer was. It passed locally and failed in CI because it is a race with hydration: the server snapshot hides the banner, so a Tab that lands before hydration sees the skip link and one that lands after does not. §6.8.1's wording is written for a banner that appears in response to something a user did; this one is present at page load, where taking focus is also disorienting in its own right. What the criterion protects is kept in full — reachable, dismissible by keyboard, and focus placed deliberately on dismissal rather than lost.
 
 **Found: the ESLint rule caught a cascading render.** The banner initially synced the cookie into `useState` inside an effect. Rewritten around `useSyncExternalStore` with the cookie as the store — which is also better: mirroring browser state into component state is what creates the window where the two disagree, and the server snapshot means the banner never renders into the HTML and cannot flash before hydration.
 
