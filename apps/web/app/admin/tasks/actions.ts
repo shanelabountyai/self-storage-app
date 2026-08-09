@@ -12,10 +12,18 @@ export async function completeTaskAction(formData: FormData): Promise<void> {
   const actor = await requireStaffActor()
   const taskId = String(formData.get('taskId') ?? '')
   const note = String(formData.get('note') ?? '')
+  const photoReference = formData.get('photo_reference')
 
-  await completeTask(actor, taskId, { note })
+  await completeTask(actor, taskId, {
+    note,
+    // Only some types require this (B-058's `overlock_apply`); omitted rather
+    // than sent as an empty string so `missingProofFields` reports it as
+    // missing, not as present-but-blank, when a form has no such field at all.
+    ...(photoReference ? { photo_reference: String(photoReference) } : {}),
+  })
   revalidatePath('/admin/tasks')
-  // B-065's keypad queue renders the same tasks; completing one there has to
-  // clear it there too.
+  // B-065's keypad queue and B-059's delinquency queue render the same tasks;
+  // completing one anywhere has to clear it everywhere.
   revalidatePath('/admin/access/queue')
+  revalidatePath('/admin/delinquency')
 }

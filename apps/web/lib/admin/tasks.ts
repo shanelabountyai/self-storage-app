@@ -94,6 +94,10 @@ export type TaskRow = {
   overdue: boolean
   assigneeName: string | null
   status: 'open' | 'completed' | 'cancelled'
+  /// The catalog's proof gate for this type, so a list can render the right
+  /// fields (e.g. a photo for `overlock_apply`) instead of a note-only form
+  /// that `completeTask` would then refuse.
+  requiredProofFields: readonly string[]
 }
 
 /// Whether a task has gone overdue.
@@ -201,6 +205,7 @@ export async function facilityTasks(
     }),
     assigneeName: task.assignee ? `${task.assignee.firstName} ${task.assignee.lastName}` : null,
     status: task.status,
+    requiredProofFields: taskTypeSpec(task.type)?.requiredProofFields ?? ['note'],
   }))
 }
 

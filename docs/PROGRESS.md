@@ -1836,3 +1836,35 @@ Lien and auction consumption of this history is B-061/B-062.
 exercise the *generic* staff-task path. Since this item that label routes
 elsewhere, so they were repointed to a certified-letter step; the overlock path
 has its own file.
+
+## B-059 — Delinquency queue
+
+`<sha>`
+
+**What it built.** US-26's screen: "today's due steps grouped by type
+(overlocks to apply/remove, notices to mail, proofs to record), so nothing is
+missed." `delinquencyQueue` filters `facilityTasks` down to the three
+delinquency-related types and groups them in that order — no new query, no new
+table, per US-41's AC that every later queue reads the one `Task` list. Lives
+at `/admin/delinquency`, the nav destination that already existed pointing at
+the generic `[section]` placeholder, gated on the `delinquency:execute_step`
+permission that was already in the catalog.
+
+**What it decided.**
+
+- *A generic-task bug in B-058 surfaced while wiring the form.* The plain
+  `/admin/tasks` list only ever collected a `note`, so completing an
+  `overlock_apply` task from there would always fail proof validation for
+  the missing photo — nobody would have hit it until an operator tried. Fixed
+  by threading `requiredProofFields` onto `TaskRow` (computed from the
+  catalog) and rendering a conditional photo field on both the generic list
+  and this one, off the same data rather than each screen guessing.
+- *Escalation is text, matching B-065's keypad queue rather than inventing a
+  second convention*: an `role="alert"` count banner plus a per-row "Overdue"
+  label, never colour alone (1.4.1).
+
+**What it left behind.** Assignment and reassignment already exist on the
+generic queue (`assignTask`) and were not duplicated here — this screen is
+about completing today's steps, not managing who owns them. FR-22's table
+semantics (`scope="row"`, `aria-sort`) don't apply: like the two queues it
+follows, this is a card list, not a data table.
