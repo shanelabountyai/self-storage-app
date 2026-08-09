@@ -1684,7 +1684,7 @@ PRD 04 §3.8 US-15, FR-AN-1..4, and PRD 01 §6.8.1's row for the consent banner.
 
 ---
 
-### B-070 — The promotions engine ✅ `PENDING`
+### B-070 — The promotions engine ✅ `15ff40f`
 
 PRD 02 US-10, PRD 04 §3.6 US-11/US-12, FR-PROMO-1..5. **The last MVP item.** Held mid-build at the owner's request while PRD 10 was written, then resumed; the partial is at `0a8fed0`.
 
