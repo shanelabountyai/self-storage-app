@@ -1580,7 +1580,7 @@ PRD 04 US-2 and US-5. B-066 generated a title, a description and five FAQs for e
 
 ---
 
-### B-097 — Phone and counter inquiry capture ✅ `PENDING`
+### B-097 — Phone and counter inquiry capture ✅ `c25c923`
 
 PRD 02 §4.8 US-43. "Do you have a 10x10 and how much?" is a ninety-second call that converts often, and until now there was nowhere to put it — the web forms are a marketing item, the reservation flow is customer-facing, and the counter move-in assumes the person is standing there with a card. The consequence was a lead-to-rental report showing only web leads and looking excellent.
 
