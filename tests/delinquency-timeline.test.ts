@@ -3,6 +3,7 @@ import {
   AUTOMATED_ACTIONS,
   EXAMPLE_TIMELINE_LABEL,
   EXAMPLE_TIMELINE_STEPS,
+  isOverlockStep,
   orderedSteps,
   stepsDue,
   TIMELINE_DISCLAIMER,
@@ -188,6 +189,21 @@ describe('US-29 — the guardrails', () => {
       expect(lien.staffTaskLabel).toBeTruthy()
       expect(lien.requiredProofFields).toContain('tracking_number')
     }
+  })
+
+  it('has an overlock step the engine will actually recognise', () => {
+    // B-058 routes overlock steps to a typed task that creates the record
+    // making a unit read as `overlocked`, and it identifies them by label.
+    // Rename the example's step and it silently degrades to a generic task
+    // with no record behind it — this fails first.
+    const overlock = EXAMPLE_TIMELINE_STEPS.filter(isOverlockStep)
+    expect(overlock).toHaveLength(1)
+    expect(overlock[0].staffTaskLabel).toBeTruthy()
+  })
+
+  it('does not mistake a lien notice for an overlock', () => {
+    const lien = EXAMPLE_TIMELINE_STEPS.filter((one) => /lien/i.test(one.label))
+    for (const step of lien) expect(isOverlockStep(step)).toBe(false)
   })
 
   it('names only actions the engine can perform', () => {

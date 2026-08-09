@@ -24,7 +24,7 @@ export function isRentable(status: EffectiveUnitStatus): boolean {
 ///
 /// **`overlocked` counts as occupied.** An overlocked unit has a delinquent
 /// tenant and their goods still in it — the lease has not ended. Nothing
-/// produces `overlocked` yet (the delinquency engine is B-057), so today this
+/// produces `overlocked` — B-058 does, from a fitted `UnitOverlock` — so this
 /// is only `occupied`; but the moment B-057 lands, an occupancy figure that
 /// forgot this would silently *drop* as tenants went delinquent, which reads
 /// as units emptying when in fact nobody moved out.

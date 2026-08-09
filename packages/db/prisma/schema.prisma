@@ -525,6 +525,7 @@ model Facility {
   marketingFaqs          FacilityFaq[]
   delinquencyTimelines   DelinquencyTimeline[]
   delinquencyStepRuns    DelinquencyStepRun[]
+  overlocks              UnitOverlock[]
   promoRedemptions       PromoRedemption[]
   analyticsEvents        AnalyticsEvent[]
   photos                 FacilityPhoto[]
@@ -726,6 +727,7 @@ model Unit {
   /// name to the one the migration created, so schema and database agree.
   @@index([facilityId, building, floor], map: "unit_facility_building_floor")
   @@map("unit")
+  overlocks UnitOverlock[]
 }
 
 // --------------------------------------------------------- people/leases ----
@@ -938,6 +940,7 @@ model Lease {
   @@map("lease")
   delinquencyTimeline DelinquencyTimeline? @relation(fields: [delinquencyTimelineId], references: [id], onDelete: SetNull)
   delinquencyStepRuns DelinquencyStepRun[]
+  overlocks UnitOverlock[]
 }
 
 // -------------------------------------------------------------- billing ----
@@ -1689,6 +1692,47 @@ model DelinquencyStepRun {
   @@index([leaseId, supersededAt])
   @@index([facilityId, businessDate])
   @@map("delinquency_step_run")
+}
+
+/// PRD 03 US-3 AC1 / PRD 02 US-25 (B-058). A physical overlock on a unit.
+///
+/// The lock itself is manual — PRD 03's non-goals are explicit that this system
+/// never actuates one — so this row is the RECORD that staff fitted it, and the
+/// thing `deriveUnitStatus` reads to make a unit `overlocked`. Until now
+/// `overlocked` was a status the code could produce and nothing ever did; the
+/// comment in `occupancyFactsForMany` said so and named this item.
+///
+/// Append-only in effect: removal sets `removedAt` rather than deleting, for
+/// the same reason the step history is superseded rather than dropped. "Was
+/// this unit locked on the day of the sale" is a question an auction turns on.
+model UnitOverlock {
+  id         String   @id @default(cuid())
+  unitId     String
+  leaseId    String
+  facilityId String
+  /// The task that asked for it, so the photo and the note are reachable from
+  /// the lock rather than only from the queue.
+  appliedTaskId String?
+  appliedAt     DateTime? @db.Timestamptz(6)
+  appliedByStaffId String?
+  removedTaskId String?
+  removedAt     DateTime? @db.Timestamptz(6)
+  removedByStaffId String?
+  /// Why it was fitted: the timeline step's label, so the record reads without
+  /// a join.
+  reason     String
+  createdAt  DateTime @default(now()) @db.Timestamptz(6)
+
+  unit     Unit     @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  lease    Lease    @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+  facility Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+
+  /// One live overlock per unit. A partial unique index in raw SQL (Prisma
+  /// cannot express one) — migration 20260810120000_unit_overlock:
+  ///   unit_overlock_one_live_per_unit — unique(unitId) where "removedAt" is null
+  @@index([facilityId, removedAt])
+  @@index([leaseId])
+  @@map("unit_overlock")
 }
 
 /// PRD 04 FR-SEO-2 (B-066). The 301 map.

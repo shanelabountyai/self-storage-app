@@ -42,16 +42,18 @@ export async function occupancyFactsForMany(
         activeLease: null,
         activeReservation: null,
         activeCheckoutLock: null,
-        // No source yet — the delinquency engine (B-057) and field ops (B-060)
-        // populate this. Until then no unit can be overlocked, which is
-        // correct: nothing in the system can currently overlock one.
+        // Filled from `UnitOverlock` below (B-058). A unit is overlocked when
+        // a lock has been FITTED, not when one was asked for — a status that
+        // flipped on the request would read as locked while the lock was still
+        // in the office, and this status is what the occupancy report and an
+        // auction file both read.
         overlocked: false,
       },
     ]),
   )
   if (unitIds.length === 0) return facts
 
-  const [leases, reservations, checkoutLocks] = await Promise.all([
+  const [leases, reservations, checkoutLocks, overlocks] = await Promise.all([
     client.lease.findMany({
       where: {
         unitId: { in: [...unitIds] },
@@ -71,6 +73,13 @@ export async function occupancyFactsForMany(
       where: { unitId: { in: [...unitIds] }, status: 'active', lockExpiresAt: { gt: new Date() } },
       select: { id: true, unitId: true },
     }),
+    // B-058. `appliedAt` not null, not merely requested: a lock that has been
+    // ASKED for is a task in somebody's queue, and the unit is not overlocked
+    // until they have actually been out and fitted it.
+    client.unitOverlock.findMany({
+      where: { unitId: { in: [...unitIds] }, removedAt: null, appliedAt: { not: null } },
+      select: { unitId: true },
+    }),
   ])
 
   for (const lease of leases) {
@@ -84,6 +93,10 @@ export async function occupancyFactsForMany(
   for (const session of checkoutLocks) {
     const entry = session.unitId ? facts.get(session.unitId) : undefined
     if (entry) entry.activeCheckoutLock = { id: session.id }
+  }
+  for (const overlock of overlocks) {
+    const entry = facts.get(overlock.unitId)
+    if (entry) entry.overlocked = true
   }
 
   return facts

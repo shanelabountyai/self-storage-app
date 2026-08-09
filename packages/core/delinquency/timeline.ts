@@ -152,6 +152,17 @@ export function validateTimeline(
 /// Steps in the order they fire. Sorted rather than trusted, because a
 /// re-ordered list (US-25: "steps are re-orderable") must not depend on the
 /// order somebody happened to drag them into.
+/// Whether a step means "go and put a lock on the unit" (B-058).
+///
+/// Matched on the label because that is what an operator types. The
+/// alternative was a seventh automated action, but an overlock is not
+/// automated — it is a person with a padlock, so it is a staff task that
+/// happens to create a record. Exported so the engine and its tests agree on
+/// one rule rather than two copies of a regex.
+export function isOverlockStep(step: TimelineStep): boolean {
+  return Boolean(step.staffTaskLabel) && /overlock/i.test(`${step.label} ${step.staffTaskLabel ?? ''}`)
+}
+
 export function orderedSteps(steps: readonly TimelineStep[]): TimelineStep[] {
   return [...steps].sort((a, b) => a.dayOffset - b.dayOffset)
 }

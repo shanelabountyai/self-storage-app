@@ -8,6 +8,7 @@ import type { Actor } from '@/lib/rbac/actor'
 import { isOverdue } from '@storage/core/access'
 import { parseWeeklySchedule, type WeeklySchedule } from '@storage/core/facility-settings'
 import { settleCommandForTask } from '@/lib/access/manual-adapter'
+import { confirmOverlockApplied, confirmOverlockRemoved } from '@/lib/delinquency/overlock'
 
 // PRD 02 §4.9 US-41 (B-095). One task queue. Every function here is generic
 // over `type` — the catalog (packages/core/tasks) is what a caller adds to,
@@ -276,6 +277,22 @@ export async function completeTask(
     // as done while the command it was raised for is still parked.
     if (task.type === 'gate_manual_action') {
       await settleCommandForTask(taskId, tx)
+    }
+
+    // B-058. The lock is physical, so the task being completed IS the event
+    // that it went on or came off — and the unit's status derives from that
+    // rather than from the request. Same transaction for the same reason: a
+    // unit reading `overlocked` with no completed task behind it, or the
+    // reverse, is a discrepancy an auction file cannot explain.
+    if (task.type === 'overlock_apply') {
+      const overlock = await tx.unitOverlock.findFirst({
+        where: { leaseId: task.entityId, removedAt: null },
+        select: { id: true },
+      })
+      if (overlock) await confirmOverlockApplied(actor, overlock.id, tx)
+    }
+    if (task.type === 'overlock_remove') {
+      await confirmOverlockRemoved(actor, task.entityId, tx)
     }
 
     if (taskTypeIsSensitive(task.type)) {

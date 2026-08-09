@@ -1,6 +1,8 @@
 import { prisma } from '@storage/db'
 import { emitEvent } from '@storage/core/events'
-import { currentStage, evaluate, type TimelineStep } from '@storage/core/delinquency'
+import { currentStage, evaluate, type TimelineStep,
+  isOverlockStep,
+} from '@storage/core/delinquency'
 import { daysPastDue, outstandingCents } from '@storage/core/metrics'
 import { OCCUPYING_LEASE_STATUSES } from '@storage/core/inventory'
 import { effectsByLease } from '@/lib/admin/holds'
@@ -8,6 +10,7 @@ import { activeTimeline } from '@/lib/admin/delinquency-timeline'
 import { createTask } from '@/lib/admin/tasks'
 import { restoreAccessIfSettled } from '@/lib/access/delinquency-gate'
 import { transitionGrant } from '@/lib/access/service'
+import { releaseOverlock, requestOverlock } from '@/lib/delinquency/overlock'
 
 // PRD 02 FR-5 (B-057). The nightly delinquency run.
 //
@@ -318,15 +321,36 @@ async function executeStep(input: {
 
   let taskId: string | null = null
   if (step.staffTaskLabel) {
-    const task = await createTask({
-      facilityId,
-      type: 'delinquency_step',
-      entityType: 'Lease',
-      entityId: lease.id,
-      at: input.businessDate,
-      priority: 'high',
-    })
-    taskId = task.id
+    // B-058. An overlock step raises the TYPED task, which carries a required
+    // photo and creates the `UnitOverlock` record that makes the unit read as
+    // `overlocked`. Recognised by the step's label because that is what an
+    // operator configures — the alternative is a seventh automated action that
+    // duplicates a staff task.
+    if (isOverlockStep(step)) {
+      const requested = await requestOverlock({
+        leaseId: lease.id,
+        facilityId,
+        reason: step.label,
+        businessDate: input.businessDate,
+      })
+      if (requested) {
+        taskId = requested.taskId
+        done.push('request_overlock')
+      } else {
+        // Already locked, or already asked for. AC4's idempotency.
+        skipped.push('request_overlock: a live overlock already exists')
+      }
+    } else {
+      const task = await createTask({
+        facilityId,
+        type: 'delinquency_step',
+        entityType: 'Lease',
+        entityId: lease.id,
+        at: input.businessDate,
+        priority: 'high',
+      })
+      taskId = task.id
+    }
   }
 
   await prisma.delinquencyStepRun.update({
@@ -360,20 +384,12 @@ async function cure(
     data: { status: 'cancelled' },
   })
 
-  // The overlock removal US-25 asks for. Raised only if an overlock was
-  // actually applied — a lease that cured at day 2 never had one, and a task to
-  // remove a lock nobody fitted is how a queue stops being trusted.
-  const hadOverlock = steps.some(
-    (step) => executedDays.includes(step.dayOffset) && /overlock/i.test(step.label),
-  )
-  if (hadOverlock) {
-    await createTask({
-      facilityId,
-      type: 'delinquency_step',
-      entityType: 'Lease',
-      entityId: lease.id,
-      priority: 'high',
-    })
+  // US-25's "queues overlock removal". `releaseOverlock` decides between a
+  // removal task and a silent withdrawal: a lock that was asked for but never
+  // fitted is closed out rather than generating a trip to a unit for nothing.
+  const released = await releaseOverlock({ leaseId: lease.id, facilityId })
+  if (released.taskId) {
+    recordItem({ itemId: lease.id, ok: true, message: 'overlock removal queued' })
   }
 
   // The pin is cleared so a future delinquency is governed by whatever is

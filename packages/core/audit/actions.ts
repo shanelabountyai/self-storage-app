@@ -96,6 +96,10 @@ export const AUDIT_ACTIONS = [
   /// and when a sale becomes possible. Who changed it, and to what, is the
   /// first question after a wrongful-sale claim.
   { action: 'delinquency.timeline_changed', label: 'Delinquency timeline changed', requiresReason: false },
+  /// PRD 03 US-3 / US-28. Whether a unit was locked, and when, is a question a
+  /// wrongful-sale claim turns on.
+  { action: 'unit.overlocked', label: 'Overlock fitted', requiresReason: false },
+  { action: 'unit.overlock_removed', label: 'Overlock removed', requiresReason: false },
   { action: 'user.created', label: 'Staff user created', requiresReason: false },
   { action: 'user.role_changed', label: 'Staff role changed', requiresReason: true },
   { action: 'user.deactivated', label: 'Staff user deactivated', requiresReason: true },

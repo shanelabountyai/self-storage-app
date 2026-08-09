@@ -126,6 +126,26 @@ export const TASK_TYPES = [
     requiredProofFields: ['note'],
     sensitive: true,
   },
+  {
+    // PRD 03 US-3 AC1 (B-058). "An overlock task is created for staff in the
+    // admin dashboard (physical overlock is manual)."
+    //
+    // A photo is required, not optional. US-25's table calls it "photo
+    // optional"; US-28's evidence rules for the sale it leads to do not, and a
+    // lock nobody photographed is a lock a tenant can say was never fitted.
+    type: 'overlock_apply',
+    label: 'Fit an overlock',
+    requiredProofFields: ['note', 'photo_reference'],
+    sensitive: true,
+  },
+  {
+    // The other half, on cure. US-25: "restores gate access, and queues
+    // overlock removal."
+    type: 'overlock_remove',
+    label: 'Take the overlock off — the tenant has paid',
+    requiredProofFields: ['note'],
+    sensitive: true,
+  },
 ] as const satisfies readonly TaskTypeSpec[]
 
 export type TaskType = (typeof TASK_TYPES)[number]['type']

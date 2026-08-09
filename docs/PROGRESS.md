@@ -1784,3 +1784,55 @@ PRD 02 FR-5, US-25. B-056 made the timeline configurable; this is what runs it, 
 Impersonation is **not** a permission bypass and so does not re-open D-12: the subject's own assignments resolve through the normal path, bounded by an escalation guard (subject's role rank ≤ impersonator's, facility scope a subset). Read-only by default with a permanent hard-block list — money, credentials, role changes, gate-code reveal, e-signature, outbound sends.
 
 D-13a (no tenant notification) and D-13b (owner-only) are linked: with no tenant-facing signal, B-092's oversight reporting is the sole misuse-detection channel.
+
+## B-058 — Overlocks: the status that had no producer
+
+`<sha>`
+
+**What it built.** The physical half of PRD 03 US-3. `overlocked` has been in
+the unit status enum since B-010 with nothing setting it —
+`occupancyFactsForMany` said so in a comment naming this item. Now a
+`UnitOverlock` row carries the whole life of a lock: requested, applied,
+removed, each with a staff id and a timestamp, and the unit's derived status
+follows it. B-057's engine raises a typed `overlock_apply` task for a timeline
+step that means "go and fit a lock", and `releaseOverlock` on cure either
+queues the removal or withdraws a request nobody actioned. Ten new DB tests.
+
+**What it decided.**
+
+- *Requesting a lock does not overlock a unit — fitting one does.* The status
+  flips on task completion, not on the engine raising the task. A unit reading
+  `overlocked` while the lock is still in the office is a lie an auction file
+  cannot survive, and staff would have no way to correct it.
+- *The apply task requires a photo.* US-25's table calls the photo optional;
+  US-28's evidence rules for the sale it leads to do not. A lock nobody
+  photographed is a lock a tenant can say was never fitted, so
+  `requiredProofFields` on `overlock_apply` is `['note', 'photo_reference']`
+  and `completeTask` refuses without it. This deliberately tightens US-25.
+- *Idempotency is a partial unique index, not a code check.*
+  `unit_overlock_one_live_per_unit ON ("unitId") WHERE "removedAt" IS NULL` —
+  so a replayed stage event (AC4) cannot produce a second lock or a second
+  task, and history still permits a fresh lock after an earlier one came off.
+- *A request that was never fitted is withdrawn, not removed.* Raising a
+  "go and take the lock off" task for a lock nobody ever put on is how a queue
+  stops being trusted. `releaseOverlock` cancels the open apply task instead.
+- *Overlock steps are recognised by label, via one exported predicate.*
+  `isOverlockStep` lives in core beside the timeline rules, so the engine and
+  its tests share one rule. The alternative — a seventh automated action —
+  was wrong: an overlock is not automated, it is a person with a padlock.
+  A test asserts the example configuration still matches it, because a rename
+  there would silently degrade to a generic task with no record behind it.
+- *Removal keeps the row.* `removedAt` is stamped, nothing is deleted —
+  "was this unit locked on the day of the sale" is a question US-28 turns on.
+
+**What it left behind.** The ≤2-minute restore SLA is asserted as "the restore
+is an inline call on the settling payment, not a nightly sweep" rather than by
+timing a clock — B-098 already owns that path and this item did not rebuild it.
+No admin screen specific to overlocks: they surface as unit status on the units
+board and as tasks in the existing queue, which is where staff already look.
+Lien and auction consumption of this history is B-061/B-062.
+
+**A note on the tests.** Two B-057 tests used a step labelled "Overlock" to
+exercise the *generic* staff-task path. Since this item that label routes
+elsewhere, so they were repointed to a certified-letter step; the overlock path
+has its own file.

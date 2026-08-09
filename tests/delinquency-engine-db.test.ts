@@ -212,7 +212,13 @@ describeDb('the delinquency engine', () => {
     await saveTimeline(actor(), facilityId, {
       label: 'Test',
       qualifyingAmount: 'full_balance',
-      steps: [step(1, 'Overlock', { staffTaskLabel: 'Apply it', requiredProofFields: ['note'] })],
+      // Deliberately not an overlock: since B-058 a step whose label says
+      // overlock routes to the typed task with its own record and photo, and
+      // that path is asserted in overlock-db.test.ts. This covers everything
+      // else an operator might put a person on.
+      steps: [
+        step(1, 'Certified letter', { staffTaskLabel: 'Post it', requiredProofFields: ['tracking_number'] }),
+      ],
     })
     await makeOverdueLease()
     await runDelinquencyTimeline(facilityId, d('2026-07-15'), noop)
@@ -264,7 +270,9 @@ describeDb('the delinquency engine', () => {
       await saveTimeline(actor(), facilityId, {
         label: 'Test',
         qualifyingAmount: 'full_balance',
-        steps: [step(1, 'Overlock', { staffTaskLabel: 'Apply it', requiredProofFields: ['note'] })],
+        steps: [
+          step(1, 'Certified letter', { staffTaskLabel: 'Post it', requiredProofFields: ['tracking_number'] }),
+        ],
       })
       const invoice = await makeOverdueLease()
       await runDelinquencyTimeline(facilityId, d('2026-07-15'), noop)
