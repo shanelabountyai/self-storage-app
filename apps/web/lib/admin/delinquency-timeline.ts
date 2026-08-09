@@ -111,7 +111,10 @@ export async function saveTimeline(
   requirePermission(actor, 'facility:settings', facilityId)
 
   const steps = orderedSteps(input.steps)
-  const problems = validateTimeline(steps)
+  // Validated against the templates that ACTUALLY exist for this facility, not
+  // against a typed string. A step naming a template nobody has written reads
+  // as "sends a notice" on every screen and sends nothing.
+  const problems = validateTimeline(steps, await noticeTemplateKeys(facilityId))
   if (problems.length > 0) return { ok: false, problems }
 
   const latest = await prisma.delinquencyTimeline.findFirst({
@@ -164,4 +167,18 @@ export async function saveTimeline(
 /// law of its state requires.
 export function exampleTimeline(): { label: string; steps: TimelineStep[] } {
   return { label: EXAMPLE_TIMELINE_LABEL, steps: [...EXAMPLE_TIMELINE_STEPS] }
+}
+
+/// Template keys this facility could actually send, for the step picker and for
+/// validation. Org defaults plus the facility's own overrides — the same
+/// precedence `effectiveTemplate` applies at send time, so the list offered
+/// here is the list that would resolve.
+export async function noticeTemplateKeys(facilityId: string): Promise<string[]> {
+  const rows = await prisma.messageTemplate.findMany({
+    where: { channel: 'email', active: true, OR: [{ facilityId }, { facilityId: null }] },
+    select: { key: true },
+    distinct: ['key'],
+    orderBy: { key: 'asc' },
+  })
+  return rows.map((row) => row.key)
 }

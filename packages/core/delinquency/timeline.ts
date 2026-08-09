@@ -76,7 +76,17 @@ export type TimelineProblem = { index: number | null; problem: string }
 /// the alternative is a step that silently never runs — which on a lien
 /// timeline means a notice that was never sent and a sale that cannot be
 /// defended.
-export function validateTimeline(steps: readonly TimelineStep[]): TimelineProblem[] {
+export function validateTimeline(
+  steps: readonly TimelineStep[],
+  /// Every `MessageTemplate` key that exists for this facility. When supplied,
+  /// a step naming a template that is not in it is REFUSED.
+  ///
+  /// Optional so the pure rules stay testable without a database — but the
+  /// service always passes it, because a free-text template key is a step whose
+  /// notice cannot be found, and on a lien timeline that is a notice that was
+  /// never sent with nothing on any screen to say so.
+  knownTemplateKeys?: readonly string[],
+): TimelineProblem[] {
   const problems: TimelineProblem[] = []
 
   if (steps.length === 0) {
@@ -108,6 +118,16 @@ export function validateTimeline(steps: readonly TimelineStep[]): TimelineProble
 
     if (step.automatedActions.includes('send_notice') && !step.noticeTemplateKey) {
       problems.push({ index, problem: 'This step sends a notice but no template is chosen.' })
+    }
+    if (
+      step.noticeTemplateKey &&
+      knownTemplateKeys &&
+      !knownTemplateKeys.includes(step.noticeTemplateKey)
+    ) {
+      problems.push({
+        index,
+        problem: `There is no message template called "${step.noticeTemplateKey}". Pick one that exists, or leave the notice empty and have staff send it by hand.`,
+      })
     }
     if (step.noticeTemplateKey && step.deliveryMethods.length === 0) {
       // A notice with no delivery method is generated and filed and never
@@ -208,21 +228,28 @@ export const EXAMPLE_TIMELINE_STEPS: readonly TimelineStep[] = [
     requiredProofFields: ['note', 'photo_reference'],
   },
   {
+    // No template, and that is not an oversight: **B-063 owns the pre-lien and
+    // lien notice templates and they do not exist yet.** Naming one here would
+    // put a key in the configuration that resolves to nothing — a step that
+    // reads as "sends a notice" on every screen and sends nothing at all,
+    // which on a lien timeline is the difference between a defensible file and
+    // a wrongful sale. Until those templates ship, this step is a staff task:
+    // somebody writes and mails the notice, and records the proof.
     dayOffset: 15,
     label: 'Pre-lien notice',
-    automatedActions: ['send_notice'],
-    noticeTemplateKey: 'pre_lien_notice',
-    deliveryMethods: ['email', 'certified_mail'],
-    staffTaskLabel: 'Mail the pre-lien notice and record the tracking number',
+    automatedActions: [],
+    noticeTemplateKey: null,
+    deliveryMethods: [],
+    staffTaskLabel: 'Write, mail and record the pre-lien notice (no template yet — B-063)',
     requiredProofFields: ['tracking_number', 'delivered_on'],
   },
   {
     dayOffset: 30,
     label: 'Lien notice',
-    automatedActions: ['send_notice'],
-    noticeTemplateKey: 'lien_notice',
-    deliveryMethods: ['certified_mail'],
-    staffTaskLabel: 'Mail the lien notice and record delivery proof',
+    automatedActions: [],
+    noticeTemplateKey: null,
+    deliveryMethods: [],
+    staffTaskLabel: 'Write, mail and record the lien notice (no template yet — B-063)',
     requiredProofFields: ['tracking_number', 'delivered_on'],
   },
   {

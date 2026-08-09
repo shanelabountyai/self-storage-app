@@ -61,6 +61,37 @@ describe('validateTimeline — US-25', () => {
     expect(problems.some((one) => one.problem.includes('proof'))).toBe(true)
   })
 
+  it('refuses a template that does not exist', () => {
+    // The whole reason the known-key list is threaded through: a typed key that
+    // resolves to nothing is a step which reads as "sends a notice" on every
+    // screen and sends none.
+    const problems = validateTimeline(
+      [step({ automatedActions: ['send_notice'], noticeTemplateKey: 'made_up', deliveryMethods: ['email'] })],
+      ['dunning_step', 'access_suspended'],
+    )
+    expect(problems).toHaveLength(1)
+    expect(problems[0].problem).toContain('no message template called')
+  })
+
+  it('accepts a template that does exist', () => {
+    expect(
+      validateTimeline(
+        [step({ automatedActions: ['send_notice'], noticeTemplateKey: 'dunning_step', deliveryMethods: ['email'] })],
+        ['dunning_step'],
+      ),
+    ).toEqual([])
+  })
+
+  it('does not check template keys when no list is supplied', () => {
+    // The pure rules stay usable without a database; the service always passes
+    // the list, so the check is not optional in practice.
+    expect(
+      validateTimeline([
+        step({ automatedActions: ['send_notice'], noticeTemplateKey: 'anything', deliveryMethods: ['email'] }),
+      ]),
+    ).toEqual([])
+  })
+
   it('refuses proof nobody is asked to produce', () => {
     const problems = validateTimeline([step({ requiredProofFields: ['tracking_number'] })])
     expect(problems.some((one) => one.problem.includes('no staff task'))).toBe(true)
@@ -135,8 +166,28 @@ describe('US-29 — the guardrails', () => {
 
   it('ships an example that would actually pass its own validation', () => {
     // A default that could not be saved would send an operator hunting for a
-    // problem in a file they cannot edit.
-    expect(validateTimeline(EXAMPLE_TIMELINE_STEPS)).toEqual([])
+    // problem in a file they cannot edit. Checked against the templates that
+    // really are seeded, so the example cannot drift into naming one that is
+    // not.
+    const SEEDED = ['dunning_step', 'access_suspended', 'invoice_due_soon', 'payment_failed']
+    expect(validateTimeline(EXAMPLE_TIMELINE_STEPS, SEEDED)).toEqual([])
+  })
+
+  it('never names a notice template that does not exist yet', () => {
+    // The pre-lien and lien templates belong to B-063 and are unwritten. Naming
+    // them here would put a key in every operator's configuration that resolves
+    // to nothing — a step that looks like it sends a notice and sends none,
+    // which on a lien timeline is the gap between a defensible file and a
+    // wrongful sale. Until B-063, those steps are staff tasks.
+    const lienSteps = EXAMPLE_TIMELINE_STEPS.filter((one) => /lien/i.test(one.label))
+    expect(lienSteps.length).toBeGreaterThan(0)
+    for (const lien of lienSteps) {
+      expect(lien.noticeTemplateKey).toBeNull()
+      expect(lien.automatedActions).not.toContain('send_notice')
+      // Still happens — by hand, with proof recorded.
+      expect(lien.staffTaskLabel).toBeTruthy()
+      expect(lien.requiredProofFields).toContain('tracking_number')
+    }
   })
 
   it('names only actions the engine can perform', () => {

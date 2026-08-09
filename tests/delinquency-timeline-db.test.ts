@@ -225,6 +225,44 @@ describeDb('the delinquency timeline', () => {
     expect((await activeTimeline(facilityId))?.label.toLowerCase()).toContain('example')
   })
 
+  it('refuses a template key that does not exist at this facility', async () => {
+    // The service always supplies the real key list, so a hand-edited form
+    // cannot smuggle one past the picker.
+    const result = await saveTimeline(actor(), facilityId, {
+      label: 'Typo',
+      qualifyingAmount: 'full_balance',
+      steps: [
+        step({
+          automatedActions: ['send_notice'],
+          noticeTemplateKey: 'pre_lien_notice',
+          deliveryMethods: ['email'],
+        }),
+      ],
+    })
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.problems[0].problem).toContain('no message template called')
+    }
+    expect(await timelinesFor(actor(), facilityId)).toEqual([])
+  })
+
+  it('accepts a template key that is really seeded', async () => {
+    const result = await saveTimeline(actor(), facilityId, {
+      label: 'Real template',
+      qualifyingAmount: 'full_balance',
+      steps: [
+        step({
+          dayOffset: 1,
+          label: 'Late',
+          automatedActions: ['send_notice'],
+          noticeTemplateKey: 'dunning_step',
+          deliveryMethods: ['email'],
+        }),
+      ],
+    })
+    expect(result).toMatchObject({ ok: true })
+  })
+
   it('refuses a staffer without the settings permission', async () => {
     await expect(
       saveTimeline(actor(['tenants:view']), facilityId, {

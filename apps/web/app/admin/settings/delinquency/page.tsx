@@ -3,7 +3,12 @@ import { Button } from '@/components/ui/button'
 import { getSwitcherData } from '@/lib/admin/context'
 import { resolveSelectedFacility } from '@/lib/admin/facility-selection-logic'
 import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
-import { activeTimeline, exampleTimeline, timelinesFor } from '@/lib/admin/delinquency-timeline'
+import {
+  activeTimeline,
+  exampleTimeline,
+  noticeTemplateKeys,
+  timelinesFor,
+} from '@/lib/admin/delinquency-timeline'
 import {
   AUTOMATED_ACTIONS,
   AUTOMATED_ACTION_LABELS,
@@ -64,10 +69,11 @@ export default async function DelinquencyTimelinePage({
   // US-29: "the system requires a facility 'state'". Read here rather than
   // taken from the switcher, which carries only a name — and the state is the
   // single fact that decides which law governs everything on this screen.
-  const [versions, active, facility] = await Promise.all([
+  const [versions, active, facility, templateKeys] = await Promise.all([
     timelinesFor(actor, facilityId),
     activeTimeline(facilityId),
     prisma.facility.findUniqueOrThrow({ where: { id: facilityId }, select: { state: true } }),
+    noticeTemplateKeys(facilityId),
   ])
 
   // The form starts from the active version, or from the example when asked —
@@ -183,12 +189,26 @@ export default async function DelinquencyTimelinePage({
               </fieldset>
 
               <div className="grid gap-3 sm:grid-cols-2">
+                {/* A picker over templates that exist, not a text box. A typed
+                    key that resolves to nothing is a step which reads as
+                    "sends a notice" on every screen and sends none — and on a
+                    lien timeline that is the gap between a defensible file and
+                    a wrongful sale. Saving refuses an unknown key too, so this
+                    cannot be worked around by editing the form. */}
                 <Field
                   name={`template-${index}`}
                   label="Notice template"
+                  as="select"
                   defaultValue={step?.noticeTemplateKey ?? ''}
-                  hint="A template key, e.g. pre_lien_notice. Empty if this step sends nothing."
-                />
+                  hint="Only templates that exist. Empty means staff send it by hand."
+                >
+                  <option value="">No notice — staff send it by hand</option>
+                  {templateKeys.map((key) => (
+                    <option key={key} value={key}>
+                      {key}
+                    </option>
+                  ))}
+                </Field>
                 <Field
                   name={`task-${index}`}
                   label="Staff task"
