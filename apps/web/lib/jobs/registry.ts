@@ -13,6 +13,7 @@ import { prisma } from '@storage/db'
 import { runDunning } from '@/lib/billing/dunning'
 import { createTask } from '@/lib/admin/tasks'
 import { raiseLeadFollowUps } from '@/lib/admin/lead-follow-up'
+import { runDelinquencyTimeline } from '@/lib/delinquency/engine'
 
 // Consumer and job registration. The machinery is B-006's; the things that use
 // it arrive with their own backlog items: reservation expiry (B-018, below),
@@ -219,6 +220,25 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
     scope: 'per_facility',
     handler: async ({ facilityId, businessDate, recordItem }) => {
       await assessLateFees(facilityId!, businessDate, recordItem)
+    },
+  },
+  {
+    // B-057 / PRD 02 FR-5. The delinquency timeline engine.
+    //
+    // At 6am local, AFTER the dunning ladder at 5am and the access rule at 4am,
+    // and last in the night for the same reason each of those gave: the day
+    // count and the balance it reads must be tonight's settled figures. A
+    // tenant whose autopay succeeded at 3am must not be advanced a lien step
+    // at 6.
+    //
+    // A facility with no configured timeline does nothing here at all (B-056),
+    // and the dunning ladder above stands down for any facility that HAS one —
+    // otherwise both chase on day 1.
+    name: 'delinquency.timeline',
+    localHour: 6,
+    scope: 'per_facility',
+    handler: async ({ facilityId, businessDate, recordItem }) => {
+      await runDelinquencyTimeline(facilityId!, businessDate, recordItem)
     },
   },
   {

@@ -114,6 +114,18 @@ export const TASK_TYPES = [
     requiredProofFields: ['note'],
     sensitive: false,
   },
+  {
+    // PRD 02 FR-5 / US-26 (B-057). A timeline step that needs a person: apply
+    // an overlock, mail a notice, get approval before a sale.
+    //
+    // Sensitive: US-28 requires an auction to be defensible from the step
+    // history with proof at each stage, and who completed a step — and when —
+    // is exactly what a wrongful-sale claim asks about.
+    type: 'delinquency_step',
+    label: 'Delinquency step needs doing',
+    requiredProofFields: ['note'],
+    sensitive: true,
+  },
 ] as const satisfies readonly TaskTypeSpec[]
 
 export type TaskType = (typeof TASK_TYPES)[number]['type']

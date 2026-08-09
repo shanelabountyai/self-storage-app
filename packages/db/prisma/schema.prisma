@@ -524,6 +524,7 @@ model Facility {
   accessEvents           AccessEvent[]
   marketingFaqs          FacilityFaq[]
   delinquencyTimelines   DelinquencyTimeline[]
+  delinquencyStepRuns    DelinquencyStepRun[]
   promoRedemptions       PromoRedemption[]
   analyticsEvents        AnalyticsEvent[]
   photos                 FacilityPhoto[]
@@ -936,6 +937,7 @@ model Lease {
   @@index([unitId])
   @@map("lease")
   delinquencyTimeline DelinquencyTimeline? @relation(fields: [delinquencyTimelineId], references: [id], onDelete: SetNull)
+  delinquencyStepRuns DelinquencyStepRun[]
 }
 
 // -------------------------------------------------------------- billing ----
@@ -1637,6 +1639,56 @@ model DelinquencyTimeline {
   @@unique([facilityId, version])
   @@index([facilityId, active])
   @@map("delinquency_timeline")
+  stepRuns DelinquencyStepRun[]
+}
+
+/// PRD 02 FR-5 / US-28 (B-057). One row per timeline step executed against one
+/// lease.
+///
+/// This is the step history US-28 requires an auction to be defensible from —
+/// "each step, date executed, proof" — so it is a table rather than an event
+/// payload, and it is what makes the nightly run idempotent: the unique
+/// constraint below is the reason a catch-up over a missed week cannot send the
+/// day-15 notice seven times.
+model DelinquencyStepRun {
+  id         String   @id @default(cuid())
+  leaseId    String
+  facilityId String
+  /// The version that governed this step. Denormalised from the lease because
+  /// the lease's pin can be cleared on cure, and the history must not lose
+  /// which configuration was in force when the notice went out.
+  timelineId String
+  /// The step's `dayOffset`, which is its identity within a timeline.
+  dayOffset  Int
+  label      String
+  /// The facility-local day it ran, for "what happened on the 3rd".
+  businessDate DateTime @db.Date
+  /// The staff task raised, when the step asked for one.
+  taskId     String?
+  /// What ran, and what did not: `{ actions: [...], skipped: [...] }`. A step
+  /// whose notice could not be sent is evidence too, and losing it would make
+  /// the history read as if everything worked.
+  outcome    Json?
+  createdAt  DateTime @default(now()) @db.Timestamptz(6)
+
+  lease    Lease               @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+  facility Facility            @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  timeline DelinquencyTimeline @relation(fields: [timelineId], references: [id], onDelete: Restrict)
+
+  /// Set when the tenant cured. The row STAYS — it is the evidence US-28 needs
+  /// — but it stops counting as executed, so a lease that falls behind again
+  /// starts the pipeline from the beginning rather than resuming at day 30.
+  supersededAt DateTime? @db.Timestamptz(6)
+
+  /// Idempotency lives in a PARTIAL unique index, in raw SQL, because Prisma
+  /// cannot express one (migration 20260810100000_step_run_episode):
+  ///   delinquency_step_run_open_episode — unique(leaseId, dayOffset)
+  ///                                       where "supersededAt" is null
+  /// Same device as `reservation_one_held_per_unit`. A plain unique on
+  /// (leaseId, dayOffset) would make a second delinquency unrunnable.
+  @@index([leaseId, supersededAt])
+  @@index([facilityId, businessDate])
+  @@map("delinquency_step_run")
 }
 
 /// PRD 04 FR-SEO-2 (B-066). The 301 map.

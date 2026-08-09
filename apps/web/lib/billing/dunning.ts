@@ -40,6 +40,27 @@ export async function runDunning(
 ): Promise<DunningResult> {
   const result: DunningResult = { emitted: 0, halted: 0 }
 
+  // B-057. Where a facility has configured a delinquency timeline, that
+  // timeline governs and this ladder stands down.
+  //
+  // Both would otherwise chase on day 1 — US-25's example timeline opens with
+  // "Late: late fee #1, email reminder" and CN-3's default `dunningDays` starts
+  // at 1 — and the tenant would get two emails for one missed payment. The
+  // timeline is the more specific configuration and the one an operator
+  // reviewed with a lawyer, so it wins.
+  const configured = await prisma.delinquencyTimeline.findFirst({
+    where: { facilityId, active: true },
+    select: { id: true },
+  })
+  if (configured) {
+    recordItem({
+      itemId: facilityId,
+      ok: true,
+      message: 'dunning ladder stood down — a delinquency timeline governs this facility',
+    })
+    return result
+  }
+
   const facility = await prisma.facility.findUniqueOrThrow({
     where: { id: facilityId },
     select: { dunningDays: true },

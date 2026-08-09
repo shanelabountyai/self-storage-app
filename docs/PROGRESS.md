@@ -1748,6 +1748,31 @@ Three changes: `validateTimeline` now takes the facility's real template keys an
 
 ---
 
+### B-057 — The delinquency engine ✅ `PENDING`
+
+PRD 02 FR-5, US-25. B-056 made the timeline configurable; this is what runs it, nightly at 6am local — last in the night, after the access rule at 4am and the dunning ladder at 5am, so the day count and balance it reads are tonight's settled figures.
+
+**What it built.** A pure `evaluate` in `packages/core/delinquency/engine.ts`. A `DelinquencyStepRun` history table. `runDelinquencyTimeline` executing automated actions and queueing staff tasks. `delinquency.stage_changed` alongside the existing `day_reached`. Cure handling. A `delinquency_step` task type.
+
+**Decided: three things this engine deliberately does not do**, because something else already owns each and two owners of one behaviour is how a tenant is charged twice or told twice:
+- **Access suspension is B-098's**, reached through the same `transitionGrant` with the same `system:delinquency` cause — so a suspended gate looks identical however it was reached, and the profile banner, the audit entry and the restore path all still key off it. That is what "inherits the access rule" means.
+- **Late fees are B-047's ladder.** A step naming `assess_late_fee` is the *trigger*; the amount and schedule stay with the fee ladder, which has its own steps and its own idempotency. The step records the delegation rather than silently doing nothing.
+- **The CN-3 dunning ladder stands down** for any facility with an active timeline. Both would otherwise chase on day 1 — US-25's example opens with "Late: late fee #1, email reminder" and `dunningDays` defaults to `[1,5,10,30]` — and the tenant would get two emails for one missed payment. The timeline wins because it is the more specific configuration and the one reviewed with a lawyer.
+
+**Decided: the step is claimed before its side effects, not after.** `executeStep` inserts the run row first and returns false if the insert loses. Claiming afterwards would send the notice twice and record it once, which is the version of this bug that is invisible until somebody reads the send log.
+
+**Found and fixed in my own code before committing: `cure()` deleted the step history.** The first cut removed the runs so a later delinquency could start over — destroying the evidence US-28 requires an auction to be defensible from, which is the entire reason the table exists rather than an event payload. Rows are now **superseded**, not deleted: they stay, stop counting as executed, and the idempotency key became a **partial unique index** scoped to the open episode (`WHERE "supersededAt" IS NULL`) — the same device and the same reason as `reservation_one_held_per_unit`. A plain `unique(leaseId, dayOffset)` would have let a lease be chased exactly once in its life. Both halves are tested: the history survives a cure, and a cured lease that falls behind again starts at day 1.
+
+**Decided: cure cancels open staff tasks rather than completing them.** Nobody applied the overlock, and a proof-less "completed" in the history an auction is defended from is worse than no record at all. Overlock *removal* is raised only if an overlock was actually applied — a lease that cured on day 2 never had one, and a task to remove a lock nobody fitted is how a queue stops being trusted.
+
+**Decided: the timeline pin is set on the first step and cleared on cure.** Pinning at move-in would freeze a configuration a tenant may never encounter; clearing on cure means a future delinquency is governed by whatever is current then. Nothing is lost — each `DelinquencyStepRun` carries its own `timelineId`, so the history knows which version was in force when each notice went out even after the lease's pin moves on.
+
+**Verified:** 1701 unit/DB tests (21 new — 11 on the halt order, catch-up and stage arithmetic; 10 against real rows for the no-timeline no-op, idempotency, version pinning, task raising, gate suspension through B-098's path, `stage_changed`, cure keeping the history, re-entry after cure, and the hold). Two consecutive clean full-suite runs. Drift check clean, lint and build clean. Two migrations.
+
+**Left behind.** **No delinquency queue screen** — US-26's "today's due steps grouped by type" is its own item; the tasks exist and land in the one task list, but there is no grouped view. **No generated notices**: `send_notice` emits `delinquency.day_reached` with the template key, and the pre-lien and lien templates themselves are **B-063**. **`flag_auction_eligible` sets `pending_auction` and stops there** — the auction pipeline is B-059. **Delivery methods are recorded, not acted on**: a step naming `certified_mail` emits it in the payload and nothing prints or posts anything. **No stage on the tenant profile** — the engine emits `stage_changed` and nothing renders it yet.
+
+---
+
 ---
 
 ## Feature PRDs added mid-build

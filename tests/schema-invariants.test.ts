@@ -76,6 +76,9 @@ const CALENDAR_DATE_FIELDS = new Set([
   // B-097. When a caller says they want to move in — "the 14th", not an
   // instant. A timestamp would imply an hour nobody on the phone gave.
   'Lead.targetMoveInDate',
+  // B-057. Which facility-local day a delinquency step ran — the answer to
+  // "what happened on the 3rd", which is how a lien file is read.
+  'DelinquencyStepRun.businessDate',
 ])
 
 describe('prisma schema invariants', () => {
