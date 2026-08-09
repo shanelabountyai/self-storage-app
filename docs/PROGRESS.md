@@ -1748,7 +1748,7 @@ Three changes: `validateTimeline` now takes the facility's real template keys an
 
 ---
 
-### B-057 — The delinquency engine ✅ `PENDING`
+### B-057 — The delinquency engine ✅ `3c00546`
 
 PRD 02 FR-5, US-25. B-056 made the timeline configurable; this is what runs it, nightly at 6am local — last in the night, after the access rule at 4am and the dunning ladder at 5am, so the day count and balance it reads are tonight's settled figures.
 
