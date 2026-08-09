@@ -41,6 +41,18 @@ export function toTestUrl(url: string, schema: string = TEST_SCHEMA): string {
   return parsed.toString()
 }
 
+/// Whether the suite should be redirected onto its own schema at all.
+///
+/// It should NOT be in CI. CI already runs against a throwaway Postgres service
+/// container whose entire database is disposable and whose migrations land in
+/// `public` — redirecting there points the suite at a schema nothing created,
+/// which is exactly how this broke a build ("The table `storage_test.message`
+/// does not exist"). The separation solves a LOCAL problem: dev and the suite
+/// sharing one long-lived Neon database.
+function shouldRedirect(): boolean {
+  return !process.env.CI
+}
+
 /// The URL the suite should use, or null when there is no database configured —
 /// in which case every `*-db` suite skips itself, which is existing behaviour.
 ///
@@ -50,6 +62,7 @@ export function toTestUrl(url: string, schema: string = TEST_SCHEMA): string {
 /// cannot carry the half of this that scopes raw SQL. A test run is one process
 /// and has no use for a connection pool anyway.
 export function testDatabaseUrl(): string | null {
+  if (!shouldRedirect()) return null
   const base = process.env.DIRECT_URL ?? process.env.DATABASE_URL
   return base ? toTestUrl(base) : null
 }

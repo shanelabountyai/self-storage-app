@@ -10,8 +10,9 @@ import { testDatabaseUrl, TEST_SCHEMA } from './scripts/test-db.mts'
 // the config rather than in a globalSetup because vitest spawns workers with
 // the env this resolves, so every worker sees it before Prisma connects.
 //
-// Falls back to leaving DATABASE_URL alone when nothing is configured: the
-// `*-db` suites already skip themselves in that case.
+// Leaves DATABASE_URL alone when nothing is configured (the `*-db` suites skip
+// themselves) and in CI, where the whole database is a throwaway container and
+// redirecting would point at a schema nothing created.
 const testUrl = testDatabaseUrl()
 
 export default defineConfig({
