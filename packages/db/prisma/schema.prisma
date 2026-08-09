@@ -523,6 +523,7 @@ model Facility {
   gateCommands           GateCommand[]
   accessEvents           AccessEvent[]
   marketingFaqs          FacilityFaq[]
+  delinquencyTimelines   DelinquencyTimeline[]
   promoRedemptions       PromoRedemption[]
   analyticsEvents        AnalyticsEvent[]
   photos                 FacilityPhoto[]
@@ -873,6 +874,13 @@ model Lease {
   /// capture, which `normalizeSource` reports as `unknown` rather than folding
   /// into `web`.
   acquisitionSource  String?
+  /// PRD 02 US-25's AC: "the lease records which timeline version governed it."
+  ///
+  /// Pinned by B-057 when the lease first becomes delinquent, not at move-in —
+  /// a lease that never goes past due is governed by nothing, and pinning at
+  /// move-in would freeze a timeline a tenant may never encounter and would
+  /// make a later configuration change apply to nobody.
+  delinquencyTimelineId String?
   /// PRD 04 US-12 AC2's structured discount instruction, as a relation. Billing
   /// reads the redemption's snapshotted schedule when generating invoices.
   promoRedemption    PromoRedemption?
@@ -927,6 +935,7 @@ model Lease {
   @@index([tenantId])
   @@index([unitId])
   @@map("lease")
+  delinquencyTimeline DelinquencyTimeline? @relation(fields: [delinquencyTimelineId], references: [id], onDelete: SetNull)
 }
 
 // -------------------------------------------------------------- billing ----
@@ -1595,6 +1604,39 @@ enum FacilityPhotoKind {
   unit
   security
   other
+}
+
+/// PRD 02 §4.6 US-25 (B-056). A facility's delinquency timeline, versioned.
+///
+/// Append-only, like message templates and tax components: activating a new
+/// configuration inserts a version and deactivates the previous one. Nothing is
+/// ever edited in place, because **the lease records which version governed
+/// it** (US-25's own AC) — and a lien file whose timeline has been rewritten
+/// since is a lien file that cannot be defended.
+model DelinquencyTimeline {
+  id         String   @id @default(cuid())
+  facilityId String
+  version    Int
+  active     Boolean  @default(false)
+  /// What the operator called this revision: "after the 2026 attorney review".
+  label      String
+  /// US-25's AC: paying this halts the pipeline.
+  qualifyingAmount String @default("full_balance")
+  /// The steps, as an ordered array of the shape in
+  /// packages/core/delinquency. JSON rather than a table: a version is
+  /// immutable once activated, so there is nothing to update in place and
+  /// nothing joins to an individual step.
+  steps      Json
+  createdByStaffId String?
+  createdAt  DateTime @default(now()) @db.Timestamptz(6)
+
+  facility       Facility   @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  createdByStaff StaffUser? @relation(fields: [createdByStaffId], references: [id], onDelete: SetNull)
+  leases         Lease[]
+
+  @@unique([facilityId, version])
+  @@index([facilityId, active])
+  @@map("delinquency_timeline")
 }
 
 /// PRD 04 FR-SEO-2 (B-066). The 301 map.
@@ -2591,6 +2633,7 @@ model StaffUser {
 
   @@map("staff_user")
   leadsCreated       Lead[]
+  delinquencyTimelines DelinquencyTimeline[]
 }
 
 enum TaskStatus {

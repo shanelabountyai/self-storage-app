@@ -648,6 +648,9 @@ export default async function AdminSettingsPage() {
           <Link href="/admin/settings/promotions" className="underline underline-offset-2">
             Promotions — discounts and codes
           </Link>
+          <Link href="/admin/settings/delinquency" className="underline underline-offset-2">
+            Delinquency timeline — what happens, and when
+          </Link>
         </p>
       </section>
 

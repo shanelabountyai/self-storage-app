@@ -24,7 +24,8 @@
     "./comms": "./comms/index.ts",
     "./marketing": "./marketing/index.ts",
     "./analytics": "./analytics/index.ts",
-    "./promotions": "./promotions/index.ts"
+    "./promotions": "./promotions/index.ts",
+    "./delinquency": "./delinquency/index.ts"
   },
   "dependencies": {
     "@storage/db": "*"

@@ -1716,6 +1716,32 @@ PRD 02 US-10, PRD 04 §3.6 US-11/US-12, FR-PROMO-1..5. **The last MVP item.** He
 
 ---
 
+### B-056 — Delinquency timeline configuration ✅ `PENDING`
+
+PRD 02 §4.6 US-25/US-29. **The first Phase 2 item**, and the one D-1 deferred out of MVP. Configuration only — B-057 is the engine that runs it.
+
+**What it built.** `packages/core/delinquency` — the action catalog, validation, and the example timeline. A versioned `DelinquencyTimeline` per facility with `Lease.delinquencyTimelineId`. `/admin/settings/delinquency`, with US-29's disclaimer as a permanent fixture.
+
+**Decided: a facility with no timeline runs no pipeline.** `activeTimeline` returns null and B-057 must treat that as "do nothing". Falling back to the example would be the worst available default — a lien pipeline nobody configured, driven by a table copied out of a PRD, running against a real tenant's property. The screen says so in as many words, so the absence reads as a decision rather than a bug.
+
+**Decided: versions are append-only and the old one survives intact.** Saving deactivates the previous version and inserts a new one, exactly as message templates and tax components do. The reason is US-25's own AC — "the lease records which timeline version governed it" — and a lien file whose timeline has been rewritten since is one that cannot be defended. Tested by superseding a version and confirming its day numbers and qualifying rule are unchanged, with the governed lease still pointing at it.
+
+**Decided: the automated-action list is closed.** Five actions, each wired to real code in B-057. Free text would let a timeline name an action nothing implements — a configuration screen that silently does nothing on day 30, which on a lien timeline means a notice that was never sent.
+
+**Decided: validation refuses rather than warns, and every rule earns its place.** Two steps on the same day leave the order between a fee and a notice quoting the balance undefined. A notice with no delivery method is generated, filed, and never reaches the tenant — the exact failure a lien file cannot survive, and it looks like success on every screen. A staff task with no required proof means "done" means nothing later.
+
+**Decided: US-29's disclaimer is persistent and its own constant.** Not dismissible, not a tooltip, at the top of the screen and rendered from one place so every surface says the same words — because the person approving a sale eight months from now is not the person who configured this. The facility's state is read and named beside it. The example is called `EXAMPLE_TIMELINE_LABEL` = "Example configuration — not legal advice", and a test asserts the constant's own name carries that.
+
+**Decided: the example is offered, never seeded.** Loading it is a separate action and saving it is another, so no facility ends up running a timeline nobody read. A test confirms the example passes its own validation unchanged — a default that could not be saved would send an operator hunting for a problem in a file they cannot edit.
+
+**Decided: auction eligibility is never reached automatically.** The example's day-60 step flags the lease but carries a staff task and a required proof, so the flag is a queue entry rather than a sale.
+
+**Verified:** 1674 unit/DB tests (29 new — 20 on validation, ordering, firing and the US-29 guardrails; 9 against real rows for versioning, the one-active invariant, the governed-lease link surviving supersession, and the permission refusal). **Two consecutive clean full-suite runs**, the first clean on the first attempt. Typecheck, lint and build clean. One migration.
+
+**Left behind.** **Nothing executes any of this** — B-057 is the engine, and until it lands a configured timeline is a document. **No drag-to-reorder**: steps are sorted by day, so ordering is implicit and re-ordering means changing a number; the form shows four blank rows and works without JavaScript. **`noticeTemplateKey` is a free-text field**, not a picker over the templates that exist — a typo produces a step whose notice cannot be found, and B-057 will need to fail loudly on that. **No per-state presets** beyond the single example, which D-10 says should eventually vary. **No preview** of what a timeline would do to a specific lease, which is the thing an operator will actually want before activating one.
+
+---
+
 ---
 
 ## Feature PRDs added mid-build

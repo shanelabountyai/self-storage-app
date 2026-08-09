@@ -107,7 +107,7 @@ The full late → overlock → pre-lien → lien → auction state machine, wire
 
 | # | ID | Item | PRD/Feature | Size | Depends on | Phase |
 |---|---|---|---|---|---|---|
-| 56 | B-056 | Delinquency timeline configuration: per-facility ordered steps keyed to days-past-due, versioned, per-state disclaimer guardrails ("example configuration" labeling) | PRD 02 §4.6 US-25/US-29 | M | B-047 | Phase 2 |
+| 56 | B-056 ✅ | Delinquency timeline configuration: per-facility ordered steps keyed to days-past-due, versioned, per-state disclaimer guardrails ("example configuration" labeling) | PRD 02 §4.6 US-25/US-29 | M | B-047 | Phase 2 |
 | 57 | B-057 | Delinquency engine: nightly evaluation against timeline version, automated actions + queued staff tasks, `delinquency.day_reached` / `stage_changed` events, cure halts pipeline and restores access. **Inherits B-098's access rule as its access step** — the threshold becomes one configured step and the suspend/restore behaviour is not reimplemented | PRD 02 FR-5, US-45 | L | B-056, B-043, B-098 | Phase 2 |
 | 58 | B-058 | Gate access suspend/restore on delinquency/cure: idempotent stage-event handling, restore SLA ≤2 min (simulated), overlock task creation. **Mostly built at B-098**; what remains here is driving the same ACS calls from timeline stage events rather than the single threshold, plus overlock task creation | PRD 03 US-3 | S | B-057, B-027, B-098 | Phase 2 |
 | 59 | B-059 | Delinquency queue: **a filtered view of B-095's `Task` list**, today's due steps grouped by type, required proof fields (tracking #, photo) that gate completion, visual escalation of overdue items carrying text or icon-plus-text — never colour alone (1.4.1) | PRD 02 US-26, US-41; PRD 02 §5.5 FR-22/FR-23 | M | B-057, B-095 | Phase 2 |

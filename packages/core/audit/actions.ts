@@ -92,6 +92,10 @@ export const AUDIT_ACTIONS = [
   /// PRD 02 US-10. A promotion is a price the business advertises; who changed
   /// it and when is the question after a campaign costs more than expected.
   { action: 'promotion.changed', label: 'Promotion created or changed', requiresReason: false },
+  /// PRD 02 US-25/US-29. Changing a lien timeline changes what notices go out
+  /// and when a sale becomes possible. Who changed it, and to what, is the
+  /// first question after a wrongful-sale claim.
+  { action: 'delinquency.timeline_changed', label: 'Delinquency timeline changed', requiresReason: false },
   { action: 'user.created', label: 'Staff user created', requiresReason: false },
   { action: 'user.role_changed', label: 'Staff role changed', requiresReason: true },
   { action: 'user.deactivated', label: 'Staff user deactivated', requiresReason: true },
