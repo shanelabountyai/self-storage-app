@@ -2026,6 +2026,12 @@ model Lead {
   @@index([facilityId, status])
   @@index([facilityId, contactedAt])
   @@index([submitterHash, createdAt])
+  /// B-068. Reporting splits leads by acquisition channel over a date range —
+  /// the funnel filter and the revenue split both do it. Declared here as well
+  /// as created in the migration: `prisma migrate diff` compares the DATABASE
+  /// against this model, so an index that exists in one and not the other is
+  /// drift, and CI fails on it by design.
+  @@index([channel, createdAt])
   @@index([email])
   @@index([phone])
   @@map("lead")
