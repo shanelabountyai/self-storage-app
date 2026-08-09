@@ -1550,7 +1550,7 @@ PRD 04 FR-SEO-1 through 7. The facility page has been server-rendered and canoni
 
 ---
 
-### B-067 — Facility marketing profile editor ✅ `PENDING`
+### B-067 — Facility marketing profile editor ✅ `239c98e`
 
 PRD 04 US-2 and US-5. B-066 generated a title, a description and five FAQs for every facility from its record; this is where a marketer replaces any of them without a deploy.
 
