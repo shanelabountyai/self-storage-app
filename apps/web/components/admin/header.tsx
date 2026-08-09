@@ -1,4 +1,5 @@
-import { Bell } from 'lucide-react'
+import { Bell, PhoneCall } from 'lucide-react'
+import Link from 'next/link'
 import { signOut } from '@/auth'
 import { FacilitySwitcher } from './facility-switcher'
 import type { SwitcherFacility } from '@/lib/admin/facility-selection'
@@ -35,6 +36,20 @@ export function Header({ userName, facilities, cookieValue, canSeeAll }: Props) 
       </div>
 
       <div className="flex items-center gap-3">
+        {/* PRD 02 US-43: "a 'new inquiry' action reachable in one click from
+            any admin screen". In the header rather than on the leads page,
+            because the phone rings while somebody is halfway through a move-out
+            — if capturing the call costs a navigation first, it goes on a
+            sticky note instead, which is the whole failure this item exists to
+            fix. Visible at every width for the same reason. */}
+        <Link
+          href="/admin/leads"
+          className="border-input hover:bg-accent inline-flex min-h-11 items-center gap-1 rounded-md border px-3 text-sm font-medium"
+        >
+          <PhoneCall className="size-4" aria-hidden="true" />
+          New inquiry
+        </Link>
+
         {/* Notification bell — static per B-007's scope; real counts (queued
             approvals, failed runs, overdue delinquency steps) come from the
             features that produce them (B-046, B-052, B-057...). */}

@@ -69,6 +69,9 @@ const CALENDAR_DATE_FIELDS = new Set([
   // B-044. A billing period is a range of DAYS a tenant occupies a unit.
   'Invoice.periodStart',
   'Invoice.periodEnd',
+  // B-097. When a caller says they want to move in — "the 14th", not an
+  // instant. A timestamp would imply an hour nobody on the phone gave.
+  'Lead.targetMoveInDate',
 ])
 
 describe('prisma schema invariants', () => {

@@ -635,18 +635,29 @@ export async function updateOperationsPolicyAction(
     max: 90,
     unit: 'days',
   })
+  // PRD 02 US-43. At least an hour — zero would make every inquiry overdue the
+  // moment it was taken, which is a queue nobody reads. A week is the ceiling
+  // because past that the lead has rented somewhere else.
+  const leadHours = parseScaled(formData.get('leadFollowUpHours'), {
+    scale: 1,
+    min: 1,
+    max: 168,
+    unit: 'hours',
+  })
 
   const errors: FieldErrors = {}
   if ('error' in accessCap) errors.authorizedAccessCap = accessCap.error
   if ('error' in cashApproval) errors.cashApprovalThresholdDollars = cashApproval.error
   if ('error' in writeOff) errors.writeOffThresholdDollars = writeOff.error
   if ('error' in noticeDays) errors.moveOutNoticeDays = noticeDays.error
+  if ('error' in leadHours) errors.leadFollowUpHours = leadHours.error
   if (Object.keys(errors).length > 0) return fieldError(errors)
   if (
     'error' in accessCap ||
     'error' in cashApproval ||
     'error' in writeOff ||
-    'error' in noticeDays
+    'error' in noticeDays ||
+    'error' in leadHours
   ) {
     return fieldError(errors)
   }
@@ -657,6 +668,7 @@ export async function updateOperationsPolicyAction(
       cashApprovalThresholdCents: cashApproval.value,
       writeOffThresholdCents: writeOff.value,
       moveOutNoticeDays: noticeDays.value,
+      leadFollowUpHours: leadHours.value,
     })
   } catch (error) {
     return asFormError(error, 'Could not save the operations policy.')

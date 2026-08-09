@@ -102,6 +102,18 @@ export const TASK_TYPES = [
     requiredProofFields: ['note'],
     sensitive: true,
   },
+  {
+    // PRD 02 US-43: "a lead not contacted within the facility's configured
+    // window generates a follow-up task. A lead with no disposition is
+    // visible, never silently ageing in `new`."
+    //
+    // Not sensitive: this is a sales nudge, not a record anyone will be asked
+    // about later. The lead's own `contactedAt` is the durable fact.
+    type: 'lead_follow_up',
+    label: 'Call this inquiry back',
+    requiredProofFields: ['note'],
+    sensitive: false,
+  },
 ] as const satisfies readonly TaskTypeSpec[]
 
 export type TaskType = (typeof TASK_TYPES)[number]['type']

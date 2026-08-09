@@ -75,6 +75,22 @@ export async function provisionMoveIn(sessionId: string): Promise<ProvisionResul
   const startDate = new Date()
   const localToday = businessDateFor(startDate, facility.timezone)
 
+  // PRD 02 US-43's last AC: "source and channel carry through reservation →
+  // move-in, so the move-in/move-out report can split walk-in vs phone vs web."
+  //
+  // Read from the reservation that produced this checkout, and stamped onto the
+  // lease. Without a reservation there is no channel to inherit and the renter
+  // came through the public checkout, which IS `web` — the one case where
+  // defaulting is a fact rather than a guess.
+  const reservationSource = row.reservationId
+    ? (
+        await prisma.reservation.findUnique({
+          where: { id: row.reservationId },
+          select: { source: true },
+        })
+      )?.source
+    : null
+
   const leaseId = await prisma.$transaction(async (tx) => {
     const lease = await tx.lease.create({
       data: {
@@ -88,6 +104,7 @@ export async function provisionMoveIn(sessionId: string): Promise<ProvisionResul
         startDate,
         monthlyRateCents: session.quotedRateCents,
         billingDay: billingDayFor(facility.billingPolicy, localToday),
+        acquisitionSource: reservationSource ?? 'web',
         autopayEnabled,
         protectionPlanName: protectionTier === 'waiver' ? null : protectionTier,
         protectionCents: premiumCents,

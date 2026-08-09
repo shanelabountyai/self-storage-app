@@ -735,6 +735,15 @@ export default async function AdminSettingsPage() {
             defaultValue={facility.moveOutNoticeDays}
             hint="0 means none. The portal enforces this; staff can override."
           />
+          <Field
+            name="leadFollowUpHours"
+            label="Call an inquiry back within"
+            type="number"
+            min={1}
+            max={168}
+            defaultValue={facility.leadFollowUpHours}
+            hint="Hours. A phone or walk-in inquiry with no disposition after this becomes a task on the morning sweep — US-43's “never silently ageing in new”."
+          />
           <Button type="submit">Save operations policy</Button>
         </AdminForm>
       </section>

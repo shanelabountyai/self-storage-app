@@ -388,6 +388,10 @@ model Facility {
   longDescription     String?
   /// PRD 04 US-5 AC2. When staff last confirmed the Google Business Profile
   /// matches this record. The system flags anything unverified for >90 days.
+  /// PRD 02 US-43. How long a new lead may sit uncontacted before it becomes
+  /// a task. Business hours are overkill here — a lead is a person waiting for
+  /// a call back, and four hours on a Sunday still feels like four hours.
+  leadFollowUpHours   Int            @default(4)
   gbpVerifiedAt       DateTime?      @db.Timestamptz(6)
   /// Which checklist items were ticked at that verification. A string array
   /// rather than six booleans: the checklist is US-5 AC1's list today and will
@@ -857,6 +861,16 @@ model Lease {
   monthlyRateCents   Int
   /// Day of month rent is billed, 1–28 to stay valid in every month.
   billingDay         Int
+  /// PRD 02 US-43 / US-39.3 (B-097). Where this rental came from, stamped at
+  /// move-in from the reservation that produced it.
+  ///
+  /// Denormalised onto the lease deliberately. The chain that knows the answer
+  /// — lease → checkout session → reservation → lead — is three joins long and
+  /// every link is nullable, so a report walking it would silently under-count
+  /// exactly the channels this exists to measure. Null means the lease predates
+  /// capture, which `normalizeSource` reports as `unknown` rather than folding
+  /// into `web`.
+  acquisitionSource  String?
   /// Whether this unit charges itself each month (PRD 01 US-704).
   ///
   /// Per lease, not per tenant: billing runs per lease (B-045), the portal
@@ -1787,6 +1801,11 @@ model Reservation {
   /// Signed-token deep links let a prospect complete or cancel without login
   /// (PRD 01 FR-3.2).
   tokenHash            String            @unique
+  /// PRD 02 US-43 (B-097). The acquisition channel, carried from the lead that
+  /// produced this hold — or `web` for one a prospect made themselves. Separate
+  /// from `utmSource`, which is campaign attribution within the web channel and
+  /// says nothing about a call.
+  source               String            @default("web")
   utmSource            String?
   utmMedium            String?
   utmCampaign          String?
@@ -1816,6 +1835,20 @@ model Lead {
   unitTypeId            String?
   tenantId              String?
   status                LeadStatus @default(new)
+  /// PRD 02 US-43 (B-097). Where this inquiry came from: `phone`, `walk_in`,
+  /// `referral`, `drive_by` for one a staffer took, `web` for a form. Loose
+  /// string rather than an enum for the same reason `Document.type` is — a new
+  /// channel is a catalog entry, not a migration.
+  /// (The column below named `source` already existed and is this.)
+  /// When they said they want to move in. Free text on a call becomes a date
+  /// here, because "sometime in March" is not something a follow-up can sort by.
+  targetMoveInDate      DateTime?  @db.Date
+  /// US-43: "a lead not contacted within the facility's configured window
+  /// generates a follow-up task... A lead with no disposition is visible, never
+  /// silently ageing in `new`." This is what stops the clock.
+  contactedAt           DateTime?  @db.Timestamptz(6)
+  /// Who took the call. Null for a web form, which nobody took.
+  createdByStaffId      String?
   firstName             String?
   lastName              String?
   email                 String?
@@ -1832,13 +1865,15 @@ model Lead {
   createdAt             DateTime   @default(now()) @db.Timestamptz(6)
   updatedAt             DateTime   @updatedAt @db.Timestamptz(6)
 
-  facility     Facility?     @relation(fields: [facilityId], references: [id], onDelete: SetNull)
-  unitType     UnitType?     @relation(fields: [unitTypeId], references: [id], onDelete: SetNull)
-  tenant       Tenant?       @relation(fields: [tenantId], references: [id], onDelete: SetNull)
-  reservations Reservation[]
-  consents     Consent[]
+  facility       Facility?     @relation(fields: [facilityId], references: [id], onDelete: SetNull)
+  unitType       UnitType?     @relation(fields: [unitTypeId], references: [id], onDelete: SetNull)
+  tenant         Tenant?       @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  createdByStaff StaffUser?    @relation(fields: [createdByStaffId], references: [id], onDelete: SetNull)
+  reservations   Reservation[]
+  consents       Consent[]
 
   @@index([facilityId, status])
+  @@index([facilityId, contactedAt])
   @@index([email])
   @@index([phone])
   @@map("lead")
@@ -2376,6 +2411,7 @@ model StaffUser {
   tasksCompleted Task[]                    @relation("TaskCompletedBy")
 
   @@map("staff_user")
+  leadsCreated       Lead[]
 }
 
 enum TaskStatus {

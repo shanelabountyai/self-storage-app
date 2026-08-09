@@ -1580,6 +1580,38 @@ PRD 04 US-2 and US-5. B-066 generated a title, a description and five FAQs for e
 
 ---
 
+### B-097 — Phone and counter inquiry capture ✅ `PENDING`
+
+PRD 02 §4.8 US-43. "Do you have a 10x10 and how much?" is a ninety-second call that converts often, and until now there was nowhere to put it — the web forms are a marketing item, the reservation flow is customer-facing, and the counter move-in assumes the person is standing there with a card. The consequence was a lead-to-rental report showing only web leads and looking excellent.
+
+**Sequencing note.** This was found outstanding while starting B-068: a parser slip in an earlier count had it reading as done. It sits at position 39a, ahead of B-068, and its own backlog line says B-068 builds the *web* forms later — so it was built first. MVP now has three items left: B-068, B-069, B-070.
+
+**What it built.** `New inquiry` in the admin header, reachable from any screen. `/admin/leads` with the capture form and the open list; `/admin/leads/[leadId]` with the quote and the hold. `Reservation.source`, `Lease.acquisitionSource`, `Lead.targetMoveInDate`/`contactedAt`/`createdByStaffId`, `Facility.leadFollowUpHours` with its settings control. A `lead_follow_up` task type and an 8am job that raises it.
+
+**Decided: the capture form lives in the header, not behind a link.** The phone rings while somebody is halfway through a move-out. If capturing the call costs a navigation first, it goes on a sticky note instead — which is the entire failure this item exists to fix.
+
+**Decided: phone is required and email is not — the inverse of the web form.** Somebody on a call gives a number without hesitating and spells an email badly. A lead with a wrong email is worse than one with none, because the follow-up looks sent.
+
+**Decided: `web` and `unknown` are not offerable to a staffer.** A person at the counter is by construction not the website, and a mis-click that credited `web` would corrupt the one report this capture exists to feed. `unknown` is what history reports, never something anyone selects. A test asserts every staff-selectable source is also a `MOVE_SOURCES` member — the failure would otherwise be silent, and would surface only when the channel split was being used to decide whether to keep answering the phone.
+
+**Decided: the hold goes through `createReservation`, not a parallel path.** A second reservation path would need its own copy of the `FOR UPDATE SKIP LOCKED` unit claim, its own expiry sweep and its own availability rules, and would be the one that eventually double-books a unit. `ReserveInput` grew a `source` field defaulting to `web`, which is the one case where defaulting is a fact rather than a guess.
+
+**Decided: `Lease.acquisitionSource` is denormalised.** The chain that knows the answer — lease → checkout session → reservation → lead — is three joins long and every link is nullable, so a report walking it would silently under-count exactly the channels it measures. Stamped at move-in from the reservation. Null means the lease predates capture and reports as `unknown` rather than being folded into `web`. **This closes the placeholder B-042 left in `movesReport`**, which had been reporting every move-in as `unknown` and said in a comment that B-097 was where the fix belonged.
+
+**Decided: the follow-up is a real `Task`, not a computed view.** The opposite of B-065's keypad SLA, and for a stated reason: an overdue keypad task is read off a queue somebody already has open, while an uncontacted lead has to reach the one list a part-timer checks on a Saturday (US-41). Raised at 8am local rather than overnight — a task created at 2am sat there six hours before anyone could act on it. Priority `normal`, not `high`: levelling a four-hour-old prospect with a gate that will not open for a paying tenant is how a queue stops sorting.
+
+**Decided: `contactedAt` is stamped once and never moved.** It is what the follow-up window measures against, so re-stamping on every status change would let a lead be nudged out of overdue without anyone calling.
+
+**Found: two schema invariants earned their keep.** The `@db.Date` check caught `Lead.targetMoveInDate` as an undeclared calendar-date field — correct, since "the 14th" is what a caller says and a timestamp would imply an hour nobody gave. And a `billingDay` spacing mismatch meant my `Lease.acquisitionSource` edit silently did not apply to the Prisma schema while the migration had already added the column to the database; the typecheck caught the divergence immediately.
+
+**Verified:** 1552 unit/DB tests (17 new — capture validation and permissions, both prices through the same calculator the public page uses, the hold carrying `source` and marking the lead reserved, sold-out handling, follow-up raising/idempotency/exemption, the stamped-once rule, and the shared-vocabulary guard). **Two consecutive clean full-suite runs.** Typecheck, lint and build clean. One migration.
+
+**Left behind.** **No dedup** — FR-LEAD-1's "unique per (email/phone, facility, 30-day window)" belongs with **B-068**, which is where the web forms create the volume that makes duplicates likely; two calls from the same person today make two leads. **No confirmation email or manager notification** — US-8 AC2 is a web-form requirement and comes with B-068; a counter lead is taken by the person who would receive the notification. **No promotions in the quote**, stated on the screen rather than silently omitted, until **B-070**. **A caller with no email gets a placeholder address** on the reservation so the hold can be created — the hold is real, the confirmation and expiry-reminder emails are not, and the follow-up task is what covers it. **No lead → move-in conversion attribution beyond the source column**: the reservation records which lead it came from, but nothing reports lead-to-rental rates yet.
+
+**A flake worth recording, not hidden.** Across five full-suite runs during this item, one run failed `manual-adapter-db.test.ts` entirely (20 skipped, i.e. `beforeAll` threw) and two others failed on the concurrent `npm run build` I had started against the same database. Both suites pass alone and together, and the two runs that bracket the flake are clean at 1552. The database is remote and the suite is now 1560 tests; treat a whole-file `beforeAll` failure as connection noise rather than as a signal, but it is noise worth watching if it recurs.
+
+---
+
 ---
 
 ## Feature PRDs added mid-build

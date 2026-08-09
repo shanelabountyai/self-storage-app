@@ -72,6 +72,12 @@ export type ReserveInput = {
   phone?: string | null
   moveInDate: Date
   quotedRateCents: number
+  /// PRD 02 US-43 (B-097). The acquisition channel: `web` for a prospect who
+  /// reserved themselves, `phone`/`walk_in`/`referral`/`drive_by` for a hold a
+  /// staffer placed from an inquiry. Distinct from `utm`, which describes a
+  /// click and says nothing about a call. Defaults to `web` because the public
+  /// site is the only caller that does not pass it.
+  source?: string
   utm?: { source?: string | null; medium?: string | null; campaign?: string | null }
 }
 
@@ -193,6 +199,7 @@ export async function createReservation(input: ReserveInput): Promise<ReserveRes
         moveInDate: input.moveInDate,
         expiresAt,
         tokenHash: hashReservationToken(token),
+        source: input.source ?? 'web',
         utmSource: input.utm?.source ?? null,
         utmMedium: input.utm?.medium ?? null,
         utmCampaign: input.utm?.campaign ?? null,

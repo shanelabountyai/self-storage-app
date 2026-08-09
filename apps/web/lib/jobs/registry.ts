@@ -10,6 +10,7 @@ import { emitRetryReminders, runAutopay } from '@/lib/billing/autopay'
 import { assessLateFees } from '@/lib/billing/late-fees'
 import { evaluateAccessSuspensions } from '@/lib/access/delinquency-gate'
 import { runDunning } from '@/lib/billing/dunning'
+import { raiseLeadFollowUps } from '@/lib/admin/lead-follow-up'
 
 // Consumer and job registration. The machinery is B-006's; the things that use
 // it arrive with their own backlog items: reservation expiry (B-018, below),
@@ -236,6 +237,21 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
       // records, and splitting it into a second JobRun would make "did the
       // tenant get told today" depend on which of two jobs ran first.
       await emitRetryReminders(facilityId!, businessDate, recordItem)
+    },
+  },
+  {
+    // B-097 / PRD 02 US-43. Leads nobody has called back.
+    //
+    // At 8am local rather than overnight: this raises work for a person, and a
+    // task created at 2am is one that sat there for six hours before anyone
+    // could act on it. The window itself is per-facility and measured from when
+    // the lead was taken, so an 8am sweep catches yesterday afternoon's calls
+    // on the morning somebody can do something about them.
+    name: 'leads.follow-up',
+    localHour: 8,
+    scope: 'per_facility',
+    handler: async ({ facilityId, recordItem }) => {
+      await raiseLeadFollowUps(facilityId!, new Date(), recordItem)
     },
   },
   {

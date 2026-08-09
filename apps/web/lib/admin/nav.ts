@@ -20,6 +20,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { key: 'dashboard', label: 'Dashboard', href: '/admin' },
   { key: 'units', label: 'Units', href: '/admin/units', anyOf: ['units:edit'] },
   { key: 'tenants', label: 'Tenants', href: '/admin/tenants', anyOf: ['tenants:view'] },
+  { key: 'leads', label: 'Inquiries', href: '/admin/leads', anyOf: ['tenants:view'] },
   // No dedicated lease permission — leases are part of tenant management.
   { key: 'leases', label: 'Leases', href: '/admin/leases', anyOf: ['tenants:view'] },
   { key: 'billing', label: 'Billing', href: '/admin/billing', anyOf: ['payments:take', 'reports:financial'] },

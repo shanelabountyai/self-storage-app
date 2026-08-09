@@ -85,6 +85,10 @@ export const AUDIT_ACTIONS = [
   /// person who did not want it.
   { action: 'suppression.added', label: 'Address suppressed', requiresReason: false },
   { action: 'suppression.removed', label: 'Suppression lifted', requiresReason: true },
+  /// PRD 02 US-43. Who took the call, and when. The lead row carries the same
+  /// facts, but a lead can be edited and an audit entry cannot — and "was this
+  /// walk-in ever actually recorded" is a commission question.
+  { action: 'lead.created', label: 'Inquiry recorded', requiresReason: false },
   { action: 'user.created', label: 'Staff user created', requiresReason: false },
   { action: 'user.role_changed', label: 'Staff role changed', requiresReason: true },
   { action: 'user.deactivated', label: 'Staff user deactivated', requiresReason: true },

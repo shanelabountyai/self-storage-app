@@ -269,7 +269,7 @@ export async function movesReport(
       const [moveIns, moveOutCount, reservations] = await Promise.all([
         prisma.lease.findMany({
           where: { facilityId: facility.id, startDate: { gte: periodStart, lt: periodEnd } },
-          select: { id: true },
+          select: { id: true, acquisitionSource: true },
         }),
         prisma.lease.count({
           where: { facilityId: facility.id, moveOutDate: { gte: periodStart, lt: periodEnd }, status: 'ended' },
@@ -283,18 +283,15 @@ export async function movesReport(
       return {
         facilityId: facility.id,
         facilityName: facility.name,
-        // Every move-in reports `unknown` today, and that is the honest
-        // answer rather than a bug: nothing on `Lease` records an acquisition
-        // channel. Both the public checkout and B-039's counter walk-in go
-        // through the same `startCheckout`, so they are indistinguishable
-        // after the fact — there is no derivation to write, only a column
-        // nobody has added. **B-097 is the item that captures source**
-        // (`phone`/`walk_in`/`referral`/`drive_by` on a `Lead`) and is where
-        // carrying it through reservation → move-in belongs. Attributing
-        // everything to `web` in the meantime would quietly credit the
-        // channel this report exists to evaluate.
+// B-097 filled the gap this comment used to describe. `acquisitionSource`
+        // is stamped at move-in from the reservation that produced it, so a
+        // phone lead that became a rental reports as `phone` rather than as
+        // `web`. A lease from before capture has a null column and reports as
+        // `unknown`, which stays visible rather than being folded into `web` —
+        // quietly crediting the channel this report exists to evaluate is the
+        // failure the whole item was written to prevent.
         moves: moveCounts(
-          moveIns.map(() => ({ source: normalizeSource(null) })),
+          moveIns.map((lease) => ({ source: normalizeSource(lease.acquisitionSource) })),
           moveOutCount,
         ),
         conversion: reservationConversion(

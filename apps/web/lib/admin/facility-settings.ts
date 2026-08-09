@@ -388,6 +388,9 @@ export type OperationsPolicyInput = {
   cashApprovalThresholdCents: number
   writeOffThresholdCents: number
   moveOutNoticeDays: number
+  /// PRD 02 US-43. How long a new inquiry may sit uncontacted before the
+  /// morning sweep turns it into a task.
+  leadFollowUpHours: number
 }
 
 export async function updateOperationsPolicy(
@@ -405,6 +408,7 @@ export async function updateOperationsPolicy(
     cashApprovalThresholdCents: row.cashApprovalThresholdCents,
     writeOffThresholdCents: row.writeOffThresholdCents,
     moveOutNoticeDays: row.moveOutNoticeDays,
+    leadFollowUpHours: row.leadFollowUpHours,
   })
 
   await recordAudit({
