@@ -1,5 +1,18 @@
 import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vitest/config'
+import { testDatabaseUrl, TEST_SCHEMA } from './scripts/test-db.mts'
+
+// The suite runs against its own Postgres SCHEMA, not against dev's.
+//
+// They shared `public` until now, which is what leaked a live owner account out
+// of an interrupted run and broke every subsequent one — and it is the reason
+// CLAUDE.md tells you to run the suite twice before believing it. Set here in
+// the config rather than in a globalSetup because vitest spawns workers with
+// the env this resolves, so every worker sees it before Prisma connects.
+//
+// Falls back to leaving DATABASE_URL alone when nothing is configured: the
+// `*-db` suites already skip themselves in that case.
+const testUrl = testDatabaseUrl()
 
 export default defineConfig({
   resolve: {
@@ -10,6 +23,7 @@ export default defineConfig({
     },
   },
   test: {
+    env: testUrl ? { DATABASE_URL: testUrl, TEST_DB_SCHEMA: TEST_SCHEMA } : {},
     // Node by default — the tests the PRDs actually demand (billing/proration
     // math, per master §5) are pure functions. Add jsdom + the React plugin
     // when the first component test shows up.

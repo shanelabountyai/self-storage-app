@@ -19,6 +19,7 @@
     "db:generate": "dotenv -e .env.local -- prisma generate --schema packages/db/prisma/schema.prisma",
     "db:migrate": "dotenv -e .env.local -- prisma migrate dev --schema packages/db/prisma/schema.prisma",
     "db:seed": "dotenv -e .env.local -- node packages/db/prisma/seed.mts",
+    "db:migrate:test": "dotenv -e .env.local -- tsx --tsconfig apps/web/tsconfig.json scripts/migrate-test-db.mts",
     "db:seed:demo": "dotenv -e .env.local -- tsx --tsconfig apps/web/tsconfig.json apps/web/scripts/seed-demo.mts",
     "db:create-owner": "dotenv -e .env.local -- tsx --tsconfig apps/web/tsconfig.json apps/web/scripts/create-owner.mts",
     "db:studio": "dotenv -e .env.local -- prisma studio --schema packages/db/prisma/schema.prisma"
