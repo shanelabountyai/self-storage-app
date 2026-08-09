@@ -1839,7 +1839,7 @@ has its own file.
 
 ## B-059 — Delinquency queue
 
-`<sha>`
+`65bb8e6`
 
 **What it built.** US-26's screen: "today's due steps grouped by type
 (overlocks to apply/remove, notices to mail, proofs to record), so nothing is
