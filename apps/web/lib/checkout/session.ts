@@ -148,6 +148,10 @@ export type CheckoutSessionView = {
   tenantId: string | null
   email: string | null
   quotedRateCents: number
+  /// PRD 04 US-12 AC2 (B-070). The promotion carried from the facility page,
+  /// so the total shown before payment is the one that gets redeemed.
+  promotionId: string | null
+  promoCodeId: string | null
   lockExpiresAt: Date
   data: Record<string, unknown>
   /// True when the lock has lapsed. Derived rather than stored, so it is right
@@ -165,6 +169,8 @@ function toView(session: {
   tenantId: string | null
   email: string | null
   quotedRateCents: number
+  promotionId: string | null
+  promoCodeId: string | null
   lockExpiresAt: Date
   data: unknown
 }): CheckoutSessionView {

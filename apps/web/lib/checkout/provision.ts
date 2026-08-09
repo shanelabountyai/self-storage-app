@@ -9,6 +9,7 @@ import { amountDueToday } from './payment'
 import { sessionById } from './session'
 import { track } from '@/lib/analytics/track'
 import { trackingContext } from '@/lib/analytics/request'
+import { offerFor, redeemPromotion } from '@/lib/promotions/service'
 
 // PRD 01 FR-4.5 / FR-4.6. Turning a paid checkout into a moved-in tenant.
 //
@@ -179,6 +180,44 @@ export async function provisionMoveIn(sessionId: string): Promise<ProvisionResul
       },
       tx,
     )
+
+    // PRD 04 FR-PROMO-4/5. Redeemed HERE — at the end of a completed, paid
+    // move-in — rather than when the promo was shown or the checkout started.
+    // A redemption claimed earlier would consume a capped promotion for
+    // somebody who abandoned at the payment step, and the cap is the scarce
+    // thing the whole atomic-claim design exists to protect.
+    //
+    // Failure is not an error: FR-PROMO-5 wants an over-cap attempt to "fall
+    // back gracefully (reservation completes at standard rate)", so the lease
+    // stands and the discount simply does not exist.
+    if (session.promotionId) {
+      const offer = await offerFor({
+        facilityId: session.facilityId,
+        unitTypeId: session.unitTypeId,
+        monthlyRateCents: session.quotedRateCents,
+        isNewTenant: true,
+        code: null,
+        client: tx,
+      })
+      // Re-evaluated at redemption rather than trusting the session's stored
+      // figure: the rate could have moved, and the amount that gets redeemed
+      // has to be the one the schedule computes from what is actually charged.
+      // If the promo no longer applies at all, the lease stands at full price.
+      const schedule =
+        offer.offer && offer.offer.promotionId === session.promotionId ? offer.offer.schedule : null
+
+      if (schedule) {
+        await redeemPromotion(tx, {
+          promotionId: session.promotionId,
+          promoCodeId: session.promoCodeId,
+          facilityId: session.facilityId,
+          reservationId: row.reservationId,
+          leaseId: lease.id,
+          schedule,
+          totalCents: schedule.reduce((sum, period) => sum + period.amountCents, 0),
+        })
+      }
+    }
 
     return lease.id
   })

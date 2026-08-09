@@ -28,7 +28,9 @@ export type ChargeLine = {
 }
 
 export type InvoiceLine = {
-  type: 'rent' | 'protection' | 'fee' | 'tax'
+  /// Mirrors `LineItemType` in the schema. `discount` is positive cents that
+  /// the total subtracts — see `buildInvoice`.
+  type: 'rent' | 'protection' | 'fee' | 'tax' | 'discount'
   description: string
   quantity: number
   unitAmountCents: number
@@ -43,12 +45,28 @@ export type BuildInvoiceInput = {
   /// period, which is the ordinary monthly case.
   prorateFrom?: Date
   prorateTo?: Date
+  /// PRD 04 FR-PROMO-4 / PRD 10 (B-070). Money off this period, in positive
+  /// cents, from a promotion's snapshotted schedule or a referral reward.
+  ///
+  /// Capped at the charges — a discount larger than the bill would turn into a
+  /// credit, and a promotion that pays a tenant is not a promotion.
+  discountCents?: number
+  /// What the tenant reads on the line. "First month free", "SPRING25".
+  discountDescription?: string
 }
 
 export type BuiltInvoice = {
   lines: InvoiceLine[]
+  /// GROSS charges, before any discount. Kept gross deliberately: B-055's
+  /// revenue report reads "billed" from the line items and "discounts given"
+  /// separately, and netting them here would make a promotion invisible in the
+  /// one report that exists to price it.
   subtotalCents: number
+  /// Positive cents actually taken off, which may be less than asked for when
+  /// the discount exceeded the charges.
+  discountCents: number
   taxCents: number
+  /// subtotal − discount + tax.
   totalCents: number
 }
 
@@ -97,6 +115,31 @@ export function buildInvoice(input: BuildInvoiceInput): BuiltInvoice {
     if (charge.taxable) taxableBase += result.amountCents
   }
 
+  // The discount, before tax — and this ordering is the load-bearing part.
+  //
+  // Tax is owed on what the tenant is actually charged. Computing it on the
+  // gross and then subtracting the discount would over-collect tax on money
+  // nobody paid, which is not a rounding difference: it is collecting a state's
+  // tax on a sale that did not happen, on every discounted invoice.
+  const requested = Math.max(0, Math.floor(input.discountCents ?? 0))
+  const discount = Math.min(requested, subtotal)
+  if (discount > 0) {
+    lines.push({
+      type: 'discount',
+      description: input.discountDescription?.trim() || 'Discount',
+      quantity: 1,
+      // Positive cents, subtracted from the total below rather than stored
+      // negative. B-055's revenue report sums these as "given away", and a
+      // negative here would report the discount as negative money given away.
+      unitAmountCents: discount,
+      amountCents: discount,
+    })
+    // Taxable base shrinks by whatever share of the discount landed on taxable
+    // charges. Capped at the base itself so a discount bigger than the taxable
+    // rent cannot drive it negative and produce a tax credit.
+    taxableBase = Math.max(0, taxableBase - Math.min(discount, taxableBase))
+  }
+
   let taxTotal = 0
   for (const rate of taxRates) {
     const amount = taxOn(taxableBase, rate.rateBasisPoints)
@@ -114,8 +157,9 @@ export function buildInvoice(input: BuildInvoiceInput): BuiltInvoice {
   return {
     lines,
     subtotalCents: subtotal,
+    discountCents: discount,
     taxCents: taxTotal,
-    totalCents: subtotal + taxTotal,
+    totalCents: subtotal - discount + taxTotal,
   }
 }
 

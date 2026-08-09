@@ -3,6 +3,7 @@ import { emitEvent } from '@storage/core/events'
 import { effectiveByGroup } from '@storage/core/facility-settings'
 import { OCCUPYING_LEASE_STATUSES } from '@storage/core/inventory'
 import { nextInvoiceNumber } from '@/lib/billing/numbering'
+import { discountForLeasePeriod, markDiscountApplied } from '@/lib/promotions/billing'
 import {
   buildInvoice,
   formatInvoiceNumber,
@@ -96,12 +97,19 @@ export async function generateInvoices(
     // comparison from turning on a time of day.
     const leaseStart = startOfDay(lease.startDate)
 
+    // Counted from the lease's first billed period, so a promotion's schedule
+    // ("period 0 is free") lines up with the invoice that actually bills it.
+    // Incremented for every period the generator yields, INCLUDING ones skipped
+    // for a move-out — the index describes the calendar, not what got billed.
+    let periodIndex = -1
+
     for (const period of periodStartsBetween(
       facility.billingPolicy as BillingPolicy,
       lease.billingDay,
       leaseStart,
       through,
     )) {
+      periodIndex += 1
       // A scheduled move-out inside or before the period means the tenant is
       // not there for it. Billing a full month to someone who has given notice
       // for the 3rd is the invoice that generates the angry phone call, and
@@ -113,6 +121,7 @@ export async function generateInvoices(
 
       const outcome = await createInvoiceForPeriod({
         facilityId,
+        periodIndex,
         lease,
         period,
         taxRates,
@@ -159,6 +168,9 @@ type CreateInput = {
   taxRates: { jurisdiction: string; rateBasisPoints: number }[]
   businessDate: Date
   prorateTo?: Date
+  /// PRD 04 US-12 AC2. Which billed period this is for the lease, counted from
+  /// zero, so a promotion's snapshotted schedule can say what comes off it.
+  periodIndex: number
 }
 
 /// Writes one invoice, its line items and its ledger charge in one
@@ -168,11 +180,19 @@ async function createInvoiceForPeriod(input: CreateInput): Promise<string | 'ski
   const { facilityId, lease, period, taxRates, businessDate } = input
 
   const shouldProrate = input.prorateTo !== undefined && input.prorateTo.getTime() < period.end.getTime()
+
+  // PRD 04 US-12 AC2's structured discount instruction, read from the snapshot
+  // taken at redemption rather than from the promotion — which may have been
+  // edited or ended since, and must not retroactively change what a tenant was
+  // promised.
+  const discount = await discountForLeasePeriod(lease.id, input.periodIndex)
+
   const built = buildInvoice({
     period,
     charges: chargesFor(lease),
     taxRates,
     ...(shouldProrate ? { prorateFrom: period.start, prorateTo: input.prorateTo } : {}),
+    ...(discount ? { discountCents: discount.amountCents, discountDescription: discount.description } : {}),
   })
 
   // Nothing to bill — a lease at zero rent with no protection. Recording a
@@ -199,6 +219,7 @@ async function createInvoiceForPeriod(input: CreateInput): Promise<string | 'ski
           periodStart: period.start,
           periodEnd: period.end,
           subtotalCents: built.subtotalCents,
+          discountCents: built.discountCents,
           taxCents: built.taxCents,
           totalCents: built.totalCents,
           lineItems: {
@@ -241,6 +262,11 @@ async function createInvoiceForPeriod(input: CreateInput): Promise<string | 'ski
         },
         tx,
       )
+
+      // Inside the transaction, so a rolled-back invoice never leaves a
+      // promotion looking spent — and a re-run of the nightly job then cannot
+      // discount the same period a second time.
+      if (discount) await markDiscountApplied(tx, discount.redemptionId, input.periodIndex)
 
       return number
     })

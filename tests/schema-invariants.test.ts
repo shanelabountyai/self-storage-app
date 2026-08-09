@@ -50,6 +50,8 @@ const NO_FACILITY_ID: Record<string, string> = {
   Suppression: 'the shared suppression list is org-wide by address (PRD 05 CN-20); an opt-out spans facilities',
   PayLink: 'scoped through the lease it lets someone pay',
   LeaseHold: 'scoped through the lease it holds',
+  PromoCode:
+    'scoped through its promotion, which targets facilities through facilityIds[] — the same reason Promotion itself is exempt (PRD 04 FR-PROMO-2)',
   LeadActivity:
     'scoped through the lead it belongs to; a repeat inquiry is about the same person at the same facility as the lead itself (PRD 04 FR-LEAD-1)',
   UrlRedirect:

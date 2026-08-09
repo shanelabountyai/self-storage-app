@@ -89,6 +89,9 @@ export const AUDIT_ACTIONS = [
   /// facts, but a lead can be edited and an audit entry cannot — and "was this
   /// walk-in ever actually recorded" is a commission question.
   { action: 'lead.created', label: 'Inquiry recorded', requiresReason: false },
+  /// PRD 02 US-10. A promotion is a price the business advertises; who changed
+  /// it and when is the question after a campaign costs more than expected.
+  { action: 'promotion.changed', label: 'Promotion created or changed', requiresReason: false },
   { action: 'user.created', label: 'Staff user created', requiresReason: false },
   { action: 'user.role_changed', label: 'Staff role changed', requiresReason: true },
   { action: 'user.deactivated', label: 'Staff user deactivated', requiresReason: true },

@@ -23,7 +23,8 @@
     "./holds": "./holds/index.ts",
     "./comms": "./comms/index.ts",
     "./marketing": "./marketing/index.ts",
-    "./analytics": "./analytics/index.ts"
+    "./analytics": "./analytics/index.ts",
+    "./promotions": "./promotions/index.ts"
   },
   "dependencies": {
     "@storage/db": "*"

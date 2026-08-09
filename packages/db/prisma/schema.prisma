@@ -523,6 +523,7 @@ model Facility {
   gateCommands           GateCommand[]
   accessEvents           AccessEvent[]
   marketingFaqs          FacilityFaq[]
+  promoRedemptions       PromoRedemption[]
   analyticsEvents        AnalyticsEvent[]
   photos                 FacilityPhoto[]
   simulatedGateCodes     SimulatedGateCode[]
@@ -872,6 +873,9 @@ model Lease {
   /// capture, which `normalizeSource` reports as `unknown` rather than folding
   /// into `web`.
   acquisitionSource  String?
+  /// PRD 04 US-12 AC2's structured discount instruction, as a relation. Billing
+  /// reads the redemption's snapshotted schedule when generating invoices.
+  promoRedemption    PromoRedemption?
   /// Whether this unit charges itself each month (PRD 01 US-704).
   ///
   /// Per lease, not per tenant: billing runs per lease (B-045), the portal
@@ -1138,6 +1142,13 @@ model CheckoutSession {
   /// Rate seen = rate charged. Locked at the moment the session started, so a
   /// rate change mid-checkout cannot move the total under the renter.
   quotedRateCents Int
+  /// PRD 04 US-12 AC2 (B-070). The promotion carried from the facility page
+  /// through checkout, so the discounted first-invoice figure shown before
+  /// payment is the one that gets redeemed. Held on the session rather than
+  /// re-evaluated at each step: a promo that ended mid-checkout must not
+  /// silently change the total somebody already read.
+  promotionId     String?
+  promoCodeId     String?
   /// The 30-minute unit lock. Extended by the heartbeat and by an explicit
   /// "keep it" from the renter (2.2.1).
   lockExpiresAt   DateTime       @db.Timestamptz(6)
@@ -1887,6 +1898,7 @@ model Reservation {
   lead     Lead?    @relation(fields: [leadId], references: [id], onDelete: SetNull)
 
   checkoutSessions CheckoutSession[]
+  promoRedemptions PromoRedemption[]
 
   @@index([facilityId, status])
   @@index([status, expiresAt])
@@ -1997,11 +2009,80 @@ model Promotion {
   maxRedemptions  Int?
   redemptionCount Int                  @default(0)
   termsText       String?
+  /// PRD 04 FR-PROMO-1's min-stay flag. Months a tenant must stay for the
+  /// promo to be kept; 0 means no condition. Recorded now and enforced by the
+  /// clawback path, which does not exist yet — see the item's own note.
+  minStayMonths   Int                  @default(0)
   createdAt       DateTime             @default(now()) @db.Timestamptz(6)
   updatedAt       DateTime             @updatedAt @db.Timestamptz(6)
 
+  codes       PromoCode[]
+  redemptions PromoRedemption[]
+
   @@index([status])
   @@map("promotion")
+}
+
+/// PRD 04 FR-PROMO-2. A code-gated promotion's codes.
+///
+/// Separate from `Promotion` because one promo can have many codes — a print
+/// run, a partner, an influencer — each with its own expiry and its own cap,
+/// and "which code brought this in" is the question the whole arrangement
+/// exists to answer.
+model PromoCode {
+  id          String    @id @default(cuid())
+  promotionId String
+  /// Stored lower-case. FR-PROMO-2: "codes unique, case-insensitive" — folding
+  /// at write time is what makes the unique index enforce that, rather than a
+  /// case-insensitive lookup that the index cannot help with.
+  code        String    @unique
+  expiresAt   DateTime? @db.Timestamptz(6)
+  maxUses     Int?
+  usesCount   Int       @default(0)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+
+  promotion   Promotion         @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+  redemptions PromoRedemption[]
+
+  @@index([promotionId])
+  @@map("promo_code")
+}
+
+/// PRD 04 FR-PROMO-4. "Created at reservation completion: promo ID, code (if
+/// any), reservation ID, facility, discount schedule snapshot."
+///
+/// The **snapshot** is the point. A percentage of a rent that later changes
+/// would silently change what was promised, and a promo edited next quarter
+/// must not rewrite what somebody already agreed to. Billing reads this row,
+/// never the `Promotion` it came from.
+model PromoRedemption {
+  id            String  @id @default(cuid())
+  promotionId   String
+  promoCodeId   String?
+  facilityId    String
+  reservationId String?
+  leaseId       String? @unique
+  /// The computed schedule: `[{ periodIndex, amountCents }]`. Whole cents,
+  /// resolved against the rate quoted at the time.
+  schedule      Json
+  /// Sum of the schedule, denormalised so ROI reporting does not have to walk
+  /// the JSON of every redemption.
+  totalCents    Int
+  /// Which periods have actually been discounted on an invoice. Append-only:
+  /// billing adds an index when it writes the line, so a re-run of the nightly
+  /// job cannot discount the same period twice.
+  appliedPeriods Int[]  @default([])
+  createdAt     DateTime @default(now()) @db.Timestamptz(6)
+
+  promotion   Promotion    @relation(fields: [promotionId], references: [id], onDelete: Restrict)
+  promoCode   PromoCode?   @relation(fields: [promoCodeId], references: [id], onDelete: SetNull)
+  facility    Facility     @relation(fields: [facilityId], references: [id], onDelete: Restrict)
+  reservation Reservation? @relation(fields: [reservationId], references: [id], onDelete: SetNull)
+  lease       Lease?       @relation(fields: [leaseId], references: [id], onDelete: SetNull)
+
+  @@index([promotionId, createdAt])
+  @@index([facilityId, createdAt])
+  @@map("promo_redemption")
 }
 
 /// One consent record per subject × channel. Owned by the shared schema so

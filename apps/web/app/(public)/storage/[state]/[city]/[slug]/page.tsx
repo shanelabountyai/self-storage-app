@@ -34,6 +34,7 @@ import { redirectFor } from '@/lib/marketing/redirects'
 import { LeadForm } from '@/components/marketing/lead-form'
 import { submitLeadAction, trackPageView } from './lead-actions'
 import { citySlugPath } from '@/lib/marketing/paths'
+import { offerFor } from '@/lib/promotions/service'
 import {
   applyFilters,
   FEATURE_FILTERS,
@@ -274,11 +275,13 @@ function UnitTypeCard({
   phone,
   pricing,
   facility,
+  promo,
 }: {
   unitType: PublicUnitType
   phone: Phone
   pricing: PublicPricingContext
   facility: PublicFacility
+  promo: { terms: string; firstPeriodCents: number } | null
 }) {
   const available = unitType.availableCount
   const saving = Math.max(0, unitType.streetRateCents - unitType.webRateCents)
@@ -302,6 +305,19 @@ function UnitTypeCard({
           <span className="text-muted-foreground font-normal">/mo online</span>
         </p>
       </div>
+
+      {/* PRD 04 US-12 AC1: "Eligible unit cards and facility pages show promo
+          badge + plain-language terms." Terms beside the badge, not behind a
+          tooltip — a discount whose conditions are a hover is a discount
+          somebody argues about at the counter. */}
+      {promo && (
+        <p className="border-input mt-2 rounded-md border p-2 text-sm">
+          <span className="font-medium">{promo.terms}</span>
+          <span className="text-muted-foreground block text-xs">
+            Applied to your first invoice. Nothing to enter — it is already in the total below.
+          </span>
+        </p>
+      )}
 
       {/* US-301: the in-store rate is struck through ONLY when it differs. A
           struck-through price identical to the price charged is a fabricated
@@ -491,12 +507,17 @@ function UnitList({
   pricing,
   filtered,
   facility,
+  promos,
 }: {
   unitTypes: PublicUnitType[] | null
   phone: Phone
   pricing: PublicPricingContext
   filtered: boolean
   facility: PublicFacility
+  /// Keyed by unit type: eligibility is per size (FR-PROMO-1's unit-type
+  /// targeting), so one badge for the whole page would be wrong the moment a
+  /// promo applies to 10x10s only.
+  promos: Map<string, { terms: string; firstPeriodCents: number }>
 }) {
   if (unitTypes === null) {
     // US-103: an inventory read that fails shows a call-to-confirm notice, never
@@ -558,6 +579,7 @@ function UnitList({
               phone={phone}
               pricing={pricing}
               facility={facility}
+              promo={promos.get(unitType.unitTypeId) ?? null}
             />
           ))}
         </ul>
@@ -574,6 +596,7 @@ function UnitList({
               phone={phone}
               pricing={pricing}
               facility={facility}
+              promo={promos.get(unitType.unitTypeId) ?? null}
             />
             ))}
           </ul>
@@ -674,6 +697,27 @@ export default async function FacilityPage({
   // hand-authored — structured data that contradicts the visible page is the
   // thing that gets penalised, and the only way to guarantee it cannot is for
   // both to read the same source.
+  // PRD 04 US-12 AC1. Evaluated per unit type, because FR-PROMO-1 lets a promo
+  // target sizes — one badge for the page would be wrong the moment a promo
+  // applies to 10x10s only. `isNewTenant: true` because an anonymous visitor
+  // browsing prices is, as far as anything here knows, a new customer; checkout
+  // re-evaluates against the real person before anything is redeemed.
+  const promos = new Map<string, { terms: string; firstPeriodCents: number }>()
+  for (const unitType of unitTypes ?? []) {
+    const lookup = await offerFor({
+      facilityId: facility.id,
+      unitTypeId: unitType.unitTypeId,
+      monthlyRateCents: unitType.webRateCents,
+      isNewTenant: true,
+    })
+    if (lookup.offer) {
+      promos.set(unitType.unitTypeId, {
+        terms: lookup.offer.terms,
+        firstPeriodCents: lookup.offer.firstPeriodCents,
+      })
+    }
+  }
+
   const canonicalUrl = absoluteUrl(siteOrigin(), canonical)
   // A facility's own FAQs replace the generated set outright rather than
   // appending to it: a marketer who has written four answers has decided what
@@ -795,6 +839,7 @@ export default async function FacilityPage({
             pricing={pricing}
             filtered={hasActiveFilters(filters)}
             facility={facility}
+            promos={promos}
           />
         </div>
       </section>

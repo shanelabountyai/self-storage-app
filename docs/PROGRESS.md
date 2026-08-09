@@ -1684,6 +1684,38 @@ PRD 04 §3.8 US-15, FR-AN-1..4, and PRD 01 §6.8.1's row for the consent banner.
 
 ---
 
+### B-070 — The promotions engine ✅ `PENDING`
+
+PRD 02 US-10, PRD 04 §3.6 US-11/US-12, FR-PROMO-1..5. **The last MVP item.** Held mid-build at the owner's request while PRD 10 was written, then resumed; the partial is at `0a8fed0`.
+
+**What it built.** `packages/core/promotions` — the discount schedule and the eligibility evaluator. `PromoCode` and `PromoRedemption` tables. An atomic redemption claim. Discount support in `buildInvoice`. The carry-through from facility page → checkout session → move-in → invoice. Badges on unit cards. `/admin/settings/promotions`.
+
+**Decided: tax is computed on the discounted base, not the gross.** The single most consequential line in the item. Computing tax on the full rent and then subtracting the discount collects a state's sales tax on money nobody paid — on every discounted invoice, silently, forever. `buildInvoice` shrinks the taxable base before the tax loop, and a test pins $100 rent with $50 off at 8.25% producing $4.13 rather than $8.25.
+
+**Decided: the subtotal stays gross and the discount is its own positive line.** B-055's revenue report reads "billed" from the line items and "discounts given" separately; netting them in the builder would make a promotion invisible in the one report that exists to price it. The discount line carries positive cents that the total subtracts, which is also what B-055 already expected.
+
+**Decided: the cap is one raw SQL statement, not a read followed by a write.** `redemptionCount < maxRedemptions` is a column-to-column comparison Prisma's `where` cannot express, so `redeemPromotion` issues a conditional `UPDATE`. Postgres evaluates the predicate against the row it locks, so of five transactions racing for the last two redemptions exactly two update a row. **Tested with five genuinely concurrent transactions**, which is the only way to see the difference — a check-then-write passes every serial test ever written.
+
+**Decided: redemption happens at completed, paid move-in — not when the promo is shown, and not when checkout starts.** A redemption claimed earlier would consume a capped promotion for somebody who abandoned at the payment step, and the cap is the scarce thing the atomic claim exists to protect.
+
+**Decided: the schedule is snapshotted, and billing reads the snapshot.** A percentage of a rent that later changes would silently change what was promised; a promo edited or ended next quarter must not rewrite what a tenant already agreed to. Tested by ending the promotion and changing its value, then confirming the invoice still discounts the original amount.
+
+**Decided: `appliedPeriods` is append-only on the redemption.** The nightly run is re-runnable and catches up missed dates (FR-4), so without it a caught-up week would apply the first month's discount seven times. Marked inside the invoice transaction, so a rolled-back invoice never leaves a promotion looking spent.
+
+**Decided: a code-gated promo is invisible without its code.** Showing it as a badge makes the code pointless. And a typed code that does not work says *why* — wrong facility, wrong size, expired, new customers only — because watching the total not change is worse than being told.
+
+**Decided: new promotions are created as drafts, always.** FR-PROMO-1 lists the statuses, and a promo that went live the instant somebody pressed Create is the one that publishes with a typo in the percentage. Activating a code-gated promo with no codes is refused outright: it can never be redeemed by anyone, and nobody notices until the campaign is over.
+
+**Decided: the discount can never exceed the rent.** A $500-off promo on a $129 unit is $129 off. Otherwise the promotion pays the tenant, and the generated terms text is capped to match so a badge cannot promise what the invoice will not do.
+
+**Found: a real shape bug, caught by the DB test.** `PromoRedemption.schedule` stores the periods *array* while `discountForPeriod` expects a `{ periods }` object — reading one as the other yields `undefined.periods` and a discount of zero, which is indistinguishable from a promotion that quietly never applies. Now named and array-checked at the boundary rather than loosely cast.
+
+**Verified:** 1645 unit/DB tests (33 new — 24 on schedule arithmetic, terms wording, eligibility and the discounted-tax rule; 9 against real rows including the five-way concurrency race, the per-code cap rollback, the snapshot's immunity to a later edit, and double-application). E2e 337. **Two consecutive clean full-suite runs.** Typecheck, lint and build clean. Two migrations.
+
+**Left behind.** **No promo entry field at checkout** — the carry-through works and `CheckoutSession.promotionId` is set by the facility page's automatic promos, but there is no box for a prospect to *type* a code during checkout; a code-gated promo is currently only reachable if the code is applied before the session starts. That is the first thing to finish. **`minStayMonths` is stored and unenforced** — the column exists per FR-PROMO-1 and nothing claws a discount back on an early move-out. **No stacking** — one promo per lease, per FR-PROMO-4's MVP rule; PRD 10 §5.5 explicitly wants referral rewards to stack with promotions, which needs a second redemption slot. **The facility page evaluates promos per unit type on every render** — correct but N queries; fine at this scale, worth a single batched read when a facility has thirty sizes. **No ROI report beyond the admin screen's per-promo total.**
+
+---
+
 ---
 
 ## Feature PRDs added mid-build
