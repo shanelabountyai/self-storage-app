@@ -1787,7 +1787,7 @@ D-13a (no tenant notification) and D-13b (owner-only) are linked: with no tenant
 
 ## B-058 — Overlocks: the status that had no producer
 
-`<sha>`
+`fd446c9`
 
 **What it built.** The physical half of PRD 03 US-3. `overlocked` has been in
 the unit status enum since B-010 with nothing setting it —
