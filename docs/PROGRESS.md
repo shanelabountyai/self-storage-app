@@ -1612,7 +1612,7 @@ PRD 02 §4.8 US-43. "Do you have a 10x10 and how much?" is a ninety-second call 
 
 ---
 
-### B-068 — Lead capture and attribution ✅ `PENDING`
+### B-068 — Lead capture and attribution ✅ `0b2a4a9`
 
 PRD 04 §3.5 US-8, US-10, FR-LEAD-1..3. B-097 built the counter half — a staffer taking a call. This is the same `Lead` entity reached by an anonymous stranger over the public internet, which changes exactly three things: nobody is authenticated, the input is hostile, and the same person will submit twice.
 
