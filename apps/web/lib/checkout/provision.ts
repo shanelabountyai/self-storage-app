@@ -7,6 +7,8 @@ import { provisionAccessForLease } from '@/lib/access/provision'
 import { createTask } from '@/lib/admin/tasks'
 import { amountDueToday } from './payment'
 import { sessionById } from './session'
+import { track } from '@/lib/analytics/track'
+import { trackingContext } from '@/lib/analytics/request'
 
 // PRD 01 FR-4.5 / FR-4.6. Turning a paid checkout into a moved-in tenant.
 //
@@ -179,6 +181,29 @@ export async function provisionMoveIn(sessionId: string): Promise<ProvisionResul
     )
 
     return lease.id
+  })
+
+  // PRD 04 US-15 AC3: "`move_in_completed` is fired server-side from the admin
+  // dashboard's move-in event (client analytics can't see it)."
+  //
+  // Literally true here — the browser that started this checkout may have been
+  // closed for ten minutes while Stripe confirmed. Fired AFTER the transaction
+  // commits, not inside it: an analytics insert that failed would otherwise
+  // roll back a completed, paid move-in, which is the tail wagging the dog in
+  // the most expensive possible way.
+  //
+  // The session id comes from the checkout's own cookie where one survives, so
+  // the funnel can join this to the page view that started it. Without it the
+  // move-in still counts — it just cannot be attributed to a session.
+  const analytics = await trackingContext().catch(() => null)
+  await track({
+    event: 'move_in_completed',
+    facilityId: session.facilityId,
+    sessionId: analytics?.sessionId ?? `lease:${leaseId}`,
+    channel: analytics?.channel ?? reservationSource ?? null,
+    utmSource: analytics?.utmSource ?? null,
+    utmMedium: analytics?.utmMedium ?? null,
+    properties: { fromReservation: Boolean(row.reservationId) },
   })
 
   return { ok: true, leaseId, alreadyProvisioned: false }

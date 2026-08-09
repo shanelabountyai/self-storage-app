@@ -1,5 +1,6 @@
 import { SiteHeader } from '@/components/site/site-header'
 import { SiteFooter } from '@/components/site/site-footer'
+import { ConsentBanner } from '@/components/marketing/consent-banner'
 
 // Public-site shell (PRD 01 §6.1). A route group rather than a path segment,
 // so these pages keep clean URLs (/faq, not /public/faq) while /admin, /login,
@@ -22,6 +23,12 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
         {children}
       </main>
       <SiteFooter />
+      {/* Last in the document, in normal flow. §6.8.1 requires the banner not
+          obscure content at 320px or 200% zoom, and a viewport-fixed bar is
+          exactly what covers the bottom third of a small screen once its text
+          wraps. Placed after the footer so tab order reaches it last rather
+          than interrupting the page. */}
+      <ConsentBanner />
     </>
   )
 }

@@ -32,7 +32,7 @@ import {
 import { siteOrigin } from '@/lib/marketing/origin'
 import { redirectFor } from '@/lib/marketing/redirects'
 import { LeadForm } from '@/components/marketing/lead-form'
-import { submitLeadAction } from './lead-actions'
+import { submitLeadAction, trackPageView } from './lead-actions'
 import { citySlugPath } from '@/lib/marketing/paths'
 import {
   applyFilters,
@@ -662,6 +662,13 @@ export default async function FacilityPage({
 
   const embed = mapEmbedUrl(facility)
   const phone = phoneFor(facility)
+
+  // PRD 04 FR-AN-2. Server-side, so it survives an ad blocker and a declined
+  // consent — this is the top of the funnel and the denominator of every
+  // conversion rate below it. Not awaited: `track` never throws and never
+  // matters more than the page, and holding the render for an insert would
+  // trade a real LCP budget (FR-SEO-6) for a count.
+  void trackPageView(facility.id)
 
   // FR-SEO-4. Built from the facility record and the live inventory, never
   // hand-authored — structured data that contradicts the visible page is the

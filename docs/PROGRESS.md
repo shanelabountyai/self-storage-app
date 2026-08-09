@@ -1646,6 +1646,44 @@ PRD 04 §3.5 US-8, US-10, FR-LEAD-1..3. B-097 built the counter half — a staff
 
 ---
 
+### B-069 — Analytics, the funnel, and the consent banner ✅ `PENDING`
+
+PRD 04 §3.8 US-15, FR-AN-1..4, and PRD 01 §6.8.1's row for the consent banner.
+
+**What it built.** `packages/core/analytics` — the event vocabulary, the funnel definition and FR-AN-4's UTM registry. An `AnalyticsEvent` table and a `track()` wrapper. Events fired at the real moments: `page_view`, `quote_form_submit`/`callback_request`, `reservation_started`/`reservation_completed`, and `move_in_completed` from inside the move-in. `/admin/reports/funnel`. A cookie consent banner with six e2e tests.
+
+**Decided: the server log is the source of truth, and the vendor is optional.** FR-AN-2 says so and the reason is quantitative — between a fifth and a third of visitors block third-party analytics, and that share correlates with the channel. A client-side funnel would under-count *unevenly*, so an owner comparing channels would be comparing numbers biased by how technical each channel's audience is. Everything shipped here works with no vendor configured, forever. US-15 AC1's vendor choice is still an open question in the PRD and did not need answering to build the report.
+
+**Decided: the funnel counts distinct sessions per step, not events.** One person reloading a facility page six times is one session. Counting events would make the top wide and every rate below it look terrible.
+
+**Decided: conversion from the step above comes before conversion from the top.** "Half the people who started a hold finished it" is a fixable problem; "0.3% of sessions moved in" is a statistic. Both are shown, in that order.
+
+**Decided: no data reports as null, never 0%.** A zero implies a measured failure, and "no sessions yet" is not one.
+
+**Decided: `track()` never throws.** Analytics must not be able to break the thing it is measuring. Every call site is mid-transaction on something that matters more, and a failed insert has to leave the checkout, the form or the move-in untouched.
+
+**Decided: the property bag is sanitised by value type, and anything containing `@` is dropped.** A property bag is where PII arrives by accident — somebody adds `{ email }` to a form-submit event because it was to hand. Half an email address is still an email address, so those are dropped rather than truncated.
+
+**Decided: `move_in_completed` fires after the transaction commits, not inside it.** US-15 AC3 wants it server-side, and it is literally unobservable from a browser — the tab that started the checkout may have been closed for ten minutes while Stripe confirmed. Inside the transaction, a failed analytics insert would roll back a completed, paid move-in.
+
+**Decided: the session cookie is minted at the edge and is NOT the attribution cookie.** Thirty minutes versus ninety days: a session is a visit, and merging the two would silently turn a short pseudonymous id into a long-lived one — a different privacy claim than the banner makes. It is also not gated on consent, because US-15 AC5 is explicit that first-party pseudonymous funnel events are the fallback *when consent is declined*.
+
+**The consent banner, criterion by criterion.** §6.8.1 calls these "the most common source of shipped keyboard traps", so each is asserted in e2e rather than claimed in a comment:
+- `role="region"`, **not** `dialog` — a modal dialog *requires* a focus trap, which is the exact defect named. A test tabs past both buttons and out.
+- Focus moves to the **heading**, not the first button: landing on "Accept" invites pressing it before hearing what it is, which is not consent.
+- Focus returns to wherever it was on dismissal — the half of "focus management" that gets skipped.
+- **Reject comes first in the tab order** and is styled identically. A ghost-styled reject beside a filled accept is the dark pattern the criterion forbids.
+- In normal document flow, not fixed to the viewport. Asserted at 320px: the banner starts below the main content and the page has no horizontal overflow.
+- Both buttons are ≥44px.
+
+**Found: the ESLint rule caught a cascading render.** The banner initially synced the cookie into `useState` inside an effect. Rewritten around `useSyncExternalStore` with the cookie as the store — which is also better: mirroring browser state into component state is what creates the window where the two disagree, and the server snapshot means the banner never renders into the HTML and cannot flash before hydration.
+
+**Verified:** 1612 unit/DB tests (21 new — 13 on the vocabulary, funnel arithmetic and UTM registry; 8 against real rows for distinct-session counting, the full walk, channel filtering, the half-open range, permission scoping and the PII strip). E2e 334, including 12 new consent-banner assertions across desktop and mobile, and the existing axe scan still clean with the banner on every public page. **Two consecutive clean full-suite runs.** Typecheck, lint and build clean. One migration.
+
+**Left behind.** **No vendor adapter** — US-15 AC1's GA4-or-alternative is still Open Question Q1, and the wrapper exists precisely so answering it later is a file rather than a refactor. **The consent banner therefore gates nothing yet**; it records a real choice that the first vendor adapter must honour, and shipping it now means that adapter cannot be added without one. **`promo_applied` and `review_request_click` are declared and never fired** — they belong to **B-070** and the review flow. **No `page_view` outside the facility page**: the search page and the home page do not fire one, so the funnel's top step under-counts sessions that never reached a facility. **No client-side `track()`** — FR-AN-1 says "web + server" and only the server half exists; nothing currently needs the client half, since every funnel step happens during a server render or a server action. **Sessions are counted per facility**, so a visitor comparing two sites appears in both funnels.
+
+---
+
 ---
 
 ## Feature PRDs added mid-build

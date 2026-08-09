@@ -523,6 +523,7 @@ model Facility {
   gateCommands           GateCommand[]
   accessEvents           AccessEvent[]
   marketingFaqs          FacilityFaq[]
+  analyticsEvents        AnalyticsEvent[]
   photos                 FacilityPhoto[]
   simulatedGateCodes     SimulatedGateCode[]
   simulatedVendorEvents  SimulatedVendorEvent[]
@@ -1454,6 +1455,47 @@ enum AccessEventResult {
 /// A real vendor's controller holds the code; we hold only a reference to it.
 /// This table exists to play that vendor's part in the simulation, and a real
 /// integration would have no equivalent row on our side at all.
+/// PRD 04 FR-AN-2 (B-069). The server-side event log — the funnel's source of
+/// truth.
+///
+/// "Immune to ad blockers/consent declines." Between a fifth and a third of
+/// visitors block third-party analytics, and that share correlates with the
+/// channel — so a funnel built on client events would under-count unevenly, and
+/// an owner would compare channels using numbers biased by how technical each
+/// channel's audience is.
+///
+/// Nothing here identifies a person. `sessionId` is a first-party random id
+/// with no account behind it, which is what makes AC5's "server-side funnel
+/// events (first-party, pseudonymous) remain the reporting fallback when
+/// consent is declined" true rather than aspirational.
+model AnalyticsEvent {
+  id         String   @id @default(cuid())
+  /// One of `ANALYTICS_EVENTS` (packages/core/analytics). A loose string for
+  /// the usual reason: a new event is a catalog entry, not a migration.
+  name       String
+  facilityId String?
+  /// Pseudonymous, first-party, and rotated per browser session. Never a user
+  /// id and never derived from one.
+  sessionId  String
+  /// The marketing channel at the time of the event, so the funnel can be
+  /// split by source without joining back to a lead that may not exist.
+  channel    String?
+  utmSource  String?
+  utmMedium  String?
+  path       String?
+  /// Event-specific detail. Deliberately small and never PII — a funnel row is
+  /// a count, and anything richer belongs on the entity it describes.
+  properties Json?
+  occurredAt DateTime @default(now()) @db.Timestamptz(6)
+
+  facility Facility? @relation(fields: [facilityId], references: [id], onDelete: SetNull)
+
+  @@index([facilityId, occurredAt])
+  @@index([name, occurredAt])
+  @@index([sessionId])
+  @@map("analytics_event")
+}
+
 /// PRD 04 FR-LEAD-1 (B-068). "New inquiries appended as activities rather than
 /// duplicate leads."
 ///

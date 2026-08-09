@@ -11,6 +11,13 @@ import {
 } from '@storage/core/marketing'
 import { authConfig } from '@/auth.config'
 
+// Kept here rather than imported from lib/analytics/track: that module pulls in
+// Prisma, and the proxy runs on the Edge runtime where the Prisma client will
+// not load. Duplicating two constants is the cheaper half of that trade; the
+// test below pins them together.
+const SESSION_COOKIE = 'st_sid'
+const SESSION_MINUTES = 30
+
 // The edge layer. Two unrelated jobs share it because Next allows exactly one
 // proxy file, so they are kept visibly separate below rather than interleaved.
 //
@@ -55,6 +62,7 @@ function seoResponse(request: NextRequest): NextResponse {
     // second request would record `direct` for 100% of paid traffic, which is
     // the misattribution the whole channel-derivation exists to prevent.
     writeAttributionCookies(request, redirect)
+    ensureSessionCookie(request, redirect)
     return redirect
   }
 
@@ -73,6 +81,7 @@ function seoResponse(request: NextRequest): NextResponse {
   // reads the same values client-side, and there is nothing here worth
   // protecting from a script that could not already be read off the URL.
   writeAttributionCookies(request, response)
+  ensureSessionCookie(request, response)
 
   if (isNoindexPath(pathname)) {
     // A header rather than a meta tag, because it also covers routes that
@@ -81,6 +90,31 @@ function seoResponse(request: NextRequest): NextResponse {
     response.headers.set('X-Robots-Tag', 'noindex, nofollow')
   }
   return response
+}
+
+/// PRD 04 FR-AN-2 (B-069). A pseudonymous id for this visit.
+///
+/// Minted at the edge so the first page view of a session already has one —
+/// a client-side mint would miss it, and the first page view is the top of the
+/// funnel. Rolling 30 minutes: a session is a visit, not a person, and this is
+/// deliberately NOT the 90-day attribution cookie. Merging them would turn a
+/// short pseudonymous id into a long-lived one, which is a different privacy
+/// claim than the one the banner makes.
+///
+/// Not gated on consent, and PRD 04 US-15 AC5 is explicit about why: "server-side
+/// funnel events (first-party, pseudonymous) remain the reporting fallback when
+/// consent is declined." Consent gates the third-party vendor, not first-party
+/// counting.
+function ensureSessionCookie(request: NextRequest, response: NextResponse): void {
+  const existing = request.cookies.get(SESSION_COOKIE)?.value
+  const value = existing && /^[a-z0-9-]{8,64}$/i.test(existing) ? existing : crypto.randomUUID()
+
+  response.cookies.set(SESSION_COOKIE, value, {
+    maxAge: SESSION_MINUTES * 60,
+    sameSite: 'lax',
+    path: '/',
+    secure: request.nextUrl.protocol === 'https:',
+  })
 }
 
 /// Records where this visit came from, if it is a visit worth recording.

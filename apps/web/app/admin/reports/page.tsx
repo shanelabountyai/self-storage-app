@@ -98,6 +98,12 @@ export default async function ReportsPage({
         >
           Delinquency aging — tenant detail
         </Link>
+        <Link
+          href="/admin/reports/funnel"
+          className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
+        >
+          Funnel — looking to moved in
+        </Link>
       </nav>
 
       <section aria-labelledby="occupancy-heading" className="flex flex-col gap-3">

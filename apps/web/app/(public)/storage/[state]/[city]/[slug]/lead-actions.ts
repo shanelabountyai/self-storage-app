@@ -8,6 +8,8 @@ import {
 } from '@storage/core/marketing'
 import { captureLead } from '@/lib/marketing/lead-capture'
 import { fieldError, parseDate, success, type FormState } from '@/lib/admin/form-state'
+import { track } from '@/lib/analytics/track'
+import { trackingContext } from '@/lib/analytics/request'
 
 // PRD 04 US-8 (B-068). The quote/callback form's server action.
 //
@@ -64,8 +66,33 @@ export async function submitLeadAction(_prev: FormState, formData: FormData): Pr
     return fieldError({ [result.field]: result.problem })
   }
 
+  // US-15 AC2's `quote_form_submit` / `callback_request`. Fired on success
+  // only: a rejected submission is not a lead, and counting it would make the
+  // funnel's second step wider than the number of leads that exist.
+  const context = await trackingContext()
+  if (context.sessionId) {
+    await track({
+      event: formData.get('kind') === 'callback' ? 'callback_request' : 'quote_form_submit',
+      facilityId: String(formData.get('facilityId') ?? ''),
+      ...context,
+      sessionId: context.sessionId,
+      properties: { deduplicated: result.deduplicated },
+    })
+  }
+
   return success(THANKS)
 }
 
 const THANKS =
   'Got it — somebody from this facility will be in touch. If it is urgent, calling is faster.'
+
+/// PRD 04 US-15 AC2's `page_view`, fired from the server.
+///
+/// A server action rather than a client effect, because FR-AN-2 makes the
+/// server log the source of truth and a client-side page view is the single
+/// event an ad blocker is most certain to remove.
+export async function trackPageView(facilityId: string): Promise<void> {
+  const context = await trackingContext()
+  if (!context.sessionId) return
+  await track({ event: 'page_view', facilityId, ...context, sessionId: context.sessionId })
+}

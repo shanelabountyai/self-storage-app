@@ -3,6 +3,8 @@ import { Prisma, prisma } from '@storage/db'
 import { emitEvent } from '@storage/core/events'
 import { recomputeUnitStatus } from '@/lib/admin/units'
 import { sendDirectEmail } from '@/lib/comms/service'
+import { track } from '@/lib/analytics/track'
+import { trackingContext } from '@/lib/analytics/request'
 
 // PRD 01 §4.4 US-401 / FR-3. A free, no-card hold on a unit.
 //
@@ -231,6 +233,30 @@ export async function createReservation(input: ReserveInput): Promise<ReserveRes
       updated: false,
     }
   })
+
+  // PRD 04 US-15 AC2. A free hold that committed IS a completed reservation —
+  // there is no payment step for one, so `reservation_started` and
+  // `reservation_completed` land together. The checkout flow (B-020) is where
+  // the two genuinely separate, and that is where a started-not-completed gap
+  // becomes measurable.
+  //
+  // Outside the transaction and never allowed to throw: an analytics insert
+  // must not roll back a hold somebody is holding a unit with.
+  if (result.ok) {
+    const analytics = await trackingContext().catch(() => null)
+    const sessionId = analytics?.sessionId ?? `reservation:${result.reservationId}`
+    for (const event of ['reservation_started', 'reservation_completed'] as const) {
+      await track({
+        event,
+        facilityId: input.facilityId,
+        sessionId,
+        channel: analytics?.channel ?? input.source ?? null,
+        utmSource: analytics?.utmSource ?? input.utm?.source ?? null,
+        utmMedium: analytics?.utmMedium ?? input.utm?.medium ?? null,
+        properties: { updated: result.updated },
+      })
+    }
+  }
 
   // US-401 / US-801: outside the transaction and only for a genuinely new
   // hold — an updated hold reuses its original token (see the comment above,
