@@ -1716,7 +1716,7 @@ PRD 02 US-10, PRD 04 §3.6 US-11/US-12, FR-PROMO-1..5. **The last MVP item.** He
 
 ---
 
-### B-056 — Delinquency timeline configuration ✅ `PENDING`
+### B-056 — Delinquency timeline configuration ✅ `7d982ab`
 
 PRD 02 §4.6 US-25/US-29. **The first Phase 2 item**, and the one D-1 deferred out of MVP. Configuration only — B-057 is the engine that runs it.
 
