@@ -513,6 +513,71 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
     ],
   },
   {
+    // PRD 04 US-14 AC1 (B-072). Step 1, immediate: "quote recap."
+    key: 'lead_drip_quote_recap',
+    classification: 'marketing',
+    subject: 'Your {{unit.size}} quote at {{facility.name}}',
+    bodyText: [
+      'Hi {{tenant.first_name}},',
+      '',
+      "Thanks for asking about {{unit.size}} storage at {{facility.name}}. Current pricing is {{lead.quoted_price}}.",
+      '',
+      'See photos, hours and exact availability here: {{links.facility_page}}',
+      '',
+      'Questions, or ready to book? Call {{facility.phone}}.',
+    ].join('\n'),
+    requiredMergeFields: [
+      'tenant.first_name',
+      'unit.size',
+      'facility.name',
+      'lead.quoted_price',
+      'links.facility_page',
+      'facility.phone',
+    ],
+  },
+  {
+    // AC1, +2 days: "value/reviews email." No price repeated — this is the one
+    // step that is not asking for money, which is the point of it existing
+    // between a quote and a discount.
+    key: 'lead_drip_value',
+    classification: 'marketing',
+    subject: 'What people say about {{facility.name}}',
+    bodyText: [
+      'Hi {{tenant.first_name}},',
+      '',
+      "Still thinking it over? Here's what current renters say about {{facility.name}}, and a closer look at the property: {{links.facility_page}}",
+      '',
+      'No pressure — call {{facility.phone}} whenever you are ready, or if you have a question we can answer faster than a web page can.',
+    ].join('\n'),
+    requiredMergeFields: ['tenant.first_name', 'facility.name', 'links.facility_page', 'facility.phone'],
+  },
+  {
+    // AC1, +5 days: "promo nudge (only if an eligible promo is live)." The
+    // rule below refuses to fire this template at all when no promo applies —
+    // `lead.promo_line` is required so a template edit cannot accidentally
+    // ship a nudge with nothing to nudge about.
+    key: 'lead_drip_promo_nudge',
+    classification: 'marketing',
+    subject: 'A reason to book your {{unit.size}} at {{facility.name}} this week',
+    bodyText: [
+      'Hi {{tenant.first_name}},',
+      '',
+      'Right now: {{lead.promo_line}} on {{unit.size}} storage at {{facility.name}}.',
+      '',
+      'Book online: {{links.facility_page}}',
+      '',
+      'Questions? Call {{facility.phone}}.',
+    ].join('\n'),
+    requiredMergeFields: [
+      'tenant.first_name',
+      'unit.size',
+      'facility.name',
+      'lead.promo_line',
+      'links.facility_page',
+      'facility.phone',
+    ],
+  },
+  {
     // PRD 04 US-7 (B-071). "As an operator, I get more Google reviews from
     // happy tenants." One ask, one link, no pressure — a request that reads
     // like a demand is the one most likely to get reported as spam rather
@@ -713,5 +778,31 @@ export const COMMS_RULES: readonly CommsRuleSeed[] = [
     templateKey: 'review_request',
     classification: 'marketing',
     skipConditions: ['tenant_moved_out', 'lease_on_hold_marketing', 'no_google_review_link'],
+  },
+
+  // ── B-072 (PRD 04 US-14). The lead drip. ────────────────────────────────────
+  //
+  // `no_consent` fires "no consent, no sequence" — the AC3 rule the abandoned-
+  // reservation section states explicitly and this drip shares by construction.
+  // `lead_exited` is FR-18 staleness: a lead can reserve, get marked lost, or
+  // have its size cleared between the job raising a step and the dispatcher
+  // reaching it.
+  {
+    event: 'lead.drip_step',
+    templateKey: 'lead_drip_quote_recap',
+    classification: 'marketing',
+    skipConditions: ['drip_step_not_1', 'lead_exited', 'no_consent'],
+  },
+  {
+    event: 'lead.drip_step',
+    templateKey: 'lead_drip_value',
+    classification: 'marketing',
+    skipConditions: ['drip_step_not_2', 'lead_exited', 'no_consent'],
+  },
+  {
+    event: 'lead.drip_step',
+    templateKey: 'lead_drip_promo_nudge',
+    classification: 'marketing',
+    skipConditions: ['drip_step_not_3', 'lead_exited', 'no_consent'],
   },
 ]

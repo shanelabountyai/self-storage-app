@@ -16,6 +16,7 @@ import { raiseLeadFollowUps } from '@/lib/admin/lead-follow-up'
 import { runDelinquencyTimeline } from '@/lib/delinquency/engine'
 import { raiseDailyWalkthrough } from '@/lib/field-ops/walkthrough'
 import { raiseReviewRequests } from '@/lib/reviews/request-job'
+import { raiseLeadDripSteps } from '@/lib/leads/drip-job'
 
 // Consumer and job registration. The machinery is B-006's; the things that use
 // it arrive with their own backlog items: reservation expiry (B-018, below),
@@ -108,6 +109,8 @@ export const CONSUMERS: readonly Consumer[] = [
       'notice.generated',
       // PRD 04 US-7 (B-071). The review-request ask.
       'review.requested',
+      // PRD 04 US-14 (B-072). The lead drip.
+      'lead.drip_step',
     ],
     handle: async ({ event }) => {
       await processCommsEvent(event)
@@ -334,6 +337,21 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
     scope: 'per_facility',
     handler: async ({ facilityId, businessDate, recordItem }) => {
       await raiseReviewRequests(facilityId!, businessDate, recordItem)
+    },
+  },
+  {
+    // B-072 / PRD 04 US-14. The lead drip's day-counted steps (+2, +5). Step 1
+    // fires immediately from capture, not from this job — see drip-job.ts.
+    //
+    // At 11am local, after the review-request job at 9am: this is outreach to
+    // a stranger who has not rented yet, lower priority than anything touching
+    // an existing tenant, and still comfortably inside FR-MSG-5's 8am–9pm
+    // window with room for the dispatcher to catch up behind it.
+    name: 'leads.raise-drip-steps',
+    localHour: 11,
+    scope: 'per_facility',
+    handler: async ({ facilityId, businessDate, recordItem }) => {
+      await raiseLeadDripSteps(facilityId!, businessDate, recordItem)
     },
   },
   {

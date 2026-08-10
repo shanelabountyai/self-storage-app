@@ -5,6 +5,13 @@ import { mintPayLink, payLinkUrl } from '@/lib/portal/pay-links'
 import { leaseHasEffect } from '@/lib/admin/holds'
 import { daysPastDue } from '@storage/core/metrics'
 import { formatCents } from '@/lib/format'
+import { facilityPath } from '@/lib/facility/public-facility'
+import { absoluteUrl } from '@storage/core/marketing'
+import { currentRateForUnitType } from '@/lib/pricing/unit-type-rates'
+import { offerFor } from '@/lib/promotions/service'
+import { isMarketingQuietHours } from '@storage/core/comms'
+import { currentConsent } from '@storage/core/consent'
+import { mintUnsubscribeToken, unsubscribeUrl } from './unsubscribe-token'
 import {
   commsEnabled,
   effectiveRecipient,
@@ -29,6 +36,7 @@ const CHANNEL = 'email' as const
 type RecipientFacility = {
   id: string
   name: string
+  slug: string
   emailFromName: string | null
   emailReplyTo: string | null
   phone: string | null
@@ -55,6 +63,14 @@ type RecipientLease = {
 
 type RecipientReservation = { id: string; expiresAt: Date; unitType: { widthFt: number; lengthFt: number } }
 
+type RecipientLead = {
+  id: string
+  status: string
+  dripStep: number
+  unitTypeId: string | null
+  unitType: { widthFt: number; lengthFt: number } | null
+}
+
 type Recipient = {
   /// Identifies the recipient for idempotency and `Message.recipientTenantId`.
   /// Usually the tenant id — but a reservation is D-7's anonymous hold (no
@@ -68,6 +84,7 @@ type Recipient = {
   facility: RecipientFacility | null
   lease: RecipientLease | null
   reservation: RecipientReservation | null
+  lead: RecipientLead | null
 }
 
 const LEASE_SELECT = {
@@ -80,6 +97,7 @@ const LEASE_SELECT = {
 const FACILITY_SELECT = {
   id: true,
   name: true,
+  slug: true,
   emailFromName: true,
   emailReplyTo: true,
   phone: true,
@@ -134,6 +152,7 @@ async function resolveRecipient(event: DomainEvent): Promise<Recipient | null> {
         autopayActive: lease.autopayEnabled && Boolean(lease.tenant.stripeDefaultPaymentMethodId),
       },
       reservation: null,
+      lead: null,
     }
   }
 
@@ -155,6 +174,7 @@ async function resolveRecipient(event: DomainEvent): Promise<Recipient | null> {
       facility,
       lease: null,
       reservation: null,
+      lead: null,
     }
   }
 
@@ -237,6 +257,7 @@ async function resolveRecipient(event: DomainEvent): Promise<Recipient | null> {
           }
         : null,
       reservation: null,
+      lead: null,
     }
   }
 
@@ -295,6 +316,45 @@ async function resolveRecipient(event: DomainEvent): Promise<Recipient | null> {
       facility: reservation.facility,
       lease: null,
       reservation: { id: reservation.id, expiresAt: reservation.expiresAt, unitType: reservation.unitType },
+      lead: null,
+    }
+  }
+
+  // B-072. A lead is D-7's anonymous shape too — no account required to ask
+  // for a quote — so the same `recipientKey`-falls-back-to-the-row's-own-id
+  // device the reservation branch above uses applies here.
+  if (event.entityType === 'Lead') {
+    const lead = await prisma.lead.findUnique({
+      where: { id: event.entityId },
+      select: {
+        id: true,
+        status: true,
+        dripStep: true,
+        unitTypeId: true,
+        unitType: { select: { widthFt: true, lengthFt: true } },
+        email: true,
+        firstName: true,
+        lastName: true,
+        facility: { select: FACILITY_SELECT },
+      },
+    })
+    if (!lead) return null
+    return {
+      recipientKey: lead.id,
+      tenantId: null,
+      email: lead.email,
+      firstName: lead.firstName ?? 'there',
+      lastName: lead.lastName ?? '',
+      facility: lead.facility,
+      lease: null,
+      reservation: null,
+      lead: {
+        id: lead.id,
+        status: lead.status,
+        dripStep: lead.dripStep,
+        unitTypeId: lead.unitTypeId,
+        unitType: lead.unitType,
+      },
     }
   }
 
@@ -332,6 +392,7 @@ function recipientFromLease(
       autopayActive: lease.autopayEnabled && Boolean(lease.tenant.stripeDefaultPaymentMethodId),
     },
     reservation: null,
+    lead: null,
   }
 }
 
@@ -383,6 +444,10 @@ function mergeContextFor(recipient: Recipient): MergeContext {
   }
   if (recipient.reservation) {
     const { widthFt, lengthFt } = recipient.reservation.unitType
+    context['unit.size'] = `${widthFt}x${lengthFt}`
+  }
+  if (recipient.lead?.unitType) {
+    const { widthFt, lengthFt } = recipient.lead.unitType
     context['unit.size'] = `${widthFt}x${lengthFt}`
   }
   return context
@@ -551,6 +616,32 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
         ? new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', month: 'long', day: 'numeric', year: 'numeric' }).format(deadline)
         : '—',
       'links.pay_now': await payNowLink(recipient, event),
+    }
+  },
+
+  // B-072 / PRD 04 US-14. Shared by all three drip templates — computed once
+  // per event, same as every other extender — so a step-1 send and a step-3
+  // send for the same lead never disagree about the price if the rate moved
+  // between them.
+  'lead.drip_step': async (_event, recipient) => {
+    if (!recipient.lead?.unitTypeId || !recipient.facility) return {} as MergeContext
+    const rate = await currentRateForUnitType(recipient.lead.unitTypeId)
+    const offer = rate
+      ? await offerFor({
+          facilityId: recipient.facility.id,
+          unitTypeId: recipient.lead.unitTypeId,
+          monthlyRateCents: rate.webRateCents,
+          isNewTenant: true,
+        })
+      : { offer: null }
+    return {
+      'lead.quoted_price': rate ? `${formatCents(rate.webRateCents)}/mo` : 'Call for current pricing',
+      // AC1: step 3 fires only when a promo is live, so this is never blank on
+      // the send that actually uses it — but computed here, at send time, so a
+      // promo that ended between the job's check and the dispatch is not
+      // quoted after it is gone.
+      'lead.promo_line': offer.offer ? offer.offer.terms : '',
+      'links.facility_page': absoluteUrl(baseUrl(), facilityPath(recipient.facility)),
     }
   },
 
@@ -882,6 +973,33 @@ const SKIP_PREDICATES: Record<
   notice_type_not_pre_lien: (_recipient, event) => (event.payload as { type?: string })?.type !== 'pre_lien',
   notice_type_not_lien: (_recipient, event) => (event.payload as { type?: string })?.type !== 'lien',
 
+  // B-072 / PRD 04 US-14. One event (`lead.drip_step`), three templates —
+  // same device `notice.generated` uses for pre-lien vs lien.
+  drip_step_not_1: (_recipient, event) => (event.payload as { step?: number })?.step !== 1,
+  drip_step_not_2: (_recipient, event) => (event.payload as { step?: number })?.step !== 2,
+  drip_step_not_3: (_recipient, event) => (event.payload as { step?: number })?.step !== 3,
+
+  // FR-18 staleness, re-checked at send time even though the job already
+  // filters at raise time: a lead can reserve, get marked lost, or have its
+  // size cleared in the gap between the two.
+  lead_exited: (recipient) => {
+    if (!recipient.lead) return false
+    return (
+      !recipient.lead.unitTypeId ||
+      recipient.lead.status === 'lost' ||
+      recipient.lead.status === 'reserved' ||
+      recipient.lead.status === 'converted'
+    )
+  },
+
+  // US-13/US-14: "no consent, no sequence." The job that raises each step
+  // already checks this before emitting the event; re-checked here because
+  // consent can be withdrawn between one step's send and the next.
+  no_consent: async (recipient) => {
+    if (!recipient.lead) return false
+    return (await currentConsent({ leadId: recipient.lead.id }, 'marketing_email')) !== 'granted'
+  },
+
   // B-071. Defence in depth: the raising job already refuses a facility with
   // no link configured, but an operator could clear it in the gap between the
   // event being raised and the dispatcher reaching it. A review ask with a
@@ -1022,6 +1140,55 @@ async function deliverForRule(
     return 'suppressed'
   }
 
+  // FR-MSG-5, enforced centrally rather than as an opt-in skip condition a new
+  // marketing rule could forget to list — the same reasoning the postal footer
+  // below uses. Retroactively covers B-071's `review_request`, which predates
+  // this file.
+  if (rule.classification === 'marketing') {
+    const timezone = recipient.facility?.timezone ?? 'America/Chicago'
+    if (isMarketingQuietHours(new Date(), timezone)) {
+      await writeMessage(idempotencyKey, {
+        ...base,
+        templateVersion: 0,
+        toAddress: address,
+        subject: null,
+        body: '',
+        status: 'cancelled',
+        error: 'skipped: marketing_quiet_hours',
+      })
+      return 'cancelled'
+    }
+
+    // "Max 1 marketing email/day/contact ACROSS SEQUENCES" — keyed on the
+    // address, which is the one identity a tenant and a lead both have; a lead
+    // has no `recipientTenantId` to match against. A rolling 24h window rather
+    // than a facility-local calendar day: simpler, and it is the stricter
+    // reading — a calendar-day boundary would let two sends land three minutes
+    // apart across midnight and still call that "once a day".
+    const rollingDayAgo = new Date(new Date().getTime() - 24 * 3_600_000)
+    const sentToday = await prisma.message.findFirst({
+      where: {
+        toAddress: address,
+        classification: 'marketing',
+        status: { in: ['sent', 'delivered'] },
+        sentAt: { gte: rollingDayAgo },
+      },
+      select: { id: true },
+    })
+    if (sentToday) {
+      await writeMessage(idempotencyKey, {
+        ...base,
+        templateVersion: 0,
+        toAddress: address,
+        subject: null,
+        body: '',
+        status: 'cancelled',
+        error: 'skipped: marketing_daily_cap',
+      })
+      return 'cancelled'
+    }
+  }
+
   const template = await effectiveTemplate(rule.templateKey, recipient.facility?.id ?? null)
   if (!template) {
     await writeMessage(idempotencyKey, {
@@ -1077,10 +1244,22 @@ async function deliverForRule(
   const footerTarget = facility
     ? { name: facility.name, address: formatFacilityAddress(facility) }
     : null
-  const text = withPostalFooter(rendered.text, footerTarget)
-  const html = footerTarget
+  const withFooter = withPostalFooter(rendered.text, footerTarget)
+  const htmlWithFooter = footerTarget
     ? `${rendered.html}<hr><p>${footerTarget.name}<br>${footerTarget.address}</p>`
     : rendered.html
+
+  // US-13 AC2: "every marketing email includes a working one-click
+  // unsubscribe." Appended here rather than left to each template, for the
+  // same reason as the postal footer just above — and it is what makes
+  // `suppressionFor`'s unsubscribe check reachable at all, since nothing else
+  // in the system links to `/unsubscribe`.
+  const isMarketing = rule.classification === 'marketing'
+  const unsubscribeLink = isMarketing ? unsubscribeUrl(mintUnsubscribeToken(address), baseUrl()) : null
+  const text = unsubscribeLink ? `${withFooter}\n\nUnsubscribe: ${unsubscribeLink}` : withFooter
+  const html = unsubscribeLink
+    ? `${htmlWithFooter}<p><a href="${unsubscribeLink}">Unsubscribe</a></p>`
+    : htmlWithFooter
 
   const provider = selectProvider()
   const result = await provider.sendEmail({

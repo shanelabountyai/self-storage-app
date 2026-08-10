@@ -97,6 +97,11 @@ export const EVENT_NAMES = [
   /// producer stamps `Lease.reviewRequestSentAt` in the same beat, since the
   /// outbox only dedupes an event that already exists.
   'review.requested',
+
+  /// PRD 04 US-14 (B-072). One lead-drip step is due. `payload.step` (1–3)
+  /// picks the template — one event, three comms rules, the same device
+  /// `notice.generated` uses for pre-lien vs lien.
+  'lead.drip_step',
 ] as const
 
 export type EventName = (typeof EVENT_NAMES)[number]

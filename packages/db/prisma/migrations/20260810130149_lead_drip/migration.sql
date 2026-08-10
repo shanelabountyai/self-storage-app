@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "lead" ADD COLUMN     "dripStep" INTEGER NOT NULL DEFAULT 0;

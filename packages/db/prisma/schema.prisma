@@ -2229,6 +2229,13 @@ model Lead {
   /// as well. Keyed rather than plain because the IPv4 space is small enough to
   /// enumerate against an unkeyed digest.
   submitterHash         String?
+  /// PRD 04 US-14 (B-072). How far the lead drip has reached: 0 = never
+  /// entered, 1–3 = that step has been raised. Stamped by the producer
+  /// (consumer for step 1, the nightly job for 2/3) in the same beat as the
+  /// event, same device as `Lease.reviewRequestSentAt` — the outbox only
+  /// dedupes an event that already exists, so guaranteeing each step fires
+  /// once is the producer's job.
+  dripStep              Int        @default(0)
   createdAt             DateTime   @default(now()) @db.Timestamptz(6)
   updatedAt             DateTime   @updatedAt @db.Timestamptz(6)
 

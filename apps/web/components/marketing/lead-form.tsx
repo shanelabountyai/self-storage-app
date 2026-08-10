@@ -99,6 +99,18 @@ export function LeadForm({
         />
       </label>
 
+      {/* PRD 04 US-13 AC1: "explicit opt-in, unchecked-by-default checkbox
+          with disclosure text at capture." Separate from the quote/callback
+          request itself — submitting the form works whether or not this is
+          checked. */}
+      <label className="flex items-start gap-2 text-sm">
+        <input type="checkbox" name="marketingConsent" value="yes" className="mt-1 size-4" />
+        <span>
+          Send me occasional emails about pricing and promotions at this facility. You can
+          unsubscribe any time.
+        </span>
+      </label>
+
       <button
         type="submit"
         className="border-input hover:bg-accent inline-flex min-h-11 items-center justify-center self-start rounded-md border px-4 text-sm font-medium"

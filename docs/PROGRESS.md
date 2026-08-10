@@ -2196,3 +2196,74 @@ database and the real seeded catalog).
   `comms-catalog.ts` needed `db:seed`/`db:migrate:test` re-run before the new
   template/rule existed in either database — the tests failed with zero sends
   until that ran.
+
+## B-072 — Marketing consent + lead drip
+
+`<sha>`
+
+**What it built.** FR-MSG-1 through 5 and US-13/US-14: an explicit,
+unchecked-by-default `marketing_email` consent checkbox on the lead-capture
+form; a real, working, signed one-click unsubscribe link on every marketing
+email (nothing linked to `/unsubscribe` before this item, though the
+suppression table and its `unsubscribe` reason already existed from B-054);
+FR-MSG-5's quiet-hours (9pm-8am facility-local) and max-1-marketing-email/day
+caps, enforced centrally rather than per-rule; and the three-step lead drip
+(quote recap → value email → conditional promo nudge) as one new domain
+event, three templates, and both an immediate consumer (step 1) and a
+day-counted per-facility job (steps 2/3). 88 new tests (39 pure, 49 against
+the database and the real seeded catalog).
+
+**What it decided.**
+
+- *`review_request` (B-071) is NOT retroactively gated on the new consent
+  requirement — recorded as D-34.* FR-MSG-4 lists lead drip, abandoned
+  reservation and review request together as the three sequences US-13's
+  consent rule governs, and a literal reading would gate all three. Rejected
+  for review_request specifically: tenants have no consent-capture point yet
+  (this item's checkbox lives on the anonymous LEAD form), so gating
+  retroactively would have silently stopped every review request the day
+  this shipped, for every existing tenant, with no way for an operator to
+  turn it back on. What DOES apply universally — the unsubscribe link, quiet
+  hours, the daily cap — costs nothing and closes a real gap, so those are
+  enforced centrally for every `marketing`-classified send regardless of
+  which item shipped it, retroactively covering review_request too.
+- *Quiet hours and the daily cap are enforced centrally, not as an opt-in
+  skip condition.* The same reasoning the postal footer already uses ("an
+  edited template cannot drop a CAN-SPAM requirement") — a future marketing
+  rule that forgot to list the skip condition would silently violate
+  FR-MSG-5, so the check lives in `deliverForRule` itself, gated on
+  `classification === 'marketing'`.
+- *The daily cap is a rolling 24h window, not a facility-local calendar
+  day.* Simpler, and the stricter reading — a calendar-day boundary would
+  let two sends land three minutes apart across midnight and still call
+  that "once a day."
+- *Unsubscribe tokens are signed, not stored*, mirroring `quote-token.ts`'s
+  precedent exactly, for the same reason: the token's whole purpose is to
+  keep working long after it was sent, so there is nothing to revoke.
+  Unlike a quote, it never expires — opened six months later, it still has
+  to unsubscribe on the first click. Confirmation is a POST behind a button,
+  not a bare GET, so an email client's link-prescan can't silently
+  unsubscribe someone who never clicked anything.
+- *`currentConsent` (B-061) was generalized* from tenant-only to
+  `{tenantId} | {leadId}`, matching `recordConsent`'s existing shape — a
+  lead has no tenant id to read consent by, and this is the read half of the
+  same table.
+- *Step 3's promo nudge is genuinely conditional*, not sent-with-nothing-to-
+  nudge-about: the job checks for a live promo before ever raising the
+  event, and simply does not raise it when none applies.
+
+**What it left behind.**
+
+- `marketing_sms` stays unbuilt, matching every prior item that touched
+  SMS — B-030 shipped email-only (FR-4), no Twilio integration exists until
+  B-074, and this item's own consent capture only writes `marketing_email`.
+  The schema and the classification checks are already shaped for it per
+  B-030's original note.
+- Templates are per-brand and operator-editable through the existing CN-16
+  editor (B-053) — no new UI needed, since the three new templates are just
+  more `MessageTemplate` rows. "Not sequence logic" (AC2) holds: the three
+  steps, their delays and the promo condition are fixed in
+  `packages/core/leads/drip.ts`, not configurable.
+- Same seeding gotcha as B-063/B-071, hit and fixed the same way: the seed
+  script only runs on explicit invocation, so the new templates/rules did
+  not exist in either database until `db:seed`/`db:migrate:test` re-ran.

@@ -42,6 +42,7 @@ export async function submitLeadAction(_prev: FormState, formData: FormData): Pr
       note: String(formData.get('note') ?? ''),
       kind: formData.get('kind') === 'callback' ? 'callback' : 'quote',
       honeypot: String(formData.get('company') ?? ''),
+      marketingConsent: formData.get('marketingConsent') === 'yes',
     },
     {
       firstTouch: decodeTouch(cookieStore.get(FIRST_TOUCH_COOKIE)?.value),

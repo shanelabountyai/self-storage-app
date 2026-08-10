@@ -542,7 +542,7 @@ export async function recordNoticeDelivery(
   const verdict = canDeliver({
     method: input.method,
     proof: input.proof,
-    noticeEmailConsent: await currentConsent(notice.lease.tenantId, 'notice_email'),
+    noticeEmailConsent: await currentConsent({ tenantId: notice.lease.tenantId }, 'notice_email'),
   })
   if (!verdict.allowed) {
     return { ok: false, reason: verdict.reason, missingProof: verdict.missingProof }

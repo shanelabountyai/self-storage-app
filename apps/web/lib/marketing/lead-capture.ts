@@ -1,12 +1,19 @@
 import { createHmac } from 'node:crypto'
 import { prisma } from '@storage/db'
 import { emitEvent } from '@storage/core/events'
+import { recordConsent } from '@storage/core/consent'
+import { raiseLeadDripStep } from '@/lib/leads/drip-job'
 import {
   dedupKeys,
   deriveChannel,
   isWithinDedupWindow,
   type TouchPoint,
 } from '@storage/core/marketing'
+
+/// PRD 04 US-13 AC1: "explicit opt-in, unchecked-by-default checkbox with
+/// disclosure text at capture." Bumped when the sentence in `LeadForm`
+/// changes — the same device `ELECTRONIC_RECORDS_CONSENT_VERSION` uses.
+export const MARKETING_EMAIL_CONSENT_VERSION = 'v1'
 
 // PRD 04 §3.5 US-8, FR-LEAD-1..3 (B-068). The web half of lead capture.
 //
@@ -27,6 +34,10 @@ export type LeadFormInput = {
   kind: 'quote' | 'callback'
   /// US-8 AC4's honeypot. A field no human sees and every naive bot fills.
   honeypot?: string | null
+  /// PRD 04 US-13 AC1 / US-14 (B-072). Unchecked by default; only `true`
+  /// writes anything — a box somebody left unchecked is silence, not a
+  /// recorded decline (see the note on `recordConsent` below).
+  marketingConsent?: boolean
 }
 
 export type LeadContext = {
@@ -170,6 +181,17 @@ export async function captureLead(
       },
     })
 
+    if (input.marketingConsent) {
+      await recordConsent({
+        leadId: existing.id,
+        channel: 'marketing_email',
+        state: 'granted',
+        source: 'lead_form',
+        disclosureVersion: MARKETING_EMAIL_CONSENT_VERSION,
+        ipAddress: context.ip,
+      })
+    }
+
     await emitLeadEvent(existing.id, input.facilityId, thisTouch.channel, true)
     return { ok: true, leadId: existing.id, deduplicated: true }
   }
@@ -203,6 +225,25 @@ export async function captureLead(
       submitterHash,
     },
   })
+
+  if (input.marketingConsent) {
+    await recordConsent({
+      leadId: lead.id,
+      channel: 'marketing_email',
+      state: 'granted',
+      source: 'lead_form',
+      disclosureVersion: MARKETING_EMAIL_CONSENT_VERSION,
+      ipAddress: context.ip,
+    })
+  }
+
+  // PRD 04 US-14. Step 1 of the drip fires from THIS event, immediately — a
+  // quote recap loses its point if it waits for a nightly sweep. Consent and a
+  // quoted size are both re-checked by the comms rule itself (`no_consent`,
+  // `lead_exited`); this call just guarantees the step is asked for once.
+  if (input.marketingConsent && input.unitTypeId) {
+    await raiseLeadDripStep(lead.id, input.facilityId, 1)
+  }
 
   await emitLeadEvent(lead.id, input.facilityId, thisTouch.channel, false)
   return { ok: true, leadId: lead.id, deduplicated: false }

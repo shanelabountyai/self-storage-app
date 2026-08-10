@@ -147,6 +147,15 @@ export const EVENT_MERGE_FIELDS: Record<string, readonly MergeFieldSpec[]> = {
     { field: 'unit.number', description: 'Unit number', sample: 'A-12' },
     { field: 'links.google_review', description: 'The facility’s Google review link', sample: 'https://g.page/r/example/review' },
   ],
+  // B-072 / PRD 04 US-14. All three lead-drip templates draw from this one
+  // set — `lead.promo_line` is empty outside step 3's own send, since it is
+  // computed fresh at send time rather than carried on the event.
+  'lead.drip_step': [
+    { field: 'unit.size', description: 'The size they asked about', sample: '10x10' },
+    { field: 'lead.quoted_price', description: 'Current price for the size they asked about', sample: '$129.00/mo' },
+    { field: 'lead.promo_line', description: 'The live promo’s terms, when one applies', sample: '50% off your first month' },
+    { field: 'links.facility_page', description: 'Link to the facility’s own page', sample: 'https://example.com/storage/tx/austin/south-congress' },
+  ],
   'protection.auto_enrolled': [
     { field: 'unit.number', description: 'Unit number', sample: 'A-12' },
     { field: 'protection.plan_name', description: 'The plan they were enrolled in', sample: 'Standard cover' },
