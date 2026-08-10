@@ -2272,7 +2272,7 @@ the database and the real seeded catalog).
 
 ## B-073 — Abandoned-checkout follow-up
 
-`<pending>`
+`9a7d284`
 
 **What it built.** US-9/FR-LEAD-4's three-step sequence: a `CheckoutSession`
 that sits unfinished for 1/24/72 configurable hours (per-facility
