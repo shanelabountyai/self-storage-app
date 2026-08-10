@@ -2339,7 +2339,7 @@ session has no earlier one. Recovery is attributed in the funnel report
 
 ## B-074 — SMS channel live
 
-`<pending>`
+`202ae29`
 
 **What it built.** FR-5/FR-7/FR-8 and CN-13/CN-14: a second delivery channel
 alongside B-030's email pipeline. `NotificationRule`/`MessageTemplate` were
