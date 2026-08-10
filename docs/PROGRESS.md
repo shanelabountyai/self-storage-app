@@ -2199,7 +2199,7 @@ database and the real seeded catalog).
 
 ## B-072 — Marketing consent + lead drip
 
-`<sha>`
+`8826b4c`
 
 **What it built.** FR-MSG-1 through 5 and US-13/US-14: an explicit,
 unchecked-by-default `marketing_email` consent checkbox on the lead-capture
