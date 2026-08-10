@@ -104,6 +104,12 @@ export default async function ReportsPage({
         >
           Funnel — looking to moved in
         </Link>
+        <Link
+          href="/admin/reports/deliverability"
+          className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
+        >
+          Deliverability — sends, bounces, failure queue
+        </Link>
       </nav>
 
       <section aria-labelledby="occupancy-heading" className="flex flex-col gap-3">

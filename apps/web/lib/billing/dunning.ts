@@ -24,7 +24,18 @@ import { effectsByLease } from '@/lib/admin/holds'
 
 type RecordItem = (outcome: { itemId: string; ok: boolean; message?: string }) => void
 
-export type DunningResult = { emitted: number; halted: number }
+export type DunningResult = {
+  emitted: number
+  halted: number
+  /// PRD 05 FR-19 (B-075). Leases the ladder actually evaluated as due a
+  /// step this run — reached past every halt/settled/no-anchor guard below,
+  /// regardless of whether a step ended up emitting. Compared against
+  /// `emitted` by the silent-failure detector: `eligible > 0 && emitted ===
+  /// 0` is the one combination those guards cannot explain on their own,
+  /// which is exactly FR-19's "a dunning run sends zero messages when
+  /// delinquent tenants exist."
+  eligible: number
+}
 
 const HALT_MESSAGE: Record<LadderHalt, string> = {
   settled: 'nothing outstanding',
@@ -38,7 +49,7 @@ export async function runDunning(
   businessDate: Date,
   recordItem: RecordItem,
 ): Promise<DunningResult> {
-  const result: DunningResult = { emitted: 0, halted: 0 }
+  const result: DunningResult = { emitted: 0, halted: 0, eligible: 0 }
 
   // B-057. Where a facility has configured a delinquency timeline, that
   // timeline governs and this ladder stands down.
@@ -140,6 +151,7 @@ export async function runDunning(
       continue
     }
     if (!anchor) continue
+    result.eligible += 1
 
     for (const step of decision.steps) {
       await emitEvent({

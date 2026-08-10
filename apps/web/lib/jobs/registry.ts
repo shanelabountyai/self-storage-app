@@ -17,6 +17,7 @@ import { runDelinquencyTimeline } from '@/lib/delinquency/engine'
 import { raiseDailyWalkthrough } from '@/lib/field-ops/walkthrough'
 import { raiseReviewRequests } from '@/lib/reviews/request-job'
 import { raiseLeadDripSteps } from '@/lib/leads/drip-job'
+import { detectDailyFailureRate, detectSilentDunning } from '@/lib/comms/detectors'
 
 // Consumer and job registration. The machinery is B-006's; the things that use
 // it arrive with their own backlog items: reservation expiry (B-018, below),
@@ -268,7 +269,11 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
     localHour: 5,
     scope: 'per_facility',
     handler: async ({ facilityId, businessDate, recordItem }) => {
-      await runDunning(facilityId!, businessDate, recordItem)
+      const result = await runDunning(facilityId!, businessDate, recordItem)
+      // PRD 05 FR-19 (B-075). The silent-failure detector for this exact
+      // job — checked with the result already in hand, not a second query
+      // re-deriving "delinquent" by a different definition.
+      await detectSilentDunning(facilityId!, businessDate, result)
     },
   },
   {
@@ -391,6 +396,23 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
     scope: 'per_facility',
     handler: async ({ facilityId, businessDate, recordItem }) => {
       await scanExpiringProtectionProofs(facilityId!, businessDate, recordItem)
+    },
+  },
+  {
+    // PRD 05 FR-19 (B-075). "Alert to owner if >2% of a day's sends fail."
+    // Last in the night, at 23 local — after every job whose comms this
+    // reads has had all day to run, so the day it checks is a settled one
+    // rather than one still in flight.
+    name: 'comms.detect-daily-failure-rate',
+    localHour: 23,
+    scope: 'per_facility',
+    handler: async ({ facilityId, businessDate, recordItem }) => {
+      const result = await detectDailyFailureRate(facilityId!, businessDate)
+      recordItem({
+        itemId: facilityId!,
+        ok: !result.alerted,
+        message: result.alerted ? 'failure rate exceeded 2% — owner alerted' : 'within threshold',
+      })
     },
   },
 ]

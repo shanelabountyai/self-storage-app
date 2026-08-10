@@ -17,9 +17,9 @@ function formatDate(date: Date): string {
 export default async function TasksPage({
   searchParams,
 }: {
-  searchParams: Promise<{ facility?: string }>
+  searchParams: Promise<{ facility?: string; type?: string }>
 }) {
-  const { facility: facilityParam } = await searchParams
+  const { facility: facilityParam, type: typeParam } = await searchParams
   const { actor, facilities, cookieValue, canSeeAll } = await getSwitcherData()
   // The roll-up below links to a single facility's list without changing the
   // switcher's persistent choice — a regional manager peeking at one
@@ -40,16 +40,28 @@ export default async function TasksPage({
     )
   }
 
-  const tasks = await facilityTasks(actor, selected.facility.id)
+  const tasks = await facilityTasks(actor, selected.facility.id, { type: typeParam })
 
   return (
     <div className="flex flex-col gap-6">
       <h1 className="text-lg font-semibold">Tasks — {selected.facility.name}</h1>
 
+      {typeParam && (
+        <p className="text-muted-foreground text-sm">
+          Filtered to &ldquo;{typeParam}&rdquo;.{' '}
+          <Link href={`/admin/tasks?facility=${selected.facility.id}`} className="underline underline-offset-2">
+            Show every open task
+          </Link>
+          .
+        </p>
+      )}
+
       {rollup.length > 1 && <Rollup rows={rollup} />}
 
       {tasks.length === 0 ? (
-        <p className="text-muted-foreground text-sm">Nothing open right now.</p>
+        <p className="text-muted-foreground text-sm">
+          {typeParam ? 'None open of this type right now.' : 'Nothing open right now.'}
+        </p>
       ) : (
         <ul className="flex flex-col gap-3">
           {tasks.map((task) => (

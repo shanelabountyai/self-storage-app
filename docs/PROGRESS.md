@@ -2446,3 +2446,104 @@ read-only SMS consent state display. 68 new tests (23 pure, 6 signature,
   not touched — the editor still assumes email. The five new SMS bodies are
   short enough to have shipped without it, but a future SMS template edited
   through that screen has no length feedback.
+
+---
+
+## B-075 — Delivery dashboard + alerting
+
+`<pending>`
+
+**What it built.** CN-19's reporting half (the AC's own sentence — "hard
+bounce or invalid number auto-flags the tenant record and creates a task" —
+already shipped with B-054) and all of FR-19. A new `/admin/reports/
+deliverability` page: overall and per-(template, channel) delivery/bounce/
+SMS-failure rates, a by-day trend, the failure queue (a count linking into
+`/admin/tasks` filtered to `no_reachable_channel` — the same "filtered view
+of the one list, not a table of its own" device `failed_payment`'s own
+catalog comment already named), and a dead-letter list finally reading
+`deadLetters()` (exported by B-054's own predecessor, wired to nothing until
+now). Three rate functions in a new `packages/core/metrics/comms.ts` are
+the one place `deliveryRate`/`bounceRate`/`smsFailureRate` are defined, same
+rule as every other report in that directory. Three silent-failure
+detectors, each dropped exactly where its own condition is already known
+rather than re-derived: a new daily per-facility `SCHEDULED_JOBS` entry
+checks yesterday's failure rate against FR-19's >2% line; `billing.dunning`'s
+existing handler now also calls a detector with the `DunningResult` it just
+produced (a new `eligible` counter on that result — leases the ladder
+actually evaluated as due a step — is what makes "delinquent tenants exist"
+answerable from the ladder's own decision rather than a second, possibly-
+disagreeing definition); and the hourly cron tick now also checks every
+comms consumer for events over 15 minutes stale, via a new
+`staleDeliveryCount` export sitting beside `deadLetters()` in
+`packages/core/events/dispatch.ts`. All three alert through one new
+`alertOwner()` (`apps/web/lib/comms/alerts.ts`), which reuses `sendDirectEmail`
+rather than inventing a second notification path — deduplication is that
+function's own idempotency key (`alert:<kind>:<scope>`), not a new table, so
+a detector re-checking an ongoing problem sends nothing a second time today.
+29 new tests (16 pure rate/threshold, 13 against the database and the real
+seeded `owner` role).
+
+**What it decided.**
+
+- *"Alert to owner" is an email to whoever holds the `owner` role*, found the
+  same way D-12's "no superuser bypass" already treats that role as the
+  single unrestricted identity — not a new alerting channel, dashboard
+  banner, or on-call rotation. If nobody has been bootstrapped into `owner`
+  yet (a fresh dev/test database), the detector reports nothing sent rather
+  than erroring, the same honest-degradation posture `commsEnabled()`/
+  `selectProvider()` already use for an unconfigured environment.
+- *FR-19's "day's sends fail" reads as bounced-or-failed, not `failed` alone*
+  — a bounce and an outright provider rejection are the same operator
+  problem (a bad list, a broken template, a provider outage) and nobody
+  triaging a 2am alert cares which `MessageStatus` bucket caused it.
+- *`DunningResult` gained a field (`eligible`) rather than the detector
+  re-querying "which leases are delinquent" itself.* A second definition of
+  delinquency computed outside the ladder could disagree with the ladder's
+  own — an operator halted for `on_hold` or already fully stepped would
+  read as "silently failed" under a naive re-derivation, which is exactly
+  the false alarm a silent-failure detector must not raise.
+- *SMS failure rate excludes `suppressed`* (no consent, opted out) —
+  tracked as a distinct fact from a delivery failure, not folded into the
+  same rate. CN-19 asks for both an "SMS failure rate" and an "opt-out
+  rate" as separate figures; conflating them would make neither number mean
+  one thing.
+- *Opt-out rate is NOT built.* `Suppression` carries no `facilityId` by
+  design (CN-20: the shared list is org-wide by address), so a genuinely
+  per-facility opt-out rate cannot be computed from it, and attributing an
+  address-scoped fact to the facility an admin happened to have selected
+  when they added it would be a number that looks precise and is not. Left
+  as a documented gap rather than a misleading figure — the page says so,
+  and points at Suppressions (CN-20) for the address-level list instead.
+- *The "alert if a dunning run sends zero" detector runs inside
+  `billing.dunning`'s own handler, not as a separate scheduled job* — the
+  `DunningResult` it needs only exists inside that call, and a second job
+  re-running the ladder's logic to get it would be the exact duplicate-
+  definition risk the decision above already rejected.
+
+**What it left behind.**
+
+- The failure-queue count on the dashboard is genuinely cross-facility (the
+  same `reportableFacilities` scoping every other report uses), but its
+  "open task" link lands on `/admin/tasks`, which is single-facility by
+  design (B-095) — the link carries whichever facility the report was
+  filtered to, or none, in which case the tasks screen falls back to its own
+  switcher default. A true cross-facility failure-queue LIST (not just a
+  count) has no screen; building one is `/admin/tasks`'s own scope, not this
+  item's.
+- FR-15's async SMS fallback trigger ("undelivered/carrier filtering" from
+  Twilio's own delivery-status webhook) still has no consumer — B-074 left
+  this behind and B-075 does not close it either. `smsFailureRate` on this
+  dashboard is therefore a floor: it counts every SYNCHRONOUS failure
+  correctly, but an SMS Twilio accepted and later marked undelivered is
+  invisible to it until that webhook exists.
+- Dead letters are read-only. There is no retry/requeue button — matching
+  `GateCommand`'s own precedent (a dead-lettered command needs the
+  ManualAdapter's human intervention, not a generic "try again"), a
+  dead-lettered `EventDelivery` needs someone to read `lastError` and decide
+  whether replaying it is even safe, which a button cannot judge.
+- The `>2%` and `15 minutes` thresholds in FR-19 are constants
+  (`dailyFailureRateExceeds`'s default parameter, `CONSUMER_LAG_MS`), not a
+  facility setting — unlike every other number this codebase's own rule
+  says needs a form field, these configure an internal alarm rather than
+  tenant-facing behaviour, which is the distinction B-062's surplus-hold-days
+  precedent draws the same way.

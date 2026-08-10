@@ -5,6 +5,7 @@ import { facilitiesDueAt, lastSuccessfulRun, missedBusinessDates, runJob } from 
 import { sendExpiringSoonReminders } from '@/lib/reservations/reserve'
 import { raiseAbandonmentFollowUps } from '@/lib/checkout/abandonment-job'
 import { retryDeferredSmsMessages } from '@/lib/comms/service'
+import { detectConsumerLag } from '@/lib/comms/detectors'
 import { CONSUMERS, SCHEDULED_JOBS } from '@/lib/jobs/registry'
 
 // Vercel Cron hits this hourly (see vercel.json). Master PRD §5 lists Vercel
@@ -57,6 +58,11 @@ export async function GET(request: Request) {
   // deferred one's facility has now opened, same shape as the two checks
   // just above.
   const smsRetry = await retryDeferredSmsMessages(now)
+
+  // PRD 05 FR-19 (B-075). "Alert if the event consumer lags >15 minutes" —
+  // elapsed time again, not a business date, so this runs every tick like
+  // the three checks above rather than through SCHEDULED_JOBS.
+  const consumerLag = await detectConsumerLag(CONSUMERS, now)
 
   const facilities = await prisma.facility.findMany({
     where: { status: 'active' },
@@ -119,6 +125,7 @@ export async function GET(request: Request) {
     reminders,
     abandonment,
     smsRetry,
+    consumerLag,
     jobs: jobResults,
   })
 }

@@ -144,7 +144,7 @@ function isTaskOverdue(
 export async function facilityTasks(
   actor: Actor,
   facilityId: string,
-  options: { businessDate?: Date; includeCompleted?: boolean } = {},
+  options: { businessDate?: Date; includeCompleted?: boolean; type?: string } = {},
 ): Promise<TaskRow[]> {
   assertFacilityAccess(actor, facilityId)
   if (!can(actor, 'tenants:view', facilityId)) {
@@ -170,6 +170,10 @@ export async function facilityTasks(
       facilityId,
       businessDate: options.businessDate ? businessDate : { lte: businessDate },
       status: options.includeCompleted ? undefined : 'open',
+      // B-075 / PRD 05 CN-19: "a failure queue... with per-tenant follow-up
+      // tasks" is this list filtered to one type, not a table of its own —
+      // same device `failed_payment`'s own catalog comment already names.
+      ...(options.type ? { type: options.type } : {}),
     },
     orderBy: [{ businessDate: 'asc' }, { priority: 'desc' }, { createdAt: 'asc' }],
     select: {

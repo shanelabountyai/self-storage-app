@@ -174,13 +174,46 @@ export async function dispatchEvents(
   return result
 }
 
-/// Deliveries that exhausted their retries and need a human. B-054 turns these
-/// into staff tasks; until then this is how you find them.
+/// Deliveries that exhausted their retries and need a human. B-075's
+/// dead-letter admin surface is what finally reads this.
 export async function deadLetters(limit = 100) {
   return prisma.eventDelivery.findMany({
     where: { status: 'dead_letter' },
     include: { event: true },
     orderBy: { completedAt: 'desc' },
     take: limit,
+  })
+}
+
+/// PRD 05 FR-19's "alert if the event consumer lags >15 minutes" — how many
+/// of a consumer's events are still unsettled and older than the given age.
+/// Same shape as `pendingEventsFor` above (a delivery row exists only once
+/// claimed, so "no row, or a failed one still due" IS "not settled"), with
+/// an age floor added: a healthy consumer always has *some* pending events
+/// between dispatch ticks, so the count that matters is how many have sat
+/// there past a threshold, not whether the count is zero.
+export async function staleDeliveryCount(
+  consumer: Consumer,
+  olderThanMs: number,
+  now: Date = new Date(),
+): Promise<number> {
+  const cutoff = new Date(now.getTime() - olderThanMs)
+  return prisma.domainEvent.count({
+    where: {
+      name: { in: [...consumer.events] },
+      occurredAt: { lte: cutoff },
+      OR: [
+        { deliveries: { none: { consumer: consumer.name } } },
+        {
+          deliveries: {
+            some: {
+              consumer: consumer.name,
+              status: 'failed',
+              nextAttemptAt: { lte: now },
+            },
+          },
+        },
+      ],
+    },
   })
 }
