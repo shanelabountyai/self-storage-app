@@ -25,6 +25,9 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { key: 'leases', label: 'Leases', href: '/admin/leases', anyOf: ['tenants:view'] },
   { key: 'billing', label: 'Billing', href: '/admin/billing', anyOf: ['payments:take', 'reports:financial'] },
   { key: 'delinquency', label: 'Delinquency', href: '/admin/delinquency', anyOf: ['delinquency:execute_step'] },
+  { key: 'overlocks', label: 'Overlocks', href: '/admin/overlocks', anyOf: ['delinquency:execute_step'] },
+  { key: 'walkthrough', label: 'Walkthrough', href: '/admin/walkthrough', anyOf: ['units:edit'] },
+  { key: 'maintenance', label: 'Maintenance', href: '/admin/maintenance', anyOf: ['units:edit'] },
   { key: 'auctions', label: 'Auctions', href: '/admin/auctions', anyOf: ['auctions:approve'] },
   { key: 'pos', label: 'POS / Drawer', href: '/admin/pos', anyOf: ['payments:take'] },
   // No Task entity yet (B-060) — gated the same as Tenants for now.

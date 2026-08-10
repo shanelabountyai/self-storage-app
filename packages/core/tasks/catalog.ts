@@ -146,6 +146,22 @@ export const TASK_TYPES = [
     requiredProofFields: ['note'],
     sensitive: true,
   },
+  {
+    // PRD 02 §4.9 US-35 (B-060). "Space-by-space verification items" — the one
+    // task raised per facility per day that stands for the walk itself, rather
+    // than one row per unit. Its own screen (`/admin/walkthrough`) lists the
+    // real per-unit work (overlocks, units awaiting a post-move-out check)
+    // alongside it; completing THIS task is "yes, I actually walked the
+    // property today."
+    //
+    // Not sensitive: nothing legal turns on whether this particular task row
+    // was completed — the things it points at (overlocks, tickets) carry their
+    // own record if something goes wrong.
+    type: 'daily_walkthrough',
+    label: 'Daily walkthrough — confirm the property was walked',
+    requiredProofFields: ['note'],
+    sensitive: false,
+  },
 ] as const satisfies readonly TaskTypeSpec[]
 
 export type TaskType = (typeof TASK_TYPES)[number]['type']

@@ -14,6 +14,7 @@ import { runDunning } from '@/lib/billing/dunning'
 import { createTask } from '@/lib/admin/tasks'
 import { raiseLeadFollowUps } from '@/lib/admin/lead-follow-up'
 import { runDelinquencyTimeline } from '@/lib/delinquency/engine'
+import { raiseDailyWalkthrough } from '@/lib/field-ops/walkthrough'
 
 // Consumer and job registration. The machinery is B-006's; the things that use
 // it arrive with their own backlog items: reservation expiry (B-018, below),
@@ -296,6 +297,20 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
       // records, and splitting it into a second JobRun would make "did the
       // tenant get told today" depend on which of two jobs ran first.
       await emitRetryReminders(facilityId!, businessDate, recordItem)
+    },
+  },
+  {
+    // B-060 / PRD 02 US-35. Raises the day's "did anyone walk the property"
+    // task.
+    //
+    // At 7am local, an hour before the leads sweep: this is a task for the
+    // person opening the facility, and it should be waiting before the office
+    // does rather than landing mid-morning.
+    name: 'field-ops.raise-walkthrough',
+    localHour: 7,
+    scope: 'per_facility',
+    handler: async ({ facilityId, businessDate, recordItem }) => {
+      await raiseDailyWalkthrough(facilityId!, businessDate, recordItem)
     },
   },
   {

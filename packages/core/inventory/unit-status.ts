@@ -35,11 +35,15 @@ export type UnitOccupancyFacts = {
   /// reservation→move-in conversion report. They render identically, because to
   /// anyone looking at the unit both mean "spoken for".
   activeCheckoutLock: { id: string } | null
-  /// Physical overlock from the delinquency pipeline. There is no source for
-  /// this yet: the delinquency engine is B-057 and field ops is B-060, so the
-  /// adapter passes `false`. Modeled now because `overlocked` outranks
-  /// `occupied`, and retrofitting precedence later is how display bugs start.
+  /// Physical overlock from the delinquency pipeline — a lock actually fitted,
+  /// per B-058's `UnitOverlock`.
   overlocked: boolean
+  /// An open `MaintenanceTicket` on this unit with `blocksAvailability` set
+  /// (B-060/US-37). Unlike the facts above, this does not change the
+  /// *effective* status — a ticket does not outrank an active lease the way an
+  /// overlock does — it only narrows what a human may set it to, in
+  /// `canSetManualStatus` below.
+  blockingMaintenanceTicket: { id: string } | null
 }
 
 /// Precedence, highest first:
@@ -65,7 +69,7 @@ export type StatusChangeVerdict =
       reason: string
       /// Names the record standing in the way, per US-8's AC: "a clear error
       /// naming the blocking record".
-      blocking: { type: 'lease' | 'reservation' | 'overlock'; id: string } | null
+      blocking: { type: 'lease' | 'reservation' | 'overlock' | 'maintenance_ticket'; id: string } | null
     }
 
 export function isManualUnitStatus(value: string): value is ManualUnitStatus {
@@ -119,6 +123,19 @@ export function canSetManualStatus(
       allowed: false,
       reason: `Unit is held by reservation ${facts.activeReservation.id}. Cancel or let the hold expire before marking it ${target}.`,
       blocking: { type: 'reservation', id: facts.activeReservation.id },
+    }
+  }
+
+  // US-37's own AC: "a unit cannot be set available while a blocking ticket is
+  // open." Deliberately narrower than the checks above — a ticket does not
+  // stop an operator taking the unit FURTHER offline (`maintenance` or
+  // `unrentable`), only from putting it back on sale out from under whoever is
+  // fixing it.
+  if (target === 'available' && facts.blockingMaintenanceTicket) {
+    return {
+      allowed: false,
+      reason: `Unit has an open maintenance ticket (${facts.blockingMaintenanceTicket.id}). Close it before marking the unit available.`,
+      blocking: { type: 'maintenance_ticket', id: facts.blockingMaintenanceTicket.id },
     }
   }
 

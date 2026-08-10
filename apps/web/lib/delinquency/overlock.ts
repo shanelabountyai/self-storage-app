@@ -146,6 +146,10 @@ export async function releaseOverlock(input: {
     // somebody who settled their account cannot reach their own belongings.
     priority: 'high',
   })
+  // Recorded on the lock itself, same as `appliedTaskId` — a defect fixed in
+  // passing while building B-060's reconciliation view, which needs exactly
+  // this to tell "confirmed, steady" apart from "confirmed, removal pending".
+  await prisma.unitOverlock.update({ where: { id: overlock.id }, data: { removedTaskId: task.id } })
   return { taskId: task.id, withdrawn: false }
 }
 

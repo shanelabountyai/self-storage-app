@@ -256,6 +256,12 @@ export default async function AdminUnitsPage({
                       Set<span className="sr-only"> status for {unit.number}</span>
                     </button>
                   </form>
+                  <Link
+                    href={`/admin/maintenance?unit=${unit.id}`}
+                    className="ml-2 text-xs underline underline-offset-2"
+                  >
+                    Report issue<span className="sr-only"> on {unit.number}</span>
+                  </Link>
                 </td>
               </tr>
             ))}

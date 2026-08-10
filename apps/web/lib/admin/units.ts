@@ -19,9 +19,9 @@ import { unitWhere, type UnitFilters } from './unit-query'
 // else is a bug.
 
 export class UnitStatusChangeBlockedError extends Error {
-  readonly blocking: { type: 'lease' | 'reservation' | 'overlock'; id: string } | null
+  readonly blocking: { type: 'lease' | 'reservation' | 'overlock' | 'maintenance_ticket'; id: string } | null
 
-  constructor(message: string, blocking: { type: 'lease' | 'reservation' | 'overlock'; id: string } | null) {
+  constructor(message: string, blocking: { type: 'lease' | 'reservation' | 'overlock' | 'maintenance_ticket'; id: string } | null) {
     super(message)
     this.name = 'UnitStatusChangeBlockedError'
     this.blocking = blocking
@@ -48,12 +48,13 @@ export async function occupancyFactsForMany(
         // in the office, and this status is what the occupancy report and an
         // auction file both read.
         overlocked: false,
+        blockingMaintenanceTicket: null,
       },
     ]),
   )
   if (unitIds.length === 0) return facts
 
-  const [leases, reservations, checkoutLocks, overlocks] = await Promise.all([
+  const [leases, reservations, checkoutLocks, overlocks, blockingTickets] = await Promise.all([
     client.lease.findMany({
       where: {
         unitId: { in: [...unitIds] },
@@ -80,6 +81,12 @@ export async function occupancyFactsForMany(
       where: { unitId: { in: [...unitIds] }, removedAt: null, appliedAt: { not: null } },
       select: { unitId: true },
     }),
+    // B-060. Only tickets that actually claim to block — a cosmetic ticket
+    // must never stop a unit from renting.
+    client.maintenanceTicket.findMany({
+      where: { unitId: { in: [...unitIds] }, status: { not: 'done' }, blocksAvailability: true },
+      select: { id: true, unitId: true },
+    }),
   ])
 
   for (const lease of leases) {
@@ -97,6 +104,12 @@ export async function occupancyFactsForMany(
   for (const overlock of overlocks) {
     const entry = facts.get(overlock.unitId)
     if (entry) entry.overlocked = true
+  }
+  for (const ticket of blockingTickets) {
+    const entry = facts.get(ticket.unitId)
+    // First one found wins — `canSetManualStatus` only needs a name to put in
+    // the error, not every open ticket.
+    if (entry && !entry.blockingMaintenanceTicket) entry.blockingMaintenanceTicket = { id: ticket.id }
   }
 
   return facts

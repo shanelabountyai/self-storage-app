@@ -526,6 +526,7 @@ model Facility {
   delinquencyTimelines   DelinquencyTimeline[]
   delinquencyStepRuns    DelinquencyStepRun[]
   overlocks              UnitOverlock[]
+  maintenanceTickets     MaintenanceTicket[]
   promoRedemptions       PromoRedemption[]
   analyticsEvents        AnalyticsEvent[]
   photos                 FacilityPhoto[]
@@ -728,6 +729,7 @@ model Unit {
   @@index([facilityId, building, floor], map: "unit_facility_building_floor")
   @@map("unit")
   overlocks UnitOverlock[]
+  maintenanceTickets MaintenanceTicket[]
 }
 
 // --------------------------------------------------------- people/leases ----
@@ -1735,6 +1737,54 @@ model UnitOverlock {
   @@map("unit_overlock")
 }
 
+enum MaintenanceTicketStatus {
+  open
+  in_progress
+  blocked
+  done
+}
+
+/// PRD 02 §4.9 US-37 (B-060). A ticket against a unit: raised from the daily
+/// walkthrough, from the units board, or directly, tracked to close.
+///
+/// `blocksAvailability` is the ticket's own flag, not implied by status —
+/// "the paint is chipped" and "the roof leaks" can both be `open`, and only
+/// one of them should stop the unit from being rented out from under a
+/// contractor. Enforced in `canSetManualStatus` (packages/core/inventory),
+/// the one place a unit's status may be hand-set (US-8).
+model MaintenanceTicket {
+  id            String                  @id @default(cuid())
+  facilityId    String
+  unitId        String
+  title         String
+  notes         String?
+  status        MaintenanceTicketStatus @default(open)
+  priority      TaskPriority            @default(normal)
+  blocksAvailability Boolean            @default(true)
+  /// 'walkthrough' or 'manual' — the AC's "create from walkthrough, unit page,
+  /// or manually" made queryable. Not itself functional.
+  source        String
+  /// Historical only, same as `UnitOverlock.appliedByStaffId` — not a relation,
+  /// so nothing about a closed ticket changes if the reporting staffer's
+  /// record ever does.
+  createdByStaffId String?
+  assigneeStaffId  String?
+  createdAt     DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime  @updatedAt @db.Timestamptz(6)
+  resolvedAt    DateTime? @db.Timestamptz(6)
+
+  facility Facility   @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  unit     Unit       @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  /// Unlike `createdByStaffId`, a live relation — "assign, prioritize, track
+  /// status" (US-37) means this list is read by assignee, so it needs the join
+  /// Task's own assignee gets.
+  assignee StaffUser? @relation("MaintenanceTicketAssignee", fields: [assigneeStaffId], references: [id], onDelete: Restrict)
+
+  @@index([facilityId, status])
+  @@index([unitId, status])
+  @@map("maintenance_ticket")
+}
+
 /// PRD 04 FR-SEO-2 (B-066). The 301 map.
 ///
 /// "301 redirect map maintained for renamed/retired slugs; facility slug
@@ -2732,6 +2782,7 @@ model StaffUser {
   holdsLifted    LeaseHold[] @relation("HoldLiftedBy")
   tasksAssigned  Task[]                    @relation("TaskAssignee")
   tasksCompleted Task[]                    @relation("TaskCompletedBy")
+  maintenanceTicketsAssigned MaintenanceTicket[] @relation("MaintenanceTicketAssignee")
 
   @@map("staff_user")
   leadsCreated       Lead[]

@@ -22,8 +22,12 @@ export async function completeTaskAction(formData: FormData): Promise<void> {
     ...(photoReference ? { photo_reference: String(photoReference) } : {}),
   })
   revalidatePath('/admin/tasks')
-  // B-065's keypad queue and B-059's delinquency queue render the same tasks;
-  // completing one anywhere has to clear it everywhere.
+  // B-065's keypad queue, B-059's delinquency queue and B-060's walkthrough all
+  // render the same tasks; completing one anywhere has to clear it everywhere.
   revalidatePath('/admin/access/queue')
   revalidatePath('/admin/delinquency')
+  revalidatePath('/admin/walkthrough')
+  // Completing an overlock_apply/overlock_remove task is what moves the
+  // reconciliation view's rows between states.
+  revalidatePath('/admin/overlocks')
 }

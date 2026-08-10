@@ -15,6 +15,7 @@ const VACANT: UnitOccupancyFacts = {
   activeReservation: null,
   activeCheckoutLock: null,
   overlocked: false,
+  blockingMaintenanceTicket: null,
 }
 
 const leased = (status = 'active'): UnitOccupancyFacts => ({
@@ -149,6 +150,29 @@ describe('canSetManualStatus — names the blocking record (US-8 AC)', () => {
   it('allows again once the lease has ended', () => {
     // `ended` is absent from OCCUPYING_LEASE_STATUSES, so the adapter reports
     // activeLease: null — matching the lease_one_active_per_unit index.
+    expect(canSetManualStatus('available', VACANT)).toEqual({ allowed: true })
+  })
+})
+
+describe('canSetManualStatus — a blocking maintenance ticket (B-060 / US-37)', () => {
+  const ticketed: UnitOccupancyFacts = { ...VACANT, blockingMaintenanceTicket: { id: 'mt-1' } }
+
+  it('refuses to reopen the unit while the ticket is open', () => {
+    const verdict = canSetManualStatus('available', ticketed)
+    expect(verdict.allowed).toBe(false)
+    if (verdict.allowed) throw new Error('unreachable')
+    expect(verdict.blocking).toEqual({ type: 'maintenance_ticket', id: 'mt-1' })
+    expect(verdict.reason).toContain('mt-1')
+  })
+
+  it('does not block taking the unit further offline', () => {
+    // The AC is specifically about `available` — a ticket should never stop an
+    // operator marking a unit `maintenance` or `unrentable` on top of it.
+    expect(canSetManualStatus('maintenance', ticketed)).toEqual({ allowed: true })
+    expect(canSetManualStatus('unrentable', ticketed)).toEqual({ allowed: true })
+  })
+
+  it('is silent once nothing is blocking', () => {
     expect(canSetManualStatus('available', VACANT)).toEqual({ allowed: true })
   })
 })

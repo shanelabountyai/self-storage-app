@@ -1868,3 +1868,67 @@ generic queue (`assignTask`) and were not duplicated here — this screen is
 about completing today's steps, not managing who owns them. FR-22's table
 semantics (`scope="row"`, `aria-sort`) don't apply: like the two queues it
 follows, this is a card list, not a data table.
+
+## B-060 — Field ops: overlock reconciliation, the daily walkthrough, maintenance tickets
+
+`<sha>`
+
+**What it built.** The three US-35/36/37 stories, each as thin as the backlog
+line asked for: "all as `Task` types and views, not new queues."
+
+- *US-36, overlock reconciliation* (`/admin/overlocks`). A pure classifier
+  (`classifyOverlock`, packages/core/delinquency) reads a live `UnitOverlock`
+  row plus whatever open `overlock_remove` task belongs to its lease and
+  states which of three things is true: awaiting apply, awaiting removal, or
+  confirmed and steady. Mismatch is a flag, not a fourth state — over 24h in
+  either non-steady state, per the AC. No new table: the whole view is a join
+  over rows B-058 already writes.
+- *US-35, the daily walkthrough* (`/admin/walkthrough`). One `Task` (type
+  `daily_walkthrough`) per facility per day, raised at 7am local by a new
+  `SCHEDULED_JOBS` entry, standing for "did anyone walk the property" as a
+  completable fact. Its page assembles the real per-unit work from lists that
+  already exist — B-059's overlock groups, and B-014's `/admin/units/ready`
+  count-and-link — plus a "report a finding" form that creates a
+  `MaintenanceTicket` directly. Nothing here is a new queue; it is one task
+  type and a page that reads three existing sources.
+- *US-37, maintenance tickets* (`/admin/maintenance`, + a "Report issue" link
+  per row on the units board). A real `MaintenanceTicket` entity — the master
+  PRD names it beside `Task` in §7, unlike the walkthrough — with status
+  (open/in_progress/blocked/done), priority, an assignee, and its own
+  `blocksAvailability` flag. `UnitOccupancyFacts` gained
+  `blockingMaintenanceTicket`, and `canSetManualStatus` refuses `available`
+  (only `available` — `maintenance`/`unrentable` stay reachable) while one is
+  open, naming the ticket the way it already names a lease or a reservation.
+
+**What it decided.**
+
+- *A blocking ticket only narrows `available`, nothing else.* "The paint is
+  chipped" and "the roof leaks" can both be open tickets; only the flag says
+  which one should stop a unit renting out from under a contractor.
+- *Opening a blocking ticket sets `maintenance` intent; closing one does not
+  revert it.* Matches the precedent move-out already set for the same column —
+  intent is a deliberate act, not an inference from whatever the last event
+  was.
+- *No new Task type for "recently vacated, needs a lock check."* B-014's
+  `/admin/units/ready` already is that queue — it has existed since move-out
+  got its own item, just never described as part of a "walkthrough." Building
+  a parallel `Task`-based version would have duplicated a working screen the
+  AC's own principle argues against. The walkthrough page links to it and
+  shows a live count instead.
+- *"Skipped days are visible" needed no extra code.* An uncompleted
+  `daily_walkthrough` task from a prior business day simply stays open and
+  reads as overdue through the same rendering every other queue already uses.
+
+**What it left behind.**
+
+- *Fixed in passing*: `UnitOverlock.removedTaskId` had existed on the schema
+  since B-058 and was never written. `releaseOverlock` now sets it — and the
+  reconciliation view's whole reason to exist is exactly that join, so this
+  was found while building the thing that needed it, not gone looking for.
+- No per-unit detail page exists yet, so "create from the unit page" (US-37's
+  AC) is the units board's new "Report issue" link into `/admin/maintenance`
+  rather than a dedicated screen — there is nowhere else for it to live until
+  one is built.
+- The walkthrough's photo attachment (US-35's AC) rides on the same
+  `photo_reference` proof field every other task type uses; there is still no
+  blob store behind it, a gap B-058 already noted and carries forward.
