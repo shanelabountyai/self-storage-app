@@ -54,6 +54,8 @@ const NO_FACILITY_ID: Record<string, string> = {
     'scoped through its promotion, which targets facilities through facilityIds[] — the same reason Promotion itself is exempt (PRD 04 FR-PROMO-2)',
   LeadActivity:
     'scoped through the lead it belongs to; a repeat inquiry is about the same person at the same facility as the lead itself (PRD 04 FR-LEAD-1)',
+  AuctionAdvertisement:
+    'scoped through the auction case it belongs to — an advertising run is about one sale at one facility, and the case already carries the facilityId (PRD 02 US-28)',
   UrlRedirect:
     'a URL is a site-wide address, and the lookup happens on a request before anything knows which facility it was for — a facilityId here could not be supplied at the only moment it would be read (PRD 04 FR-SEO-2)',
 }
@@ -83,6 +85,15 @@ const CALENDAR_DATE_FIELDS = new Set([
   // would put an hour on a statutory deadline that the document does not
   // state, and that the tenant reading it was never told.
   'Notice.deadlineDate',
+  // B-062. All four are days a person reads off a document or an
+  // advertisement, not instants. A sale is advertised as being "on the 14th";
+  // a cleanout deadline and a surplus holding period are dates a buyer and a
+  // former tenant are told, and putting an hour on either would assert a
+  // precision the paperwork does not have.
+  'AuctionCase.scheduledSaleDate',
+  'AuctionCase.buyerCleanoutDeadline',
+  'AuctionCase.surplusHoldUntil',
+  'AuctionAdvertisement.runDate',
 ])
 
 describe('prisma schema invariants', () => {

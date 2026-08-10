@@ -1,0 +1,823 @@
+import { prisma, type SurplusDisposition } from '@storage/db'
+import { recordAudit } from '@storage/core/audit'
+import {
+  auctionReadiness,
+  canRecordDisposition,
+  distribute,
+  ledgerPostings,
+  missingBuyerFields,
+  surplusHoldUntil,
+  surplusObligation,
+  type Blocker,
+  type BuyerRecordInput,
+  type Readiness,
+  type StepEvidence,
+} from '@storage/core/auctions'
+import { orderedSteps, type TimelineStep } from '@storage/core/delinquency'
+import { requirePermission } from '@/lib/rbac/authorize'
+import { toAuditActor } from '@/lib/rbac/audit-actor'
+import type { Actor } from '@/lib/rbac/actor'
+import { recomputeUnitStatus } from '@/lib/admin/units'
+import { storeGeneratedDocument } from '@/lib/documents/store'
+import { formatCents } from '@/lib/format'
+
+// PRD 02 §4.6 US-28 (B-062). The auction pipeline.
+//
+// Every refusal in this file is a hard block with no override, because each one
+// is a line in a wrongful-sale complaint: a vehicle run through the standard
+// path, a step with no proof behind it, a sale with no served notice, a surplus
+// nobody dispositioned. The rules themselves live in packages/core/auctions and
+// are exhaustively tested there; this file gathers the facts and writes the
+// consequences.
+
+/// Regional. Higher than MANAGER_RANK (20) — US-28 says "regional/owner
+/// approval", and a site manager approving the sale of their own site's tenant
+/// is exactly the check this is.
+const REGIONAL_RANK = 30
+
+function rankAt(actor: Actor, facilityId: string): number {
+  if (actor.kind !== 'staff') return 0
+  return Math.max(
+    0,
+    ...actor.assignments
+      .filter((one) => one.facilityId === null || one.facilityId === facilityId)
+      .map((one) => one.rank),
+  )
+}
+
+/// Opens (or returns) the live case for a lease the delinquency engine has
+/// flagged. Idempotent: the partial unique index allows one live case per
+/// lease, so a re-run of the timeline does not open a second.
+export async function openAuctionCase(input: {
+  leaseId: string
+  facilityId: string
+}): Promise<{ id: string; created: boolean } | null> {
+  const lease = await prisma.lease.findUnique({
+    where: { id: input.leaseId },
+    select: { unitId: true, delinquencyTimelineId: true },
+  })
+  if (!lease?.unitId) return null
+
+  const existing = await prisma.auctionCase.findFirst({
+    where: { leaseId: input.leaseId, status: { in: ['eligible', 'scheduled'] } },
+    select: { id: true },
+  })
+  if (existing) return { id: existing.id, created: false }
+
+  try {
+    const created = await prisma.auctionCase.create({
+      data: {
+        facilityId: input.facilityId,
+        leaseId: input.leaseId,
+        unitId: lease.unitId,
+        timelineId: lease.delinquencyTimelineId,
+      },
+      select: { id: true },
+    })
+    return { id: created.id, created: true }
+  } catch {
+    // Lost the race for the partial unique index — somebody else opened it,
+    // which is the outcome we wanted.
+    const row = await prisma.auctionCase.findFirst({
+      where: { leaseId: input.leaseId, status: { in: ['eligible', 'scheduled'] } },
+      select: { id: true },
+    })
+    return row ? { id: row.id, created: false } : null
+  }
+}
+
+export type AuctionCaseView = {
+  id: string
+  facilityId: string
+  leaseId: string
+  unitId: string
+  unitNumber: string
+  tenantId: string
+  tenantName: string
+  status: string
+  containsVehicle: boolean
+  vehicleNote: string | null
+  approvedAt: Date | null
+  approvedByName: string | null
+  scheduledSaleDate: Date | null
+  outstandingCents: number
+  readiness: Readiness
+  /// US-29: "shows the configured timeline summary on every auction approval
+  /// screen." The version pinned to this case, not whatever is current.
+  timelineLabel: string | null
+  timelineVersion: number | null
+  steps: (StepEvidence & { blocked: boolean })[]
+  advertisements: { id: string; publication: string; runDate: Date; reference: string | null }[]
+  lockCutAt: Date | null
+  inventoryDocumentId: string | null
+  sale: {
+    soldAt: Date | null
+    grossProceedsCents: number | null
+    saleCostsCents: number | null
+    costsRecoveredCents: number | null
+    appliedToLienCents: number | null
+    surplusCents: number | null
+    deficiencyCents: number | null
+  }
+  surplus: {
+    disposition: SurplusDisposition
+    holdUntil: Date | null
+    notifiedAt: Date | null
+    note: string | null
+    outstanding: boolean
+    outstandingActions: string[]
+    overdue: boolean
+  }
+  cancelledAt: Date | null
+  cancelledReason: string | null
+}
+
+/// One case, with its readiness computed from real evidence.
+export async function auctionCase(actor: Actor, caseId: string): Promise<AuctionCaseView | null> {
+  const row = await prisma.auctionCase.findUnique({
+    where: { id: caseId },
+    include: {
+      unit: { select: { number: true } },
+      timeline: { select: { label: true, version: true, steps: true } },
+      advertisements: { orderBy: { runDate: 'asc' } },
+      lease: {
+        select: {
+          tenantId: true,
+          tenant: { select: { firstName: true, lastName: true } },
+        },
+      },
+    },
+  })
+  if (!row) return null
+  requirePermission(actor, 'tenants:view', row.facilityId)
+
+  const [ledger, stepRuns, servedLienNotice, approver] = await Promise.all([
+    prisma.ledgerEntry.aggregate({ where: { leaseId: row.leaseId }, _sum: { amountCents: true } }),
+    prisma.delinquencyStepRun.findMany({
+      where: { leaseId: row.leaseId, supersededAt: null },
+      select: { dayOffset: true, taskId: true },
+    }),
+    // B-061. A generated AND served lien notice, not merely generated, and not
+    // one that has since been superseded by a correction.
+    prisma.notice.findFirst({
+      where: { leaseId: row.leaseId, type: 'lien', status: 'delivered', supersededAt: null },
+      select: { id: true },
+    }),
+    row.approvedByStaffId
+      ? prisma.staffUser.findUnique({
+          where: { id: row.approvedByStaffId },
+          select: { firstName: true, lastName: true },
+        })
+      : null,
+  ])
+
+  const taskIds = stepRuns.map((run) => run.taskId).filter((id): id is string => !!id)
+  const tasks = taskIds.length
+    ? await prisma.task.findMany({
+        where: { id: { in: taskIds } },
+        select: { id: true, status: true, proof: true },
+      })
+    : []
+  const taskById = new Map(tasks.map((task) => [task.id, task]))
+  const runByDay = new Map(stepRuns.map((run) => [run.dayOffset, run]))
+
+  const timelineSteps = orderedSteps((row.timeline?.steps ?? []) as unknown as TimelineStep[])
+  const steps: StepEvidence[] = timelineSteps.map((step) => {
+    const run = runByDay.get(step.dayOffset)
+    const task = run?.taskId ? taskById.get(run.taskId) : undefined
+    return {
+      dayOffset: step.dayOffset,
+      label: step.label,
+      staffTaskLabel: step.staffTaskLabel,
+      requiredProofFields: step.requiredProofFields,
+      executed: Boolean(run),
+      task: task ? { status: task.status, proof: task.proof as Record<string, unknown> | null } : null,
+    }
+  })
+
+  const outstandingCents = ledger._sum.amountCents ?? 0
+  const readiness = auctionReadiness({
+    timelineConfigured: Boolean(row.timeline),
+    steps,
+    containsVehicle: row.containsVehicle,
+    lienNoticeServed: Boolean(servedLienNotice),
+    approved: Boolean(row.approvedAt),
+    outstandingCents,
+    status: row.status,
+  })
+
+  const blockedDays = new Set(readiness.blockers.map((one) => one.dayOffset).filter(Boolean))
+  const obligation = surplusObligation(
+    {
+      surplusCents: row.surplusCents ?? 0,
+      disposition: row.surplusDisposition,
+      holdUntil: row.surplusHoldUntil,
+      notifiedAt: row.surplusTenantNotifiedAt,
+    },
+    new Date(),
+  )
+
+  return {
+    id: row.id,
+    facilityId: row.facilityId,
+    leaseId: row.leaseId,
+    unitId: row.unitId,
+    unitNumber: row.unit.number,
+    tenantId: row.lease.tenantId,
+    tenantName: `${row.lease.tenant.firstName} ${row.lease.tenant.lastName}`,
+    status: row.status,
+    containsVehicle: row.containsVehicle,
+    vehicleNote: row.vehicleNote,
+    approvedAt: row.approvedAt,
+    approvedByName: approver ? `${approver.firstName} ${approver.lastName}` : null,
+    scheduledSaleDate: row.scheduledSaleDate,
+    outstandingCents,
+    readiness,
+    timelineLabel: row.timeline?.label ?? null,
+    timelineVersion: row.timeline?.version ?? null,
+    steps: steps.map((step) => ({ ...step, blocked: blockedDays.has(step.dayOffset) })),
+    advertisements: row.advertisements.map((one) => ({
+      id: one.id,
+      publication: one.publication,
+      runDate: one.runDate,
+      reference: one.reference,
+    })),
+    lockCutAt: row.lockCutAt,
+    inventoryDocumentId: row.inventoryDocumentId,
+    sale: {
+      soldAt: row.soldAt,
+      grossProceedsCents: row.grossProceedsCents,
+      saleCostsCents: row.saleCostsCents,
+      costsRecoveredCents: row.costsRecoveredCents,
+      appliedToLienCents: row.appliedToLienCents,
+      surplusCents: row.surplusCents,
+      deficiencyCents: row.deficiencyCents,
+    },
+    surplus: {
+      disposition: row.surplusDisposition,
+      holdUntil: row.surplusHoldUntil,
+      notifiedAt: row.surplusTenantNotifiedAt,
+      note: row.surplusDispositionNote,
+      outstanding: obligation.outstanding,
+      outstandingActions: obligation.outstandingActions,
+      overdue: obligation.overdue,
+    },
+    cancelledAt: row.cancelledAt,
+    cancelledReason: row.cancelledReason,
+  }
+}
+
+export type CasesFilter = { includeClosed?: boolean }
+
+export async function auctionCasesFor(
+  actor: Actor,
+  facilityId: string,
+  filter: CasesFilter = {},
+): Promise<AuctionCaseView[]> {
+  requirePermission(actor, 'tenants:view', facilityId)
+  const rows = await prisma.auctionCase.findMany({
+    where: {
+      facilityId,
+      status: filter.includeClosed ? undefined : { in: ['eligible', 'scheduled'] },
+    },
+    orderBy: { createdAt: 'asc' },
+    select: { id: true },
+  })
+  const cases = await Promise.all(rows.map((row) => auctionCase(actor, row.id)))
+  return cases.filter((one): one is AuctionCaseView => one !== null)
+}
+
+export type ActionResult = { ok: true } | { ok: false; reason: string; blockers?: Blocker[] }
+
+/// US-28's vehicle carve-out. Flagging is a one-way door in the blocking
+/// direction on purpose — clearing it is possible (somebody mis-flagged) but
+/// audited, because the flag is what stands between a titled vehicle and a
+/// wrongful sale.
+export async function setContainsVehicle(
+  actor: Actor,
+  caseId: string,
+  containsVehicle: boolean,
+  note: string,
+): Promise<ActionResult> {
+  const row = await prisma.auctionCase.findUniqueOrThrow({ where: { id: caseId } })
+  requirePermission(actor, 'tenants:edit', row.facilityId)
+  if (!note.trim()) return { ok: false, reason: 'Say what was found in the unit.' }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.auctionCase.update({
+      where: { id: caseId },
+      data: { containsVehicle, vehicleNote: note.trim() },
+    })
+    await recordAudit(
+      {
+        actor: toAuditActor(actor),
+        facilityId: row.facilityId,
+        action: 'lease.updated',
+        entityType: 'AuctionCase',
+        entityId: caseId,
+        context: { containsVehicle, note: note.trim() },
+      },
+      tx,
+    )
+  })
+  return { ok: true }
+}
+
+/// Regional or owner approval. Requires a reason code, per the audit catalog.
+export async function approveAuction(
+  actor: Actor,
+  caseId: string,
+  reasonCode: string,
+): Promise<ActionResult> {
+  const row = await prisma.auctionCase.findUniqueOrThrow({ where: { id: caseId } })
+  requirePermission(actor, 'auctions:approve', row.facilityId)
+
+  if (rankAt(actor, row.facilityId) < REGIONAL_RANK) {
+    return {
+      ok: false,
+      reason: 'Approving a lien sale needs a regional manager or an owner, not a site manager.',
+    }
+  }
+  if (!reasonCode.trim()) return { ok: false, reason: 'An approval has to record why.' }
+  if (row.containsVehicle) {
+    // Refused here as well as at scheduling: approving a case that can never
+    // be scheduled would leave a signed-off record of a sale nobody may run.
+    return {
+      ok: false,
+      reason:
+        'This unit is recorded as containing a vehicle, boat or trailer. It requires a separate ' +
+        'vehicle lien process and cannot be approved on this path.',
+    }
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.auctionCase.update({
+      where: { id: caseId },
+      data: { approvedByStaffId: actor.kind === 'staff' ? actor.staffUserId : null, approvedAt: new Date() },
+    })
+    await recordAudit(
+      {
+        actor: toAuditActor(actor),
+        facilityId: row.facilityId,
+        action: 'auction.approved',
+        entityType: 'AuctionCase',
+        entityId: caseId,
+        reasonCode: reasonCode.trim(),
+        context: { leaseId: row.leaseId },
+      },
+      tx,
+    )
+  })
+  return { ok: true }
+}
+
+/// The hard block. Scheduling is refused unless EVERY readiness rule passes.
+export async function scheduleSale(
+  actor: Actor,
+  caseId: string,
+  saleDate: Date,
+): Promise<ActionResult> {
+  const view = await auctionCase(actor, caseId)
+  if (!view) return { ok: false, reason: 'No such case.' }
+  requirePermission(actor, 'auctions:approve', view.facilityId)
+
+  if (!view.readiness.ready) {
+    return {
+      ok: false,
+      reason: 'This sale cannot be scheduled yet.',
+      blockers: view.readiness.blockers,
+    }
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.auctionCase.update({
+      where: { id: caseId },
+      data: { status: 'scheduled', scheduledSaleDate: saleDate },
+    })
+    await recordAudit(
+      {
+        actor: toAuditActor(actor),
+        facilityId: view.facilityId,
+        action: 'auction.scheduled',
+        entityType: 'AuctionCase',
+        entityId: caseId,
+        context: { saleDate: saleDate.toISOString().slice(0, 10), leaseId: view.leaseId },
+      },
+      tx,
+    )
+  })
+  return { ok: true }
+}
+
+export async function addAdvertisement(
+  actor: Actor,
+  caseId: string,
+  input: { publication: string; runDate: Date; reference: string | null },
+): Promise<ActionResult> {
+  const row = await prisma.auctionCase.findUniqueOrThrow({ where: { id: caseId } })
+  requirePermission(actor, 'auctions:approve', row.facilityId)
+  if (!input.publication.trim()) return { ok: false, reason: 'Name the publication or site.' }
+
+  await prisma.auctionAdvertisement.create({
+    data: {
+      auctionCaseId: caseId,
+      publication: input.publication.trim(),
+      runDate: input.runDate,
+      reference: input.reference?.trim() || null,
+    },
+  })
+  return { ok: true }
+}
+
+/// Lock cut and inventory. "The primary evidence that you sold what you said
+/// you sold" — so the itemised contents are rendered into a hashed `Document`
+/// through US-27's mechanism rather than stored as free text.
+export async function recordLockCut(
+  actor: Actor,
+  caseId: string,
+  input: {
+    cutAt: Date
+    oldLockDisposition: string
+    items: { description: string; photoReference: string }[]
+  },
+): Promise<ActionResult> {
+  const row = await prisma.auctionCase.findUniqueOrThrow({
+    where: { id: caseId },
+    include: { unit: { select: { number: true } } },
+  })
+  requirePermission(actor, 'auctions:approve', row.facilityId)
+
+  if (row.lockCutAt) {
+    // Written once. A re-cut inventory that overwrote the first would destroy
+    // the evidence this record exists to be.
+    return { ok: false, reason: 'The lock cut and inventory have already been recorded for this case.' }
+  }
+  if (!input.oldLockDisposition.trim()) {
+    return { ok: false, reason: 'Record what happened to the tenant’s lock.' }
+  }
+  const items = input.items.filter((item) => item.description.trim())
+  if (items.length === 0) {
+    return {
+      ok: false,
+      reason:
+        'An inventory with no items is not an inventory. List what was in the unit — "no items of ' +
+        'value" is itself a line, and it has to be written down.',
+    }
+  }
+  const withoutPhotos = items.filter((item) => !item.photoReference.trim())
+  if (withoutPhotos.length > 0) {
+    return {
+      ok: false,
+      reason: `Every inventory line needs a photograph reference. Missing on: ${withoutPhotos
+        .map((item) => item.description.trim())
+        .join(', ')}.`,
+    }
+  }
+
+  const rows = items
+    .map(
+      (item, index) =>
+        `<tr><th scope="row">${index + 1}</th><td>${escape(item.description.trim())}</td>` +
+        `<td>${escape(item.photoReference.trim())}</td></tr>`,
+    )
+    .join('\n')
+
+  await prisma.$transaction(async (tx) => {
+    const { id: documentId } = await storeGeneratedDocument(
+      {
+        facilityId: row.facilityId,
+        type: 'lien_evidence',
+        subjectType: 'AuctionCase',
+        subjectId: caseId,
+        title: `Unit ${row.unit.number} — contents inventory at lock cut`,
+        template:
+          '<p>Unit {{unitNumber}}. Lock cut {{cutAt}} by {{cutBy}}. ' +
+          'Tenant’s lock: {{lockDisposition}}.</p>{{itemsTable}}',
+        values: {
+          unitNumber: row.unit.number,
+          cutAt: input.cutAt.toISOString(),
+          cutBy: actor.kind === 'staff' ? actor.staffUserId : 'system',
+          lockDisposition: input.oldLockDisposition.trim(),
+          itemsTable: [
+            '<table>',
+            '<caption>Itemised contents</caption>',
+            '<thead><tr><th scope="col">#</th><th scope="col">Item</th><th scope="col">Photograph</th></tr></thead>',
+            `<tbody>${rows}</tbody>`,
+            '</table>',
+          ].join('\n'),
+        },
+        rawFields: ['itemsTable'],
+        actor: toAuditActor(actor),
+      },
+      tx,
+    )
+
+    await tx.auctionCase.update({
+      where: { id: caseId },
+      data: {
+        lockCutAt: input.cutAt,
+        lockCutByStaffId: actor.kind === 'staff' ? actor.staffUserId : null,
+        oldLockDisposition: input.oldLockDisposition.trim(),
+        inventoryDocumentId: documentId,
+      },
+    })
+
+    await recordAudit(
+      {
+        actor: toAuditActor(actor),
+        facilityId: row.facilityId,
+        action: 'auction.lock_cut',
+        entityType: 'AuctionCase',
+        entityId: caseId,
+        context: { cutAt: input.cutAt.toISOString(), itemCount: items.length, documentId },
+      },
+      tx,
+    )
+  })
+  return { ok: true }
+}
+
+function escape(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
+export type SaleOutcomeInput = {
+  soldAt: Date
+  grossProceedsCents: number
+  saleCostsCents: number
+  buyer: BuyerRecordInput & { forfeitTerms?: string | null }
+}
+
+/// Records the sale. The waterfall computes every figure and posts the ledger
+/// entries; nothing here is typed in as a total.
+export async function recordSaleOutcome(
+  actor: Actor,
+  caseId: string,
+  input: SaleOutcomeInput,
+): Promise<ActionResult> {
+  const view = await auctionCase(actor, caseId)
+  if (!view) return { ok: false, reason: 'No such case.' }
+  requirePermission(actor, 'auctions:approve', view.facilityId)
+
+  if (view.status === 'sold') return { ok: false, reason: 'This sale has already been recorded.' }
+  if (view.status !== 'scheduled') {
+    return { ok: false, reason: 'Only a scheduled sale can have an outcome recorded.' }
+  }
+  if (view.containsVehicle) {
+    return { ok: false, reason: 'This case is blocked: the unit contains a vehicle.' }
+  }
+  if (!view.lockCutAt) {
+    return {
+      ok: false,
+      reason:
+        'Record the lock cut and the contents inventory first. It is the primary evidence that you ' +
+        'sold what you said you sold, and it cannot be reconstructed afterwards.',
+    }
+  }
+
+  const missing = missingBuyerFields(input.buyer)
+  if (missing.length > 0) {
+    return {
+      ok: false,
+      reason: `The buyer record is incomplete: ${missing.join(', ')}. A sales-tax return on auction proceeds cannot be filed without it.`,
+    }
+  }
+
+  const facility = await prisma.facility.findUniqueOrThrow({
+    where: { id: view.facilityId },
+    select: { surplusHoldDays: true },
+  })
+
+  // The lien balance is what the ledger says right now, not a figure carried
+  // from the notice — days may have passed and a payment may have landed.
+  const result = distribute({
+    grossProceedsCents: input.grossProceedsCents,
+    saleCostsCents: input.saleCostsCents,
+    lienBalanceCents: Math.max(0, view.outstandingCents),
+  })
+  const postings = ledgerPostings(
+    {
+      grossProceedsCents: input.grossProceedsCents,
+      saleCostsCents: input.saleCostsCents,
+      lienBalanceCents: Math.max(0, view.outstandingCents),
+    },
+    result,
+  )
+
+  await prisma.$transaction(async (tx) => {
+    for (const posting of postings) {
+      await tx.ledgerEntry.create({
+        data: {
+          facilityId: view.facilityId,
+          leaseId: view.leaseId,
+          type: posting.type,
+          amountCents: posting.amountCents,
+          description: posting.description,
+          occurredAt: input.soldAt,
+        },
+      })
+    }
+
+    await tx.auctionCase.update({
+      where: { id: caseId },
+      data: {
+        status: 'sold',
+        soldAt: input.soldAt,
+        grossProceedsCents: input.grossProceedsCents,
+        saleCostsCents: input.saleCostsCents,
+        costsRecoveredCents: result.costsRecoveredCents,
+        appliedToLienCents: result.appliedToLienCents,
+        surplusCents: result.surplusCents,
+        deficiencyCents: result.deficiencyCents,
+        buyerName: input.buyer.name,
+        buyerAddressLine1: input.buyer.addressLine1,
+        buyerAddressLine2: input.buyer.addressLine2 ?? null,
+        buyerCity: input.buyer.city,
+        buyerState: input.buyer.state,
+        buyerPostalCode: input.buyer.postalCode,
+        buyerGovernmentIdReference: input.buyer.governmentIdReference,
+        buyerTaxExempt: Boolean(input.buyer.taxExempt),
+        buyerResaleCertificateReference: input.buyer.resaleCertificateReference ?? null,
+        buyerPaymentMethod: input.buyer.paymentMethod,
+        buyerCleanoutDeadline: input.buyer.cleanoutDeadline,
+        buyerForfeitTerms: input.buyer.forfeitTerms ?? null,
+        // A surplus starts HELD, never "no surplus" — the disposition has to be
+        // recorded by a person, and starting it settled is how one gets kept.
+        surplusDisposition: result.surplusCents > 0 ? 'held' : 'no_surplus',
+        surplusHoldUntil:
+          result.surplusCents > 0 ? surplusHoldUntil(input.soldAt, facility.surplusHoldDays) : null,
+      },
+    })
+
+    // "Unit released to `maintenance` for cleanout verification" — the same
+    // path a move-out takes (B-040), so the unit cannot go back on sale before
+    // somebody has opened the door.
+    await tx.lease.update({
+      where: { id: view.leaseId },
+      data: { status: 'ended', endDate: input.soldAt, moveOutDate: input.soldAt },
+    })
+    await tx.unit.update({ where: { id: view.unitId }, data: { operationalStatus: 'maintenance' } })
+    await recomputeUnitStatus(view.unitId, tx)
+
+    await recordAudit(
+      {
+        actor: toAuditActor(actor),
+        facilityId: view.facilityId,
+        action: 'auction.completed',
+        entityType: 'AuctionCase',
+        entityId: caseId,
+        context: {
+          soldAt: input.soldAt.toISOString(),
+          grossProceedsCents: input.grossProceedsCents,
+          saleCostsCents: input.saleCostsCents,
+          appliedToLienCents: result.appliedToLienCents,
+          surplusCents: result.surplusCents,
+          deficiencyCents: result.deficiencyCents,
+          buyerName: input.buyer.name,
+        },
+      },
+      tx,
+    )
+  })
+
+  return { ok: true }
+}
+
+/// "Cancelling a sale (tenant paid) at any point restores the normal lifecycle
+/// and logs the reason."
+export async function cancelAuction(
+  actor: Actor,
+  caseId: string,
+  reason: string,
+): Promise<ActionResult> {
+  const row = await prisma.auctionCase.findUniqueOrThrow({ where: { id: caseId } })
+  requirePermission(actor, 'auctions:approve', row.facilityId)
+
+  if (row.status === 'sold') {
+    return { ok: false, reason: 'This unit has already been sold. A completed sale cannot be cancelled.' }
+  }
+  if (row.status === 'cancelled') return { ok: true }
+  if (!reason.trim()) return { ok: false, reason: 'Cancelling has to record why.' }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.auctionCase.update({
+      where: { id: caseId },
+      data: { status: 'cancelled', cancelledAt: new Date(), cancelledReason: reason.trim() },
+    })
+    // Restores the normal lifecycle: the lease goes back to being an ordinary
+    // delinquent lease rather than one pending auction. The delinquency engine
+    // decides from here — if they really paid, its own cure path runs.
+    await tx.lease.updateMany({
+      where: { id: row.leaseId, status: 'pending_auction' },
+      data: { status: 'delinquent' },
+    })
+    await recordAudit(
+      {
+        actor: toAuditActor(actor),
+        facilityId: row.facilityId,
+        action: 'auction.cancelled',
+        entityType: 'AuctionCase',
+        entityId: caseId,
+        reasonCode: reason.trim(),
+        context: { leaseId: row.leaseId, previousStatus: row.status },
+      },
+      tx,
+    )
+  })
+  return { ok: true }
+}
+
+/// Records that the former tenant was notified a surplus is held.
+export async function recordSurplusNotified(actor: Actor, caseId: string): Promise<ActionResult> {
+  const row = await prisma.auctionCase.findUniqueOrThrow({ where: { id: caseId } })
+  requirePermission(actor, 'auctions:approve', row.facilityId)
+  if ((row.surplusCents ?? 0) <= 0) return { ok: false, reason: 'This sale produced no surplus.' }
+
+  await prisma.auctionCase.update({
+    where: { id: caseId },
+    data: { surplusTenantNotifiedAt: row.surplusTenantNotifiedAt ?? new Date() },
+  })
+  return { ok: true }
+}
+
+/// Records what happened to the surplus — claimed by the former tenant, or
+/// remitted to the state.
+export async function recordSurplusDisposition(
+  actor: Actor,
+  caseId: string,
+  disposition: SurplusDisposition,
+  note: string,
+): Promise<ActionResult> {
+  const row = await prisma.auctionCase.findUniqueOrThrow({ where: { id: caseId } })
+  requirePermission(actor, 'auctions:approve', row.facilityId)
+
+  const verdict = canRecordDisposition(row.surplusCents ?? 0, disposition)
+  if (!verdict.allowed) return { ok: false, reason: verdict.reason }
+  if (!note.trim()) {
+    return { ok: false, reason: 'Record how the surplus was paid out or remitted, and to whom.' }
+  }
+  if (row.surplusDispositionedAt) {
+    return { ok: false, reason: 'This surplus has already been dispositioned.' }
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.auctionCase.update({
+      where: { id: caseId },
+      data: {
+        surplusDisposition: disposition,
+        surplusDispositionNote: note.trim(),
+        surplusDispositionedAt: new Date(),
+      },
+    })
+    await recordAudit(
+      {
+        actor: toAuditActor(actor),
+        facilityId: row.facilityId,
+        action: 'auction.surplus_dispositioned',
+        entityType: 'AuctionCase',
+        entityId: caseId,
+        context: { disposition, surplusCents: row.surplusCents, note: note.trim() },
+      },
+      tx,
+    )
+  })
+  return { ok: true }
+}
+
+/// Every sale whose surplus is still outstanding, across the actor's
+/// facilities. The list that stops a surplus being quietly retained.
+export async function outstandingSurpluses(actor: Actor, facilityId: string) {
+  requirePermission(actor, 'tenants:view', facilityId)
+  const rows = await prisma.auctionCase.findMany({
+    where: { facilityId, status: 'sold', surplusDisposition: { in: ['held'] } },
+    include: { unit: { select: { number: true } }, lease: { select: { tenantId: true } } },
+    orderBy: { surplusHoldUntil: 'asc' },
+  })
+
+  const now = new Date()
+  return rows.map((row) => {
+    const obligation = surplusObligation(
+      {
+        surplusCents: row.surplusCents ?? 0,
+        disposition: row.surplusDisposition,
+        holdUntil: row.surplusHoldUntil,
+        notifiedAt: row.surplusTenantNotifiedAt,
+      },
+      now,
+    )
+    return {
+      caseId: row.id,
+      unitNumber: row.unit.number,
+      tenantId: row.lease.tenantId,
+      surplusCents: row.surplusCents ?? 0,
+      surplusLabel: formatCents(row.surplusCents ?? 0),
+      holdUntil: row.surplusHoldUntil,
+      notifiedAt: row.surplusTenantNotifiedAt,
+      ...obligation,
+    }
+  })
+}

@@ -453,6 +453,13 @@ model Facility {
   /// suspended. Texas practice is around 6; configuration, not law (D-10).
   /// Zero or less disables the rule entirely, which is a real operator choice.
   accessSuspendDaysPastDue Int       @default(6)
+  /// US-28 (B-062). How long an auction surplus is held before it must be
+  /// dispositioned — paid to the former tenant, or remitted to the state.
+  ///
+  /// Configuration, emphatically not law: US-28's own note says the Texas
+  /// duration needs an attorney pass under D-10. The default is a placeholder
+  /// of the right order of magnitude, and the settings screen says so.
+  surplusHoldDays     Int            @default(365)
   /// What counts as a qualifying payment for automatic restore.
   ///
   /// Zero — the default and D-16's decision — means the balance must reach
@@ -546,6 +553,7 @@ model Facility {
   unitTypeRates          UnitTypeRate[]
   messageTemplates       MessageTemplate[]
   noticeTemplates        NoticeTemplate[]
+  auctionCases           AuctionCase[]
   notificationRules      NotificationRule[]
   messages               Message[]
 
@@ -731,6 +739,7 @@ model Unit {
   @@map("unit")
   overlocks UnitOverlock[]
   maintenanceTickets MaintenanceTicket[]
+  auctionCases AuctionCase[]
 }
 
 // --------------------------------------------------------- people/leases ----
@@ -944,6 +953,7 @@ model Lease {
   delinquencyTimeline DelinquencyTimeline? @relation(fields: [delinquencyTimelineId], references: [id], onDelete: SetNull)
   delinquencyStepRuns DelinquencyStepRun[]
   overlocks UnitOverlock[]
+  auctionCases AuctionCase[]
 }
 
 // -------------------------------------------------------------- billing ----
@@ -1288,6 +1298,7 @@ model Document {
   facility  Facility           @relation(fields: [facilityId], references: [id], onDelete: Restrict)
   signature DocumentSignature?
   notices   Notice[]
+  auctionInventories AuctionCase[]
 
   @@index([facilityId, type])
   @@index([subjectType, subjectId])
@@ -1647,6 +1658,7 @@ model DelinquencyTimeline {
   @@index([facilityId, active])
   @@map("delinquency_timeline")
   stepRuns DelinquencyStepRun[]
+  auctionCases AuctionCase[]
 }
 
 /// PRD 02 FR-5 / US-28 (B-057). One row per timeline step executed against one
@@ -2994,4 +3006,151 @@ model AuditLog {
   @@index([action, occurredAt])
   @@index([occurredAt])
   @@map("audit_log")
+}
+
+// ------------------------------------------------------------ auctions ----
+
+enum AuctionStatus {
+  eligible
+  scheduled
+  sold
+  cancelled
+}
+
+enum SurplusDisposition {
+  no_surplus
+  held
+  claimed
+  remitted
+}
+
+/// PRD 02 §4.6 US-28 (B-062). One lien-sale case against one lease.
+///
+/// The spine of the auction pipeline, and the record a wrongful-sale complaint
+/// is answered from. Everything the AC lists that is a single fact about the
+/// sale lives here; the two things that are lists of their own (advertising
+/// runs, and the itemised inventory) are a separate table and a hashed
+/// `Document` respectively.
+///
+/// Append-mostly. `cancelledAt`, the sale outcome and the surplus disposition
+/// are each written once and never rewritten — a case that was cancelled and
+/// then re-opened is a NEW case, because "was this unit under a live lien case
+/// on the 3rd" has to stay answerable.
+model AuctionCase {
+  id         String        @id @default(cuid())
+  facilityId String
+  leaseId    String
+  unitId     String
+  status     AuctionStatus @default(eligible)
+
+  /// US-29: "shows the configured timeline summary on every auction approval
+  /// screen." Pinned to the version that governed this case, so a timeline
+  /// edited next quarter cannot change what the approval screen said.
+  timelineId String?
+
+  /// US-28's vehicle carve-out. Titled property follows a different notice and
+  /// sale route in Texas and most states, so this HARD-BLOCKS the standard
+  /// path — there is no override anywhere in the codebase.
+  containsVehicle Boolean @default(false)
+  vehicleNote     String?
+
+  /// Regional or owner approval, required before scheduling.
+  approvedByStaffId String?
+  approvedAt        DateTime? @db.Timestamptz(6)
+
+  /// A facility-local calendar day: the sale is "on the 14th".
+  scheduledSaleDate DateTime? @db.Date
+
+  /// Lock cut and inventory. "The primary evidence that you sold what you said
+  /// you sold" — so the itemised inventory and its photographs are rendered
+  /// into a hashed `Document` (US-27's mechanism), not free text on this row.
+  lockCutAt          DateTime? @db.Timestamptz(6)
+  lockCutByStaffId   String?
+  oldLockDisposition String?
+  inventoryDocumentId String?
+
+  /// Sale outcome. Every figure below is computed by the waterfall
+  /// (packages/core/auctions) and posted as ledger entries — never typed in as
+  /// a total.
+  soldAt              DateTime? @db.Timestamptz(6)
+  grossProceedsCents  Int?
+  saleCostsCents      Int?
+  costsRecoveredCents Int?
+  appliedToLienCents  Int?
+  surplusCents        Int?
+  deficiencyCents     Int?
+
+  /// Buyer record (US-28). A sales-tax return on auction proceeds cannot be
+  /// filed without it, so it is required at the moment the sale is recorded
+  /// rather than chased afterwards.
+  buyerName             String?
+  buyerAddressLine1     String?
+  buyerAddressLine2     String?
+  buyerCity             String?
+  buyerState            String?
+  buyerPostalCode       String?
+  /// A REFERENCE, never the number itself — see the note on redaction in
+  /// packages/core/audit. Storing a driving licence number would create a
+  /// breach-notification liability for a field nobody needs to read back.
+  buyerGovernmentIdReference String?
+  buyerTaxExempt             Boolean @default(false)
+  buyerResaleCertificateReference String?
+  buyerPaymentMethod         String?
+  buyerCleanoutDeadline      DateTime? @db.Date
+  buyerForfeitTerms          String?
+
+  /// Surplus: a liability with a statutory life, not revenue.
+  surplusDisposition     SurplusDisposition @default(no_surplus)
+  surplusHoldUntil       DateTime?          @db.Date
+  surplusTenantNotifiedAt DateTime?         @db.Timestamptz(6)
+  surplusDispositionNote String?
+  surplusDispositionedAt DateTime?          @db.Timestamptz(6)
+
+  /// "Cancelling a sale (tenant paid) at any point restores the normal
+  /// lifecycle and logs the reason."
+  cancelledAt     DateTime? @db.Timestamptz(6)
+  cancelledReason String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  facility  Facility             @relation(fields: [facilityId], references: [id], onDelete: Restrict)
+  lease     Lease                @relation(fields: [leaseId], references: [id], onDelete: Restrict)
+  unit      Unit                 @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  timeline  DelinquencyTimeline? @relation(fields: [timelineId], references: [id], onDelete: Restrict)
+  inventory Document?            @relation(fields: [inventoryDocumentId], references: [id], onDelete: Restrict)
+  advertisements AuctionAdvertisement[]
+
+  /// One LIVE case per lease. A partial unique index in raw SQL (Prisma cannot
+  /// express one) — migration 20260810030000_auction_case:
+  ///   auction_case_one_live_per_lease
+  ///     — unique(leaseId) where status in ('eligible','scheduled')
+  /// Same device as `unit_overlock_one_live_per_unit`. A plain unique would
+  /// make a second lien cycle on the same lease impossible.
+  @@index([facilityId, status])
+  @@index([leaseId])
+  @@index([facilityId, surplusDisposition])
+  @@map("auction_case")
+}
+
+/// US-28's "advertising record fields (publication/site, dates run)".
+///
+/// A table rather than columns because a sale is commonly advertised more than
+/// once, in more than one place, and "which runs did you place" is a question
+/// the file has to answer with a list.
+model AuctionAdvertisement {
+  id            String   @id @default(cuid())
+  auctionCaseId String
+  /// Publication or site name.
+  publication   String
+  /// The facility-local day it ran.
+  runDate       DateTime @db.Date
+  /// Tear sheet, listing URL, or invoice reference.
+  reference     String?
+  createdAt     DateTime @default(now()) @db.Timestamptz(6)
+
+  auctionCase AuctionCase @relation(fields: [auctionCaseId], references: [id], onDelete: Cascade)
+
+  @@index([auctionCaseId, runDate])
+  @@map("auction_advertisement")
 }

@@ -412,6 +412,15 @@ export async function updateBillingPolicyAction(
     max: 180,
     unit: 'days',
   })
+  // US-28's note: "the Texas surplus holding period... needs an attorney pass
+  // under D-10. The fields and the hard block are built now; the durations are
+  // configuration." Floor of 1: a zero-day hold is not a hold.
+  const surplusHoldDays = parseScaled(formData.get('surplusHoldDays'), {
+    scale: 1,
+    min: 1,
+    max: 3_650,
+    unit: 'days',
+  })
   const restoreAtOrBelow = parseScaled(formData.get('accessRestoreAtOrBelowDollars'), {
     scale: 100,
     min: 0,
@@ -432,6 +441,7 @@ export async function updateBillingPolicyAction(
   }
   if ('error' in leadDays) errors.invoiceLeadDays = leadDays.error
   if ('error' in suspendDays) errors.accessSuspendDaysPastDue = suspendDays.error
+  if ('error' in surplusHoldDays) errors.surplusHoldDays = surplusHoldDays.error
   if ('error' in restoreAtOrBelow) errors.accessRestoreAtOrBelowDollars = restoreAtOrBelow.error
 
   let retryDays: number[] = []
@@ -451,7 +461,12 @@ export async function updateBillingPolicyAction(
   }
 
   if (Object.keys(errors).length > 0) return fieldError(errors)
-  if ('error' in leadDays || 'error' in suspendDays || 'error' in restoreAtOrBelow) {
+  if (
+    'error' in leadDays ||
+    'error' in suspendDays ||
+    'error' in surplusHoldDays ||
+    'error' in restoreAtOrBelow
+  ) {
     return fieldError(errors)
   }
 
@@ -463,6 +478,7 @@ export async function updateBillingPolicyAction(
       prorateOnMoveOut: formData.get('prorateOnMoveOut') === 'yes',
       paymentRetryDays: retryDays,
       accessSuspendDaysPastDue: suspendDays.value,
+      surplusHoldDays: surplusHoldDays.value,
       accessRestoreAtOrBelowCents: restoreAtOrBelow.value,
       paymentAllocationOrder: allocationOrder,
       dunningDays,

@@ -249,6 +249,10 @@ export type BillingPolicyInput = {
   /// policy" for the same reason.
   accessSuspendDaysPastDue: number
   accessRestoreAtOrBelowCents: number
+  /// US-28 (B-062). How long an auction surplus is held before it must be
+  /// dispositioned. Configuration, not law — the durations need an attorney
+  /// pass under D-10, which is why it is a field and not a constant.
+  surplusHoldDays: number
   /// US-22's allocation order, as category keys.
   paymentAllocationOrder: string[]
   /// CN-3's ladder: days past due at which the tenant is chased.
@@ -325,6 +329,7 @@ export async function updateBillingPolicy(
       prorateOnMoveOut: before.prorateOnMoveOut,
       paymentRetryDays: before.paymentRetryDays,
       accessSuspendDaysPastDue: before.accessSuspendDaysPastDue,
+      surplusHoldDays: before.surplusHoldDays,
       accessRestoreAtOrBelowCents: before.accessRestoreAtOrBelowCents,
       paymentAllocationOrder: before.paymentAllocationOrder,
       dunningDays: before.dunningDays,
@@ -336,6 +341,7 @@ export async function updateBillingPolicy(
       prorateOnMoveOut: after.prorateOnMoveOut,
       paymentRetryDays: after.paymentRetryDays,
       accessSuspendDaysPastDue: after.accessSuspendDaysPastDue,
+      surplusHoldDays: after.surplusHoldDays,
       accessRestoreAtOrBelowCents: after.accessRestoreAtOrBelowCents,
       paymentAllocationOrder: after.paymentAllocationOrder,
       dunningDays: after.dunningDays,

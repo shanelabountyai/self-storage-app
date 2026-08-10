@@ -66,6 +66,16 @@ export const AUDIT_ACTIONS = [
   { action: 'notice.delivered', label: 'Notice delivery recorded', requiresReason: false },
   { action: 'auction.approved', label: 'Auction eligibility approved', requiresReason: true },
   { action: 'auction.completed', label: 'Auction outcome recorded', requiresReason: false },
+  /// B-062. Each one is a question a wrongful-sale complaint asks directly.
+  { action: 'auction.scheduled', label: 'Sale scheduled', requiresReason: false },
+  /// Reason required: "cancelling a sale (tenant paid) at any point restores
+  /// the normal lifecycle and LOGS THE REASON" (US-28).
+  { action: 'auction.cancelled', label: 'Sale cancelled', requiresReason: true },
+  /// "The primary evidence that you sold what you said you sold."
+  { action: 'auction.lock_cut', label: 'Lock cut and contents inventoried', requiresReason: false },
+  /// A surplus quietly retained is how a routine auction becomes a
+  /// class-action-shaped problem, so its disposition is audited on its own.
+  { action: 'auction.surplus_dispositioned', label: 'Auction surplus dispositioned', requiresReason: false },
 
   // Access control (PRD 03 FR-1)
   { action: 'access.granted', label: 'Access granted', requiresReason: false },

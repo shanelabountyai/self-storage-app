@@ -512,6 +512,15 @@ export default async function AdminSettingsPage() {
             hint="Days past due. Enter 0 to never suspend for non-payment."
           />
           <Field
+            name="surplusHoldDays"
+            label="Hold an auction surplus for"
+            type="number"
+            min={1}
+            max={3650}
+            defaultValue={facility.surplusHoldDays}
+            hint="Days after a lien sale before the surplus must be paid out or remitted to the state. This is a placeholder, not a legal figure — ask your attorney what your state requires."
+          />
+          <Field
             name="accessRestoreAtOrBelowDollars"
             label="Restore access once the balance is at or below ($)"
             type="text"

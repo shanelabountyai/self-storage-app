@@ -11,6 +11,7 @@ import { createTask } from '@/lib/admin/tasks'
 import { restoreAccessIfSettled } from '@/lib/access/delinquency-gate'
 import { transitionGrant } from '@/lib/access/service'
 import { releaseOverlock, requestOverlock } from '@/lib/delinquency/overlock'
+import { openAuctionCase } from '@/lib/auctions/service'
 
 // PRD 02 FR-5 (B-057). The nightly delinquency run.
 //
@@ -314,6 +315,11 @@ async function executeStep(input: {
           where: { id: lease.id, status: { in: [...OCCUPYING_LEASE_STATUSES] } },
           data: { status: 'pending_auction' },
         })
+        // B-062. Opens the case the pipeline screen works from. Idempotent via
+        // the partial unique index, so a re-run does not open a second — and
+        // opening one grants nothing: every readiness rule still has to pass
+        // before a sale can be scheduled.
+        await openAuctionCase({ leaseId: lease.id, facilityId })
         done.push('flag_auction_eligible')
         break
     }

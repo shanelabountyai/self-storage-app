@@ -2006,3 +2006,68 @@ staff preview, generate and record service. 74 new tests (52 pure, 22 DB).
   encoder exists in this runtime, and the hash and evidence chain work
   identically. Certified-mail API integration is B-083; today staff type the
   tracking number.
+
+## B-062 — The auction pipeline
+
+`<sha>`
+
+**What it built.** US-28 end to end: `AuctionCase` (one live case per lease, via
+a partial unique index) with its advertising runs, the hard-blocked scheduling
+gate, the lock-cut inventory as a hashed document, the buyer record, the
+system-computed proceeds waterfall posting real ledger entries, and surplus
+tracked as a liability until somebody records where the money went.
+`/admin/auctions` lists cases and outstanding surpluses; the case screen carries
+US-29's disclaimer and the pinned timeline summary. 131 new tests (97 pure, 34
+DB), including a swept identity check over the waterfall.
+
+**What it decided.**
+
+- *The waterfall accounts for every cent, and asserts it.* `distribute` returns
+  costs-recovered, applied-to-lien and surplus, and throws if they do not sum to
+  gross proceeds. Unreachable by construction; checked anyway, because money
+  falling out of the waterfall is the failure the file exists to prevent. A
+  swept range test covers ~200 combinations.
+- *The surplus is never posted to the lease ledger.* Sale costs post as a
+  charge and the recovered amount as a payment, so the lease nets to zero (or
+  to a real deficiency). Posting the surplus as a credit would make it read as
+  discharged the moment it was recorded — exactly how a surplus gets quietly
+  retained. It is a liability against the case, and it stays on the auctions
+  screen until dispositioned.
+- *A surplus starts `held`, never `no_surplus`*, and `no_surplus` cannot be
+  chosen by a person. Otherwise a real surplus could be closed out by declaring
+  it never existed.
+- *Every blocker is reported at once, not the first.* A manager fixing one
+  blocker per round, discovering the next each time, is how a deadline gets
+  missed and a corner gets cut.
+- *A vehicle blocks approval as well as scheduling.* Approving a case that can
+  never be scheduled would leave a signed-off record of a sale nobody may run.
+- *A served lien notice is a scheduling precondition*, joined to B-061:
+  `status: delivered` and not superseded. Generated-but-never-served does not
+  count — a sale with no served notice behind it is the commonest wrongful-sale
+  claim there is.
+- *Approval requires rank ≥ 30 (regional).* A site manager cannot approve the
+  sale of their own site's tenant.
+- *The lock-cut inventory is written once*, requires a photograph per line, and
+  refuses an empty list — "no items of value" is itself a line that has to be
+  written down. It renders through `storeGeneratedDocument`, so it is hashed and
+  verifiable like a notice.
+- *The buyer's government ID is a REFERENCE, never the number.* Enough to find
+  the record, not enough to become a breach-notification liability.
+- *`surplusHoldDays` is a facility setting with its control shipped in this
+  item*, per the repo rule. US-28's own note says the duration needs an attorney
+  pass under D-10, so the field is labelled a placeholder rather than a legal
+  figure.
+
+**What it left behind.**
+
+- Two schema invariants correctly caught the new fields and were extended with
+  reasons rather than loosened: four calendar dates (`@db.Date`), and
+  `AuctionAdvertisement` as scoped through its parent case.
+- The sale releases the unit to `maintenance` and ends the lease, reusing
+  B-040's path — so a sold unit cannot go back on sale before somebody has
+  opened the door.
+- Online auction platform listing is B-083, still P2. Nothing here talks to an
+  external marketplace; the advertising record is what staff type.
+- Cancelling returns the lease to `delinquent` and lets the delinquency engine
+  decide from there, rather than asserting the tenant paid — if they really did,
+  the engine's own cure path runs.
