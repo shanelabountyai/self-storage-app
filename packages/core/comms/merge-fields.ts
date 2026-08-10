@@ -115,6 +115,27 @@ export const EVENT_MERGE_FIELDS: Record<string, readonly MergeFieldSpec[]> = {
     { field: 'links.pay_now', description: 'One-tap link to pay', sample: 'https://example.com/pay/abc123' },
   ],
   'access.restored': [{ field: 'unit.number', description: 'Unit number', sample: 'A-12' }],
+  // B-063 / PRD 05 CN-11. The remaining stage notice — a physical lock, not the
+  // gate. Same field names as `access.suspended` on purpose: it is the same
+  // kind of fact (what is blocked, how much clears it), told about a different
+  // enforcement action.
+  'overlock.required': [
+    { field: 'unit.number', description: 'Unit number', sample: 'A-12' },
+    { field: 'access.days_past_due', description: 'How many days past due', sample: '10' },
+    { field: 'balance.total', description: 'What must be paid to have the lock removed', sample: '$258.00' },
+    { field: 'links.pay_now', description: 'One-tap link to pay', sample: 'https://example.com/pay/abc123' },
+  ],
+  'overlock.cleared': [{ field: 'unit.number', description: 'Unit number', sample: 'A-12' }],
+  // B-063 / PRD 05 CN-12. The courtesy supplement — never the statutory notice.
+  // `notice.balance` and `notice.deadline_date` are read from the notice's own
+  // stored snapshot, not recomputed, so the email can never quote a different
+  // figure than the document it is telling the tenant about.
+  'notice.generated': [
+    { field: 'unit.number', description: 'Unit number', sample: 'A-12' },
+    { field: 'notice.balance', description: 'The balance stated on the generated notice', sample: '$387.00' },
+    { field: 'notice.deadline_date', description: 'The deadline stated on the generated notice', sample: 'September 15, 2026' },
+    { field: 'links.pay_now', description: 'One-tap link to pay', sample: 'https://example.com/pay/abc123' },
+  ],
   'protection.proof_expiring': [
     { field: 'unit.number', description: 'Unit number', sample: 'A-12' },
     { field: 'protection.expires_on', description: 'When their cover runs out', sample: 'September 15, 2026' },

@@ -86,6 +86,11 @@ export const EVENT_NAMES = [
 
   // Documents
   'esign.completed',
+
+  /// PRD 02 US-27 / PRD 05 CN-12 (B-061/B-063). A pre-lien or lien notice was
+  /// generated and stored. Drives the courtesy email — never the statutory
+  /// notice itself, which is the mailed, hashed document this event points at.
+  'notice.generated',
 ] as const
 
 export type EventName = (typeof EVENT_NAMES)[number]

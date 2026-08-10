@@ -99,6 +99,12 @@ export const CONSUMERS: readonly Consumer[] = [
       'payment_method.expiring',
       'protection.proof_expiring',
       'protection.auto_enrolled',
+      // B-063 / PRD 05 CN-11, CN-12. Two catalog names B-057 reserved
+      // (`overlock.required`/`overlock.cleared`) with nothing emitting them
+      // until now, plus the pre-lien/lien courtesy supplement.
+      'overlock.required',
+      'overlock.cleared',
+      'notice.generated',
     ],
     handle: async ({ event }) => {
       await processCommsEvent(event)

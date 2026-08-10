@@ -515,6 +515,43 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
     }
   },
 
+  // B-063 / PRD 05 CN-11. Same recompute-at-send-time reasoning as
+  // `access.suspended` — a tenant who paid between the lock going on and the
+  // dispatch must see the figure that is true now, not the one that triggered
+  // the timeline step.
+  'overlock.required': async (event, recipient) => {
+    const invoices = recipient.lease
+      ? await prisma.invoice.findMany({
+          where: { leaseId: recipient.lease.id, kind: 'rent' },
+          select: { dueDate: true, totalCents: true, amountPaidCents: true },
+        })
+      : []
+    return {
+      'access.days_past_due': String(daysPastDue(invoices, new Date())),
+      'balance.total': formatCents(await leaseBalanceCents(recipient.lease?.id ?? null)),
+      'links.pay_now': await payNowLink(recipient, event),
+    }
+  },
+
+  // B-063 / PRD 05 CN-12. Read from the EVENT payload — the figures the
+  // generated document actually stated — never recomputed. A courtesy email
+  // quoting a different balance than the notice it describes would be worse
+  // than not sending one.
+  'notice.generated': async (event, recipient) => {
+    const payload = (event.payload ?? {}) as { claimTotalCents?: number; deadlineDate?: string }
+    // The deadline is a calendar date (packages/db's `@db.Date`), read back as
+    // UTC midnight — formatting it with a facility timezone could shift it a
+    // day off what the actual notice document printed.
+    const deadline = payload.deadlineDate ? new Date(`${payload.deadlineDate}T00:00:00.000Z`) : null
+    return {
+      'notice.balance': formatCents(payload.claimTotalCents ?? 0),
+      'notice.deadline_date': deadline
+        ? new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', month: 'long', day: 'numeric', year: 'numeric' }).format(deadline)
+        : '—',
+      'links.pay_now': await payNowLink(recipient, event),
+    }
+  },
+
   // CN-3's tone escalation, as content rather than code. Four rungs, and the
   // wording gets firmer without ever threatening something that has not been
   // decided — the day-10 line warns about access because B-098 genuinely
@@ -815,6 +852,24 @@ const SKIP_PREDICATES: Record<
     if (!invoice) return true
     return invoice.status === 'paid' || invoice.amountPaidCents >= invoice.totalCents
   },
+
+  // B-063. FR-18 staleness for the overlock notice: the tenant paid and staff
+  // already took the lock off between the event and the dispatch. "We've
+  // locked your unit" would be false by the time it landed.
+  overlock_already_cleared: async (recipient) => {
+    if (!recipient.lease) return false
+    const live = await prisma.unitOverlock.findFirst({
+      where: { leaseId: recipient.lease.id, removedAt: null },
+      select: { id: true },
+    })
+    return !live
+  },
+
+  // B-063 / PRD 05 CN-12. `notice.generated` fires for both notice types; each
+  // rule is scoped to the one it renders by skipping the other, the same
+  // device `applicableRules` already uses for multiple templates on one event.
+  notice_type_not_pre_lien: (_recipient, event) => (event.payload as { type?: string })?.type !== 'pre_lien',
+  notice_type_not_lien: (_recipient, event) => (event.payload as { type?: string })?.type !== 'lien',
 }
 
 async function firstFiringSkip(

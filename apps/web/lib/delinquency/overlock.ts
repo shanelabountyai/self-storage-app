@@ -1,5 +1,6 @@
 import { prisma, type Prisma } from '@storage/db'
 import { recordAudit } from '@storage/core/audit'
+import { emitEvent } from '@storage/core/events'
 import { createTask } from '@/lib/admin/tasks'
 import { recomputeUnitStatus } from '@/lib/admin/units'
 import { toAuditActor } from '@/lib/rbac/audit-actor'
@@ -102,6 +103,21 @@ export async function confirmOverlockApplied(
     },
     client,
   )
+
+  // PRD 05 CN-11 (B-063). The catalog has carried this event name since B-057's
+  // planning with nothing emitting it — a lock going physically onto a unit is
+  // the fact the tenant most needs told, and this is what the courtesy comms
+  // rule fires on.
+  await emitEvent(
+    {
+      name: 'overlock.required',
+      entityType: 'Lease',
+      entityId: overlock.leaseId,
+      facilityId: overlock.facilityId,
+      payload: { unitId: overlock.unitId, overlockId },
+    },
+    client,
+  )
 }
 
 /// US-25's "queues overlock removal" on cure.
@@ -182,6 +198,19 @@ export async function confirmOverlockRemoved(
       entityId: overlock.unitId,
       facilityId: overlock.facilityId,
       context: { leaseId, overlockId: overlock.id },
+    },
+    client,
+  )
+
+  // PRD 05 CN-11's cure half — the same pairing D-16 requires for access:
+  // both transitions are notified.
+  await emitEvent(
+    {
+      name: 'overlock.cleared',
+      entityType: 'Lease',
+      entityId: leaseId,
+      facilityId: overlock.facilityId,
+      payload: { unitId: overlock.unitId, overlockId: overlock.id },
     },
     client,
   )

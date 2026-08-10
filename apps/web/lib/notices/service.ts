@@ -1,6 +1,7 @@
 import { prisma, type NoticeType, type Prisma } from '@storage/db'
 import { recordAudit } from '@storage/core/audit'
 import { currentConsent } from '@storage/core/consent'
+import { emitEvent } from '@storage/core/events'
 import {
   ledgerTotals,
   runningBalance,
@@ -464,6 +465,28 @@ export async function generateNotice(
           templateVersion: context.template.version,
           renderedTo: `${context.address.line1}, ${context.address.city} ${context.address.postalCode}`,
           corrects: options.correctsNoticeId ?? null,
+        },
+      },
+      tx,
+    )
+
+    // PRD 05 CN-12 (B-063). Drives the courtesy email — "the message never
+    // claims to *be* the statutory notice." The statutory notice is the
+    // document just stored above; this only tells the pipeline a lease-scoped
+    // notification is now warranted. Fires on a correction too: a corrected
+    // notice is a new document with a new deadline, and the tenant is told
+    // about THAT one.
+    await emitEvent(
+      {
+        name: 'notice.generated',
+        entityType: 'Lease',
+        entityId: leaseId,
+        facilityId: context.facilityId,
+        payload: {
+          noticeId: notice.id,
+          type,
+          claimTotalCents: context.claim.totalCents,
+          deadlineDate: context.deadlineDate.toISOString().slice(0, 10),
         },
       },
       tx,

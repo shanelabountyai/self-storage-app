@@ -2071,3 +2071,59 @@ DB), including a swept identity check over the waterfall.
 - Cancelling returns the lease to `delinquent` and lets the delinquency engine
   decide from there, rather than asserting the tenant paid — if they really did,
   the engine's own cure path runs.
+
+## B-063 — Comms delinquency-stage notices and pre-lien/lien courtesy supplements
+
+`<sha>`
+
+**What it built.** CN-11's remaining stage pair (overlock applied/removed) and
+CN-12's pre-lien/lien courtesy supplements, on B-030's existing engine —
+templates, notification rules, merge-field schema entries, and the event
+wiring to fire them. The access-suspended/restored pair already shipped with
+B-098; this closes out the rest of PRD 05's delinquency-stage list. 22 new
+tests (14 pure copy/wiring checks, 8 against the database and the real seeded
+catalog).
+
+**What it decided.**
+
+- *Two catalog event names had been reserved and never used.* `overlock.required`
+  and `overlock.cleared` sat in packages/core/events/catalog.ts since B-057's
+  planning with nothing emitting them. `confirmOverlockApplied` and
+  `confirmOverlockRemoved` (B-058) now emit them in the same transaction as the
+  state change — found while building the thing that needed them, not gone
+  looking for.
+- *The courtesy supplement quotes the notice's own snapshot, never a live
+  balance.* `notice.generated`'s payload carries the claim total and deadline
+  exactly as B-061 stored them on the `Notice` row. Recomputing at send time —
+  the pattern every other rule in this catalog uses — would risk the email
+  disagreeing with the mailed document it describes, which is worse for a
+  courtesy message than a stale figure would be for a reminder.
+- *One event, two templates, filtered by a skip condition each.* `notice_type_not_pre_lien`
+  and `notice_type_not_lien` reuse the same device the catalog already needed
+  for anything scoped narrower than its event — exactly one of the two fires
+  per generated notice.
+- *The courtesy language is tested as content, not trusted as prose.* Both
+  supplement templates are checked for "courtesy", "not the formal notice",
+  "by mail", and "lease and state law" — and checked to contain NONE of several
+  phrasings that would read as the email being service of process. The same
+  discipline B-056 applied to the timeline's own disclaimer.
+- *FR-18 staleness gets a new predicate for the overlock notice*
+  (`overlock_already_cleared`): a tenant who paid and had the lock removed
+  between the event and the dispatch must not receive "we've locked your
+  unit."
+
+**What it left behind.**
+
+- *SMS is out of scope, matching the existing architecture.* CN-12 asks for
+  "email (and SMS if consented)"; B-030 shipped email-only (FR-4) and no SMS
+  provider is wired in this codebase yet. Both supplements are email; the SMS
+  half is a gap B-030 already carries, not a new one from this item.
+- *A real bug in the test harness, not the product*: the seed script only runs
+  when explicitly invoked — a schema change alone does not populate
+  `NotificationRule`/`MessageTemplate` rows into either database. Re-running
+  `db:seed` and `db:migrate:test` was what made the new templates actually
+  sendable; a session that edits `comms-catalog.ts` without reseeding will see
+  every new rule silently match nothing.
+- No new admin screen: the existing per-facility template editor (B-053, CN-16)
+  already reads `MessageTemplate` generically, so all four new templates are
+  editable there with no further work.

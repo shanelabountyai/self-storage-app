@@ -162,6 +162,104 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
     ].join('\n'),
     requiredMergeFields: ['tenant.first_name', 'unit.number', 'facility.name', 'facility.phone'],
   },
+  {
+    // PRD 05 CN-11 (B-063). The "remaining stage notice" this item covers — a
+    // physical lock, not the gate. Same house rules as `access_suspended`: say
+    // what happened, the amount, and how it stops, without moralising.
+    key: 'unit_overlocked',
+    classification: 'transactional',
+    subject: 'A lock has been added to unit {{unit.number}} at {{facility.name}}',
+    bodyText: [
+      'Hi {{tenant.first_name}},',
+      '',
+      'Because the account for unit {{unit.number}} at {{facility.name}} is {{access.days_past_due}} days past due, we have added a lock to the unit in addition to your own.',
+      '',
+      'Your belongings are safe and nothing has been sold or moved.',
+      '',
+      'Paying {{balance.total}} clears this. Once it is paid, our team will come and remove the lock: {{links.pay_now}}',
+      '',
+      'If that is wrong, or you need into your unit urgently, call {{facility.phone}} and we will sort it out.',
+    ].join('\n'),
+    requiredMergeFields: [
+      'tenant.first_name',
+      'unit.number',
+      'facility.name',
+      'access.days_past_due',
+      'balance.total',
+      'links.pay_now',
+      'facility.phone',
+    ],
+  },
+  {
+    key: 'unit_overlock_cleared',
+    classification: 'transactional',
+    subject: 'The lock on unit {{unit.number}} at {{facility.name}} has been removed',
+    bodyText: [
+      'Hi {{tenant.first_name}},',
+      '',
+      'Thank you — your account is settled and the additional lock on unit {{unit.number}} at {{facility.name}} has been removed.',
+      '',
+      'If you have any trouble getting into your unit, call {{facility.phone}}.',
+    ].join('\n'),
+    requiredMergeFields: ['tenant.first_name', 'unit.number', 'facility.name', 'facility.phone'],
+  },
+  {
+    // PRD 05 CN-12 (B-063). A courtesy supplement, and the copy has to hold
+    // that line on its own — this may be forwarded, printed, or read back in a
+    // dispute with nothing else attached to it. It states plainly what it is
+    // NOT, states that mail is the real notice, and never quotes a figure this
+    // module computed itself: `notice.balance`/`notice.deadline_date` come
+    // straight off the generated document (PRD 02's evidence chain), so this
+    // email can never disagree with the paper it describes.
+    key: 'pre_lien_notice_supplement',
+    classification: 'transactional',
+    subject: 'A formal notice about unit {{unit.number}} at {{facility.name}} has been sent',
+    bodyText: [
+      'Hi {{tenant.first_name}},',
+      '',
+      'This is a courtesy email. It is not the formal notice itself.',
+      '',
+      'A pre-lien notice about unit {{unit.number}} at {{facility.name}} has been sent to you by mail, as required by your lease and state law. It states a balance of {{notice.balance}}, due by {{notice.deadline_date}}.',
+      '',
+      'You can pay online now: {{links.pay_now}}',
+      '',
+      'If you have questions about the notice, or believe the balance is wrong, call {{facility.phone}}.',
+    ].join('\n'),
+    requiredMergeFields: [
+      'tenant.first_name',
+      'unit.number',
+      'facility.name',
+      'notice.balance',
+      'notice.deadline_date',
+      'links.pay_now',
+      'facility.phone',
+    ],
+  },
+  {
+    key: 'lien_notice_supplement',
+    classification: 'transactional',
+    subject: 'A formal lien notice about unit {{unit.number}} at {{facility.name}} has been sent',
+    bodyText: [
+      'Hi {{tenant.first_name}},',
+      '',
+      'This is a courtesy email. It is not the formal notice itself.',
+      '',
+      'A lien notice about unit {{unit.number}} at {{facility.name}} has been sent to you by mail, as required by your lease and state law. It explains that the property stored in your unit may be sold if the balance is not paid, and states a balance of {{notice.balance}}, due by {{notice.deadline_date}}.',
+      '',
+      'You can pay online now: {{links.pay_now}}',
+      '',
+      'If you have questions about the notice, or believe the balance is wrong, call {{facility.phone}} right away.',
+    ].join('\n'),
+    requiredMergeFields: [
+      'tenant.first_name',
+      'unit.number',
+      'facility.name',
+      'notice.balance',
+      'notice.deadline_date',
+      'links.pay_now',
+      'facility.phone',
+    ],
+  },
 
   {
     // PRD 05 CN-3 (B-052). The dunning ladder.
@@ -488,6 +586,35 @@ export const COMMS_RULES: readonly CommsRuleSeed[] = [
     templateKey: 'access_restored',
     classification: 'transactional',
     skipConditions: ['tenant_moved_out'],
+  },
+
+  // ── B-063 (PRD 05 CN-11/CN-12). The remaining stage notices. ────────────────
+  {
+    event: 'overlock.required',
+    templateKey: 'unit_overlocked',
+    classification: 'transactional',
+    skipConditions: ['tenant_moved_out', 'overlock_already_cleared'],
+  },
+  {
+    event: 'overlock.cleared',
+    templateKey: 'unit_overlock_cleared',
+    classification: 'transactional',
+    skipConditions: ['tenant_moved_out'],
+  },
+  {
+    // One event, two templates — the same device `delinquency.day_reached`
+    // would use if its steps were not merged into one. Each rule skips the
+    // other type, so exactly one of the two ever fires per notice.
+    event: 'notice.generated',
+    templateKey: 'pre_lien_notice_supplement',
+    classification: 'transactional',
+    skipConditions: ['tenant_moved_out', 'notice_type_not_pre_lien'],
+  },
+  {
+    event: 'notice.generated',
+    templateKey: 'lien_notice_supplement',
+    classification: 'transactional',
+    skipConditions: ['tenant_moved_out', 'notice_type_not_lien'],
   },
 
   // ── B-050 ───────────────────────────────────────────────────────────────────
