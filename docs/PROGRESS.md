@@ -2009,7 +2009,7 @@ staff preview, generate and record service. 74 new tests (52 pure, 22 DB).
 
 ## B-062 — The auction pipeline
 
-`<sha>`
+`5e92979`
 
 **What it built.** US-28 end to end: `AuctionCase` (one live case per lease, via
 a partial unique index) with its advertising runs, the hard-blocked scheduling
