@@ -58,6 +58,8 @@ const NO_FACILITY_ID: Record<string, string> = {
     'scoped through the auction case it belongs to — an advertising run is about one sale at one facility, and the case already carries the facilityId (PRD 02 US-28)',
   UrlRedirect:
     'a URL is a site-wide address, and the lookup happens on a request before anything knows which facility it was for — a facilityId here could not be supplied at the only moment it would be read (PRD 04 FR-SEO-2)',
+  NotificationPreference:
+    'scoped to a tenant, not a facility — the same reasoning Consent is exempt: a preference center choice follows the person across every facility they hold a lease at (PRD 05 CN-13, B-074)',
 }
 
 /// Calendar dates, not instants. A business date is a facility-local day with

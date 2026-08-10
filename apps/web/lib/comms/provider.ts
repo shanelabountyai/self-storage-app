@@ -99,6 +99,99 @@ export function resendProvider(apiKey: string): MessageProvider {
   }
 }
 
+// -- SMS (PRD 05 FR-5, B-074) -------------------------------------------------
+
+export type OutboundSms = {
+  to: string
+  /// Twilio Messaging Service SID — the facility's own number pool
+  /// (`Facility.smsMessagingServiceSid`), not a single From number.
+  messagingServiceSid: string
+  body: string
+  idempotencyKey: string
+}
+
+/// A separate port from `MessageProvider`, not an extra method on it: Resend
+/// and Twilio are configured independently (different env vars, different
+/// facilities may have one without the other), and `selectProvider`'s
+/// production/sandbox gating logic needs to run separately per channel.
+export type SmsProvider = {
+  name: string
+  sendSms: (sms: OutboundSms) => Promise<SendResult>
+}
+
+export function logOnlySmsProvider(): SmsProvider {
+  return {
+    name: 'log_only',
+    async sendSms() {
+      return { ok: true, providerMessageId: null }
+    },
+  }
+}
+
+/// PRD 05 FR-5. Twilio Programmable Messaging over its REST API — no SDK, same
+/// rule as `resendProvider`: one authenticated POST does not justify a
+/// dependency. Unlike Resend, Twilio's Messages resource has no native
+/// idempotency-key mechanism — the backstop against a double-send is entirely
+/// OUR OWN idempotency key on the `Message` row (reserved by an upsert before
+/// this call, same as the email path), not a provider-side one.
+export function twilioProvider(accountSid: string, authToken: string): SmsProvider {
+  return {
+    name: 'twilio',
+    async sendSms(sms) {
+      try {
+        const response = await fetch(
+          `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`,
+          {
+            method: 'POST',
+            headers: {
+              Authorization: `Basic ${Buffer.from(`${accountSid}:${authToken}`).toString('base64')}`,
+              'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: new URLSearchParams({
+              To: sms.to,
+              MessagingServiceSid: sms.messagingServiceSid,
+              Body: sms.body,
+            }),
+          },
+        )
+
+        if (response.ok) {
+          const data = (await response.json().catch(() => ({}))) as { sid?: string }
+          return { ok: true, providerMessageId: data.sid ?? null }
+        }
+
+        // Same split as Resend: 4xx (bad number, unconfigured service) fails
+        // identically on retry; 5xx/429 are transient.
+        const retryable = response.status >= 500 || response.status === 429
+        return { ok: false, retryable, message: `twilio ${response.status}` }
+      } catch (error) {
+        return { ok: false, retryable: true, message: error instanceof Error ? error.message : 'send failed' }
+      }
+    },
+  }
+}
+
+/// FR-20's sandbox redirect, SMS side. Same guarantee as `effectiveRecipient`:
+/// no real tenant's phone is reachable from a non-production environment.
+export function effectiveSmsRecipient(realPhone: string): string {
+  if (isProductionEnv()) return realPhone
+  const sandbox = process.env.COMMS_SANDBOX_SMS
+  return sandbox ?? realPhone
+}
+
+/// SMS analogue of `selectProvider`: a real Twilio credential is used only in
+/// production, or in a non-prod env that has ALSO set a sandbox phone number —
+/// otherwise log-only, so a stray credential in a preview deploy cannot text a
+/// real tenant.
+export function selectSmsProvider(): SmsProvider {
+  const sid = process.env.TWILIO_ACCOUNT_SID
+  const token = process.env.TWILIO_AUTH_TOKEN
+  if (!sid || !token) return logOnlySmsProvider()
+  if (isProductionEnv()) return twilioProvider(sid, token)
+  if (process.env.COMMS_SANDBOX_SMS) return twilioProvider(sid, token)
+  return logOnlySmsProvider()
+}
+
 function isProductionEnv(): boolean {
   return process.env.NODE_ENV === 'production'
 }

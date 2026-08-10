@@ -455,6 +455,44 @@ export async function updateEmailIdentity(
   })
 }
 
+export type SmsSettingsInput = {
+  /// PRD 05 FR-5. Null means SMS is not configured for this facility — every
+  /// `sms_preferred_email_fallback` rule degrades to email-only, same as
+  /// having no RESEND_API_KEY degrades email to log-only. A new column that
+  /// configures behaviour, so its control ships in this item (B-074), same
+  /// rule as every other facility setting on this page.
+  smsMessagingServiceSid: string | null
+  smsQuietHoursStartHour: number
+  smsQuietHoursEndHour: number
+}
+
+export async function updateSmsSettings(
+  actor: Actor,
+  facilityId: string,
+  input: SmsSettingsInput,
+): Promise<void> {
+  requirePermission(actor, 'facility:settings', facilityId)
+
+  const before = await prisma.facility.findUniqueOrThrow({ where: { id: facilityId } })
+  const after = await prisma.facility.update({ where: { id: facilityId }, data: input })
+
+  const fields = (row: typeof before) => ({
+    smsMessagingServiceSid: row.smsMessagingServiceSid,
+    smsQuietHoursStartHour: row.smsQuietHoursStartHour,
+    smsQuietHoursEndHour: row.smsQuietHoursEndHour,
+  })
+
+  await recordAudit({
+    actor: toAuditActor(actor),
+    action: 'facility.settings_changed',
+    entityType: 'Facility',
+    entityId: facilityId,
+    facilityId,
+    before: fields(before),
+    after: fields(after),
+  })
+}
+
 export type GateAdapterInput = {
   gateAdapter: 'simulated' | 'manual'
   manualTaskSlaHours: number

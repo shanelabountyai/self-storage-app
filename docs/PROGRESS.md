@@ -2334,3 +2334,115 @@ session has no earlier one. Recovery is attributed in the funnel report
 - Same seeding gotcha as every comms-catalog item before it: `db:seed` and
   `db:migrate:test` both re-ran after adding the three templates/rules, or
   the new sequence would have matched nothing in either database.
+
+---
+
+## B-074 — SMS channel live
+
+`<pending>`
+
+**What it built.** FR-5/FR-7/FR-8 and CN-13/CN-14: a second delivery channel
+alongside B-030's email pipeline. `NotificationRule`/`MessageTemplate` were
+already channel-keyed (B-030's own design); this item is what actually reads
+`channel`/`channelPolicy` rather than hardcoding `email` everywhere. A new
+`deliverSmsForRule` (Twilio, REST, no SDK — same convention as
+`resendProvider`) sits beside the untouched `deliverForRule`: SMS consent
+(`account_sms`, TCPA requires it for every classification, not just
+marketing), phone normalization to E.164, quiet hours (8am-9pm
+facility-local, configurable, applied to every classification unlike
+email's marketing-only window), and a preference-center gate all sit in
+front of it, falling back inline to the sibling email `MessageTemplate` of
+the same key when SMS is not viable — one shared idempotency key per
+(event, rule, recipient) for `sms_preferred_email_fallback` rules, so
+exactly one channel's `Message` row ever settles. Quiet-hours SMS neither
+sends nor falls back — it `defer`s (a new `MessageStatus` value) and the
+hourly cron sweeps it once the window reopens, re-checking staleness
+best-effort against the original event first. Five templates got real SMS
+bodies (`invoice_due_soon`, `invoice_due_today`, `payment_retry_reminder`,
+`payment_method_expiring`, `access_suspended`); a sixth channel a facility
+never configures (`smsMessagingServiceSid` null) degrades every one of them
+to email-only, silently, the same honest-degradation posture as an unset
+`RESEND_API_KEY`. Inbound STOP/STOPALL/UNSUBSCRIBE/CANCEL/END/QUIT, HELP and
+START/UNSTOP land on `/api/comms/sms-webhook` (hand-rolled Twilio signature
+verification, no SDK) and reply via TwiML; the same `applySmsStop`/
+`applySmsStart` functions are what the portal's "turn off text messages"
+button calls, so the two entry points can never drift. A new
+`/portal/notifications` page is CN-13's preference center: three categories
+(payment reminders, receipts, operational notices) × two channels, plus a
+read-only SMS consent state display. 68 new tests (23 pure, 6 signature,
+39 against the database and the real seeded catalog).
+
+**What it decided.**
+
+- *`dunning_step` (the delinquency-stage ladder) and both lien-notice
+  supplements NEVER get an SMS variant, permanently* — recorded as D-36. The
+  backlog line's "SMS variants of all reminder/dunning templates" and CN-13's
+  "legally significant messages... are email-mandatory and cannot be toggled
+  off" name the same template in opposite directions; the PRD's explicit
+  carve-out wins. `access.suspended` DOES get one — a consequence of
+  non-payment, not a delinquency stage itself, and exactly the kind of thing
+  a tenant wants to know about the moment it happens.
+- *One `NotificationRule` row per templateKey, never two.* A rule that gets
+  an SMS variant has its existing row's `channel` flipped from `email` to
+  `sms` (plus `channelPolicy`), not a second parallel rule — `applicableRules`
+  dedupes by templateKey alone, so two active rows for one key is exactly the
+  ambiguity that dedup exists to not have. The seed script's identity for
+  "which row to update" changed from `(event, templateKey, channel,
+  facilityId)` to `(event, templateKey, facilityId)` for this reason — the
+  old identity orphaned the email row under its old channel instead of
+  updating it, and shipped as a real bug mid-item (caught by the seed
+  count going 26→31 templates but 26→31 *rules* instead of staying at 26;
+  fixed before the DB carried it into a real facility).
+- *`deliverSmsForRule` is its own function, not a parameterized
+  `deliverForRule`.* The two channels diverge enough (phone vs email,
+  consent gate, quiet-hours scope, no HTML/postal-footer/unsubscribe, an
+  inline fallback) that threading `channel` through the existing 200-line,
+  well-tested function would have cost more clarity than the duplication it
+  avoided. `applicableRules`/`effectiveTemplate`/`suppressionFor`/
+  `writeMessage` DID generalize (a `channel` parameter, defaulted so every
+  existing email call site needed zero changes) — those were mechanical and
+  low-risk; the delivery function itself was not.
+- *SMS requires `account_sms` consent for EVERY classification*, not just
+  marketing — TCPA's prior-express-consent requirement is about the channel,
+  not the content, unlike PRD 04's marketing-consent carve-out for
+  transactional email. No `marketing_sms` rule is seeded (B-072 never built
+  that capture flow), so this item's consent check is the only one that
+  matters yet.
+- *Twilio Advanced Opt-Out (the provider-level half of CN-14's "provider +
+  app level") is an operator console setting, not code* — this item builds
+  and controls only the application-level layer (`Suppression`, checked at
+  every send regardless of what Twilio's own list says), the one thing this
+  codebase actually owns. The settings screen's own copy says so.
+- *`processCommsEvent`/`deliverSmsForRule` take an optional `now`*, defaulted
+  to the real clock. FR-8's quiet-hours check needs a fixed instant to test
+  deterministically, the same reason `raiseAbandonmentFollowUps`/
+  `sendExpiringSoonReminders` already take one.
+
+**What it left behind.**
+
+- The async fallback trigger FR-15 also names — a provider-reported
+  "undelivered/carrier filtered" status arriving later via Twilio's delivery
+  webhook — has no consumer. This item only catches the SYNCHRONOUS failure
+  (a network error, an immediate 4xx from Twilio's own API). The webhook
+  itself (FR-14's SMS status callback) is unbuilt; B-054's delivery
+  dashboard is the natural owner of both.
+- HELP/an ordinary inbound reply that is not STOP/START gets acknowledged
+  with no action and no reply. A tenant texting back a real question has
+  nowhere for it to go — a two-way inbox is explicitly B-090 scope (Phase 3),
+  not this item's.
+- `NotificationRule.delayMinutes` stays unread — FR-3's "send-time offset the
+  comms service owns" has no consumer yet; nothing in this item needed it.
+- Portal re-enabling SMS after a STOP has no button — only the inbound START
+  keyword lifts a stop-reasoned suppression. CN-13's own AC only asks for
+  the portal to match STOP's effect (revoke), not START's; a portal
+  re-consent flow is a real gap but not one this AC covers.
+- `facilityContactForPhone` (the HELP reply's "identification + support
+  contact") is best-effort by phone match — a prospect who never rented, or
+  two tenants sharing a household number, gets a generic identification line
+  with no facility-specific phone. No per-number-to-facility index exists;
+  Twilio Messaging Services route by pool, not by a mapping this schema
+  keeps.
+- CN-16's template editor (segment counter, 160-char warning for SMS) was
+  not touched — the editor still assumes email. The five new SMS bodies are
+  short enough to have shipped without it, but a future SMS template edited
+  through that screen has no length feedback.

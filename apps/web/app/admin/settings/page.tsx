@@ -14,6 +14,7 @@ import {
   addLateFeeStepAction,
   updateBillingPolicyAction,
   updateEmailIdentityAction,
+  updateSmsSettingsAction,
   updateGateAdapterAction,
   updateOperationsPolicyAction,
   addProtectionPlanAction,
@@ -667,6 +668,52 @@ export default async function AdminSettingsPage() {
             Reviews — manual entry and the review-request link
           </Link>
         </p>
+      </section>
+
+      <section aria-labelledby="sms-heading" className="flex flex-col gap-3">
+        <h2 id="sms-heading" className="text-base font-medium">
+          SMS
+        </h2>
+        <p className="text-muted-foreground max-w-prose text-xs text-pretty">
+          Leave the Messaging Service SID empty to keep SMS off for this facility — every reminder
+          that would text still emails instead, exactly as if this section did not exist. Setting
+          it up in Twilio (a phone number pool, A2P 10DLC brand and campaign registration, and
+          Advanced Opt-Out on the Messaging Service) is a one-time console step this screen does
+          not do for you.
+        </p>
+        <AdminForm
+          action={updateSmsSettingsAction}
+          label="SMS settings"
+          className="flex flex-wrap items-end gap-3"
+        >
+          <input type="hidden" name="facilityId" value={facilityId} />
+          <Field
+            name="smsMessagingServiceSid"
+            label="Twilio Messaging Service SID"
+            defaultValue={facility.smsMessagingServiceSid ?? ''}
+            hint="Starts with MG. Empty means SMS is off for this facility."
+            className="flex flex-col gap-1 text-sm sm:col-span-2"
+          />
+          <Field
+            name="smsQuietHoursStartHour"
+            label="Sending window opens at (24h, facility-local)"
+            type="number"
+            min={0}
+            max={23}
+            defaultValue={facility.smsQuietHoursStartHour}
+            hint="No SMS sends before this hour. TCPA's default is 8 (8am)."
+          />
+          <Field
+            name="smsQuietHoursEndHour"
+            label="Sending window closes at (24h, facility-local)"
+            type="number"
+            min={1}
+            max={24}
+            defaultValue={facility.smsQuietHoursEndHour}
+            hint="No SMS sends at or after this hour. TCPA's default is 21 (9pm); a stricter state — Florida's mini-TCPA — needs 20 (8pm)."
+          />
+          <Button type="submit">Save SMS settings</Button>
+        </AdminForm>
       </section>
 
       <section aria-labelledby="gate-adapter-heading" className="flex flex-col gap-3">

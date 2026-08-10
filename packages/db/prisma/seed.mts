@@ -49,15 +49,17 @@ async function main() {
   // facilityId: null throughout — a per-facility override is a row an admin
   // screen (CN-16) writes later, never something this script touches.
   for (const template of COMMS_TEMPLATES) {
+    const channel = template.channel ?? 'email'
     // Not `upsert`: Prisma's generated compound-unique input does not accept a
     // literal `null` for a nullable column in the key, even though the schema
     // itself does (the same reason NotificationRule below uses findFirst).
     const existing = await prisma.messageTemplate.findFirst({
-      where: { key: template.key, channel: 'email', facilityId: null, version: 1 },
+      where: { key: template.key, channel, facilityId: null, version: 1 },
     })
     const fields = {
       classification: template.classification,
-      subject: template.subject,
+      // Schema's own rule: "Email subject; null for SMS."
+      subject: template.subject ?? null,
       bodyText: template.bodyText,
       requiredMergeFields: template.requiredMergeFields,
       active: true,
@@ -66,19 +68,29 @@ async function main() {
       await prisma.messageTemplate.update({ where: { id: existing.id }, data: fields })
     } else {
       await prisma.messageTemplate.create({
-        data: { key: template.key, channel: 'email', facilityId: null, version: 1, ...fields },
+        data: { key: template.key, channel, facilityId: null, version: 1, ...fields },
       })
     }
   }
 
   for (const rule of COMMS_RULES) {
+    const channel = rule.channel ?? 'email'
+    // Identity is (event, templateKey, facilityId) — deliberately NOT channel.
+    // There is exactly one rule per templateKey by convention (B-074's own
+    // "one rule per template, its channel decides the path"), and a catalog
+    // edit that flips a rule's channel (email -> sms, e.g. access_suspended)
+    // must UPDATE that row, not orphan it under the old channel while
+    // creating a second one — two active rows for the same templateKey is
+    // exactly the ambiguity `applicableRules`' dedup was built to not have.
     const existing = await prisma.notificationRule.findFirst({
-      where: { event: rule.event, templateKey: rule.templateKey, channel: 'email', facilityId: null },
+      where: { event: rule.event, templateKey: rule.templateKey, facilityId: null },
     })
     const fields = {
       event: rule.event,
       templateKey: rule.templateKey,
-      channel: 'email' as const,
+      channel,
+      channelPolicy: rule.channelPolicy ?? 'email_only',
+      category: rule.category ?? null,
       facilityId: null,
       classification: rule.classification,
       skipConditions: rule.skipConditions ?? [],

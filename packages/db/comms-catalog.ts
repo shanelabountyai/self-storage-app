@@ -10,7 +10,12 @@
 export type CommsTemplateSeed = {
   key: string
   classification: 'transactional' | 'operational' | 'marketing'
-  subject: string
+  /// B-074. Defaults to 'email' — every template before this item is email,
+  /// and stays that way with no change to its own entry.
+  channel?: 'email' | 'sms'
+  /// Email subject. Omit for an SMS template — schema's own rule ("null for
+  /// SMS") applies here too.
+  subject?: string
   bodyText: string
   requiredMergeFields: string[]
 }
@@ -20,6 +25,16 @@ export type CommsRuleSeed = {
   templateKey: string
   classification: 'transactional' | 'operational' | 'marketing'
   skipConditions?: string[]
+  /// B-074. Defaults to 'email'.
+  channel?: 'email' | 'sms'
+  /// B-074 FR-7. Defaults to 'email_only'. Only meaningful on an sms-channel
+  /// rule — `sms_preferred_email_fallback` is what makes the sibling
+  /// email-channel MessageTemplate (same key) reachable when SMS is not
+  /// viable for this send.
+  channelPolicy?: 'email_only' | 'sms_only' | 'both' | 'sms_preferred_email_fallback'
+  /// B-074 CN-13. Which preference-center row governs this rule. Omit for
+  /// legally-significant and marketing events — those are never toggle-off.
+  category?: 'payment_reminders' | 'receipts' | 'operational_notices'
 }
 
 export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
@@ -147,6 +162,22 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
       'balance.total',
       'links.pay_now',
       'facility.phone',
+    ],
+  },
+  {
+    // B-074. Same key as the email version above — one MessageTemplate row
+    // per channel, `sms_preferred_email_fallback` picks between them.
+    key: 'access_suspended',
+    classification: 'transactional',
+    channel: 'sms',
+    bodyText:
+      '{{facility.name}}: gate access for unit {{unit.number}} is paused, {{access.days_past_due}} days past due. Pay {{balance.total}} to restore it: {{links.pay_now}}',
+    requiredMergeFields: [
+      'unit.number',
+      'facility.name',
+      'access.days_past_due',
+      'balance.total',
+      'links.pay_now',
     ],
   },
   {
@@ -339,6 +370,14 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
     ],
   },
   {
+    key: 'invoice_due_soon',
+    classification: 'transactional',
+    channel: 'sms',
+    bodyText:
+      '{{facility.name}}: {{invoice.amount}} is due {{invoice.due_date}} for unit {{unit.number}}. Pay: {{links.pay_now}}',
+    requiredMergeFields: ['invoice.amount', 'invoice.due_date', 'unit.number', 'facility.name', 'links.pay_now'],
+  },
+  {
     key: 'invoice_due_today',
     classification: 'transactional',
     subject: 'Rent for unit {{unit.number}} is due today',
@@ -361,6 +400,13 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
       'links.pay_now',
       'facility.phone',
     ],
+  },
+  {
+    key: 'invoice_due_today',
+    classification: 'transactional',
+    channel: 'sms',
+    bodyText: '{{facility.name}}: {{invoice.amount}} is due TODAY for unit {{unit.number}}. Pay: {{links.pay_now}}',
+    requiredMergeFields: ['invoice.amount', 'unit.number', 'facility.name', 'links.pay_now'],
   },
   {
     // CN-6. A receipt is a document people keep and forward to an accountant,
@@ -455,6 +501,14 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
     ],
   },
   {
+    key: 'payment_retry_reminder',
+    classification: 'transactional',
+    channel: 'sms',
+    bodyText:
+      '{{facility.name}}: {{payment.amount}} is still outstanding for unit {{unit.number}}. {{payment.retry_line}} Pay: {{links.pay_now}}',
+    requiredMergeFields: ['payment.amount', 'unit.number', 'facility.name', 'payment.retry_line', 'links.pay_now'],
+  },
+  {
     // CN-10a. Nothing has gone wrong and the wording must not suggest it has —
     // this is the notice that keeps a long-standing on-time tenant out of the
     // dunning ladder over something visible a month ahead.
@@ -486,6 +540,13 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
       'links.update_card',
       'facility.phone',
     ],
+  },
+  {
+    key: 'payment_method_expiring',
+    classification: 'operational',
+    channel: 'sms',
+    bodyText: '{{facility.name}}: the card on file expires {{card.expires}}. Update it: {{links.update_card}}',
+    requiredMergeFields: ['facility.name', 'card.expires', 'links.update_card'],
   },
   {
     // D-17 assigned this notice to B-050. Draft text, not legal advice (D-10).
@@ -740,16 +801,24 @@ export const COMMS_RULES: readonly CommsRuleSeed[] = [
 
   // ── B-098 (D-16). Both transitions are notified — US-45's own AC. ──────────
   {
+    // B-074 / D-35. SMS-eligible: a gate lockout is urgent enough that a
+    // tenant wants to know the moment it happens, and it is a consequence of
+    // non-payment rather than a "delinquency STAGE" itself (CN-13's own
+    // parenthetical names dunning/lien/rate-increase, not this) — see D-35.
     event: 'access.suspended',
     templateKey: 'access_suspended',
     classification: 'transactional',
     skipConditions: ['tenant_moved_out'],
+    channel: 'sms',
+    channelPolicy: 'sms_preferred_email_fallback',
+    category: 'operational_notices',
   },
   {
     event: 'access.restored',
     templateKey: 'access_restored',
     classification: 'transactional',
     skipConditions: ['tenant_moved_out'],
+    category: 'operational_notices',
   },
 
   // ── B-063 (PRD 05 CN-11/CN-12). The remaining stage notices. ────────────────
@@ -758,12 +827,14 @@ export const COMMS_RULES: readonly CommsRuleSeed[] = [
     templateKey: 'unit_overlocked',
     classification: 'transactional',
     skipConditions: ['tenant_moved_out', 'overlock_already_cleared'],
+    category: 'operational_notices',
   },
   {
     event: 'overlock.cleared',
     templateKey: 'unit_overlock_cleared',
     classification: 'transactional',
     skipConditions: ['tenant_moved_out'],
+    category: 'operational_notices',
   },
   {
     // One event, two templates — the same device `delinquency.day_reached`
@@ -786,23 +857,36 @@ export const COMMS_RULES: readonly CommsRuleSeed[] = [
     // CN-1. `autopay_covers_it` is the reason this item exists as more than
     // templates: a reminder to go and pay a bill the tenant's own card is about
     // to cover is worse than no reminder at all.
+    // B-074. SMS-eligible: a payment reminder is exactly what CN-13's
+    // "payment reminders (email/SMS)" category names.
     event: 'invoice.due_soon',
     templateKey: 'invoice_due_soon',
     classification: 'transactional',
     skipConditions: ['autopay_covers_it', 'invoice_paid', 'tenant_moved_out'],
+    channel: 'sms',
+    channelPolicy: 'sms_preferred_email_fallback',
+    category: 'payment_reminders',
   },
   {
     event: 'invoice.due_today',
     templateKey: 'invoice_due_today',
     classification: 'transactional',
     skipConditions: ['autopay_covers_it', 'invoice_paid', 'tenant_moved_out'],
+    channel: 'sms',
+    channelPolicy: 'sms_preferred_email_fallback',
+    category: 'payment_reminders',
   },
   {
     // CN-6. No autopay skip: a receipt is exactly what an autopay tenant should
     // get, and is the only thing telling them the charge went through.
+    // D-11a / CN-6: SMS receipts default OFF (`defaultNotificationPreference`)
+    // — no SMS template is seeded for this key, so the SMS column in the
+    // preference center's "Receipts" row has nothing to turn on yet either
+    // way; the category exists so the EMAIL toggle works today.
     event: 'payment.succeeded',
     templateKey: 'payment_receipt',
     classification: 'transactional',
+    category: 'receipts',
   },
   {
     event: 'payment.failed',
@@ -814,12 +898,19 @@ export const COMMS_RULES: readonly CommsRuleSeed[] = [
     skipConditions: ['tenant_moved_out'],
   },
   {
+    // B-074 / D-35. SMS-eligible: distinct from `dunning_step` above (D-16's
+    // delinquency-stage ladder, CN-13's "legally significant" and therefore
+    // NEVER SMS) — this is the day-of-decline nudge, ordinary billing rather
+    // than the collections ladder.
     event: 'payment.retry_reminder',
     templateKey: 'payment_retry_reminder',
     classification: 'transactional',
     // US-42: chasing stops on a hold. This is the one send in the current
     // catalog that is genuinely dunning rather than ordinary billing.
     skipConditions: ['invoice_paid', 'tenant_moved_out', 'lease_on_hold_dunning'],
+    channel: 'sms',
+    channelPolicy: 'sms_preferred_email_fallback',
+    category: 'payment_reminders',
   },
   {
     // CN-10a. Operational rather than transactional: nothing has been charged
@@ -828,12 +919,16 @@ export const COMMS_RULES: readonly CommsRuleSeed[] = [
     templateKey: 'payment_method_expiring',
     classification: 'operational',
     skipConditions: ['tenant_moved_out'],
+    channel: 'sms',
+    channelPolicy: 'sms_preferred_email_fallback',
+    category: 'payment_reminders',
   },
   {
     event: 'protection.proof_expiring',
     templateKey: 'protection_proof_expiring',
     classification: 'transactional',
     skipConditions: ['tenant_moved_out'],
+    category: 'operational_notices',
   },
   {
     event: 'protection.auto_enrolled',

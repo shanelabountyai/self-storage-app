@@ -1,3 +1,7 @@
 export * from './merge-fields.ts'
 export * from './delivery.ts'
 export * from './marketing-window.ts'
+export * from './sms-window.ts'
+export * from './phone.ts'
+export * from './preferences.ts'
+export * from './sms-keywords.ts'

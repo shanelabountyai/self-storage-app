@@ -4,6 +4,7 @@ import { dispatchEvents } from '@storage/core/events'
 import { facilitiesDueAt, lastSuccessfulRun, missedBusinessDates, runJob } from '@storage/core/jobs'
 import { sendExpiringSoonReminders } from '@/lib/reservations/reserve'
 import { raiseAbandonmentFollowUps } from '@/lib/checkout/abandonment-job'
+import { retryDeferredSmsMessages } from '@/lib/comms/service'
 import { CONSUMERS, SCHEDULED_JOBS } from '@/lib/jobs/registry'
 
 // Vercel Cron hits this hourly (see vercel.json). Master PRD §5 lists Vercel
@@ -50,6 +51,12 @@ export async function GET(request: Request) {
   // "+1h" cannot be expressed as a once-daily business-date job, so this runs
   // every tick against real elapsed time rather than through `SCHEDULED_JOBS`.
   const abandonment = await raiseAbandonmentFollowUps(now)
+
+  // PRD 05 FR-8 (B-074). "Queue for the next window opening" — a quiet-hours
+  // SMS is neither sent nor abandoned, so every tick checks whether any
+  // deferred one's facility has now opened, same shape as the two checks
+  // just above.
+  const smsRetry = await retryDeferredSmsMessages(now)
 
   const facilities = await prisma.facility.findMany({
     where: { status: 'active' },
@@ -111,6 +118,7 @@ export async function GET(request: Request) {
     dispatch,
     reminders,
     abandonment,
+    smsRetry,
     jobs: jobResults,
   })
 }

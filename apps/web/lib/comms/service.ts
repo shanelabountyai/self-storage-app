@@ -1,5 +1,12 @@
 import { type Prisma, prisma } from '@storage/db'
-import type { DomainEvent, MessageClassification, SuppressionReason } from '@storage/db'
+import type {
+  ChannelPolicy,
+  DomainEvent,
+  MessageChannel,
+  MessageClassification,
+  NotificationCategory,
+  SuppressionReason,
+} from '@storage/db'
 import { codeForLease } from '@/lib/access/provision'
 import { mintPayLink, payLinkUrl } from '@/lib/portal/pay-links'
 import { leaseHasEffect } from '@/lib/admin/holds'
@@ -9,18 +16,20 @@ import { facilityPath } from '@/lib/facility/public-facility'
 import { absoluteUrl } from '@storage/core/marketing'
 import { currentRateForUnitType } from '@/lib/pricing/unit-type-rates'
 import { offerFor } from '@/lib/promotions/service'
-import { isMarketingQuietHours } from '@storage/core/comms'
+import { defaultNotificationPreference, isMarketingQuietHours, isSmsQuietHours, normalizePhoneE164 } from '@storage/core/comms'
 import { currentConsent } from '@storage/core/consent'
 import { mintUnsubscribeToken, unsubscribeUrl } from './unsubscribe-token'
 import { mintCheckoutResumeToken, checkoutResumeUrl } from '@/lib/checkout/resume-token'
 import {
   commsEnabled,
   effectiveRecipient,
+  effectiveSmsRecipient,
   fromAddress,
   selectProvider,
+  selectSmsProvider,
   withPostalFooter,
 } from './provider'
-import { type MergeContext, messageIdempotencyKey, RenderError, renderEmail } from './render'
+import { type MergeContext, messageIdempotencyKey, RenderError, renderEmail, renderString } from './render'
 
 // PRD 05 FR-1. The pipeline: event → rule(s) → recipient → suppression/consent
 // → render → provider → Message log, idempotent by construction. Producers emit
@@ -48,6 +57,11 @@ type RecipientFacility = {
   postalCode: string
   timezone: string
   googleReviewUrl: string | null
+  /// B-074. Null means SMS is not configured for this facility — every
+  /// `sms_preferred_email_fallback` rule degrades to email-only.
+  smsMessagingServiceSid: string | null
+  smsQuietHoursStartHour: number
+  smsQuietHoursEndHour: number
 }
 
 type RecipientLease = {
@@ -80,6 +94,11 @@ type Recipient = {
   recipientKey: string
   tenantId: string | null
   email: string | null
+  /// B-074. The tenant/reservation/lead's own phone, not the facility's
+  /// office number (`RecipientFacility.phone`). Null wherever the source row
+  /// has none — a reservation or lead never requires one, and a tenant's is
+  /// optional at checkout.
+  phone: string | null
   firstName: string
   lastName: string
   facility: RecipientFacility | null
@@ -109,6 +128,9 @@ const FACILITY_SELECT = {
   postalCode: true,
   timezone: true,
   googleReviewUrl: true,
+  smsMessagingServiceSid: true,
+  smsQuietHoursStartHour: true,
+  smsQuietHoursEndHour: true,
 } as const
 
 /// Resolves who a message goes to from the event's entity. Keyed by entityType
@@ -129,6 +151,7 @@ async function resolveRecipient(event: DomainEvent): Promise<Recipient | null> {
           select: {
             id: true,
             email: true,
+            phone: true,
             firstName: true,
             lastName: true,
             stripeDefaultPaymentMethodId: true,
@@ -143,6 +166,7 @@ async function resolveRecipient(event: DomainEvent): Promise<Recipient | null> {
       recipientKey: lease.tenant.id,
       tenantId: lease.tenant.id,
       email: lease.tenant.email,
+      phone: lease.tenant.phone,
       firstName: lease.tenant.firstName,
       lastName: lease.tenant.lastName,
       facility: lease.facility,
@@ -160,7 +184,7 @@ async function resolveRecipient(event: DomainEvent): Promise<Recipient | null> {
   if (event.entityType === 'Tenant') {
     const tenant = await prisma.tenant.findUnique({
       where: { id: event.entityId },
-      select: { id: true, email: true, firstName: true, lastName: true },
+      select: { id: true, email: true, phone: true, firstName: true, lastName: true },
     })
     if (!tenant) return null
     const facility = event.facilityId
@@ -170,6 +194,7 @@ async function resolveRecipient(event: DomainEvent): Promise<Recipient | null> {
       recipientKey: tenant.id,
       tenantId: tenant.id,
       email: tenant.email,
+      phone: tenant.phone,
       firstName: tenant.firstName,
       lastName: tenant.lastName,
       facility,
@@ -194,6 +219,7 @@ async function resolveRecipient(event: DomainEvent): Promise<Recipient | null> {
               select: {
                 id: true,
                 email: true,
+                phone: true,
                 firstName: true,
                 lastName: true,
                 stripeDefaultPaymentMethodId: true,
@@ -216,6 +242,7 @@ async function resolveRecipient(event: DomainEvent): Promise<Recipient | null> {
           select: {
             id: true,
             email: true,
+            phone: true,
             firstName: true,
             lastName: true,
             stripeDefaultPaymentMethodId: true,
@@ -245,6 +272,7 @@ async function resolveRecipient(event: DomainEvent): Promise<Recipient | null> {
       recipientKey: payment.tenant.id,
       tenantId: payment.tenant.id,
       email: payment.tenant.email,
+      phone: payment.tenant.phone,
       firstName: payment.tenant.firstName,
       lastName: payment.tenant.lastName,
       facility: payment.facility,
@@ -282,6 +310,7 @@ async function resolveRecipient(event: DomainEvent): Promise<Recipient | null> {
           select: {
             id: true,
             email: true,
+            phone: true,
             firstName: true,
             lastName: true,
             stripeDefaultPaymentMethodId: true,
@@ -300,6 +329,7 @@ async function resolveRecipient(event: DomainEvent): Promise<Recipient | null> {
         id: true,
         tenantId: true,
         email: true,
+        phone: true,
         firstName: true,
         lastName: true,
         expiresAt: true,
@@ -312,6 +342,7 @@ async function resolveRecipient(event: DomainEvent): Promise<Recipient | null> {
       recipientKey: reservation.id,
       tenantId: reservation.tenantId,
       email: reservation.email,
+      phone: reservation.phone,
       firstName: reservation.firstName,
       lastName: reservation.lastName,
       facility: reservation.facility,
@@ -334,6 +365,7 @@ async function resolveRecipient(event: DomainEvent): Promise<Recipient | null> {
         unitTypeId: true,
         unitType: { select: { widthFt: true, lengthFt: true } },
         email: true,
+        phone: true,
         firstName: true,
         lastName: true,
         facility: { select: FACILITY_SELECT },
@@ -344,6 +376,7 @@ async function resolveRecipient(event: DomainEvent): Promise<Recipient | null> {
       recipientKey: lead.id,
       tenantId: null,
       email: lead.email,
+      phone: lead.phone,
       firstName: lead.firstName ?? 'there',
       lastName: lead.lastName ?? '',
       facility: lead.facility,
@@ -372,6 +405,7 @@ function recipientFromLease(
     tenant: {
       id: string
       email: string | null
+      phone: string | null
       firstName: string
       lastName: string
       stripeDefaultPaymentMethodId: string | null
@@ -383,6 +417,7 @@ function recipientFromLease(
     recipientKey: lease.tenant.id,
     tenantId: lease.tenant.id,
     email: lease.tenant.email,
+    phone: lease.tenant.phone,
     firstName: lease.tenant.firstName,
     lastName: lease.tenant.lastName,
     facility,
@@ -874,16 +909,24 @@ type ResolvedRule = {
   templateKey: string
   classification: MessageClassification
   skipConditions: string[]
+  channel: MessageChannel
+  /// B-074 FR-7. Only meaningful when `channel === 'sms'` — `deliverForRule`
+  /// (email) never reads this.
+  channelPolicy: ChannelPolicy
+  /// B-074 CN-13. Which preference-center row governs this rule, if any.
+  category: NotificationCategory | null
 }
 
 /// FR-2. The active rules for this event, with the per-facility override winning
-/// over the org default for a given template key.
+/// over the org default for a given template key. B-074: no longer filtered by
+/// channel — a rule's OWN channel decides which delivery path it takes, and
+/// there is still exactly one rule per (event, templateKey), never a
+/// email-and-sms pair competing for the same key.
 async function applicableRules(event: DomainEvent): Promise<ResolvedRule[]> {
   const rows = await prisma.notificationRule.findMany({
     where: {
       event: event.name,
       active: true,
-      channel: CHANNEL,
       OR: [{ facilityId: event.facilityId ?? undefined }, { facilityId: null }],
     },
   })
@@ -899,16 +942,19 @@ async function applicableRules(event: DomainEvent): Promise<ResolvedRule[]> {
     templateKey: r.templateKey,
     classification: r.classification,
     skipConditions: r.skipConditions,
+    channel: r.channel,
+    channelPolicy: r.channelPolicy,
+    category: r.category,
   }))
 }
 
 /// The effective template for a key: facility override beats org default, and
 /// the highest active version wins (versioned per FR-21).
-async function effectiveTemplate(templateKey: string, facilityId: string | null) {
+async function effectiveTemplate(templateKey: string, channel: MessageChannel, facilityId: string | null) {
   const rows = await prisma.messageTemplate.findMany({
     where: {
       key: templateKey,
-      channel: CHANNEL,
+      channel,
       active: true,
       OR: [{ facilityId: facilityId ?? undefined }, { facilityId: null }],
     },
@@ -921,15 +967,17 @@ async function effectiveTemplate(templateKey: string, facilityId: string | null)
 
 /// PRD 05 §6.1 suppression matrix. A hard bounce or spam complaint blocks every
 /// channel — the address is unusable or the recipient reported us. STOP blocks
-/// SMS only. Unsubscribe / manual block marketing only; transactional and
+/// SMS only, but ALL SMS regardless of classification (CN-14: "transactional
+/// included"). Unsubscribe / manual block marketing only; transactional and
 /// operational mail still goes, which is what CAN-SPAM's transactional carve-out
 /// permits. Returns the reason so the send record can prove why it was withheld.
 async function suppressionFor(
   address: string,
   classification: MessageClassification,
+  channel: MessageChannel,
 ): Promise<SuppressionReason | null> {
   const entry = await prisma.suppression.findUnique({
-    where: { channel_address: { channel: CHANNEL, address: address.toLowerCase() } },
+    where: { channel_address: { channel, address: channel === 'email' ? address.toLowerCase() : address } },
   })
   if (!entry) return null
   switch (entry.reason) {
@@ -939,7 +987,11 @@ async function suppressionFor(
     case 'unsubscribe':
     case 'manual':
       return classification === 'marketing' ? entry.reason : null
-    case 'stop': // SMS-only; never blocks email
+    case 'stop':
+      // The WHERE clause above already scopes by channel, so a 'stop' row
+      // only ever exists under channel:'sms' in practice — this branch stays
+      // explicit rather than assuming that invariant holds forever.
+      return channel === 'sms' ? entry.reason : null
     case 'kill_switch':
       return null
   }
@@ -1086,7 +1138,7 @@ async function firstFiringSkip(
   return null
 }
 
-type DeliveryOutcome = 'sent' | 'suppressed' | 'cancelled' | 'failed' | 'skipped'
+type DeliveryOutcome = 'sent' | 'suppressed' | 'cancelled' | 'failed' | 'skipped' | 'deferred'
 
 /// Upserts the append-only Message row for one (event, rule, recipient, channel)
 /// to a terminal state. Keyed by the idempotency key, so a redelivery lands on
@@ -1103,18 +1155,23 @@ async function writeMessage(
     toAddress: string
     subject: string | null
     body: string
-    status: 'queued' | 'sent' | 'failed' | 'suppressed' | 'cancelled'
+    status: 'queued' | 'sent' | 'failed' | 'suppressed' | 'cancelled' | 'deferred'
     suppressionReason?: SuppressionReason | null
     providerMessageId?: string | null
     error?: string | null
     sentAt?: Date | null
+    /// B-074. Defaults to email — every pre-existing call site is the email
+    /// path and needs no change.
+    channel?: MessageChannel
+    /// B-074 FR-21. Which consent record authorised an SMS. Null for email.
+    consentId?: string | null
   },
 ) {
   const common = {
     templateKey: data.templateKey,
     templateVersion: data.templateVersion,
     classification: data.classification,
-    channel: CHANNEL,
+    channel: data.channel ?? CHANNEL,
     recipientTenantId: data.recipient.tenantId,
     facilityId: data.recipient.facility?.id ?? data.event.facilityId ?? null,
     toAddress: data.toAddress,
@@ -1125,6 +1182,7 @@ async function writeMessage(
     providerMessageId: data.providerMessageId ?? null,
     error: data.error ?? null,
     sentAt: data.sentAt ?? null,
+    consentId: data.consentId ?? null,
   }
   return prisma.message.upsert({
     where: { idempotencyKey },
@@ -1136,6 +1194,309 @@ async function writeMessage(
     },
     update: common,
   })
+}
+
+/// PRD 05 CN-13 (B-074). Whether the tenant has this category+channel turned
+/// on. `null` category (legally significant, marketing) always passes —
+/// those are never toggle-off-able, by construction rather than a check here.
+/// No tenant (a Lead/Reservation recipient) also always passes: the
+/// preference center is portal-scoped and only a Tenant has one.
+async function notificationAllowed(
+  tenantId: string | null,
+  category: NotificationCategory | null,
+  channel: MessageChannel,
+): Promise<boolean> {
+  if (!category || !tenantId) return true
+  const row = await prisma.notificationPreference.findUnique({
+    where: { tenantId_category_channel: { tenantId, category, channel } },
+    select: { enabled: true },
+  })
+  return row ? row.enabled : defaultNotificationPreference(category, channel)
+}
+
+/// PRD 05 §5.1/FR-5. Whether this tenant has said yes to ANY SMS at all.
+/// `account_sms` gates every classification sent by SMS in this item —
+/// there is no `marketing_sms` capture flow yet (B-072 shipped
+/// `marketing_email` only), so a marketing SMS rule would have nothing to
+/// check and none is seeded.
+async function smsConsentGranted(tenantId: string | null): Promise<boolean> {
+  if (!tenantId) return false
+  return (await currentConsent({ tenantId }, 'account_sms')) === 'granted'
+}
+
+/// B-074 FR-7's email fallback, shared by every `sms_preferred_email_fallback`
+/// rule that cannot reach the tenant by SMS. Deliberately its own function
+/// rather than a call into `deliverForRule`: that function computes its OWN
+/// per-channel idempotency key, and the whole point of FR-7's "idempotency
+/// key covers the pair" is that the fallback settles on the SAME row the SMS
+/// attempt would have. It is also deliberately SIMPLER than `deliverForRule` —
+/// no marketing quiet-hours/daily-cap/unsubscribe-link branches — because
+/// every rule this item wires to SMS is transactional or operational, never
+/// marketing; a future marketing SMS rule would need those added back here.
+async function sendEmailFallback(
+  idempotencyKey: string,
+  rule: ResolvedRule,
+  recipient: Recipient,
+  context: MergeContext,
+  base: { event: DomainEvent; ruleId: string; templateKey: string; classification: MessageClassification; recipient: Recipient },
+): Promise<DeliveryOutcome> {
+  if (!recipient.email) {
+    await writeMessage(idempotencyKey, {
+      ...base, templateVersion: 0, toAddress: '', subject: null, body: '',
+      status: 'failed', error: 'no reachable email address (sms fallback)',
+    })
+    return 'failed'
+  }
+  const address = recipient.email.toLowerCase()
+
+  if (!(await notificationAllowed(recipient.tenantId, rule.category, 'email'))) {
+    await writeMessage(idempotencyKey, {
+      ...base, templateVersion: 0, toAddress: address, subject: null, body: '',
+      status: 'cancelled', error: 'skipped: notification_preference_off',
+    })
+    return 'cancelled'
+  }
+
+  const suppression = await suppressionFor(address, rule.classification, 'email')
+  if (suppression) {
+    await writeMessage(idempotencyKey, {
+      ...base, templateVersion: 0, toAddress: address, subject: null, body: '',
+      status: 'suppressed', suppressionReason: suppression, error: `suppressed: ${suppression}`,
+    })
+    return 'suppressed'
+  }
+
+  const template = await effectiveTemplate(rule.templateKey, 'email', recipient.facility?.id ?? null)
+  if (!template) {
+    await writeMessage(idempotencyKey, {
+      ...base, templateVersion: 0, toAddress: address, subject: null, body: '',
+      status: 'failed', error: `no active email template for "${rule.templateKey}" (sms fallback)`,
+    })
+    return 'failed'
+  }
+
+  let rendered
+  try {
+    rendered = renderEmail(template, context)
+  } catch (error) {
+    if (error instanceof RenderError) {
+      await writeMessage(idempotencyKey, {
+        ...base, templateVersion: template.version, toAddress: address, subject: null, body: '',
+        status: 'failed', error: error.message,
+      })
+      return 'failed'
+    }
+    throw error
+  }
+
+  await writeMessage(idempotencyKey, {
+    ...base, templateVersion: template.version, toAddress: effectiveRecipient(address),
+    subject: rendered.subject, body: rendered.text, status: 'queued',
+  })
+
+  const facility = recipient.facility
+  const footerTarget = facility ? { name: facility.name, address: formatFacilityAddress(facility) } : null
+  const text = withPostalFooter(rendered.text, footerTarget)
+  const html = footerTarget
+    ? `${rendered.html}<hr><p>${footerTarget.name}<br>${footerTarget.address}</p>`
+    : rendered.html
+
+  const result = await selectProvider().sendEmail({
+    to: effectiveRecipient(address),
+    from: fromAddress(facility?.emailFromName ?? facility?.name ?? 'Storage'),
+    replyTo: facility?.emailReplyTo ?? null,
+    subject: rendered.subject,
+    html,
+    text,
+    idempotencyKey,
+  })
+
+  if (result.ok) {
+    await writeMessage(idempotencyKey, {
+      ...base, templateVersion: template.version, toAddress: effectiveRecipient(address),
+      subject: rendered.subject, body: rendered.text, status: 'sent',
+      providerMessageId: result.providerMessageId, sentAt: new Date(),
+    })
+    return 'sent'
+  }
+
+  await writeMessage(idempotencyKey, {
+    ...base, templateVersion: template.version, toAddress: effectiveRecipient(address),
+    subject: rendered.subject, body: rendered.text, status: 'failed', error: result.message,
+  })
+  if (result.retryable) throw new Error(`comms provider send failed: ${result.message}`)
+  return 'failed'
+}
+
+/// PRD 05 FR-5/FR-7/FR-8 (B-074). The SMS-primary delivery path. Mirrors
+/// `deliverForRule`'s shape (idempotency, skip predicates, suppression,
+/// render, send, write) but does not share its body: SMS has a consent gate
+/// email never needed (§5.1 — TCPA requires prior consent for ANY automated
+/// text, not just marketing), quiet hours that apply to every classification
+/// rather than only marketing, no HTML/postal-footer/unsubscribe-link, and an
+/// inline fallback to `sendEmailFallback` above.
+async function deliverSmsForRule(
+  event: DomainEvent,
+  rule: ResolvedRule,
+  recipient: Recipient,
+  context: MergeContext,
+  now: Date,
+): Promise<DeliveryOutcome> {
+  const fallbackEligible = rule.channelPolicy === 'sms_preferred_email_fallback'
+  // FR-7: "idempotency key covers the pair so fallback can't duplicate." A
+  // fallback-eligible rule shares ONE key between its SMS attempt and its
+  // email fallback — exactly one of the two channels ever actually sends for
+  // a given (event, rule, recipient), so there is only ever one row to settle.
+  const idempotencyKey = messageIdempotencyKey(
+    event.id,
+    rule.id,
+    recipient.recipientKey,
+    fallbackEligible ? 'pair' : 'sms',
+  )
+
+  const existing = await prisma.message.findUnique({ where: { idempotencyKey }, select: { status: true } })
+  if (existing && ['sent', 'delivered', 'suppressed', 'cancelled'].includes(existing.status)) {
+    return 'skipped'
+  }
+  // A `deferred` row is retried by the hourly cron sweep, not re-attempted
+  // here — a second dispatch of the same event while one is already queued
+  // for the next window must not re-render or double-queue it.
+  if (existing?.status === 'deferred') return 'skipped'
+
+  const base = {
+    event,
+    ruleId: rule.id,
+    templateKey: rule.templateKey,
+    classification: rule.classification,
+    recipient,
+  }
+
+  const skip = await firstFiringSkip(rule, recipient, event)
+  if (skip) {
+    await writeMessage(idempotencyKey, {
+      ...base, templateVersion: 0, toAddress: recipient.phone ?? '', subject: null, body: '',
+      status: 'cancelled', error: `skipped: ${skip}`, channel: 'sms',
+    })
+    return 'cancelled'
+  }
+
+  // Everything from here down is "can this go by SMS" — any no falls back to
+  // email (if the policy allows) rather than terminating, since a reminder a
+  // tenant cannot be texted is still one they can be emailed.
+  const phone = normalizePhoneE164(recipient.phone)
+  const smsAllowed = await notificationAllowed(recipient.tenantId, rule.category, 'sms')
+  const consented = await smsConsentGranted(recipient.tenantId)
+  const smsSuppression = phone ? await suppressionFor(phone, rule.classification, 'sms') : null
+  const messagingServiceSid = recipient.facility?.smsMessagingServiceSid ?? null
+
+  const notViableReason = !messagingServiceSid
+    ? 'sms_not_configured'
+    : !phone
+      ? 'no reachable phone number'
+      : !smsAllowed
+        ? 'skipped: notification_preference_off'
+        : !consented
+          ? 'no sms consent'
+          : smsSuppression
+            ? `suppressed: ${smsSuppression}`
+            : null
+
+  if (notViableReason) {
+    if (fallbackEligible) return sendEmailFallback(idempotencyKey, rule, recipient, context, base)
+    await writeMessage(idempotencyKey, {
+      ...base, templateVersion: 0, toAddress: phone ?? '', subject: null, body: '',
+      status: smsSuppression ? 'suppressed' : 'failed',
+      suppressionReason: smsSuppression, error: notViableReason, channel: 'sms',
+    })
+    return smsSuppression ? 'suppressed' : 'failed'
+  }
+
+  // FR-8. Quiet hours DEFER rather than fall back — a text at 6am becomes a
+  // text at 8am, not an email instead. `deferred` is a terminal write here;
+  // the hourly cron (`retryDeferredSmsMessages`) is what re-attempts it.
+  const timezone = recipient.facility?.timezone ?? 'America/Chicago'
+  // Unreachable with `recipient.facility` actually null: `messagingServiceSid`
+  // above is only ever truthy when it exists, and a null `messagingServiceSid`
+  // already returned above. The `?? 8`/`?? 21` are schema defaults, not a
+  // second source of truth — belt, not a real branch.
+  const start = recipient.facility?.smsQuietHoursStartHour ?? 8
+  const end = recipient.facility?.smsQuietHoursEndHour ?? 21
+  if (isSmsQuietHours(now, timezone, start, end)) {
+    await writeMessage(idempotencyKey, {
+      ...base, templateVersion: 0, toAddress: phone!, subject: null, body: '',
+      status: 'deferred', error: 'deferred: sms_quiet_hours', channel: 'sms',
+    })
+    return 'deferred'
+  }
+
+  const template = await effectiveTemplate(rule.templateKey, 'sms', recipient.facility?.id ?? null)
+  if (!template) {
+    if (fallbackEligible) return sendEmailFallback(idempotencyKey, rule, recipient, context, base)
+    await writeMessage(idempotencyKey, {
+      ...base, templateVersion: 0, toAddress: phone!, subject: null, body: '',
+      status: 'failed', error: `no active sms template for "${rule.templateKey}"`, channel: 'sms',
+    })
+    return 'failed'
+  }
+
+  let bodyText: string
+  try {
+    // FR-11: every SMS carries the opt-out/help line. Appended here, not
+    // authored per template, for the same reason the postal footer is
+    // appended centrally — a template author cannot forget it.
+    bodyText = `${renderString(template.bodyText, context, template.requiredMergeFields)} Reply STOP to opt out, HELP for help.`
+  } catch (error) {
+    if (error instanceof RenderError) {
+      await writeMessage(idempotencyKey, {
+        ...base, templateVersion: template.version, toAddress: phone!, subject: null, body: '',
+        status: 'failed', error: error.message, channel: 'sms',
+      })
+      return 'failed'
+    }
+    throw error
+  }
+
+  const consentRow = await prisma.consent.findFirst({
+    where: { tenantId: recipient.tenantId!, channel: 'account_sms', state: 'granted' },
+    orderBy: { capturedAt: 'desc' },
+    select: { id: true },
+  })
+
+  await writeMessage(idempotencyKey, {
+    ...base, templateVersion: template.version, toAddress: effectiveSmsRecipient(phone!),
+    subject: null, body: bodyText, status: 'queued', channel: 'sms', consentId: consentRow?.id ?? null,
+  })
+
+  const result = await selectSmsProvider().sendSms({
+    to: effectiveSmsRecipient(phone!),
+    messagingServiceSid: messagingServiceSid!,
+    body: bodyText,
+    idempotencyKey,
+  })
+
+  if (result.ok) {
+    await writeMessage(idempotencyKey, {
+      ...base, templateVersion: template.version, toAddress: effectiveSmsRecipient(phone!),
+      subject: null, body: bodyText, status: 'sent', providerMessageId: result.providerMessageId,
+      sentAt: now, channel: 'sms', consentId: consentRow?.id ?? null,
+    })
+    return 'sent'
+  }
+
+  await writeMessage(idempotencyKey, {
+    ...base, templateVersion: template.version, toAddress: effectiveSmsRecipient(phone!),
+    subject: null, body: bodyText, status: 'failed', error: result.message,
+    channel: 'sms', consentId: consentRow?.id ?? null,
+  })
+  // FR-7 lists a provider-reported failure as a fallback trigger too, not
+  // just a retry candidate — this catches the SYNCHRONOUS ones (network
+  // failure, an immediate 4xx from Twilio). The async case FR-15 also names
+  // — "undelivered/carrier filtered", which only Twilio's later delivery-
+  // status webhook can report — has no consumer yet; left behind alongside
+  // that webhook (see PROGRESS.md).
+  if (fallbackEligible) return sendEmailFallback(idempotencyKey, rule, recipient, context, base)
+  if (result.retryable) throw new Error(`comms provider send failed: ${result.message}`)
+  return 'failed'
 }
 
 async function deliverForRule(
@@ -1192,7 +1553,24 @@ async function deliverForRule(
   }
   const address = recipient.email.toLowerCase()
 
-  const suppression = await suppressionFor(address, rule.classification)
+  // CN-13: the tenant turned this category+channel off in the preference
+  // center. Checked after the skip predicates (a stale premise is a
+  // different reason not to send) but before suppression, since this is a
+  // choice, not a bounce.
+  if (!(await notificationAllowed(recipient.tenantId, rule.category, CHANNEL))) {
+    await writeMessage(idempotencyKey, {
+      ...base,
+      templateVersion: 0,
+      toAddress: address,
+      subject: null,
+      body: '',
+      status: 'cancelled',
+      error: 'skipped: notification_preference_off',
+    })
+    return 'cancelled'
+  }
+
+  const suppression = await suppressionFor(address, rule.classification, CHANNEL)
   if (suppression) {
     await writeMessage(idempotencyKey, {
       ...base,
@@ -1256,7 +1634,7 @@ async function deliverForRule(
     }
   }
 
-  const template = await effectiveTemplate(rule.templateKey, recipient.facility?.id ?? null)
+  const template = await effectiveTemplate(rule.templateKey, CHANNEL, recipient.facility?.id ?? null)
   if (!template) {
     await writeMessage(idempotencyKey, {
       ...base,
@@ -1375,13 +1753,29 @@ export type CommsResult = {
   cancelled: number
   failed: number
   skipped: number
+  /// B-074 FR-8. Queued for the facility's next SMS quiet-hours window —
+  /// `retryDeferredSmsMessages` (the hourly cron sweep) is what resolves these.
+  deferred: number
 }
 
 /// Processes one domain event through every rule that maps to it. Called by the
 /// comms consumer (jobs/registry) on each dispatch; idempotent, so an
 /// at-least-once redelivery is safe.
-export async function processCommsEvent(event: DomainEvent): Promise<CommsResult> {
-  const result: CommsResult = { paused: false, sent: 0, suppressed: 0, cancelled: 0, failed: 0, skipped: 0 }
+///
+/// `now` defaults to the real clock — every production call site wants that —
+/// and is only ever overridden by a test that needs FR-8's quiet-hours check
+/// to see a specific instant rather than whatever the wall clock says when
+/// the test happens to run.
+export async function processCommsEvent(event: DomainEvent, now: Date = new Date()): Promise<CommsResult> {
+  const result: CommsResult = {
+    paused: false,
+    sent: 0,
+    suppressed: 0,
+    cancelled: 0,
+    failed: 0,
+    skipped: 0,
+    deferred: 0,
+  }
 
   // FR-20 kill switch: nothing goes out, and the event is settled without a
   // Message row (see provider.ts on the emergency-stop, no-replay semantics).
@@ -1403,9 +1797,115 @@ export async function processCommsEvent(event: DomainEvent): Promise<CommsResult
   const context = { ...mergeContextFor(recipient), ...(extender ? await extender(event, recipient) : {}) }
 
   for (const rule of rules) {
-    const outcome = await deliverForRule(event, rule, recipient, context)
+    const outcome =
+      rule.channel === 'sms'
+        ? await deliverSmsForRule(event, rule, recipient, context, now)
+        : await deliverForRule(event, rule, recipient, context)
     result[outcome] += 1
   }
+  return result
+}
+
+export type SmsRetryResult = { retried: number; stillQuiet: number; cancelled: number }
+
+/// PRD 05 FR-8's "queue for the next window opening." Called every hourly
+/// cron tick — the same hour-grained shape `sendExpiringSoonReminders` and
+/// B-073's abandonment sweep already use for a check `SCHEDULED_JOBS`'
+/// once-per-day granularity cannot express.
+///
+/// Re-sends from the STORED render (`bodySnapshot`), not a fresh one — the
+/// point of a deferred send is that it is the exact message that was already
+/// composed, just late, not a new one recomputed hours after the event. The
+/// one thing re-checked is staleness (FR-18): a best-effort lookup of the
+/// original event and rule, so a message that went moot while queued
+/// (invoice paid) is cancelled here rather than sent late. "Best-effort"
+/// because `Message.eventId`/`ruleId` are snapshot columns, not FKs (the
+/// model's own note: "so the log outlives a pruned event or an edited rule")
+/// — if either is gone, the snapshot is sent as-is rather than blocking
+/// forever on a fact that can no longer be checked.
+export async function retryDeferredSmsMessages(now: Date = new Date()): Promise<SmsRetryResult> {
+  const deferred = await prisma.message.findMany({
+    where: { status: 'deferred', channel: 'sms' },
+  })
+
+  const result: SmsRetryResult = { retried: 0, stillQuiet: 0, cancelled: 0 }
+
+  for (const message of deferred) {
+    const facility = message.facilityId
+      ? await prisma.facility.findUnique({
+          where: { id: message.facilityId },
+          select: {
+            timezone: true,
+            smsQuietHoursStartHour: true,
+            smsQuietHoursEndHour: true,
+            smsMessagingServiceSid: true,
+          },
+        })
+      : null
+
+    const timezone = facility?.timezone ?? 'America/Chicago'
+    const start = facility?.smsQuietHoursStartHour ?? 8
+    const end = facility?.smsQuietHoursEndHour ?? 21
+    if (isSmsQuietHours(now, timezone, start, end)) {
+      result.stillQuiet += 1
+      continue
+    }
+
+    const [event, rule] = await Promise.all([
+      prisma.domainEvent.findUnique({ where: { id: message.eventId } }),
+      prisma.notificationRule.findUnique({ where: { id: message.ruleId } }),
+    ])
+    if (event && rule) {
+      const recipient = await resolveRecipient(event)
+      if (recipient) {
+        const skip = await firstFiringSkip(
+          {
+            id: rule.id,
+            templateKey: rule.templateKey,
+            classification: rule.classification,
+            skipConditions: rule.skipConditions,
+            channel: rule.channel,
+            channelPolicy: rule.channelPolicy,
+            category: rule.category,
+          },
+          recipient,
+          event,
+        )
+        if (skip) {
+          await prisma.message.update({
+            where: { id: message.id },
+            data: { status: 'cancelled', error: `skipped: ${skip}` },
+          })
+          result.cancelled += 1
+          continue
+        }
+      }
+    }
+
+    if (!facility?.smsMessagingServiceSid) {
+      // The facility's SMS was un-configured in the gap — nothing to retry
+      // onto. Left `deferred` rather than failed: an operator fixing the
+      // setting should not have to know this message needs re-raising.
+      result.stillQuiet += 1
+      continue
+    }
+
+    const providerResult = await selectSmsProvider().sendSms({
+      to: message.toAddress,
+      messagingServiceSid: facility.smsMessagingServiceSid,
+      body: message.bodySnapshot,
+      idempotencyKey: message.idempotencyKey,
+    })
+
+    await prisma.message.update({
+      where: { id: message.id },
+      data: providerResult.ok
+        ? { status: 'sent', providerMessageId: providerResult.providerMessageId, sentAt: new Date() }
+        : { status: 'failed', error: providerResult.message },
+    })
+    result.retried += 1
+  }
+
   return result
 }
 
@@ -1473,7 +1973,7 @@ export async function sendDirectEmail(input: DirectEmailInput): Promise<DirectSe
     bodySnapshot: input.text,
   }
 
-  const suppression = await suppressionFor(address, input.classification)
+  const suppression = await suppressionFor(address, input.classification, CHANNEL)
   if (suppression) {
     await prisma.message.create({
       data: { ...common, toAddress: address, status: 'suppressed', suppressionReason: suppression },

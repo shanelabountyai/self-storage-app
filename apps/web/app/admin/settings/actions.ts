@@ -27,6 +27,7 @@ import {
   parseRetryDays,
   updateBillingPolicy,
   updateEmailIdentity,
+  updateSmsSettings,
   updateOperationsPolicy,
   updateFacilityDetails,
   updateFacilityHours,
@@ -746,6 +747,61 @@ export async function updateEmailIdentityAction(
     replyTo
       ? `Tenants will see “${fromName || 'the facility name'}” and replies go to ${replyTo}.`
       : `Tenants will see “${fromName || 'the facility name'}”. Replies have nowhere to go until you set a reply-to.`,
+  )
+}
+
+/// PRD 05 FR-5/FR-8 (B-074). The Twilio Messaging Service SID and the
+/// quiet-hours override. No SID means SMS stays off for this facility —
+/// every reminder rule degrades to email-only — so an empty field is a valid,
+/// intentional save, not an error.
+export async function updateSmsSettingsAction(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const actor = await requireStaffActor()
+  const facilityId = String(formData.get('facilityId'))
+  requirePermission(actor, 'facility:settings', facilityId)
+
+  const sid = String(formData.get('smsMessagingServiceSid') ?? '').trim()
+  // Twilio's own SID format: a fixed "MG" prefix for a Messaging Service,
+  // followed by 32 hex characters. Loose beyond that on purpose — this is a
+  // trust boundary against typos, not a full validator.
+  if (sid && !/^MG[0-9a-f]{32}$/i.test(sid)) {
+    return fieldError({
+      smsMessagingServiceSid: 'A Messaging Service SID starts with "MG" followed by 32 characters.',
+    })
+  }
+
+  const start = parseScaled(formData.get('smsQuietHoursStartHour'), { scale: 1, min: 0, max: 23, unit: 'hours' })
+  const end = parseScaled(formData.get('smsQuietHoursEndHour'), { scale: 1, min: 1, max: 24, unit: 'hours' })
+
+  const errors: FieldErrors = {}
+  if ('error' in start) errors.smsQuietHoursStartHour = start.error
+  if ('error' in end) errors.smsQuietHoursEndHour = end.error
+  if (Object.keys(errors).length > 0) return fieldError(errors)
+  if ('error' in start || 'error' in end) return fieldError(errors)
+
+  if (start.value >= end.value) {
+    return fieldError({
+      smsQuietHoursStartHour: 'The window has to open before it closes — start must be earlier than end.',
+    })
+  }
+
+  try {
+    await updateSmsSettings(actor, facilityId, {
+      smsMessagingServiceSid: sid || null,
+      smsQuietHoursStartHour: start.value,
+      smsQuietHoursEndHour: end.value,
+    })
+  } catch (error) {
+    return asFormError(error, 'Could not save the SMS settings.')
+  }
+
+  revalidatePath('/admin/settings')
+  return success(
+    sid
+      ? `SMS is on for this facility, quiet hours ${start.value}:00-${end.value}:00.`
+      : 'SMS stays off for this facility until a Messaging Service SID is set — every reminder still sends by email.',
   )
 }
 

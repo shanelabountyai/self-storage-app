@@ -278,6 +278,24 @@ enum MessageStatus {
   failed
   suppressed
   cancelled
+  /// PRD 05 FR-8 (B-074). An SMS raised inside the facility's quiet-hours
+  /// window — not sent, not cancelled: the premise still holds, only the
+  /// clock is wrong. The hourly cron retries every `deferred` row once its
+  /// facility's window reopens, re-checking staleness first so a message that
+  /// went moot while queued (invoice paid) is cancelled then, not sent late.
+  deferred
+}
+
+/// PRD 05 CN-13 (B-074). The three togglable categories the tenant
+/// preference center exposes. Deliberately NOT every classification —
+/// legally significant mail (delinquency stages, lien supplements, rate
+/// increases) and marketing (governed by its own consent gate, B-072) are
+/// never toggle-off-able here, so events in those buckets carry no category
+/// at all rather than one of these three.
+enum NotificationCategory {
+  payment_reminders
+  receipts
+  operational_notices
 }
 
 enum SuppressionReason {
@@ -504,6 +522,19 @@ model Facility {
   /// and DKIM for every send — so the facility's real inbox is reached by
   /// reply-to instead. That split is CN-17's own design.
   emailReplyTo           String?
+  /// PRD 05 FR-5 (B-074). The Twilio Messaging Service this facility's SMS
+  /// sends through — one number pool per facility, per §6.3's A2P 10DLC
+  /// campaign attachment. Null means SMS is not configured for this facility
+  /// yet: every `sms_preferred_email_fallback` rule degrades to email-only,
+  /// the same honest-degradation posture `selectSmsProvider` uses when no
+  /// Twilio credentials are set at all.
+  smsMessagingServiceSid  String?
+  /// PRD 05 FR-8 / §6.4. TCPA's 8am-9pm recipient-local window, adopted for
+  /// ALL SMS regardless of classification — not just marketing. Defaults are
+  /// the PRD's own conservative default; a per-org stricter override (e.g.
+  /// 8am-8pm to clear Florida's mini-TCPA window) is this pair of fields.
+  smsQuietHoursStartHour  Int       @default(8)
+  smsQuietHoursEndHour    Int       @default(21)
   /// Days of notice the lease requires before a move-out. 0 means none.
   moveOutNoticeDays   Int            @default(10)
   /// A residual balance at or below this can be written off to close the
@@ -816,6 +847,7 @@ model Tenant {
   leads            Lead[]
   consents         Consent[]
   messages         Message[]
+  notificationPreferences NotificationPreference[]
 
   @@index([lastName, firstName])
   @@map("tenant")
@@ -2445,6 +2477,12 @@ model NotificationRule {
   channel        MessageChannel
   channelPolicy  ChannelPolicy         @default(email_only)
   classification MessageClassification
+  /// PRD 05 CN-13 (B-074). Which preference-center row governs this rule, if
+  /// any. Null for legally-significant and marketing events — those are never
+  /// toggle-off-able (the former by law, the latter by its own consent gate),
+  /// so leaving this null is what keeps them out of `NotificationPreference`
+  /// entirely rather than requiring a "cannot disable" special case there.
+  category       NotificationCategory?
   /// Predicate keys re-evaluated at send time; if any holds, the send is
   /// skipped as stale (FR-18). Resolved by the skip-condition registry.
   skipConditions String[]
@@ -2460,6 +2498,27 @@ model NotificationRule {
   @@index([event, active])
   @@index([facilityId])
   @@map("notification_rule")
+}
+
+/// PRD 05 CN-13 (B-074). The tenant preference center's own storage: one row
+/// per (tenant, category, channel) the tenant has EXPLICITLY overridden.
+/// Absence of a row means the default applies — `enabled: true` for every
+/// combination except receipts-by-SMS, which CN-6/D-11a default OFF — so
+/// seeding every tenant with six rows on signup is never necessary and a
+/// brand-new tenant is never silently unreachable.
+model NotificationPreference {
+  id        String               @id @default(cuid())
+  tenantId  String
+  category  NotificationCategory
+  channel   MessageChannel
+  enabled   Boolean
+  createdAt DateTime             @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime             @updatedAt @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, category, channel])
+  @@map("notification_preference")
 }
 
 /// PRD 05 FR-21. One send attempt's whole lifecycle, append-only evidence.
