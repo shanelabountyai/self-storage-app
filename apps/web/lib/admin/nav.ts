@@ -29,6 +29,11 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { key: 'walkthrough', label: 'Walkthrough', href: '/admin/walkthrough', anyOf: ['units:edit'] },
   { key: 'maintenance', label: 'Maintenance', href: '/admin/maintenance', anyOf: ['units:edit'] },
   { key: 'auctions', label: 'Auctions', href: '/admin/auctions', anyOf: ['auctions:approve'] },
+  // B-076 / PRD 02 US-11. The rate-increase review screen. Gated on the
+  // permission that schedules them; the regional-rank check that governs
+  // APPROVAL lives in the service, since a site manager may legitimately
+  // build a worklist they cannot sign off.
+  { key: 'rate-increases', label: 'Rate Increases', href: '/admin/rate-increases', anyOf: ['rates:tenant_increase'] },
   { key: 'pos', label: 'POS / Drawer', href: '/admin/pos', anyOf: ['payments:take'] },
   // No Task entity yet (B-060) — gated the same as Tenants for now.
   { key: 'tasks', label: 'Tasks', href: '/admin/tasks', anyOf: ['tenants:view'] },

@@ -23,6 +23,11 @@ export const AUDIT_ACTIONS = [
   // Pricing
   { action: 'rate.street_changed', label: 'Street rate changed', requiresReason: false },
   { action: 'rate.tenant_increased', label: 'Tenant rate increased', requiresReason: true },
+  /// US-11: "Increases are cancellable up to the effective date; cancellation
+  /// is audit-logged." A reason is required for the same reason approval
+  /// needs one — a tenant who was told their rate was going up and then was
+  /// not is a conversation somebody has to be able to reconstruct.
+  { action: 'rate.increase_cancelled', label: 'Tenant rate increase cancelled', requiresReason: true },
 
   // Tenants
   { action: 'tenant.contact_updated', label: 'Tenant contact info updated', requiresReason: false },

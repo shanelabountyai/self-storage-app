@@ -537,6 +537,14 @@ model Facility {
   smsQuietHoursEndHour    Int       @default(21)
   /// Days of notice the lease requires before a move-out. 0 means none.
   moveOutNoticeDays   Int            @default(10)
+  /// PRD 02 US-11 (B-076). Minimum advance notice before a tenant rate
+  /// increase may take effect. "Default 30 days; configurable, since required
+  /// notice varies by state/lease" — the AC's own words. Zero is refused
+  /// rather than treated as "no notice": a rate increase with no warning is
+  /// the one configuration that is never a deliberate operator choice, and
+  /// D-10's attorney pass has not settled the Texas figure (PROGRESS.md
+  /// still lists it open), so the default is the conservative common term.
+  rateIncreaseNoticeDays Int         @default(30)
   /// A residual balance at or below this can be written off to close the
   /// lease; anything above needs a manager (US-14's own AC).
   writeOffThresholdCents Int         @default(1000)
@@ -604,6 +612,7 @@ model Facility {
   auctionCases           AuctionCase[]
   notificationRules      NotificationRule[]
   messages               Message[]
+  rateIncreases          TenantRateIncrease[]
 
   @@index([state])
   @@map("facility")
@@ -997,6 +1006,7 @@ model Lease {
   accessCredentials      AccessCredential[]
   notices                Notice[]
   rateChanges            LeaseRateChange[]
+  rateIncreases          TenantRateIncrease[]
   authorizedAccessPeople AuthorizedAccessPerson[]
   payLinks               PayLink[]
   holds                  LeaseHold[]
@@ -1430,12 +1440,94 @@ model LeaseRateChange {
   actorStaffId      String?
   /// Days of notice given, where the reason required any.
   noticeDays        Int?
+  /// US-11's "notice-sent reference (nullable until this story ships)" —
+  /// B-076 is that story. Set for a `ecri` change applied from a scheduled
+  /// increase, which is what carries the notice date and its send record.
+  /// Null for every other reason: a move-in or a transfer gives no notice
+  /// because there is nothing to give notice OF.
+  rateIncreaseId    String?
   createdAt         DateTime        @default(now()) @db.Timestamptz(6)
 
   lease Lease @relation(fields: [leaseId], references: [id], onDelete: Restrict)
+  rateIncrease TenantRateIncrease? @relation(fields: [rateIncreaseId], references: [id], onDelete: SetNull)
 
   @@index([leaseId, effectiveFrom])
   @@map("lease_rate_change")
+}
+
+/// PRD 02 US-11 (B-076). A SCHEDULED tenant rate increase, with a lifecycle.
+///
+/// Deliberately its own model rather than a status column on
+/// `LeaseRateChange`: that table is append-only history — what the rate WAS,
+/// from when — and a workflow row that moves through approval, notice and
+/// cancellation is a different kind of thing. Mixing them would make the
+/// history mutable, and "which rate applied on this date" is a question a
+/// billing dispute asks of a table nothing edits. An applied increase writes
+/// its own `LeaseRateChange` row and points back here through
+/// `rateIncreaseId`; a cancelled one never writes history at all, because
+/// nothing happened.
+model TenantRateIncrease {
+  id                String             @id @default(cuid())
+  facilityId        String
+  leaseId           String
+  /// Snapshotted at scheduling, not read live at apply time. The approval
+  /// screen showed a projected delta against THIS figure, and an increase
+  /// approved against $129 must not silently become a different increase
+  /// because something else moved the rate in between — `applyDue` refuses
+  /// the row instead (see the service).
+  currentRateCents  Int
+  newRateCents      Int
+  /// Calendar dates, not instants: "effective on the 1st" is a facility-local
+  /// day, and a timestamp would imply a precision the fact does not have —
+  /// the same reasoning `Lease.moveOutDate` and `JobRun.businessDate` use.
+  effectiveDate     DateTime           @db.Date
+  /// When the tenant must be told by. Derived from `effectiveDate` minus the
+  /// facility's `rateIncreaseNoticeDays` at scheduling time, and stored
+  /// rather than recomputed so a later settings change cannot retroactively
+  /// make an already-served notice look late.
+  noticeDate        DateTime           @db.Date
+  /// The figure the notice quotes, snapshotted for the same reason.
+  noticeDays        Int
+  status            RateIncreaseStatus @default(pending_approval)
+  /// US-11: "one-off (selected tenants) or rule-based". Groups a rule-based
+  /// batch so the approval screen can approve one worklist rather than
+  /// forty rows, and so a batch is cancellable as a unit.
+  batchId           String?
+  createdByStaffId  String?
+  /// US-11 AC: "regional/owner approval is required before notices go out."
+  approvedByStaffId String?
+  approvedAt        DateTime?          @db.Timestamptz(6)
+  /// Set by the notice job on the notice date. The presence of this is what
+  /// `applyDue` requires before it will move a rate — an increase whose
+  /// notice never went out is never applied.
+  noticeSentAt      DateTime?          @db.Timestamptz(6)
+  appliedAt         DateTime?          @db.Timestamptz(6)
+  cancelledAt       DateTime?          @db.Timestamptz(6)
+  cancelledByStaffId String?
+  createdAt         DateTime           @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime           @updatedAt @db.Timestamptz(6)
+
+  facility    Facility          @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  lease       Lease             @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+  rateChanges LeaseRateChange[]
+
+  @@index([facilityId, status])
+  @@index([leaseId])
+  @@index([status, effectiveDate])
+  @@index([status, noticeDate])
+  @@map("tenant_rate_increase")
+}
+
+/// US-11's lifecycle. `notice_sent` is a distinct state from `approved`
+/// because the AC gates them separately — approval unlocks the notice, the
+/// notice unlocks the apply — and collapsing them would let an increase
+/// take effect on a tenant who was never told.
+enum RateIncreaseStatus {
+  pending_approval
+  approved
+  notice_sent
+  applied
+  cancelled
 }
 
 enum LeaseRateReason {

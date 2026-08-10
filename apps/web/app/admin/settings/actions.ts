@@ -663,12 +663,24 @@ export async function updateOperationsPolicyAction(
     unit: 'hours',
   })
 
+  // PRD 02 US-11 (B-076). Minimum 1: zero is not "no notice required", it is
+  // a misconfiguration that would let an unannounced increase reach a real
+  // tenant — the scheduler refuses a zero-day period outright for the same
+  // reason, so the form refuses to save one.
+  const rateNoticeDays = parseScaled(formData.get('rateIncreaseNoticeDays'), {
+    scale: 1,
+    min: 1,
+    max: 365,
+    unit: 'days',
+  })
+
   const errors: FieldErrors = {}
   if ('error' in accessCap) errors.authorizedAccessCap = accessCap.error
   if ('error' in cashApproval) errors.cashApprovalThresholdDollars = cashApproval.error
   if ('error' in writeOff) errors.writeOffThresholdDollars = writeOff.error
   if ('error' in noticeDays) errors.moveOutNoticeDays = noticeDays.error
   if ('error' in leadHours) errors.leadFollowUpHours = leadHours.error
+  if ('error' in rateNoticeDays) errors.rateIncreaseNoticeDays = rateNoticeDays.error
 
   // PRD 04 US-9 AC2 (B-073). "+1h, +24h, +72h (configurable)" — three
   // strictly-increasing hour offsets, same shape as the retry/dunning day
@@ -688,7 +700,8 @@ export async function updateOperationsPolicyAction(
     'error' in cashApproval ||
     'error' in writeOff ||
     'error' in noticeDays ||
-    'error' in leadHours
+    'error' in leadHours ||
+    'error' in rateNoticeDays
   ) {
     return fieldError(errors)
   }
@@ -701,6 +714,7 @@ export async function updateOperationsPolicyAction(
       moveOutNoticeDays: noticeDays.value,
       leadFollowUpHours: leadHours.value,
       abandonmentFollowUpHours: abandonmentHours,
+      rateIncreaseNoticeDays: rateNoticeDays.value,
     })
   } catch (error) {
     return asFormError(error, 'Could not save the operations policy.')

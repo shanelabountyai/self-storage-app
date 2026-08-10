@@ -2547,3 +2547,95 @@ seeded `owner` role).
   says needs a form field, these configure an internal alarm rather than
   tenant-facing behaviour, which is the distinction B-062's surplus-hold-days
   precedent draws the same way.
+
+---
+
+## B-076 — Tenant rate increases
+
+`<pending>`
+
+**What it built.** US-11 end to end, and the first use of two things reserved
+long before this item: the `rates:tenant_increase` permission and the
+`rate.tenant_increased` audit action, both defined and unreferenced since
+B-004/B-005. A new `TenantRateIncrease` model carries the lifecycle
+(pending → approved → notice sent → applied, plus cancelled); the
+append-only `LeaseRateChange` history it eventually writes gains only a
+nullable `rateIncreaseId`, which is US-11's own "notice-sent reference
+(nullable until this story ships)". Scheduling comes two ways — one-off
+(this tenant, this rate, this date) and rule-based (US-11's own example:
+≥9 months since the last change and ≥$15 below street, raised to street) —
+both refusing an effective date that breaks the facility's new
+`rateIncreaseNoticeDays` (default 30, with its own settings control).
+Approval is regional-or-owner with a required reason code, matching the
+auction bar. Two new nightly jobs: notices go out at 10am local on the
+notice date (emitting `lease.rate_increase_scheduled` into the ordinary
+comms pipeline, with a new template quoting all four of CN-9's merge
+fields), and increases apply at hour 0 — deliberately BEFORE
+`billing.generate-invoices` at hour 1, which is what makes "the first
+invoice on/after the effective date" true without `invoices.ts` needing an
+effective-dated read of its own. A new `/admin/rate-increases` screen is
+US-11's review screen: pending increases with the projected monthly revenue
+delta, the rule's current worklist, and approve/cancel per row or per batch.
+69 new tests (39 pure, 30 against the database and the real seeded catalog).
+
+**What it decided.**
+
+- *The workflow row is a new model, not a status column on `LeaseRateChange`
+  — recorded as D-37.* That table is what a billing dispute reads to answer
+  "which rate applied on this date"; a mutable status on it would make the
+  history editable, and a cancelled increase would leave a history row for a
+  change that never happened. PRD 02 §5 already names `TenantRateIncrease` as
+  its own entity.
+- *The notice is email only; the postal/`Notice`-document path is not built —
+  also D-37.* CN-9 scopes itself to "the electronic copy" and hands the mail
+  queue and the legal-sufficiency call to PRD 02, and the per-state "requires
+  written notice" flag it would key off is exactly what D-10's unfinished
+  attorney pass governs. `NoticeType.rate_change` already exists in the enum
+  for whenever that lands.
+- *`applyRateChange()` is now the ONLY way `Lease.monthlyRateCents` moves*,
+  which is US-11's schema AC finally enforced ("written only through the
+  function that writes the history row — the same discipline as
+  `recomputeUnitStatus()`"). Until this item there was one hand-rolled
+  inline writer (move-in) and no such function. Exported so B-077's
+  transfers and any later promo-expiry path use it rather than touching the
+  column.
+- *An increase is applied only from `notice_sent`, never from `approved`.*
+  That one guard is what makes "no tenant is charged more without having
+  been told" true by construction rather than by the two jobs happening to
+  run in the right order.
+- *An increase whose lease rate moved after approval is REFUSED, not
+  applied.* The approver signed off on a delta from a specific figure; the
+  run records a failed item naming both rates rather than quietly applying
+  the increase to a number nobody agreed to.
+- *`notice_sent` is still cancellable.* The case that matters most is an
+  operator who changes their mind after the letter went out — telling the
+  tenant it is cancelled is a phone call, not a reason to make the charge
+  unstoppable.
+- *`rateVariance` (core metrics) was made generic* rather than duplicated, so
+  the worklist and the rate-variance report cannot disagree about which
+  lease is most worth raising.
+
+**What it left behind.**
+
+- **No mid-cycle proration.** US-11's AC allows for it ("with proration if
+  mid-cycle billing anniversary rules require it"); this applies the new
+  rate to the first invoice GENERATED on or after the effective date and
+  never re-rates a period already invoiced. Under D-27's anniversary billing
+  each lease's period starts on its own billing day, so an operator
+  scheduling to a period boundary gets exactly what they expect — scheduling
+  mid-period means the increase lands on the following period rather than
+  splitting it. A real simplification, documented rather than hidden.
+- **No percentage cap on a rule-based batch.** The rule raises to street,
+  full stop. A softer step (cap at +10%, say) is a real feature the AC does
+  not ask for, and a guessed cap would quietly become the thing every batch
+  does.
+- **The one-off form takes a lease ID typed by hand** rather than a tenant
+  picker. The rule-based worklist is the path the AC actually describes
+  ("the rate-variance report... is the worklist the Phase-2 rate-increase
+  workflow runs from"); the one-off form is the escape hatch beside it, and
+  a search-and-select control belongs with the tenant-picker work that has
+  no item yet.
+- **The notice period default (30 days) is still legally unverified.**
+  PROGRESS.md has listed it open since B-056 and D-10's attorney pass has
+  not happened; the setting, the screen and the email all say so rather than
+  asserting a figure.

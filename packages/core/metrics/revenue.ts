@@ -86,7 +86,14 @@ export type RateVarianceRow = {
 /// not a column": in-place vs current street per occupied unit, sorted by the
 /// gap, largest first. Ties break on the longer-untouched lease, since that
 /// is the one more likely to accept an increase without complaint.
-export function rateVariance(rows: readonly RateVarianceRow[]): RateVarianceRow[] {
+/// Generic over the row so the Phase-2 rate-increase worklist (B-076) can
+/// order ITS shape by the same definition rather than re-implementing the
+/// comparator — §4.11's "one metrics definition layer" applies to an
+/// ordering exactly as much as to a ratio. The report's own `RateVarianceRow`
+/// satisfies the constraint unchanged.
+export function rateVariance<T extends Pick<RateVarianceRow, 'gapCents' | 'monthsSinceLastChange'>>(
+  rows: readonly T[],
+): T[] {
   return [...rows].sort((a, b) => {
     if (b.gapCents !== a.gapCents) return b.gapCents - a.gapCents
     return (b.monthsSinceLastChange ?? 0) - (a.monthsSinceLastChange ?? 0)

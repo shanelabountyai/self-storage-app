@@ -18,6 +18,7 @@ import { raiseDailyWalkthrough } from '@/lib/field-ops/walkthrough'
 import { raiseReviewRequests } from '@/lib/reviews/request-job'
 import { raiseLeadDripSteps } from '@/lib/leads/drip-job'
 import { detectDailyFailureRate, detectSilentDunning } from '@/lib/comms/detectors'
+import { applyDueRateIncreases, sendDueRateIncreaseNotices } from '@/lib/pricing/tenant-rate-increases'
 
 // Consumer and job registration. The machinery is B-006's; the things that use
 // it arrive with their own backlog items: reservation expiry (B-018, below),
@@ -112,6 +113,8 @@ export const CONSUMERS: readonly Consumer[] = [
       'review.requested',
       // PRD 04 US-14 (B-072). The lead drip.
       'lead.drip_step',
+      // PRD 02 US-11 / PRD 05 CN-9 (B-076). The rate-increase notice.
+      'lease.rate_increase_scheduled',
     ],
     handle: async ({ event }) => {
       await processCommsEvent(event)
@@ -197,6 +200,38 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
         ok: true,
         message: `expired ${expired} checkout session${expired === 1 ? '' : 's'}`,
       })
+    },
+  },
+  {
+    // B-076 / PRD 02 US-11. "The new rate applies automatically to the first
+    // invoice on/after the effective date."
+    //
+    // At hour 0, and the ordering is the whole mechanism: this runs BEFORE
+    // `billing.generate-invoices` at hour 1, so an increase effective today
+    // has already moved `Lease.monthlyRateCents` by the time tonight's
+    // invoice reads it. Doing it the other way round would mean every
+    // increase landed one billing period late, silently.
+    name: 'pricing.apply-rate-increases',
+    localHour: 0,
+    scope: 'per_facility',
+    handler: async ({ facilityId, businessDate, recordItem }) => {
+      await applyDueRateIncreases(facilityId!, businessDate, recordItem)
+    },
+  },
+  {
+    // B-076 / PRD 05 CN-9. "Send the tenant notice on the configured
+    // advance-notice date."
+    //
+    // At 10am local rather than overnight, and for the same reason B-071's
+    // review request is mid-morning: this is a letter telling somebody their
+    // rent is going up, and one that arrives at 3am reads worse than one
+    // that arrives during business hours — when they can ring the office
+    // about it and somebody is there.
+    name: 'pricing.send-rate-increase-notices',
+    localHour: 10,
+    scope: 'per_facility',
+    handler: async ({ facilityId, businessDate, recordItem }) => {
+      await sendDueRateIncreaseNotices(facilityId!, businessDate, recordItem)
     },
   },
   {

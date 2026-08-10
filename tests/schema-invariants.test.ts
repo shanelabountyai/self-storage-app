@@ -99,6 +99,13 @@ const CALENDAR_DATE_FIELDS = new Set([
   // B-071. The day a review was actually posted, not an instant — "5 most
   // recent reviews" sorts and displays by calendar date.
   'Review.reviewDate',
+  // B-076. Both are days a tenant reads off a letter: "your rent changes on
+  // 1 October", and the day we must have told them by. Putting an hour on
+  // either would assert a precision the notice does not state — the same
+  // reasoning `Notice.deadlineDate` already carries, and the reason the
+  // notice email formats these in UTC rather than a facility timezone.
+  'TenantRateIncrease.effectiveDate',
+  'TenantRateIncrease.noticeDate',
 ])
 
 describe('prisma schema invariants', () => {
@@ -141,8 +148,12 @@ describe('prisma schema invariants', () => {
     const words = (name: string) => name.split(/(?=[A-Z])/).map((w) => w.toLowerCase())
     // Non-money units that legitimately share a money word: a tax rate in
     // hundredths of a percent (TaxComponent.rateBasisPoints) is a "rate" but
-    // is never cents.
-    const ACCEPTED_SUFFIXES = ['Cents', 'BasisPoints']
+    // is never cents, and a `…Days` field is a duration however it is named
+    // (B-076's `Facility.rateIncreaseNoticeDays` is a count of days, not a
+    // rate). Both suffixes name their own unit, which is exactly what makes
+    // them safe — the rule this guards is "money is cents and says so", not
+    // "no field may contain the word rate".
+    const ACCEPTED_SUFFIXES = ['Cents', 'BasisPoints', 'Days']
 
     const suspicious = models.flatMap((model) =>
       model.fields

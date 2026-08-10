@@ -401,6 +401,11 @@ export type OperationsPolicyInput = {
   /// timing — grouped with `leadFollowUpHours` above rather than billing
   /// policy, since both are "how soon do we follow up", not money.
   abandonmentFollowUpHours: number[]
+  /// PRD 02 US-11 (B-076). Minimum advance notice before a tenant rate
+  /// increase may take effect. Here rather than in billing policy for the
+  /// same reason `moveOutNoticeDays` is: it is a term of the lease and a
+  /// question of what the state requires, not a decision about invoicing.
+  rateIncreaseNoticeDays: number
 }
 
 export async function updateOperationsPolicy(
@@ -420,6 +425,7 @@ export async function updateOperationsPolicy(
     moveOutNoticeDays: row.moveOutNoticeDays,
     leadFollowUpHours: row.leadFollowUpHours,
     abandonmentFollowUpHours: row.abandonmentFollowUpHours,
+    rateIncreaseNoticeDays: row.rateIncreaseNoticeDays,
   })
 
   await recordAudit({

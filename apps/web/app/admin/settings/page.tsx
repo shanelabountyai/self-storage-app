@@ -813,6 +813,15 @@ export default async function AdminSettingsPage() {
             hint="Hours. A phone or walk-in inquiry with no disposition after this becomes a task on the morning sweep — US-43's “never silently ageing in new”."
           />
           <Field
+            name="rateIncreaseNoticeDays"
+            label="Notice before a rate increase (days)"
+            type="number"
+            min={1}
+            max={365}
+            defaultValue={facility.rateIncreaseNoticeDays}
+            hint="The minimum an increase's effective date has to be from the day it is scheduled. 30 is the common lease term — what your state and lease actually require is a question for your attorney."
+          />
+          <Field
             name="abandonmentFollowUpHours"
             label="Email a checkout that stalls, at these hours"
             defaultValue={facility.abandonmentFollowUpHours.join(', ')}

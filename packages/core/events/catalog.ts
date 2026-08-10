@@ -82,6 +82,13 @@ export const EVENT_NAMES = [
 
   // Pricing and demand
   'rates.updated',
+  /// PRD 02 US-11 / PRD 05 CN-9 (B-076). Raised on the NOTICE date of an
+  /// approved tenant rate increase, not when it was scheduled — CN-9's own
+  /// wording is "send the tenant notice on the configured advance-notice
+  /// date", and the whole point of the notice period is that the tenant
+  /// hears about it then rather than at whatever moment an operator queued
+  /// the batch.
+  'lease.rate_increase_scheduled',
   'lead.created',
 
   // Documents

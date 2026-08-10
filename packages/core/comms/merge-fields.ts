@@ -165,6 +165,19 @@ export const EVENT_MERGE_FIELDS: Record<string, readonly MergeFieldSpec[]> = {
     { field: 'checkout.promo_line', description: 'The live promo’s terms, when one applies', sample: '50% off your first month' },
     { field: 'links.resume_checkout', description: 'Link that resumes their checkout where they left off', sample: 'https://example.com/checkout/resume/abc123' },
   ],
+  // B-076 / PRD 05 CN-9. The AC names all four exactly: "merge fields include
+  // old rate, new rate, effective date, and the governing notice-period."
+  // Every one is `required` on the template, so CN-9's "send is blocked (loud
+  // failure to admin) if any merge field is missing" is enforced by the
+  // ordinary render guard rather than a special case — a rate letter with a
+  // blank effective date is worse than no letter.
+  'lease.rate_increase_scheduled': [
+    { field: 'unit.number', description: 'Unit number', sample: 'A-12' },
+    { field: 'rate.old', description: 'What they pay now', sample: '$129.00' },
+    { field: 'rate.new', description: 'What they will pay', sample: '$149.00' },
+    { field: 'rate.effective_date', description: 'When the new rate starts', sample: 'October 1, 2026' },
+    { field: 'rate.notice_days', description: 'The notice period this gives', sample: '30' },
+  ],
   'protection.auto_enrolled': [
     { field: 'unit.number', description: 'Unit number', sample: 'A-12' },
     { field: 'protection.plan_name', description: 'The plan they were enrolled in', sample: 'Standard cover' },

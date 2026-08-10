@@ -726,6 +726,40 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
     'links.google_review': recipient.facility?.googleReviewUrl ?? '',
   }),
 
+  // B-076 / PRD 05 CN-9. Every figure comes from the EVENT payload, not a
+  // fresh read — deliberately the opposite of this file's usual FR-18
+  // recompute-at-send-time rule, and for the reason B-063's notice supplement
+  // gives: this letter IS the legal notice of a specific increase, and one
+  // quoting a different figure than the increase it gives notice of would be
+  // worse than not sending it. The row it describes is also mid-flight
+  // (`notice_sent`, not yet `applied`), so `Lease.monthlyRateCents` still
+  // holds the OLD rate at this moment — reading it live would print the old
+  // rate as the new one.
+  'lease.rate_increase_scheduled': async (event) => {
+    const payload = (event.payload ?? {}) as {
+      previousRateCents?: number
+      newRateCents?: number
+      effectiveDate?: string
+      noticeDays?: number
+    }
+    const effective = payload.effectiveDate
+      ? new Date(`${payload.effectiveDate}T00:00:00.000Z`)
+      : null
+    return {
+      'rate.old': payload.previousRateCents !== undefined ? formatCents(payload.previousRateCents) : '',
+      'rate.new': payload.newRateCents !== undefined ? formatCents(payload.newRateCents) : '',
+      // Formatted in UTC, not the facility timezone: the effective date is a
+      // calendar day (`@db.Date`), and running it through a timezone would
+      // shift it a day off the date the increase actually takes effect on —
+      // the same reasoning `notice.generated`'s deadline date already uses.
+      'rate.effective_date': effective
+        ? new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', dateStyle: 'long' }).format(effective)
+        : '',
+      'rate.notice_days': payload.noticeDays !== undefined ? String(payload.noticeDays) : '',
+      'links.portal': `${baseUrl()}/login`,
+    }
+  },
+
   // CN-3's tone escalation, as content rather than code. Four rungs, and the
   // wording gets firmer without ever threatening something that has not been
   // decided — the day-10 line warns about access because B-098 genuinely

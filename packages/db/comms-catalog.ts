@@ -549,6 +549,48 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
     requiredMergeFields: ['facility.name', 'card.expires', 'links.update_card'],
   },
   {
+    // PRD 05 CN-9 / PRD 02 US-11 (B-076). The rate-increase notice.
+    //
+    // Every one of CN-9's four merge fields is REQUIRED, which is what makes
+    // its "send is blocked (loud failure to admin) if any merge field is
+    // missing" true through the ordinary render guard. Draft copy, not legal
+    // advice (D-10) — the notice period itself is still an open attorney
+    // question, which is exactly why the letter quotes the configured figure
+    // rather than asserting a number of its own.
+    //
+    // The tone is deliberately plain and early-paragraph: a rate increase
+    // buried under three sentences of appreciation reads as an attempt to
+    // hide it, and a tenant who feels tricked cancels.
+    key: 'rate_increase_notice',
+    classification: 'transactional',
+    subject: 'Your rent for unit {{unit.number}} changes on {{rate.effective_date}}',
+    bodyText: [
+      'Hi {{tenant.first_name}},',
+      '',
+      'This is {{rate.notice_days}} days’ notice that the rent for unit {{unit.number}} at {{facility.name}} is changing.',
+      '',
+      'Now: {{rate.old}} per month',
+      'From {{rate.effective_date}}: {{rate.new}} per month',
+      '',
+      'Nothing changes before {{rate.effective_date}}, and you do not need to do anything — the new amount will appear on the first invoice on or after that date.',
+      '',
+      'Your account: {{links.portal}}',
+      '',
+      'If you have questions, or this does not look right, call {{facility.phone}} and we will go through it with you.',
+    ].join('\n'),
+    requiredMergeFields: [
+      'tenant.first_name',
+      'unit.number',
+      'facility.name',
+      'rate.old',
+      'rate.new',
+      'rate.effective_date',
+      'rate.notice_days',
+      'links.portal',
+      'facility.phone',
+    ],
+  },
+  {
     // D-17 assigned this notice to B-050. Draft text, not legal advice (D-10).
     key: 'protection_proof_expiring',
     classification: 'transactional',
@@ -934,6 +976,21 @@ export const COMMS_RULES: readonly CommsRuleSeed[] = [
     event: 'protection.auto_enrolled',
     templateKey: 'protection_auto_enrolled',
     classification: 'transactional',
+  },
+  {
+    // B-076 / PRD 05 CN-9. Email only, and no `category` — a rate increase is
+    // one of the three things D-36 puts in CN-13's email-mandatory legal
+    // carve-out ("delinquency stages, lien supplements, rate increases"), so
+    // it is deliberately absent from the preference centre and can never be
+    // toggled off.
+    //
+    // `tenant_moved_out` is the one skip: an increase whose lease ended
+    // between the notice job raising it and the dispatcher reaching it has
+    // nobody left to give notice to.
+    event: 'lease.rate_increase_scheduled',
+    templateKey: 'rate_increase_notice',
+    classification: 'transactional',
+    skipConditions: ['tenant_moved_out'],
   },
 
   // ── B-071 (PRD 04 US-7). ────────────────────────────────────────────────────
