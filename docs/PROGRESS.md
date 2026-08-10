@@ -2130,7 +2130,7 @@ catalog).
 
 ## B-071 — Reviews: manual entry, facility-page display, review-request email
 
-`<sha>`
+`e3e4ec9`
 
 **What it built.** FR-REV-1/2/3 and US-6/US-7 end to end. A `Review` entity
 (immutable content, hide-not-edit per FR-REV-2, same convention as
