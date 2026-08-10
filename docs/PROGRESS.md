@@ -1871,7 +1871,7 @@ follows, this is a card list, not a data table.
 
 ## B-060 — Field ops: overlock reconciliation, the daily walkthrough, maintenance tickets
 
-`<sha>`
+`dd93511`
 
 **What it built.** The three US-35/36/37 stories, each as thin as the backlog
 line asked for: "all as `Task` types and views, not new queues."
