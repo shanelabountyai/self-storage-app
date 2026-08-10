@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { advance, extendLock, relock, sendCheckoutResumeLink, type Step } from '@/lib/checkout/session'
 import {
+  MARKETING_EMAIL_CHECKOUT_DISCLOSURE_VERSION,
   SMS_CONSENT_DISCLOSURE_VERSION,
   upsertTenantForCheckout,
   validateDetails,
@@ -46,6 +47,7 @@ export async function submitDetailsAction(
     activeDutyMilitary: formData.get('activeDutyMilitary') === 'yes',
   }
   const smsConsentChecked = formData.get('smsConsent') === 'yes'
+  const marketingConsentChecked = formData.get('marketingConsent') === 'yes'
 
   const errors = validateDetails(input)
   if (Object.keys(errors).length > 0) return fieldError(errors)
@@ -80,6 +82,19 @@ export async function submitDetailsAction(
     state: smsConsentChecked ? 'granted' : 'revoked',
     source: 'checkout_step_1',
     disclosureVersion: SMS_CONSENT_DISCLOSURE_VERSION,
+    ipAddress: (await requestMetadata()).ipAddress,
+  })
+
+  // PRD 04 US-13 AC1 / US-9 AC3 (B-073). "No consent, no sequence" — the
+  // abandonment follow-up reads this back at raise time. Recorded either way,
+  // same reasoning as the SMS consent above: a declined box is evidence the
+  // disclosure was shown and answered, not silence.
+  await recordConsent({
+    tenantId,
+    channel: 'marketing_email',
+    state: marketingConsentChecked ? 'granted' : 'revoked',
+    source: 'checkout_step_1',
+    disclosureVersion: MARKETING_EMAIL_CHECKOUT_DISCLOSURE_VERSION,
     ipAddress: (await requestMetadata()).ipAddress,
   })
 

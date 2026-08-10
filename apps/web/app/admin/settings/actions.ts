@@ -16,6 +16,7 @@ import { prisma } from '@storage/db'
 import { recordAudit } from '@storage/core/audit'
 import { toAuditActor } from '@/lib/rbac/audit-actor'
 import { requirePermission } from '@/lib/rbac/authorize'
+import { InvalidAbandonmentScheduleError, parseAbandonmentHours } from '@storage/core/checkout'
 import {
   InvalidRetryScheduleError,
   addFeeScheduleEntry,
@@ -667,6 +668,19 @@ export async function updateOperationsPolicyAction(
   if ('error' in writeOff) errors.writeOffThresholdDollars = writeOff.error
   if ('error' in noticeDays) errors.moveOutNoticeDays = noticeDays.error
   if ('error' in leadHours) errors.leadFollowUpHours = leadHours.error
+
+  // PRD 04 US-9 AC2 (B-073). "+1h, +24h, +72h (configurable)" — three
+  // strictly-increasing hour offsets, same shape as the retry/dunning day
+  // lists above but its own parser: the structure (exactly three steps) is
+  // fixed, unlike a retry ladder an operator may shorten to nothing.
+  let abandonmentHours: number[] = []
+  try {
+    abandonmentHours = parseAbandonmentHours(String(formData.get('abandonmentFollowUpHours') ?? ''))
+  } catch (error) {
+    errors.abandonmentFollowUpHours =
+      error instanceof InvalidAbandonmentScheduleError ? error.message : 'Enter three offsets like "1, 24, 72".'
+  }
+
   if (Object.keys(errors).length > 0) return fieldError(errors)
   if (
     'error' in accessCap ||
@@ -685,6 +699,7 @@ export async function updateOperationsPolicyAction(
       writeOffThresholdCents: writeOff.value,
       moveOutNoticeDays: noticeDays.value,
       leadFollowUpHours: leadHours.value,
+      abandonmentFollowUpHours: abandonmentHours,
     })
   } catch (error) {
     return asFormError(error, 'Could not save the operations policy.')

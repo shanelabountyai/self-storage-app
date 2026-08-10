@@ -765,6 +765,12 @@ export default async function AdminSettingsPage() {
             defaultValue={facility.leadFollowUpHours}
             hint="Hours. A phone or walk-in inquiry with no disposition after this becomes a task on the morning sweep — US-43's “never silently ageing in new”."
           />
+          <Field
+            name="abandonmentFollowUpHours"
+            label="Email a checkout that stalls, at these hours"
+            defaultValue={facility.abandonmentFollowUpHours.join(', ')}
+            hint="Exactly three, increasing — hours after checkout starts. Only sends with marketing consent, and stops the moment the booking completes."
+          />
           <Button type="submit">Save operations policy</Button>
         </AdminForm>
       </section>

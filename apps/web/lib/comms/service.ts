@@ -12,6 +12,7 @@ import { offerFor } from '@/lib/promotions/service'
 import { isMarketingQuietHours } from '@storage/core/comms'
 import { currentConsent } from '@storage/core/consent'
 import { mintUnsubscribeToken, unsubscribeUrl } from './unsubscribe-token'
+import { mintCheckoutResumeToken, checkoutResumeUrl } from '@/lib/checkout/resume-token'
 import {
   commsEnabled,
   effectiveRecipient,
@@ -645,6 +646,42 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
     }
   },
 
+  // B-073 / PRD 04 US-9 AC1. Entity type is 'Tenant' (a checkout session has
+  // no consistent entity of its own before it becomes a lease), so everything
+  // about the session itself — unit size, quoted price, any live promo, the
+  // resume link — comes from re-reading it here by the id on the payload.
+  // Same re-derive-fresh reasoning as `lead.drip_step`: a promo that ended
+  // between the job raising this step and the send must not be quoted after
+  // it is gone.
+  'checkout.abandonment_step': async (event, recipient) => {
+    const payload = (event.payload ?? {}) as { checkoutSessionId?: string }
+    if (!payload.checkoutSessionId || !recipient.facility) return {} as MergeContext
+    const session = await prisma.checkoutSession.findUnique({
+      where: { id: payload.checkoutSessionId },
+      select: {
+        id: true,
+        unitTypeId: true,
+        quotedRateCents: true,
+        unitType: { select: { widthFt: true, lengthFt: true } },
+      },
+    })
+    if (!session) return {} as MergeContext
+
+    const offer = await offerFor({
+      facilityId: recipient.facility.id,
+      unitTypeId: session.unitTypeId,
+      monthlyRateCents: session.quotedRateCents,
+      isNewTenant: true,
+    })
+
+    return {
+      'unit.size': `${session.unitType.widthFt}x${session.unitType.lengthFt}`,
+      'checkout.quoted_price': `${formatCents(session.quotedRateCents)}/mo`,
+      'checkout.promo_line': offer.offer ? offer.offer.terms : '',
+      'links.resume_checkout': checkoutResumeUrl(mintCheckoutResumeToken(session.id), baseUrl()),
+    }
+  },
+
   // B-071 / PRD 04 US-7 AC1. The recipient's own lease is on the event
   // already (entityType 'Lease'); the only extra fact is where to send them.
   // `googleReviewUrl` is read at send time rather than carried on the event —
@@ -1005,6 +1042,36 @@ const SKIP_PREDICATES: Record<
   // event being raised and the dispatcher reaching it. A review ask with a
   // dead link is worse than a late one.
   no_google_review_link: (recipient) => !recipient.facility?.googleReviewUrl,
+
+  // B-073 / PRD 04 US-9. One event (`checkout.abandonment_step`), three
+  // templates — same device `drip_step_not_*` uses.
+  abandonment_step_not_1: (_recipient, event) => (event.payload as { step?: number })?.step !== 1,
+  abandonment_step_not_2: (_recipient, event) => (event.payload as { step?: number })?.step !== 2,
+  abandonment_step_not_3: (_recipient, event) => (event.payload as { step?: number })?.step !== 3,
+
+  // AC2/FR-18 staleness: the renter finished checking out, or the session's
+  // lock lapsed and was never resumed, in the gap between the raising job and
+  // this send. Re-read rather than trusted from the event, same reasoning as
+  // `invoice_paid` above.
+  checkout_session_exited: async (_recipient, event) => {
+    const payload = (event.payload ?? {}) as { checkoutSessionId?: string }
+    if (!payload.checkoutSessionId) return true
+    const session = await prisma.checkoutSession.findUnique({
+      where: { id: payload.checkoutSessionId },
+      select: { status: true },
+    })
+    return !session || session.status === 'completed'
+  },
+
+  // AC3: "no consent, no sequence." The job already checks this before
+  // raising each step; re-checked here because consent can be withdrawn
+  // between one step's send and the next — `no_consent` above is the same
+  // check for a Lead owner, this is the Tenant-owner equivalent a checkout
+  // session's recipient always resolves to.
+  checkout_no_consent: async (recipient) => {
+    if (!recipient.tenantId) return true
+    return (await currentConsent({ tenantId: recipient.tenantId }, 'marketing_email')) !== 'granted'
+  },
 }
 
 async function firstFiringSkip(

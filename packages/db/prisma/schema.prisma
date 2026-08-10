@@ -407,6 +407,12 @@ model Facility {
   /// — a column that changes behaviour with no form field is how five of them
   /// end up reachable only from a database client.
   reviewRequestDelayDays Int         @default(7)
+  /// PRD 04 US-9 AC2 (B-073). "Follow-up sequence: +1h, +24h, +72h
+  /// (configurable)." The STRUCTURE (three steps) is fixed
+  /// (packages/core/checkout/abandonment.ts); this is only the timing, with
+  /// its own control shipped in this item per the same repo rule as the
+  /// review-request delay above.
+  abandonmentFollowUpHours Int[]     @default([1, 24, 72])
 
   /// PRD 03 FR-3 / US-6. Which gate controller this facility talks to.
   ///
@@ -1199,6 +1205,14 @@ model CheckoutSession {
   /// Per-step captured data, merged as the renter advances. Typed at the edges
   /// by the step schemas in B-021..B-025 rather than here.
   data            Json           @default("{}")
+  /// PRD 04 US-9 AC1/AC2 (B-073). How far the abandonment follow-up has
+  /// reached: 0 = never entered, 1–3 = that step has been raised. Same device
+  /// as `Lead.dripStep` — the outbox only dedupes an event that already
+  /// exists, so guaranteeing each step fires once is the producer's job.
+  /// Deliberately NOT tracked via `CheckoutStatus`'s own `abandoned` value:
+  /// that would risk a slow-but-still-`active` renter's live session being
+  /// mutated out from under them the moment the first follow-up fires.
+  abandonmentSequenceStep Int    @default(0)
   createdAt       DateTime       @default(now()) @db.Timestamptz(6)
   updatedAt       DateTime       @updatedAt @db.Timestamptz(6)
 

@@ -1,6 +1,10 @@
 import { AdminForm, Field } from '@/components/admin/form'
 import { submitDetailsAction } from '@/app/(public)/checkout/actions'
-import { SMS_CONSENT_DISCLOSURE, type DetailsInput } from '@/lib/checkout/details'
+import {
+  MARKETING_EMAIL_CHECKOUT_DISCLOSURE,
+  SMS_CONSENT_DISCLOSURE,
+  type DetailsInput,
+} from '@/lib/checkout/details'
 
 // PRD 01 US-501 step 1. One screen, and every field carries its autocomplete
 // token (1.3.5 Identify Input Purpose) and a keyboard that matches the data
@@ -68,6 +72,14 @@ export function DetailsStep({
             implied by entering a phone number above. */}
         <input type="checkbox" name="smsConsent" value="yes" className="mt-1" />
         <span>{SMS_CONSENT_DISCLOSURE}</span>
+      </label>
+
+      <label className="flex items-start gap-2 text-sm sm:col-span-2">
+        {/* PRD 04 US-13 AC1 / US-9 AC3: unchecked by default. This is the
+            ONLY thing that makes the abandoned-checkout follow-up (US-9)
+            legal to send at all — "no consent, no sequence." */}
+        <input type="checkbox" name="marketingConsent" value="yes" className="mt-1" />
+        <span>{MARKETING_EMAIL_CHECKOUT_DISCLOSURE}</span>
       </label>
 
       <Field

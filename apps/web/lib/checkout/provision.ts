@@ -39,7 +39,7 @@ export async function provisionMoveIn(sessionId: string): Promise<ProvisionResul
 
   const row = await prisma.checkoutSession.findUniqueOrThrow({
     where: { id: sessionId },
-    select: { tenantId: true, unitId: true, reservationId: true },
+    select: { tenantId: true, unitId: true, reservationId: true, abandonmentSequenceStep: true },
   })
   if (!row.tenantId) return { ok: false, reason: 'no_tenant' }
   if (!row.unitId) return { ok: false, reason: 'no_unit' }
@@ -242,7 +242,14 @@ export async function provisionMoveIn(sessionId: string): Promise<ProvisionResul
     channel: analytics?.channel ?? reservationSource ?? null,
     utmSource: analytics?.utmSource ?? null,
     utmMedium: analytics?.utmMedium ?? null,
-    properties: { fromReservation: Boolean(row.reservationId) },
+    // PRD 04 US-9 AC4 (B-073). "Recovered reservations are attributed to the
+    // sequence in funnel reporting" — the fact lives here, on the event the
+    // funnel already counts, rather than a second report joining back to
+    // `CheckoutSession`.
+    properties: {
+      fromReservation: Boolean(row.reservationId),
+      recoveredByAbandonment: row.abandonmentSequenceStep > 0,
+    },
   })
 
   return { ok: true, leaseId, alreadyProvisioned: false }

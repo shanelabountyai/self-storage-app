@@ -156,6 +156,15 @@ export const EVENT_MERGE_FIELDS: Record<string, readonly MergeFieldSpec[]> = {
     { field: 'lead.promo_line', description: 'The live promo’s terms, when one applies', sample: '50% off your first month' },
     { field: 'links.facility_page', description: 'Link to the facility’s own page', sample: 'https://example.com/storage/tx/austin/south-congress' },
   ],
+  // B-073 / PRD 04 US-9. All three abandonment templates draw from this one
+  // set — `checkout.promo_line` is empty whenever no promo is currently live,
+  // same as `lead.promo_line`.
+  'checkout.abandonment_step': [
+    { field: 'unit.size', description: 'The size they were checking out', sample: '10x10' },
+    { field: 'checkout.quoted_price', description: 'The price they were quoted', sample: '$129.00/mo' },
+    { field: 'checkout.promo_line', description: 'The live promo’s terms, when one applies', sample: '50% off your first month' },
+    { field: 'links.resume_checkout', description: 'Link that resumes their checkout where they left off', sample: 'https://example.com/checkout/resume/abc123' },
+  ],
   'protection.auto_enrolled': [
     { field: 'unit.number', description: 'Unit number', sample: 'A-12' },
     { field: 'protection.plan_name', description: 'The plan they were enrolled in', sample: 'Standard cover' },

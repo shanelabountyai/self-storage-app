@@ -104,6 +104,18 @@ describeDb('the funnel', () => {
     expect(report.steps[4].fromTop).toBeCloseTo(0.25)
   })
 
+  it('attributes recovered move-ins from the abandonment sequence (AC4)', async () => {
+    await event('move_in_completed', `s-${suffix}-recovered`, {
+      properties: { recoveredByAbandonment: true },
+    })
+    await event('move_in_completed', `s-${suffix}-direct`, {
+      properties: { recoveredByAbandonment: false },
+    })
+
+    const report = await funnelReport(actor(), RANGE)
+    expect(report.abandonmentRecovery).toEqual({ moveIns: 2, recovered: 1 })
+  })
+
   it('filters by channel and offers only channels that exist', async () => {
     await event('page_view', `s-${suffix}-paid`, { channel: 'paid_search' })
     await event('page_view', `s-${suffix}-org`, { channel: 'organic' })

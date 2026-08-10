@@ -133,7 +133,7 @@ The demand engine. SEO location pages and lead capture are master-MVP; reviews, 
 | 70b | B-101 | **Referral visibility**: portal list (first name + initial only, state, credit date), staff view on both tenant profiles with the refusing rule named, `referral_tenant` in the funnel report, and the revenue report splitting referral rewards from promotional discounts — one is acquisition cost, the other a price decision. Plus PRD 10 §6.3's four transactional templates | PRD 10 §5.6/§5.7/§6.3 | M | B-100, B-069, B-055 | Phase 2 |
 | 71 | B-071 ✅ | Reviews: manual entry + facility-page display (gated `aggregateRating` decision), post-move-in review-request email (max 1/tenancy, tracked) | PRD 04 §3.4 US-6/US-7, FR-REV-1–3 | M | B-067, B-030, B-026 | Phase 2 |
 | 72 | B-072 ✅ | Marketing consent + lead drip: `marketing_email`/`marketing_sms` consent capture, CAN-SPAM unsubscribe, shared suppression enforcement, declarative sequence engine, 3-step lead drip | PRD 04 §3.7 US-13/US-14, FR-MSG-1–5 | M | B-054, B-068 | Phase 2 |
-| 73 | B-073 | Abandoned-reservation follow-up: 60-min abandonment detection, +1h/+24h/+72h resume-checkout sequence (consent-gated), recovery attribution | PRD 04 US-9, FR-LEAD-4 | M | B-072, B-020 | Phase 2 |
+| 73 | B-073 ✅ | Abandoned-reservation follow-up: 60-min abandonment detection, +1h/+24h/+72h resume-checkout sequence (consent-gated), recovery attribution | PRD 04 US-9, FR-LEAD-4 | M | B-072, B-020 | Phase 2 |
 
 ## Milestone 7: Phase 2 hardening & reach
 

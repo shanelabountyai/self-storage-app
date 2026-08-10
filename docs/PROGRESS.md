@@ -2267,3 +2267,70 @@ the database and the real seeded catalog).
 - Same seeding gotcha as B-063/B-071, hit and fixed the same way: the seed
   script only runs on explicit invocation, so the new templates/rules did
   not exist in either database until `db:seed`/`db:migrate:test` re-ran.
+
+---
+
+## B-073 — Abandoned-checkout follow-up
+
+`<pending>`
+
+**What it built.** US-9/FR-LEAD-4's three-step sequence: a `CheckoutSession`
+that sits unfinished for 1/24/72 configurable hours (per-facility
+`abandonmentFollowUpHours`, reachable from Operations policy — the repo's
+own "a new column gets its control in the same item" rule) gets an email
+carrying the exact unit and quoted price, a signed resume link, and — on the
+final step only — a live promo's terms when one applies. Consent-gated both
+at raise time and again at send time, the same two-layer device B-072's
+lead drip uses. A new checkbox at checkout step 1 (`marketing_email`
+consent, unchecked by default) is the only capture point, since a checkout
+session has no earlier one. Recovery is attributed in the funnel report
+(AC4): `provisionMoveIn`'s `move_in_completed` event now carries
+`recoveredByAbandonment`, and the funnel page shows the resulting count.
+26 new DB tests (against real rows and the real seeded catalog) plus the
+17 pure-function tests already covered in the design pass.
+
+**What it decided.**
+
+- *`CheckoutSession`, not the separate `Reservation` entity, is FR-LEAD-4's
+  "reservation started event."* The PRD's own US-9 wording ("unit selected,
+  contact info captured") describes checkout step 1, and the free-hold
+  `Reservation` model has no such multi-step form to abandon. Recorded here
+  rather than re-litigated: a later item reading "reservation" in this PRD
+  section should read it as "checkout."
+- *`CheckoutStatus.abandoned` is deliberately never written.* The enum value
+  exists but a dedicated `abandonmentSequenceStep Int` counter (0–3) tracks
+  progress instead — the same shape `Lead.dripStep` (B-072) uses. Setting
+  `status: 'abandoned'` would risk mutating a session out from under a
+  renter who is simply slow, and nothing downstream (the checkout page's own
+  `relock` fallback) distinguishes `abandoned` from `expired` anyway.
+- *A lapsed 30-minute lock (`status: 'expired'`) is NOT an exit condition* —
+  only `completed` is. By the time the first follow-up can fire (60+
+  minutes in), an expired lock is the ordinary case, not evidence the
+  renter is gone; the existing `relock` UI already lets them recover the
+  unit (or another one) the moment they click back in.
+- *The resume link is a second, separate signed-and-unstored token*
+  (`resume-token.ts`, mirroring `quote-token.ts`/`unsubscribe-token.ts`),
+  not the session's own token. The live session token is minted once at
+  step 1 and only its hash is ever stored, so there is nothing left to
+  re-send days later. Visiting the link mints a FRESH real session token
+  (`reissueCheckoutToken`) and redirects into `/checkout?token=...`, so
+  `advance`/`extendLock`/`relock` see exactly the shape they already
+  handle — no new state machine.
+- *Step 3's promo line is required-but-not-gated at the rule level*, the
+  same device `lead_drip_promo_nudge` (B-072) uses: with no live promo the
+  render throws on the missing field and the send is logged `failed` — a
+  deliberate no-op, not a promo-less repeat of steps 1/2.
+
+**What it left behind.**
+
+- `checkout.abandonment_step`'s templates are operator-editable through the
+  existing CN-16 editor, same as every other B-072-era template — no new UI
+  needed beyond the merge-field entries this item added.
+- Recovery attribution lives on the funnel report as a single count/rate,
+  not a dedicated dashboard — AC4 only asks that recovered move-ins be
+  "attributed... in funnel reporting," and a fuller breakdown (by step, by
+  facility) can build on the same `properties.recoveredByAbandonment` flag
+  without a schema change.
+- Same seeding gotcha as every comms-catalog item before it: `db:seed` and
+  `db:migrate:test` both re-ran after adding the three templates/rules, or
+  the new sequence would have matched nothing in either database.

@@ -31,6 +31,15 @@ export const SMS_CONSENT_DISCLOSURE =
 /// whatever the copy currently says.
 export const SMS_CONSENT_DISCLOSURE_VERSION = 'v1'
 
+/// PRD 04 US-13 AC1 / US-9 AC3 (B-073). Unchecked by default, same as SMS
+/// above. This is the ONLY thing that makes the abandonment follow-up (US-9)
+/// legal to send at all — "no consent, no sequence" — since a checkout
+/// session has no other consent-capture point before it might be abandoned.
+export const MARKETING_EMAIL_CHECKOUT_DISCLOSURE =
+  'Send me occasional emails about pricing and promotions. You can unsubscribe any time. This is not required to rent a unit.'
+
+export const MARKETING_EMAIL_CHECKOUT_DISCLOSURE_VERSION = 'v1'
+
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 /// Deliberately loose. This is a trust boundary, so the job is to reject
 /// obvious nonsense and typos, not to enforce a format that turns away a real

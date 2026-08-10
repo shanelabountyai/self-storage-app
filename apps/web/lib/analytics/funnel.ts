@@ -31,17 +31,23 @@ export type FunnelReport = {
   /// same rows the report counts, so the dropdown can never offer a value that
   /// produces an empty report.
   channels: string[]
+  /// PRD 04 US-9 AC4 (B-073). Of the move-ins counted above, how many came from
+  /// a checkout the abandonment sequence brought back — read off `properties`
+  /// on the same `move_in_completed` events the funnel's last step already
+  /// counts, not a second query against `CheckoutSession`.
+  abandonmentRecovery: { moveIns: number; recovered: number }
 }
 
 export async function funnelReport(actor: Actor, filters: FunnelFilters): Promise<FunnelReport> {
   const facilities = await reportableFacilities(actor)
   const allowed = facilities.filter((facility) => can(actor, 'reports:operational', facility.id))
-  if (allowed.length === 0) return { steps: funnelFrom(emptyFunnel()), channels: [] }
+  const empty = { steps: funnelFrom(emptyFunnel()), channels: [], abandonmentRecovery: { moveIns: 0, recovered: 0 } }
+  if (allowed.length === 0) return empty
 
   const facilityIds = filters.facilityId
     ? allowed.filter((facility) => facility.id === filters.facilityId).map((f) => f.id)
     : allowed.map((facility) => facility.id)
-  if (facilityIds.length === 0) return { steps: funnelFrom(emptyFunnel()), channels: [] }
+  if (facilityIds.length === 0) return empty
 
   const where: Prisma.AnalyticsEventWhereInput = {
     facilityId: { in: facilityIds },
@@ -55,7 +61,26 @@ export async function funnelReport(actor: Actor, filters: FunnelFilters): Promis
   // page six times is one session; counting events would make the top of the
   // funnel look wide and every conversion rate look terrible.
   const counts = emptyFunnel()
+  let abandonmentRecovery = { moveIns: 0, recovered: 0 }
   for (const step of FUNNEL_STEPS) {
+    if (step.key === 'move_ins') {
+      // Same distinct-session query as every other step, just also reading
+      // `properties` — one extra column, not a second query — so the
+      // recovery count can never disagree with the move-in count above it.
+      const rows = await prisma.analyticsEvent.findMany({
+        where: { ...where, name: step.event },
+        select: { sessionId: true, properties: true },
+        distinct: ['sessionId'],
+      })
+      counts[step.key] = rows.length
+      abandonmentRecovery = {
+        moveIns: rows.length,
+        recovered: rows.filter(
+          (row) => (row.properties as { recoveredByAbandonment?: boolean } | null)?.recoveredByAbandonment === true,
+        ).length,
+      }
+      continue
+    }
     const rows = await prisma.analyticsEvent.findMany({
       where: { ...where, name: step.event },
       select: { sessionId: true },
@@ -76,5 +101,6 @@ export async function funnelReport(actor: Actor, filters: FunnelFilters): Promis
       .map((row) => row.channel)
       .filter((channel): channel is string => Boolean(channel))
       .sort(),
+    abandonmentRecovery,
   }
 }

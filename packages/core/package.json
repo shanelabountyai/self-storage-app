@@ -29,7 +29,8 @@
     "./notices": "./notices/index.ts",
     "./auctions": "./auctions/index.ts",
     "./reviews": "./reviews/index.ts",
-    "./leads": "./leads/index.ts"
+    "./leads": "./leads/index.ts",
+    "./checkout": "./checkout/index.ts"
   },
   "dependencies": {
     "@storage/db": "*"

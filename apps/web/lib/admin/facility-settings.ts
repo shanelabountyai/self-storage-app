@@ -397,6 +397,10 @@ export type OperationsPolicyInput = {
   /// PRD 02 US-43. How long a new inquiry may sit uncontacted before the
   /// morning sweep turns it into a task.
   leadFollowUpHours: number
+  /// PRD 04 US-9 AC2 (B-073). The abandoned-checkout email sequence's own
+  /// timing — grouped with `leadFollowUpHours` above rather than billing
+  /// policy, since both are "how soon do we follow up", not money.
+  abandonmentFollowUpHours: number[]
 }
 
 export async function updateOperationsPolicy(
@@ -415,6 +419,7 @@ export async function updateOperationsPolicy(
     writeOffThresholdCents: row.writeOffThresholdCents,
     moveOutNoticeDays: row.moveOutNoticeDays,
     leadFollowUpHours: row.leadFollowUpHours,
+    abandonmentFollowUpHours: row.abandonmentFollowUpHours,
   })
 
   await recordAudit({

@@ -356,6 +356,26 @@ export async function relock(sessionId: string): Promise<RelockResult> {
   })
 }
 
+/// PRD 04 US-9 AC1 (B-073). Mints a fresh session token for the abandonment
+/// email's resume link to redeem — the original token was never stored
+/// (`tokenHash` only), so there is nothing left to hand back days later. Only
+/// the hash changes; nothing about the session's progress does, so the
+/// renter lands exactly where `sessionByToken` already resumes them.
+export async function reissueCheckoutToken(sessionId: string): Promise<string | null> {
+  const session = await prisma.checkoutSession.findUnique({
+    where: { id: sessionId },
+    select: { status: true },
+  })
+  if (!session || session.status === 'completed') return null
+
+  const token = newToken()
+  await prisma.checkoutSession.update({
+    where: { id: sessionId },
+    data: { tokenHash: hashSessionToken(token) },
+  })
+  return token
+}
+
 /// Marks lapsed sessions expired and returns their units. Idempotent, and safe
 /// to run repeatedly — availability already ignores a lapsed lock, so a missed
 /// run costs nothing but tidiness.

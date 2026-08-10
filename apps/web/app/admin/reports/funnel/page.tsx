@@ -132,6 +132,15 @@ export default async function FunnelPage({
         cookie consent do not remove anyone from these numbers, which is why they are the ones to
         trust when they disagree with an outside analytics tool.
       </p>
+
+      {report.abandonmentRecovery.moveIns > 0 && (
+        <p className="text-sm">
+          <span className="font-medium">{report.abandonmentRecovery.recovered}</span> of{' '}
+          {report.abandonmentRecovery.moveIns} move-ins in this range came from a checkout the
+          abandonment follow-up brought back (
+          {percent(report.abandonmentRecovery.recovered / report.abandonmentRecovery.moveIns)}).
+        </p>
+      )}
     </div>
   )
 }

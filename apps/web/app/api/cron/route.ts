@@ -3,6 +3,7 @@ import { prisma } from '@storage/db'
 import { dispatchEvents } from '@storage/core/events'
 import { facilitiesDueAt, lastSuccessfulRun, missedBusinessDates, runJob } from '@storage/core/jobs'
 import { sendExpiringSoonReminders } from '@/lib/reservations/reserve'
+import { raiseAbandonmentFollowUps } from '@/lib/checkout/abandonment-job'
 import { CONSUMERS, SCHEDULED_JOBS } from '@/lib/jobs/registry'
 
 // Vercel Cron hits this hourly (see vercel.json). Master PRD §5 lists Vercel
@@ -44,6 +45,11 @@ export async function GET(request: Request) {
   // this runs every tick rather than through SCHEDULED_JOBS' once-per-day
   // shape. `expiryReminderSentAt` (not a JobRun row) is what keeps it "once".
   const reminders = await sendExpiringSoonReminders(now)
+
+  // PRD 04 US-9 / FR-LEAD-4 (B-073). Same reasoning as the reminder above:
+  // "+1h" cannot be expressed as a once-daily business-date job, so this runs
+  // every tick against real elapsed time rather than through `SCHEDULED_JOBS`.
+  const abandonment = await raiseAbandonmentFollowUps(now)
 
   const facilities = await prisma.facility.findMany({
     where: { status: 'active' },
@@ -104,6 +110,7 @@ export async function GET(request: Request) {
     durationMs: Date.now() - started,
     dispatch,
     reminders,
+    abandonment,
     jobs: jobResults,
   })
 }

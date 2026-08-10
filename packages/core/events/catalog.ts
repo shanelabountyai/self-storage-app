@@ -102,6 +102,14 @@ export const EVENT_NAMES = [
   /// picks the template — one event, three comms rules, the same device
   /// `notice.generated` uses for pre-lien vs lien.
   'lead.drip_step',
+
+  /// PRD 04 US-9 / FR-LEAD-4 (B-073). One abandoned-checkout follow-up step is
+  /// due. `payload.step` (1–3) picks the template, same device as
+  /// `lead.drip_step`. Entity is the TENANT (a real Tenant row exists from
+  /// checkout step 1 onward), with `payload.checkoutSessionId` carrying which
+  /// session — a tenant can only ever have one live checkout at a time, but
+  /// the event should not assume that stays true.
+  'checkout.abandonment_step',
 ] as const
 
 export type EventName = (typeof EVENT_NAMES)[number]

@@ -630,6 +630,80 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
       'links.portal',
     ],
   },
+  {
+    // PRD 04 US-9 AC1 (B-073). +1h, immediate: "you're still holding this."
+    key: 'checkout_abandonment_1',
+    classification: 'marketing',
+    subject: 'Your {{unit.size}} at {{facility.name}} is still waiting',
+    bodyText: [
+      'Hi {{tenant.first_name}},',
+      '',
+      "You started booking a {{unit.size}} unit at {{facility.name}} for {{checkout.quoted_price}}, but didn't finish.",
+      '',
+      'Pick up right where you left off — same unit, same price: {{links.resume_checkout}}',
+      '',
+      'Questions? Call {{facility.phone}}.',
+    ].join('\n'),
+    requiredMergeFields: [
+      'tenant.first_name',
+      'unit.size',
+      'facility.name',
+      'checkout.quoted_price',
+      'links.resume_checkout',
+      'facility.phone',
+    ],
+  },
+  {
+    // AC1/AC2, +24h: a second, lower-pressure nudge — no new information, just
+    // another chance to notice the email.
+    key: 'checkout_abandonment_2',
+    classification: 'marketing',
+    subject: 'Still interested in storage at {{facility.name}}?',
+    bodyText: [
+      'Hi {{tenant.first_name}},',
+      '',
+      'Your {{unit.size}} unit at {{facility.name}} is still quoted at {{checkout.quoted_price}} — nothing has changed.',
+      '',
+      'Finish booking here: {{links.resume_checkout}}',
+      '',
+      'No rush — call {{facility.phone}} if you have a question first.',
+    ].join('\n'),
+    requiredMergeFields: [
+      'tenant.first_name',
+      'unit.size',
+      'facility.name',
+      'checkout.quoted_price',
+      'links.resume_checkout',
+      'facility.phone',
+    ],
+  },
+  {
+    // AC1, +72h: the last touch, only when a promo is actually live —
+    // `checkout.promo_line` is required so this step renders as a no-op
+    // (logged 'failed', nothing sent) rather than a promo-less repeat of the
+    // first two, the same device `lead_drip_promo_nudge` uses.
+    key: 'checkout_abandonment_3',
+    classification: 'marketing',
+    subject: 'Last chance: {{checkout.promo_line}} on your {{unit.size}} at {{facility.name}}',
+    bodyText: [
+      'Hi {{tenant.first_name}},',
+      '',
+      'Your {{unit.size}} unit at {{facility.name}} is still held at {{checkout.quoted_price}} — and right now, {{checkout.promo_line}}.',
+      '',
+      'Finish booking here: {{links.resume_checkout}}',
+      '',
+      'Call {{facility.phone}} if you would rather book over the phone.',
+    ].join('\n'),
+    requiredMergeFields: [
+      'tenant.first_name',
+      'unit.size',
+      'facility.name',
+      'checkout.quoted_price',
+      'checkout.promo_line',
+      'links.resume_checkout',
+      'facility.phone',
+    ],
+  },
 ]
 
 export const COMMS_RULES: readonly CommsRuleSeed[] = [
@@ -804,5 +878,31 @@ export const COMMS_RULES: readonly CommsRuleSeed[] = [
     templateKey: 'lead_drip_promo_nudge',
     classification: 'marketing',
     skipConditions: ['drip_step_not_3', 'lead_exited', 'no_consent'],
+  },
+
+  // ── B-073 (PRD 04 US-9 / FR-LEAD-4). The abandoned-checkout follow-up. ─────
+  //
+  // `checkout_session_exited` and `checkout_no_consent` are AC2's exit
+  // condition and AC3's "no consent, no sequence", re-checked here for the
+  // same reason the lead drip re-checks `lead_exited`/`no_consent`: the raising
+  // job already filtered at raise time, but either can change in the gap
+  // before the send.
+  {
+    event: 'checkout.abandonment_step',
+    templateKey: 'checkout_abandonment_1',
+    classification: 'marketing',
+    skipConditions: ['abandonment_step_not_1', 'checkout_session_exited', 'checkout_no_consent'],
+  },
+  {
+    event: 'checkout.abandonment_step',
+    templateKey: 'checkout_abandonment_2',
+    classification: 'marketing',
+    skipConditions: ['abandonment_step_not_2', 'checkout_session_exited', 'checkout_no_consent'],
+  },
+  {
+    event: 'checkout.abandonment_step',
+    templateKey: 'checkout_abandonment_3',
+    classification: 'marketing',
+    skipConditions: ['abandonment_step_not_3', 'checkout_session_exited', 'checkout_no_consent'],
   },
 ]
