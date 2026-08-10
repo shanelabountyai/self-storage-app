@@ -651,6 +651,9 @@ export default async function AdminSettingsPage() {
           <Link href="/admin/settings/delinquency" className="underline underline-offset-2">
             Delinquency timeline — what happens, and when
           </Link>
+          <Link href="/admin/settings/notices" className="underline underline-offset-2">
+            Notice templates — the pre-lien and lien text this site sends
+          </Link>
         </p>
       </section>
 

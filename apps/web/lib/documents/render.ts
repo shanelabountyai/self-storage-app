@@ -51,13 +51,32 @@ export function mergeFieldsIn(template: string): string[] {
 /// that renders "Dear {{firstName}}" or, worse, "Dear " is a document somebody
 /// signs — silence here produces a legal artifact with a hole in it, so an
 /// absent or blank value throws rather than rendering.
-export function renderTemplate(template: string, values: Record<string, string>): string {
+///
+/// `rawFields` names the few merge fields whose value is MARKUP THIS
+/// APPLICATION BUILT, not a value read from a record — B-061's itemized claim
+/// table is the only one today. Everything else is escaped, and the default
+/// (no raw fields at all) keeps it that way.
+///
+/// The seam is narrow on purpose. A template author cannot reach it: the field
+/// name has to be passed in by the calling code alongside the value, so making
+/// a field raw is a deliberate act in a reviewed file rather than something a
+/// notice template can opt into. Any caller using it owns escaping every
+/// record-derived string inside that markup — see `claimTableHtml`, which
+/// escapes each description and invoice number it embeds.
+export function renderTemplate(
+  template: string,
+  values: Record<string, string>,
+  rawFields: readonly string[] = [],
+): string {
   const missing = mergeFieldsIn(template).filter(
     (field) => values[field] === undefined || values[field].trim() === '',
   )
   if (missing.length > 0) throw new MissingMergeFieldsError(missing)
 
-  return template.replace(FIELD, (_match, field: string) => escapeHtml(values[field]))
+  const raw = new Set(rawFields)
+  return template.replace(FIELD, (_match, field: string) =>
+    raw.has(field) ? values[field] : escapeHtml(values[field]),
+  )
 }
 
 /// Values are merged into markup, so they are escaped. A tenant whose surname
@@ -97,9 +116,12 @@ export function renderDocument(input: {
   title: string
   template: string
   values: Record<string, string>
+  /// See `renderTemplate` — merge fields whose value is markup this
+  /// application generated. Empty by default; everything is escaped.
+  rawFields?: readonly string[]
   lang?: string
 }): RenderedDocument {
-  const body = renderTemplate(input.template, input.values)
+  const body = renderTemplate(input.template, input.values, input.rawFields)
   const html = [
     '<!doctype html>',
     `<html lang="${input.lang ?? 'en'}">`,

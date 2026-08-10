@@ -356,6 +356,13 @@ export default async function TenantProfilePage({
                       Ledger
                       <span className="sr-only"> for unit {lease.unitNumber}</span>
                     </Link>
+                    <Link
+                      href={`/admin/tenants/${profile.tenantId}/notices/${lease.leaseId}`}
+                      className="ml-3 underline underline-offset-2"
+                    >
+                      Notices
+                      <span className="sr-only"> for unit {lease.unitNumber}</span>
+                    </Link>
                   </td>
                 </tr>
               ))}

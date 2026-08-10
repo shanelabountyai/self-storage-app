@@ -68,6 +68,45 @@ describe('merge-field validation', () => {
     expect(html).toContain('&lt;script&gt;')
     expect(html).toContain('Smith &amp; Sons')
   })
+
+  describe('the rawFields seam (B-061)', () => {
+    // One merge field in the whole system carries markup rather than a value:
+    // B-061's itemized claim table. These pin the blast radius.
+
+    it('escapes everything by default — the seam is opt-in per call', () => {
+      const html = renderTemplate('<p>{{name}}</p>', { name: '<b>bold</b>' })
+      expect(html).toContain('&lt;b&gt;')
+    })
+
+    it('passes through only the fields the CALLER named', () => {
+      const html = renderTemplate('<p>{{safe}}{{unsafe}}</p>', {
+        safe: '<table></table>',
+        unsafe: '<script>alert(1)</script>',
+      }, ['safe'])
+      expect(html).toContain('<table></table>')
+      // The field not named is still escaped, in the same render.
+      expect(html).not.toContain('<script>')
+      expect(html).toContain('&lt;script&gt;')
+    })
+
+    it('cannot be reached from template text', () => {
+      // A notice template is edited by an operator. If a template could opt
+      // its own field into raw rendering, an operator (or anyone who got at
+      // the template) could inject markup into a legal document. The field
+      // list comes from calling code only, so a template naming a field that
+      // is not on the caller's list gets escaped like anything else.
+      const html = renderTemplate('<p>{{payload}}</p>', {
+        payload: '<script>alert(1)</script>',
+      })
+      expect(html).not.toContain('<script>')
+    })
+
+    it('still fails loudly on a missing raw field', () => {
+      expect(() => renderTemplate('<p>{{claimTable}}</p>', { claimTable: '  ' }, ['claimTable'])).toThrow(
+        MissingMergeFieldsError,
+      )
+    })
+  })
 })
 
 describe('rendered documents', () => {

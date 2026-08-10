@@ -25,6 +25,9 @@ export type StoreGeneratedInput = {
   title: string
   template: string
   values: Record<string, string>
+  /// Merge fields carrying application-generated markup — see
+  /// `renderTemplate`. Empty by default.
+  rawFields?: readonly string[]
   actor?: AuditActor
 }
 
@@ -39,6 +42,7 @@ export async function storeGeneratedDocument(
     title: input.title,
     template: input.template,
     values: input.values,
+    rawFields: input.rawFields,
   })
 
   const document = await client.document.create({

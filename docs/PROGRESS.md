@@ -1932,3 +1932,77 @@ line asked for: "all as `Task` types and views, not new queues."
 - The walkthrough's photo attachment (US-35's AC) rides on the same
   `photo_reference` proof field every other task type uses; there is still no
   blob store behind it, a gap B-058 already noted and carries forward.
+
+## B-061 — Pre-lien and lien notice generation
+
+`<sha>`
+
+**What it built.** US-27's generated notices, with US-13's evidence chain
+attached. A `NoticeTemplate` (versioned, per-facility, org-default fallback)
+holds the text; `generateNotice` renders it through the existing document store,
+so the notice is stored, hashed and verifiable by `verifyDocument` like every
+other generated document. `/admin/settings/notices` is where an operator and
+their attorney write the text; the tenant's per-lease Notices screen is where
+staff preview, generate and record service. 74 new tests (52 pure, 22 DB).
+
+**What it decided.**
+
+- *A notice cannot be generated when the ledger and the invoices disagree.* Not
+  a warning — a refusal, with the reason on screen. US-27 asks that the claim
+  "reconciles to the ledger at generation time"; if the two sources of truth
+  disagree then nobody knows what the tenant owes, which is exactly the moment
+  to stop rather than to bake the discrepancy into a legal document and mail it.
+  `claimForNotice` reuses B-049's `reconcile` verbatim so the ledger screen and
+  the notice can never disagree about whether a lease reconciles.
+- *The claim itemizes payments too, not only charges.* A claim listing charges
+  and quoting a net total overstates the debt by exactly what the tenant paid —
+  the first thing an attorney checks. `buildClaim` also asserts its own lines
+  sum to its own total, which is unreachable-by-construction and checked anyway.
+- *A separate table from `MessageTemplate`, deliberately.* Reusing it would have
+  been less code and was wrong three ways: a statutory notice is a served
+  document rather than an email; B-063's courtesy email supplements would share
+  the key namespace with the thing they explicitly are not; and B-056's
+  `validateTimeline` resolves `noticeTemplateKey` against `MessageTemplate`, so
+  a notice template living there becomes selectable as a `send_notice` target —
+  emailing the statutory notice through a path with no consent check and no
+  delivery proof. The schema comment records all three.
+- *`notice_email` consent is checked in the service, not the screen*, and
+  `account_email` does not satisfy it. US-13 is explicit that overloading the
+  two destroys the ability to prove agreement. Never-asked and consent-withdrawn
+  give different messages because they need different fixes from whoever is at
+  the counter.
+- *The rendered address is snapshotted on the `Notice` row, not joined.* A
+  tenant who moves on day 40 must not retroactively change where an already
+  served notice says it went. `tenantAddressId` keeps the provenance chain back
+  to the history row.
+- *A correction is a new document.* `correctsNoticeId` forward, `supersededAt`
+  back; the original's bytes and hash are untouched, and delivery cannot be
+  recorded against a superseded notice.
+- *No template means no notice.* A facility that has not written its text
+  generates nothing, rather than silently mailing the unedited example — the
+  same posture B-056 took for an unconfigured timeline, for a stronger reason.
+- *Every delivery method requires proof*, and a notice posted on a unit requires
+  a photo: the claim a tenant most easily denies.
+
+**What it left behind.**
+
+- *A shared-renderer change worth flagging.* `renderTemplate` escapes every
+  merge value, correctly — which double-escaped the itemized claim table into
+  visible markup. Fixed with a narrow `rawFields` parameter naming the merge
+  fields whose value is markup this application built (one: `claimTable`).
+  A template cannot opt itself in — the list comes from calling code — and
+  `claimTableHtml` escapes every record-derived string it embeds. Four tests
+  in `documents-db.test.ts` pin the blast radius.
+- *B-056's example timeline said the pre-lien and lien templates "belong to
+  B-063 and are unwritten".* That was the wrong reason even when written; the
+  right one is that those keys name email templates and these notices are
+  documents. Comment and step labels corrected; the labels now point staff at
+  the notices screen. The invariant test was renamed to state the real rule.
+- The deadline is `DEFAULT_DEADLINE_DAYS` (14) with a per-notice override, not
+  a facility setting. Deliberate: the lawful figure is statutory and differs by
+  stage, and a configurable field here would imply the system knows which value
+  is compliant. The timeline (B-056) is where the schedule is encoded.
+- Still HTML rather than PDF, per B-023's standing decision — no tagged-PDF
+  encoder exists in this runtime, and the hash and evidence chain work
+  identically. Certified-mail API integration is B-083; today staff type the
+  tracking number.

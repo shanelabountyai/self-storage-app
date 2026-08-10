@@ -79,6 +79,10 @@ const CALENDAR_DATE_FIELDS = new Set([
   // B-057. Which facility-local day a delinquency step ran — the answer to
   // "what happened on the 3rd", which is how a lien file is read.
   'DelinquencyStepRun.businessDate',
+  // B-061. The date printed on a lien notice: "pay by 24 August". A timestamp
+  // would put an hour on a statutory deadline that the document does not
+  // state, and that the tenant reading it was never told.
+  'Notice.deadlineDate',
 ])
 
 describe('prisma schema invariants', () => {

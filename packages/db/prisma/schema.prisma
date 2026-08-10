@@ -545,6 +545,7 @@ model Facility {
   feeSchedules           FeeSchedule[]
   unitTypeRates          UnitTypeRate[]
   messageTemplates       MessageTemplate[]
+  noticeTemplates        NoticeTemplate[]
   notificationRules      NotificationRule[]
   messages               Message[]
 
@@ -1286,6 +1287,7 @@ model Document {
 
   facility  Facility           @relation(fields: [facilityId], references: [id], onDelete: Restrict)
   signature DocumentSignature?
+  notices   Notice[]
 
   @@index([facilityId, type])
   @@index([subjectType, subjectId])
@@ -2437,6 +2439,63 @@ model Suppression {
 
 /// Generated delinquency, lien and rate-change documents. Immutable once
 /// generated; all text is draft-only and not legal advice (D-10).
+enum NoticeDeliveryMethod {
+  certified_mail
+  first_class_mail
+  hand_delivered
+  posted_on_unit
+  email
+}
+
+/// PRD 02 §4.6 US-27 (B-061). Per-facility lien notice templates.
+///
+/// A separate table from `MessageTemplate`, deliberately, and it would have
+/// been cheaper to reuse that one. Three reasons not to:
+///
+///  1. A statutory notice is a DOCUMENT, served and evidenced, not an email.
+///     It goes through `storeGeneratedDocument` and gets hashed; the comms
+///     pipeline's suppression and unsubscribe rules must never apply to it.
+///  2. B-063 adds courtesy EMAIL supplements about the same lien stages
+///     ("check your mail"), which explicitly never claim to be the statutory
+///     notice. Sharing a key namespace with those is how the two get confused.
+///  3. B-056's `validateTimeline` checks a step's `noticeTemplateKey` against
+///     `MessageTemplate` rows, so a notice template living there would be
+///     selectable as a `send_notice` target — quietly emailing the statutory
+///     notice through a path with no consent check and no delivery proof.
+///
+/// Versioned like `MessageTemplate`: new version = new row, never edited in
+/// place, and the generated `Notice` records which version rendered it.
+model NoticeTemplate {
+  id         String     @id @default(cuid())
+  type       NoticeType
+  /// null = org-level default; set = per-facility override. Same precedence
+  /// `effectiveTemplate` applies to messages.
+  facilityId String?
+  version    Int        @default(1)
+  active     Boolean    @default(true)
+  title      String
+  /// The merge template. Required fields are enforced at save AND at render —
+  /// see packages/core/notices/templates.ts.
+  body       String
+  createdByStaffId String?
+  createdAt  DateTime   @default(now()) @db.Timestamptz(6)
+
+  facility Facility? @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  notices  Notice[]
+
+  @@unique([type, facilityId, version])
+  @@index([type, facilityId, active])
+  @@map("notice_template")
+}
+
+/// PRD 02 §4.6 US-27 / §4.2 US-13. A generated lien notice.
+///
+/// Immutable once generated. Nothing on a generated row is ever rewritten: a
+/// corrected notice is a NEW row with a NEW document and a new date, pointing
+/// back at what it corrects (`correctsNoticeId`), and the original is marked
+/// superseded rather than edited. Regenerating a PDF at the same URL is the
+/// specific failure the backlog names — it destroys the ability to say what was
+/// actually sent on the day it was sent.
 model Notice {
   id            String       @id @default(cuid())
   facilityId    String
@@ -2444,18 +2503,65 @@ model Notice {
   type          NoticeType
   status        NoticeStatus @default(draft)
   generatedAt   DateTime?    @db.Timestamptz(6)
+  generatedByStaffId String?
+
+  /// The stored, hashed document (US-16's store). `documentHash` is
+  /// denormalised alongside it because US-13's AC asks for the rendered
+  /// address and the hash to sit together on THIS row — a lien file should not
+  /// need a join to answer "what did you send, and where."
+  documentId    String?
   documentUrl   String?
   documentHash  String?
+  /// Which template version rendered it (US-27 AC). Kept as an integer as well
+  /// as the FK: the row survives a template being deleted, and "version 3" is
+  /// what a person asks about.
+  noticeTemplateId String?
+  templateVersion  Int?
+
+  /// US-13 AC: "Notice generation stores the address it actually rendered on
+  /// the `Notice` row alongside the document hash, so 'where did you send it'
+  /// is answered by the record." Snapshotted, not joined: the tenant's address
+  /// history keeps moving, and this has to keep saying what was on the envelope.
+  renderedAddressLine1 String?
+  renderedAddressLine2 String?
+  renderedCity         String?
+  renderedState        String?
+  renderedPostalCode   String?
+  /// The `TenantAddress` row this was taken from, so the provenance chain runs
+  /// notice → address row → who changed it and when.
+  tenantAddressId      String?
+
+  /// The itemized claim as it stood at generation, and its total. US-27's
+  /// "reconciles to the ledger at generation time" — snapshotted because the
+  /// ledger keeps moving and the notice has to keep saying what it said.
+  claimSnapshot   Json?
+  claimTotalCents Int?
+  /// The date the notice gives the tenant to pay by.
+  deadlineDate    DateTime? @db.Date
+
+  deliveryMethod NoticeDeliveryMethod?
+  deliveredAt    DateTime?             @db.Timestamptz(6)
   /// Tracking numbers, photos, mail receipts — the lien evidence chain.
   deliveryProof Json?
+
+  /// Set on the OLD notice when a correction replaces it.
+  supersededAt   DateTime? @db.Timestamptz(6)
+  /// Set on the NEW notice, pointing at what it corrects.
+  correctsNoticeId String?
+
   createdAt     DateTime     @default(now()) @db.Timestamptz(6)
   updatedAt     DateTime     @updatedAt @db.Timestamptz(6)
 
-  facility Facility @relation(fields: [facilityId], references: [id], onDelete: Restrict)
-  lease    Lease    @relation(fields: [leaseId], references: [id], onDelete: Restrict)
+  facility Facility        @relation(fields: [facilityId], references: [id], onDelete: Restrict)
+  lease    Lease           @relation(fields: [leaseId], references: [id], onDelete: Restrict)
+  template NoticeTemplate? @relation(fields: [noticeTemplateId], references: [id], onDelete: Restrict)
+  document Document?       @relation(fields: [documentId], references: [id], onDelete: Restrict)
+  corrects Notice?         @relation("NoticeCorrection", fields: [correctsNoticeId], references: [id], onDelete: Restrict)
+  correctedBy Notice[]     @relation("NoticeCorrection")
 
   @@index([facilityId, type])
   @@index([leaseId])
+  @@index([leaseId, type, supersededAt])
   @@map("notice")
 }
 

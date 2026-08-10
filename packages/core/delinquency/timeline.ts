@@ -239,19 +239,28 @@ export const EXAMPLE_TIMELINE_STEPS: readonly TimelineStep[] = [
     requiredProofFields: ['note', 'photo_reference'],
   },
   {
-    // No template, and that is not an oversight: **B-063 owns the pre-lien and
-    // lien notice templates and they do not exist yet.** Naming one here would
-    // put a key in the configuration that resolves to nothing — a step that
-    // reads as "sends a notice" on every screen and sends nothing at all,
-    // which on a lien timeline is the difference between a defensible file and
-    // a wrongful sale. Until those templates ship, this step is a staff task:
-    // somebody writes and mails the notice, and records the proof.
+    // `noticeTemplateKey` stays null, and that is not an oversight — but the
+    // reason changed at B-061 and is worth stating precisely.
+    //
+    // These keys name MESSAGE templates: `send_notice` emits an event the
+    // comms pipeline turns into an EMAIL. The statutory pre-lien and lien
+    // notices are DOCUMENTS, generated from `NoticeTemplate` (B-061), served
+    // by mail, hashed, and evidenced with the address they rendered to. Wiring
+    // one to the other would email a statutory notice through a path with no
+    // notice-by-email consent check and no delivery proof — precisely what
+    // US-13's separate consent type exists to prevent.
+    //
+    // So this stays a staff task, and the task is now "generate it on the
+    // notices screen, mail it, record the proof" rather than "write it
+    // yourself". B-063 adds a courtesy EMAIL supplement about this stage,
+    // which never claims to be the statutory notice; if that ships, its key
+    // goes here and `send_notice` alongside.
     dayOffset: 15,
     label: 'Pre-lien notice',
     automatedActions: [],
     noticeTemplateKey: null,
     deliveryMethods: [],
-    staffTaskLabel: 'Write, mail and record the pre-lien notice (no template yet — B-063)',
+    staffTaskLabel: 'Generate the pre-lien notice on the tenant’s Notices screen, mail it, record the proof',
     requiredProofFields: ['tracking_number', 'delivered_on'],
   },
   {
@@ -260,7 +269,7 @@ export const EXAMPLE_TIMELINE_STEPS: readonly TimelineStep[] = [
     automatedActions: [],
     noticeTemplateKey: null,
     deliveryMethods: [],
-    staffTaskLabel: 'Write, mail and record the lien notice (no template yet — B-063)',
+    staffTaskLabel: 'Generate the lien notice on the tenant’s Notices screen, mail it, record the proof',
     requiredProofFields: ['tracking_number', 'delivered_on'],
   },
   {

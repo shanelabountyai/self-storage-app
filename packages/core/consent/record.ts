@@ -38,3 +38,25 @@ export async function recordConsent(
     },
   })
 }
+
+/// The tenant's current state for one channel, or null if they have never been
+/// asked.
+///
+/// `recordConsent` is append-only, so "current" means the newest row — read
+/// here, once, rather than by each caller writing its own `orderBy`. The
+/// distinction between `null` and `revoked` is load-bearing for notice
+/// delivery (B-061): never asked and said-no need different things from the
+/// person standing at the counter, and collapsing them into a boolean loses
+/// that.
+export async function currentConsent(
+  tenantId: string,
+  channel: ConsentChannel,
+  client: Prisma.TransactionClient | typeof prisma = prisma,
+): Promise<ConsentState | null> {
+  const latest = await client.consent.findFirst({
+    where: { tenantId, channel },
+    orderBy: [{ capturedAt: 'desc' }, { createdAt: 'desc' }],
+    select: { state: true },
+  })
+  return latest?.state ?? null
+}

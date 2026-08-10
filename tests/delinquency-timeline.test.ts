@@ -174,12 +174,16 @@ describe('US-29 — the guardrails', () => {
     expect(validateTimeline(EXAMPLE_TIMELINE_STEPS, SEEDED)).toEqual([])
   })
 
-  it('never names a notice template that does not exist yet', () => {
-    // The pre-lien and lien templates belong to B-063 and are unwritten. Naming
-    // them here would put a key in every operator's configuration that resolves
-    // to nothing — a step that looks like it sends a notice and sends none,
-    // which on a lien timeline is the gap between a defensible file and a
-    // wrongful sale. Until B-063, those steps are staff tasks.
+  it('never routes a statutory notice through the email pipeline', () => {
+    // `noticeTemplateKey` names a MESSAGE template, and `send_notice` emails
+    // it. Since B-061 the statutory pre-lien and lien notices are DOCUMENTS
+    // with their own templates, served by mail, hashed, and evidenced with the
+    // address they rendered to — and US-13 makes notice-by-email its own
+    // consent type precisely so they cannot be emailed without permission.
+    //
+    // Naming a key here would route the statutory notice through a path with
+    // no consent check and no delivery proof. So these stay staff tasks that
+    // point at the notices screen.
     const lienSteps = EXAMPLE_TIMELINE_STEPS.filter((one) => /lien/i.test(one.label))
     expect(lienSteps.length).toBeGreaterThan(0)
     for (const lien of lienSteps) {
