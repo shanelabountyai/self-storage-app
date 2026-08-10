@@ -2074,7 +2074,7 @@ DB), including a swept identity check over the waterfall.
 
 ## B-063 — Comms delinquency-stage notices and pre-lien/lien courtesy supplements
 
-`<sha>`
+`959af72`
 
 **What it built.** CN-11's remaining stage pair (overlock applied/removed) and
 CN-12's pre-lien/lien courtesy supplements, on B-030's existing engine —
