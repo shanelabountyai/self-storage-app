@@ -2639,3 +2639,86 @@ delta, the rule's current worklist, and approve/cancel per row or per batch.
   PROGRESS.md has listed it open since B-056 and D-10's attorney pass has
   not happened; the setting, the screen and the email all say so rather than
   asserting a figure.
+
+---
+
+## B-077 — Unit transfer wizard
+
+`<pending>`
+
+**What it built.** US-14's transfer: `/admin/tenants/[tenantId]/transfer`, one
+screen with a GET-recalculate preview and a single confirmation, reached from
+a per-lease link on the tenant profile. Behind it,
+`apps/web/lib/admin/transfer.ts` closes the old lease and opens a new one in
+**one transaction** — both units' statuses recomputed inside it, which is
+US-14's "both units' statuses update atomically" taken literally. Both sides
+of the billing period are prorated by calling B-044's `unusedRemainder` and
+`prorate` once each, which is exactly what that module's header predicted
+("a transfer is a prorated move-out and a prorated move-in on the same day,
+so it calls this twice"). Four things reserved long ago finally got used: the
+`lease.transferred` event, the `leases:transfer` permission (manager and
+above), `LeaseRateReason.transfer`, and `FeeType.transfer`. 18 new DB tests.
+
+**What it decided.**
+
+- *A transfer is NOT `completeMoveOut` + `provisionMoveIn`.* Both were
+  considered and neither fits: `completeMoveOut` unconditionally releases the
+  unit to `maintenance`, revokes pay links and emits `lease.moved_out` —
+  which fires CN-8's "your account is settled" email at a tenant who has not
+  gone anywhere; `provisionMoveIn` is welded to a `CheckoutSession` it reads
+  and completes. What IS reused is the money, which is the part US-14 and
+  US-18 actually mandate. A test asserts `lease.moved_out` is never emitted.
+- *`MoveOutReason` gained a `transfer` value* rather than reusing
+  `tenant_request`. The former-tenant AR list and the move-out report both
+  read this field, and counting a transfer as a departure would show a
+  move-out and a move-in for somebody who never left.
+- *The new lease is created at the OLD rate, then moved to the new one
+  through `applyRateChange`.* That is what makes the `LeaseRateChange` row
+  read `previous = what they paid on the old unit, new = the new unit's rate,
+  reason = transfer` — creating it at the new rate directly would leave a
+  history row claiming the rate had never changed. It also keeps B-076's
+  write-through the only writer of `Lease.monthlyRateCents`, which was the
+  whole point of building it.
+- *`billingDay` is carried over, not recomputed from the transfer date.* The
+  tenant keeps their billing anniversary, which is what makes the two
+  prorated halves add up to one unbroken period rather than leaving a gap or
+  an overlap.
+- *The old unit returns to `available`, not `maintenance`.* A move-out holds
+  the unit for a "verified empty and clean" check; a transfer happens with
+  the tenant on site handing it back in the same visit, so a maintenance hold
+  would be theatre. Staff can still mark it from the unit screen.
+- *One screen, not a multi-step wizard.* The codebase's only comment about
+  wizards (`admin/pos/actions.ts`) argues against building a second stateful
+  flow, and this needs none — a GET form recalculates server-side, so the
+  arithmetic never happens in the browser and the confirmed figure is the
+  posted one, the same discipline the move-out screen established.
+
+**A real bug found and fixed along the way (D-38).** Move-out's proration
+divided by the days in the **calendar month**, where US-18's AC says "days in
+billing period". Under D-27's anniversary default those differ. Worse, its
+day-count did not tile with the charge side: a 1 Aug–1 Sep period with a
+15 Aug move-out refunded 16 days while the charge covered 14, so one day of
+every prorated move-out was billed to nobody and kept. `proratedCredit` now
+delegates to B-044's `unusedRemainder`; a regression test asserts
+`charged + refunded === the full period` across all 31 days. **Refunds on
+anniversary-billed move-outs get slightly larger.** Fixed rather than worked
+around because B-077 would otherwise have shipped a transfer whose two halves
+used different arithmetic — and because US-14 and US-18 both already claimed
+this math was "built once", which it now genuinely is.
+
+**What it left behind.**
+
+- **Same-facility only**, per US-14's own wording ("another unit in the same
+  facility"). A cross-facility move is a move-out and a move-in, and the
+  screen refuses one with that reason named.
+- **No payment is taken at transfer time.** The net lands on the new lease's
+  ledger and is collected by the ordinary billing path. Taking a card at the
+  counter is POS work (B-039's surface), not this screen's.
+- **The customer-side transfer flow is not built** — that is B-090 (Phase 3)
+  and PRD 01 §9 explicitly puts "transfer-unit flow (upsize/downsize online)"
+  out of MVP. This is the staff-side one US-14 asks for.
+- **A failed gate-credential issue is swallowed**, deliberately: the transfer
+  has committed and the tenant has the unit, so a slow controller must not
+  roll it back. It surfaces through the same gate queue and
+  `move_in_provisioning_failed` path B-026 built, but there is no
+  transfer-specific task for it.

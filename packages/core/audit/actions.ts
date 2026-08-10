@@ -52,6 +52,12 @@ export const AUDIT_ACTIONS = [
   /// the charge will actually ask to see.
   { action: 'lease.protection_auto_enrolled', label: 'Protection auto-enrolled on lapsed proof', requiresReason: false },
   { action: 'lease.move_out_overridden', label: 'Move-out charges overridden', requiresReason: true },
+  /// PRD 02 US-14 (B-077). A transfer closes one lease and opens another in
+  /// one act, so neither `lease.moved_out` nor a move-in entry describes what
+  /// happened — this is the single entry that names both units and both
+  /// rates. No reason code: the tenant asked to move units, which is an
+  /// ordinary service request, not a discretionary override.
+  { action: 'lease.transferred', label: 'Tenant transferred between units', requiresReason: false },
   { action: 'unit.created', label: 'Unit created', requiresReason: false },
   { action: 'unit.updated', label: 'Unit updated', requiresReason: false },
   { action: 'unit.status_overridden', label: 'Unit status manually overridden', requiresReason: true },

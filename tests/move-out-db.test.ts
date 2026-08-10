@@ -139,8 +139,8 @@ describeDb('move-out', () => {
     const before = await prisma.lease.findUniqueOrThrow({ where: { id: lease.id } })
 
     const preview = await previewMoveOut(actorOf(counterId, 10), lease.id, d('2026-08-15'))
-    expect(preview.settlement.prorationCreditCents).toBe(16_000)
-    expect(preview.settlement.refundDueCents).toBe(16_000)
+    expect(preview.settlement.prorationCreditCents).toBe(17_000)
+    expect(preview.settlement.refundDueCents).toBe(17_000)
     expect(preview.noticeShortfallDays).toBe(10)
 
     const after = await prisma.lease.findUniqueOrThrow({ where: { id: lease.id } })
@@ -165,7 +165,7 @@ describeDb('move-out', () => {
     const credit = await prisma.ledgerEntry.findFirstOrThrow({
       where: { leaseId: lease.id, type: 'credit' },
     })
-    expect(credit.amountCents).toBe(-16_000)
+    expect(credit.amountCents).toBe(-17_000)
 
     // Never straight to available: a human has to open the door first.
     const unit = await prisma.unit.findUniqueOrThrow({ where: { id: unitAId } })
@@ -183,7 +183,7 @@ describeDb('move-out', () => {
     const event = await prisma.domainEvent.findFirstOrThrow({
       where: { entityId: lease.id, name: 'lease.moved_out' },
     })
-    expect((event.payload as { refundDueCents: number }).refundDueCents).toBe(16_000)
+    expect((event.payload as { refundDueCents: number }).refundDueCents).toBe(17_000)
   })
 
   describe('write-off authority', () => {

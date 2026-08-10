@@ -115,6 +115,8 @@ export const CONSUMERS: readonly Consumer[] = [
       'lead.drip_step',
       // PRD 02 US-11 / PRD 05 CN-9 (B-076). The rate-increase notice.
       'lease.rate_increase_scheduled',
+      // PRD 02 US-14 (B-077). The transfer confirmation.
+      'lease.transferred',
     ],
     handle: async ({ event }) => {
       await processCommsEvent(event)

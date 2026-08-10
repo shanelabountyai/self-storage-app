@@ -2,6 +2,7 @@ import { prisma } from '@storage/db'
 import { OCCUPYING_LEASE_STATUSES } from '@storage/core/inventory'
 import { emitEvent } from '@storage/core/events'
 import { noticeShortfallDays, settleMoveOut, type MoveOutSettlement } from '@storage/core/move-out'
+import { billingPeriodFor } from '@storage/core/billing'
 import { createTask, cancelOpenTask } from '@/lib/admin/tasks'
 
 // PRD 01 US-707. The tenant's own move-out request: pick a date, see what it
@@ -92,10 +93,11 @@ export async function previewTenantMoveOut(
     select: {
       facilityId: true,
       monthlyRateCents: true,
+      billingDay: true,
       paidThroughDate: true,
       noticeGivenAt: true,
       facility: {
-        select: { name: true, phone: true, moveOutNoticeDays: true, prorateOnMoveOut: true, writeOffThresholdCents: true },
+        select: { name: true, phone: true, billingPolicy: true, moveOutNoticeDays: true, prorateOnMoveOut: true, writeOffThresholdCents: true },
       },
       unit: { select: { number: true } },
     },
@@ -131,6 +133,7 @@ export async function previewTenantMoveOut(
         moveOutDate,
         prorateOnMoveOut: lease.facility.prorateOnMoveOut,
         writeOffThresholdCents: lease.facility.writeOffThresholdCents,
+        period: billingPeriodFor(lease.facility.billingPolicy, lease.billingDay, moveOutDate),
       }),
       noticeShortfallDays: noticeShortfallDays(lease.noticeGivenAt, moveOutDate, lease.facility.moveOutNoticeDays),
     },

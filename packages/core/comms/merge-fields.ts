@@ -165,6 +165,21 @@ export const EVENT_MERGE_FIELDS: Record<string, readonly MergeFieldSpec[]> = {
     { field: 'checkout.promo_line', description: 'The live promo’s terms, when one applies', sample: '50% off your first month' },
     { field: 'links.resume_checkout', description: 'Link that resumes their checkout where they left off', sample: 'https://example.com/checkout/resume/abc123' },
   ],
+  // B-077 / PRD 02 US-14. The tenant's confirmation that they have moved
+  // units. Not a notice with a legal deadline like CN-9's below — a receipt
+  // for something they asked for and just did at the counter — so what it
+  // carries is the two unit numbers and what it cost.
+  'lease.transferred': [
+    { field: 'transfer.from_unit', description: 'The unit they left', sample: 'A-12' },
+    { field: 'transfer.to_unit', description: 'The unit they moved into', sample: 'B-04' },
+    { field: 'transfer.new_rate', description: 'What the new unit costs per month', sample: '$149.00' },
+    { field: 'transfer.date', description: 'The day the transfer took effect', sample: 'October 1, 2026' },
+    {
+      field: 'transfer.settlement_line',
+      description: 'What was charged or credited today, in one sentence',
+      sample: 'You were charged $32.10 today for the rest of this billing period.',
+    },
+  ],
   // B-076 / PRD 05 CN-9. The AC names all four exactly: "merge fields include
   // old rate, new rate, effective date, and the governing notice-period."
   // Every one is `required` on the template, so CN-9's "send is blocked (loud

@@ -735,6 +735,47 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
   // (`notice_sent`, not yet `applied`), so `Lease.monthlyRateCents` still
   // holds the OLD rate at this moment — reading it live would print the old
   // rate as the new one.
+  // B-077 / PRD 02 US-14. Read from the event payload, not re-derived: by the
+  // time this renders the old lease is `ended` and the new one holds the new
+  // rate, so a live read would have to reconstruct which unit they came from
+  // — the event already carries it, and carrying it is why the payload has
+  // those fields.
+  'lease.transferred': async (event) => {
+    const payload = (event.payload ?? {}) as {
+      fromUnitNumber?: string
+      toUnitNumber?: string
+      newRateCents?: number
+      transferDate?: string
+      totalDueTodayCents?: number
+    }
+    const due = payload.totalDueTodayCents ?? 0
+    const transferDate = payload.transferDate
+      ? new Date(`${payload.transferDate}T00:00:00.000Z`)
+      : null
+
+    return {
+      'transfer.from_unit': payload.fromUnitNumber ?? '',
+      'transfer.to_unit': payload.toUnitNumber ?? '',
+      'transfer.new_rate': payload.newRateCents !== undefined ? formatCents(payload.newRateCents) : '',
+      // UTC, like every other calendar-date merge field here — the transfer
+      // happened on a day, and a timezone would shift it.
+      'transfer.date': transferDate
+        ? new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', dateStyle: 'long' }).format(transferDate)
+        : '',
+      // One sentence rather than three merge fields the template would have
+      // to assemble: the three cases (charged, credited, nothing) read
+      // differently, and a template cannot express that without conditionals
+      // it does not have.
+      'transfer.settlement_line':
+        due > 0
+          ? `You were charged ${formatCents(due)} today for the rest of this billing period.`
+          : due < 0
+            ? `${formatCents(-due)} has been credited to your account.`
+            : 'There was nothing extra to pay today.',
+      'links.portal': `${baseUrl()}/login`,
+    }
+  },
+
   'lease.rate_increase_scheduled': async (event) => {
     const payload = (event.payload ?? {}) as {
       previousRateCents?: number

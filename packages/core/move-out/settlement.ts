@@ -1,9 +1,28 @@
+import { unusedRemainder, type BillingPeriod } from '../billing/index.ts'
+
 // PRD 02 US-14 (move-out). What a lease is worth on the day it ends.
 //
 // Pure: no database, no clock, no facility. Every input is passed in, so the
 // proration boundaries and the write-off decision are testable exactly — this
 // is the code that decides whether a former tenant is refunded, billed, or
 // let go.
+//
+// ── The proration denominator, corrected in B-077 ───────────────────────────
+//
+// This file used to divide by the days in the move-out date's CALENDAR MONTH.
+// US-18's AC states the formula: "daily rate = monthly rate / days in billing
+// period". Under D-27's default (anniversary billing) a billing period is not
+// a calendar month — a lease that bills on the 20th has a 20 Aug–20 Sep period
+// of 31 days, while `daysInMonthOf(5 Sep)` is 30 — so the old denominator was
+// simply the wrong one, and a $129 lease refunded $64.50 where the AC says
+// $62.42.
+//
+// It now calls `unusedRemainder` from `@storage/core/billing`, which is the
+// implementation US-18 and US-14 both say is the only one ("proration math is
+// built once, in the shared core package, in both directions"). That also
+// makes B-077's transfer coherent: a transfer is a prorated move-out and a
+// prorated move-in on one day, and the two halves must not use different
+// arithmetic.
 
 /// Whole days from `from` to `to`, exclusive of `to`. Both are calendar dates
 /// (UTC midnight), which is how move-out and paid-through are stored.
@@ -12,26 +31,26 @@ function daysBetween(from: Date, to: Date): number {
   return Math.round((to.getTime() - from.getTime()) / MS_PER_DAY)
 }
 
-export function daysInMonthOf(date: Date): number {
-  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)).getUTCDate()
-}
-
-/// The unused portion of an already-paid period, as a credit.
+/// The unused portion of an already-paid billing period, as a credit.
 ///
-/// Rounded DOWN to whole cents in the tenant's favour is not possible in both
-/// directions at once, so the rule is: a refund rounds down (we never refund a
-/// fraction we did not collect), and a charge rounds down too (we never bill a
-/// fraction of a cent). Both use the same floor, so the arithmetic is
-/// symmetric and a reconciliation never finds a stray cent.
+/// Delegates to `unusedRemainder`, so "charged + refunded === the full period"
+/// holds to the penny — that guarantee comes from subtracting the charged
+/// amount from the whole rather than rounding the refund independently, and
+/// is the reason this is a delegation rather than a second formula.
 export function proratedCredit(
   monthlyRateCents: number,
-  paidThroughDate: Date,
+  period: BillingPeriod,
   moveOutDate: Date,
 ): number {
-  const unusedDays = daysBetween(moveOutDate, paidThroughDate)
-  if (unusedDays <= 0) return 0
-  const daysInMonth = daysInMonthOf(moveOutDate)
-  return Math.floor((monthlyRateCents * unusedDays) / daysInMonth)
+  // Nothing to refund once the period is already over, or when the move-out
+  // is at or after its end.
+  if (moveOutDate.getTime() >= period.end.getTime()) return 0
+  return unusedRemainder({
+    monthlyCents: monthlyRateCents,
+    period,
+    from: period.start,
+    to: moveOutDate,
+  }).amountCents
 }
 
 export type MoveOutSettlementInput = {
@@ -44,6 +63,10 @@ export type MoveOutSettlementInput = {
   moveOutDate: Date
   prorateOnMoveOut: boolean
   writeOffThresholdCents: number
+  /// The billing period the move-out falls in — the denominator US-18's AC
+  /// specifies. Supplied by the caller because only it knows the facility's
+  /// billing policy and the lease's billing day.
+  period: BillingPeriod
 }
 
 export type MoveOutSettlement = {
@@ -65,9 +88,17 @@ export type MoveOutSettlement = {
 }
 
 export function settleMoveOut(input: MoveOutSettlementInput): MoveOutSettlement {
+  // `paidThroughDate` remains the gate rather than the arithmetic: it answers
+  // "is any of this period actually paid for", which is what makes a refund
+  // owed at all. The period answers "how much of it is unused", which is the
+  // part US-18 specifies.
+  const paidBeyondMoveOut =
+    input.paidThroughDate !== null &&
+    input.paidThroughDate.getTime() > input.moveOutDate.getTime()
+
   const prorationCreditCents =
-    input.prorateOnMoveOut && input.paidThroughDate
-      ? proratedCredit(input.monthlyRateCents, input.paidThroughDate, input.moveOutDate)
+    input.prorateOnMoveOut && paidBeyondMoveOut
+      ? proratedCredit(input.monthlyRateCents, input.period, input.moveOutDate)
       : 0
 
   const netBalanceCents = input.balanceCents - prorationCreditCents

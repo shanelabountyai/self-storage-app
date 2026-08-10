@@ -3,6 +3,7 @@ import type { MoveOutReason } from '@storage/db'
 import { recordAudit } from '@storage/core/audit'
 import { emitEvent } from '@storage/core/events'
 import { noticeShortfallDays, settleMoveOut, type MoveOutSettlement } from '@storage/core/move-out'
+import { billingPeriodFor } from '@storage/core/billing'
 import { MANAGER_RANK } from '@storage/core/pos'
 import { assertFacilityAccess, can, ForbiddenError } from '@/lib/rbac/authorize'
 import { toAuditActor } from '@/lib/rbac/audit-actor'
@@ -50,12 +51,14 @@ async function loadLeaseForMoveOut(actor: Actor, leaseId: string) {
       tenantId: true,
       status: true,
       monthlyRateCents: true,
+      billingDay: true,
       paidThroughDate: true,
       noticeGivenAt: true,
       moveOutDate: true,
       facility: {
         select: {
           name: true,
+          billingPolicy: true,
           prorateOnMoveOut: true,
           moveOutNoticeDays: true,
           writeOffThresholdCents: true,
@@ -101,6 +104,9 @@ export async function previewMoveOut(
       moveOutDate,
       prorateOnMoveOut: lease.facility.prorateOnMoveOut,
       writeOffThresholdCents: lease.facility.writeOffThresholdCents,
+      // US-18's denominator: the billing period the move-out lands in, not
+      // the calendar month it happens to share a name with.
+      period: billingPeriodFor(lease.facility.billingPolicy, lease.billingDay, moveOutDate),
     }),
     noticeShortfallDays: noticeShortfallDays(
       lease.noticeGivenAt,

@@ -549,6 +549,40 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
     requiredMergeFields: ['facility.name', 'card.expires', 'links.update_card'],
   },
   {
+    // PRD 02 US-14 (B-077). The transfer confirmation.
+    //
+    // Leads with the new unit number, because that is the one fact the tenant
+    // needs in their pocket when they drive back — the gate code and the
+    // money are secondary to "which door is mine now".
+    key: 'lease_transferred',
+    classification: 'transactional',
+    subject: 'You’ve moved to unit {{transfer.to_unit}} at {{facility.name}}',
+    bodyText: [
+      'Hi {{tenant.first_name}},',
+      '',
+      'You’ve moved from unit {{transfer.from_unit}} to unit {{transfer.to_unit}} at {{facility.name}}, effective {{transfer.date}}.',
+      '',
+      'Your new rent is {{transfer.new_rate}} per month. {{transfer.settlement_line}}',
+      '',
+      'Your gate code is unchanged and already works on the new unit.',
+      '',
+      'Your account: {{links.portal}}',
+      '',
+      'Questions? Call {{facility.phone}}.',
+    ].join('\n'),
+    requiredMergeFields: [
+      'tenant.first_name',
+      'transfer.from_unit',
+      'transfer.to_unit',
+      'facility.name',
+      'transfer.date',
+      'transfer.new_rate',
+      'transfer.settlement_line',
+      'links.portal',
+      'facility.phone',
+    ],
+  },
+  {
     // PRD 05 CN-9 / PRD 02 US-11 (B-076). The rate-increase notice.
     //
     // Every one of CN-9's four merge fields is REQUIRED, which is what makes
@@ -976,6 +1010,18 @@ export const COMMS_RULES: readonly CommsRuleSeed[] = [
     event: 'protection.auto_enrolled',
     templateKey: 'protection_auto_enrolled',
     classification: 'transactional',
+  },
+  {
+    // B-077 / PRD 02 US-14. No `tenant_moved_out` skip: the transfer's own
+    // OLD lease is `ended` by the time this dispatches, and the event names
+    // the NEW lease — but the skip predicate reads whichever lease the
+    // recipient resolver found, and a tenant mid-transfer is exactly who
+    // this is for. Categorised as an operational notice so the preference
+    // centre can govern it like any other service message.
+    event: 'lease.transferred',
+    templateKey: 'lease_transferred',
+    classification: 'transactional',
+    category: 'operational_notices',
   },
   {
     // B-076 / PRD 05 CN-9. Email only, and no `category` — a rate increase is

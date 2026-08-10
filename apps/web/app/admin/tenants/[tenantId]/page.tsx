@@ -342,12 +342,22 @@ export default async function TenantProfilePage({
                   <td className="py-2">{formatDate(lease.startDate)}</td>
                   <td className="py-2">
                     {lease.status !== 'ended' && (
-                      <Link
-                        href={`/admin/tenants/${tenantId}/move-out?lease=${lease.leaseId}`}
-                        className="underline underline-offset-2"
-                      >
-                        Move out
-                      </Link>
+                      <>
+                        <Link
+                          href={`/admin/tenants/${tenantId}/move-out?lease=${lease.leaseId}`}
+                          className="underline underline-offset-2"
+                        >
+                          Move out
+                          <span className="sr-only"> from unit {lease.unitNumber}</span>
+                        </Link>
+                        <Link
+                          href={`/admin/tenants/${tenantId}/transfer?lease=${lease.leaseId}`}
+                          className="ml-3 underline underline-offset-2"
+                        >
+                          Transfer
+                          <span className="sr-only"> out of unit {lease.unitNumber}</span>
+                        </Link>
+                      </>
                     )}
                     <Link
                       href={`/admin/tenants/${profile.tenantId}/ledger/${lease.leaseId}`}

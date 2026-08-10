@@ -1,49 +1,78 @@
 import { describe, expect, it } from 'vitest'
 import { noticeShortfallDays, proratedCredit, settleMoveOut } from '../packages/core/move-out'
+import { prorate } from '../packages/core/billing'
 
 // B-040 / PRD 02 US-14 (move-out). Pure money math — no database, no clock.
 
 const d = (iso: string) => new Date(`${iso}T00:00:00.000Z`)
 
+/// A first-of-month period, so the calendar month and the billing period
+/// happen to coincide — the case the old calendar-month denominator got right
+/// by accident.
+const AUGUST = { start: d('2026-08-01'), end: d('2026-09-01') }
+
 describe('proratedCredit', () => {
-  it('credits the unused days of a paid month', () => {
-    // Paid through 31 Aug, left on the 15th → 16 unused days of a 31-day month.
-    expect(proratedCredit(31_000, d('2026-08-31'), d('2026-08-15'))).toBe(16_000)
+  it('credits the unused days of a paid period', () => {
+    // 31-day period, left on the 15th. The move-out day itself is not
+    // charged (`to` is exclusive), so days 15–31 are refunded: 17 of 31.
+    expect(proratedCredit(31_000, AUGUST, d('2026-08-15'))).toBe(17_000)
   })
 
-  it('credits nothing when the tenant leaves on the day they are paid to', () => {
-    expect(proratedCredit(31_000, d('2026-08-15'), d('2026-08-15'))).toBe(0)
+  it('credits nothing when the tenant leaves on the last day of the period', () => {
+    expect(proratedCredit(31_000, AUGUST, d('2026-09-01'))).toBe(0)
   })
 
-  it('credits nothing when the tenant leaves after what they paid for', () => {
+  it('credits nothing when the move-out is past the period end', () => {
     // They owe for the overrun; that is the balance's job, not a negative credit.
-    expect(proratedCredit(31_000, d('2026-08-10'), d('2026-08-20'))).toBe(0)
+    expect(proratedCredit(31_000, AUGUST, d('2026-09-10'))).toBe(0)
   })
 
-  it('uses the length of the month the move-out falls in', () => {
-    // February: 28 days in 2026, so a day is worth more than in August.
-    expect(proratedCredit(28_000, d('2026-02-28'), d('2026-02-14'))).toBe(14_000)
+  it('uses the length of the BILLING PERIOD, not the calendar month (US-18)', () => {
+    // B-077's correction. An anniversary lease billing on the 20th has a
+    // 20 Aug – 20 Sep period of 31 days. Leaving on 5 Sep leaves 15 unused.
+    // Correct: 12900 − round(12900 × 16/31) = 12900 − 6658 = 6242.
+    // The old calendar-month denominator used 30 (September) and returned
+    // 6450 — $2.08 more than the AC's formula allows.
+    const anniversary = { start: d('2026-08-20'), end: d('2026-09-20') }
+    expect(proratedCredit(12_900, anniversary, d('2026-09-05'))).toBe(6_242)
   })
 
-  it('rounds down rather than inventing a fraction of a cent', () => {
-    // 10000 * 10 / 31 = 3225.8… → 3225, never 3226.
-    expect(proratedCredit(10_000, d('2026-08-31'), d('2026-08-21'))).toBe(3_225)
+  it('reconciles exactly: charged + refunded === the full period', () => {
+    // The guarantee `unusedRemainder` exists for. Every day of a 31-day
+    // period, checked, so no rounding pair can drift a cent.
+    const period = { start: d('2026-08-01'), end: d('2026-09-01') }
+    for (let day = 1; day <= 31; day += 1) {
+      const moveOut = new Date(Date.UTC(2026, 7, day))
+      const refunded = proratedCredit(12_900, period, moveOut)
+      const charged = prorate({ monthlyCents: 12_900, period, from: period.start, to: moveOut }).amountCents
+      expect(charged + refunded).toBe(12_900)
+    }
+  })
+
+  it('handles a short February period', () => {
+    const february = { start: d('2026-02-01'), end: d('2026-03-01') }
+    expect(proratedCredit(28_000, february, d('2026-02-15'))).toBe(14_000)
   })
 })
 
 describe('settleMoveOut', () => {
   const base = {
     monthlyRateCents: 31_000,
-    paidThroughDate: d('2026-08-31'),
+    paidThroughDate: d('2026-09-01'),
     moveOutDate: d('2026-08-15'),
     prorateOnMoveOut: true,
     writeOffThresholdCents: 1_000,
+    period: AUGUST,
   }
 
   it('refunds the unused part when the tenant is paid up', () => {
+    // Leaving on 15 Aug of a 1 Aug – 1 Sep period: charged for 1–14 (14 days,
+    // $140), refunded 15–31 (17 days, $170). The two sum to the full $310,
+    // which is the invariant the old calendar-month math did NOT hold — it
+    // refunded 16 days and charged 14, quietly keeping one day.
     const result = settleMoveOut({ ...base, balanceCents: 0 })
-    expect(result.prorationCreditCents).toBe(16_000)
-    expect(result.refundDueCents).toBe(16_000)
+    expect(result.prorationCreditCents).toBe(17_000)
+    expect(result.refundDueCents).toBe(17_000)
     expect(result.amountDueCents).toBe(0)
     expect(result.needsManagerOverride).toBe(false)
   })
@@ -57,8 +86,8 @@ describe('settleMoveOut', () => {
 
   it('nets a proration credit against what is owed', () => {
     const result = settleMoveOut({ ...base, balanceCents: 20_000 })
-    expect(result.netBalanceCents).toBe(4_000)
-    expect(result.amountDueCents).toBe(4_000)
+    expect(result.netBalanceCents).toBe(3_000)
+    expect(result.amountDueCents).toBe(3_000)
   })
 
   it('lets a small residual debt be written off', () => {

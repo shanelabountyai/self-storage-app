@@ -65,6 +65,13 @@ enum OperationalUnitStatus {
 enum MoveOutReason {
   tenant_request
   abandonment
+  /// PRD 02 US-14 (B-077). The lease ended because the tenant moved to
+  /// another unit at the same facility, not because they left. Its own value
+  /// rather than `tenant_request` because the two answer a question the
+  /// former-tenant AR list and the move-out report both ask: a transferred
+  /// tenant is still a tenant, and counting them as a departure would show a
+  /// move-out and a move-in for somebody who never went anywhere.
+  transfer
 }
 
 enum LeaseStatus {
