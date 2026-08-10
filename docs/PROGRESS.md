@@ -2552,7 +2552,7 @@ seeded `owner` role).
 
 ## B-076 — Tenant rate increases
 
-`<pending>`
+`d8d53b8`
 
 **What it built.** US-11 end to end, and the first use of two things reserved
 long before this item: the `rates:tenant_increase` permission and the
