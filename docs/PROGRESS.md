@@ -1935,7 +1935,7 @@ line asked for: "all as `Task` types and views, not new queues."
 
 ## B-061 — Pre-lien and lien notice generation
 
-`<sha>`
+`ab148d6`
 
 **What it built.** US-27's generated notices, with US-13's evidence chain
 attached. A `NoticeTemplate` (versioned, per-facility, org-default fallback)
