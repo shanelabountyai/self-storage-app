@@ -119,6 +119,11 @@ export const AUDIT_ACTIONS = [
   { action: 'user.role_changed', label: 'Staff role changed', requiresReason: true },
   { action: 'user.deactivated', label: 'Staff user deactivated', requiresReason: true },
   { action: 'document.deleted', label: 'Document deleted', requiresReason: true },
+  /// B-071. Not reason-required like a deletion — hiding a review is display
+  /// moderation, not destroying evidence (the row and its text stay exactly
+  /// as entered). Audited because "why did this review disappear from the
+  /// page" is a question worth being able to answer.
+  { action: 'review.visibility_changed', label: 'Review visibility changed', requiresReason: false },
   { action: 'drawer.over_short', label: 'Drawer over/short recorded', requiresReason: true },
 
   // Authentication

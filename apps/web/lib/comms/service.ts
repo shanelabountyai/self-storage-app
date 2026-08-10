@@ -38,6 +38,7 @@ type RecipientFacility = {
   state: string
   postalCode: string
   timezone: string
+  googleReviewUrl: string | null
 }
 
 type RecipientLease = {
@@ -88,6 +89,7 @@ const FACILITY_SELECT = {
   state: true,
   postalCode: true,
   timezone: true,
+  googleReviewUrl: true,
 } as const
 
 /// Resolves who a message goes to from the event's entity. Keyed by entityType
@@ -552,6 +554,15 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
     }
   },
 
+  // B-071 / PRD 04 US-7 AC1. The recipient's own lease is on the event
+  // already (entityType 'Lease'); the only extra fact is where to send them.
+  // `googleReviewUrl` is read at send time rather than carried on the event —
+  // an operator who fixes a broken link after the job already raised the
+  // request should have the CORRECT one land in the tenant's inbox.
+  'review.requested': async (_event, recipient) => ({
+    'links.google_review': recipient.facility?.googleReviewUrl ?? '',
+  }),
+
   // CN-3's tone escalation, as content rather than code. Four rungs, and the
   // wording gets firmer without ever threatening something that has not been
   // decided — the day-10 line warns about access because B-098 genuinely
@@ -870,6 +881,12 @@ const SKIP_PREDICATES: Record<
   // device `applicableRules` already uses for multiple templates on one event.
   notice_type_not_pre_lien: (_recipient, event) => (event.payload as { type?: string })?.type !== 'pre_lien',
   notice_type_not_lien: (_recipient, event) => (event.payload as { type?: string })?.type !== 'lien',
+
+  // B-071. Defence in depth: the raising job already refuses a facility with
+  // no link configured, but an operator could clear it in the gap between the
+  // event being raised and the dispatcher reaching it. A review ask with a
+  // dead link is worse than a late one.
+  no_google_review_link: (recipient) => !recipient.facility?.googleReviewUrl,
 }
 
 async function firstFiringSkip(

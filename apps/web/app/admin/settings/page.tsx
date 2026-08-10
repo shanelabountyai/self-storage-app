@@ -663,6 +663,9 @@ export default async function AdminSettingsPage() {
           <Link href="/admin/settings/notices" className="underline underline-offset-2">
             Notice templates — the pre-lien and lien text this site sends
           </Link>
+          <Link href="/admin/settings/reviews" className="underline underline-offset-2">
+            Reviews — manual entry and the review-request link
+          </Link>
         </p>
       </section>
 

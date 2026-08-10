@@ -35,6 +35,7 @@ import { LeadForm } from '@/components/marketing/lead-form'
 import { submitLeadAction, trackPageView } from './lead-actions'
 import { citySlugPath } from '@/lib/marketing/paths'
 import { offerFor } from '@/lib/promotions/service'
+import { visibleReviewsForFacility } from '@/lib/reviews/public'
 import {
   applyFilters,
   FEATURE_FILTERS,
@@ -718,6 +719,13 @@ export default async function FacilityPage({
     }
   }
 
+  // PRD 04 US-6 (B-071). `schemaAggregateRating` is almost always null — see
+  // D-33: manually transcribed reviews never qualify for the JSON-LD markup,
+  // whatever the on-page average says.
+  const { average: reviewAverage, reviews, schemaAggregateRating } = await visibleReviewsForFacility(
+    facility.id,
+  )
+
   const canonicalUrl = absoluteUrl(siteOrigin(), canonical)
   // A facility's own FAQs replace the generated set outright rather than
   // appending to it: a marketer who has written four answers has decided what
@@ -737,6 +745,7 @@ export default async function FacilityPage({
         availableCount: unitType.availableCount,
         description: unitType.description,
       })),
+      aggregateRating: schemaAggregateRating ?? undefined,
     }),
     faqPageJsonLd(faqs),
     breadcrumbJsonLd([
@@ -979,6 +988,37 @@ export default async function FacilityPage({
           />
         </div>
       </section>
+
+      {/* PRD 04 US-6 AC1/AC2. Manual transcriptions today, attributed as such —
+          never presented as though collected here (D-33 is the same reason
+          the average is not marked up as `aggregateRating`). */}
+      {reviews.length > 0 && reviewAverage && (
+        <section aria-labelledby="reviews" className="mt-10">
+          <h2 id="reviews" className="text-xl font-medium">
+            What renters say
+          </h2>
+          <p className="text-muted-foreground mt-1">
+            {reviewAverage.ratingValue.toFixed(1)} out of 5, from {reviewAverage.reviewCount} review
+            {reviewAverage.reviewCount === 1 ? '' : 's'}
+          </p>
+          <ul className="mt-4 flex flex-col gap-4">
+            {reviews.map((review) => (
+              <li key={review.id} className="border-input rounded-lg border p-4">
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <span aria-label={`${review.rating} out of 5 stars`} className="font-medium">
+                    {'★'.repeat(review.rating)}
+                    {'☆'.repeat(5 - review.rating)}
+                  </span>
+                  <span className="text-muted-foreground text-sm">
+                    {review.reviewerDisplayName} · {review.sourceLabel}
+                  </span>
+                </div>
+                <p className="text-muted-foreground mt-2 text-sm text-pretty">{review.text}</p>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {/* US-1 AC2: "at least 5 facility-specific FAQs." Generated from the
           facility record (packages/core/marketing/faqs.ts) so an answer can

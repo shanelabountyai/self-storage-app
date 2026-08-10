@@ -140,6 +140,13 @@ export const EVENT_MERGE_FIELDS: Record<string, readonly MergeFieldSpec[]> = {
     { field: 'unit.number', description: 'Unit number', sample: 'A-12' },
     { field: 'protection.expires_on', description: 'When their cover runs out', sample: 'September 15, 2026' },
   ],
+  // B-071 / PRD 04 US-7. `links.google_review` is the facility's own setting
+  // (`Facility.googleReviewUrl`) — the job that raises this event already
+  // refuses to for a facility that has not configured one.
+  'review.requested': [
+    { field: 'unit.number', description: 'Unit number', sample: 'A-12' },
+    { field: 'links.google_review', description: 'The facility’s Google review link', sample: 'https://g.page/r/example/review' },
+  ],
   'protection.auto_enrolled': [
     { field: 'unit.number', description: 'Unit number', sample: 'A-12' },
     { field: 'protection.plan_name', description: 'The plan they were enrolled in', sample: 'Standard cover' },

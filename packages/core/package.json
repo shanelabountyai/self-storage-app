@@ -27,7 +27,8 @@
     "./promotions": "./promotions/index.ts",
     "./delinquency": "./delinquency/index.ts",
     "./notices": "./notices/index.ts",
-    "./auctions": "./auctions/index.ts"
+    "./auctions": "./auctions/index.ts",
+    "./reviews": "./reviews/index.ts"
   },
   "dependencies": {
     "@storage/db": "*"

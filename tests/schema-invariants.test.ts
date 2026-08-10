@@ -94,6 +94,9 @@ const CALENDAR_DATE_FIELDS = new Set([
   'AuctionCase.buyerCleanoutDeadline',
   'AuctionCase.surplusHoldUntil',
   'AuctionAdvertisement.runDate',
+  // B-071. The day a review was actually posted, not an instant — "5 most
+  // recent reviews" sorts and displays by calendar date.
+  'Review.reviewDate',
 ])
 
 describe('prisma schema invariants', () => {

@@ -91,6 +91,12 @@ export const EVENT_NAMES = [
   /// generated and stored. Drives the courtesy email — never the statutory
   /// notice itself, which is the mailed, hashed document this event points at.
   'notice.generated',
+
+  /// PRD 04 US-7 AC1 (B-071). A tenant has cleared their facility's
+  /// review-request delay after move-in. Raised once per tenancy — the
+  /// producer stamps `Lease.reviewRequestSentAt` in the same beat, since the
+  /// outbox only dedupes an event that already exists.
+  'review.requested',
 ] as const
 
 export type EventName = (typeof EVENT_NAMES)[number]

@@ -397,6 +397,16 @@ model Facility {
   /// rather than six booleans: the checklist is US-5 AC1's list today and will
   /// grow, and each addition would otherwise be a migration.
   gbpCheckedItems     String[]       @default([])
+  /// PRD 04 US-7 AC1 (B-071). The link the review-request email sends people
+  /// to. Null means the request cannot go out at all — a review ask with
+  /// nowhere to leave the review is worse than not asking, so the job that
+  /// raises requests refuses to for a facility that has not set this.
+  googleReviewUrl     String?
+  /// US-7 AC1: "N days after move-in completion (default 7, configurable per
+  /// facility)." Its own control ships in this item, per this repo's own rule
+  /// — a column that changes behaviour with no form field is how five of them
+  /// end up reachable only from a database client.
+  reviewRequestDelayDays Int         @default(7)
 
   /// PRD 03 FR-3 / US-6. Which gate controller this facility talks to.
   ///
@@ -530,6 +540,7 @@ model Facility {
   gateCommands           GateCommand[]
   accessEvents           AccessEvent[]
   marketingFaqs          FacilityFaq[]
+  reviews                Review[]
   delinquencyTimelines   DelinquencyTimeline[]
   delinquencyStepRuns    DelinquencyStepRun[]
   overlocks              UnitOverlock[]
@@ -889,6 +900,12 @@ model Lease {
   /// capture, which `normalizeSource` reports as `unknown` rather than folding
   /// into `web`.
   acquisitionSource  String?
+  /// PRD 04 US-7 AC1/AC2 (B-071). "Max 1 review request per tenant per
+  /// tenancy." Stamped by the job that raises the request — same device as
+  /// `Reservation.expiryReminderSentAt` (B-031): the outbox only dedupes an
+  /// event once it exists, so the PRODUCER needs its own marker to guarantee
+  /// "once" across a catch-up run that walks several missed nights at once.
+  reviewRequestSentAt DateTime? @db.Timestamptz(6)
   /// PRD 02 US-25's AC: "the lease records which timeline version governed it."
   ///
   /// Pinned by B-057 when the lease first becomes delinquent, not at move-in —
@@ -1586,6 +1603,46 @@ model FacilityFaq {
 
   @@index([facilityId, position])
   @@map("facility_faq")
+}
+
+enum ReviewSource {
+  manual_google
+  manual_other
+  /// FR-REV-4 (Phase 3). Nothing produces this yet — no Google Places/GBP API
+  /// integration exists in this codebase. Reserved now because
+  /// `qualifiesForSchemaMarkup` (packages/core/reviews) checks for it, and the
+  /// gate is easier to trust when it names the value it is waiting for.
+  google_api
+}
+
+/// PRD 04 §3.4 FR-REV-1/FR-REV-2 (B-071). A review shown on a facility page.
+///
+/// Immutable content, same convention as `TenantNote`: "corrections are new
+/// notes," not edits. Here it is "hide, never edit" — `visible` is the one
+/// field a moderation action may change, because it is display order, not the
+/// content of what somebody said. A hidden review's rating and text stay
+/// exactly what was entered; if a review was mistranscribed the fix is to hide
+/// it and create the corrected one, not to rewrite what a citation of it would
+/// have quoted.
+model Review {
+  id                  String       @id @default(cuid())
+  facilityId          String
+  rating              Int
+  text                String
+  reviewerDisplayName String
+  /// When the review was actually posted, not when staff transcribed it — "5
+  /// most recent reviews" (US-6 AC1) has to sort by the real date.
+  reviewDate          DateTime     @db.Date
+  source              ReviewSource @default(manual_google)
+  visible             Boolean      @default(true)
+  createdByStaffId    String?
+  createdAt           DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime     @updatedAt @db.Timestamptz(6)
+
+  facility Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+
+  @@index([facilityId, visible, reviewDate])
+  @@map("review")
 }
 
 /// PRD 04 US-2 AC1 (B-067). Facility photos, with alt text that is not optional.

@@ -15,6 +15,7 @@ import { createTask } from '@/lib/admin/tasks'
 import { raiseLeadFollowUps } from '@/lib/admin/lead-follow-up'
 import { runDelinquencyTimeline } from '@/lib/delinquency/engine'
 import { raiseDailyWalkthrough } from '@/lib/field-ops/walkthrough'
+import { raiseReviewRequests } from '@/lib/reviews/request-job'
 
 // Consumer and job registration. The machinery is B-006's; the things that use
 // it arrive with their own backlog items: reservation expiry (B-018, below),
@@ -105,6 +106,8 @@ export const CONSUMERS: readonly Consumer[] = [
       'overlock.required',
       'overlock.cleared',
       'notice.generated',
+      // PRD 04 US-7 (B-071). The review-request ask.
+      'review.requested',
     ],
     handle: async ({ event }) => {
       await processCommsEvent(event)
@@ -317,6 +320,20 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
     scope: 'per_facility',
     handler: async ({ facilityId, businessDate, recordItem }) => {
       await raiseDailyWalkthrough(facilityId!, businessDate, recordItem)
+    },
+  },
+  {
+    // B-071 / PRD 04 US-7. The review-request ask, N days after move-in.
+    //
+    // At 9am local — after the leads sweep at 8am, and deliberately mid-
+    // morning rather than overnight: this reaches a happy tenant's inbox, and
+    // an ask that lands at 3am reads as a robot rather than a facility that
+    // noticed they settled in well.
+    name: 'reviews.raise-requests',
+    localHour: 9,
+    scope: 'per_facility',
+    handler: async ({ facilityId, businessDate, recordItem }) => {
+      await raiseReviewRequests(facilityId!, businessDate, recordItem)
     },
   },
   {

@@ -513,6 +513,31 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
     ],
   },
   {
+    // PRD 04 US-7 (B-071). "As an operator, I get more Google reviews from
+    // happy tenants." One ask, one link, no pressure — a request that reads
+    // like a demand is the one most likely to get reported as spam rather
+    // than acted on.
+    key: 'review_request',
+    classification: 'marketing',
+    subject: 'How’s your unit at {{facility.name}} working out?',
+    bodyText: [
+      'Hi {{tenant.first_name}},',
+      '',
+      "You've been settled into unit {{unit.number}} at {{facility.name}} for a little while now, and we'd love to know how it's going.",
+      '',
+      'If you have a minute, a review helps other people find us and helps us know what we are doing right: {{links.google_review}}',
+      '',
+      'Thanks either way — and if anything about your unit or your account needs attention, call {{facility.phone}} and we will sort it out.',
+    ].join('\n'),
+    requiredMergeFields: [
+      'tenant.first_name',
+      'unit.number',
+      'facility.name',
+      'links.google_review',
+      'facility.phone',
+    ],
+  },
+  {
     // D-17's enrolment notice. The owner's decision requires the tenant be told
     // "of the enrolment AND its cost", so the premium is in the second line and
     // in the subject — not buried under an explanation.
@@ -675,5 +700,18 @@ export const COMMS_RULES: readonly CommsRuleSeed[] = [
     event: 'protection.auto_enrolled',
     templateKey: 'protection_auto_enrolled',
     classification: 'transactional',
+  },
+
+  // ── B-071 (PRD 04 US-7). ────────────────────────────────────────────────────
+  {
+    // `marketing`, not `transactional`: this is a solicitation, not a receipt
+    // or a service notice, and the suppression matrix only respects an
+    // unsubscribe/manual block for this classification — exactly the
+    // protection a review ask needs even before B-072 builds explicit
+    // marketing-consent capture.
+    event: 'review.requested',
+    templateKey: 'review_request',
+    classification: 'marketing',
+    skipConditions: ['tenant_moved_out', 'lease_on_hold_marketing', 'no_google_review_link'],
   },
 ]

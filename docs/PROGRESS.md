@@ -2127,3 +2127,72 @@ catalog).
 - No new admin screen: the existing per-facility template editor (B-053, CN-16)
   already reads `MessageTemplate` generically, so all four new templates are
   editable there with no further work.
+
+## B-071 — Reviews: manual entry, facility-page display, review-request email
+
+`<sha>`
+
+**What it built.** FR-REV-1/2/3 and US-6/US-7 end to end. A `Review` entity
+(immutable content, hide-not-edit per FR-REV-2, same convention as
+`TenantNote`), manual entry and visibility management at
+`/admin/settings/reviews`, the average-plus-N-most-recent block on the
+facility page, and a per-facility scheduled job that raises a one-time
+review-request email N days after move-in (default 7, its own settings
+control shipped in this item). 88 new tests (52 pure, 36 against the
+database and the real seeded catalog).
+
+**What it decided.**
+
+- *`aggregateRating` never gets fed by manual reviews — recorded as D-33,
+  closing PRD 04's own Open Question Q3.* Google's structured-data policies
+  for review snippets require the rating be independently verifiable as
+  collected by the site marking it up; a staff transcription of a rating
+  authored and verified on Google itself is republished third-party data, not
+  this site's own collection of it. The stakes are asymmetric with the upside:
+  one facility's star rating against a manual action that can suppress
+  rich-result eligibility **sitewide**. `qualifiesForSchemaMarkup` encodes
+  "every review source is `google_api`" rather than a flag someone could
+  enable early, so it is false by construction until FR-REV-4 (Phase 3) ships
+  a real source. This was already anticipated at B-066 — `selfStorageJsonLd`'s
+  `aggregateRating` parameter has carried the exact warning in its own comment
+  since before `Review` existed.
+- *The review-request delay is a per-facility scheduled job, not an
+  event-driven wait.* "N days after X" needs something that ticks nightly and
+  asks whether enough time has passed — the same shape B-043's expiry scans
+  and B-097's follow-up sweep already use. `reviewRequestDue` uses `>=`, not
+  `===`, so a catch-up run (or a facility that only just configured its review
+  link) still raises every tenancy that already cleared the delay.
+- *A facility with no Google review link never sends, and is never stamped
+  for having tried.* A review ask with nowhere to leave the review is worse
+  than not asking. Because eligibility is `>=`, the moment an operator sets
+  the link, the next run catches up every tenancy that was already waiting —
+  no lease is ever silently skipped forever for a gap that gets fixed later.
+- *`reviewRequestSentAt` is stamped in the SAME transaction as the emit*, the
+  same device `Reservation.expiryReminderSentAt` uses — the outbox only
+  dedupes an event that already exists, so "once per tenancy" is the
+  producer's job.
+- *Classified `marketing`, not `transactional`.* This is a solicitation, and
+  the suppression matrix only honours an unsubscribe/manual block for that
+  classification — real protection even before B-072 builds explicit
+  marketing-consent capture. `lease_on_hold_marketing` (already existing) is
+  reused verbatim as the operator's manual-exclusion path AC2 asks for,
+  needing zero new mechanism.
+- *A suppressed send still counts as the one request.* AC2's "max 1 per
+  tenancy" is used up by a suppressed attempt (moved out, on a marketing
+  hold), not retried once the condition lifts — matches how every other
+  once-per-something guarantee in this codebase behaves.
+
+**What it left behind.**
+
+- *Open/click tracking is explicitly NOT built.* AC3 asks for it; nothing in
+  this codebase does open-pixel or click-redirect tracking for ANY template
+  today, and building it narrowly for one new email would be backwards — every
+  other message (dunning, payment failures) would benefit from it more. Send
+  tracking (the `Message` row + status, identical to every other template)
+  and a per-facility sent/suppressed/failed count on the settings screen are
+  built; genuine open/click needs a general mechanism, which belongs with
+  B-054's delivery dashboard or a dedicated item, not bolted onto reviews.
+- Same seeding gotcha as B-063, hit again and fixed the same way: editing
+  `comms-catalog.ts` needed `db:seed`/`db:migrate:test` re-run before the new
+  template/rule existed in either database — the tests failed with zero sends
+  until that ran.
