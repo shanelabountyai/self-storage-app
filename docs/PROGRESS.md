@@ -2451,7 +2451,7 @@ read-only SMS consent state display. 68 new tests (23 pure, 6 signature,
 
 ## B-075 — Delivery dashboard + alerting
 
-`<pending>`
+`659f72f`
 
 **What it built.** CN-19's reporting half (the AC's own sentence — "hard
 bounce or invalid number auto-flags the tenant record and creates a task" —
