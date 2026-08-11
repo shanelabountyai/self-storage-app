@@ -2970,7 +2970,7 @@ it, so it stayed invisible until this item. Repaired by recomputing the hash int
 
 ## B-080 — Gate hardening: reconciliation, contract suite, one vendor stub
 
-`PENDING`
+`9772d98`
 
 **What it built.** PRD 03 §8 Phase 2's operational hardening, in six parts.
 
