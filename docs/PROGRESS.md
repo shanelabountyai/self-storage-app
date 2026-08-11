@@ -3091,7 +3091,7 @@ delete the variable themselves and restore it.
 
 ## B-081 split → B-102–B-107, and B-102 — monthly statements centre
 
-`PENDING`
+`ed5479c`
 
 **The split first (D-44).** B-081 bundled six unrelated features behind one
 number. Backlog note 8 always intended these tail bundles to be split when
