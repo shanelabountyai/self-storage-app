@@ -153,6 +153,18 @@ export const AUDIT_ACTIONS = [
   /// gets papered over.
   { action: 'merchandise.stock_adjusted', label: 'Stock adjusted', requiresReason: true },
 
+  // PRD 01 US-705 (B-104). Protection cover, changed by the tenant.
+  ///
+  /// Three separate actions rather than one, because they answer three
+  /// different questions after a loss: what did they ask for and when, did they
+  /// change their mind, and what was actually in force on the day.
+  { action: 'protection.change_scheduled', label: 'Protection change scheduled', requiresReason: false },
+  { action: 'protection.change_cancelled', label: 'Protection change cancelled', requiresReason: false },
+  { action: 'protection.change_applied', label: 'Protection change applied', requiresReason: false },
+  /// The tenant's own cover, as they described it. `requiresReason: false`
+  /// because the record IS the reason — carrier, policy number and expiry.
+  { action: 'protection.proof_submitted', label: 'Proof of insurance submitted', requiresReason: false },
+
   // PRD 03 (B-080). Gate hardware.
   ///
   /// Recorded by the reconciliation job, not a person. The audit log is where

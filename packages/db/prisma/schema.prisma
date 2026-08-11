@@ -643,6 +643,7 @@ model Facility {
   reconciliationRuns     GateReconciliationRun[]
   webhookSecrets         GateWebhookSecret[]
   cameras                FacilityCamera[]
+  protectionChanges      ProtectionChange[]
   authorizedAccessPeople AuthorizedAccessPerson[]
   leads                  Lead[]
   notices                Notice[]
@@ -1052,6 +1053,7 @@ model Lease {
   facility               Facility                 @relation(fields: [facilityId], references: [id], onDelete: Restrict)
   tenant                 Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   unit                   Unit                     @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  protectionChanges      ProtectionChange[]
   invoices               Invoice[]
   ledgerEntries          LedgerEntry[]
   accessCredentials      AccessCredential[]
@@ -1549,6 +1551,52 @@ model ProtectionWaiver {
 
   @@index([facilityId, expiresAt])
   @@map("protection_waiver")
+}
+
+/// PRD 01 US-705 (B-104). A protection-tier change a tenant asked for, waiting
+/// for the billing cycle it takes effect on.
+///
+/// Scheduled rather than applied, because a protection premium is a flat
+/// monthly charge and changing it mid-period would mean prorating one — which
+/// is a coverage question, not an arithmetic one. Nobody wants to answer "was
+/// this unit covered to $2,000 or $5,000 on the 14th" after a fire. It also
+/// stops a tenant upgrading the morning after a break-in and having it apply to
+/// the month just gone.
+///
+/// Append-only in spirit: a cancelled request keeps its row rather than being
+/// deleted, because "the tenant asked to drop cover and then changed their
+/// mind" is exactly the sort of thing a coverage dispute asks about.
+model ProtectionChange {
+  id         String   @id @default(cuid())
+  facilityId String
+  leaseId    String
+  /// What the lease bills today, captured when the change was requested — so
+  /// the row still describes the change even after it has been applied and the
+  /// lease has moved on.
+  fromPlanName    String?
+  fromPremiumCents Int
+  /// Null when switching to the tenant's own cover.
+  toPlanName      String?
+  toTier          String?
+  toPremiumCents  Int
+  /// Facility-local calendar day the change takes effect: the start of the next
+  /// billing period, never today.
+  effectiveFrom   DateTime @db.Date
+  /// Who asked. A tenant from the portal, or staff at the counter — both are
+  /// legitimate and the difference matters in a dispute.
+  requestedByTenantId String?
+  requestedByStaffId  String?
+  appliedAt   DateTime? @db.Timestamptz(6)
+  cancelledAt DateTime? @db.Timestamptz(6)
+  cancelledReason String?
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+
+  facility Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  lease    Lease    @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+
+  @@index([facilityId, effectiveFrom])
+  @@index([leaseId, appliedAt])
+  @@map("protection_change")
 }
 
 /// PRD 02 US-16 / FR-6. THE document store — one, not one per feature.

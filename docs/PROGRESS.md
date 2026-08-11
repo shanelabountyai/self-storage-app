@@ -3250,3 +3250,71 @@ the fix makes the failure mode impossible rather than merely unlikely.
 - **No separate settlement report.** Money in flight is visible per tenant in
   the portal and per lease to the jobs that skip it, but there is no
   facility-level "what is settling" view.
+
+---
+
+## B-104 — Insurance tier change + proof of own cover
+
+`PENDING`
+
+**What it built.** The other half of PRD 01 US-705, at `/portal/protection`.
+
+- `packages/core/billing/protection-changes.ts` — `effectiveDateFor`,
+  `changeProblem`, `scheduledNotice`. Pure.
+- `ProtectionChange`: a scheduled tier change waiting for its billing cycle.
+- `apps/web/lib/protection/changes.ts` — schedule, cancel, submit proof, and
+  `applyDueProtectionChanges`.
+- A nightly `protection.apply-changes` job at local hour 0.
+- The portal screen, and an `insurance_proof_review` task type.
+
+**What it decided.**
+
+- *A change is scheduled to the start of the next billing period, never applied
+  today* — and not today even when today IS the billing day, because that
+  period's invoice may already have been raised this morning. A protection
+  premium is a flat monthly charge, so changing it mid-period means prorating
+  one, and a prorated premium is a coverage question rather than an arithmetic
+  one: was the unit covered to $2,000 or $5,000 on the 14th? Nobody wants to
+  answer that after a fire. It also stops a tenant upgrading the morning after a
+  break-in and having it apply to the month just gone.
+- *The job runs at hour 0, before `billing.generate-invoices` at hour 1.* Same
+  ordering constraint as B-076's rate increases and for the same reason: the
+  other way round, every change would arrive a full month after the date the
+  tenant was promised.
+- *Dropping a paid plan requires current, unexpired proof.* An expired policy is
+  not cover, and letting one justify the drop is exactly the gap D-17 exists to
+  close. A test asserts the expired case is refused.
+- *A repriced tier is applied at the new price rather than refused* — the
+  opposite of B-076's rate-increase rule, deliberately. There an approver signed
+  off on a specific delta; here the TENANT asked for a named level of cover and
+  should get it at whatever it now costs. The audit entry carries both figures.
+- *A superseded request is cancelled, not deleted.* "They asked to drop cover
+  and then changed their mind" is precisely what a coverage dispute asks about.
+- *Re-selecting the same plan at a NEW price is allowed, not a no-op.* An
+  operator can reprice a tier, and treating it as a no-op would leave the tenant
+  no way to accept the new premium.
+- *Switching to own cover sets `protectionWaivedAt`*, which D-17's scan and the
+  move-out settlement both read.
+- *"Protection plan" and "insurance" stay separate words throughout the copy.*
+  What we sell is a lease addendum; selling actual insurance generally needs a
+  licensed agent. Copy that blurs the two claims something untrue.
+
+**What it left behind — and one is the headline.**
+
+- **No file is uploaded, because there is no blob store.** US-705 says "submit
+  proof", and `Document.storageKey` has been waiting for a storage vendor since
+  B-023. An upload control here would be a button that either loses the file or
+  lies about keeping it. What ships instead is the part the system actually
+  uses: carrier, policy number and — the substantive one — the expiry date that
+  D-17's nightly lapse scan reads, plus a staff task to check them against the
+  declaration page the tenant emails or brings in. **This is a real gap, not a
+  resolved one**, and it stays open until somebody picks a storage vendor.
+- **No staff-side review screen of its own.** The task lands in the existing
+  queue and a manager reads the details on the tenant profile; there is no
+  "approve this proof" button that changes anything, because accepting it is
+  already what recording it does.
+- **No notification when a change is scheduled or applied.** The portal says so
+  on the screen; nothing emails it. The comms rules exist and adding one is a
+  catalogue entry, but no template was written for it.
+- **A tenant cannot change cover on a lease that has ended**, which is correct,
+  but there is also no way to see what cover a past lease had from the portal.

@@ -21,6 +21,7 @@ import { raiseReviewRequests } from '@/lib/reviews/request-job'
 import { raiseLeadDripSteps } from '@/lib/leads/drip-job'
 import { detectDailyFailureRate, detectSilentDunning } from '@/lib/comms/detectors'
 import { applyDueRateIncreases, sendDueRateIncreaseNotices } from '@/lib/pricing/tenant-rate-increases'
+import { applyDueProtectionChanges } from '@/lib/protection/changes'
 
 // Consumer and job registration. The machinery is B-006's; the things that use
 // it arrive with their own backlog items: reservation expiry (B-018, below),
@@ -256,6 +257,20 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
     scope: 'per_facility',
     handler: async ({ facilityId, businessDate, recordItem }) => {
       await applyDueRateIncreases(facilityId!, businessDate, recordItem)
+    },
+  },
+  {
+    // PRD 01 US-705 (B-104). A protection change "takes effect next billing
+    // cycle", so it has to land on `Lease.protectionCents` BEFORE
+    // `billing.generate-invoices` at hour 1 reads it — the same ordering
+    // constraint, and for the same reason, as the rate increases above. The
+    // other way round and every change a tenant made would arrive one whole
+    // month after the date they were promised.
+    name: 'protection.apply-changes',
+    localHour: 0,
+    scope: 'per_facility',
+    handler: async ({ facilityId, businessDate, recordItem }) => {
+      await applyDueProtectionChanges(facilityId!, businessDate, recordItem)
     },
   },
   {

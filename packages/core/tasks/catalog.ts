@@ -64,6 +64,24 @@ export const TASK_TYPES = [
     sensitive: true,
   },
   {
+    // PRD 01 US-705 (B-104). A tenant has told us about their own cover from
+    // the portal — insurer, policy number, expiry.
+    //
+    // Distinct from `insurance_proof_lapsed`, which is the system noticing that
+    // cover has RUN OUT. This one is a person volunteering details that nobody
+    // has checked yet, and it exists because there is no blob store: the
+    // declaration page cannot be attached, so a human confirming the numbers
+    // against the document the tenant emails or brings in is the honest
+    // substitute.
+    //
+    // Sensitive: whether a unit was covered, and by whom, is the first question
+    // asked after a fire or a flood.
+    type: 'insurance_proof_review',
+    label: 'Check a tenant’s proof of insurance',
+    requiredProofFields: ['note'],
+    sensitive: true,
+  },
+  {
     // PRD 02 US-20 / US-41. The "failed payments queue" the AC asks for is a
     // filtered view of this list, not a table of its own — §4.9 is explicit
     // that every later queue reads `Task`.

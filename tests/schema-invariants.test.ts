@@ -121,6 +121,12 @@ const CALENDAR_DATE_FIELDS = new Set([
   // day — an instant would make two runs either side of UTC midnight look like
   // two different days at a site where it was still the same afternoon.
   'GateReconciliationRun.businessDate',
+  // B-104. The day a protection change takes effect — the start of a billing
+  // period, which is a calendar day the tenant was told in a sentence ("your
+  // cover changes on 12 September"). A timestamp would put an hour on a
+  // coverage boundary, and "was it in force at 2pm" is not a question anybody
+  // wants to have to answer after a fire.
+  'ProtectionChange.effectiveFrom',
 ])
 
 describe('prisma schema invariants', () => {
