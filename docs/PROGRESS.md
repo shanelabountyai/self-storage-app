@@ -2965,3 +2965,124 @@ it, so it stayed invisible until this item. Repaired by recomputing the hash int
   settings screen. Pre-existing, not introduced here.
 - **Org defaults cover three scopes, not every setting.** Billing policy,
   protection plans and gate hours are still per-facility only.
+
+---
+
+## B-080 — Gate hardening: reconciliation, contract suite, one vendor stub
+
+`PENDING`
+
+**What it built.** PRD 03 §8 Phase 2's operational hardening, in six parts.
+
+- **Reconciliation (FR-9).** `packages/core/access/reconciliation.ts` is the
+  pure diff; `apps/web/lib/access/reconciliation.ts` builds the expected side
+  and records a `GateReconciliationRun` per facility per day. Nightly at 3am
+  facility-local, plus an on-demand button. Raises a `gate_drift_review` task
+  and a `gate.drift_detected` audit entry.
+- **The port gained a read side.** `GateAdapter.snapshot()` — required, not
+  optional (D-42).
+- **Adapter contract suite** (`tests/adapter-contract-db.test.ts`): one set of
+  assertions run against the simulated adapter, the vendor stub and the manual
+  adapter.
+- **One vendor stub (D-18/D-43):** `pti-emulator.ts` is a fake vendor with a
+  deliberately different shape; `pti-cloud.ts` is our driver for it. Selected
+  per facility by `gateAdapter = 'pti_cloud'`.
+- **Webhook secret rotation (SR-4):** per-facility `GateWebhookSecret` with a
+  24-hour dual-secret window, a partial unique index for "exactly one active",
+  and a prune once the window closes.
+- **Camera links (FR-10)** and a **gate health dashboard** at
+  `/admin/access/health`.
+
+**What it decided.**
+
+- *`snapshot()` is required of every adapter, and "cannot verify" is not "no
+  drift" (D-42).* An optional method would make every caller ask whether an
+  adapter supports reading back; the honest answer for the manual adapter —
+  "nothing at this site is verified" — is exactly what the report must be able
+  to say. A facility that could not be checked is still recorded, because a
+  site that silently drops out is one nobody notices has been unverified for
+  six months.
+- *Drift is matched by credential id, not by code.* Matching by code would
+  report a rotation as a missing credential plus an unknown one — two findings
+  for one fact, and every rotation looking like a break-in.
+- *Findings carry hashes, never codes.* They land on a screen, in a job log and
+  on a task; SR-1 keeps codes out of all three. A test asserts the stored
+  findings contain neither the old nor the new code.
+- *Each drift says whether the gate ended up MORE permissive than intended.*
+  That is the distinction a manager needs at 7am: a code that opens when it
+  should not is somebody in the building, while one that fails to open is
+  somebody on the phone. Only the first makes the task high priority.
+- *A revoked credential the controller has forgotten is NOT drift.* That is the
+  system working, and reporting it would make every move-out generate a
+  finding.
+- *An offline controller reports "not verifiable", never an empty entry list.*
+  An empty list would read as "the controller holds nothing" and flag every
+  credential at the site.
+- *One task per facility per day, not one per finding.* A controller restored
+  from a backup produces dozens at once.
+- *The emulator was written to be inconvenient (D-43)* — its own ids, one call
+  that sets PIN and status and window together, numbered time zones instead of
+  schedules, HTTP-ish codes the driver must classify. A stub shaped like our
+  own port would have proved nothing.
+- *Rotation keeps the old secret for 24 hours.* A vendor cannot switch keys at
+  the same instant we do, and a single-secret rotation drops every gate event
+  in flight while somebody pastes a value into a portal.
+- *The new signing secret is shown once and never again.* An admin screen that
+  could display every site's signing key is what SR-1 exists to prevent.
+- *Camera links only, no iframes — settling OQ-8.* A viewer that refuses to be
+  framed renders a blank box, and staff cannot tell that from a dead camera.
+  URLs are https-only and rejected if they carry embedded credentials; the
+  audit entry records the host, not the path, because a viewer path can carry a
+  camera token.
+
+**What the vendor stub found.** The port survived three of the four frictions
+unchanged. The fourth is real and is written down rather than papered over:
+`set_time_window` accepts an arbitrary weekly schedule and this vendor can only
+express "always" or "site hours". The adapter degrades honestly — the window
+fingerprint reports what the gate is *actually* enforcing — and reconciliation
+compares like with like per adapter, so a PTI site does not report drift on
+every credential forever. Second friction worth naming: because the vendor sets
+PIN and status in one call, the driver must read grant state before pushing a
+code, or rotating a suspended tenant's code silently restores their access. The
+contract suite now asserts that for every adapter.
+
+**A second test defect found and fixed: three suites only passed during the
+working day.** The full run at 22:00 reported eight failures in
+`checkout-abandonment-db`, `lead-drip-db` and `review-request-db` — all of the
+shape "expected [] to have a length of 1". None of them were caused by this
+item; stashing every B-080 change reproduced them exactly. The cause is that
+each of those suites sends a MARKETING message, and `deliverForRule` refuses
+marketing during quiet hours (FR-MSG-5: before 8am or from 9pm, facility-local)
+against the **real wall clock**. The production behaviour is correct — nobody
+should be emailed a promo at ten at night — so the fix is in the tests, which
+now pin `Date` to midday Central. They previously meant something different
+depending on the hour they ran, and would have failed in CI on any runner whose
+clock put America/Chicago outside 08:00–21:00. Only `Date` is faked; faking
+timers wholesale hangs the Prisma round trips these suites are built from.
+
+**A test-coverage hole found and closed.** Six of the rotation assertions —
+the whole encrypted-at-rest half of SR-4 — skipped themselves locally and in
+CI, because `ACCESS_CODE_ENCRYPTION_KEY` was unset and every affected code path
+takes a degraded branch without one. `vitest.config.ts` now sets a fixed
+test-only key, so the ENCRYPTED paths are the ones under test. A security
+feature whose tests quietly opt out is worse than one with no tests, because
+the green run says otherwise. The suites that need the *unconfigured* behaviour
+delete the variable themselves and restore it.
+
+**What it left behind.**
+
+- **No real vendor driver.** D-4 and D-18 both stand: this is a driver against a
+  fake vendor, and B-085 (Phase 3, contingent on a partner agreement) is the
+  first real one. The emulator must never be pointed at a live site.
+- **No nonce replay cache.** SR-4 names one alongside the timestamp tolerance;
+  the ±5-minute window shipped with B-028 and the cache did not. Nothing
+  external can reach the endpoint yet, so a replay needs a captured in-process
+  request — but this is a genuine gap in SR-4, not a resolved one.
+- **Drift is reported, never auto-repaired.** The reconciliation raises a task
+  and stops. Re-pushing automatically would mean a nightly job writing to gate
+  hardware unsupervised on the strength of a comparison that has just told you
+  the two sides disagree.
+- **No drift trend over time on any screen.** The rows carry the history
+  FR-9's "metrics" asks for; the dashboard shows only the latest run.
+- **Camera links are unordered in practice** — `sortOrder` exists on the model
+  and there is no UI to set it.

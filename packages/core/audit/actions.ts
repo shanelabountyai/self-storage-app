@@ -153,6 +153,16 @@ export const AUDIT_ACTIONS = [
   /// gets papered over.
   { action: 'merchandise.stock_adjusted', label: 'Stock adjusted', requiresReason: true },
 
+  // PRD 03 (B-080). Gate hardware.
+  ///
+  /// Recorded by the reconciliation job, not a person. The audit log is where
+  /// "when did we first know this code was live" gets answered, and a task that
+  /// somebody completes and closes is not a durable enough record of it.
+  { action: 'gate.drift_detected', label: 'Gate controller drift detected', requiresReason: false },
+  /// SR-3: "immutable audit records for... every webhook secret rotation."
+  { action: 'gate.webhook_secret_rotated', label: 'Gate webhook secret rotated', requiresReason: false },
+  { action: 'gate.camera_link_changed', label: 'Camera link changed', requiresReason: false },
+
   // Authentication
   { action: 'password.reset_completed', label: 'Password reset completed', requiresReason: false },
   { action: 'login.locked_out', label: 'Login locked out', requiresReason: false },

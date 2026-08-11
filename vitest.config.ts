@@ -24,7 +24,25 @@ export default defineConfig({
     },
   },
   test: {
-    env: testUrl ? { DATABASE_URL: testUrl, TEST_DB_SCHEMA: TEST_SCHEMA } : {},
+    env: {
+      ...(testUrl ? { DATABASE_URL: testUrl, TEST_DB_SCHEMA: TEST_SCHEMA } : {}),
+      // B-080. A fixed key so the ENCRYPTED paths are the ones under test.
+      //
+      // Without it, everything that stores a secret at rest — gate codes
+      // (`unrevealable:` fallback) and B-080's webhook signing secrets —
+      // silently takes its degraded branch, and six of the rotation assertions
+      // skipped themselves both locally and in CI. A security feature whose
+      // tests quietly opt out is worse than one with no tests, because the
+      // green run says otherwise.
+      //
+      // Test-only, published deliberately, and scoped to a throwaway schema —
+      // the same posture as the demo credentials. The tests that need the
+      // UNconfigured behaviour (access-secret.test.ts) delete it themselves and
+      // put it back.
+      ACCESS_CODE_ENCRYPTION_KEY:
+        process.env.ACCESS_CODE_ENCRYPTION_KEY ??
+        '00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff',
+    },
     // Node by default — the tests the PRDs actually demand (billing/proration
     // math, per master §5) are pure functions. Add jsdom + the React plugin
     // when the first component test shows up.

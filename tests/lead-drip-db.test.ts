@@ -76,8 +76,23 @@ async function processLatestDripEvent(): Promise<void> {
   await processCommsEvent(event)
 }
 
+// B-080 found this: every test below sends a MARKETING message, and
+// `deliverForRule` refuses those during quiet hours (FR-MSG-5 — before 8am or
+// from 9pm, facility-local) against the REAL wall clock. So this suite passed
+// between 8am and 9pm Central and failed outside it, which is why a full run at
+// 22:00 reported four "expected [] to have a length of 1" failures that had
+// nothing to do with the code under test. The clock is pinned to the middle of
+// a working day so the suite means the same thing at every hour.
+//
+// Only `Date` is faked. Faking timers wholesale would hang the Prisma round
+// trips these tests are made of.
+const CLOCK = new Date('2026-07-01T17:00:00.000Z') // 12:00 in America/Chicago
+
 describeDb('the lead drip', () => {
   beforeAll(async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(CLOCK)
+
     vi.spyOn(provider, 'selectProvider').mockImplementation(() => fakeProvider())
     vi.spyOn(provider, 'commsEnabled').mockReturnValue(true)
     vi.spyOn(provider, 'effectiveRecipient').mockImplementation((address: string) => address)
@@ -123,6 +138,8 @@ describeDb('the lead drip', () => {
   })
 
   afterAll(async () => {
+    vi.useRealTimers()
+
     if (!hasDatabase) return
     vi.restoreAllMocks()
     await prisma.message.deleteMany({ where: { facilityId } })

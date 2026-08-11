@@ -445,6 +445,12 @@ model Facility {
   /// real driver until there is a controller on a bench). `manual` is the
   /// fallback for a legacy keypad nobody can integrate, or for a vendor outage:
   /// every command becomes a task with the exact keypad action instead.
+  ///
+  /// B-080 adds `pti_cloud`: the ONE vendor stub D-18 allows, driving an
+  /// in-repo emulator of the vendor's API shape rather than a real endpoint.
+  /// It is a real driver against a fake vendor, which is what makes it prove
+  /// anything about the port; it is not a real integration and must never be
+  /// pointed at a live site.
   gateAdapter         String         @default("simulated")
   /// PRD 03 US-6 AC2: "Overdue manual tasks (configurable, default 4 business
   /// hours) escalate in the dashboard." Business hours, counted against this
@@ -609,6 +615,9 @@ model Facility {
   simulatedGateCodes     SimulatedGateCode[]
   simulatedVendorEvents  SimulatedVendorEvent[]
   gateSimulatorConfig    GateSimulatorConfig?
+  reconciliationRuns     GateReconciliationRun[]
+  webhookSecrets         GateWebhookSecret[]
+  cameras                FacilityCamera[]
   authorizedAccessPeople AuthorizedAccessPerson[]
   leads                  Lead[]
   notices                Notice[]
@@ -2246,6 +2255,100 @@ model SimulatedVendorEvent {
 
   @@index([facilityId, delivered])
   @@map("simulated_vendor_event")
+}
+
+/// PRD 03 FR-9 (B-080). One nightly expected-vs-actual comparison against one
+/// facility's controller.
+///
+/// Kept as rows rather than recomputed on demand because FR-9 asks for
+/// "metrics (drift count per facility)" — a trend, which needs history — and
+/// because the answer to "was this code live on the 3rd" has to be what the
+/// controller said on the 3rd, not what it says today.
+model GateReconciliationRun {
+  id           String   @id @default(cuid())
+  facilityId   String
+  /// The facility-local day this checked, not an instant.
+  businessDate DateTime @db.Date
+  /// Which adapter answered. A run against the manual adapter can only ever
+  /// say "not verifiable", and a chart that mixed the two would flatter a site
+  /// nobody is actually checking.
+  adapter      String
+  /// False when the adapter cannot enumerate what the controller holds. NOT
+  /// the same as zero drift, and the screens must never render it as such.
+  verifiable   Boolean  @default(true)
+  credentialsChecked Int @default(0)
+  driftCount   Int      @default(0)
+  /// How many findings had the gate MORE permissive than we intend. The
+  /// number that decides whether somebody drives to the site tonight.
+  permissiveCount Int   @default(0)
+  /// The findings themselves, in the shape packages/core/access/reconciliation.ts
+  /// defines. Never contains a gate code — the diff compares hashes.
+  drifts       Json
+  startedAt    DateTime @default(now()) @db.Timestamptz(6)
+  finishedAt   DateTime? @db.Timestamptz(6)
+
+  facility Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+
+  @@unique([facilityId, businessDate])
+  @@index([facilityId, startedAt])
+  @@map("gate_reconciliation_run")
+}
+
+/// PRD 03 SR-4 (B-080). Per-facility webhook signing secrets, with the
+/// dual-secret window rotation requires.
+///
+/// "Rotation without downtime (dual-secret window)" is the whole reason this is
+/// a table and not an environment variable. A vendor cannot switch secrets at
+/// the same instant we do — there is always a period where messages signed with
+/// either one are in flight — so rotation issues a new ACTIVE secret and leaves
+/// the previous one accepted until `retiresAt`. Verification tries every
+/// currently-acceptable secret; signing only ever uses the active one.
+model GateWebhookSecret {
+  id         String   @id @default(cuid())
+  facilityId String
+  /// Encrypted at rest (SR-1), never the raw value. `unrevealable:` when no
+  /// encryption key is configured, which makes rotation unavailable rather
+  /// than silently insecure.
+  secretRef  String
+  /// Exactly one active row per facility, enforced by a partial unique index
+  /// (hand-written — Prisma cannot express one).
+  active     Boolean  @default(true)
+  /// Null while active. Set when superseded: the moment this stops being
+  /// accepted.
+  retiresAt  DateTime? @db.Timestamptz(6)
+  createdAt  DateTime @default(now()) @db.Timestamptz(6)
+  createdByStaffId String?
+
+  facility Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+
+  @@index([facilityId, active])
+  @@map("gate_webhook_secret")
+}
+
+/// PRD 03 FR-10 (B-080). "Facility config stores labeled camera-viewer URLs
+/// (vendor NVR/cloud viewer); rendered as external links... no credentials
+/// proxied, no video handled."
+///
+/// A link and a label, and nothing else. The PRD's own FR-10 and OQ-8 both stop
+/// well short of handling video, and there is no credential column here on
+/// purpose: SR-1 forbids storing vendor account passwords anywhere, including
+/// "temporary" notes fields, and a URL with an embedded password would be
+/// exactly that with extra steps.
+model FacilityCamera {
+  id         String   @id @default(cuid())
+  facilityId String
+  /// What a person calls it: "Front gate", "Building C corridor".
+  label      String
+  /// The vendor's viewer URL. Validated https-only at the boundary.
+  url        String
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt  DateTime @updatedAt @db.Timestamptz(6)
+
+  facility Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+
+  @@index([facilityId, sortOrder])
+  @@map("facility_camera")
 }
 
 /// PRD 03 US-7 AC3. Per-facility fault injection, toggled from the dev keypad

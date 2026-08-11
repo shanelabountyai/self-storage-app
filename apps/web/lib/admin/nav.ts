@@ -39,6 +39,9 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { key: 'tasks', label: 'Tasks', href: '/admin/tasks', anyOf: ['tenants:view'] },
   { key: 'access', label: 'Gate Activity', href: '/admin/access', anyOf: ['access:events'] },
   { key: 'keypad-queue', label: 'Keypad Queue', href: '/admin/access/queue', anyOf: ['tenants:view'] },
+  // PRD 03 §8 Phase 2 (B-080). Where a quiet webhook feed or a dead-lettered
+  // command becomes visible before a tenant phones about it.
+  { key: 'gate-health', label: 'Gate Health', href: '/admin/access/health', anyOf: ['access:events'] },
   { key: 'reports', label: 'Reports', href: '/admin/reports', anyOf: ['reports:operational', 'reports:financial', 'reports:rollup'] },
   { key: 'settings', label: 'Settings', href: '/admin/settings', anyOf: ['facility:settings'] },
   { key: 'audit-log', label: 'Audit Log', href: '/admin/audit-log', anyOf: ['audit:view'] },

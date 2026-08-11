@@ -15,7 +15,9 @@ import {
 import { prisma } from '@storage/db'
 import { recordAudit } from '@storage/core/audit'
 import { toAuditActor } from '@/lib/rbac/audit-actor'
-import { requirePermission } from '@/lib/rbac/authorize'
+import { ForbiddenError, requirePermission } from '@/lib/rbac/authorize'
+import { addCamera, InvalidCameraUrlError, removeCamera } from '@/lib/access/cameras'
+import { rotateWebhookSecret } from '@/lib/access/webhook-secrets'
 import { InvalidAbandonmentScheduleError, parseAbandonmentHours } from '@storage/core/checkout'
 import {
   InvalidRetryScheduleError,
@@ -857,5 +859,85 @@ export async function updateGateAdapterAction(
     rerouted > 0
       ? `Saved. ${rerouted} outstanding ${rerouted === 1 ? 'change is' : 'changes are'} back with the controller, and the keypad tasks for them are cancelled.`
       : 'Saved.',
+  )
+}
+
+// ---------------------------------------------------------------------------
+// PRD 03 FR-10 / SR-4 (B-080). Camera links and webhook secret rotation.
+// ---------------------------------------------------------------------------
+
+export async function addCameraAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const actor = await requireStaffActor()
+  const facilityId = String(formData.get('facilityId') ?? '')
+
+  try {
+    const camera = await addCamera(actor, {
+      facilityId,
+      label: String(formData.get('label') ?? ''),
+      url: String(formData.get('url') ?? ''),
+    })
+    revalidatePath('/admin/settings')
+    return success(`Camera link "${camera.label}" added.`)
+  } catch (error) {
+    if (error instanceof InvalidCameraUrlError) return fieldError({ url: error.reason })
+    if (error instanceof ForbiddenError) {
+      return fieldError({ url: 'You cannot change settings at this facility.' })
+    }
+    throw error
+  }
+}
+
+export async function removeCameraAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const actor = await requireStaffActor()
+  const cameraId = String(formData.get('cameraId') ?? '')
+  if (!cameraId) return fieldError({ cameraId: 'Nothing to remove.' })
+
+  try {
+    await removeCamera(actor, cameraId)
+  } catch (error) {
+    if (error instanceof ForbiddenError) {
+      return fieldError({ cameraId: 'You cannot change settings at this facility.' })
+    }
+    throw error
+  }
+
+  revalidatePath('/admin/settings')
+  return success('Camera link removed.')
+}
+
+/// SR-4's rotation. The new secret comes back once, in `details`, and is never
+/// readable again from any screen — the only party that needs it is the vendor
+/// portal it is about to be pasted into, and an admin page that could show
+/// every site's signing key is the thing SR-1 exists to prevent.
+export async function rotateWebhookSecretAction(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const actor = await requireStaffActor()
+  const facilityId = String(formData.get('facilityId') ?? '')
+
+  let result
+  try {
+    result = await rotateWebhookSecret(actor, facilityId)
+  } catch (error) {
+    if (error instanceof ForbiddenError) {
+      return fieldError({ facilityId: 'You cannot change settings at this facility.' })
+    }
+    throw error
+  }
+
+  if (!result.ok) {
+    return fieldError({
+      facilityId:
+        'Rotation needs ACCESS_CODE_ENCRYPTION_KEY configured — without it the signing key would have to be stored in the clear.',
+    })
+  }
+
+  revalidatePath('/admin/settings')
+  return success(
+    result.previousRetiresAt
+      ? 'New signing secret issued. Copy it now — it is not shown again. The previous secret keeps working for 24 hours so you can update the vendor portal without losing gate events.'
+      : 'Signing secret issued for this site. Copy it now — it is not shown again.',
+    [result.secret],
   )
 }

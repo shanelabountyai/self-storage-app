@@ -2,6 +2,8 @@ import type { Consumer } from '@storage/core/events'
 import { expireReservations } from '@/lib/reservations/reserve'
 import { expireCheckoutSessions } from '@/lib/checkout/session'
 import { drainGateCommands } from '@/lib/access/service'
+import { reconcileFacility } from '@/lib/access/reconciliation'
+import { pruneRetiredSecrets } from '@/lib/access/webhook-secrets'
 import { provisionAccessForLease } from '@/lib/access/provision'
 import { processCommsEvent } from '@/lib/comms/service'
 import { scanExpiringCards, scanExpiringProtectionProofs } from '@/lib/billing/scans'
@@ -165,6 +167,37 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
     },
   },
   {
+    // PRD 03 FR-9 (B-080). The nightly expected-vs-actual gate reconciliation.
+    //
+    // Per facility and at 3am local, which is the one hour of the day a gate is
+    // least likely to be in use: the snapshot is a read of the whole controller
+    // and a site that is busy while it runs can produce a finding for a code
+    // that was legitimately mid-change.
+    //
+    // A facility whose adapter cannot enumerate — the manual one, and a vendor
+    // whose API has no list endpoint — still gets a row, recorded as NOT
+    // verifiable. Skipping it would let a site quietly go six months without
+    // anybody noticing it was never being checked.
+    name: 'access.reconcile',
+    localHour: 3,
+    scope: 'per_facility',
+    handler: async ({ facilityId, recordItem }) => {
+      if (!facilityId) return
+      const result = await reconcileFacility(facilityId)
+      recordItem({
+        itemId: facilityId,
+        // Drift is a finding, not a job failure — the job did exactly what it
+        // was asked to. Marking it failed would put a red mark on the runner
+        // every night at a site with one known ghost code, and a runner that is
+        // always red is a runner nobody reads.
+        ok: true,
+        message: result.verifiable
+          ? `checked ${result.credentialsChecked}, ${result.drifts.length} drift${result.drifts.length === 1 ? '' : 's'}${result.permissiveCount > 0 ? ` (${result.permissiveCount} gate-too-permissive)` : ''}`
+          : `not verifiable: ${result.reason ?? 'adapter cannot enumerate'}`,
+      })
+    },
+  },
+  {
     // PRD 03 FR-3. Drains the gate command outbox.
     //
     // Hourly would be better and the runner is once-per-business-date (B-006),
@@ -176,10 +209,15 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
     scope: 'global',
     handler: async ({ recordItem }) => {
       const result = await drainGateCommands()
+      // SR-4 (B-080). A secret whose grace window has closed is a key that can
+      // still be leaked for no remaining benefit — the whole point of the
+      // window is that it ends. Swept here rather than in its own job because
+      // it is two rows a week at most.
+      const pruned = await pruneRetiredSecrets()
       recordItem({
         itemId: 'global',
         ok: result.deadLettered === 0,
-        message: `sent ${result.succeeded}, retrying ${result.failed}, dead-lettered ${result.deadLettered}`,
+        message: `sent ${result.succeeded}, retrying ${result.failed}, dead-lettered ${result.deadLettered}${pruned > 0 ? `, pruned ${pruned} retired webhook secret${pruned === 1 ? '' : 's'}` : ''}`,
       })
     },
   },

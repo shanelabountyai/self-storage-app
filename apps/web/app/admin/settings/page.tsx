@@ -9,6 +9,8 @@ import { getFacilitySettings } from '@/lib/admin/facility-settings'
 import { formatCents } from '@/lib/format'
 import { CLOSED_ALL_WEEK, DAYS_OF_WEEK } from '@storage/core/facility-settings'
 import { currentPlans } from '@/lib/protection/plans'
+import { facilityCameras } from '@/lib/access/cameras'
+import { webhookSecretStatus } from '@/lib/access/webhook-secrets'
 import {
   addFeeScheduleEntryAction,
   addLateFeeStepAction,
@@ -16,6 +18,9 @@ import {
   updateEmailIdentityAction,
   updateSmsSettingsAction,
   updateGateAdapterAction,
+  addCameraAction,
+  removeCameraAction,
+  rotateWebhookSecretAction,
   updateOperationsPolicyAction,
   addProtectionPlanAction,
   setProtectionPolicyAction,
@@ -87,6 +92,18 @@ function todayIso(): string {
   return new Date().toISOString().slice(0, 10)
 }
 
+function formatDate(value: Date): string {
+  return new Intl.DateTimeFormat('en-US', { dateStyle: 'medium' }).format(value)
+}
+
+function formatDateTime(value: Date, timezone: string): string {
+  return new Intl.DateTimeFormat('en-US', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+    timeZone: timezone,
+  }).format(value)
+}
+
 // Facility settings CRUD (PRD 02 US-3, FR-9). Unlike the dashboard, there is
 // no "all facilities" story here — settings are inherently per-facility, so
 // this page just asks for one to be picked.
@@ -114,6 +131,10 @@ export default async function AdminSettingsPage() {
   const settings = await getFacilitySettings(facilityId)
   const { facility } = settings
   const plans = await currentPlans(facilityId)
+  const [cameras, secretStatus] = await Promise.all([
+    facilityCameras(facilityId),
+    webhookSecretStatus(facilityId),
+  ])
   const lateFeeSteps = settings.currentLateFeeSteps
   const officeHours = settings.officeHours ?? CLOSED_ALL_WEEK
   const gateHours = settings.gateHours ?? CLOSED_ALL_WEEK
@@ -745,6 +766,12 @@ export default async function AdminSettingsPage() {
           >
             <option value="simulated">Integrated controller</option>
             <option value="manual">Manual — staff key changes in</option>
+            {/* B-080 / D-18. The one vendor stub, driving an in-repo emulator
+                of the vendor's API — a real driver against a fake vendor. It
+                proves the port survives a differently-shaped third-party API,
+                which is the whole reason it exists; it is not a real
+                integration and must not be selected for a live site. */}
+            <option value="pti_cloud">PTI Cloud — vendor emulation (not a real integration)</option>
           </Field>
           <Field
             name="manualTaskSlaHours"
@@ -758,6 +785,84 @@ export default async function AdminSettingsPage() {
           <Button type="submit" className="self-start">
             Save gate controller
           </Button>
+        </AdminForm>
+
+        <h3 className="text-sm font-medium">Webhook signing secret</h3>
+        <p className="text-muted-foreground max-w-prose text-xs text-pretty">
+          {secretStatus.unavailable
+            ? 'Rotation is unavailable because no access encryption key is configured — a signing key would have to be stored in the clear, which is worse than not offering the button.'
+            : secretStatus.configured
+              ? `This site has its own signing secret, active since ${formatDate(secretStatus.activeSince!)}.`
+              : 'This site uses the shared default secret. Rotating gives it one of its own.'}
+          {secretStatus.retiring.length > 0 &&
+            ` The previous secret is still accepted until ${formatDateTime(secretStatus.retiring[0].retiresAt, facility.timezone)} — paste the new one into the vendor portal before then.`}
+        </p>
+        {!secretStatus.unavailable && (
+          <AdminForm action={rotateWebhookSecretAction} label="Rotate the webhook signing secret" className="flex flex-col gap-2">
+            <input type="hidden" name="facilityId" value={facility.id} />
+            <div>
+              <Button type="submit" variant="outline">
+                Rotate signing secret
+              </Button>
+            </div>
+            <p className="text-muted-foreground text-xs text-pretty">
+              The new secret is shown once and never again. The old one keeps working for 24 hours so
+              a vendor portal can be updated without dropping the gate events in flight.
+            </p>
+          </AdminForm>
+        )}
+      </section>
+
+      <section aria-labelledby="cameras-heading" className="flex flex-col gap-3">
+        <h2 id="cameras-heading" className="text-base font-medium">
+          Cameras
+        </h2>
+        <p className="text-muted-foreground max-w-prose text-xs text-pretty">
+          Labelled links to your camera vendor&apos;s own viewer. We store a name and an address and
+          nothing else — no credentials, no video, no proxying. Links open in a new tab rather than
+          embedding, because most vendor viewers refuse to be framed and a blank box is
+          indistinguishable from a dead camera.
+        </p>
+
+        {cameras.length === 0 ? (
+          <p className="text-muted-foreground text-sm">No camera links yet.</p>
+        ) : (
+          <ul className="flex flex-col gap-2 text-sm">
+            {cameras.map((camera) => (
+              <li key={camera.id} className="flex flex-wrap items-center gap-3">
+                <a
+                  href={camera.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline underline-offset-2"
+                >
+                  {camera.label}
+                </a>
+                <span className="text-muted-foreground text-xs">{new URL(camera.url).host}</span>
+                <AdminForm action={removeCameraAction} label={`Remove ${camera.label}`}>
+                  <input type="hidden" name="cameraId" value={camera.id} />
+                  <button type="submit" className="text-xs underline underline-offset-2">
+                    Remove
+                  </button>
+                </AdminForm>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <AdminForm action={addCameraAction} label="Add a camera link" className="grid gap-3 sm:grid-cols-3">
+          <input type="hidden" name="facilityId" value={facility.id} />
+          <Field name="label" label="Name" type="text" required hint="What staff call it: “Front gate”." />
+          <Field
+            name="url"
+            label="Viewer address"
+            type="url"
+            required
+            hint="Must start with https:// and contain no username or password."
+          />
+          <div className="flex items-end">
+            <Button type="submit">Add camera</Button>
+          </div>
         </AdminForm>
       </section>
 

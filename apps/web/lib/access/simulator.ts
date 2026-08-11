@@ -3,7 +3,8 @@ import { prisma } from '@storage/db'
 import { gateHoursDecision } from '@storage/core/access'
 import { parseWeeklySchedule } from '@storage/core/facility-settings'
 import { applyHardwareWebhookEvent, type HardwareWebhookPayload } from './webhook-handler'
-import { hardwareWebhookSecret, signHardwarePayload } from './webhook-signature'
+import { signHardwarePayload } from './webhook-signature'
+import { signingSecret } from './webhook-secrets'
 
 // PRD 03 US-7. The mock gate-controller service: the "vendor side" of the
 // simulation. A real keypad talks to a real vendor's cloud, which evaluates
@@ -33,7 +34,10 @@ export type KeypadOutcome = {
 // ponytail: in-process delivery, not a real self-fetch; revisit if a
 // dev-server proxy ever makes a genuine loopback call cheap and reliable.
 async function deliver(payload: HardwareWebhookPayload): Promise<void> {
-  const secret = hardwareWebhookSecret()
+  // B-080: the facility's ACTIVE secret, which is the one a real vendor would
+  // have been given. Falls back to the environment secret at a site nobody has
+  // rotated, so this behaves exactly as it did before rotation existed.
+  const secret = await signingSecret(payload.facilityId)
   if (!secret) throw new Error('Hardware webhook secret unavailable')
   const body = JSON.stringify(payload)
   // Signed and then immediately re-verified via the same call the route makes

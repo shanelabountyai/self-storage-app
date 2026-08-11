@@ -116,6 +116,11 @@ const CALENDAR_DATE_FIELDS = new Set([
   // deposits report groups by. A session opened at 8am and closed at 6pm is
   // one day; a timestamp would make "which day was this" a timezone question.
   'DrawerSession.businessDate',
+  // B-080. Which facility-local day a reconciliation run checked. FR-9 asks for
+  // a drift count "per facility" over time, and the run is one per site per
+  // day — an instant would make two runs either side of UTC midnight look like
+  // two different days at a site where it was still the same afternoon.
+  'GateReconciliationRun.businessDate',
 ])
 
 describe('prisma schema invariants', () => {

@@ -103,6 +103,23 @@ export const TASK_TYPES = [
     sensitive: true,
   },
   {
+    // PRD 03 FR-9 (B-080). The nightly reconciliation found the controller and
+    // our records disagreeing.
+    //
+    // One task per facility per day rather than one per finding: a controller
+    // restored from a backup produces dozens of findings at once, and dozens of
+    // tasks is a queue nobody opens. The task points at the run; the run lists
+    // what diverged.
+    //
+    // Sensitive: the findings include which codes the gate honours that we have
+    // no record of, and "who could get in on the 3rd" is asked after something
+    // goes missing — the same reason `gate_manual_action` is marked sensitive.
+    type: 'gate_drift_review',
+    label: 'Reconcile the gate controller against our records',
+    requiredProofFields: ['note'],
+    sensitive: true,
+  },
+  {
     // PRD 02 US-43: "a lead not contacted within the facility's configured
     // window generates a follow-up task. A lead with no disposition is
     // visible, never silently ageing in `new`."
