@@ -3384,3 +3384,104 @@ tenant adds, sees and withdraws their own named people.
 - **Withdrawn people are hidden, not shown as history.** The row and its audit
   entries survive, but the portal shows only the live list — "who used to have
   access" is an admin question and stays on the admin side.
+
+---
+
+## B-104 follow-up — the blob store, and the proof upload it was blocking
+
+`PENDING`
+
+**Why this exists.** B-104 shipped the insurance half of US-705 with one gap
+named loudly: "submit proof" collected the insurer, policy number and expiry but
+could not keep the declaration page, because `Document.storageRef` had been
+waiting for a storage vendor since B-023. This closes it.
+
+**What it built.**
+
+- **Vercel Blob**, chosen because the app deploys on Vercel: one token rather
+  than a second cloud account, a second IAM policy and a second set of
+  credentials to rotate. `@vercel/blob` is the only new dependency.
+- `packages/core/documents/upload.ts` — pure validation: magic-byte sniffing, a
+  10 MB cap, storage paths, and filename sanitising.
+- `apps/web/lib/documents/storage.ts` — store and read, with the uploader
+  injectable so the flow is testable without a bucket.
+- Authenticated download routes for the tenant (`/portal/documents/[id]/file`)
+  and for staff (`/admin/documents/[id]/file`).
+- The file input on the proof form, and links from both document lists.
+
+**What it decided.**
+
+- *The stored type comes from the BYTES, never from the upload.* A declared
+  `Content-Type` is attacker-controlled. A file claiming `image/png` and
+  containing HTML is refused, which is the case the whole check exists for —
+  a browser sniffing an upload as HTML and running it from a URL the uploader
+  can share is stored XSS.
+- *SVG is not an image.* It is a document format that can carry script, and it
+  is deliberately off the accepted list.
+- *The blob URL never reaches a browser, and the routes never redirect to it.*
+  Vercel Blob serves public objects to anyone holding the URL, and a
+  declaration page carries a name, an address and a policy number. The path is
+  a UUID treated as a secret; the bytes are proxied. A redirect would put that
+  URL in the address bar, in history and in every referrer after it.
+- *Two download routes, not one.* The tenant route asks "is this tenant a party
+  to it"; the staff route asks "does this staffer hold this facility". One
+  route taking either kind of actor is how one of the two checks eventually
+  gets skipped.
+- *`readUpload` does no permission checking at all*, by design, and says so.
+  One half-check plus another half-check is how bytes reach the wrong person.
+- *Uploaded files never populate `Document.content`.* That column is what the
+  portal viewer renders with `dangerouslySetInnerHTML` — its own comment
+  already warned that anything storing tenant-authored markup there must
+  sanitise first, and the answer here is that nothing tenant-authored goes in
+  it. A test asserts it.
+- *A rejected file never loses the policy details.* The waiver is written
+  first, and the action reports the file problem while confirming the details
+  were kept. The expiry date is what stops D-17 auto-enrolling the tenant into
+  a paid plan; discarding it because a photo was a HEIC would be the far worse
+  failure.
+- *The uploader's filename is never part of the storage path.* "policy for 12
+  Oak Street.pdf" in a URL is a privacy leak on its own, quite apart from what
+  a path separator in it would do. It survives only as a display title, with
+  quotes and control characters stripped — that string ends up in a
+  `Content-Disposition` header, where a stray CR/LF lets the uploader write a
+  header of their own choosing. There is a test for that specifically.
+- *No blob token still degrades honestly.* Uploads are refused with a message
+  saying the details were kept — the same posture an unconfigured Stripe key or
+  encryption key takes — rather than silently dropping the file.
+
+**Three things fixed alongside it.**
+
+- **A deployment blocker nobody had hit yet.** `packages/db/generated/` is
+  gitignored — correctly, it is build output — and nothing ran `prisma
+  generate` on a clean install. Any build from a fresh checkout (CI on a cold
+  cache, or a first Vercel deploy) would have failed with "Cannot find module
+  ./generated/client". Added a `postinstall`, then verified by deleting the
+  directory and running `npm install` from clean.
+- **A real performance defect shipped in B-079.** `compareFacilities` ran one
+  query PER FACILITY, and the org-defaults screen is a portfolio screen — the
+  one place that shape goes unnoticed, because it is correct and it is fine at
+  three sites. Against a database with a few hundred facilities the tests went
+  from about a second to ten or twenty, and then started timing out. Now a
+  fixed number of queries regardless of portfolio size; the same suite runs in
+  about a second per test again.
+- **A public text-message policy page** (`/messaging-policy`), which an A2P
+  10DLC campaign registration asks for by URL and which the portal's own consent
+  control now links to. Written from the code rather than from a template: the
+  keyword sets, the 8am–9pm window and the consent record it describes are the
+  ones `sms-keywords.ts`, `Facility.smsQuietHours*` and the `Consent` row
+  actually implement. A policy page that promises something the system does not
+  do is the document a regulator reads when somebody complains.
+
+**What it left behind.**
+
+- **No virus scanning.** A PDF that is a real PDF and also malware is stored and
+  served to staff. Mitigated by `attachment` + `nosniff` + a sandbox CSP, which
+  stops it executing in our origin, but not by anything that inspects content.
+- **No deletion path for an uploaded file.** `Document.deletedAt` soft-deletes
+  the row; the blob stays. A real retention policy needs a sweeper.
+- **HEIC is not accepted**, which is what an iPhone produces by default unless
+  the user has changed a setting. The message says PDF or JPG/PNG; in practice
+  iOS converts on upload for `accept=` types, so this may not bite — but it is
+  the most likely real-world rejection.
+- **10 MB is a guess**, not a measured limit. A phone photo of a page is well
+  under it; a scanner set to 600 dpi may not be.

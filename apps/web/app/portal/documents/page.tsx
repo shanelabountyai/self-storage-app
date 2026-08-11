@@ -49,6 +49,17 @@ export default async function DocumentsPage() {
                   )}
                   <span className="text-muted-foreground"> · {formatWhen(document.createdAt)}</span>
                 </span>
+                {/* An uploaded file is downloaded through the authenticated
+                    route, never rendered: its bytes came from outside and the
+                    viewer page renders markup. */}
+                {document.downloadable && (
+                  <a
+                    href={`/portal/documents/${document.id}/file`}
+                    className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
+                  >
+                    Download
+                  </a>
+                )}
                 {document.viewable && (
                   <Link
                     href={`/portal/documents/${document.id}`}

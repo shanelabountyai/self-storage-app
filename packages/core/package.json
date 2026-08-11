@@ -32,7 +32,8 @@
     "./leads": "./leads/index.ts",
     "./checkout": "./checkout/index.ts",
     "./auth/totp": "./auth/totp.ts",
-    "./org": "./org/index.ts"
+    "./org": "./org/index.ts",
+    "./documents": "./documents/index.ts"
   },
   "dependencies": {
     "@storage/db": "*"

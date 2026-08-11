@@ -17,6 +17,9 @@ export type PortalDocument = {
   /// render.ts). Nothing here is a PDF yet, so the UI says "view" rather
   /// than promising a download that would arrive as a web page.
   viewable: boolean
+  /// An uploaded file (B-104 follow-up), fetched through
+  /// `/portal/documents/[id]/file` after an ownership check.
+  downloadable: boolean
 }
 
 /// The leases this tenant's documents can belong to — including ended ones.
@@ -44,10 +47,21 @@ export async function portalDocuments(tenantId: string): Promise<PortalDocument[
       // Only what the tenant is a party to. The same store holds lien
       // evidence and inspection photos against these very leases, and those
       // are the operator's file, not the tenant's copy.
-      type: { in: ['lease', 'receipt'] },
+      // B-104 follow-up adds `insurance_proof`: the tenant uploaded it, so it
+      // is plainly their copy too. `lien_evidence` and `inspection_photo` stay
+      // out for the reason above — same store, operator's file.
+      type: { in: ['lease', 'receipt', 'insurance_proof'] },
     },
     orderBy: { createdAt: 'desc' },
-    select: { id: true, title: true, type: true, createdAt: true, subjectId: true, content: true },
+    select: {
+      id: true,
+      title: true,
+      type: true,
+      createdAt: true,
+      subjectId: true,
+      content: true,
+      storageRef: true,
+    },
   })
 
   return documents.map((document) => ({
@@ -57,6 +71,9 @@ export async function portalDocuments(tenantId: string): Promise<PortalDocument[
     createdAt: document.createdAt,
     unitNumber: leases.get(document.subjectId) ?? null,
     viewable: Boolean(document.content),
+    // An uploaded file, served through the authenticated download route rather
+    // than rendered — its bytes are not ours and never go near the HTML path.
+    downloadable: Boolean(document.storageRef),
   }))
 }
 
@@ -117,4 +134,33 @@ export async function portalPayments(tenantId: string): Promise<PortalReceipt[]>
     receivedAt: payment.receivedAt,
     unitNumber: leases.get(payment.ledgerEntries[0]?.leaseId ?? '') ?? null,
   }))
+}
+
+/// Whether this tenant may download this uploaded document.
+///
+/// Deliberately separate from `portalDocument`, which is about GENERATED
+/// documents and returns their markup. Same ownership rule, different answer:
+/// this one says yes or no and hands the caller nothing, so a route cannot
+/// accidentally serve bytes it never checked.
+export async function tenantOwnsDocument(
+  tenantId: string,
+  documentId: string,
+): Promise<boolean> {
+  const document = await prisma.document.findFirst({
+    where: {
+      id: documentId,
+      deletedAt: null,
+      subjectType: 'Lease',
+      type: { in: ['lease', 'receipt', 'insurance_proof'] },
+      storageRef: { not: null },
+    },
+    select: { subjectId: true },
+  })
+  if (!document) return false
+
+  const owns = await prisma.lease.findFirst({
+    where: { id: document.subjectId, tenantId },
+    select: { id: true },
+  })
+  return owns !== null
 }

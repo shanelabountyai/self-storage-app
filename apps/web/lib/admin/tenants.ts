@@ -159,6 +159,10 @@ export type TenantDocumentRow = {
   title: string
   createdAt: Date
   hasContent: boolean
+  /// An uploaded file (B-104 follow-up). Fetched through
+  /// `/admin/documents/[id]/file`, which re-checks facility access — the
+  /// profile listing it is not authorisation.
+  downloadable: boolean
 }
 
 /// CN-18's row: "timestamp, channel, template + version, triggering event,
@@ -355,7 +359,14 @@ export async function tenantProfile(actor: Actor, tenantId: string): Promise<Ten
       ],
     },
     orderBy: { createdAt: 'desc' },
-    select: { id: true, type: true, title: true, createdAt: true, content: true },
+    select: {
+      id: true,
+      type: true,
+      title: true,
+      createdAt: true,
+      content: true,
+      storageRef: true,
+    },
   })
 
   const feeInvoices = await prisma.invoice.findMany({
@@ -475,6 +486,7 @@ export async function tenantProfile(actor: Actor, tenantId: string): Promise<Ten
       title: document.title,
       createdAt: document.createdAt,
       hasContent: document.content !== null,
+      downloadable: document.storageRef !== null,
     })),
     messages: messages.map((message) => ({
       id: message.id,

@@ -601,7 +601,16 @@ export default async function TenantProfilePage({
           {profile.documents.map((document) => (
             <li key={document.id} className="border-input flex justify-between gap-2 rounded-lg border p-3 text-sm">
               <span>
-                <span className="font-medium">{document.title}</span>{' '}
+                {document.downloadable ? (
+                  <a
+                    href={`/admin/documents/${document.id}/file`}
+                    className="font-medium underline underline-offset-2"
+                  >
+                    {document.title}
+                  </a>
+                ) : (
+                  <span className="font-medium">{document.title}</span>
+                )}{' '}
                 <span className="text-muted-foreground capitalize">({document.type.replace('_', ' ')})</span>
               </span>
               <span className="text-muted-foreground">{formatDate(document.createdAt)}</span>

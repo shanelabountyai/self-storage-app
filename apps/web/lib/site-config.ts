@@ -20,4 +20,7 @@ export const LEGAL_PAGES = [
   { href: '/terms', label: 'Terms' },
   { href: '/privacy', label: 'Privacy' },
   { href: '/accessibility', label: 'Accessibility' },
+  // PRD 05 CN-14 / §6.4. Public because it has to be: an A2P 10DLC campaign
+  // review asks for the URL, and the portal's own consent control points here.
+  { href: '/messaging-policy', label: 'Text messages' },
 ] as const

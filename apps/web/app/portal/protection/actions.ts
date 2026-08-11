@@ -91,17 +91,43 @@ export async function submitProofAction(_prev: FormState, formData: FormData): P
   if (Object.keys(errors).length > 0) return fieldError(errors)
   if ('error' in expires) return fieldError(errors)
 
+  // The file is optional. Read here rather than inside the service so the
+  // service takes bytes and knows nothing about forms.
+  const file = formData.get('document')
+  const document =
+    file instanceof File && file.size > 0
+      ? {
+          bytes: new Uint8Array(await file.arrayBuffer()),
+          declaredType: file.type || null,
+          filename: file.name || null,
+        }
+      : undefined
+
   const result = await submitInsuranceProof({
     tenantId: actor.tenantId,
     leaseId,
     carrier,
     policyNumber,
     expiresAt: expires.value,
+    document,
   })
   if (!result.ok) return fieldError({ carrier: 'We could not find that unit on your account.' })
 
   revalidatePath('/portal/protection')
+
+  // A rejected file is reported WITHOUT losing the submission. The expiry date
+  // is what stops D-17 auto-enrolling them into a paid plan, and throwing that
+  // away because a photo was in the wrong format would be the worse failure by
+  // a distance.
+  if (result.documentProblem) {
+    return success(
+      `We have your policy details. We could not keep the file, though — ${result.documentProblem}`,
+    )
+  }
+
   return success(
-    'Thanks — we have your policy details. Someone will check them against your declaration page, and we will email you if anything is missing.',
+    document
+      ? 'Thanks — we have your policy details and your declaration page. Someone here will check them over.'
+      : 'Thanks — we have your policy details. Someone will check them against your declaration page, and we will email you if anything is missing.',
   )
 }

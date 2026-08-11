@@ -9,6 +9,7 @@ import {
   type ProtectionSelection,
 } from '@storage/core/billing'
 import { createTask } from '@/lib/admin/tasks'
+import { storeUpload, type BlobPutter, type StoreResult } from '@/lib/documents/storage'
 import { currentPlans } from './plans'
 
 // PRD 01 US-705 (B-104). Changing protection from the portal, and telling us
@@ -244,25 +245,41 @@ export async function cancelProtectionChange(input: {
   return { ok: true }
 }
 
-export type ProofResult = { ok: true } | { ok: false; reason: 'not_your_lease' }
+export type ProofResult =
+  | {
+      ok: true
+      /// Null when no file was sent. Set to a message when one was sent and
+      /// could not be kept — the details were still recorded, and the caller
+      /// says so rather than claiming a clean success.
+      documentProblem: string | null
+    }
+  | { ok: false; reason: 'not_your_lease' }
 
-/// Records the tenant's own cover: insurer, policy number, expiry.
+/// Records the tenant's own cover: insurer, policy number, expiry — and, since
+/// the B-104 follow-up, the declaration page itself.
 ///
-/// **No file is stored.** There is no blob store configured in this project
-/// (see the `Document.storageKey` note), so an "upload" control here would be a
-/// button that either loses the file or lies about keeping it. What is captured
-/// instead is the part the system actually uses: `expiresAt` is what D-17's
-/// nightly lapse scan reads and what auto-enrols the tenant when their policy
-/// runs out, and the carrier and policy number are what a coverage argument
-/// needs. A staff task asks for the declaration page to be checked, which is
-/// the honest version of "we have seen it" until there is somewhere to put it.
+/// The structured details are the part the SYSTEM uses: `expiresAt` is what
+/// D-17's nightly lapse scan reads and what auto-enrols the tenant when their
+/// policy runs out. The document is the part a PERSON uses — it is what a
+/// coverage argument is actually settled with, and until this shipped the staff
+/// task asked somebody to check details against a page nobody could attach.
+///
+/// The upload is optional and its failure is NOT fatal: a tenant whose file is
+/// rejected, or who submits from a deployment with no blob token, still gets
+/// their policy details recorded. Losing the expiry date because a photo was a
+/// heic would be the worse outcome by far — that date is what stops the
+/// auto-enrolment charge.
 export async function submitInsuranceProof(input: {
   tenantId: string
   leaseId: string
   carrier: string
   policyNumber: string
   expiresAt: Date
-}): Promise<ProofResult> {
+  document?: { bytes: Uint8Array; declaredType?: string | null; filename?: string | null }
+},
+  /// Injected by tests so the flow can be proved without a bucket or a token.
+  put?: BlobPutter,
+): Promise<ProofResult> {
   const lease = await prisma.lease.findUnique({
     where: { id: input.leaseId },
     select: { id: true, tenantId: true, facilityId: true },
@@ -291,6 +308,30 @@ export async function submitInsuranceProof(input: {
     },
   })
 
+  // Stored after the waiver row, so the details survive a rejected file.
+  let upload: StoreResult | null = null
+  if (input.document && input.document.bytes.length > 0) {
+    upload = await storeUpload(
+      {
+        facilityId: lease.facilityId,
+        type: 'insurance_proof',
+        subjectType: 'Lease',
+        subjectId: lease.id,
+        bytes: input.document.bytes,
+        declaredType: input.document.declaredType,
+        filename: input.document.filename,
+        fallbackTitle: 'Proof of insurance',
+      },
+      ...(put ? ([put] as const) : ([] as const)),
+    )
+    if (upload.ok) {
+      await prisma.protectionWaiver.update({
+        where: { leaseId: lease.id },
+        data: { documentRef: upload.documentId },
+      })
+    }
+  }
+
   await createTask({
     facilityId: lease.facilityId,
     type: 'insurance_proof_review',
@@ -307,10 +348,11 @@ export async function submitInsuranceProof(input: {
     after: {
       carrier: input.carrier.trim(),
       expiresAt: input.expiresAt.toISOString().slice(0, 10),
+      documentId: upload?.ok ? upload.documentId : null,
     },
   })
 
-  return { ok: true }
+  return { ok: true, documentProblem: upload && !upload.ok ? upload.message : null }
 }
 
 export type ApplyResult = { applied: number; skipped: number }

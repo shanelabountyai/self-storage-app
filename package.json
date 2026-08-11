@@ -22,7 +22,8 @@
     "db:migrate:test": "dotenv -e .env.local -- tsx --tsconfig apps/web/tsconfig.json scripts/migrate-test-db.mts",
     "db:seed:demo": "dotenv -e .env.local -- tsx --tsconfig apps/web/tsconfig.json apps/web/scripts/seed-demo.mts",
     "db:create-owner": "dotenv -e .env.local -- tsx --tsconfig apps/web/tsconfig.json apps/web/scripts/create-owner.mts",
-    "db:studio": "dotenv -e .env.local -- prisma studio --schema packages/db/prisma/schema.prisma"
+    "db:studio": "dotenv -e .env.local -- prisma studio --schema packages/db/prisma/schema.prisma",
+    "postinstall": "prisma generate --schema packages/db/prisma/schema.prisma"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.10.2",
@@ -33,6 +34,7 @@
     "tsx": "^4.23.1",
     "vitest": "^3.2.4"
   },
+  "_postinstall_note": "packages/db/generated/ is gitignored — it is build output, and committing a 20MB engine binary per platform is worse than regenerating it. Nothing else runs `prisma generate` on a clean checkout, so a CI or Vercel build would fail with \"Cannot find module ./generated/client\". This is the one place that makes a fresh `npm install` produce a working tree.",
   "_overrides_note": "Only transitive deps we can bump without putting the tree in an `invalid` state. Left alone deliberately: postcss/sharp (pinned by next), brace-expansion (minimatch@3 requires the 1.x line). `npm audit` runs in CI so the inherited advisories stay visible; they clear when next and eslint ship bumps.",
   "overrides": {
     "tmp": "^0.2.5",

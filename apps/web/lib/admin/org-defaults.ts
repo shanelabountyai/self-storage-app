@@ -116,54 +116,106 @@ export async function compareFacilities(
     orderBy: { name: 'asc' },
     select: { id: true, name: true },
   })
+  if (facilities.length === 0) return []
 
-  return Promise.all(
-    facilities.map(async (facility) => ({
-      facilityId: facility.id,
-      facilityName: facility.name,
-      report: await reportFor(scope, record.payload, facility.id),
-      canPush: can(actor, 'facility:settings', facility.id),
-    })),
+  const reports = await reportsFor(
+    scope,
+    record.payload,
+    facilities.map((facility) => facility.id),
   )
+
+  return facilities.map((facility) => ({
+    facilityId: facility.id,
+    facilityName: facility.name,
+    report: reports.get(facility.id) ?? { matches: true, differences: [], missing: [] },
+    canPush: can(actor, 'facility:settings', facility.id),
+  }))
 }
 
+/// Every facility's report, in a fixed number of queries.
+///
+/// One query per scope for the whole set, not one per facility. B-104's
+/// follow-up found the difference the hard way: the per-facility version took
+/// ten to twenty seconds once the database held a few hundred sites, because it
+/// is a round trip each and they are sequential in all but name. A portfolio
+/// screen is exactly the place that shape of query goes unnoticed — it is
+/// correct, and it is fine at three facilities.
+async function reportsFor(
+  scope: OrgDefaultScope,
+  payload: unknown,
+  facilityIds: string[],
+): Promise<Map<string, OverrideReport>> {
+  const now = new Date()
+  const reports = new Map<string, OverrideReport>()
+
+  if (scope === 'fee_schedule') {
+    const rows = await prisma.feeSchedule.findMany({
+      where: { facilityId: { in: facilityIds } },
+      orderBy: { effectiveFrom: 'desc' },
+    })
+    const byFacility = groupBy(rows, (row) => row.facilityId)
+    for (const facilityId of facilityIds) {
+      // `effectiveByGroup` is applied per facility, exactly as before — the
+      // change is where the rows came from, not what is done with them.
+      const current = [
+        ...effectiveByGroup(byFacility.get(facilityId) ?? [], now, (row) => row.feeType).values(),
+      ]
+      reports.set(facilityId, compareFeeSchedule(feesOf(payload), current))
+    }
+    return reports
+  }
+
+  if (scope === 'late_fee_ladder') {
+    const rows = await prisma.lateFeeRule.findMany({
+      where: { facilityId: { in: facilityIds } },
+      orderBy: { effectiveFrom: 'desc' },
+    })
+    const byFacility = groupBy(rows, (row) => row.facilityId)
+    for (const facilityId of facilityIds) {
+      const current = [
+        ...effectiveByGroup(byFacility.get(facilityId) ?? [], now, (row) => String(row.step)).values(),
+      ]
+      reports.set(facilityId, compareLateFeeLadder(ladderOf(payload), current))
+    }
+    return reports
+  }
+
+  const active = await prisma.delinquencyTimeline.findMany({
+    where: { facilityId: { in: facilityIds }, active: true },
+    select: { facilityId: true, qualifyingAmount: true, steps: true },
+  })
+  const byFacility = new Map(active.map((row) => [row.facilityId, row]))
+  for (const facilityId of facilityIds) {
+    const row = byFacility.get(facilityId)
+    reports.set(
+      facilityId,
+      compareTimeline(
+        timelineOf(payload),
+        row ? { qualifyingAmount: row.qualifyingAmount, steps: (row.steps ?? []) as unknown[] } : null,
+      ),
+    )
+  }
+  return reports
+}
+
+function groupBy<T>(rows: readonly T[], key: (row: T) => string): Map<string, T[]> {
+  const grouped = new Map<string, T[]>()
+  for (const row of rows) {
+    const id = key(row)
+    grouped.set(id, [...(grouped.get(id) ?? []), row])
+  }
+  return grouped
+}
+
+/// One facility's report. Still needed by the push, which checks a single site
+/// immediately before writing to it.
 async function reportFor(
   scope: OrgDefaultScope,
   payload: unknown,
   facilityId: string,
 ): Promise<OverrideReport> {
-  const now = new Date()
-
-  if (scope === 'fee_schedule') {
-    const rows = await prisma.feeSchedule.findMany({
-      where: { facilityId },
-      orderBy: { effectiveFrom: 'desc' },
-    })
-    // The same `effectiveByGroup` the facility settings screen uses, so the
-    // comparison is against the values in force TODAY — not against a
-    // future-dated row an operator has already queued, which would flag a
-    // facility as overridden for a change nobody has felt yet.
-    const current = [...effectiveByGroup(rows, now, (row) => row.feeType).values()]
-    return compareFeeSchedule(feesOf(payload), current)
-  }
-
-  if (scope === 'late_fee_ladder') {
-    const rows = await prisma.lateFeeRule.findMany({
-      where: { facilityId },
-      orderBy: { effectiveFrom: 'desc' },
-    })
-    const current = [...effectiveByGroup(rows, now, (row) => String(row.step)).values()]
-    return compareLateFeeLadder(ladderOf(payload), current)
-  }
-
-  const active = await prisma.delinquencyTimeline.findFirst({
-    where: { facilityId, active: true },
-    select: { qualifyingAmount: true, steps: true },
-  })
-  return compareTimeline(timelineOf(payload), active ? {
-    qualifyingAmount: active.qualifyingAmount,
-    steps: (active.steps ?? []) as unknown[],
-  } : null)
+  const reports = await reportsFor(scope, payload, [facilityId])
+  return reports.get(facilityId) ?? { matches: true, differences: [], missing: [] }
 }
 
 // ---------------------------------------------------------------- pushing ---

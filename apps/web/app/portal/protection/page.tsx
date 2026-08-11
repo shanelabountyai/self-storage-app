@@ -134,8 +134,8 @@ export default async function ProtectionPage() {
               Tell us about your own insurance
             </summary>
             <p className="text-muted-foreground mt-2 text-sm text-pretty">
-              We need your insurer, your policy number and the date the policy runs out. Keep your
-              declaration page handy — someone here will check these details against it.
+              We need your insurer, your policy number and the date the policy runs out. Attach
+              the declaration page too if you have it handy — a photo is fine.
             </p>
             <AdminForm
               action={submitProofAction}
@@ -166,6 +166,14 @@ export default async function ProtectionPage() {
                 required
                 defaultValue={unit.waiver?.expiresAt?.toISOString().slice(0, 10) ?? ''}
                 className="flex flex-col gap-1 text-sm"
+              />
+              <Field
+                name="document"
+                label="Declaration page (optional)"
+                type="file"
+                accept="application/pdf,image/jpeg,image/png"
+                hint="A PDF or a photo of the page, up to 10 MB. You can send the details without it and bring the document in later."
+                className="flex flex-col gap-1 text-sm sm:col-span-3"
               />
               <div className="sm:col-span-3">
                 <button

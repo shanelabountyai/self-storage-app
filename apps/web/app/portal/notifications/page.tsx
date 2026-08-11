@@ -98,6 +98,13 @@ export default async function NotificationsPage() {
         <h2 id="sms-consent-heading" className="font-medium">
           Text message consent
         </h2>
+        <p className="text-muted-foreground max-w-prose text-sm text-pretty">
+          What we send, when we send it and how to stop it is set out in our{' '}
+          <Link href="/messaging-policy" className="underline underline-offset-4">
+            text message policy
+          </Link>
+          .
+        </p>
         {consent.state ? (
           <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
             <dt className="text-muted-foreground">Status</dt>
