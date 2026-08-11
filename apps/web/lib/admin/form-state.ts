@@ -12,7 +12,12 @@ export type FormState =
   | { status: 'idle' }
   /// Announced in the form's persistent live region (FR-20). Say what changed,
   /// not "Saved" — "Tax rate added, effective 1 Aug 2026" is the useful form.
-  | { status: 'success'; message: string }
+  ///
+  /// `details` is a list the action produced that exists nowhere else and can
+  /// never be shown again — MFA recovery codes are the case it was added for
+  /// (B-079). It is rendered as a list rather than folded into `message`
+  /// because a live region reading ten codes as one sentence is unusable.
+  | { status: 'success'; message: string; details?: string[] }
   /// `message` is the summary heading; `fieldErrors` maps field name → message.
   /// A field error must carry a *suggestion*, not just an identification
   /// (3.3.3): "State must be a 2-letter code, e.g. TX."
@@ -35,8 +40,8 @@ export function fieldError(fields: FieldErrors): FormState {
   }
 }
 
-export function success(message: string): FormState {
-  return { status: 'success', message }
+export function success(message: string, details?: string[]): FormState {
+  return { status: 'success', message, ...(details ? { details } : {}) }
 }
 
 /// Parses a decimal entered by a human into an integer of the smallest unit

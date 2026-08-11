@@ -2807,3 +2807,161 @@ by design — widened rather than cast), and `sellMerchandise` returned
 - **Deposits are reported, not banked.** The report tells staff what to take
   to the bank; there is no bank-deposit record to reconcile against, and no
   bank feed.
+
+---
+
+## B-079 — Staff MFA + org-level defaults
+
+`PENDING`
+
+**What it built.** Two halves of PRD 00 §7.1 and PRD 02 US-4.
+
+*TOTP MFA for staff.*
+
+- `packages/core/auth/totp.ts` — RFC 4226 (HOTP), RFC 6238 (TOTP) and RFC 4648
+  (base32) implemented directly, plus `otpauthUri` and recovery-code shaping.
+  `tests/totp.test.ts` runs every published vector from all three RFCs.
+- `apps/web/lib/auth/totp-secret.ts` — AES-256-GCM at rest, keyed by HKDF from
+  `AUTH_SECRET` with its own `info` string.
+- `StaffUser.totpSecret / totpConfirmedAt / totpLastStep`, `StaffRecoveryCode`.
+- `/mfa` — enrolment, and the recovery codes, shown once.
+- The admin layout gate, and `/admin/settings/staff` for an owner to see who is
+  enrolled and reset a lost second factor.
+- Four audit actions: `mfa.enrolled`, `mfa.recovery_code_used`,
+  `mfa.recovery_codes_regenerated`, `mfa.reset_by_admin` (reason required).
+
+*Org-level defaults (US-4).*
+
+- `OrgDefault` (one row per scope: fee schedule, late-fee ladder, delinquency
+  timeline), `packages/core/org/defaults.ts` for the comparison, and
+  `/admin/settings/org` to edit, compare and push.
+- New permission `org:defaults` (owner, regional) — 29 permissions, 89 grants.
+- Two audit actions: `org_default.updated`, `org_default.pushed` (per facility).
+
+**What it decided.**
+
+- *MFA is mandatory, with no toggle (D-40).* §7.1 states it as a property, not a
+  setting. A toggle would be a column whose only correct value is `true`, plus a
+  code path for `false` that exists to be a hole.
+- *Verification is at sign-in; enforcement is at the admin surface.* An
+  unenrolled staff member authenticates normally and then reaches `/mfa` and
+  nothing else. Blocking the sign-in would leave a new hire unable to ever
+  enrol, and would break `system` integration accounts that authenticate but
+  never browse the admin. The gate reads the database on every admin request
+  rather than a JWT claim, so an administrator's reset takes effect at once
+  instead of after the remaining thirty days of a session.
+- *There is never a half-authenticated session.* No JWT is issued until the
+  second factor has passed, so no "MFA pending" state exists for anything to
+  forget to check.
+- *Staff magic links are refused at both ends (D-40).* A link that signs
+  somebody in on possession of their inbox IS a second factor; offering it
+  beside a mandatory TOTP prompt would let every enrolment be walked around
+  with one click. `requestMagicLink` will not mint one and the credentials
+  provider will not spend one — both, because links minted before this shipped
+  are still sitting in inboxes.
+- *The second factor is verified BEFORE the login attempt is recorded.*
+  Recording a success on a correct password and failing MFA afterwards would
+  clear the throttle counter on every attempt, leaving a six-digit code free to
+  brute-force. A wrong code is now a failed attempt, throttled at five per
+  fifteen minutes like any other.
+- *A TOTP code may be spent once* — `totpLastStep` rejects any step at or below
+  the last accepted one, claimed with a conditional `updateMany` so two racing
+  requests cannot both win. Without it a shoulder-surfed code stays valid for
+  about ninety seconds across the drift window.
+- *An unreadable secret fails closed.* A rotated `AUTH_SECRET` makes every
+  stored secret undecryptable; treating that as "no second factor configured"
+  would turn a key rotation into a silent MFA bypass across every staff account
+  at once.
+- *Recovery codes are SHA-256, not argon2* — the opposite of the usual
+  reasoning. They are 50 bits of machine entropy, so there is nothing to
+  brute-force, and verification means testing against every unused code the
+  person holds; ten argon2 runs per attempt would be a self-inflicted denial of
+  service.
+- *The login form always shows the code field for staff*, rather than revealing
+  it after a first submit. A reveal would have to answer "does this account have
+  MFA?" before anyone had authenticated — account enumeration — and would make
+  every staff sign-in two round trips.
+- *Org defaults are pushed, never resolved at runtime (D-41).* A push writes
+  ordinary effective-dated rows into the receiving facility's own tables, so
+  invoicing, the late-fee job and the delinquency engine keep reading exactly
+  one place. A runtime fallback would change what a facility charges the moment
+  somebody edited a central record, with no effective date and nothing in that
+  site's history saying what happened.
+- *"Overridden" is computed, not stored (D-41).* A boolean would be a second
+  source of truth that goes stale the first time anyone edits a facility fee
+  directly. The comparison also names what diverges — "overridden: admin fee,
+  late step 2" — because "Overridden" alone sends an owner to inspect twelve
+  sites, which is the work the screen exists to save.
+- *A facility that already matches is skipped, not rewritten.* These tables are
+  append-only, so pushing unconditionally would file an identical row at every
+  site every time the button was pressed.
+- *Push access is checked per facility*, against `facility:settings` at that
+  facility, not once for the batch — the ids arrive from a form, and a regional
+  manager must not reach a site they hold no assignment for by adding its id to
+  the POST. Editing the default itself is checked org-wide, which only an
+  all-facilities assignment satisfies.
+- *Notice templates get no push (D-41).* `MessageTemplate` already resolves
+  org-level → facility override at render time, so the org default is already
+  live everywhere that has not diverged; pushing would turn every inheriting
+  site into an override of the thing it was tracking. What was missing was the
+  visibility half, which is what shipped.
+- *There is no second timeline editor.* The org timeline default is ADOPTED from
+  a facility's active timeline, because `/admin/settings/delinquency` already
+  validates every step against the notice templates that exist — and a second
+  place for a lien timeline to be wrong is not worth having.
+
+**What it changed elsewhere.** The e2e suite now signs in once per run through a
+Playwright setup project and replays the saved session, instead of once per
+spec. Forced rather than chosen: a TOTP code is single-use, so twenty
+fully-parallel specs signing in inside the same thirty-second window would have
+had nineteen correctly rejected as replays. The demo owner is enrolled with a
+published demo secret (`demo-credentials.ts`, same guard as the demo password —
+`seed-demo.mts` refuses to run with `NODE_ENV=production`), so the suite
+exercises the real second factor. **There is no test-only MFA bypass anywhere**,
+which was the point.
+
+`FormState` gained an optional `details?: string[]` on the success variant,
+rendered by `AdminForm` as a list outside the live region. Recovery codes are
+what it exists for: a list somebody must read, copy or print cannot be a single
+run-on utterance announced once and left behind by the focus.
+
+**A real bug found and fixed in B-078's deposits report.** It bucketed payments
+by `receivedAt`'s **UTC** day while a drawer session carries the facility-LOCAL
+one (`businessDate`), and a comment asserted the two matched. They do not: 6pm
+in Chicago is 23:00 UTC the same date, but 7pm is 00:00 UTC the *next* one — so
+every drawer counted after the office shut landed on a different row of the
+report from the cash it was counting, each showing a variance against an empty
+column. Now bucketed by the facility-local day on both sides, through the same
+`businessDateFor` the session itself uses. The regression test constructs an
+explicit late-evening payment rather than trusting the clock, because the bug
+was invisible for nineteen hours a day and B-078's own runs happened to fall
+inside those hours — it surfaced only because this item's verification ran after
+7pm.
+
+**A repo hazard found along the way**, now recorded in CLAUDE.md: appending
+hand-written SQL to an already-applied migration (which B-078 did for its
+partial index) changes the file's checksum, and the next `prisma migrate dev`
+offers to reset the development database. `prisma migrate status` does not catch
+it, so it stayed invisible until this item. Repaired by recomputing the hash into
+`_prisma_migrations`, not by resetting.
+
+**What it left behind.**
+
+- **No QR code on the enrolment screen.** The secret is shown grouped in fours
+  for manual entry, with an `otpauth://` link that opens an authenticator app
+  directly on a phone. A QR needs Reed–Solomon encoding — not "a few lines" —
+  so it would mean a dependency; add `qrcode` if desktop-to-phone enrolment
+  friction turns out to matter.
+- **No WebAuthn / passkeys.** §7.1 names TOTP specifically.
+- **Rotating `AUTH_SECRET` invalidates every enrolment** and requires every
+  staff member to re-enrol. That is the correct blast radius, but there is no
+  re-encryption migration path — the `v1.` prefix on the stored ciphertext is
+  what would make one possible later.
+- **No "remember this device for 30 days".** Every staff sign-in asks for a
+  code.
+- **A pushed default cannot REMOVE an extra ladder rung** a facility added
+  locally. The comparison reports it (`step 3 (extra)`), but effective-dated
+  rows have no tombstone, so removing it is a manual edit on that facility's own
+  settings screen. Pre-existing, not introduced here.
+- **Org defaults cover three scopes, not every setting.** Billing policy,
+  protection plans and gate hours are still per-facility only.

@@ -52,6 +52,12 @@ export const PERMISSIONS = [
   // Administration
   { key: 'facility:settings', name: 'Edit facility settings', category: 'admin', description: 'Hours, fees, taxes, and facility configuration.' },
   { key: 'users:manage', name: 'Manage users and roles', category: 'admin', description: 'Create staff users and assign roles.' },
+  // B-079 / PRD 02 US-4. Editing the org-level default is a portfolio-wide act,
+  // so `can()` is asked for it with a null facilityId — which only an
+  // all-facilities assignment satisfies. Pushing one to a given facility is
+  // checked separately against `facility:settings` AT that facility, so a
+  // regional manager can push a default down to their own sites and no others.
+  { key: 'org:defaults', name: 'Edit org-level defaults', category: 'admin', description: 'Define the portfolio-wide fee schedule, late-fee ladder and delinquency timeline, and push them to facilities.' },
   { key: 'audit:view', name: 'View the audit log', category: 'admin', description: 'Read the append-only audit trail.' },
 
   // Reporting
@@ -183,6 +189,7 @@ export const ROLES: readonly RoleSeed[] = [
       'access:view_codes',
       'access:events',
       'facility:settings',
+      'org:defaults',
       'audit:view',
       'reports:operational',
       'reports:financial',

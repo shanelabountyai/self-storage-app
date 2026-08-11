@@ -55,6 +55,22 @@ export default async function LoginPage({
           required
           className="flex flex-col gap-1 text-sm"
         />
+        {/* B-079. Always shown for staff, never conditionally revealed after a
+            first submit. A reveal-on-demand field would have to answer "does
+            this account have MFA?" before anyone had authenticated, which is
+            account enumeration; and it would turn every staff sign-in into two
+            round trips. Staff who have not enrolled yet leave it blank. */}
+        {audience === 'staff' && (
+          <Field
+            name="code"
+            label="Authentication code"
+            type="text"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            hint="The 6-digit code from your authenticator app, or one of your recovery codes. Leave blank if you have not set up two-factor authentication yet."
+            className="flex flex-col gap-1 text-sm"
+          />
+        )}
         <button
           type="submit"
           className="bg-primary text-primary-foreground mt-1 inline-flex min-h-11 items-center justify-center rounded-md px-4 text-sm font-medium"
@@ -71,7 +87,13 @@ export default async function LoginPage({
 
       {/* Native disclosure, no client JS needed (§6.2's "works without
           JavaScript" applies to every public/portal-adjacent route, not just
-          checkout). */}
+          checkout).
+
+          Tenants only. A magic link signs somebody in on possession of their
+          inbox, which is the second factor staff MFA exists to require — so
+          lib/auth/flows.ts refuses to mint one for staff, and offering the form
+          anyway would just be a button that silently does nothing. */}
+      {audience === 'tenant' && (
       <details className="border-input rounded-lg border p-4">
         <summary className="cursor-pointer text-sm font-medium">Email me a sign-in link instead</summary>
         <p className="text-muted-foreground mt-2 text-sm text-pretty">
@@ -100,6 +122,7 @@ export default async function LoginPage({
           </button>
         </AdminForm>
       </details>
+      )}
 
       {audience === 'tenant' ? (
         <p className="text-muted-foreground text-sm">

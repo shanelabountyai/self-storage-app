@@ -10,11 +10,22 @@ function baseUrl(): string {
 
 /// Requests a magic link. Always resolves the same way whether or not the
 /// address belongs to an account — the caller must not branch on the result.
+///
+/// Staff are refused outright (B-079). A magic link signs somebody in on
+/// possession of their inbox alone, which is exactly the second factor the
+/// password path now demands — so leaving it available to staff would mean
+/// every MFA enrolment could be walked around by clicking "email me a link".
+/// Master PRD §7.1 already assigns the two mechanisms separately: "Staff auth
+/// requires MFA (TOTP)... Tenants use email/password + magic-link fallback."
+/// Staff who forget a password still have the reset flow, which lands them back
+/// at a sign-in that asks for the code.
 export async function requestMagicLink(
   email: string,
   audience: AuthAudience,
   ipAddress?: string | null,
 ): Promise<void> {
+  if (audience === 'staff') return
+
   const subject = await findSubjectByEmail(email, audience)
   if (!subject) return
 

@@ -24,6 +24,7 @@ export async function signInWithPasswordAction(
 ): Promise<FormState> {
   const email = String(formData.get('email') ?? '').trim()
   const password = String(formData.get('password') ?? '')
+  const code = String(formData.get('code') ?? '').trim()
   const from = String(formData.get('from') ?? '') || undefined
   const audience = audienceFor(from)
   const redirectTo = safeRedirectTarget(from, audience)
@@ -50,13 +51,20 @@ export async function signInWithPasswordAction(
   }
 
   try {
-    await signIn('password', { email, password, audience, redirectTo })
+    await signIn('password', { email, password, code, audience, redirectTo })
   } catch (error) {
     if (error instanceof AuthError) {
       // Deliberately generic: authenticateWithPassword() already returns null
       // (rather than distinguishing "no such account" from "wrong password")
-      // specifically so there is nothing here to enumerate either.
-      return fieldError({ password: 'Incorrect email or password.' })
+      // specifically so there is nothing here to enumerate either. For staff
+      // that now covers the code as well — naming which of the three was wrong
+      // would tell an attacker holding a correct password that they had one.
+      return fieldError({
+        password:
+          audience === 'staff'
+            ? 'Incorrect email, password, or authentication code.'
+            : 'Incorrect email or password.',
+      })
     }
     throw error // includes Next's own redirect signal on success — must propagate
   }

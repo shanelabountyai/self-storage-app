@@ -1,4 +1,5 @@
 import { prisma } from '@storage/db'
+import { businessDateFor } from '@storage/core/jobs'
 import { financialFacilities } from './reports'
 import type { Actor } from '@/lib/rbac/actor'
 
@@ -41,6 +42,13 @@ function isoDay(date: Date): string {
   return date.toISOString().slice(0, 10)
 }
 
+/// Which facility-local day an instant belongs to, as `yyyy-mm-dd`. The single
+/// definition both halves of this report use, so a payment and the drawer
+/// session that counted it can never land on different rows.
+function localDay(instant: Date, timezone: string | undefined): string {
+  return isoDay(businessDateFor(instant, timezone ?? 'UTC'))
+}
+
 export async function depositsReport(
   actor: Actor,
   from: Date,
@@ -53,6 +61,18 @@ export async function depositsReport(
 
   const facilityIds = facilities.map((f) => f.id)
   const nameById = new Map(facilities.map((f) => [f.id, f.name]))
+
+  // B-079. Fetched because a payment has to be bucketed by the facility-LOCAL
+  // day. See the note on `dayOf` below — this query is what makes that possible
+  // and it is the whole of the fix.
+  const timezones = new Map(
+    (
+      await prisma.facility.findMany({
+        where: { id: { in: facilityIds } },
+        select: { id: true, timezone: true },
+      })
+    ).map((facility) => [facility.id, facility.timezone]),
+  )
 
   const [payments, sessions] = await Promise.all([
     prisma.payment.findMany({
@@ -76,10 +96,17 @@ export async function depositsReport(
     }),
   ])
 
-  // Keyed by facility + day. Payments are bucketed by `receivedAt`'s UTC day
-  // rather than the facility-local one, matching how `businessDate` is
-  // stored for the session — a facility whose day boundary straddles UTC
-  // midnight is the known imprecision, called out on the screen.
+  // Keyed by facility + FACILITY-LOCAL day, which is what `businessDate` on a
+  // drawer session already is (`businessDateFor(new Date(), facility.timezone)`).
+  //
+  // B-079 fixed this. It previously bucketed payments by `receivedAt`'s UTC day
+  // and a comment claimed that matched the session — it does not, and for a US
+  // facility the two disagree every evening. A payment taken at 6pm in Chicago
+  // is 23:00 UTC on the same date, but one taken at 7pm is 00:00 UTC on the
+  // NEXT one, so the cash landed on one row of the report and the count that
+  // reconciles it on another, with each showing a variance against nothing.
+  // Every close-out done after 7pm — which is most of them, since a drawer is
+  // counted when the office shuts — reconciled against an empty column.
   type Bucket = Omit<DepositsRow, 'facilityId' | 'facilityName' | 'businessDate'>
   const buckets = new Map<string, Bucket>()
   const key = (facility: string, day: string) => `${facility}|${day}`
@@ -96,7 +123,7 @@ export async function depositsReport(
   })
 
   for (const payment of payments) {
-    const day = isoDay(payment.receivedAt)
+    const day = localDay(payment.receivedAt, timezones.get(payment.facilityId))
     const bucket = buckets.get(key(payment.facilityId, day)) ?? empty()
     // A refund is money out; netting it keeps each column "what the drawer
     // or the processor actually moved".

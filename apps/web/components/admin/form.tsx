@@ -40,6 +40,18 @@ export function AdminForm({ action, children, className, label }: AdminFormProps
           {state.status === 'success' ? state.message : ''}
         </p>
 
+        {/* Outside the live region on purpose. A list the user has to read,
+            copy or print — recovery codes are the case this exists for — must
+            be reachable and selectable at leisure, not announced once as a
+            single run-on utterance and then left behind by the focus. */}
+        {state.status === 'success' && state.details && state.details.length > 0 && (
+          <ul className="border-input col-span-full mt-2 grid gap-1 rounded-md border p-3 font-mono text-sm">
+            {state.details.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+        )}
+
         {(state.status === 'error' || state.status === 'confirm') && (
           <div
             ref={summaryRef}

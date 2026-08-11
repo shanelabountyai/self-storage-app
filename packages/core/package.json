@@ -30,7 +30,9 @@
     "./auctions": "./auctions/index.ts",
     "./reviews": "./reviews/index.ts",
     "./leads": "./leads/index.ts",
-    "./checkout": "./checkout/index.ts"
+    "./checkout": "./checkout/index.ts",
+    "./auth/totp": "./auth/totp.ts",
+    "./org": "./org/index.ts"
   },
   "dependencies": {
     "@storage/db": "*"

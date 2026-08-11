@@ -28,3 +28,16 @@ export const DEMO_TENANT_PASSWORD = 'demo-tenant-password'
 // runs. Anything in the suite that mutates money has to aim at a tenant whose
 // balance nothing else depends on.
 export const DEMO_POS_TENANT_EMAIL = `pos-tenant@${DEMO_EMAIL_DOMAIN}`
+
+// B-079. Staff MFA is mandatory, so the demo owner has to hold a real second
+// factor or the e2e suite reaches the enrolment screen and nothing else.
+//
+// A fixed, published TOTP secret is the same class of thing as the fixed
+// password above and carries the same guard: seed-demo.mts refuses to run with
+// NODE_ENV=production, and this account exists only in a throwaway demo
+// database. Publishing it is what lets the suite exercise the REAL second
+// factor rather than a test-only bypass — there is no "skip MFA in tests" flag
+// anywhere, which is the point.
+//
+// Base32, 20 bytes, as RFC 4226 §4 R6 recommends.
+export const DEMO_STAFF_TOTP_SECRET = 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP'

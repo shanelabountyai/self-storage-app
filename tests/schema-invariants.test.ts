@@ -62,6 +62,10 @@ const NO_FACILITY_ID: Record<string, string> = {
     'scoped to a tenant, not a facility — the same reasoning Consent is exempt: a preference center choice follows the person across every facility they hold a lease at (PRD 05 CN-13, B-074)',
   MerchandiseSaleLine:
     'scoped through the sale it belongs to, which carries the facilityId — the same reasoning InvoiceLineItem and PaymentAllocation are exempt (PRD 02 US-34, B-078)',
+  StaffRecoveryCode:
+    'belongs to a staff account, which is org-level identity — the same reasoning StaffUser itself is exempt: one person\u2019s second factor is not a per-facility thing (PRD 00 §7.1, B-079)',
+  OrgDefault:
+    'is the org-level default, by definition — it exists precisely to be the value BEFORE any facility has one, and a facilityId here would make it a facility setting (PRD 02 US-4, B-079)',
 }
 
 /// Calendar dates, not instants. A business date is a facility-local day with

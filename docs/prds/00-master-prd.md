@@ -210,6 +210,7 @@ These apply to every module; module PRDs must not re-decide them.
 - One auth system, two audiences: **customers** (prospect → tenant) and **staff**.
 - Roles: `tenant`, `manager` (scoped to assigned facilities), `owner` (all facilities + pricing + user admin), `system` (integrations/jobs). Design roles as data, not code, so adding `regional_manager` later is configuration.
 - Staff auth requires MFA (TOTP) from Phase 2. Tenants use email/password + magic-link fallback.
+  - **Built in B-079.** Mandatory for every staff account, with no toggle and no per-role exemption (D-40). Verification happens at sign-in — no session is issued until the second factor passes, so there is no half-authenticated state — while *enforcement* of enrolment lives in the admin layout, which sends an unenrolled staff member to `/mfa` and nowhere else. **Staff magic links are refused at both ends**: a link that signs somebody in on possession of their inbox is itself a second factor, so offering one beside a mandatory TOTP prompt would let every enrolment be walked around with a click. The magic-link fallback in this sentence is the tenant mechanism, and only that.
 - Every privileged action (rate change, fee waiver, credential suspend, lien step) is written to an append-only audit log with actor, timestamp, and before/after values.
 
 ### 7.2 Accessibility — WCAG 2.1 AA

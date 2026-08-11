@@ -16,8 +16,13 @@ export default defineConfig({
   // Mobile-first is a cross-cutting requirement (master PRD §7.3), so the
   // default project is a phone viewport, not a desktop one.
   projects: [
-    { name: 'mobile-chrome', use: { ...devices['Pixel 7'] } },
-    { name: 'desktop-chrome', use: { ...devices['Desktop Chrome'] } },
+    // B-079. One real sign-in per run, saved for every spec to replay. Staff
+    // MFA makes this mandatory rather than merely tidy: a TOTP code is
+    // single-use, so parallel specs each doing their own sign-in would be
+    // correctly rejected as replays.
+    { name: 'setup', testMatch: /.*\.setup\.ts/ },
+    { name: 'mobile-chrome', use: { ...devices['Pixel 7'] }, dependencies: ['setup'] },
+    { name: 'desktop-chrome', use: { ...devices['Desktop Chrome'] }, dependencies: ['setup'] },
   ],
   webServer: {
     command: 'npm run dev',

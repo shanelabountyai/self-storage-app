@@ -428,6 +428,42 @@ describeDb('POS depth (US-33 / US-34 / US-39.6)', () => {
       expect(row?.varianceCents).toBe(-200)
     })
 
+    it('keeps an evening payment on the same row as the drawer that counted it', async () => {
+      // B-079 found this: payments were bucketed by `receivedAt`'s UTC day
+      // while a drawer session carries the facility-LOCAL one. For a US
+      // facility those disagree every evening — 7pm in Chicago is already
+      // tomorrow in UTC — so every close-out done after the office shut
+      // reconciled against an empty column, on a different row of the report.
+      //
+      // Written as an explicit late-evening payment rather than relying on the
+      // clock, because the original bug was invisible for nineteen hours a day
+      // and the tests that missed it happened to run inside those hours.
+      const opened = await openDrawer(manager(), facilityId, 10_000)
+      if (!opened.ok) throw new Error('unreachable')
+
+      const session = await prisma.drawerSession.findUniqueOrThrow({
+        where: { id: opened.sessionId },
+      })
+      // 20:00 in Chicago on the session's own business date — 01:00 UTC the
+      // NEXT day, which is the whole point.
+      const evening = new Date(session.businessDate.getTime() + 25 * 60 * 60 * 1000)
+      await prisma.payment.updateMany({
+        where: { drawerSessionId: opened.sessionId },
+        data: { receivedAt: evening },
+      })
+      await takeCash(4_000)
+      await prisma.payment.updateMany({
+        where: { drawerSessionId: opened.sessionId },
+        data: { receivedAt: evening },
+      })
+
+      const report = await depositsReport(manager(), d('2020-01-01'), d('2100-01-01'), facilityId)
+      const rows = report.rows.filter((r) => r.facilityId === facilityId)
+      expect(rows).toHaveLength(1)
+      expect(rows[0].cashRecordedCents).toBe(4_000)
+      expect(rows[0].countedCashCents).not.toBeNull()
+    })
+
     it('flags cash taken with no drawer session as unreconciled', async () => {
       await takeCash(7_500)
 

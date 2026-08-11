@@ -114,6 +114,8 @@ Grouped by feature area. AC = acceptance criteria. Stories tagged **[MVP]** or *
 
 **US-4 [P2]** As an owner, I can define org-level defaults (fee schedule, notice templates, delinquency timeline) and push them to selected facilities, with per-facility overrides flagged visibly.
 
+- **Built in B-079** at `/admin/settings/org`. A default is **pushed, never resolved at runtime** (D-41): the push writes ordinary effective-dated rows into the receiving facility's own tables, so invoicing, the late-fee job and the delinquency engine keep reading exactly one place. "Overridden" is therefore a **computed comparison** against the values in force today, not a stored flag — and it names what diverges ("overridden: admin fee, late step 2") rather than only that something does. **Notice templates get no push**, deliberately: `MessageTemplate` already resolves org-level → facility override at render time, so the org default is already live everywhere that has not diverged; what shipped for templates is the visibility half. Editing a default requires `org:defaults` org-wide (an all-facilities assignment); pushing to a given site is checked against `facility:settings` **at that site**, per facility rather than once per batch.
+
 ### 4.2 Unit Inventory
 
 **US-5 [MVP]** As a facility manager, I see an interactive facility map (or auto-generated grid fallback) of all units, color-coded by status, so I can answer "what's available" and find a unit visually.

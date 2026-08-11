@@ -156,6 +156,26 @@ export const AUDIT_ACTIONS = [
   // Authentication
   { action: 'password.reset_completed', label: 'Password reset completed', requiresReason: false },
   { action: 'login.locked_out', label: 'Login locked out', requiresReason: false },
+
+  // B-079. Staff MFA (PRD 00 §7.1).
+  { action: 'mfa.enrolled', label: 'MFA enrolled', requiresReason: false },
+  /// A recovery code is a bypass of the second factor. Logged separately from an
+  /// ordinary sign-in because a run of these is what a phished account looks
+  /// like from the outside, and because it is the only signal that somebody is
+  /// down to their last few codes.
+  { action: 'mfa.recovery_code_used', label: 'MFA recovery code used', requiresReason: false },
+  { action: 'mfa.recovery_codes_regenerated', label: 'MFA recovery codes regenerated', requiresReason: false },
+  /// One administrator clearing another's second factor. Requires a reason:
+  /// this is the single action that turns "I have their password" into a full
+  /// account takeover, so the log has to say who asked and why.
+  { action: 'mfa.reset_by_admin', label: 'MFA reset by an administrator', requiresReason: true },
+
+  // B-079. Org-level defaults (PRD 02 US-4).
+  { action: 'org_default.updated', label: 'Org default updated', requiresReason: false },
+  /// Recorded once per facility, not once per push: "what changed at this
+  /// facility and who did it" is the question the log gets asked, and a single
+  /// org-level row listing twelve facility ids does not answer it.
+  { action: 'org_default.pushed', label: 'Org default pushed to a facility', requiresReason: false },
 ] as const satisfies readonly AuditActionSpec[]
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number]['action']

@@ -667,6 +667,12 @@ export default async function AdminSettingsPage() {
           <Link href="/admin/settings/reviews" className="underline underline-offset-2">
             Reviews — manual entry and the review-request link
           </Link>
+          <Link href="/admin/settings/org" className="underline underline-offset-2">
+            Org defaults — one fee schedule, ladder and timeline for the portfolio
+          </Link>
+          <Link href="/admin/settings/staff" className="underline underline-offset-2">
+            Staff security — who has two-factor authentication switched on
+          </Link>
         </p>
       </section>
 

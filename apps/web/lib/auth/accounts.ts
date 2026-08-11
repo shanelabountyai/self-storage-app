@@ -1,5 +1,6 @@
 import { prisma, type AuthAudience } from '@storage/db'
 import { hashPassword, needsRehash, verifyPassword } from './password'
+import { verifySecondFactor } from './mfa'
 import { checkLoginThrottle, recordLoginAttempt } from './rate-limit'
 
 export type AuthenticatedSubject = {
@@ -49,13 +50,22 @@ export class LoginThrottledError extends Error {
 }
 
 /// Returns null for every ordinary failure — unknown email, no password set,
-/// wrong password, disabled account — so the caller has nothing to enumerate
-/// with. Throws only when the request is throttled, which the user must be told.
+/// wrong password, disabled account, missing or wrong second factor — so the
+/// caller has nothing to enumerate with. Throws only when the request is
+/// throttled, which the user must be told.
+///
+/// `secondFactor` is a TOTP code or a recovery code, and is required only for
+/// staff who have completed enrolment (B-079). It is checked BEFORE the login
+/// attempt is recorded, which is the point: recording a success on a correct
+/// password and then failing MFA afterwards would clear the throttle counter on
+/// every attempt, leaving the second factor itself unthrottled and free to
+/// brute-force at a million codes an hour.
 export async function authenticateWithPassword(
   email: string,
   password: string,
   audience: AuthAudience,
   ipAddress?: string | null,
+  secondFactor?: string | null,
 ): Promise<AuthenticatedSubject | null> {
   const throttle = await checkLoginThrottle(email, audience, ipAddress)
   if (!throttle.allowed) throw new LoginThrottledError(throttle.retryAfterMs)
@@ -63,7 +73,12 @@ export async function authenticateWithPassword(
   const account = await findAccount(email, audience)
   // Still runs the KDF when there's no account, so timing doesn't reveal it.
   const ok = await verifyPassword(password, account?.passwordHash)
-  const success = ok && account !== null && !account.disabled
+  const passwordOk = ok && account !== null && !account.disabled
+
+  const success =
+    passwordOk && account
+      ? await secondFactorOk(account.id, audience, secondFactor)
+      : false
 
   await recordLoginAttempt(email, audience, success, ipAddress)
   if (!success || !account) return null
@@ -78,6 +93,25 @@ export async function authenticateWithPassword(
     audience,
     name: `${account.firstName} ${account.lastName}`.trim(),
   }
+}
+
+/// True when the second factor is satisfied — which for a tenant, or for a
+/// staff member who has not enrolled yet, means "there is nothing to satisfy".
+///
+/// An unenrolled staff member is let through deliberately. Enforcement lives in
+/// the admin layout, which sends them to /mfa before they can reach any screen;
+/// blocking the sign-in itself would leave a new hire with no way to ever
+/// enrol, and would break the `system` integration accounts that authenticate
+/// but never browse the admin.
+async function secondFactorOk(
+  subjectId: string,
+  audience: AuthAudience,
+  submitted: string | null | undefined,
+): Promise<boolean> {
+  if (audience !== 'staff') return true
+
+  const result = await verifySecondFactor(subjectId, (submitted ?? '').trim())
+  return result.ok || result.reason === 'not_enrolled'
 }
 
 /// Used after a magic link or password-reset token has already been consumed.

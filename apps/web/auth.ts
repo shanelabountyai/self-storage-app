@@ -19,6 +19,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         email: { label: 'Email', type: 'email' },
         password: { label: 'Password', type: 'password' },
         audience: { label: 'Audience', type: 'text' },
+        // B-079. A TOTP code or a recovery code. Required for staff who have
+        // enrolled; ignored for tenants and for staff who have not.
+        code: { label: 'Authentication code', type: 'text' },
       },
       async authorize(credentials, request) {
         const email = String(credentials?.email ?? '')
@@ -31,6 +34,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             password,
             audienceOf(credentials?.audience),
             clientIp(request),
+            credentials?.code == null ? null : String(credentials.code),
           )
           return subject ? { ...subject, name: subject.name } : null
         } catch (error) {
@@ -55,6 +59,12 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         // Single-use and expiry are enforced inside consumeToken.
         const consumed = await consumeToken(token, 'magic_link')
         if (!consumed) return null
+
+        // B-079. flows.ts refuses to MINT a staff magic link; this refuses to
+        // spend one. Both, because a link minted before this shipped is still
+        // sitting in somebody's inbox, and possession of an inbox is precisely
+        // the second factor the password path now insists on.
+        if (consumed.audience === 'staff') return null
 
         const subject = await loadSubject(consumed.subjectId, consumed.audience)
         return subject ? { ...subject, name: subject.name } : null

@@ -4,10 +4,12 @@ import { prisma } from '@storage/db'
 import { CLOSED_ALL_WEEK, type WeeklySchedule } from '@storage/core/facility-settings'
 import { recomputeUnitStatus } from '@/lib/admin/units'
 import { setPassword } from '@/lib/auth/accounts'
+import { encryptTotpSecret } from '@/lib/auth/totp-secret'
 import {
   DEMO_EMAIL_DOMAIN,
   DEMO_STAFF_EMAIL,
   DEMO_STAFF_PASSWORD,
+  DEMO_STAFF_TOTP_SECRET,
   DEMO_TENANT_EMAIL,
   DEMO_TENANT_PASSWORD,
   DEMO_POS_TENANT_EMAIL,
@@ -326,6 +328,20 @@ async function seedStaffOwner(facilityIds: string[]) {
     })),
   })
   await setPassword(staffUser.id, 'staff', DEMO_STAFF_PASSWORD)
+
+  // B-079. Enrolled with the published demo secret, encrypted the same way a
+  // real enrolment is — no test-only column, no bypass. `totpLastStep` is
+  // cleared so a fresh seed does not inherit a replay guard from the previous
+  // run's last sign-in, which would reject the first code of the new one.
+  await prisma.staffUser.update({
+    where: { id: staffUser.id },
+    data: {
+      totpSecret: encryptTotpSecret(DEMO_STAFF_TOTP_SECRET),
+      totpConfirmedAt: new Date(),
+      totpLastStep: null,
+    },
+  })
+
   return staffUser
 }
 
