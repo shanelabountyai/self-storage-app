@@ -2727,7 +2727,7 @@ this math was "built once", which it now genuinely is.
 
 ## B-078 — POS depth: cash drawer + merchandise
 
-`PENDING`
+`604160a`
 
 **What it built.** US-33's drawer session and US-34's merchandise sales, plus
 the deposits reconciliation US-39.6 asks for.
