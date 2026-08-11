@@ -127,3 +127,57 @@ export function missedBusinessDates(
   }
   return dates
 }
+
+/// How far a timezone is from UTC at a given instant, in minutes, positive east
+/// of UTC (so America/Chicago in summer is -300).
+///
+/// Resolved from `Intl` at the actual instant rather than from a fixed table,
+/// which is what makes it DST-correct: the same zone answers -360 in January
+/// and -300 in July, and nothing here has to know why.
+export function zoneOffsetMinutes(instant: Date, timezone: string): number {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).formatToParts(instant)
+
+  const get = (type: string) => Number(parts.find((p) => p.type === type)!.value)
+  const asUtc = Date.UTC(
+    get('year'),
+    get('month') - 1,
+    get('day'),
+    get('hour') % 24,
+    get('minute'),
+    get('second'),
+  )
+  return Math.round((asUtc - instant.getTime()) / 60_000)
+}
+
+/// The UTC instant of facility-local midnight on a given calendar date.
+///
+/// The inverse of `businessDateFor`, and the piece B-102's statements needed:
+/// a monthly period has to start at local midnight, because a payment taken at
+/// 8pm on the 31st belongs to that month and a UTC boundary would push it into
+/// the next one at every US facility. That is the same mistake B-078's deposits
+/// report shipped with.
+///
+/// Measured twice on purpose. The offset at the naive instant and the offset at
+/// the true one differ across a DST boundary, so a single-pass conversion is an
+/// hour out for exactly the two days a year somebody would notice.
+export function zonedMidnight(
+  year: number,
+  month: number,
+  day: number,
+  timezone: string,
+): Date {
+  const naive = Date.UTC(year, month - 1, day)
+  const first = zoneOffsetMinutes(new Date(naive), timezone)
+  const candidate = naive - first * 60_000
+  const second = zoneOffsetMinutes(new Date(candidate), timezone)
+  return new Date(second === first ? candidate : naive - second * 60_000)
+}

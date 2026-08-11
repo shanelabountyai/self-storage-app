@@ -3086,3 +3086,79 @@ delete the variable themselves and restore it.
   FR-9's "metrics" asks for; the dashboard shows only the latest run.
 - **Camera links are unordered in practice** — `sortOrder` exists on the model
   and there is no UI to set it.
+
+---
+
+## B-081 split → B-102–B-107, and B-102 — monthly statements centre
+
+`PENDING`
+
+**The split first (D-44).** B-081 bundled six unrelated features behind one
+number. Backlog note 8 always intended these tail bundles to be split when
+reached; B-078 and B-080 were each built whole because their parts shared a
+schema and a screen, and B-081's do not — a mapping vendor, a payment method, a
+statements read model, an insurance workflow, a gate-access surface and a
+rewrite of the checkout core touch six PRD sections and six tables. It is now
+B-102 (statements), B-103 (ACH + Stripe Link), B-104 (insurance tier change +
+proof upload), B-105 (portal authorized-access self-service), B-106
+(future-dated + multi-unit checkout — the only one that changes checkout's core
+assumptions) and B-107 (map view, **blocked** until §10 OQ-6 has a maps vendor,
+and ordered last for that reason). The dropped size-estimator quiz stays
+dropped.
+
+**What B-102 built.** PRD 01 US-705's "monthly statements".
+
+- `packages/core/billing/statements.ts` — `buildStatement`, `reconciles`,
+  `statementMonths`, `monthBounds`, all pure.
+- `packages/core/jobs/schedule.ts` gained `zoneOffsetMinutes` and
+  `zonedMidnight` — the inverse of `businessDateFor`, which did not exist.
+- `apps/web/lib/billing/statements.ts` — the read model, plus the staff-side
+  gate.
+- `/portal/statements` and `/portal/statements/[leaseId]/[period]`; the same
+  document for staff at `/admin/tenants/[id]/ledger/[leaseId]/statements`,
+  through one shared `StatementView` component.
+
+**What it decided.**
+
+- *A statement is derived, never stored.* `LedgerEntry` is append-only, so a
+  month recomputes to the same figures forever. A stored copy would be a second
+  source of truth that could disagree with the ledger the business runs on. A
+  later reversal appears in the period it was made — which is what an accountant
+  expects — rather than silently rewriting a month already sent.
+- *The closing balance is opening + movement, never a second independent sum.*
+  Two sums that should agree are two things that can disagree, and the one
+  thing a statement may not do is fail to add up.
+- *A statement that does not reconcile throws.* `reconciles()` is called by the
+  read model, not only by tests. Rendering it anyway puts a document in front of
+  somebody's accountant that is wrong in a way nobody noticed.
+- *Month boundaries are facility-local midnight, not UTC.* A payment taken at
+  8pm on the 31st belongs to that month. This is the same mistake B-078's
+  deposits report shipped with, caught this time before it shipped — a DB test
+  files a 01:00 UTC payment into the previous local month, and a pure test
+  asserts consecutive months have no gap and no overlap.
+- *Months with no activity are listed.* "Nothing happened in March" is an
+  answer a bookkeeper may need, and a gap in a numbered list reads as a missing
+  document.
+- *Ended leases keep their statements.* A moved-out tenant still needs last
+  year's, which is most of why persona P5 wants this screen at all.
+- *Staff see the identical document, gated exactly like the ledger*
+  (`assertFacilityAccess` + `tenants:view` at the lease's own facility). Two
+  implementations of a financial summary is two chances for them to disagree in
+  front of a tenant; a different URL must not be a way around the ledger's own
+  scoping.
+- *Still HTML, not PDF.* B-023's standing decision holds — no JavaScript PDF
+  library available to this project emits tagged PDFs, and an untagged statement
+  is exactly the §6.8.1 accessibility failure. The browser's print dialogue
+  makes a paper copy.
+
+**What it left behind.**
+
+- **No PDF and no emailed statement.** Both wait on the same unbuilt PDF
+  encoder port. There is no "email me this statement" action.
+- **No statement-level tax breakdown.** Line descriptions carry what each charge
+  was; §3's "taxes itemized" is satisfied at the invoice, not summarised as a
+  tax total per month.
+- **No cross-lease consolidated statement.** A tenant with three units gets
+  three lists. Consolidated billing is explicitly Phase 3 (§9, "business
+  accounts").
+- **No paging.** A tenant with six years of history gets 72 links on one page.

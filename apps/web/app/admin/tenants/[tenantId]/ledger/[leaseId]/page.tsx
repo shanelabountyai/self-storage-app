@@ -52,6 +52,12 @@ export default async function LedgerPage({
           >
             Export CSV
           </Link>
+          <Link
+            href={`/admin/tenants/${tenantId}/ledger/${leaseId}/statements`}
+            className="underline underline-offset-2"
+          >
+            Monthly statements
+          </Link>
           <Link href={`/admin/tenants/${tenantId}`} className="underline underline-offset-2">
             Back to tenant
           </Link>

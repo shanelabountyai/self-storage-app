@@ -197,6 +197,8 @@ As a renter, I want to sign the lease, pay, and get my gate code online so I can
 **US-705 — View lease, receipts, statements**
 - Download signed lease PDF; list of all payments with downloadable PDF receipts; monthly statements; insurance/protection selection visible with option to change tier (takes effect next billing cycle) or submit proof of own insurance.
 
+- **The monthly statements half was built in B-102** at `/portal/statements`, with the same document available to staff from the lease ledger so "can you send me my March statement?" does not require impersonating anybody. A statement is **derived, never stored**: `LedgerEntry` is append-only, so a month recomputes to the same figures forever, and a stored copy would be a second source of truth that could disagree with the ledger the business runs on. It is refused rather than rendered if it does not reconcile — opening balance plus every line must equal the closing balance exactly, and a statement that fails that is a wrong document in front of somebody's accountant. Month boundaries are **facility-local midnight**, not UTC (`zonedMidnight`), so a payment taken at 8pm on the 31st is filed in the month it happened. **Still HTML, not PDF** — the standing B-023 decision: no JavaScript PDF library available here emits tagged PDFs, and an untagged statement is the §6.8.1 failure. The insurance tier-change half of this story is **B-104**.
+
 **US-706 — Update contact info**
 - Edit phone, email, mailing address, alternate contact; email change requires confirmation to both old and new addresses.
 
