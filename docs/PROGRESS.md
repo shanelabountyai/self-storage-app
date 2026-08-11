@@ -2812,7 +2812,7 @@ by design — widened rather than cast), and `sellMerchandise` returned
 
 ## B-079 — Staff MFA + org-level defaults
 
-`PENDING`
+`d654876`
 
 **What it built.** Two halves of PRD 00 §7.1 and PRD 02 US-4.
 
