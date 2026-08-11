@@ -70,7 +70,7 @@ export type DeliveryCheckInput = {
   /// never been asked. Null and `revoked` are both refusals; they differ only
   /// in the message, because "they said no" and "nobody asked" need different
   /// fixes from whoever is standing at the counter.
-  noticeEmailConsent: 'granted' | 'revoked' | null
+  noticeEmailConsent: 'granted' | 'revoked' | 'pending' | null
 }
 
 export function canDeliver(input: DeliveryCheckInput): DeliveryVerdict {
@@ -92,11 +92,15 @@ export function canDeliver(input: DeliveryCheckInput): DeliveryVerdict {
           'Use mail, and capture notice-by-email consent separately if you want the option later.',
       }
     }
-    if (input.noticeEmailConsent === 'revoked') {
+    // `pending` counts as not-yet-consented here, deliberately: a tenant who
+    // has been ASKED about notice-by-email and has not answered has not agreed
+    // to it, and serving a legal notice on that basis is exactly the thing this
+    // check exists to prevent.
+    if (input.noticeEmailConsent === 'revoked' || input.noticeEmailConsent === 'pending') {
       return {
         allowed: false,
         reason:
-          'This tenant has withdrawn consent to receive notices by email. Serve this notice by mail.',
+          'This tenant has not agreed to receive notices by email, or has withdrawn that agreement. Serve this notice by mail.',
       }
     }
   }

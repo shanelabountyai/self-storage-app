@@ -3464,6 +3464,31 @@ waiting for a storage vendor since B-023. This closes it.
   from about a second to ten or twenty, and then started timing out. Now a
   fixed number of queries regardless of portfolio size; the same suite runs in
   about a second per test again.
+- **Text-based SMS opt-in, made real — and made a DOUBLE opt-in.** A campaign
+  registration that declares "consent collected by text" needs the system to
+  actually do it, and it did not: `applySmsStart` only lifted a previous STOP,
+  so a tenant who gave us their number at move-in and never switched texts on
+  could text JOIN all day and stay unsubscribed.
+
+  The flow is now two steps, which is what a carrier campaign review asks to
+  see: `JOIN`/`SUBSCRIBE` records `pending` and asks for confirmation and
+  **subscribes nobody**; only a reply of `YES` grants consent. A bare YES with
+  nothing pending subscribes nobody either — otherwise the second step is
+  theatre and "they replied YES" is evidence of nothing. `START`/`UNSTOP` stay
+  a one-step immediate resume, because carriers require that and somebody who
+  already opted in once is not somebody to ask twice.
+
+  `ConsentState` gained `pending` for this. Every existing reader compares
+  against `granted`, so a pending row counts as not-consented everywhere by
+  construction; the one place that tested for `revoked` specifically
+  (`notices/delivery.ts`, legal notice by email) now names it explicitly rather
+  than letting a pending consent fall through as permission.
+
+  Both outbound messages carry the five things an audit looks for — who is
+  texting, what they will get, how often, that rates may apply, and both HELP
+  and STOP. **A number we cannot place is told so rather than confirmed**: a
+  confirmation with no consent behind it is precisely the message an audit
+  would read as proof of consent.
 - **A public text-message policy page** (`/messaging-policy`), which an A2P
   10DLC campaign registration asks for by URL and which the portal's own consent
   control now links to. Written from the code rather than from a template: the

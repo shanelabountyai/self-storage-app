@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
+import { SMS_CONFIRM_KEYWORD, SMS_OPT_IN_KEYWORD } from '@storage/core/comms'
 import { SITE } from '@/lib/site-config'
 
 export const metadata: Metadata = {
@@ -46,9 +47,24 @@ export default function MessagingPolicyPage() {
           How you agree to receive texts
         </h2>
         <p className="text-pretty">
-          We never text a number that has not agreed to hear from us. You give consent by turning
-          text messages on yourself, in the <strong>Notifications</strong> section of your online
-          account, or by telling our staff to switch them on for you.
+          We never text a number that has not agreed to hear from us.
+        </p>
+        <p className="text-pretty">
+          <strong>
+            Text {SMS_OPT_IN_KEYWORD} to {SITE.smsNumber.display}, then reply{' '}
+            {SMS_CONFIRM_KEYWORD} when we ask.
+          </strong>{' '}
+          Texting the keyword does not subscribe you on its own — we reply asking you to confirm,
+          and only your {SMS_CONFIRM_KEYWORD} switches the messages on. Both of our replies tell you
+          how often we text, that message and data rates may apply, and how to stop.
+        </p>
+        <p className="text-pretty">
+          If we do not recognise the number you text from, we say so and subscribe nothing — call us
+          and we will add it to your account first.
+        </p>
+        <p className="text-pretty">
+          You can also turn text messages on yourself, in the <strong>Notifications</strong> section
+          of your online account, or by telling our staff to switch them on for you.
         </p>
         <p className="text-pretty">
           When you do, we record the date and time, where the consent came from, and the exact
@@ -100,8 +116,8 @@ export default function MessagingPolicyPage() {
           part of your rental agreement.
         </p>
         <p className="text-pretty">
-          To start again, reply <strong>START</strong> or <strong>UNSTOP</strong>, or turn texts back
-          on from your Notifications page. For help, reply <strong>HELP</strong> — you will get our
+          To start again, reply <strong>START</strong> or <strong>UNSTOP</strong>, or turn texts
+          back on from your Notifications page. For help, reply <strong>HELP</strong> — you will get our
           phone number and a link back to this page.
         </p>
         <p className="text-pretty">
@@ -153,22 +169,6 @@ export default function MessagingPolicyPage() {
         </p>
       </section>
 
-      <section aria-labelledby="contact" className="flex flex-col gap-3">
-        <h2 id="contact" className="text-lg font-medium">
-          Questions
-        </h2>
-        <p className="text-pretty">
-          Call{' '}
-          <a href={`tel:${SITE.phone.href}`} className="font-medium underline underline-offset-4">
-            {SITE.phone.display}
-          </a>{' '}
-          or email{' '}
-          <a href={`mailto:${SITE.supportEmail}`} className="underline underline-offset-4">
-            {SITE.supportEmail}
-          </a>
-          .
-        </p>
-      </section>
     </main>
   )
 }

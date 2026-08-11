@@ -153,6 +153,14 @@ export const AUDIT_ACTIONS = [
   /// gets papered over.
   { action: 'merchandise.stock_adjusted', label: 'Stock adjusted', requiresReason: true },
 
+  /// PRD 05 CN-14. A double opt-in completed by text.
+  ///
+  /// Audited on its own, separately from the `Consent` row it writes, because
+  /// the row records the STATE and this records the ACT — and it is the act a
+  /// carrier or a TCPA complaint asks about: this number, texting this word, at
+  /// this time.
+  { action: 'consent.captured', label: 'Consent captured', requiresReason: false },
+
   // PRD 01 US-705 (B-104). Protection cover, changed by the tenant.
   ///
   /// Three separate actions rather than one, because they answer three

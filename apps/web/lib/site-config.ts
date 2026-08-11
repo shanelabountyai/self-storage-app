@@ -9,6 +9,11 @@ export const SITE = {
   /// E.164 for the `tel:` href, formatted separately for display.
   phone: { href: '+15125550100', display: '(512) 555-0100' },
   supportEmail: 'help@example.com',
+  /// The number tenants text to opt in, and the one the messaging policy
+  /// publishes. Separate from `phone` on purpose: the office line and the A2P
+  /// messaging number are usually different, and printing the wrong one on the
+  /// page an A2P 10DLC review reads is how a campaign gets rejected.
+  smsNumber: { href: '+18775147301', display: '(877) 514-7301' },
 } as const
 
 /// Static/legal pages required by PRD 01 FR-8.1. Listed once so the footer,

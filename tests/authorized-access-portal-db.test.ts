@@ -107,8 +107,14 @@ describeDb('tenant self-service for the access list (US-9 AC4)', () => {
 
   beforeEach(async () => {
     await prisma.gateCommand.deleteMany({ where: { facilityId } })
+    // Scoped to THIS facility. Without the facility filter this deletes every
+    // authorized-person credential in the shared test schema — including one
+    // `authorized-access-db.test.ts` created moments earlier in a parallel
+    // worker, which then fails with "no record was found" for a row it had
+    // just been handed the id of. That is what it did, intermittently, for
+    // several runs.
     await prisma.accessCredential.deleteMany({
-      where: { grant: { authorizedPersonId: { not: null } } },
+      where: { facilityId, grant: { authorizedPersonId: { not: null } } },
     })
     await prisma.accessGrant.deleteMany({ where: { facilityId, authorizedPersonId: { not: null } } })
     await prisma.authorizedAccessPerson.deleteMany({ where: { facilityId } })

@@ -94,7 +94,16 @@ export async function applySmsStop(input: {
   return { suppressed: true, tenantMatched: Boolean(tenant) }
 }
 
-export type SmsStartResult = { lifted: boolean; tenantMatched: boolean }
+export type SmsStartResult = {
+  /// A previous STOP was lifted. False on a first-time opt-in, which had
+  /// nothing to lift.
+  lifted: boolean
+  /// We could tell whose number this is, and therefore had somewhere to record
+  /// the consent.
+  tenantMatched: boolean
+  /// Consent is now granted for this number.
+  optedIn: boolean
+}
 
 /// CN-14 AC: "START/UNSTOP re-enables with logged re-consent." Deliberately
 /// its OWN path rather than `removeSuppression` (CN-20's admin lift) — that
@@ -106,30 +115,49 @@ export type SmsStartResult = { lifted: boolean; tenantMatched: boolean }
 /// working around it.
 export async function applySmsStart(input: { rawPhone: string }): Promise<SmsStartResult> {
   const phone = normalizePhoneE164(input.rawPhone)
-  if (!phone) return { lifted: false, tenantMatched: false }
+  if (!phone) return { lifted: false, tenantMatched: false, optedIn: false }
 
   const existing = await prisma.suppression.findUnique({
     where: { channel_address: { channel: 'sms', address: phone } },
   })
-  if (!existing || existing.reason !== 'stop') return { lifted: false, tenantMatched: false }
+  // Only a `stop` entry is the tenant's own instruction to undo. A `bounce` or
+  // a staff-added suppression is somebody else's decision and stays.
+  const liftable = existing?.reason === 'stop' ? existing : null
 
   const tenant = await findTenantByPhone(phone)
 
+  // A number we cannot place has nowhere to record consent — `Consent` needs an
+  // owner — and there is nothing we would text it anyway. Reported honestly so
+  // the reply can say "we do not recognise this number" rather than confirming
+  // a subscription that does not exist.
+  if (!liftable && !tenant) return { lifted: false, tenantMatched: false, optedIn: false }
+
   await prisma.$transaction(async (tx) => {
-    await tx.suppression.delete({ where: { id: existing.id } })
-    await recordAudit(
-      {
-        actor: toAuditActor(systemActor('sms_start_keyword')),
-        action: 'suppression.removed',
-        entityType: 'Suppression',
-        entityId: `sms:${phone}`,
-        reasonCode: 'inbound_start_keyword',
-        before: { reason: existing.reason, note: existing.note, createdAt: existing.createdAt.toISOString() },
-        context: { channel: 'sms' },
-      },
-      tx,
-    )
+    if (liftable) {
+      await tx.suppression.delete({ where: { id: liftable.id } })
+      await recordAudit(
+        {
+          actor: toAuditActor(systemActor('sms_start_keyword')),
+          action: 'suppression.removed',
+          entityType: 'Suppression',
+          entityId: `sms:${phone}`,
+          reasonCode: 'inbound_start_keyword',
+          before: {
+            reason: liftable.reason,
+            note: liftable.note,
+            createdAt: liftable.createdAt.toISOString(),
+          },
+          context: { channel: 'sms' },
+        },
+        tx,
+      )
+    }
     if (tenant) {
+      // Written whether or not there was a STOP to lift. THIS is what makes
+      // texting a keyword a genuine opt-in rather than only a resume: a tenant
+      // who gave us their number at move-in but never switched texts on can
+      // now grant consent from their phone, which is the method an A2P 10DLC
+      // campaign declares when it says consent is collected by text.
       await recordConsent(
         { tenantId: tenant.id, channel: 'account_sms', state: 'granted', source: 'sms_start_keyword' },
         tx,
@@ -137,5 +165,80 @@ export async function applySmsStart(input: { rawPhone: string }): Promise<SmsSta
     }
   })
 
-  return { lifted: true, tenantMatched: Boolean(tenant) }
+  return { lifted: Boolean(liftable), tenantMatched: Boolean(tenant), optedIn: Boolean(tenant) }
+}
+
+export type SmsOptInResult =
+  | { ok: true; step: 'awaiting_confirmation' }
+  | { ok: true; step: 'confirmed' }
+  | { ok: false; reason: 'unknown_number' | 'nothing_pending' }
+
+/// Step one of the double opt-in: they texted JOIN.
+///
+/// Records `pending` and asks them to confirm. It deliberately does NOT
+/// subscribe anybody — that is the whole difference between a two-step opt-in
+/// and a one-step one wearing an extra message, and it is the step a carrier
+/// campaign review asks to see in the collateral.
+export async function beginSmsOptIn(input: { rawPhone: string }): Promise<SmsOptInResult> {
+  const phone = normalizePhoneE164(input.rawPhone)
+  if (!phone) return { ok: false, reason: 'unknown_number' }
+
+  const tenant = await findTenantByPhone(phone)
+  // Nowhere to record consent, and nothing we would text them anyway. Answered
+  // honestly so the reply can say so rather than starting a flow that cannot
+  // finish.
+  if (!tenant) return { ok: false, reason: 'unknown_number' }
+
+  await recordConsent({
+    tenantId: tenant.id,
+    channel: 'account_sms',
+    state: 'pending',
+    source: 'sms_opt_in_keyword',
+  })
+
+  return { ok: true, step: 'awaiting_confirmation' }
+}
+
+/// Step two: they replied YES.
+///
+/// Only completes an opt-in that is actually pending. A bare YES from somebody
+/// who never texted JOIN subscribes nobody — otherwise the second step would be
+/// theatre, and "they replied YES" would be evidence of nothing.
+export async function confirmSmsOptIn(input: { rawPhone: string }): Promise<SmsOptInResult> {
+  const phone = normalizePhoneE164(input.rawPhone)
+  if (!phone) return { ok: false, reason: 'unknown_number' }
+
+  const tenant = await findTenantByPhone(phone)
+  if (!tenant) return { ok: false, reason: 'unknown_number' }
+
+  const latest = await prisma.consent.findFirst({
+    where: { tenantId: tenant.id, channel: 'account_sms' },
+    orderBy: [{ capturedAt: 'desc' }, { createdAt: 'desc' }],
+    select: { state: true },
+  })
+  if (latest?.state !== 'pending') return { ok: false, reason: 'nothing_pending' }
+
+  await prisma.$transaction(async (tx) => {
+    await recordConsent(
+      {
+        tenantId: tenant.id,
+        channel: 'account_sms',
+        state: 'granted',
+        source: 'sms_double_opt_in',
+      },
+      tx,
+    )
+    await recordAudit(
+      {
+        actor: toAuditActor(systemActor('sms_double_opt_in')),
+        action: 'consent.captured',
+        entityType: 'Tenant',
+        entityId: tenant.id,
+        context: { channel: 'account_sms', method: 'sms_double_opt_in', phone },
+      },
+      tx,
+    )
+  })
+
+  return { ok: true, step: 'confirmed' }
 }

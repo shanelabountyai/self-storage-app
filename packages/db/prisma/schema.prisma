@@ -264,6 +264,18 @@ enum ConsentChannel {
 enum ConsentState {
   granted
   revoked
+  /// Asked for and not yet confirmed — the middle step of a double opt-in.
+  ///
+  /// Added for SMS (a carrier campaign review expects a keyword, a request for
+  /// confirmation, and only then a subscription), but the state is general: it
+  /// is what "we asked and they have not answered" has always meant, written
+  /// down instead of inferred from a missing row.
+  ///
+  /// Every existing reader compares against `granted`, so a pending row counts
+  /// as NOT consented everywhere by construction. The one place that tests for
+  /// `revoked` specifically is `packages/core/notices/delivery.ts`, which is a
+  /// different channel and now names this state explicitly.
+  pending
 }
 
 // ------------------------------------------------------------- comms (PRD 05) ----

@@ -2,7 +2,12 @@ import { randomUUID } from 'node:crypto'
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { prisma } from '../packages/db'
 import { processCommsEvent, retryDeferredSmsMessages, suppress } from '../apps/web/lib/comms/service'
-import { applySmsStart, applySmsStop } from '../apps/web/lib/comms/sms-consent'
+import {
+  applySmsStart,
+  applySmsStop,
+  beginSmsOptIn,
+  confirmSmsOptIn,
+} from '../apps/web/lib/comms/sms-consent'
 import * as provider from '../apps/web/lib/comms/provider'
 
 // B-074 / PRD 05 FR-5/FR-7/FR-8/CN-13/CN-14, against real rows and the real
@@ -356,10 +361,85 @@ describeDb('SMS delivery (FR-5/FR-7/FR-8)', () => {
       expect(consent?.state).toBe('granted')
     })
 
-    it('applySmsStart is a no-op for a number that was never suppressed', async () => {
+    it('opts a KNOWN number in for the first time, with nothing to lift', async () => {
+      // The text-based opt-in an A2P 10DLC campaign declares as its consent
+      // method. Before this, START only undid a previous STOP — so a tenant who
+      // gave us their number at move-in and never switched texts on could text
+      // JOIN all day and stay unsubscribed.
       const tenant = await makeTenant()
       const result = await applySmsStart({ rawPhone: `+1${tenant.phone}` })
+
       expect(result.lifted).toBe(false)
+      expect(result.optedIn).toBe(true)
+
+      const consent = await prisma.consent.findFirst({
+        where: { tenantId: tenant.id, channel: 'account_sms' },
+        orderBy: { capturedAt: 'desc' },
+      })
+      expect(consent?.state).toBe('granted')
+      expect(consent?.source).toBe('sms_start_keyword')
+    })
+
+    it('JOIN alone subscribes nobody — it only asks for confirmation', async () => {
+      // The whole difference between a two-step opt-in and a one-step one
+      // wearing an extra message, and the step a campaign review asks to see.
+      const tenant = await makeTenant()
+      const result = await beginSmsOptIn({ rawPhone: `+1${tenant.phone}` })
+      expect(result).toEqual({ ok: true, step: 'awaiting_confirmation' })
+
+      const consent = await prisma.consent.findFirst({
+        where: { tenantId: tenant.id, channel: 'account_sms' },
+        orderBy: { capturedAt: 'desc' },
+      })
+      expect(consent?.state).toBe('pending')
+    })
+
+    it('YES after JOIN completes the opt-in', async () => {
+      const tenant = await makeTenant()
+      await beginSmsOptIn({ rawPhone: `+1${tenant.phone}` })
+      expect(await confirmSmsOptIn({ rawPhone: `+1${tenant.phone}` })).toEqual({
+        ok: true,
+        step: 'confirmed',
+      })
+
+      const consent = await prisma.consent.findFirst({
+        where: { tenantId: tenant.id, channel: 'account_sms' },
+        orderBy: { capturedAt: 'desc' },
+      })
+      expect(consent?.state).toBe('granted')
+      expect(consent?.source).toBe('sms_double_opt_in')
+    })
+
+    it('a bare YES with nothing pending subscribes nobody', async () => {
+      // Otherwise the second step is theatre, and "they replied YES" is
+      // evidence of nothing.
+      const tenant = await makeTenant()
+      expect(await confirmSmsOptIn({ rawPhone: `+1${tenant.phone}` })).toEqual({
+        ok: false,
+        reason: 'nothing_pending',
+      })
+      // The fixture tenant already has a consent row; what matters is that the
+      // bare YES wrote nothing of its own.
+      expect(
+        await prisma.consent.count({
+          where: { tenantId: tenant.id, channel: 'account_sms', source: 'sms_double_opt_in' },
+        }),
+      ).toBe(0)
+    })
+
+    it('will not begin an opt-in for a number it cannot place', async () => {
+      expect(await beginSmsOptIn({ rawPhone: `+1${nextPhone()}` })).toEqual({
+        ok: false,
+        reason: 'unknown_number',
+      })
+    })
+
+    it('does NOT subscribe a number it cannot place', async () => {
+      // Confirming a subscription here would be the worst possible reply: it is
+      // the message a carrier audit reads as proof of consent, and there would
+      // be no consent behind it.
+      const result = await applySmsStart({ rawPhone: `+1${nextPhone()}` })
+      expect(result).toEqual({ lifted: false, tenantMatched: false, optedIn: false })
     })
 
     it('a manual suppression is untouched by START — only a stop-reason entry lifts', async () => {
