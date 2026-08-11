@@ -3255,7 +3255,7 @@ the fix makes the failure mode impossible rather than merely unlikely.
 
 ## B-104 — Insurance tier change + proof of own cover
 
-`PENDING`
+`8f515b2`
 
 **What it built.** The other half of PRD 01 US-705, at `/portal/protection`.
 
