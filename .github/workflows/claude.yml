@@ -1,0 +1,50 @@
+name: Claude
+
+# The on-demand half: mention @claude in an issue, a PR comment or a review
+# comment and it picks the thread up with the repo checked out.
+#
+# Separate from claude-code-review.yml on purpose. That one runs unasked on
+# every PR and only reviews; this one runs only when somebody asks, and can be
+# asked to change things. Merging them would mean either reviewing on every
+# comment or granting write intent to a job nobody triggered.
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+  pull_request_review:
+    types: [submitted]
+  issues:
+    types: [opened, assigned]
+
+jobs:
+  claude:
+    # Only when actually summoned, and only from inside the repo — a fork's
+    # comment must not be able to start a job holding this repo's token.
+    if: |
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
+      (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
+    runs-on: ubuntu-latest
+
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - if: env.ANTHROPIC_API_KEY != ''
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_args: |
+            --allowed-tools "Read,Grep,Glob,Edit,Write,Bash(npm run typecheck),Bash(npm run lint),Bash(git diff:*),Bash(git log:*)"

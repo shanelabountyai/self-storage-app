@@ -1,0 +1,89 @@
+name: Claude review
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+# One review per branch. A force-push mid-review cancels the stale one rather
+# than leaving two sets of comments arguing with each other.
+concurrency:
+  group: claude-review-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+
+    # A fork's PR must not start a job holding this repo's token.
+    if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+
+    # Read once here so the step below can skip when it is unset. Without the
+    # key the action fails, and a red cross on every PR is noise — noise on a
+    # review job is how people stop reading it.
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+    permissions:
+      contents: read
+      pull-requests: write
+      # Required by the action to post inline review comments.
+      issues: write
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The diff is the subject of the review, so the base commit has to be
+          # present to compute one.
+          fetch-depth: 0
+
+      - name: Review the pull request
+        if: env.ANTHROPIC_API_KEY != ''
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            Review this pull request as a careful colleague who knows this
+            codebase. CLAUDE.md and docs/prds/ are the source of truth; read
+            them before commenting.
+
+            Prioritise, in this order:
+
+            1. **Correctness in money, access and legal paths.** Money is
+               integer cents everywhere. The ledger is append-only — corrections
+               are reversing entries, never edits. A gate credential that opens
+               when it should not, or a suspension that does not cascade to a
+               tenant's authorized people, is the most expensive kind of bug
+               here.
+            2. **Facility scoping.** Almost every table is scoped by
+               `facilityId`, and almost every read must be filtered by the
+               actor's assignments. An id taken from a URL or a form is not
+               authorisation. Flag any query that could return another
+               facility's or another tenant's rows.
+            3. **Shared-state damage in tests.** The suite runs in parallel
+               against ONE Postgres schema. A `deleteMany` without a
+               `facilityId`/suffix filter deletes rows a parallel suite is
+               using, and shows up days later as an unrelated flake. This has
+               happened; look for it specifically.
+            4. **Effective-dating and time.** Prices and policies are
+               effective-dated rather than edited. Business dates are
+               facility-local, not UTC — a payment at 8pm on the 31st belongs to
+               that month. Flag any `new Date()` bucketed by UTC day.
+            5. **Configuration with no control.** A new column that changes
+               behaviour needs its form field in the same change. "An operator
+               would have to ring someone" is the test.
+            6. **Accessibility on customer-facing work.** WCAG 2.1 AA is an
+               acceptance criterion, not cleanup: labels, error association,
+               focus, and never colour alone.
+
+            Also check: a schema change has a migration AND the invariants in
+            `tests/schema-invariants.test.ts` still hold; anything audited that
+            US-38 says needs a reason code actually passes one; and claims in
+            comments or docs match what the code does.
+
+            Be specific and short. Quote the line, say what goes wrong and when.
+            If the change is sound, say so briefly rather than inventing
+            findings — a review that always finds something is a review nobody
+            trusts.
+          claude_args: |
+            --allowed-tools "Read,Grep,Glob,Bash(git diff:*),Bash(git log:*)"
