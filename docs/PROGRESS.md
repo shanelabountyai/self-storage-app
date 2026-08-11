@@ -3167,7 +3167,7 @@ dropped.
 
 ## B-103 — ACH bank debit + Stripe Link
 
-`PENDING`
+`7dbc517`
 
 **What it built.** PRD 01 §3's remaining payment methods, and the settlement
 state ACH forced.
