@@ -3323,7 +3323,7 @@ the fix makes the failure mode impossible rather than merely unlikely.
 
 ## B-105 — Portal self-service for the authorized-access list
 
-`PENDING`
+`95249b1`
 
 **What it built.** PRD 03 US-9 AC4's Phase 2 half: `/portal/access`, where a
 tenant adds, sees and withdraws their own named people.
