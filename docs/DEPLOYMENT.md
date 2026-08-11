@@ -28,23 +28,26 @@ matters when something does not work.
   are still recorded; no `ACCESS_CODE_ENCRYPTION_KEY` means gate codes are
   issued but not revealable. None of these break a deploy.
 
-## Two things to check against your Vercel plan
+## The plan, and why it matters
 
-Both are believed true of Vercel's plans as of writing and are worth confirming
-rather than taking on trust — plan limits change:
+**Vercel Pro, from 2026-08-11.** Two things in this repo needed it, and both are
+now settled rather than open:
 
-1. **`vercel.json` schedules the cron hourly** (`0 * * * *`). Hobby has
-   historically limited cron to once per day. Nightly jobs run in
-   facility-local time, so the hourly tick is what asks "which facilities have
-   just reached their hour" — a daily tick would run every facility's jobs at
-   one UTC hour, which is the thing the design avoids.
-2. **`/api/cron` sets `maxDuration = 300`.** Hobby has historically capped
-   functions at 60s. The tick dispatches events and runs every due job for
-   every facility, so it will grow past 60s well before it grows past 300s.
+1. **`vercel.json` schedules the cron hourly** (`0 * * * *`). Hobby limits cron
+   to once a day, which would have broken the design rather than slowed it:
+   nightly jobs run in **facility-local** time, and the hourly tick is what asks
+   "which facilities have just reached their hour". A daily tick runs every
+   facility's jobs at one UTC hour — invoices generated in the middle of the
+   afternoon for half the portfolio, late fees assessed a day early or late
+   depending on the season.
+2. **`/api/cron` sets `maxDuration = 300`.** Hobby caps functions at 60s. The
+   tick dispatches events and runs every due job for every facility, so it grows
+   with the portfolio; 300s is the ceiling Pro allows and the code already asks
+   for it.
 
-If Hobby is the plan, expect to either upgrade or move the scheduler off Vercel
-Cron. Nothing in the code assumes Vercel — `runJob` and the registry are
-provider-agnostic.
+Nothing in the code assumes Vercel — `runJob` and the registry are
+provider-agnostic — so moving the scheduler elsewhere later costs a config
+change, not a rewrite.
 
 ## Order to do it in
 
