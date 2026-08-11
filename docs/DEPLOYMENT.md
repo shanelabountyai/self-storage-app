@@ -49,6 +49,26 @@ Nothing in the code assumes Vercel — `runJob` and the registry are
 provider-agnostic — so moving the scheduler elsewhere later costs a config
 change, not a rewrite.
 
+## Why `vercel.json` looks like that
+
+Vercel rejects unknown properties in `vercel.json`, so it carries no comments
+of its own. The three settings each exist for a reason:
+
+- **`framework: "nextjs"`** — the repo root is not a Next.js app, so detection
+  from the root `package.json` would otherwise come up empty.
+- **`buildCommand: "npm run build"`** — the root script, which builds the web
+  workspace. It is wrapped in `dotenv -e .env.local` locally; that file does not
+  exist on Vercel and `dotenv-cli` tolerates its absence, so one command works
+  in both places.
+- **`outputDirectory: "apps/web/.next"`** — because the build runs from the
+  repo root.
+
+**Root Directory is deliberately left at the repo root**, not set to
+`apps/web`. The workspace packages (`@storage/core`, `@storage/db`) resolve
+from the root `node_modules`, and an install scoped to `apps/web` does not
+create them — `postinstall`'s `prisma generate` writes into
+`packages/db/generated`, which an `apps/web`-rooted install would never see.
+
 ## Order to do it in
 
 1. **A separate Neon database for production.** Not the dev one: the test suite
