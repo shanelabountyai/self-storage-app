@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import {
   absoluteUrl,
   canonicalPath,
@@ -136,5 +136,30 @@ describe('absoluteUrl', () => {
     expect(absoluteUrl('https://example.com', '/storage')).toBe('https://example.com/storage')
     expect(absoluteUrl('https://example.com/', '/storage')).toBe('https://example.com/storage')
     expect(absoluteUrl('https://example.com', 'storage')).toBe('https://example.com/storage')
+  })
+})
+
+// B-104 follow-up. A `.vercel.app` deployment is a second host serving the same
+// pages, and FR-SEO-2's whole concern is that every variant a crawler can reach
+// splits the ranking signal of the page they all point at. An empty pre-launch
+// storefront indexed under a throwaway domain is the worst version of that.
+describe('robots on a host with no real domain', () => {
+  const original = process.env.NEXT_PUBLIC_SITE_URL
+
+  afterEach(() => {
+    if (original === undefined) delete process.env.NEXT_PUBLIC_SITE_URL
+    else process.env.NEXT_PUBLIC_SITE_URL = original
+  })
+
+  it('knows it is not on a canonical domain when none is configured', async () => {
+    delete process.env.NEXT_PUBLIC_SITE_URL
+    const { hasCanonicalDomain } = await import('../apps/web/lib/marketing/origin')
+    expect(hasCanonicalDomain()).toBe(false)
+  })
+
+  it('knows it IS once a domain is set', async () => {
+    process.env.NEXT_PUBLIC_SITE_URL = 'https://storage.example.com'
+    const { hasCanonicalDomain } = await import('../apps/web/lib/marketing/origin')
+    expect(hasCanonicalDomain()).toBe(true)
   })
 })

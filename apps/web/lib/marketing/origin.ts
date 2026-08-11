@@ -18,3 +18,18 @@ export function siteOrigin(): string {
   // submit by accident.
   return 'http://localhost:3000'
 }
+
+/// Whether this deployment is serving from its REAL domain.
+///
+/// `NEXT_PUBLIC_SITE_URL` is set deliberately, by a person, once a domain
+/// exists. Its absence means the site is answering on a `.vercel.app` host —
+/// a preview, or a production deployment that has not been pointed at a domain
+/// yet. Neither should ever be indexed: FR-SEO-2's whole concern is that every
+/// variant a crawler can reach is a separate URL as far as an index is
+/// concerned, splitting the ranking signal of the page they all point at. A
+/// `.vercel.app` twin of the real site is the largest such variant there is,
+/// and an empty pre-launch storefront is the worst possible thing to have
+/// indexed under it.
+export function hasCanonicalDomain(): boolean {
+  return Boolean(process.env.NEXT_PUBLIC_SITE_URL)
+}

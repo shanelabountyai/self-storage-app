@@ -1,6 +1,6 @@
 import type { MetadataRoute } from 'next'
 import { NOINDEX_PREFIXES } from '@storage/core/marketing'
-import { siteOrigin } from '@/lib/marketing/origin'
+import { hasCanonicalDomain, siteOrigin } from '@/lib/marketing/origin'
 
 // PRD 04 FR-SEO-5 / US-3 AC2: "robots.txt allows marketing routes;
 // account/portal/checkout routes are noindex."
@@ -13,6 +13,14 @@ import { siteOrigin } from '@/lib/marketing/origin'
 export const dynamic = 'force-dynamic'
 
 export default function robots(): MetadataRoute.Robots {
+  // No real domain yet means this is a `.vercel.app` host, and nothing on it
+  // should reach an index — see `hasCanonicalDomain`. Deliberately a blanket
+  // refusal rather than the usual allow-list: the objection is to the HOST, not
+  // to particular routes on it.
+  if (!hasCanonicalDomain()) {
+    return { rules: [{ userAgent: '*', disallow: '/' }] }
+  }
+
   return {
     rules: [
       {
