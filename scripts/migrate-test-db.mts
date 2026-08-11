@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process'
+import { assertDevDatabase } from './assert-dev-database.mts'
 import { TEST_SCHEMA, testDirectUrl } from './test-db.mts'
 
 // Creates the test schema and applies every migration into it.
@@ -7,6 +8,8 @@ import { TEST_SCHEMA, testDirectUrl } from './test-db.mts'
 // Deliberately NOT run before every `npm test` — applying ~30 migrations
 // against a remote database takes long enough that it would tax every run to
 // cover the handful where anything changed.
+
+assertDevDatabase('create the test schema and migrate it')
 
 const direct = testDirectUrl()
 if (!direct) {

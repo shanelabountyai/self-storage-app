@@ -1,4 +1,5 @@
 import { pathToFileURL } from 'node:url'
+import { assertDevDatabase } from '../../../scripts/assert-dev-database.mts'
 import zipcodes from 'zipcodes'
 import { prisma } from '@storage/db'
 import { CLOSED_ALL_WEEK, type WeeklySchedule } from '@storage/core/facility-settings'
@@ -607,6 +608,12 @@ async function seedLifecycleStates(seeded: SeededFacility, startIndex: number, i
 }
 
 async function main() {
+  // Two guards, catching two different mistakes. This one catches production
+  // CREDENTIALS in .env.local, which the NODE_ENV check below cannot see: a
+  // local shell has no NODE_ENV set, so that check passes happily while the
+  // connection string points at the live database.
+  assertDevDatabase('seed demo facilities and tenants')
+
   if (process.env.NODE_ENV === 'production') {
     console.error('Refusing to seed demo data with NODE_ENV=production.')
     process.exitCode = 1

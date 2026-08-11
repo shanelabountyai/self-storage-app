@@ -1,3 +1,4 @@
+import { assertDevDatabase } from '../../../scripts/assert-dev-database.mts'
 import { prisma } from '@storage/db'
 import { createOwnerAccount } from '../lib/admin/bootstrap-owner.ts'
 
@@ -10,6 +11,11 @@ function readArg(name: string): string | undefined {
 }
 
 async function main() {
+  // Creating the first owner against production is a legitimate thing to do —
+  // but through `vercel env pull` or the deployment's own environment, not by
+  // pasting credentials into .env.local (see the guard's own note).
+  assertDevDatabase('create an owner account')
+
   const email = readArg('email')
   if (!email) {
     console.error('Usage: npm run db:create-owner -- --email you@example.com [--force]')
