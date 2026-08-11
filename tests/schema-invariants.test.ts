@@ -60,6 +60,8 @@ const NO_FACILITY_ID: Record<string, string> = {
     'a URL is a site-wide address, and the lookup happens on a request before anything knows which facility it was for — a facilityId here could not be supplied at the only moment it would be read (PRD 04 FR-SEO-2)',
   NotificationPreference:
     'scoped to a tenant, not a facility — the same reasoning Consent is exempt: a preference center choice follows the person across every facility they hold a lease at (PRD 05 CN-13, B-074)',
+  MerchandiseSaleLine:
+    'scoped through the sale it belongs to, which carries the facilityId — the same reasoning InvoiceLineItem and PaymentAllocation are exempt (PRD 02 US-34, B-078)',
 }
 
 /// Calendar dates, not instants. A business date is a facility-local day with
@@ -106,6 +108,10 @@ const CALENDAR_DATE_FIELDS = new Set([
   // notice email formats these in UTC rather than a facility timezone.
   'TenantRateIncrease.effectiveDate',
   'TenantRateIncrease.noticeDate',
+  // B-078. Which facility-local day a drawer session belongs to — the day the
+  // deposits report groups by. A session opened at 8am and closed at 6pm is
+  // one day; a timestamp would make "which day was this" a timezone question.
+  'DrawerSession.businessDate',
 ])
 
 describe('prisma schema invariants', () => {

@@ -2722,3 +2722,88 @@ this math was "built once", which it now genuinely is.
   roll it back. It surfaces through the same gate queue and
   `move_in_provisioning_failed` path B-026 built, but there is no
   transfer-specific task for it.
+
+---
+
+## B-078 — POS depth: cash drawer + merchandise
+
+`PENDING`
+
+**What it built.** US-33's drawer session and US-34's merchandise sales, plus
+the deposits reconciliation US-39.6 asks for.
+
+- `packages/core/pos/drawer.ts` — `expectedDrawer`, `varianceOf`,
+  `varianceNeedsNote`, `closeProblem`, `depositSlip`. Pure arithmetic over a
+  list of tender movements.
+- `packages/core/pos/merchandise.ts` — `priceSale`, `saleProblem`,
+  `isLowStock`, `margin`.
+- `DrawerSession`, `Product`, `MerchandiseSale`, `MerchandiseSaleLine`;
+  `Payment.drawerSessionId` so every counter payment is attributable to the
+  session that took it; `Facility.drawerVarianceThresholdCents` (default 500)
+  with its control on the facility settings screen.
+- `/admin/pos/drawer` (open with a counted float, close with a blind count),
+  `/admin/pos/merchandise` (sell, adjust stock, low-stock list),
+  `/admin/reports/deposits` with a CSV.
+- Two permissions: `drawer:manage` (counter, manager, regional) and
+  `merchandise:manage` (manager, regional) — 28 permissions, 87 grants.
+- Four audit actions: `drawer.opened`, `drawer.closed`, `merchandise.sold`,
+  `merchandise.stock_adjusted`.
+
+**What it decided.**
+
+- *Card and ACH never touch the drawer.* `expectedDrawer` ignores them
+  entirely. The single most common way a till reconciliation gets built wrong
+  is counting the day's card takings into the expected cash, which makes every
+  drawer look over by exactly that amount. Cheques and money orders are
+  counted, but on their own line — they are banked, not spendable as change.
+- *A cash movement counts `amountCents`, and the change is deliberately NOT
+  subtracted.* `settleTender` defines change as `tendered − amount`, so the
+  drawer takes in the note and hands the change straight back out: net
+  movement is `tendered − change`, which is `amount`. Subtracting change again
+  double-counts it. `depositSlip` still reports `changeGivenCents` because
+  staff want to see it — but it is already netted, not deducted twice.
+- *Only one drawer session may be open per facility at a time*, enforced by a
+  hand-written partial unique index (`drawer_session_one_open_per_facility`),
+  the same mechanism `checkout_session_one_active_per_unit` uses. Prisma
+  cannot express a partial index, so it is appended raw to the migration.
+- *The close is blind.* The screen asks for the counted cash and cheques
+  without showing the expected figure first. A count taken against a number
+  already on screen is not a count.
+- *A variance past the facility threshold requires a note before the session
+  will close*, and an overage is treated exactly like a shortage — an
+  unexplained overage usually means a payment was never recorded, which is the
+  same failure seen from the other side.
+- *A merchandise sale is its own entity, not an invoice line (D-39).* It has
+  no billing period, no proration, and no delinquency consequence, and forcing
+  it through `Invoice` would put it in the AR ageing of a tenant who owes
+  nothing. `REVENUE_CATEGORIES` therefore stays at four, and the existing test
+  asserting a `merchandise` line contributes nothing to rental revenue stays
+  true.
+- *`DrawerSession.businessDate` is a `@db.Date`.* A session opened at 8am and
+  closed at 6pm is one facility-local day; a timestamp would turn "which day
+  was this" into a timezone question, which is exactly what the deposits
+  report groups by.
+
+**A real bug the tests caught.** The first `expectedDrawer` subtracted
+`changeCents` from `amountCents`, so a $60 bill paid with a $100 note read as
+$20 in the drawer instead of $60. Every close-out that gave change would have
+looked short by the change given. The implementation was fixed, not the test.
+Two smaller things went with it: `SellResult.changeCents` was typed `number`
+where `settleTender` returns `number | null` (null for cheque and money order,
+by design — widened rather than cast), and `sellMerchandise` returned
+`'no_product'` for a missing tenant, which now has its own
+`'tenant_required'` code.
+
+**What it left behind.**
+
+- **No cash-count denomination breakdown.** The close takes one cash total,
+  not a tally of twenties and fives. Operators who want a denomination sheet
+  count on paper; adding it is a form change, not a model change.
+- **No mid-shift drop or paid-out.** Everything that moves cash moves it as a
+  `Payment` or a refund. A safe drop would need its own movement type.
+- **No purchase orders or supplier records.** `Product.stockCount` is adjusted
+  by hand with an audited reason. Receiving stock against a PO is out of MVP
+  scope entirely.
+- **Deposits are reported, not banked.** The report tells staff what to take
+  to the bank; there is no bank-deposit record to reconcile against, and no
+  bank feed.

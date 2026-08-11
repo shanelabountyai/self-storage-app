@@ -464,6 +464,12 @@ model Facility {
   /// US-32: a cash payment at or above this needs manager-or-above to take it.
   /// Configuration, not policy — $500 is a starting value, not a rule.
   cashApprovalThresholdCents Int      @default(50000)
+  /// PRD 02 US-33 (B-078). "Over/short beyond a configurable threshold
+  /// requires a manager note." A drawer is never exactly right — a few cents
+  /// of miscount is noise, and demanding a written explanation for every one
+  /// of them teaches people to write "count" and move on. $5 is a starting
+  /// value, not a rule.
+  drawerVarianceThresholdCents Int    @default(500)
   /// US-14 move-out. Whether the final month is prorated to the move-out day,
   /// or the tenant pays through the period they are in. Texas has no statute
   /// either way and "no proration on move-out" is the common lease term, so
@@ -620,6 +626,9 @@ model Facility {
   notificationRules      NotificationRule[]
   messages               Message[]
   rateIncreases          TenantRateIncrease[]
+  drawerSessions         DrawerSession[]
+  products               Product[]
+  merchandiseSales       MerchandiseSale[]
 
   @@index([state])
   @@map("facility")
@@ -864,6 +873,7 @@ model Tenant {
   consents         Consent[]
   messages         Message[]
   notificationPreferences NotificationPreference[]
+  merchandiseSales        MerchandiseSale[]
 
   @@index([lastName, firstName])
   @@map("tenant")
@@ -1149,17 +1159,25 @@ model Payment {
   /// receipt book with holes where the web rentals were is not gapless, it is
   /// just confusing.
   receiptNumber         Int?
+  /// US-33 (B-078). The drawer session this money went into, for cash,
+  /// cheque and money-order payments taken while one was open. Null for a
+  /// card or online payment — that money never touches a drawer — and null
+  /// for a counter payment taken with no session open, which is legal and
+  /// is exactly what the deposits report flags as unreconciled.
+  drawerSessionId       String?
   createdAt             DateTime      @default(now()) @db.Timestamptz(6)
   updatedAt             DateTime      @updatedAt @db.Timestamptz(6)
 
   facility       Facility            @relation(fields: [facilityId], references: [id], onDelete: Restrict)
   tenant         Tenant              @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  drawerSession  DrawerSession?      @relation(fields: [drawerSessionId], references: [id], onDelete: SetNull)
   receivedByStaff StaffUser?         @relation(fields: [receivedByStaffId], references: [id], onDelete: Restrict)
   refundOf       Payment?            @relation("PaymentRefund", fields: [refundOfPaymentId], references: [id], onDelete: Restrict)
   refunds        Payment[]           @relation("PaymentRefund")
   allocations    PaymentAllocation[]
   ledgerEntries  LedgerEntry[]
   payLink        PayLink?
+  merchandiseSale MerchandiseSale?
 
   @@unique([facilityId, receiptNumber])
   @@index([facilityId, receivedAt])
@@ -1183,6 +1201,164 @@ model ReceiptCounter {
   facility Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
 
   @@map("receipt_counter")
+}
+
+/// PRD 02 US-33 (B-078). "Each facility day has a drawer session — opening
+/// float, all cash/check transactions, close-out count with over/short
+/// recorded and explained."
+///
+/// The session is what makes a close-out mean something: B-039 deliberately
+/// shipped a daily deposit slip that reconciled against nothing counted, and
+/// said so ("would look like accountability without being it"). This is the
+/// counted side.
+///
+/// One OPEN session per facility at a time, enforced in raw SQL because
+/// Prisma cannot express a partial unique index — the same device
+/// `checkout_session_one_active_per_unit` uses. Several CLOSED sessions per
+/// business date are legal on purpose: a facility that counts down at a shift
+/// change opens a second one the same day.
+model DrawerSession {
+  id                String              @id @default(cuid())
+  facilityId        String
+  /// The facility-local day this session belongs to, for the deposits
+  /// report to group by. A session opened at 8am and closed at 6pm is one
+  /// day; a timestamp would make "which day was this" a timezone question.
+  businessDate      DateTime            @db.Date
+  status            DrawerSessionStatus @default(open)
+  /// What was in the drawer before trading. Counted by a person, not derived.
+  openingFloatCents Int
+  openedByStaffId   String
+  openedAt          DateTime            @default(now()) @db.Timestamptz(6)
+
+  closedByStaffId   String?
+  closedAt          DateTime?           @db.Timestamptz(6)
+  /// What the person counted at close-out. Null until closed.
+  countedCashCents  Int?
+  /// The cheques and money orders counted into the deposit bag. Kept apart
+  /// from cash because they are deposited as a list, not a total, and a
+  /// variance in one says nothing about the other.
+  countedChecksCents Int?
+  /// What the system says should have been there: float + cash taken −
+  /// change given − cash refunds paid out. Snapshotted at close so a later
+  /// backdated payment cannot silently rewrite a signed-off count.
+  expectedCashCents Int?
+  expectedChecksCents Int?
+  /// counted − expected, on the cash side. Positive is over, negative short.
+  varianceCents     Int?
+  /// US-33: "over/short beyond a configurable threshold requires a manager
+  /// note." Required by the service when the variance exceeds the facility's
+  /// threshold, and the audit entry carries it as the reason code.
+  note              String?
+  createdAt         DateTime            @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime            @updatedAt @db.Timestamptz(6)
+
+  facility Facility  @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  payments Payment[]
+
+  @@index([facilityId, businessDate])
+  @@index([facilityId, status])
+  /// One live session per facility, enforced in raw SQL because Prisma cannot
+  /// express a partial index (migration 20260810_pos_depth):
+  ///   drawer_session_one_open_per_facility — unique(facilityId) where status='open'
+  @@map("drawer_session")
+}
+
+enum DrawerSessionStatus {
+  open
+  closed
+}
+
+/// PRD 02 US-34 (B-078). "Locks, boxes, packing supplies as SKU'd inventory
+/// per facility — price, tax category, stock count, low-stock alert."
+///
+/// Per facility, not per org: stock is physical and sits on a shelf at one
+/// site, and a shared SKU would let one facility sell another's locks.
+model Product {
+  id            String   @id @default(cuid())
+  facilityId    String
+  /// The operator's own code, unique within the facility. Theirs to choose —
+  /// nothing derives meaning from its shape.
+  sku           String
+  name          String
+  priceCents    Int
+  /// What it cost us. US-34's "simple COGS report" is the only reason this
+  /// is here, and it is snapshotted onto each sale line so a later price
+  /// change cannot rewrite last quarter's margin.
+  unitCostCents Int      @default(0)
+  /// US-34's "tax category". Whether the facility's tax components apply —
+  /// a lock is usually taxable where a deposit is not.
+  taxable       Boolean  @default(true)
+  stockCount    Int      @default(0)
+  /// US-34's "low-stock alert" threshold. Null disables the alert for this
+  /// product rather than alerting at zero, which would fire once the shelf
+  /// is already empty and the sale already lost.
+  lowStockAt    Int?
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime @updatedAt @db.Timestamptz(6)
+
+  facility  Facility            @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  saleLines MerchandiseSaleLine[]
+
+  @@unique([facilityId, sku])
+  @@index([facilityId, active])
+  @@map("product")
+}
+
+/// One over-the-counter sale of merchandise. US-34: "sellable standalone or
+/// attached to a move-in."
+///
+/// Deliberately NOT an `Invoice` with line items. A merchandise sale is paid
+/// in full at the moment it happens — it never ages, never dunns, and never
+/// enters the allocation order — so routing it through the invoice/ledger
+/// machinery would add a fifth revenue category to a list whose whole point
+/// (see `REVENUE_CATEGORIES`) is that it matches the allocation order. Its
+/// money is reported by its own report instead, which is what US-34's "simple
+/// COGS report" asks for.
+model MerchandiseSale {
+  id              String   @id @default(cuid())
+  facilityId      String
+  /// The counter payment that paid for it. Every sale is paid at the point
+  /// of sale, so this is required — there is no such thing as an unpaid
+  /// merchandise sale in this model.
+  paymentId       String   @unique
+  /// Set when the buyer is a known tenant; null for a walk-in buying a lock.
+  tenantId        String?
+  soldByStaffId   String
+  /// Snapshotted totals. Each is the sum of the lines at the moment of sale.
+  subtotalCents   Int
+  taxCents        Int
+  totalCents      Int
+  /// The COGS snapshot: what these goods cost us, summed at sale time.
+  costCents       Int
+  occurredAt      DateTime @default(now()) @db.Timestamptz(6)
+
+  facility Facility              @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  tenant   Tenant?               @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  payment  Payment               @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  lines    MerchandiseSaleLine[]
+
+  @@index([facilityId, occurredAt])
+  @@map("merchandise_sale")
+}
+
+model MerchandiseSaleLine {
+  id             String @id @default(cuid())
+  saleId         String
+  productId      String
+  quantity       Int
+  /// Price and cost as they were when this was sold. Both snapshotted for
+  /// the same reason every other money snapshot in this schema is: a report
+  /// of last quarter must not move when somebody re-prices a lock today.
+  unitPriceCents Int
+  unitCostCents  Int
+  lineTotalCents Int
+
+  sale    MerchandiseSale @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  product Product         @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@index([saleId])
+  @@map("merchandise_sale_line")
 }
 
 /// A payment can settle several invoices; allocation order is configurable in B-048.

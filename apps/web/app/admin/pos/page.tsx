@@ -71,9 +71,17 @@ export default async function PosPage({
     <div className="flex flex-col gap-8">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-lg font-semibold">POS — {selected.facility.name}</h1>
-        <Link href="/admin/pos/summary" className="text-sm underline underline-offset-2">
-          Today&apos;s payments &amp; deposit slip
-        </Link>
+        <div className="flex flex-wrap gap-4">
+          <Link href="/admin/pos/drawer" className="text-sm underline underline-offset-2">
+            Drawer
+          </Link>
+          <Link href="/admin/pos/merchandise" className="text-sm underline underline-offset-2">
+            Merchandise
+          </Link>
+          <Link href="/admin/pos/summary" className="text-sm underline underline-offset-2">
+            Today&apos;s payments &amp; deposit slip
+          </Link>
+        </div>
       </div>
 
       {soldOut && (

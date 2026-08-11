@@ -13,6 +13,7 @@ import { toAuditActor } from '@/lib/rbac/audit-actor'
 import type { Actor } from '@/lib/rbac/actor'
 import { restoreAccessIfSettled } from '@/lib/access/delinquency-gate'
 import { applyPayment, type AppliedPayment } from '@/lib/billing/allocation'
+import { openSessionFor } from '@/lib/admin/drawer'
 
 // PRD 02 §4.8 US-32. Money taken across the counter.
 //
@@ -115,6 +116,16 @@ export async function recordCounterPayment(
   // the settlement path in lib/payments/reconcile.ts.
   const allocation: AppliedPayment[] = []
 
+  // B-078 / US-33: "cash and check payments post to the drawer session where
+  // one exists" (US-32's own AC, written to anticipate this). Read outside
+  // the transaction because it is a plain lookup, and null is a legal answer
+  // — a counter payment taken with no session open still records, and the
+  // deposits report is what surfaces it as unreconciled rather than a refusal
+  // here that would stop somebody taking money.
+  const drawerSession = requiresAttribution(input.method)
+    ? await openSessionFor(input.facilityId)
+    : null
+
   const result = await prisma.$transaction(async (tx) => {
     const receiptNumber = await nextReceiptNumber(tx, input.facilityId)
 
@@ -133,6 +144,7 @@ export async function recordCounterPayment(
         // From the session actor, never a form field (US-32's own wording).
         receivedByStaffId: requiresAttribution(input.method) ? actor.staffUserId : null,
         receiptNumber,
+        drawerSessionId: drawerSession?.id ?? null,
       },
     })
 

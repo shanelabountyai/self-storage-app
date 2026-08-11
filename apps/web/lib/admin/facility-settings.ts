@@ -406,6 +406,9 @@ export type OperationsPolicyInput = {
   /// same reason `moveOutNoticeDays` is: it is a term of the lease and a
   /// question of what the state requires, not a decision about invoicing.
   rateIncreaseNoticeDays: number
+  /// PRD 02 US-33 (B-078). How far a drawer may be out at close-out before
+  /// the close demands a written explanation.
+  drawerVarianceThresholdCents: number
 }
 
 export async function updateOperationsPolicy(
@@ -426,6 +429,7 @@ export async function updateOperationsPolicy(
     leadFollowUpHours: row.leadFollowUpHours,
     abandonmentFollowUpHours: row.abandonmentFollowUpHours,
     rateIncreaseNoticeDays: row.rateIncreaseNoticeDays,
+    drawerVarianceThresholdCents: row.drawerVarianceThresholdCents,
   })
 
   await recordAudit({

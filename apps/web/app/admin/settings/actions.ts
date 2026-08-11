@@ -674,6 +674,15 @@ export async function updateOperationsPolicyAction(
     unit: 'days',
   })
 
+  // PRD 02 US-33 (B-078). Zero is legal here, unlike the notice period: a
+  // facility that wants every penny explained is making a real choice.
+  const drawerVariance = parseScaled(formData.get('drawerVarianceThresholdDollars'), {
+    scale: 100,
+    min: 0,
+    max: 10_000,
+    unit: 'dollars',
+  })
+
   const errors: FieldErrors = {}
   if ('error' in accessCap) errors.authorizedAccessCap = accessCap.error
   if ('error' in cashApproval) errors.cashApprovalThresholdDollars = cashApproval.error
@@ -681,6 +690,7 @@ export async function updateOperationsPolicyAction(
   if ('error' in noticeDays) errors.moveOutNoticeDays = noticeDays.error
   if ('error' in leadHours) errors.leadFollowUpHours = leadHours.error
   if ('error' in rateNoticeDays) errors.rateIncreaseNoticeDays = rateNoticeDays.error
+  if ('error' in drawerVariance) errors.drawerVarianceThresholdDollars = drawerVariance.error
 
   // PRD 04 US-9 AC2 (B-073). "+1h, +24h, +72h (configurable)" — three
   // strictly-increasing hour offsets, same shape as the retry/dunning day
@@ -701,7 +711,8 @@ export async function updateOperationsPolicyAction(
     'error' in writeOff ||
     'error' in noticeDays ||
     'error' in leadHours ||
-    'error' in rateNoticeDays
+    'error' in rateNoticeDays ||
+    'error' in drawerVariance
   ) {
     return fieldError(errors)
   }
@@ -715,6 +726,7 @@ export async function updateOperationsPolicyAction(
       leadFollowUpHours: leadHours.value,
       abandonmentFollowUpHours: abandonmentHours,
       rateIncreaseNoticeDays: rateNoticeDays.value,
+      drawerVarianceThresholdCents: drawerVariance.value,
     })
   } catch (error) {
     return asFormError(error, 'Could not save the operations policy.')

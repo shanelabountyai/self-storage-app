@@ -135,7 +135,23 @@ export const AUDIT_ACTIONS = [
   /// as entered). Audited because "why did this review disappear from the
   /// page" is a question worth being able to answer.
   { action: 'review.visibility_changed', label: 'Review visibility changed', requiresReason: false },
+  /// B-078. Opening is not sensitive — it records a float somebody counted
+  /// in — but it is the other end of the pair that makes a close-out
+  /// meaningful, so both are logged.
+  { action: 'drawer.opened', label: 'Drawer session opened', requiresReason: false },
+  { action: 'drawer.closed', label: 'Drawer session closed', requiresReason: false },
+  /// Reserved since B-005 and finally written by B-078. `requiresReason` is
+  /// what enforces US-33's "over/short beyond a configurable threshold
+  /// requires a manager note" — the audit machinery refuses the entry
+  /// without one, so the rule cannot be bypassed by a caller that forgets.
   { action: 'drawer.over_short', label: 'Drawer over/short recorded', requiresReason: true },
+  /// US-34. A sale moves stock and takes money; both are worth a trail.
+  { action: 'merchandise.sold', label: 'Merchandise sold', requiresReason: false },
+  /// A stock count changed without a sale — a delivery, a breakage, a
+  /// recount. Requires a reason precisely because there is no transaction
+  /// explaining it: an unexplained inventory adjustment is how shrinkage
+  /// gets papered over.
+  { action: 'merchandise.stock_adjusted', label: 'Stock adjusted', requiresReason: true },
 
   // Authentication
   { action: 'password.reset_completed', label: 'Password reset completed', requiresReason: false },

@@ -110,6 +110,12 @@ export default async function ReportsPage({
         >
           Deliverability — sends, bounces, failure queue
         </Link>
+        <Link
+          href="/admin/reports/deposits"
+          className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
+        >
+          Deposits — recorded vs counted
+        </Link>
       </nav>
 
       <section aria-labelledby="occupancy-heading" className="flex flex-col gap-3">

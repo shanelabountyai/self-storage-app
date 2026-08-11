@@ -19,6 +19,15 @@ export const PERMISSIONS = [
   { key: 'credits:manual', name: 'Issue manual credits', category: 'billing', description: 'Post a manual credit, subject to the role monetary limit.' },
   { key: 'refunds:request', name: 'Request refunds', category: 'billing', description: 'Submit a refund for approval.' },
   { key: 'refunds:approve', name: 'Approve refunds', category: 'billing', description: 'Approve a refund, subject to the role monetary limit.' },
+  /// PRD 02 US-33 (B-078). Opening and closing the till. Held by whoever
+  /// works the counter — the person who takes the cash is the person who
+  /// counts it down — with the manager gate applying to an unexplained
+  /// variance rather than to the act of closing.
+  { key: 'drawer:manage', name: 'Open and close the drawer', category: 'billing', description: 'Start a drawer session and count it down at close.' },
+  /// PRD 02 US-34 (B-078). Editing what is on the shelf and what it costs.
+  /// Separate from `payments:take`: selling a lock is counter work, but
+  /// setting its price and its cost is not.
+  { key: 'merchandise:manage', name: 'Manage merchandise', category: 'billing', description: 'Add products, set prices and adjust stock.' },
 
   // Inventory & pricing
   { key: 'units:edit', name: 'Edit unit inventory', category: 'inventory', description: 'Create, edit, and change unit statuses.' },
@@ -93,6 +102,7 @@ export const ROLES: readonly RoleSeed[] = [
       'tenants:edit',
       'leases:move_in',
       'payments:take',
+      'drawer:manage',
       'access:manage_grants',
       'access:view_codes',
       'access:events',
@@ -126,6 +136,8 @@ export const ROLES: readonly RoleSeed[] = [
       'leases:move_out',
       'leases:transfer',
       'payments:take',
+      'drawer:manage',
+      'merchandise:manage',
       'fees:waive',
       'credits:manual',
       'refunds:request',
@@ -155,6 +167,8 @@ export const ROLES: readonly RoleSeed[] = [
       'leases:move_out',
       'leases:transfer',
       'payments:take',
+      'drawer:manage',
+      'merchandise:manage',
       'fees:waive',
       'credits:manual',
       'refunds:request',

@@ -6,6 +6,7 @@ import { toAuditActor } from '@/lib/rbac/audit-actor'
 import type { Actor } from '@/lib/rbac/actor'
 import { stripeClient } from '@/lib/payments/stripe'
 import { recomputeInvoices } from '@/lib/billing/allocation'
+import { openSessionFor } from '@/lib/admin/drawer'
 
 // PRD 02 US-23 (B-048). Refunds.
 //
@@ -140,6 +141,12 @@ export async function refundPayment(
 
   const leaseId = payment.ledgerEntries[0]?.leaseId ?? null
 
+  // B-078 / US-33. A cash or cheque refund comes out of the open drawer, so
+  // it belongs to that session: the close-out's expected-cash figure has to
+  // account for money that went back over the counter, and closing the
+  // session is what finally settles the payable B-048 left `pending`.
+  const drawerSession = method === 'card' ? null : await openSessionFor(payment.facilityId)
+
   const refundPaymentId = await prisma.$transaction(async (tx) => {
     const refund = await tx.payment.create({
       data: {
@@ -155,6 +162,7 @@ export async function refundPayment(
         refundOfPaymentId: payment.id,
         checkNumber: input.checkNumber?.trim() || null,
         receivedByStaffId: actor.kind === 'staff' ? actor.staffUserId : null,
+        drawerSessionId: drawerSession?.id ?? null,
         stripePaymentIntentId: null,
         failureReason: null,
       },

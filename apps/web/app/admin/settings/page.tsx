@@ -813,6 +813,14 @@ export default async function AdminSettingsPage() {
             hint="Hours. A phone or walk-in inquiry with no disposition after this becomes a task on the morning sweep — US-43's “never silently ageing in new”."
           />
           <Field
+            name="drawerVarianceThresholdDollars"
+            label="Drawer over/short needing a note ($)"
+            type="text"
+            inputMode="decimal"
+            defaultValue={(facility.drawerVarianceThresholdCents / 100).toFixed(2)}
+            hint="A close-out out by more than this cannot be saved without an explanation. 0.00 means every penny needs one."
+          />
+          <Field
             name="rateIncreaseNoticeDays"
             label="Notice before a rate increase (days)"
             type="number"
