@@ -3389,7 +3389,7 @@ tenant adds, sees and withdraws their own named people.
 
 ## B-104 follow-up — the blob store, and the proof upload it was blocking
 
-`PENDING`
+`8470637`
 
 **Why this exists.** B-104 shipped the insurance half of US-705 with one gap
 named loudly: "submit proof" collected the insurer, policy number and expiry but
