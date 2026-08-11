@@ -118,7 +118,23 @@ enum PaymentMethod {
 }
 
 enum PaymentStatus {
+  /// Created, not yet confirmed by the payer. A card intent sits here for
+  /// seconds; an abandoned one sits here forever and is what the Stripe
+  /// reconciliation report looks for.
   pending
+  /// B-103. Confirmed and irrevocably submitted to the bank, but not settled.
+  ///
+  /// Only ACH reaches this state, and it is the whole reason B-103 needed a new
+  /// one: a card is approved or declined in seconds, while a bank debit is
+  /// accepted now and can fail four business days later. `pending` could not
+  /// carry it — that means "nobody has paid yet", and treating money already
+  /// taken from a bank account as not-yet-paid chases a tenant who has paid.
+  ///
+  /// Deliberately NOT counted as settled anywhere: `SETTLING_STATUSES` in the
+  /// allocation excludes it, so an invoice does not read as paid on money that
+  /// has not arrived. What it DOES do is suppress late fees and dunning — see
+  /// `leasesWithSettlingPayment`.
+  processing
   succeeded
   failed
   refunded
@@ -452,6 +468,15 @@ model Facility {
   /// anything about the port; it is not a real integration and must never be
   /// pointed at a live site.
   gateAdapter         String         @default("simulated")
+  /// B-103 / PRD 01 §3. Whether a renter may pay by bank debit at CHECKOUT.
+  ///
+  /// Off by default, and per facility because it is a risk appetite rather than
+  /// a feature flag: an ACH move-in hands over a unit and a gate code against
+  /// money that can be reversed four business days later. §3 already scopes ACH
+  /// to "portal payments and autopay; optional at checkout" — this is that
+  /// option, and an operator who does not want it never has to think about it.
+  /// Portal ACH is not gated: there the tenant already has the unit.
+  achAtCheckoutEnabled Boolean       @default(false)
   /// PRD 03 US-6 AC2: "Overdue manual tasks (configurable, default 4 business
   /// hours) escalate in the dashboard." Business hours, counted against this
   /// facility's own `officeHours` — a task raised at 6pm on Friday is not four

@@ -115,9 +115,26 @@ export async function evaluateAccessSuspensions(
   })
   const grantByTenant = new Map(grants.map((grant) => [grant.tenantId!, grant]))
 
+  // B-103. Tenants with a bank debit accepted but not yet settled. Cutting
+  // somebody's gate access over money that has already left their account —
+  // and that nothing they can do makes arrive faster — is the version of D-16
+  // that ends in a complaint nobody can defend. Restoring is untouched: that
+  // still needs the balance actually at zero, which unsettled money is not.
+  const settlingTenants = await settlingTenantIds(facilityId)
+
   for (const state of states) {
     const grant = grantByTenant.get(state.tenantId)
     if (!grant) continue
+
+    if (settlingTenants.has(state.tenantId) && grant.state !== 'suspended') {
+      outcome.unchanged += 1
+      recordItem({
+        itemId: state.tenantId,
+        ok: true,
+        message: 'access suspension blocked — a bank payment is still settling',
+      })
+      continue
+    }
 
     const decision = gateDecision({
       state: grant.state,
@@ -255,4 +272,19 @@ async function applyRestore(
   })
 
   // As above: `transitionGrant` emits `access.restored` for this transition.
+}
+
+/// Tenants at this facility with a bank debit in flight (B-103).
+///
+/// Deliberately its own small query rather than reusing
+/// `leasesWithSettlingPayment`: the gate is scoped per TENANT (one grant per
+/// credential holder per facility, PRD 03 FR-1), and mapping to leases and back
+/// would be two joins to answer a question about a person.
+async function settlingTenantIds(facilityId: string): Promise<Set<string>> {
+  const rows = await prisma.payment.findMany({
+    where: { facilityId, status: 'processing' },
+    select: { tenantId: true },
+    distinct: ['tenantId'],
+  })
+  return new Set(rows.map((row) => row.tenantId))
 }

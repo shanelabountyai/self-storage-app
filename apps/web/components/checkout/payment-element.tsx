@@ -60,7 +60,9 @@ function PaymentForm({ returnUrl }: { returnUrl: string }) {
     })
 
     if (result.error) {
-      setError(result.error.message ?? 'That card was declined. Try another card.')
+      // B-103: no longer necessarily a card. Stripe's own message is used
+      // when there is one; the fallback stopped naming the method.
+      setError(result.error.message ?? 'That payment was declined. Try another payment method.')
       setSubmitting(false)
       return
     }

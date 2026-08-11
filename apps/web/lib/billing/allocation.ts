@@ -223,3 +223,40 @@ export async function recomputeInvoices(
     })
   }
 }
+
+/// Leases with money in flight — a bank debit accepted but not yet settled.
+///
+/// B-103. Only ACH reaches `processing`, and while it is there the tenant has
+/// paid as far as they are concerned: the money has left their account and
+/// nothing they can do makes it arrive faster. Charging a late fee or starting
+/// a dunning ladder against that is the single most avoidable way to make
+/// somebody who paid on time feel cheated, and it is the reason the state
+/// exists at all.
+///
+/// Scoped by TENANT at the facility rather than by invoice, deliberately. A
+/// portal payment does not always name an invoice, so an allocation-based
+/// lookup would silently miss the commonest case. The cost of the coarser rule
+/// is that a tenant with two units at one site gets both left alone for the few
+/// days a debit is settling — an error in the tenant's favour, bounded by the
+/// settlement window, and far cheaper than the alternative.
+///
+/// One query for the whole facility, mirroring `effectsByLease` above: these
+/// run per facility per night, and a per-lease lookup would be a query per
+/// lease.
+export async function leasesWithSettlingPayment(
+  facilityId: string,
+  client: Prisma.TransactionClient | typeof prisma = prisma,
+): Promise<Set<string>> {
+  const settling = await client.payment.findMany({
+    where: { facilityId, status: 'processing' },
+    select: { tenantId: true },
+    distinct: ['tenantId'],
+  })
+  if (settling.length === 0) return new Set()
+
+  const leases = await client.lease.findMany({
+    where: { facilityId, tenantId: { in: settling.map((payment) => payment.tenantId) } },
+    select: { id: true },
+  })
+  return new Set(leases.map((lease) => lease.id))
+}

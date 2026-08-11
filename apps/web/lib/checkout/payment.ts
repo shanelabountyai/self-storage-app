@@ -85,6 +85,10 @@ export async function preparePayment(session: CheckoutSessionView): Promise<Paym
     amountCents: due.totalDueTodayCents,
     reference: `checkout:${session.id}`,
     description: 'Storage move-in',
+    // B-103. The one surface where bank debit is a facility decision: a
+    // move-in hands over a unit and a gate code, and a debit can reverse four
+    // business days later.
+    surface: 'checkout',
   })
 
   return {

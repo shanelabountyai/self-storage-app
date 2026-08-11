@@ -486,6 +486,7 @@ export async function updateBillingPolicyAction(
       accessRestoreAtOrBelowCents: restoreAtOrBelow.value,
       paymentAllocationOrder: allocationOrder,
       dunningDays,
+      achAtCheckoutEnabled: formData.get('achAtCheckoutEnabled') === 'yes',
     })
   } catch (error) {
     return asFormError(error, 'Could not save the billing policy.')

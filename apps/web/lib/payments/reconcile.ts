@@ -2,9 +2,27 @@ import type Stripe from 'stripe'
 import { type Prisma, prisma } from '@storage/db'
 import { emitEvent } from '@storage/core/events'
 import { provisionMoveIn, requestDownstream } from '@/lib/checkout/provision'
-import { cancelOpenTask } from '@/lib/admin/tasks'
+import { cancelOpenTask, createTask } from '@/lib/admin/tasks'
 import { applyPayment } from '@/lib/billing/allocation'
 import { restoreAccessIfSettled } from '@/lib/access/delinquency-gate'
+
+/// How Stripe actually took the money.
+///
+/// `createChargeIntent` writes every row as `card`, because at creation time
+/// nobody knows what the payer will choose in the Payment Element. This is the
+/// first moment the truth is available, and it matters: the deposits report,
+/// the receipt and the tenant's own history all read `Payment.method`, and a
+/// bank debit filed as a card is wrong on all three.
+function methodOf(intent: Stripe.PaymentIntent): 'card' | 'ach' {
+  const types = intent.payment_method_types ?? []
+  const used =
+    typeof intent.payment_method === 'object' && intent.payment_method
+      ? intent.payment_method.type
+      : types.length === 1
+        ? types[0]
+        : null
+  return used === 'us_bank_account' ? 'ach' : 'card'
+}
 
 /// The checkout session a PaymentIntent belongs to, from the reference B-025
 /// set when it created the intent (`checkout:<sessionId>`).
@@ -26,6 +44,11 @@ function referenceSessionId(intent: Stripe.PaymentIntent): string | null {
 /// Stripe retry something we were never going to process.
 export const HANDLED_EVENTS = [
   'payment_intent.succeeded',
+  // B-103. Bank debit only. A card never emits this — it is approved or
+  // declined in seconds — so this event IS the ACH case, and handling it is
+  // what stops a renter waiting four business days for a unit they have paid
+  // for, and a tenant being dunned for money already taken from their account.
+  'payment_intent.processing',
   'payment_intent.payment_failed',
   'charge.refunded',
   'setup_intent.succeeded',
@@ -222,13 +245,90 @@ export async function applyStripeEvent(event: Stripe.Event): Promise<void> {
       return
     }
 
+    case 'payment_intent.processing': {
+      const intent = event.data.object as Stripe.PaymentIntent
+      let checkoutSessionId: string | null = null
+
+      await prisma.$transaction(async (tx) => {
+        const payment = await tx.payment.findUnique({
+          where: { stripePaymentIntentId: intent.id },
+        })
+        if (!payment) return
+        // A late redelivery must not walk a settled payment backwards. Stripe
+        // retries for days, and `processing` arriving after `succeeded` is an
+        // ordinary out-of-order delivery rather than a problem.
+        if (payment.status !== 'pending') return
+
+        await tx.payment.update({
+          where: { id: payment.id },
+          data: {
+            status: 'processing',
+            // The method as Stripe actually charged it, not as we guessed:
+            // `createChargeIntent` writes every row as `card` because it cannot
+            // know which method the payer will pick in the Element.
+            method: methodOf(intent),
+          },
+        })
+
+        // Deliberately NOT posted to the ledger and NOT allocated to an
+        // invoice. The money has not arrived, and an invoice that reads paid on
+        // an unsettled debit is a lie the moment the bank reverses it. What
+        // this state does buy the tenant is silence from the dunning ladder —
+        // see `leasesWithSettlingPayment`.
+        await emitEvent(
+          {
+            name: 'payment.processing',
+            facilityId: payment.facilityId,
+            entityType: 'Payment',
+            entityId: payment.id,
+            payload: {
+              amountCents: payment.amountCents,
+              paymentIntentId: intent.id,
+              method: methodOf(intent),
+            },
+          },
+          tx,
+        )
+        checkoutSessionId = referenceSessionId(intent)
+      })
+
+      // The move-in does NOT wait for settlement.
+      //
+      // Making a renter wait four business days for a unit they have paid for
+      // is not a product, and the risk is the one the operator opted into by
+      // switching bank debit on at checkout (`achAtCheckoutEnabled`). If the
+      // debit later fails, `payment_intent.payment_failed` raises a task and
+      // the ordinary delinquency path takes it from there — the tenant has a
+      // unit and an unpaid balance, which is a situation this system already
+      // knows how to handle.
+      if (checkoutSessionId) {
+        const result = await provisionMoveIn(checkoutSessionId)
+        if (result.ok) await requestDownstream(result.leaseId)
+      }
+      return
+    }
+
     case 'payment_intent.payment_failed': {
       const intent = event.data.object as Stripe.PaymentIntent
+      // B-103. A debit that had already been accepted and is now bouncing —
+      // days later, on money the tenant believes they have paid. Captured
+      // before the update, because the update is what erases the distinction.
+      const wasSettling: { payment: { id: string; facilityId: string; tenantId: string } }[] = []
+
       await prisma.$transaction(async (tx) => {
         const payment = await tx.payment.findUnique({
           where: { stripePaymentIntentId: intent.id },
         })
         if (!payment || payment.status === 'succeeded') return
+        if (payment.status === 'processing') {
+          wasSettling.push({
+            payment: {
+              id: payment.id,
+              facilityId: payment.facilityId,
+              tenantId: payment.tenantId,
+            },
+          })
+        }
 
         await tx.payment.update({
           where: { id: payment.id },
@@ -255,6 +355,23 @@ export async function applyStripeEvent(event: Stripe.Event): Promise<void> {
           tx,
         )
       })
+
+      // A bank debit that bounces after acceptance needs a person, not just a
+      // ledger entry. Nothing was posted (the money never arrived), so the
+      // balance is already correct — but the tenant has been told it was paid,
+      // may have been let through a gate on it, and the ordinary dunning ladder
+      // will now start chasing somebody who thinks they are square. Raised
+      // outside the transaction so a task-store failure cannot roll back the
+      // record of the failure itself.
+      if (wasSettling[0]) {
+        await createTask({
+          facilityId: wasSettling[0].payment.facilityId,
+          type: 'settling_payment_failed',
+          entityType: 'Payment',
+          entityId: wasSettling[0].payment.id,
+          priority: 'high',
+        })
+      }
       return
     }
 

@@ -3162,3 +3162,91 @@ dropped.
   three lists. Consolidated billing is explicitly Phase 3 (§9, "business
   accounts").
 - **No paging.** A tenant with six years of history gets 72 links on one page.
+
+---
+
+## B-103 — ACH bank debit + Stripe Link
+
+`PENDING`
+
+**What it built.** PRD 01 §3's remaining payment methods, and the settlement
+state ACH forced.
+
+- `packages/core/billing/payment-methods.ts` — `methodsFor(surface, policy)`,
+  the pure decision about which methods each surface offers.
+- `PaymentStatus.processing`, `Facility.achAtCheckoutEnabled` (default off),
+  and the `payment.processing` domain event.
+- `payment_intent.processing` in the Stripe reconciler, plus `methodOf` — the
+  first moment the real payment method is knowable.
+- `leasesWithSettlingPayment` and its three callers: late fees, dunning and
+  gate suspension.
+- A `settling_payment_failed` task for a debit that bounces after acceptance.
+- Portal copy (dashboard panel, receipt page), and the facility settings
+  toggle.
+
+**What it decided (D-45).**
+
+- *`processing` posts nothing to the ledger and settles no invoice.* Money that
+  has not arrived must not make an invoice read paid, and must not let a
+  delinquent tenant's gate access auto-restore under D-16. It also means a
+  bounce needs **no reversing entry** — there is nothing to reverse — which
+  removes the entire class of correction bugs the alternative would have
+  introduced. A test asserts the ledger is untouched after a bounce for exactly
+  this reason.
+- *The tenant is left alone anyway.* Late fees, dunning and gate suspension all
+  skip a lease with a debit in flight. The money has left their account and
+  nothing they can do makes it arrive faster.
+- *Suppression is scoped by tenant-at-facility, not by invoice.* A portal
+  payment does not always name an invoice, so an allocation-based lookup would
+  miss the commonest case. The cost is that a tenant with two units at one site
+  gets both left alone for a few days — an error in their favour, bounded by the
+  settlement window.
+- *The move-in does not wait for settlement.* Four business days for a unit
+  somebody has paid for is not a product. The risk is real, which is why ACH at
+  checkout is **per facility and off by default**, and why a late bounce raises
+  its own task.
+- *A bounced debit is its own task type, not `failed_payment`.* A card decline
+  means nobody was ever told the money arrived. This tenant has a receipt, may
+  have been let through a gate on it, and is about to start getting dunning
+  letters. Different conversation, different urgency.
+- *`Payment.method` is corrected on the processing event.* `createChargeIntent`
+  writes every row as `card` because it cannot know what the payer will pick in
+  the Element; the deposits report, the receipt and the tenant's own history all
+  read this column, and a bank debit filed as a card is wrong on all three.
+- *Payment method types are stated explicitly rather than left to the Stripe
+  dashboard's automatic methods.* Bank debit at checkout is a per-facility
+  decision this code has to make, and an off-session autopay charge must never
+  be offered `us_bank_account` as a fresh method — there is nobody there to
+  authorise a debit.
+- *The portal shows settling money BESIDE the balance, never netted off it.*
+  Subtracting it would make the portal disagree with the ledger and with every
+  staff screen; saying nothing produces the support call this state exists to
+  prevent.
+
+**A latent robustness bug found during verification.** A full parallel test run
+aborted `completeMoveOut`'s transaction mid-flight, while the same suite passed
+alone and on the next run — the signature of a wall-clock limit under load
+rather than a defect in the work. Prisma's default interactive-transaction
+timeout is 5 seconds, tuned for a database on the same machine; this one is Neon
+over the network, and that transaction makes eight or nine round trips. Raised
+to 20 seconds (maxWait 10s) on the client. **This was never only a test
+problem** — the same limit would abort a move-out during any production latency
+spike and surface as an opaque Prisma error to whoever was standing at the
+counter. Diagnosed from one observed failure rather than a reproduction, and
+the fix makes the failure mode impossible rather than merely unlikely.
+
+**What it left behind.**
+
+- **Microdeposit verification is not handled.** A bank account Stripe cannot
+  verify instantly leaves the intent in `requires_action`, and nothing here
+  drives that flow — the renter would be stuck on the Payment Element. Instant
+  verification covers the common case; this is a real gap for the rest.
+- **No ACH-specific retry.** B-046's retry schedule is built around card decline
+  codes. An `insufficient_funds` bounce raises a task and stops; it does not
+  re-present the debit the way a card retry would.
+- **Autopay still charges the stored default method**, whatever it is. Nothing
+  yet lets a tenant say "use my bank account for autopay but my card for
+  one-offs".
+- **No separate settlement report.** Money in flight is visible per tenant in
+  the portal and per lease to the jobs that skip it, but there is no
+  facility-level "what is settling" view.

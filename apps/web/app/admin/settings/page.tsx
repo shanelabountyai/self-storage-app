@@ -477,6 +477,20 @@ export default async function AdminSettingsPage() {
             <option value="no">Charge the full period they are in</option>
             <option value="yes">Charge only the days used</option>
           </Field>
+          {/* B-103. A money-risk switch, so it sits with the other ones rather
+              than beside the Stripe keys. Portal bank payments are always on
+              and deliberately not configurable — there the tenant already has
+              the unit. */}
+          <Field
+            name="achAtCheckoutEnabled"
+            label="Accept bank payments at checkout"
+            as="select"
+            defaultValue={facility.achAtCheckoutEnabled ? 'yes' : 'no'}
+            hint="A bank payment can reverse up to four business days after it is accepted, and a move-in hands over a unit and a gate code straight away. Off means new renters pay by card; tenants can always pay by bank from the portal."
+          >
+            <option value="no">No — card only at checkout</option>
+            <option value="yes">Yes — allow bank payments</option>
+          </Field>
           <Field
             name="prorateOnMoveIn"
             label="On move-in"

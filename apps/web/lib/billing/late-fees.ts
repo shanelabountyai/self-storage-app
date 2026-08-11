@@ -6,6 +6,7 @@ import { daysPastDue, outstandingCents } from '@storage/core/metrics'
 import { formatInvoiceNumber, lateFeeAmount, stepsDue, type LateFeeStep } from '@storage/core/billing'
 import { recordAudit } from '@storage/core/audit'
 import { effectsByLease } from '@/lib/admin/holds'
+import { leasesWithSettlingPayment } from './allocation'
 import { nextInvoiceNumber } from '@/lib/billing/numbering'
 import { checkMonetaryAuthority } from '@/lib/rbac/authorize'
 import { toAuditActor } from '@/lib/rbac/audit-actor'
@@ -90,6 +91,9 @@ export async function assessLateFees(
     businessDate,
   )
 
+  // B-103. A bank debit that has been accepted but has not settled yet.
+  const settling = await leasesWithSettlingPayment(facilityId)
+
   for (const lease of leases) {
     // A hold declaring `halt_late_fees` stops assessment outright — a tenant on
     // a payment plan, in a billing dispute, or under an automatic stay does not
@@ -97,6 +101,19 @@ export async function assessLateFees(
     if (onHold.has(lease.id)) {
       result.skipped += 1
       recordItem({ itemId: lease.id, ok: true, message: 'late fee skipped — lease is on hold' })
+      continue
+    }
+
+    // B-103. The money has left their bank account; nothing they can do makes
+    // it arrive faster. Charging a fee for the four days it spends in transit
+    // is the most avoidable way to make somebody who paid on time feel cheated.
+    if (settling.has(lease.id)) {
+      result.skipped += 1
+      recordItem({
+        itemId: lease.id,
+        ok: true,
+        message: 'late fee skipped — a bank payment is still settling',
+      })
       continue
     }
 

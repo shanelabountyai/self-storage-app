@@ -36,6 +36,13 @@ export const EVENT_NAMES = [
   'invoice.due_soon',
   'invoice.due_today',
   'payment.succeeded',
+  /// B-103. A bank debit has been submitted and is settling — money taken but
+  /// not arrived. Only ACH ever emits it; a card is approved or declined in
+  /// seconds. Deliberately its own name rather than a flavour of
+  /// `payment.succeeded`, because nothing that reacts to a successful payment
+  /// (posting to the ledger, settling an invoice, restoring gate access) may
+  /// react to this one.
+  'payment.processing',
   'payment.failed',
   /// Emitted from the Stripe reconciler for full and partial refunds alike —
   /// the payload says which (B-019). Refund *authorisation* is B-048.

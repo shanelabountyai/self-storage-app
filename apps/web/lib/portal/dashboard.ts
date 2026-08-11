@@ -46,6 +46,14 @@ export type PortalLeaseSummary = {
   autopayNeedsCard: boolean
   accessSuspended: boolean
   gateCode: string | null
+  /// B-103. A bank payment taken but not yet settled, in cents.
+  ///
+  /// Shown BESIDE the balance rather than subtracted from it. The money has not
+  /// arrived, so netting it off would make the portal disagree with the ledger
+  /// and with every staff screen — but a tenant who paid on the 1st and still
+  /// sees the full balance on the 3rd rings the office, which is the support
+  /// call this whole state exists to prevent.
+  settlingCents: number
 }
 
 export async function portalDashboardForTenant(
@@ -72,13 +80,21 @@ export async function portalDashboardForTenant(
 
   return Promise.all(
     leases.map(async (lease) => {
-      const [balance, grant, gateCode] = await Promise.all([
+      const [balance, grant, gateCode, settling] = await Promise.all([
         prisma.ledgerEntry.aggregate({ where: { leaseId: lease.id }, _sum: { amountCents: true } }),
         prisma.accessGrant.findUnique({
           where: { facilityId_tenantId: { facilityId: lease.facilityId, tenantId } },
           select: { state: true },
         }),
         codeForLease(lease.id),
+        // Scoped to the tenant at this facility, matching how the suppression
+        // in `leasesWithSettlingPayment` decides who not to chase — so the
+        // portal never says "we won't charge you a late fee" about a payment
+        // the late-fee job would not in fact have spared.
+        prisma.payment.aggregate({
+          where: { tenantId, facilityId: lease.facilityId, status: 'processing' },
+          _sum: { amountCents: true },
+        }),
       ])
 
       return {
@@ -97,6 +113,7 @@ export async function portalDashboardForTenant(
         autopayNeedsCard: lease.autopayEnabled && !tenant.stripeDefaultPaymentMethodId,
         accessSuspended: grant?.state === 'suspended',
         gateCode,
+        settlingCents: settling._sum.amountCents ?? 0,
       }
     }),
   )

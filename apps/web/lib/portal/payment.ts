@@ -141,7 +141,11 @@ export async function startPortalPayment(
 }
 
 export type PaymentReceipt = {
-  status: 'succeeded' | 'pending' | 'failed'
+  /// B-103 adds `processing`: a bank debit accepted but not settled. Kept
+  /// distinct from `pending` because the wait is days rather than seconds, and
+  /// telling somebody their balance will move "within a minute or two" when it
+  /// will not is how a correct system produces a support call.
+  status: 'succeeded' | 'pending' | 'processing' | 'failed'
   amountCents: number
   receivedAt: Date
   unitNumber: string | null
@@ -190,7 +194,17 @@ export async function paymentReceipt(
   return {
     // Anything not yet marked succeeded or failed is still in flight. The
     // screen says so rather than claiming a payment that has not landed.
-    status: payment.status === 'succeeded' ? 'succeeded' : payment.status === 'failed' ? 'failed' : 'pending',
+    // A refunded or partially-refunded payment still reads as succeeded here:
+    // the receipt is about the payment that was taken, and the refund is its
+    // own row with its own receipt.
+    status:
+      payment.status === 'failed'
+        ? 'failed'
+        : payment.status === 'processing'
+          ? 'processing'
+          : payment.status === 'pending'
+            ? 'pending'
+            : 'succeeded',
     amountCents: payment.amountCents,
     receivedAt: payment.receivedAt,
     unitNumber: lease?.unit.number ?? null,

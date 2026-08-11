@@ -4,6 +4,7 @@ import { OCCUPYING_LEASE_STATUSES } from '@storage/core/inventory'
 import { daysPastDue, outstandingCents } from '@storage/core/metrics'
 import { ladderDecision, stepsFrom, type LadderHalt } from '@storage/core/billing'
 import { effectsByLease } from '@/lib/admin/holds'
+import { leasesWithSettlingPayment } from './allocation'
 
 // PRD 05 CN-3 / CN-5 (B-052). Emitting the dunning ladder's day events.
 //
@@ -95,6 +96,10 @@ export async function runDunning(
   })
   if (leases.length === 0) return result
 
+  // B-103. Chasing a tenant whose bank debit is still in transit is chasing
+  // somebody who has paid.
+  const settling = await leasesWithSettlingPayment(facilityId)
+
   const onHold = await effectsByLease(
     leases.map((lease) => lease.id),
     'halt_dunning',
@@ -130,7 +135,12 @@ export async function runDunning(
       daysPastDue: daysPastDue(lease.invoices, businessDate),
       outstandingCents: unpaid.reduce((sum, invoice) => sum + outstandingCents(invoice), 0),
       leaseEnded: !OCCUPYING_LEASE_STATUSES.includes(lease.status as never),
-      onHold: onHold.has(lease.id),
+      // B-103 folds into the existing hold flag rather than adding a second
+      // reason to the pure decision function: `dunningDecision` already knows
+      // what "do not chase this lease today" means, and giving it a second way
+      // to be told would be two code paths for one outcome. The job log below
+      // still distinguishes them, which is where the difference matters.
+      onHold: onHold.has(lease.id) || settling.has(lease.id),
       steps,
       alreadySent: anchor ? (sentByInvoice.get(anchor.id) ?? []) : [],
     })

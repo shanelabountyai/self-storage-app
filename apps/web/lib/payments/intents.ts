@@ -1,4 +1,5 @@
 import { prisma } from '@storage/db'
+import { methodsFor, type PaymentSurface } from '@storage/core/billing'
 import { ensureStripeCustomer } from './customers'
 import { idempotencyKey, requireStripe, stripeClient } from './stripe'
 
@@ -48,6 +49,12 @@ export type ChargeIntentInput = {
   /// default, because that default and `Tenant.stripeDefaultPaymentMethodId`
   /// are two fields that can disagree, and the tenant chose ours (B-036).
   paymentMethodId?: string
+  /// B-103. Which surface is asking, which decides whether bank debit is on
+  /// offer (`@storage/core/billing`'s `methodsFor`). Defaults to `portal` —
+  /// the permissive case — because every existing caller is one, and a default
+  /// that silently dropped a payment method would be a worse failure than one
+  /// that offers a method somewhere it was not strictly needed.
+  surface?: PaymentSurface
 }
 
 export type ChargeIntent = {
@@ -82,6 +89,14 @@ export async function createChargeIntent(input: ChargeIntentInput): Promise<Char
 
   const stripe = requireStripe()
   const customerId = await ensureStripeCustomer(input.tenantId)
+
+  const facility = await prisma.facility.findUniqueOrThrow({
+    where: { id: input.facilityId },
+    select: { achAtCheckoutEnabled: true },
+  })
+  const methods = methodsFor(input.surface ?? 'portal', {
+    achAtCheckoutEnabled: facility.achAtCheckoutEnabled,
+  })
 
   // The pending row and — when this charge is for one named invoice — its
   // allocation are written together, BEFORE Stripe is called.
@@ -120,6 +135,19 @@ export async function createChargeIntent(input: ChargeIntentInput): Promise<Char
         currency: 'usd',
         customer: customerId,
         description: input.description,
+        // B-103. Stated explicitly rather than left to the dashboard's
+        // automatic payment methods, for two reasons: bank debit at checkout is
+        // a per-facility decision this code has to make (see `methodsFor`), and
+        // an off-session autopay charge must never be offered `us_bank_account`
+        // as a fresh method — it charges a stored one and there is nobody there
+        // to authorise a debit.
+        //
+        // `link` is included on every on-session surface. It is a faster way to
+        // present a card rather than a different kind of money, so it needs no
+        // facility switch and settles like a card.
+        ...(input.offSession
+          ? {}
+          : { payment_method_types: methods }),
         // Lets a later autopay run charge this method without the renter there.
         setup_future_usage:
           input.offSession || input.saveMethod === false ? undefined : 'off_session',

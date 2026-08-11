@@ -57,6 +57,21 @@ function LeaseCard({ lease }: { lease: PortalLeaseSummary }) {
           </p>
         </div>
       )}
+      {/* B-103. Said BEFORE the balance panel, because a tenant who paid on the
+          1st and sees "you have a balance" on the 3rd rings the office — and
+          the answer is that their money is in transit, not that anything is
+          wrong. Shown beside the balance rather than netted off it: the money
+          has not arrived, and subtracting it would make this screen disagree
+          with the ledger and with every staff screen. */}
+      {lease.settlingCents > 0 && (
+        <div role="status" className="border-input rounded-md border p-3 text-sm text-pretty">
+          <p>
+            <strong>{formatRate(lease.settlingCents)}</strong> is on its way from your bank. Bank
+            payments take about four business days to clear. Your balance updates when it arrives,
+            and you won&apos;t be charged a late fee while it&apos;s in transit.
+          </p>
+        </div>
+      )}
       {owesMoney && !lease.accessSuspended && (
         <div role="status" className="border-input rounded-md border p-3 text-sm text-pretty">
           <p>

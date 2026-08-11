@@ -257,6 +257,15 @@ export type BillingPolicyInput = {
   paymentAllocationOrder: string[]
   /// CN-3's ladder: days past due at which the tenant is chased.
   dunningDays: number[]
+  /// B-103 / PRD 01 §3. Whether a renter may pay by bank debit AT CHECKOUT.
+  ///
+  /// Here rather than in a section of its own because it is a money-risk
+  /// decision like the ones around it: an ACH move-in hands over a unit and a
+  /// gate code against money that can reverse four business days later. Portal
+  /// ACH is always on and is not configurable — there the tenant already has
+  /// the unit, so a bounced debit is an unpaid balance the dunning ladder
+  /// already knows how to handle.
+  achAtCheckoutEnabled: boolean
 }
 
 export class InvalidRetryScheduleError extends Error {
@@ -333,6 +342,7 @@ export async function updateBillingPolicy(
       accessRestoreAtOrBelowCents: before.accessRestoreAtOrBelowCents,
       paymentAllocationOrder: before.paymentAllocationOrder,
       dunningDays: before.dunningDays,
+      achAtCheckoutEnabled: before.achAtCheckoutEnabled,
     },
     after: {
       billingPolicy: after.billingPolicy,
@@ -345,6 +355,7 @@ export async function updateBillingPolicy(
       accessRestoreAtOrBelowCents: after.accessRestoreAtOrBelowCents,
       paymentAllocationOrder: after.paymentAllocationOrder,
       dunningDays: after.dunningDays,
+      achAtCheckoutEnabled: after.achAtCheckoutEnabled,
     },
   })
 }

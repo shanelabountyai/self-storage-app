@@ -114,6 +114,20 @@ export const TASK_TYPES = [
     // Sensitive: the findings include which codes the gate honours that we have
     // no record of, and "who could get in on the 3rd" is asked after something
     // goes missing — the same reason `gate_manual_action` is marked sensitive.
+    // B-103 / PRD 01 §3. A bank debit that was accepted and then bounced,
+    // typically four business days later.
+    //
+    // Its own type rather than reusing `failed_payment`: that one is a card
+    // decline, where nobody was ever told the money arrived. This one is a
+    // tenant who has a receipt, may have been let through a gate on it, and
+    // will now start getting dunning letters. The conversation is different
+    // and so is the urgency.
+    type: 'settling_payment_failed',
+    label: 'A bank payment bounced after it was accepted',
+    requiredProofFields: ['note'],
+    sensitive: false,
+  },
+  {
     type: 'gate_drift_review',
     label: 'Reconcile the gate controller against our records',
     requiredProofFields: ['note'],

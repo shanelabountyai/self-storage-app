@@ -59,13 +59,27 @@ export default async function PaymentDonePage({
           ? 'Payment received'
           : receipt.status === 'failed'
             ? 'That payment didn’t go through'
-            : 'Payment sent'}
+            : receipt.status === 'processing'
+              ? 'Bank payment on its way'
+              : 'Payment sent'}
       </h1>
 
       {receipt.status === 'pending' && (
         <p role="status" className="border-input rounded-md border p-3 text-sm text-pretty">
           Your bank has taken it. We&apos;re still confirming it on our side — your balance updates
           within a minute or two, and there&apos;s nothing else for you to do.
+        </p>
+      )}
+
+      {/* B-103. A bank debit is a genuinely different wait: days, not minutes.
+          Sharing the `pending` copy would tell somebody to expect their balance
+          to move "within a minute or two" and then leave them watching it for
+          four days. */}
+      {receipt.status === 'processing' && (
+        <p role="status" className="border-input rounded-md border p-3 text-sm text-pretty">
+          Your bank payment has been submitted. Bank payments take about four business days to
+          clear — your balance updates when it arrives, and you won&apos;t be charged a late fee
+          while it&apos;s on its way. There&apos;s nothing else for you to do.
         </p>
       )}
 
