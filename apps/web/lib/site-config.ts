@@ -4,11 +4,11 @@
 // defaults arrive with B-079. Kept in one file so that item has one place to
 // replace rather than a hunt through templates.
 export const SITE = {
-  name: 'Storage Co.',
+  name: 'Lab Intelligence LLC',
   tagline: 'Simple self-storage, rented online in minutes.',
   /// E.164 for the `tel:` href, formatted separately for display.
   phone: { href: '+15125550100', display: '(512) 555-0100' },
-  supportEmail: 'help@example.com',
+  supportEmail: 'help@labintelligence.co',
   /// The number tenants text to opt in, and the one the messaging policy
   /// publishes. Separate from `phone` on purpose: the office line and the A2P
   /// messaging number are usually different, and printing the wrong one on the

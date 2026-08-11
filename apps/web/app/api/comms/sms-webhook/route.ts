@@ -80,7 +80,7 @@ export async function POST(request: Request): Promise<Response> {
     const result = await beginSmsOptIn({ rawPhone: from })
     if (!result.ok) {
       return twiml(
-        `${SITE.name}: we do not recognise this number, so we have not subscribed it. Call ${SITE.phone.display} and we will add it to your account.`,
+        `${SITE.name}: we do not recognise this number, so we have not subscribed it. Call ${SITE.smsNumber.display} and we will add it to your account.`,
       )
     }
     // The "request for final confirmation" a campaign review looks for. It
@@ -114,7 +114,7 @@ export async function POST(request: Request): Promise<Response> {
     // consent, and there would be no consent behind it.
     if (!result.optedIn) {
       return twiml(
-        `${SITE.name}: we do not recognise this number, so we have not subscribed it. Call ${SITE.phone.display} and we will add it to your account.`,
+        `${SITE.name}: we do not recognise this number, so we have not subscribed it. Call ${SITE.smsNumber.display} and we will add it to your account.`,
       )
     }
 
