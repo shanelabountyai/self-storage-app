@@ -1,4 +1,5 @@
 import { prisma } from '@storage/db'
+import { cascadeAuthorizedAccess } from './authorized-persons'
 import { recordAudit } from '@storage/core/audit'
 import { describeRestore, describeSuspension, gateDecision } from '@storage/core/access'
 import { OCCUPYING_LEASE_STATUSES } from '@storage/core/inventory'
@@ -154,7 +155,7 @@ export async function evaluateAccessSuspensions(
         message: describeSuspension(state.daysPastDue, asOf),
       })
     } else if (decision.action === 'restore') {
-      await applyRestore(facilityId, grant.id, state.tenantId, state.leaseIds[0] ?? null, asOf)
+      await applyRestore(facilityId, grant.id, state.tenantId, state.leaseIds, asOf)
       outcome.restored += 1
       recordItem({ itemId: state.tenantId, ok: true, message: describeRestore(asOf) })
     } else {
@@ -209,7 +210,7 @@ export async function restoreAccessIfSettled(
   })
   if (decision.action !== 'restore') return false
 
-  await applyRestore(facilityId, grant.id, tenantId, state.leaseIds[0] ?? null, asOf)
+  await applyRestore(facilityId, grant.id, tenantId, state.leaseIds, asOf)
   return true
 }
 
@@ -228,6 +229,18 @@ async function applySuspend(
   })
 
   await transitionGrant(grantId, 'suspended', 'system:delinquency')
+
+  // PRD 03 US-9 AC2: an authorized person's credential is "suspended together
+  // with the lease when the lease is suspended for delinquency (US-3)".
+  //
+  // B-105 wired this up. `cascadeAuthorizedAccess` had existed since B-029 with
+  // no caller, which meant a delinquent tenant locked out under D-16 could
+  // still send their brother in on his own code — and every gate event would
+  // attribute correctly to a person whose access should have been off. The
+  // suspension was real for exactly one of the people it was meant to cover.
+  for (const leaseId of state.leaseIds) {
+    await cascadeAuthorizedAccess(leaseId, 'suspended', 'system:delinquency')
+  }
 
   await recordAudit({
     actor: { type: 'system', label: 'delinquency access rule' },
@@ -256,10 +269,17 @@ async function applyRestore(
   facilityId: string,
   grantId: string,
   tenantId: string,
-  _leaseId: string | null,
+  leaseIds: string[],
   asOf: Date,
 ): Promise<void> {
   await transitionGrant(grantId, 'active', 'system:delinquency_cleared')
+
+  // The other half of AC2. Restoring only the tenant would leave everybody they
+  // had authorised locked out permanently, with nothing on any screen saying
+  // why — the failure is quieter than the suspension one and lasts longer.
+  for (const leaseId of leaseIds) {
+    await cascadeAuthorizedAccess(leaseId, 'active', 'system:delinquency_cleared')
+  }
 
   await recordAudit({
     actor: { type: 'system', label: 'delinquency access rule' },

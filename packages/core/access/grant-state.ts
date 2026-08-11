@@ -58,7 +58,20 @@ export type GrantCause =
   | 'system:delinquency'
   | 'system:delinquency_cleared'
   | `staff:${string}`
+  /// B-105. A tenant acting on their own lease from the portal — adding or
+  /// withdrawing somebody on their authorized-access list.
+  ///
+  /// Its own prefix rather than folding into `staff:`, because the gate log is
+  /// evidence: after a theft claim, "the tenant let this person in" and "a
+  /// manager did" are different facts, and a cause string that cannot tell
+  /// them apart makes the log answer the question wrongly.
+  | `tenant:${string}`
 
 export function isSystemCause(cause: string): boolean {
   return cause.startsWith('system:')
+}
+
+/// True when a tenant, rather than staff or the system, caused the change.
+export function isTenantCause(cause: string): boolean {
+  return cause.startsWith('tenant:')
 }

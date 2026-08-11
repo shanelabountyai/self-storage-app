@@ -45,6 +45,9 @@ export default async function PortalLayout({ children }: { children: React.React
             <Link href="/portal/statements" className="underline underline-offset-2">
               Statements
             </Link>
+            <Link href="/portal/access" className="underline underline-offset-2">
+              Who can get in
+            </Link>
             <Link href="/portal/protection" className="underline underline-offset-2">
               Protection
             </Link>

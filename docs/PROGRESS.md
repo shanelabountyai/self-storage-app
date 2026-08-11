@@ -3318,3 +3318,69 @@ the fix makes the failure mode impossible rather than merely unlikely.
   catalogue entry, but no template was written for it.
 - **A tenant cannot change cover on a lease that has ended**, which is correct,
   but there is also no way to see what cover a past lease had from the portal.
+
+---
+
+## B-105 — Portal self-service for the authorized-access list
+
+`PENDING`
+
+**What it built.** PRD 03 US-9 AC4's Phase 2 half: `/portal/access`, where a
+tenant adds, sees and withdraws their own named people.
+
+- `AuthorizedAccessPerson.createdByStaffId` became nullable, with
+  `createdByTenantId` / `revokedByTenantId` alongside.
+- `createAuthorizedPerson` and `revokeAuthorizedPerson` now take a tenant actor;
+  one shared `actingParty` decides who may touch a lease.
+- `GrantCause` gained a `tenant:` prefix.
+- `apps/web/lib/portal/authorized-access.ts` plus the screen and its actions.
+
+**What it decided.**
+
+- *The tenant and the counter call the same functions.* A second path to a
+  working gate code is a second place for the cap, the audit entry and the
+  suspension state to be wrong.
+- *`tenant:` is its own cause prefix, not folded into `staff:`.* The gate log is
+  evidence, and after a theft claim "the tenant let this person in" and "a
+  manager did" are different facts.
+- *A tenant may withdraw somebody a manager added.* It is their unit; making
+  them ring the office is how a person keeps access they should not have over a
+  weekend.
+- *The code is shown in the portal*, the same posture already taken with the
+  tenant's own code — the tenant is the person expected to pass it on. An
+  unreadable one degrades to "call the office" rather than throwing.
+
+**Two defects found and fixed, one of them serious.**
+
+- **US-9 AC2's delinquency cascade had never been wired up.**
+  `cascadeAuthorizedAccess` was written in B-029 and described in its own
+  comment as "a seam, not yet wired to a caller" — and no caller ever arrived.
+  So when D-16 suspended a delinquent tenant's gate access, everyone that tenant
+  had authorised kept working codes: the suspension was real for exactly one of
+  the people it was meant to cover, and every gate event attributed correctly to
+  somebody whose access should have been off. Now driven from both
+  `applySuspend` and `applyRestore` — the restore half matters just as much,
+  since restoring only the tenant would leave everyone they authorised locked
+  out permanently with nothing on any screen explaining it.
+- **A person added while the tenant was suspended got working access.** They now
+  start suspended. Found by writing the test for it: a locked-out tenant could
+  otherwise add somebody from the portal and be back in the building ten minutes
+  later on a code the system issued. The fix has to transition through `active`
+  first, because `pending → suspended` is not a legal edge — and
+  `transitionGrant` REFUSES rather than throwing, so getting it wrong left the
+  grant sitting in `pending` with no error anywhere and a credential nobody
+  noticed did not work. That silent-refusal shape is worth remembering.
+
+**What it left behind.**
+
+- **No per-person access hours from the portal.** `accessHours` exists on the
+  model and is still unread by anything (B-064 owns enforcement); the portal
+  does not offer it rather than collecting a preference nothing honours.
+- **No notification to the person being added.** They get a code from the
+  tenant, by whatever means the tenant chooses. Texting it would need their
+  consent, which nothing captures.
+- **No edit.** A wrong phone number means withdraw and re-add, which mints a new
+  code. Fine at three people per lease; annoying at the cap.
+- **Withdrawn people are hidden, not shown as history.** The row and its audit
+  entries survive, but the portal shows only the live list — "who used to have
+  access" is an admin question and stays on the admin side.

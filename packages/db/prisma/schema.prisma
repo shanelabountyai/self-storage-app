@@ -2595,9 +2595,17 @@ model AuthorizedAccessPerson {
   /// captured and unread until that item exists.
   accessHours      Json?
   active           Boolean   @default(true)
-  createdByStaffId String
+  /// AC1 wants "the actor who changed it", and from B-105 that actor may be the
+  /// TENANT rather than a staff member — self-service from the portal is
+  /// AC4's Phase 2. Exactly one of each pair is set; which one is not
+  /// cosmetic, because "the tenant added their own brother" and "a manager
+  /// added somebody at the counter" are different answers when the gate log is
+  /// read after a theft claim.
+  createdByStaffId String?
+  createdByTenantId String?
   revokedAt        DateTime? @db.Timestamptz(6)
   revokedByStaffId String?
+  revokedByTenantId String?
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)

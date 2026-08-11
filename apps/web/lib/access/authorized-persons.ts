@@ -9,8 +9,15 @@ import { drainGateCommands, ensureGrantForHolder, issueCredential, transitionGra
 
 // PRD 03 US-9. The authorized-access list: named people on a lease, each with
 // their own individually-revocable credential — never a copy of the tenant's
-// code (FR-1). Staff-managed at MVP (AC4); the admin screen that calls this
-// is B-038's, the same split B-096 used for lease holds.
+// code (FR-1). The admin screen that calls this is B-038's, the same split
+// B-096 used for lease holds.
+//
+// B-105 opened it to tenants, which AC4 always intended: "the list is
+// staff-managed at MVP... tenant self-service from the portal is Phase 2 and
+// inherits the same cap." Both actors run through the functions below rather
+// than the portal getting its own copy — a second way to put a working code on
+// a gate is a second place for the cap, the audit entry and the suspension
+// state to be wrong.
 
 export class AuthorizedAccessCapError extends Error {
   readonly cap: number
@@ -34,11 +41,40 @@ export type CreateAuthorizedPersonInput = {
 
 export type CreatedAuthorizedPerson = { personId: string; credentialId: string; code: string }
 
-function requireStaffActor(actor: Actor): string {
-  if (actor.kind !== 'staff') {
-    throw new Error('Authorized-access people are staff-managed at MVP (US-9 AC4)')
+/// Who is asking, and whether they may touch this lease.
+///
+/// Staff need `access:manage_grants` at the facility; a tenant needs only to
+/// own the lease. Returned as a discriminated pair so every write below records
+/// WHICH kind of actor did it — AC1 asks for "the actor who changed it", and
+/// after a theft claim "the tenant added their own brother" and "a manager
+/// added somebody at the counter" are different answers.
+type ActingParty = { staffUserId: string; tenantId: null } | { staffUserId: null; tenantId: string }
+
+export class NotYourLeaseError extends Error {
+  constructor() {
+    super('That unit is not on your account.')
+    this.name = 'NotYourLeaseError'
   }
-  return actor.staffUserId
+}
+
+async function actingParty(actor: Actor, leaseId: string, facilityId: string): Promise<ActingParty> {
+  if (actor.kind === 'staff') {
+    requirePermission(actor, 'access:manage_grants', facilityId)
+    return { staffUserId: actor.staffUserId, tenantId: null }
+  }
+
+  // The `system` actor has no business on this list: every path that reaches
+  // here is a person deciding who may walk through a gate.
+  if (actor.kind !== 'tenant') throw new NotYourLeaseError()
+
+  // A lease id in a portal form. Checked here rather than at the screen so
+  // there is exactly one place that decides it, shared by every caller.
+  const lease = await prisma.lease.findUnique({
+    where: { id: leaseId },
+    select: { tenantId: true },
+  })
+  if (lease?.tenantId !== actor.tenantId) throw new NotYourLeaseError()
+  return { staffUserId: null, tenantId: actor.tenantId }
 }
 
 /// Adds a person to a lease's authorized-access list and issues their
@@ -49,13 +85,18 @@ export async function createAuthorizedPerson(
   leaseId: string,
   input: CreateAuthorizedPersonInput,
 ): Promise<CreatedAuthorizedPerson> {
-  const staffUserId = requireStaffActor(actor)
   const lease = await prisma.lease.findUniqueOrThrow({
     where: { id: leaseId },
-    select: { facilityId: true, facility: { select: { authorizedAccessCap: true } } },
+    select: {
+      facilityId: true,
+      tenantId: true,
+      facility: { select: { authorizedAccessCap: true } },
+    },
   })
-  requirePermission(actor, 'access:manage_grants', lease.facilityId)
+  const party: ActingParty = await actingParty(actor, leaseId, lease.facilityId)
 
+  // AC4: tenant self-service "inherits the same cap". One check for both
+  // actors, which is most of why they share this function.
   const activeCount = await prisma.authorizedAccessPerson.count({ where: { leaseId, active: true } })
   if (activeCount >= lease.facility.authorizedAccessCap) {
     throw new AuthorizedAccessCapError(lease.facility.authorizedAccessCap)
@@ -69,16 +110,47 @@ export async function createAuthorizedPerson(
       phone: input.phone,
       relationship: input.relationship,
       accessHours: (input.accessHours ?? undefined) as Prisma.InputJsonValue | undefined,
-      createdByStaffId: staffUserId,
+      createdByStaffId: party.staffUserId,
+      createdByTenantId: party.tenantId,
     },
   })
+
+  const cause: GrantCause = party.tenantId
+    ? 'tenant:authorized_person_added'
+    : 'staff:authorized_person_added'
 
   const grant = await ensureGrantForHolder(
     lease.facilityId,
     { authorizedPersonId: person.id },
-    'staff:authorized_person_added',
+    cause,
   )
-  await transitionGrant(grant.grantId, 'active', 'staff:authorized_person_added')
+
+  // B-105. A person added while the TENANT'S own access is suspended starts
+  // suspended too, rather than active.
+  //
+  // Without this, a delinquent tenant locked out under D-16 could add their
+  // brother from the portal and be back in the building ten minutes later with
+  // a code the system issued — and the same hole exists for a manager doing it
+  // at the counter. The credential is still created and still belongs to that
+  // person, so it comes up on its own when the balance clears and the cascade
+  // restores the lease.
+  const tenantGrant = lease.tenantId
+    ? await prisma.accessGrant.findUnique({
+        where: { facilityId_tenantId: { facilityId: lease.facilityId, tenantId: lease.tenantId } },
+        select: { state: true },
+      })
+    : null
+  const startSuspended = tenantGrant?.state === 'suspended'
+
+  // Always through `active` first. The state machine is
+  // `pending → active ⇄ suspended` (FR-1), so `pending → suspended` is not a
+  // legal edge — and `transitionGrant` REFUSES rather than throwing, which
+  // means getting this wrong leaves the grant sitting in `pending` with no
+  // error anywhere and a credential nobody notices does not work.
+  await transitionGrant(grant.grantId, 'active', cause)
+  if (startSuspended) {
+    await transitionGrant(grant.grantId, 'suspended', 'system:delinquency')
+  }
   const credential = await issueCredential(grant.grantId, leaseId)
   await drainGateCommands(new Date(), lease.facilityId)
 
@@ -103,21 +175,34 @@ export async function revokeAuthorizedPerson(
   personId: string,
   reasonCode: string,
 ): Promise<RevokeResult> {
-  const staffUserId = requireStaffActor(actor)
   const person = await prisma.authorizedAccessPerson.findUnique({
     where: { id: personId },
     select: { id: true, facilityId: true, leaseId: true, active: true, grant: { select: { id: true } } },
   })
   if (!person) return { ok: false, reason: 'not_found' }
-  requirePermission(actor, 'access:manage_grants', person.facilityId)
+
+  const party = await actingParty(actor, person.leaseId, person.facilityId)
   if (!person.active) return { ok: false, reason: 'already_revoked' }
 
   await prisma.authorizedAccessPerson.update({
     where: { id: personId },
-    data: { active: false, revokedAt: new Date(), revokedByStaffId: staffUserId },
+    data: {
+      active: false,
+      revokedAt: new Date(),
+      revokedByStaffId: party.staffUserId,
+      revokedByTenantId: party.tenantId,
+    },
   })
   if (person.grant) {
-    await transitionGrant(person.grant.id, 'revoked', 'staff:authorized_person_removed')
+    // A tenant may revoke somebody a MANAGER added, deliberately. It is their
+    // unit; the point of the list is that the tenant controls who gets in, and
+    // making them ring the office to withdraw access is how a person keeps
+    // access they should not have over a weekend.
+    await transitionGrant(
+      person.grant.id,
+      'revoked',
+      party.tenantId ? 'tenant:authorized_person_removed' : 'staff:authorized_person_removed',
+    )
   }
 
   await recordAudit({
