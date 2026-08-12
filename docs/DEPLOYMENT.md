@@ -121,6 +121,53 @@ Add only when you mean it:
 | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` | Leave unset until the A2P 10DLC campaign is approved. SMS falls back to email meanwhile, which is the correct behaviour rather than a workaround. |
 | `RESEND_API_KEY` | Real outbound email. |
 
+## Twilio go-live (PENDING — campaign not yet approved)
+
+SMS is built and dormant. Nothing here is a code change; it is all
+configuration, and it is deliberately inert until the last step so an
+unapproved campaign cannot send.
+
+**Where it stands.** The A2P 10DLC campaign is submitted and not yet approved.
+The published opt-in policy is live at `/messaging-policy`, and the double
+opt-in it describes (text `JOIN` → we ask → reply `YES`) is implemented in
+`/api/comms/sms-webhook`. With `TWILIO_*` unset, every SMS rule falls back to
+email, which is the correct behaviour rather than a workaround — see
+`deliverSmsForRule`.
+
+**When the campaign is approved, in this order:**
+
+1. **Env vars in Vercel** (Production):
+   `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`. Adding these alone still sends
+   nothing — step 3 is the switch.
+2. **Inbound webhook** in the Twilio console, on the Messaging Service:
+   `https://<your-domain>/api/comms/sms-webhook`.
+   Twilio signs the **exact URL it was configured with**, so it must match byte
+   for byte — scheme, host and path. A trailing slash or a proxy that rewrites
+   the host breaks verification by Twilio's design, not by a bug here.
+   `TWILIO_AUTH_TOKEN` must be set before this: the route fails closed without
+   it, because a forged STOP would cut a tenant off from every message.
+3. **Per-facility Messaging Service SID.** `Facility.smsMessagingServiceSid` is
+   the actual on/off switch, set per site on the facility settings screen. Empty
+   means that facility stays email-only. This is what lets one site go live
+   without dragging the whole portfolio with it.
+4. **Check the quiet-hours window** per facility if any state needs narrower
+   than the 8am–9pm default (`smsQuietHoursStartHour`/`EndHour`). It applies to
+   every message, not only marketing.
+5. **Round-trip it from a real handset** before telling anybody it works:
+   - text `JOIN` → expect the confirmation *request*, and no subscription yet
+   - reply `YES` → expect the welcome message, and a `granted` Consent row
+   - reply `STOP` → expect one confirmation, and every SMS to that number to
+     stop, transactional included
+   - reply `HELP` → expect identification and a contact number
+
+   A number the system does not recognise should be told so rather than
+   confirmed. That reply is the one a carrier audit would read as proof of
+   consent, and there must be none behind it.
+
+**Also still placeholder:** `SITE.phone` is `(512) 555-0100`. It no longer
+appears on the messaging policy, but it is the fallback office number across the
+public site and portal.
+
 ## After the first deploy
 
 - Point Twilio's campaign at `https://<your-domain>/messaging-policy` rather
