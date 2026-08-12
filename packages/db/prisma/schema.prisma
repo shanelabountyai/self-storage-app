@@ -16,6 +16,21 @@
 generator client {
   provider = "prisma-client-js"
   output   = "../generated/client"
+
+  // Prisma ships its query engine as a per-platform binary, and generates only
+  // the host's by default. `postinstall` runs `prisma generate` on Vercel's
+  // build container, which is Amazon Linux — so without naming it here the
+  // deployed functions carry a macOS engine and every runtime query fails with
+  // "could not locate the Query Engine for runtime rhel-openssl-3.0.x".
+  //
+  // That failure is nastier than it sounds because it is INVISIBLE to a smoke
+  // test: statically prerendered pages query the database at BUILD time, where
+  // the engine is present, so the homepage and the marketing pages render
+  // perfectly while every dynamic route, every API handler and the hourly cron
+  // return 500. Production looked healthy for a day on exactly that basis.
+  //
+  // `native` keeps local development and CI working.
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
 }
 
 datasource db {
