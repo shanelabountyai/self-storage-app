@@ -98,7 +98,11 @@ create them — `postinstall`'s `prisma generate` writes into
    build, deliberately: a build that migrates is a build that can half-migrate.
 7. **Bootstrap the first owner**: `npm run db:create-owner`. Nothing can create
    a staff account before this (D-12), and MFA enrolment is forced on first
-   sign-in.
+   sign-in. It prints a reset link that **expires in 60 minutes**, and until
+   `RESEND_API_KEY` is set there is no self-service way to get another —
+   `/forgot-password` throws rather than silently dropping a sign-in link. If it
+   lapses, re-issue with `npm run db:reset-link -- --email you@example.com`
+   rather than creating a second owner.
 
 ## Environment variables
 
