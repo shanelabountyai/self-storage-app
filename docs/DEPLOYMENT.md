@@ -123,6 +123,7 @@ Strongly recommended before anything real happens:
 | `ACCESS_CODE_ENCRYPTION_KEY` | `openssl rand -hex 32`. Gate codes are issued but can never be revealed to staff or re-sent to a tenant. |
 | `BLOB_READ_WRITE_TOKEN` | Proof-of-insurance uploads are refused (details still recorded). Created by adding a Blob store to the project. |
 | `HARDWARE_WEBHOOK_SECRET` | Per-facility rotation supersedes this; it is the fallback for a site that has never rotated. |
+| `DEMO_ACCESS_PASSWORD` | Set it and the whole site sits behind one shared password (HTTP Basic). Unset, the site is public. See below. |
 
 Add only when you mean it:
 
@@ -131,6 +132,34 @@ Add only when you mean it:
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | **Test keys until there is a real facility.** Live keys are what turn a mistake into a chargeback. |
 | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` | Leave unset until the A2P 10DLC campaign is approved. SMS falls back to email meanwhile, which is the correct behaviour rather than a workaround. |
 | `RESEND_API_KEY` | Real outbound email. |
+
+## Keeping a deployment non-public
+
+`DEMO_ACCESS_PASSWORD` puts one shared password in front of everything —
+[apps/web/lib/demo-gate.ts](../apps/web/lib/demo-gate.ts), called first thing in
+`proxy.ts`. It is not the application's authentication; sign-in, RBAC and MFA
+are untouched behind it.
+
+**Why not Vercel's own protection.** Vercel Authentication covers production
+deployments only on Enterprise, and Password Protection is a paid add-on — the
+API refuses both on Pro with `invalid_sso_protection`. The gate is also better
+suited to this app: platform protection blocks inbound webhooks
+indiscriminately, so enabling it would break Twilio and Stripe at go-live and
+force a bypass secret through a query parameter, which then changes the URL
+Twilio signs. Instead, six paths are exempt — the cron and the four webhooks,
+each of which proves who is calling by secret or signature, plus `/api/auth`,
+without which nobody could reach the login form the password is meant to admit
+them to. `tests/demo-gate.test.ts` pins that list; a 401 on the hourly tick
+would otherwise be invisible until a billing run did not happen.
+
+Verified in production: anonymous requests to `/`, `/login` and
+`/storage/search` return 401 with a `WWW-Authenticate` header, the same paths
+return 200 with the password, and the scheduled cron ran at 17:00 UTC and
+returned 200 with the gate live. `/api/cron` still 401s anonymously — that is
+the `CRON_SECRET` check, distinguishable because it sends no
+`WWW-Authenticate`.
+
+Remove the variable to make the site public.
 
 ## Twilio go-live (PENDING — campaign not yet approved)
 
