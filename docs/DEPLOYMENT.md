@@ -133,6 +133,43 @@ Add only when you mean it:
 | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` | Leave unset until the A2P 10DLC campaign is approved. SMS falls back to email meanwhile, which is the correct behaviour rather than a workaround. |
 | `RESEND_API_KEY` | Real outbound email. |
 
+## Running a command against production
+
+Some things can only be done from a laptop — bootstrapping the first owner,
+minting a reset link when there is no mail provider, seeding demo data. They
+need production credentials, and the wrong way to supply them is `.env.local`:
+every npm script loads it, and `vitest.config.ts` derives the `storage_test`
+schema from `DIRECT_URL`, so a single `npm test` afterwards would create that
+schema **inside production** and run the destructive suite against it. That is
+the accident `scripts/assert-dev-database.mts` exists to catch.
+
+Keep them in `.env.prod-ops` instead — already covered by `.gitignore`'s
+`.env*`:
+
+```
+DATABASE_URL="postgresql://…-pooler.…/neondb?sslmode=require"
+DIRECT_URL="postgresql://…/neondb?sslmode=require"
+EXPECTED_DEV_DB_HOST=ep-your-production-endpoint
+AUTH_URL=https://storage.labintelligence.co
+```
+
+Then wrap any command with it — an outer `dotenv` beats the `-e .env.local`
+inside the npm script, so nothing needs editing:
+
+```bash
+npx dotenv -e .env.prod-ops -- npm run db:seed:demo -- --no-logins
+npx dotenv -e .env.prod-ops -- npm run db:reset-link -- --email you@example.com
+npx dotenv -e .env.prod-ops -- npm run db:create-owner -- --email you@example.com
+```
+
+**Do not name it `.env`, `.env.production`, `.env.production.local`,
+`.env.development*` or `.env.test*`** — Next.js auto-loads all of those, and a
+local `next build` would silently connect to production.
+
+`EXPECTED_DEV_DB_HOST` is set to the *production* endpoint here on purpose:
+that is the deliberate override, and it disarms the guard only for commands
+that name this file. Everything running off `.env.local` stays protected.
+
 ## Keeping a deployment non-public
 
 `DEMO_ACCESS_PASSWORD` puts one shared password in front of everything —
