@@ -36,6 +36,21 @@ import {
 // recomputeUnitStatus() like everything else (B-010 US-8).
 
 export const DEMO_PREFIX = 'demo-'
+
+/// `--no-logins`: seed the data, set no passwords and enrol no second factor.
+///
+/// The published demo credentials are the ONLY part of this seed that is unsafe
+/// outside a throwaway database — `demo-owner-password` and a printed TOTP
+/// secret sit in demo-credentials.ts, so seeding them anywhere reachable hands
+/// over an owner account to anybody who reads the repo. The facilities, units,
+/// leases and the one past-due ledger entry are just data.
+///
+/// Splitting them is what makes a populated demo deployment possible at all:
+/// with this flag the guards below do not apply, because the thing they exist
+/// to prevent is not being written. Sign in afterwards with a real account —
+/// `npm run db:reset-link -- --email dana@demo.example.com --tenant` mints a
+/// password-reset link for a demo tenant without sending mail anywhere.
+const NO_LOGINS = process.argv.includes('--no-logins')
 export { DEMO_EMAIL_DOMAIN, DEMO_STAFF_EMAIL, DEMO_STAFF_PASSWORD, DEMO_TENANT_EMAIL, DEMO_TENANT_PASSWORD, DEMO_POS_TENANT_EMAIL }
 
 /// A signed-in staff account for the e2e suite.
@@ -328,20 +343,37 @@ async function seedStaffOwner(facilityIds: string[]) {
       facilityId,
     })),
   })
-  await setPassword(staffUser.id, 'staff', DEMO_STAFF_PASSWORD)
+  // Under --no-logins the account is still created, with its scoped
+  // assignments, because a staff list with nobody in it is not a demo. It
+  // simply has no password and no second factor, so nobody can sign in as it.
+  //
+  // CLEARED rather than merely skipped, and that distinction is the whole
+  // point: teardown() deliberately keeps this row (once it has acted it cannot
+  // be deleted), so a database that was seeded normally once would otherwise
+  // keep the published password and the printed TOTP secret through every
+  // later --no-logins run — the exact outcome the flag exists to prevent, and
+  // silent, because the summary would still say no logins were set.
+  if (NO_LOGINS) {
+    await prisma.staffUser.update({
+      where: { id: staffUser.id },
+      data: { passwordHash: null, totpSecret: null, totpConfirmedAt: null, totpLastStep: null },
+    })
+  } else {
+    await setPassword(staffUser.id, 'staff', DEMO_STAFF_PASSWORD)
 
-  // B-079. Enrolled with the published demo secret, encrypted the same way a
-  // real enrolment is — no test-only column, no bypass. `totpLastStep` is
-  // cleared so a fresh seed does not inherit a replay guard from the previous
-  // run's last sign-in, which would reject the first code of the new one.
-  await prisma.staffUser.update({
-    where: { id: staffUser.id },
-    data: {
-      totpSecret: encryptTotpSecret(DEMO_STAFF_TOTP_SECRET),
-      totpConfirmedAt: new Date(),
-      totpLastStep: null,
-    },
-  })
+    // B-079. Enrolled with the published demo secret, encrypted the same way a
+    // real enrolment is — no test-only column, no bypass. `totpLastStep` is
+    // cleared so a fresh seed does not inherit a replay guard from the previous
+    // run's last sign-in, which would reject the first code of the new one.
+    await prisma.staffUser.update({
+      where: { id: staffUser.id },
+      data: {
+        totpSecret: encryptTotpSecret(DEMO_STAFF_TOTP_SECRET),
+        totpConfirmedAt: new Date(),
+        totpLastStep: null,
+      },
+    })
+  }
 
   return staffUser
 }
@@ -559,7 +591,15 @@ async function seedLifecycleStates(seeded: SeededFacility, startIndex: number, i
     200,
   )
   if (isPrimaryFacility) {
-    await setPassword(delinquentTenant.id, 'tenant', DEMO_TENANT_PASSWORD)
+    // Cleared, not skipped — same reasoning as the staff account above.
+    if (NO_LOGINS) {
+      await prisma.tenant.update({
+        where: { id: delinquentTenant.id },
+        data: { passwordHash: null },
+      })
+    } else {
+      await setPassword(delinquentTenant.id, 'tenant', DEMO_TENANT_PASSWORD)
+    }
     // The only ledger write in this whole seed — a real unpaid charge so the
     // portal dashboard's past-due banner and suspended gate-code panel
     // (B-034) have a genuine signal to render instead of an empty $0.
@@ -608,16 +648,24 @@ async function seedLifecycleStates(seeded: SeededFacility, startIndex: number, i
 }
 
 async function main() {
-  // Two guards, catching two different mistakes. This one catches production
-  // CREDENTIALS in .env.local, which the NODE_ENV check below cannot see: a
-  // local shell has no NODE_ENV set, so that check passes happily while the
-  // connection string points at the live database.
-  assertDevDatabase('seed demo facilities and tenants')
+  // Both guards exist to keep PUBLISHED CREDENTIALS out of a database anybody
+  // can reach, so `--no-logins`, which writes none, is not something they need
+  // to stop. Without it they stand exactly as before.
+  //
+  // The first catches production credentials in .env.local, which the NODE_ENV
+  // check cannot see: a local shell has no NODE_ENV set, so that check passes
+  // happily while the connection string points at the live database.
+  if (!NO_LOGINS) {
+    assertDevDatabase('seed demo data with the published demo logins')
 
-  if (process.env.NODE_ENV === 'production') {
-    console.error('Refusing to seed demo data with NODE_ENV=production.')
-    process.exitCode = 1
-    return
+    if (process.env.NODE_ENV === 'production') {
+      console.error(
+        'Refusing to seed the published demo logins with NODE_ENV=production.\n' +
+          'Re-run with --no-logins to seed the data without them.',
+      )
+      process.exitCode = 1
+      return
+    }
   }
 
   const removed = await teardown()
@@ -694,7 +742,13 @@ async function main() {
     `\nSeeded ${facilityCount} demo facilities, ${unitCount} units, ${tenantCount} tenants, ${leaseCount} leases.`,
   )
   console.info('Lifecycle states per facility:', Object.keys(first.summary).join(', '))
-  console.info(`\nSigned-in demo staff account: ${DEMO_STAFF_EMAIL} / ${DEMO_STAFF_PASSWORD}`)
+  if (NO_LOGINS) {
+    console.info('\nNo passwords were set and no second factor was enrolled (--no-logins).')
+    console.info('To sign in as a demo tenant, mint a reset link — nothing is emailed:')
+    console.info(`  npm run db:reset-link -- --email ${DEMO_TENANT_EMAIL} --tenant`)
+  } else {
+    console.info(`\nSigned-in demo staff account: ${DEMO_STAFF_EMAIL} / ${DEMO_STAFF_PASSWORD}`)
+  }
   console.info(`All demo rows are marked: facility slug "${DEMO_PREFIX}*", email "*@${DEMO_EMAIL_DOMAIN}".`)
   console.info('Re-running this script removes and recreates them; it writes no audit entries.')
 }
