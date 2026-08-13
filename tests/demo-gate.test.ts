@@ -1,13 +1,15 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { NextRequest } from 'next/server'
-import { middleware } from '../apps/web/middleware'
+import { demoGate } from '../apps/web/lib/demo-gate'
 
 // The gate is the only thing standing between a not-yet-public deployment and
 // the open internet, so the two ways it could fail silently — letting everyone
 // through, or locking out the cron and the webhooks — both get an assertion.
 
+/// `demoGate` returns a response to send INSTEAD of handling the request, or
+/// null to carry on — so "let through" is null here, not a 200.
 function get(path: string, password?: string) {
-  return middleware(
+  return demoGate(
     new NextRequest(`https://example.com${path}`, {
       headers: password ? { authorization: `Basic ${btoa(`x:${password}`)}` } : {},
     }),
@@ -22,7 +24,7 @@ afterEach(() => {
 
 describe('demo access gate', () => {
   it('is inert when no password is configured', () => {
-    expect(get('/storage/search').status).toBe(200)
+    expect(get('/storage/search')).toBeNull()
   })
 
   describe('with a password set', () => {
@@ -36,8 +38,8 @@ describe('demo access gate', () => {
     it('refuses an anonymous request and asks for the password', () => {
       withPassword(() => {
         const response = get('/storage/search')
-        expect(response.status).toBe(401)
-        expect(response.headers.get('www-authenticate')).toContain('Basic')
+        expect(response?.status).toBe(401)
+        expect(response?.headers.get('www-authenticate')).toContain('Basic')
       })
     })
 
@@ -49,19 +51,19 @@ describe('demo access gate', () => {
       withPassword(() => {
         const wrong = 'x'.repeat(PASSWORD.length)
         expect(wrong).toHaveLength(PASSWORD.length)
-        expect(get('/storage/search', wrong).status).toBe(401)
+        expect(get('/storage/search', wrong)?.status).toBe(401)
       })
     })
 
     it('refuses a wrong password of a different length', () => {
       withPassword(() => {
-        expect(get('/storage/search', 'wrong').status).toBe(401)
+        expect(get('/storage/search', 'wrong')?.status).toBe(401)
       })
     })
 
     it('lets the right password through', () => {
       withPassword(() => {
-        expect(get('/storage/search', PASSWORD).status).toBe(200)
+        expect(get('/storage/search', PASSWORD)).toBeNull()
       })
     })
 
@@ -77,13 +79,13 @@ describe('demo access gate', () => {
       '/api/auth/callback/credentials',
     ])('never gates %s', (path) => {
       withPassword(() => {
-        expect(get(path).status).toBe(200)
+        expect(get(path)).toBeNull()
       })
     })
 
     it('gates the rest of the API, including the public read endpoints', () => {
       withPassword(() => {
-        expect(get('/api/public/facilities/austin-south/inventory').status).toBe(401)
+        expect(get('/api/public/facilities/austin-south/inventory')?.status).toBe(401)
       })
     })
   })

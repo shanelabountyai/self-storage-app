@@ -13,7 +13,16 @@
       "Bash(python3 -c ' *)",
       "Bash(cd \"/Users/shanelabounty/Documents/Claude/Projects/storage business\" && rm -rf packages/db/generated && npm run typecheck 2>&1 | grep -E \"error TS\" | head -5; echo \"typecheck done\"; npm run build 2>&1 | grep -E \"error|Failed|Compiled successfully\" | head -5)",
       "Bash(echo \"drift exit: $?\")",
-      "Bash(vercel crons *)"
+      "Bash(vercel crons *)",
+      "Bash(DATABASE_URL='postgres://inline-wins/x' npx dotenv -e .env.local -- node -e \"console.log\\(process.env.DATABASE_URL\\)\")",
+      "Bash(DATABASE_URL='postgresql://u:p@ep-not-dev-123-pooler.c-4.us-east-2.aws.neon.tech/neondb' npm run db:reset-link -- --email x@y.com)",
+      "mcp__claude_ai_Vercel__get_project_deployment_protection",
+      "Bash(curl -s https://api.vercel.com/v9/projects/prj_IJCLSDCSpdQjVZITdCU4gE2uI73q?teamId=team_HJnm56EPKbrqWwd75nQEytBd -H 'Authorization: Bearer __TRACKED_VAR__')",
+      "Bash(cp apps/web/middleware.ts /tmp/mw.bak)",
+      "Bash(sed -i '' \"s|  '/api/cron',||\" apps/web/middleware.ts)",
+      "Bash(sed -i '' 's|  return diff === 0|  return true|' apps/web/middleware.ts)",
+      "Bash(cp apps/web/lib/demo-gate.ts /tmp/dg.bak)",
+      "Bash(sed -i '' 's|  return diff === 0|  return true|' apps/web/lib/demo-gate.ts)"
     ]
   }
 }

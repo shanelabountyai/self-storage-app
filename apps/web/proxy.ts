@@ -10,6 +10,7 @@ import {
   touchFrom,
 } from '@storage/core/marketing'
 import { authConfig } from '@/auth.config'
+import { demoGate } from '@/lib/demo-gate'
 
 // Kept here rather than imported from lib/analytics/track: that module pulls in
 // Prisma, and the proxy runs on the Edge runtime where the Prisma client will
@@ -174,6 +175,12 @@ const gated = auth((request) => {
 
 export default function proxy(request: NextRequest, event: unknown) {
   const { pathname } = request.nextUrl
+
+  // Before anything else, including the auth redirect: a deployment that is not
+  // meant to be public should not reveal which paths exist by redirecting
+  // differently for each one.
+  const locked = demoGate(request)
+  if (locked) return locked
 
   // Signed-in areas go through the auth gate first — being redirected to the
   // login page matters more than URL tidiness, and the gate ends by calling
