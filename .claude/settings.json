@@ -12,7 +12,8 @@
       "Bash(node -e ' *)",
       "Bash(python3 -c ' *)",
       "Bash(cd \"/Users/shanelabounty/Documents/Claude/Projects/storage business\" && rm -rf packages/db/generated && npm run typecheck 2>&1 | grep -E \"error TS\" | head -5; echo \"typecheck done\"; npm run build 2>&1 | grep -E \"error|Failed|Compiled successfully\" | head -5)",
-      "Bash(echo \"drift exit: $?\")"
+      "Bash(echo \"drift exit: $?\")",
+      "Bash(vercel crons *)"
     ]
   }
 }

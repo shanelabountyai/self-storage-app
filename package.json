@@ -34,7 +34,7 @@
     "tsx": "^4.23.1",
     "vitest": "^3.2.4"
   },
-  "_postinstall_note": "packages/db/generated/ is gitignored — it is build output, and committing a 20MB engine binary per platform is worse than regenerating it. Nothing else runs `prisma generate` on a clean checkout, so a CI or Vercel build would fail with \"Cannot find module ./generated/client\". This is the one place that makes a fresh `npm install` produce a working tree.",
+  "_postinstall_note": "The Prisma client is build output (node_modules/.prisma/client, re-exported by @prisma/client) and nothing else generates it, so a clean checkout has no client at all and a CI or Vercel build fails with \"@prisma/client did not initialize yet\". This is the one place that makes a fresh `npm install` produce a working tree. It also generates the Linux engine named by binaryTargets, which is what the deployed functions load.",
   "_overrides_note": "Only transitive deps we can bump without putting the tree in an `invalid` state. Left alone deliberately: postcss/sharp (pinned by next), brace-expansion (minimatch@3 requires the 1.x line). `npm audit` runs in CI so the inherited advisories stay visible; they clear when next and eslint ship bumps.",
   "overrides": {
     "tmp": "^0.2.5",

@@ -6,11 +6,18 @@ matters when something does not work.
 
 ## What is already true
 
-- **`prisma generate` runs on install.** `packages/db/generated/` is gitignored
-  (it is build output, and committing a per-platform engine binary is worse
-  than regenerating it), so a clean checkout has no Prisma client until
+- **`prisma generate` runs on install.** The client is build output in
+  `node_modules/.prisma/client`, so a clean checkout has none until
   `postinstall` makes one. Verified by deleting the directory and installing
   from scratch.
+- **The deployed functions load a Linux query engine, and two settings put it
+  there.** `binaryTargets` in `schema.prisma` generates it, and
+  `serverExternalPackages: ['@prisma/client']` in `next.config.ts` keeps the
+  client out of the bundle so it can still find it — see the comments in both
+  files. Getting either wrong breaks every runtime query in production while
+  leaving the prerendered pages working, which is how it went unnoticed for a
+  day. `/storage/search?q=<zip>` is the cheapest honest smoke test: it is
+  dynamic, public, and hits the database.
 - **The build needs a reachable `DATABASE_URL`.** The homepage is prerendered
   with `revalidate = 3600` and reads the facility registry, so the build
   connects to the database. That is deliberate — the facility list changes when
