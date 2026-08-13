@@ -15,7 +15,14 @@
 
 generator client {
   provider = "prisma-client-js"
-  output   = "../generated/client"
+
+  // Deliberately no `output`. Generating into the package (../generated/client)
+  // put the client somewhere Next.js had to BUNDLE it, and the bundled client
+  // then looked for its engine relative to the chunk it was inlined into —
+  // /var/task/apps/web/packages/db/generated/client, which does not exist. The
+  // default output is node_modules/.prisma/client, re-exported by
+  // @prisma/client, which next.config.ts keeps external: an ordinary runtime
+  // require, resolving from node_modules, where the engine actually is.
 
   // Prisma ships its query engine as a per-platform binary, and generates only
   // the host's by default. `postinstall` runs `prisma generate` on Vercel's

@@ -1,4 +1,4 @@
-import { PrismaClient } from '../generated/client/index.js'
+import { PrismaClient } from '@prisma/client'
 import { PERMISSIONS, ROLES } from '../rbac-catalog.ts'
 import { COMMS_RULES, COMMS_TEMPLATES } from '../comms-catalog.ts'
 

@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, it } from 'vitest'
-import { PrismaClient } from '../packages/db/generated/client'
+import { PrismaClient } from '@prisma/client'
 
 // Proves the raw-SQL invariants in the migration actually hold in a real
 // Postgres. Skipped when no database is reachable so `npm test` stays offline;
