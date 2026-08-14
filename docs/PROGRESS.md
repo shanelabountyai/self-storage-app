@@ -3559,7 +3559,7 @@ Both payment submits — checkout's and the portal's — swapped `disabled` for 
 
 ## B-111 — Checkout goes both ways, and the price says what changed
 
-`PENDING`
+`10ddbb4`
 
 **Built:** `goBack(token, to)` in the checkout state machine, and two ways to reach it — a Back control below Continue on every step that has one behind it, and the completed entries in the progress indicator, which are now submit buttons styled as links. Both post the same action, so there is one set of rules about what may be returned to rather than two that can disagree. Nothing is unwound: the data stays, the signed lease stays signed, the unit stays held, and the hold is renewed because correcting an answer is activity. Back is refused once the session is no longer `active` — the state `provisionMoveIn` commits alongside the lease and the ledger — and the payment step additionally withdraws the control the moment its own `Payment` row leaves `pending`, so "nothing has been charged yet" is never printed next to a charge that is settling.
 
