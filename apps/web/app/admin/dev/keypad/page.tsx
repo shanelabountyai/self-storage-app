@@ -40,7 +40,7 @@ export default async function KeypadDevPage() {
       <div>
         <h1 className="text-lg font-semibold">Gate simulator — {selected.facility.name}</h1>
         <p className="text-muted-foreground mt-1 text-sm text-pretty">
-          Runs the real access-control service (B-027) end to end with no hardware. A code entered
+          Runs the real access-control service end to end with no hardware. A code entered
           here is checked against the mock vendor&apos;s own record — never against our database
           directly — and a real signed webhook is what creates the event below (PRD 03 FR-8).
         </p>
@@ -70,7 +70,7 @@ export default async function KeypadDevPage() {
         </h2>
         <p className="text-muted-foreground text-xs text-pretty">
           US-7 AC3. &ldquo;Offline&rdquo; and &ldquo;webhook failing&rdquo; both stop the event from
-          reaching us — offline also stops us sending new commands TO the gate (B-027&apos;s retry
+          reaching us — offline also stops us sending new commands TO the gate (the retry
           queue takes over); webhook-failing only stops us hearing back FROM it. The gate keeps
           deciding granted/denied locally either way, matching how a real standalone keypad keeps
           working with no network.

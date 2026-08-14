@@ -17,6 +17,7 @@ import {
   waiveFeeAction,
 } from './actions'
 import { HOLD_TYPES, type HoldEffect } from '@storage/core/holds'
+import { leaseStatusLabel } from '@storage/core/labels'
 
 /// The effects in an operator's words, on the banner. The catalog names them
 /// for code; a staffer needs to know what stopped.
@@ -334,7 +335,7 @@ export default async function TenantProfilePage({
                   <td className="py-2">
                     {lease.facilityName} — {lease.unitNumber}
                   </td>
-                  <td className="py-2 capitalize">{lease.status.replace('_', ' ')}</td>
+                  <td className="py-2 capitalize">{leaseStatusLabel(lease.status)}</td>
                   <td className="py-2">{formatCents(lease.monthlyRateCents)}/mo</td>
                   <td className={`py-2 text-right tabular-nums ${lease.balanceCents > 0 ? 'font-medium text-red-800' : ''}`}>
                     {formatCents(lease.balanceCents)}

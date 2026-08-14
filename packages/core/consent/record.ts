@@ -59,7 +59,21 @@ export async function currentConsent(
 ): Promise<ConsentState | null> {
   const latest = await client.consent.findFirst({
     where: { ...owner, channel },
-    orderBy: [{ capturedAt: 'desc' }, { createdAt: 'desc' }],
+    // THREE keys, and the third is not decoration. `capturedAt` and
+    // `createdAt` both default to now(), so two consents recorded in the same
+    // millisecond tie on BOTH and Postgres is free to return either - which
+    // makes "the newest row wins" a coin toss exactly where it matters most,
+    // deciding whether somebody who revoked consent still gets emailed.
+    //
+    // It went unnoticed because every write used to cross a network to a
+    // remote database, and the round trip guaranteed the timestamps differed.
+    // Moving the suite onto a local Postgres removed that accidental spacing
+    // and the tie surfaced immediately (2026-08-14).
+    //
+    // `id` is a cuid, which embeds a monotonic counter, so it breaks the tie
+    // in insertion order for rows created in the same process. That is the
+    // ordering the caller means by "newest" and it is stable.
+    orderBy: [{ capturedAt: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
     select: { state: true },
   })
   return latest?.state ?? null

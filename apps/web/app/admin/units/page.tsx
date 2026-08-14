@@ -1,6 +1,8 @@
 import Link from 'next/link'
 import { prisma } from '@storage/db'
 import { MANUAL_UNIT_STATUSES } from '@storage/core/inventory'
+import { REASON_CODES } from '@storage/core/audit'
+import { labelForStatus, unitStatusLabel } from '@storage/core/labels'
 import { Button } from '@/components/ui/button'
 import { UnitStatusBadge } from '@/components/admin/unit-status-badge'
 import { UnitsSubnav } from '@/components/admin/units-subnav'
@@ -157,7 +159,7 @@ export default async function AdminUnitsPage({
           <select name="status" defaultValue={params.status ?? ''} className="border-input bg-background h-9 rounded-md border px-2">
             <option value="">Any</option>
             {ALL_STATUSES.map((s) => (
-              <option key={s} value={s}>{s}</option>
+              <option key={s} value={s}>{unitStatusLabel(s)}</option>
             ))}
           </select>
         </label>
@@ -314,7 +316,9 @@ export default async function AdminUnitsPage({
           <label className="flex flex-col gap-1 text-sm">
             To status
             <select name="opStatus" defaultValue={params.opStatus ?? 'available'} className="border-input bg-background h-9 rounded-md border px-2">
-              {MANUAL_UNIT_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+              {MANUAL_UNIT_STATUSES.map((s) => (
+                <option key={s} value={s}>{unitStatusLabel(s)}</option>
+              ))}
             </select>
           </label>
           <label className="flex flex-col gap-1 text-sm">
@@ -380,9 +384,35 @@ export default async function AdminUnitsPage({
                 <input type="hidden" name="targetUnitTypeId" value={params.opUnitTypeId ?? ''} />
                 <input type="hidden" name="targetBuilding" value={params.opBuilding ?? ''} />
                 <input type="hidden" name="targetFloor" value={params.opFloor ?? ''} />
+                {/* A chosen code plus an optional note, not a free-text box
+                    pre-filled with `management_approval`. Two things were wrong
+                    with the old field: it put a schema identifier in front of an
+                    operator as the thing to type, and — because it was free
+                    text with a default nobody edits — the audit log filled with
+                    one value that means "somebody pressed the button", on an
+                    operation that can rewrite the status of every unit at a
+                    site. US-38 wants the log filterable; a field with one
+                    de-facto value is not. */}
                 <label className="flex flex-col gap-1 text-sm">
                   Reason
-                  <input name="reasonCode" defaultValue="management_approval" required className="border-input bg-background h-9 rounded-md border px-2" />
+                  <select
+                    name="reasonCode"
+                    defaultValue="management_approval"
+                    required
+                    className="border-input bg-background h-9 rounded-md border px-2"
+                  >
+                    {REASON_CODES.map((code) => (
+                      <option key={code} value={code}>{labelForStatus(code)}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="flex flex-col gap-1 text-sm">
+                  Note <span className="text-muted-foreground text-xs">(optional)</span>
+                  <input
+                    name="reasonNote"
+                    className="border-input bg-background h-9 rounded-md border px-2"
+                    placeholder="Anything the code does not capture"
+                  />
                 </label>
                 <Button type="submit">Apply to {preview.applyCount}</Button>
               </form>
@@ -474,7 +504,16 @@ export default async function AdminUnitsPage({
                     <input type="hidden" name="layoutJson" value={params.layout ?? ''} />
                     <label className="flex flex-col gap-1 text-sm">
                       Reason
-                      <input name="reasonCode" defaultValue="management_approval" required className="border-input bg-background h-9 rounded-md border px-2" />
+                      <select
+                        name="reasonCode"
+                        defaultValue="management_approval"
+                        required
+                        className="border-input bg-background h-9 rounded-md border px-2"
+                      >
+                        {REASON_CODES.map((code) => (
+                          <option key={code} value={code}>{labelForStatus(code)}</option>
+                        ))}
+                      </select>
                     </label>
                     <Button type="submit">Import {layoutPlan.createCount + layoutPlan.updateCount}</Button>
                   </form>

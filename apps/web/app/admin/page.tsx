@@ -57,8 +57,12 @@ export default async function AdminDashboardPage() {
   if (selected.mode === 'all') {
     return (
       <p className="text-muted-foreground text-sm">
-        Portfolio roll-up across every facility arrives with reporting (B-042). Pick a single
-        facility above to see today&apos;s activity.
+        This dashboard shows one facility at a time — pick one above to see today&apos;s activity.
+        For figures across the whole portfolio, use{' '}
+        <Link href="/admin/reports" className="underline underline-offset-4">
+          Reports
+        </Link>
+        , which covers every facility you hold.
       </p>
     )
   }

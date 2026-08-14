@@ -79,6 +79,7 @@ export async function applyBulkAction(formData: FormData) {
     readFilters(formData),
     readOperation(formData),
     String(formData.get('reasonCode') || 'management_approval'),
+    String(formData.get('reasonNote') ?? '').trim() || null,
   )
 
   revalidatePath('/admin/units')

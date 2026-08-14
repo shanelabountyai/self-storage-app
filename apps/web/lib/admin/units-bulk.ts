@@ -213,6 +213,10 @@ export async function applyBulkOperation(
   filters: UnitFilters,
   operation: BulkUnitOperation,
   reasonCode: string,
+  /// Free text beside the chosen code, not instead of it. The code is what
+  /// keeps US-38's log filterable; the note is for the half of a real reason
+  /// no vocabulary anticipates ("roof leak, north row, per Dave").
+  reasonNote?: string | null,
 ): Promise<BulkApplyResult> {
   requirePermission(actor, 'units:edit', facilityId)
 
@@ -267,6 +271,7 @@ export async function applyBulkOperation(
         facilityId,
         reasonCode,
         context: {
+          ...(reasonNote ? { reasonNote } : {}),
           operation,
           filters,
           matchedTotal: preview.matchedTotal,

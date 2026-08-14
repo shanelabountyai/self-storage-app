@@ -4,16 +4,27 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 // D-15: no internal identifier — a backlog ID, an entity name, a status enum —
-// may render on a route a customer can reach.
+// may render on a route a human can reach.
 //
 // This exists because /login shipped reading "The sign-in screen is built in
 // backlog item B-033" and sat there as the destination of the header's "Pay
 // bill" button on every page. It was written as a placeholder for us and read
 // by anyone who clicked.
+//
+// **Widened to `/admin` in B-109**, and the reason is not tidiness. D-15 is a
+// customer-lexicon decision, but the same leak on a staff screen misinforms
+// somebody who cannot check: `/admin/leads/[leadId]` told the counter agent
+// "No promotions engine yet (B-070), so nothing here is discounted" for as
+// long as B-070 had been shipped and the website had been advertising one, so
+// a phone quote and a web quote for the same unit disagreed and the caller
+// found out at the counter. A backlog ID on screen is a claim about the build,
+// and a claim about the build is exactly the thing that rots silently. Staff
+// may read industry words; they may not read our issue tracker.
 
 const appDir = fileURLToPath(new URL('../apps/web/app', import.meta.url))
 
-/// Every route a customer (not staff) can reach, signed in or not. `(public)`
+/// Every route a human can reach, signed in or not — customer-facing and, since
+/// B-109, staff-facing. `(public)`
 /// is the route group behind the site chrome; `login` is outside it but is
 /// linked from every page header, which is exactly how it got missed the first
 /// time. `forgot-password`/`reset-password`/`reauth` and the tenant `portal`
@@ -21,6 +32,7 @@ const appDir = fileURLToPath(new URL('../apps/web/app', import.meta.url))
 /// there is exactly as readable by a tenant as one on the public site.
 const CUSTOMER_REACHABLE = [
   '(public)',
+  'admin',
   'login',
   'forgot-password',
   'reset-password',
@@ -49,7 +61,7 @@ function renderedText(source: string): string {
     .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
 }
 
-describe('D-15 — customer-reachable routes carry no internal identifiers', () => {
+describe('D-15 — reachable routes carry no internal identifiers', () => {
   const files = CUSTOMER_REACHABLE.flatMap((route) => filesUnder(join(appDir, route)))
 
   it('scans every customer-facing page', () => {

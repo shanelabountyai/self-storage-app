@@ -3510,3 +3510,21 @@ waiting for a storage vendor since B-023. This closes it.
   the most likely real-world rejection.
 - **10 MB is a guess**, not a measured limit. A phone photo of a page is well
   under it; a scanner set to 600 dpi may not be.
+
+## B-109 — Stale copy, dead references and enum identifiers on staff screens
+
+`<SHA>`
+
+**Built:** the D-15 "no internal identifier renders" guard now scans `/admin` as well as the customer routes, and everything it found is fixed. A shared `packages/core/labels` turns unit, lease and lead statuses into words for every select, badge and chip. Bulk edit's Reason is a `<select>` of the audit reason catalogue with an optional free-text note beside it, and the layout importer got the same treatment. The homepage's size question now links to the size guide rather than the FAQ.
+
+**The one that mattered:** `/admin/leads/[leadId]` told the counter agent *"No promotions engine yet (B-070), so nothing here is discounted"* — and it was right, because `quoteForFacility` never asked. `promotionsAvailable` was a **hardcoded `false`** from B-039 and stayed that way through B-070 shipping the whole engine, so the public facility page advertised a discount that the phone quote for the same unit did not apply. A caller quoted on the phone and the same person on the website saw different numbers, and the tenant found out at the counter. The quote now calls the same `offerFor` the public page calls, with the same arguments, and shows the promotional first-period price in the Due-today cell rather than in a footnote; `promotionsAvailable` is computed from the lines so it cannot drift from what the table shows.
+
+**Decided:** admin may use industry words, it may not use enum identifiers. "Overlocked" and "unrentable" stay — a manager asks for the overlock list by name, and translating operator vocabulary would make the software harder to use for the people whose job it is. `pending_auction` and `overlock_apply` never reach a screen. `delinquent` is the single deliberate rename, to "Past due". The label maps are exhaustive `Record<Union, string>` rather than `Record<string, string>`, so a status added to the schema fails the build here instead of shipping its raw identifier to a screen — that typing is the whole point of the module.
+
+**Also decided:** the reason on a bulk edit is a chosen code *plus* an optional note, not free text pre-filled with `management_approval`. The old field put a schema identifier in front of an operator as the thing to type, and because nobody edits a default, the audit log filled with one value meaning "somebody pressed the button" — on an operation that can rewrite the status of every unit at a site. US-38 wants the log filterable; a field with one de-facto value is not. The note lands in the audit `context`, so `reasonCode` stays filterable.
+
+**Found — a test that defended the bug.** `inquiries-db.test.ts` asserted `promotionsAvailable === false` under the name *"says plainly that it knows nothing about promotions"*. It stayed green through B-070 because it pinned the placeholder rather than the behaviour. Replaced with one that creates a live promotion and asserts the quote prices it; reverting the fix fails it.
+
+**Left behind:** `/admin/maintenance`, `/admin/auctions/[caseId]`, `/admin/settings/promotions`, `/admin/settings/staff` and the tenant page's message rows still render their own status enums raw. They are not backlog IDs so the guard does not catch them, and each needs its own vocabulary decision rather than a mechanical map — B-117 owns the admin surface sweep. The `capitalize` class was removed only from the unit badge.
+
+**Not reproduced:** the first full-suite run after these changes had one failure that did not recur across three subsequent full runs (2767 passing each) or across repeated runs of the promotion-adjacent suites. The filename was not captured. The most likely candidate is the new test's live promotion being visible to a concurrently-running suite, since `candidates()` reads promotions globally and scopes by `facilityIds` afterwards.

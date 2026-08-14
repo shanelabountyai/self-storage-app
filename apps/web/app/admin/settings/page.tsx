@@ -362,7 +362,11 @@ export default async function AdminSettingsPage() {
           Fee schedule
         </h2>
         <p className="text-muted-foreground text-xs">
-          Baseline amounts only — late-fee rules (caps, grace periods) are configured in B-047.
+          Baseline amounts only. Late-fee rules — caps, grace periods and the ladder — are on{' '}
+          <Link href="/admin/settings/delinquency" className="underline underline-offset-4">
+            Delinquency settings
+          </Link>
+          .
         </p>
 
         {settings.currentFeeSchedule.length > 0 && (
@@ -1018,8 +1022,8 @@ export default async function AdminSettingsPage() {
         <p className="text-muted-foreground max-w-prose text-xs text-pretty">
           Enrolling on lapse charges a tenant for cover their lease may not have explicitly agreed
           to. It is off until someone turns it on, per facility, and the wording of the notice and
-          the lease clause behind it need a lawyer&apos;s eyes before it runs against a real tenant
-          (D-17). Either way the tenant is notified, and the lapse raises a task for staff.
+          the lease clause behind it need a lawyer&apos;s eyes before it runs against a real
+          tenant. Either way the tenant is notified, and the lapse raises a task for staff.
         </p>
 
         {plans.length > 0 && (

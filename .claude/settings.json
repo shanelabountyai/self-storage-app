@@ -39,7 +39,19 @@
       "Bash(curl -s --max-time 20 \"https://dns.google/resolve?name=storage.labintelligence.co&type=CNAME\")",
       "Bash(curl -s --max-time 20 -H \"accept: application/dns-json\" \"https://cloudflare-dns.com/dns-query?name=storage.labintelligence.co&type=A\")",
       "Bash(vercel logs *)",
-      "Bash(awk -F'|' '/^\\\\| [0-9]/ {print NF}' docs/prds/06-backlog.md)"
+      "Bash(awk -F'|' '/^\\\\| [0-9]/ {print NF}' docs/prds/06-backlog.md)",
+      "Bash(awk -F'|' '/^\\\\| [0-9]/ {print $2, $3, NF}' docs/prds/06-backlog.md)",
+      "Bash(awk -F'|' '/^\\\\| [0-9]/ {print $2}' docs/prds/06-backlog.md)",
+      "Bash(awk -F'|' '/^\\\\| D-/ {print $2, NF}' docs/prds/07-decisions.md)",
+      "Bash(git diff *)",
+      "Bash(awk -F'|' '/^\\\\| [0-9]/ {gsub\\(/ /,\"\",$3\\); print $3}' docs/prds/06-backlog.md)",
+      "Bash(awk -F'|' '/^\\\\| [0-9]/ {gsub\\(/ /,\"\",$2\\); print $2}' docs/prds/06-backlog.md)",
+      "Bash(awk -F'|' '/^\\\\| [0-9]/ {gsub\\(/[ ✅]/,\"\",$3\\); print $3}' docs/prds/06-backlog.md)",
+      "Bash(awk -F'|' '/^\\\\| 81d[a-k]/ {gsub\\(/^ +| +$/,\"\",$2\\); gsub\\(/^ +| +$/,\"\",$3\\); gsub\\(/^ +| +$/,\"\",$6\\); printf \"%-5s %-7s size=%s\\\\n\", $2, $3, $6}' docs/prds/06-backlog.md)",
+      "Bash(awk -F'|' '/B-106/ && /^\\\\| 81e/ {print \"Depends on:\", $7}' docs/prds/06-backlog.md)",
+      "Bash(awk -F'|' '/B-109/ && /^\\\\| 81da/ {print $4}' docs/prds/06-backlog.md)",
+      "Bash(cp apps/web/lib/admin/inquiries.ts /tmp/inq.bak)",
+      "Bash(sed -i '' 's|promotionsAvailable: lines.some\\(\\(line\\) => line.promo !== null\\)|promotionsAvailable: false|' apps/web/lib/admin/inquiries.ts)"
     ]
   }
 }

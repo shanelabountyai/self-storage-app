@@ -1,3 +1,4 @@
+import { unitStatusLabel } from '@storage/core/labels'
 import { cn } from '@/lib/utils'
 
 // PRD 02 US-5 AC fixes the colour per status. Colour is never the only signal:
@@ -19,12 +20,14 @@ export function UnitStatusBadge({ status, className }: { status: string; classNa
   return (
     <span
       className={cn(
-        'inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium capitalize ring-1 ring-inset',
+        // No `capitalize`: the label arrives already written for a reader, and
+        // a CSS transform cannot turn `pending_auction` into "Pending auction".
+        'inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ring-1 ring-inset',
         STATUS_STYLES[status] ?? 'bg-gray-100 text-gray-900 ring-gray-500/30',
         className,
       )}
     >
-      {status}
+      {unitStatusLabel(status)}
     </span>
   )
 }

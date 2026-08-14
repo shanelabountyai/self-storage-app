@@ -213,7 +213,10 @@ export async function confirmSmsOptIn(input: { rawPhone: string }): Promise<SmsO
 
   const latest = await prisma.consent.findFirst({
     where: { tenantId: tenant.id, channel: 'account_sms' },
-    orderBy: [{ capturedAt: 'desc' }, { createdAt: 'desc' }],
+    // Same three-key ordering, same reason, as currentConsent - two rows in
+    // one millisecond tie on both timestamps and "newest wins" becomes a coin
+    // toss (2026-08-14).
+    orderBy: [{ capturedAt: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
     select: { state: true },
   })
   if (latest?.state !== 'pending') return { ok: false, reason: 'nothing_pending' }

@@ -25,7 +25,12 @@ export default defineConfig({
     { name: 'desktop-chrome', use: { ...devices['Desktop Chrome'] }, dependencies: ['setup'] },
   ],
   webServer: {
-    command: 'npm run dev',
+    // `dev:test`, NOT `dev`. The server under test has to read the SAME
+    // database as the specs do, and `npm run dev` loads only .env.local -
+    // which points at the deployed dev branch. Two databases is a split brain
+    // that produces failures nobody can reproduce: a spec seeds a record the
+    // app cannot see.
+    command: 'npm run dev:test',
     url: baseURL,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,

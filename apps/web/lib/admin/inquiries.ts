@@ -2,6 +2,7 @@ import { prisma } from '@storage/db'
 import { recordAudit } from '@storage/core/audit'
 import { isStaffLeadSource, LEAD_SOURCE_LABELS } from '@storage/core/metrics'
 import { calculateMoveInCost } from '@storage/core/pricing'
+import { offerFor } from '@/lib/promotions/service'
 import { createReservation } from '@/lib/reservations/reserve'
 import { publicInventoryForFacility } from '@/lib/inventory/public-inventory'
 import { assertFacilityAccess, can, ForbiddenError } from '@/lib/rbac/authorize'
@@ -99,14 +100,21 @@ export type QuoteLine = {
   /// What they would actually pay today to walk out with a key — rent, fees,
   /// protection and tax, through the same calculator checkout uses.
   moveInTotalCents: number
+  /// The live promotion for this type, or null when none applies. Read through
+  /// the same `offerFor` the public facility page calls (B-070/B-109), because
+  /// this screen exists so a staffer on the phone cannot quote a price the
+  /// website contradicts — and until B-109 it silently could: the quote was
+  /// built with no promotion at all while the website priced one.
+  promo: { terms: string; firstPeriodCents: number } | null
 }
 
 export type LeadQuote = {
   facilityId: string
   lines: QuoteLine[]
-  /// Named rather than assumed: no promotions engine exists until B-070, and a
-  /// quote screen that silently omitted a discount would have staff quoting
-  /// over the top of a live promo.
+  /// Whether any line carries a live promotion. Computed from the lines rather
+  /// than declared, so it cannot drift from what the table actually shows —
+  /// it was a hardcoded `false` from B-039 until B-109, which is precisely how
+  /// it survived B-070 shipping the engine it claimed did not exist.
   promotionsAvailable: boolean
 }
 
@@ -124,7 +132,7 @@ export async function quoteForFacility(actor: Actor, facilityId: string): Promis
     select: { slug: true },
   })
   const inventory = await publicInventoryForFacility(facility.slug)
-  const lines: QuoteLine[] = (inventory?.unitTypes ?? []).map((unitType) => {
+  const lines: QuoteLine[] = await Promise.all((inventory?.unitTypes ?? []).map(async (unitType) => {
     // The same calculator the public page and checkout use, so the number a
     // staffer reads down the phone is the number the caller will see online.
     const cost = calculateMoveInCost({
@@ -133,6 +141,16 @@ export async function quoteForFacility(actor: Actor, facilityId: string): Promis
       adminFeeCents: inventory!.pricing.adminFeeCents,
       taxRates: inventory!.pricing.taxRates,
     })
+    // Same call, same arguments as the public facility page, so the two agree
+    // by construction rather than by two developers remembering to. A caller on
+    // the phone and the same person on the website now see one number.
+    const lookup = await offerFor({
+      facilityId,
+      unitTypeId: unitType.unitTypeId,
+      monthlyRateCents: unitType.webRateCents,
+      isNewTenant: true,
+    })
+
     return {
       unitTypeId: unitType.unitTypeId,
       name: unitType.name,
@@ -141,10 +159,13 @@ export async function quoteForFacility(actor: Actor, facilityId: string): Promis
       webRateCents: unitType.webRateCents,
       streetRateCents: unitType.streetRateCents,
       moveInTotalCents: cost.totalDueTodayCents,
+      promo: lookup.offer
+        ? { terms: lookup.offer.terms, firstPeriodCents: lookup.offer.firstPeriodCents }
+        : null,
     }
-  })
+  }))
 
-  return { facilityId, lines, promotionsAvailable: false }
+  return { facilityId, lines, promotionsAvailable: lines.some((line) => line.promo !== null) }
 }
 
 export type HoldResult =

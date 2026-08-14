@@ -61,9 +61,13 @@ export default function HomePage() {
             <a href={`tel:${SITE.phone.href}`} className="underline underline-offset-4">
               {SITE.phone.display}
             </a>{' '}
-            and we will talk it through, or read the{' '}
-            <Link href="/faq" className="underline underline-offset-4">
-              frequently asked questions
+            and we will talk it through, or see{' '}
+            {/* The size guide, not the FAQ: this paragraph is about choosing a
+                size, and the page that answers that question is the one that
+                lists them with what fits in each. Sending a size question to a
+                general FAQ makes the reader do the routing. */}
+            <Link href="/storage/size-guide" className="underline underline-offset-4">
+              what fits in each size
             </Link>
             .
           </p>

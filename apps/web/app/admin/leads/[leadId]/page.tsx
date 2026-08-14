@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { prisma } from '@storage/db'
+import { leadStatusLabel } from '@storage/core/labels'
 import { AdminForm } from '@/components/admin/form'
 import { Button } from '@/components/ui/button'
 import { getAdminActor } from '@/lib/admin/context'
@@ -81,7 +82,7 @@ export default async function LeadPage({ params }: { params: Promise<{ leadId: s
           </form>
         )}
         <span className="text-muted-foreground self-center text-sm">
-          Status: <span className="font-medium">{row.status}</span>
+          Status: <span className="font-medium">{leadStatusLabel(row.status)}</span>
         </span>
       </div>
 
@@ -89,12 +90,11 @@ export default async function LeadPage({ params }: { params: Promise<{ leadId: s
         <h2 id="quote" className="font-medium">
           Quote
         </h2>
-        {!quote.promotionsAvailable && (
-          <p className="text-muted-foreground text-xs text-pretty">
-            No promotions engine yet (B-070), so nothing here is discounted. If a promo is running
-            off-system, say so on the call — this screen does not know about it.
-          </p>
-        )}
+        <p className="text-muted-foreground text-xs text-pretty">
+          {quote.promotionsAvailable
+            ? 'First-period prices below include the promotion the website is currently advertising, so this screen and the website agree.'
+            : 'No promotion is running at this facility right now, so nothing here is discounted. If one is running off-system, say so on the call — this screen only knows about promotions set up in Settings.'}
+        </p>
         <div className="overflow-x-auto">
           <table className="w-full min-w-2xl border-collapse text-sm">
             <caption className="sr-only">Sizes, prices and what today would cost</caption>
@@ -117,7 +117,18 @@ export default async function LeadPage({ params }: { params: Promise<{ leadId: s
                   </th>
                   <td className="py-2 pr-4 text-right tabular-nums">{formatCents(line.webRateCents)}</td>
                   <td className="py-2 pr-4 text-right tabular-nums">{formatCents(line.streetRateCents)}</td>
-                  <td className="py-2 pr-4 text-right tabular-nums">{formatCents(line.moveInTotalCents)}</td>
+                  <td className="py-2 pr-4 text-right tabular-nums">
+                    {formatCents(line.moveInTotalCents)}
+                    {line.promo && (
+                      // Beside the number it modifies rather than in a caption:
+                      // the staffer is reading one row down a phone line, and a
+                      // discount noted anywhere else is a discount not quoted.
+                      <span className="text-muted-foreground mt-0.5 block text-xs font-normal">
+                        then {formatCents(line.promo.firstPeriodCents)} first period
+                        <span className="block">{line.promo.terms}</span>
+                      </span>
+                    )}
+                  </td>
                   <td className="py-2 pr-4 text-right tabular-nums">{line.availableCount}</td>
                   <td className="py-2 pr-4">
                     {line.availableCount > 0 && !held ? (

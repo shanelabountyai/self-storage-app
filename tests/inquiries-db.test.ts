@@ -172,10 +172,45 @@ describeDb('inquiry capture', () => {
       expect(line.availableCount).toBe(2)
     })
 
-    it('says plainly that it knows nothing about promotions', async () => {
-      // A quote screen that silently omitted a discount would have staff
-      // quoting over the top of a live promo.
-      expect((await quoteForFacility(actor(), facilityId)).promotionsAvailable).toBe(false)
+    it('reports no promotion when none is running', async () => {
+      const quote = await quoteForFacility(actor(), facilityId)
+      expect(quote.promotionsAvailable).toBe(false)
+      expect(quote.lines.every((line) => line.promo === null)).toBe(true)
+    })
+
+    // B-109. This assertion used to read "says plainly that it knows nothing
+    // about promotions" and pinned `promotionsAvailable` to a hardcoded
+    // `false` — which stayed green through B-070 shipping the whole engine.
+    // The screen went on telling the counter agent "No promotions engine yet"
+    // while the website advertised a discount on the same unit, so a phone
+    // quote and a web quote disagreed and the caller found out at the counter.
+    // A test that asserts a placeholder is a test that defends the placeholder.
+    it('prices the live promotion the website is advertising', async () => {
+      const promotion = await prisma.promotion.create({
+        data: {
+          name: `Quote promo ${suffix}`,
+          type: 'percent_off',
+          value: 50,
+          durationPeriods: 1,
+          status: 'active',
+          displayMode: 'auto',
+          facilityIds: [facilityId],
+        },
+      })
+
+      try {
+        const quote = await quoteForFacility(actor(), facilityId)
+        const line = quote.lines.find((row) => row.unitTypeId === unitTypeId)!
+
+        expect(quote.promotionsAvailable).toBe(true)
+        expect(line.promo).not.toBeNull()
+        // Half off the online rate, through the same `offerFor` the public
+        // facility page calls — so the two agree by construction.
+        expect(line.promo!.firstPeriodCents).toBe(Math.round(line.webRateCents / 2))
+        expect(line.promo!.terms).toBeTruthy()
+      } finally {
+        await prisma.promotion.delete({ where: { id: promotion.id } })
+      }
     })
   })
 

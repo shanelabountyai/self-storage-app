@@ -33,7 +33,8 @@
     "./checkout": "./checkout/index.ts",
     "./auth/totp": "./auth/totp.ts",
     "./org": "./org/index.ts",
-    "./documents": "./documents/index.ts"
+    "./documents": "./documents/index.ts",
+    "./labels": "./labels/index.ts"
   },
   "dependencies": {
     "@storage/db": "*"
