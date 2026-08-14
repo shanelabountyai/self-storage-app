@@ -43,7 +43,7 @@ export const LEASE_MERGE_FIELDS = [
 /// bottom", which is hostile to everyone and simply broken for a screen-reader
 /// user who never scrolls at all.
 export const LEASE_SUMMARY_TEMPLATE = `
-<h2>The short version</h2>
+<h2 id="lease-summary">The short version</h2>
 <p>This is a plain-language summary of the agreement below. The full text is what you are signing.</p>
 <dl>
   <dt>What you are renting</dt>

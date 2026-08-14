@@ -1,7 +1,9 @@
 import Link from 'next/link'
 import { AdminForm } from '@/components/admin/form'
 import { PriceSummary } from '@/components/checkout/price-summary'
-import { Stepper } from '@/components/checkout/stepper'
+import { CheckoutAnnouncer } from '@/components/checkout/announcer'
+import { LockWarning } from '@/components/checkout/lock-warning'
+import { stepAnnouncement, Stepper } from '@/components/checkout/stepper'
 import { SITE } from '@/lib/site-config'
 import { prisma } from '@storage/db'
 import { billingDayFor } from '@storage/core/billing'
@@ -17,7 +19,7 @@ import { PaymentStep } from '@/components/checkout/payment-step'
 import { amountDueToday, preparePayment } from '@/lib/checkout/payment'
 import { currentPlans, defaultTier } from '@/lib/protection/plans'
 import { buildLeaseDocument, existingLeaseDocument } from '@/lib/lease/build'
-import { renderTemplate } from '@/lib/documents/render'
+import { bodyOf, renderTemplate } from '@/lib/documents/render'
 import { LEASE_SUMMARY_TEMPLATE } from '@/lib/lease/template'
 import { leaseValuesFor } from '@/lib/lease/build'
 import { leaseIdForSession } from '@/lib/checkout/provision'
@@ -31,7 +33,7 @@ import {
   type PublicFacility,
 } from '@/lib/facility/public-facility'
 import type { DayOfWeek } from '@storage/core/facility-settings'
-import { advanceAction, extendLockAction, relockAction } from './actions'
+import { advanceAction, relockAction } from './actions'
 
 export const metadata = {
   title: 'Move in online',
@@ -130,8 +132,10 @@ export default async function CheckoutPage({
     if (existing?.content) {
       lease = {
         // The stored document is a complete HTML document; only its body can be
-        // embedded in this page. See renderDocument's note.
-        leaseHtml: existing.content.replace(/^[\s\S]*<body>/, '').replace(/<\/body>[\s\S]*$/, ''),
+        // embedded in this page, and `bodyOf` drops the document's own <h1> so
+        // a resumed lease step has the same heading outline as a first visit.
+        // See renderDocument's note.
+        leaseHtml: bodyOf(existing.content),
         summaryHtml: renderTemplate(LEASE_SUMMARY_TEMPLATE, await leaseValuesFor(session)),
       }
     } else {
@@ -156,11 +160,19 @@ export default async function CheckoutPage({
   }
 
   const remaining = minutesLeft(session.lockExpiresAt)
-  const warning = !session.lockLapsed && remaining <= LOCK_WARNING_MINUTES
 
   return (
     <div className="mx-auto w-full max-w-2xl px-4 py-12">
       <h1 className="text-3xl font-semibold tracking-tight text-balance">Move in online</h1>
+
+      {/* Above everything conditional on purpose: it has to outlive the step it
+          is reporting on. See the note in announcer.tsx. */}
+      <CheckoutAnnouncer
+        step={session.step}
+        stepLabel={stepAnnouncement(session.step)}
+        lockExpiresAt={session.lockExpiresAt.toISOString()}
+        lapsed={session.lockLapsed}
+      />
 
       <div className="mt-6">
         <Stepper current={session.step} />
@@ -190,31 +202,18 @@ export default async function CheckoutPage({
         </section>
       )}
 
-      {/* 2.2.1 Timing Adjustable: warned before it lapses, with an extension
-          that is one activation away. The control exists rather than relying on
-          a background heartbeat, because a screen-reader user reading a long
-          lease generates no interaction events and an idle-based timer would
-          drop precisely them. */}
-      {warning && (
-        <section aria-labelledby="lock" className="border-input mt-6 rounded-lg border p-4">
-          <h2 id="lock" className="text-base font-medium">
-            Still there?
-          </h2>
-          <p role="status" className="mt-1 text-sm text-pretty">
-            We are holding your unit for another {remaining}{' '}
-            {remaining === 1 ? 'minute' : 'minutes'}. Nothing has been charged, and you can keep it
-            for longer.
-          </p>
-          <AdminForm action={extendLockAction} label="Keep holding my unit" className="mt-3">
-            <input type="hidden" name="token" value={token} />
-            <button
-              type="submit"
-              className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
-            >
-              Keep it for another 30 minutes
-            </button>
-          </AdminForm>
-        </section>
+      {/* 2.2.1 Timing Adjustable. The threshold is watched by a client timer,
+          not decided once at render time — on the lease step nothing submits
+          between T-30 and the signature, so a server-rendered verdict never
+          became true and the renter's first news of the deadline was it
+          passing. See lock-warning.tsx. */}
+      {!session.lockLapsed && (
+        <LockWarning
+          token={token!}
+          lockExpiresAt={session.lockExpiresAt.toISOString()}
+          warningMinutes={LOCK_WARNING_MINUTES}
+          initialRemaining={remaining}
+        />
       )}
 
       {!session.lockLapsed && (

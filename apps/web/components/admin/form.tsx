@@ -120,10 +120,12 @@ export function Field({
   ...control
 }: {
   name: string
-  label: string
+  /// A node rather than a string, because a checkbox or radio label is often a
+  /// sentence with emphasis in it — a consent disclosure, a plan and its price.
+  label: React.ReactNode
   hint?: string
   className?: string
-  as?: 'input' | 'select'
+  as?: 'input' | 'select' | 'checkbox' | 'radio'
   children?: React.ReactNode
 } & React.InputHTMLAttributes<HTMLInputElement> &
   React.SelectHTMLAttributes<HTMLSelectElement>) {
@@ -134,19 +136,20 @@ export function Field({
     .filter(Boolean)
     .join(' ')
 
+  // A checkbox is a box, not a text input: CONTROL_CLASS's height, border and
+  // padding would stretch it into something that looks like an empty field.
+  const choice = as === 'checkbox' || as === 'radio'
   const shared = {
     id,
     name,
     'aria-invalid': error ? true : undefined,
     'aria-describedby': describedBy || undefined,
-    className: CONTROL_CLASS,
+    className: choice ? 'mt-1' : CONTROL_CLASS,
     ...control,
   }
 
-  return (
-    <div className={className ?? 'flex flex-col gap-1 text-sm'}>
-      <label htmlFor={id}>{label}</label>
-      {as === 'select' ? <select {...shared}>{children}</select> : <input {...shared} />}
+  const messages = (
+    <>
       {hint && (
         <p id={`${id}-hint`} className="text-muted-foreground text-xs">
           {hint}
@@ -157,7 +160,85 @@ export function Field({
           {error}
         </p>
       )}
+    </>
+  )
+
+  // Label after the control, and the two in one row. Everything else here puts
+  // the label first, which is right for a text input and wrong for a box.
+  if (choice) {
+    return (
+      <div className={className ?? 'text-sm'}>
+        <label htmlFor={id} className="flex items-start gap-2">
+          <input type={as} {...shared} />
+          <span>{label}</span>
+        </label>
+        {messages}
+      </div>
+    )
+  }
+
+  return (
+    <div className={className ?? 'flex flex-col gap-1 text-sm'}>
+      <label htmlFor={id}>{label}</label>
+      {as === 'select' ? <select {...shared}>{children}</select> : <input {...shared} />}
+      {messages}
     </div>
+  )
+}
+
+/// A set of radios or checkboxes that answer one question, with the error on
+/// the group rather than on any one control.
+///
+/// "Choose a protection plan" is a fact about the whole set — there is no
+/// single radio it belongs to, and putting it on the first one tells a
+/// control-by-control navigator who happens to land on the third one nothing at
+/// all. `aria-invalid` and `aria-describedby` are global attributes, so a
+/// `<fieldset>` (role `group`) carries both.
+///
+/// `name` is the key the ACTION reports the error under, which is not always
+/// the `name` on the inputs — the protection step's radios are `tier` and its
+/// error is `protection`.
+export function FieldSet({
+  name,
+  legend,
+  hint,
+  className,
+  children,
+}: {
+  name: string
+  legend: React.ReactNode
+  hint?: string
+  className?: string
+  children: React.ReactNode
+}) {
+  const state = useContext(FormStateContext)
+  const id = useId()
+  const error = state.status === 'error' ? state.fieldErrors[name] : undefined
+  const describedBy = [error ? `${id}-error` : null, hint ? `${id}-hint` : null]
+    .filter(Boolean)
+    .join(' ')
+
+  return (
+    <fieldset
+      className={className}
+      aria-invalid={error ? true : undefined}
+      aria-describedby={describedBy || undefined}
+    >
+      <legend className="font-medium">{legend}</legend>
+      {/* Above the options, not below them: a sighted user should meet the
+          reason before the things they have to choose between. */}
+      {hint && (
+        <p id={`${id}-hint`} className="text-muted-foreground mt-1 text-sm">
+          {hint}
+        </p>
+      )}
+      {error && (
+        <p id={`${id}-error`} className="mt-1 text-sm text-red-700">
+          {error}
+        </p>
+      )}
+      {children}
+    </fieldset>
   )
 }
 

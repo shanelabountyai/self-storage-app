@@ -1,4 +1,4 @@
-import { AdminForm, Field } from '@/components/admin/form'
+import { AdminForm, Field, FieldSet } from '@/components/admin/form'
 import { submitProtectionAction } from '@/app/(public)/checkout/actions'
 import { formatRate } from '@/lib/format'
 import type { PlanOption } from '@/lib/protection/plans'
@@ -32,9 +32,12 @@ export function ProtectionStep({
         This is a protection plan we offer, not an insurance policy.
       </p>
 
-      <fieldset className="mt-4">
-        <legend className="font-medium">Choose your cover</legend>
-
+      {/* The refusal to choose is a fact about the whole group, so it lands on
+          the <fieldset> — `validateChoice` reports it under `protection` while
+          the radios are named `tier`, which is why FieldSet takes the error key
+          separately. Putting it on the first radio would leave anyone who
+          arrives at the third one with no idea anything was wrong. */}
+      <FieldSet name="protection" legend="Choose your cover" className="mt-4">
         <div className="mt-3 flex flex-col gap-3">
           {plans.map((plan) => (
             <label
@@ -72,7 +75,7 @@ export function ProtectionStep({
             </span>
           </label>
         </div>
-      </fieldset>
+      </FieldSet>
 
       {/* Always rendered rather than revealed by JavaScript: the public path
           works with the bundle disabled, and a field that only exists after a
@@ -90,15 +93,16 @@ export function ProtectionStep({
             hint="We will remind you before it runs out."
           />
         </div>
-        <label className="mt-3 inline-flex items-start gap-2 text-sm">
-          {/* Unchecked by default. An attestation that arrives pre-agreed is
-              not an attestation. */}
-          <input type="checkbox" name="attested" value="yes" className="mt-1" />
-          <span>
-            I confirm my own insurance covers my belongings while they are stored here, and I will
-            tell you if that changes.
-          </span>
-        </label>
+        {/* Unchecked by default. An attestation that arrives pre-agreed is not
+            an attestation. Through `Field` so that leaving it unticked marks
+            the box itself invalid and points at its own message. */}
+        <Field
+          as="checkbox"
+          name="attested"
+          value="yes"
+          className="mt-3 text-sm"
+          label="I confirm my own insurance covers my belongings while they are stored here, and I will tell you if that changes."
+        />
       </fieldset>
 
       <div className="mt-4">

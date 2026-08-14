@@ -25,8 +25,14 @@ import {
 // code may be spent exactly once, so twenty parallel specs each doing a real
 // sign-in would have nineteen correctly rejected as replays.
 
-export const OWNER_STATE = join(import.meta.dirname, '.auth', 'owner.json')
-export const TENANT_STATE = join(import.meta.dirname, '.auth', 'tenant.json')
+// Resolved from the working directory, not from this module's own path. The
+// root package.json declares no `"type": "module"`, so Playwright transpiles
+// these specs to CommonJS and `import.meta` is a syntax error there — the whole
+// suite failed to load at the `setup` project with "Cannot use 'import.meta'
+// outside a module", which reads like a broken auth helper and is a module
+// system. `testDir: './e2e'` already resolves the same way.
+export const OWNER_STATE = join(process.cwd(), 'e2e', '.auth', 'owner.json')
+export const TENANT_STATE = join(process.cwd(), 'e2e', '.auth', 'tenant.json')
 
 async function signInWithPassword(
   page: Page,

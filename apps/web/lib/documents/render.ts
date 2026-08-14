@@ -139,6 +139,27 @@ export function renderDocument(input: {
   return { title: input.title, html, bodyHtml: body, contentHash: hashContent(html) }
 }
 
+/// The embeddable fragment of a document we have already STORED — the same
+/// thing `renderDocument` hands back as `bodyHtml`, recovered from the complete
+/// document when only the stored bytes are to hand.
+///
+/// It exists because there were two answers. The checkout lease step built a
+/// fresh lease from `bodyHtml` and a resumed one by stripping `<body>` inline,
+/// which keeps the document's `<h1>` — so first visit and resume disagreed
+/// about the heading outline of the same step, and only the resumed one
+/// injected a second `<h1>` into a page that already has one. B-031 emails a
+/// resume link precisely to make resuming the normal case.
+///
+/// Deliberately regex over a parser: the input is a document this module
+/// generated four lines above, not arbitrary HTML, and its shape is fixed by
+/// `renderDocument`.
+export function bodyOf(html: string): string {
+  return html
+    .replace(/^[\s\S]*?<body>\s*/, '')
+    .replace(/^<h1>[\s\S]*?<\/h1>\s*/, '')
+    .replace(/\s*<\/body>[\s\S]*$/, '')
+}
+
 export function hashContent(content: string): string {
   return createHash('sha256').update(content, 'utf8').digest('hex')
 }

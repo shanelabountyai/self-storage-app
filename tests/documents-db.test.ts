@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { prisma } from '../packages/db'
 import {
+  bodyOf,
   contentMatchesHash,
   hashContent,
   MissingMergeFieldsError,
@@ -106,6 +107,31 @@ describe('merge-field validation', () => {
         MissingMergeFieldsError,
       )
     })
+  })
+})
+
+describe('bodyOf (B-110)', () => {
+  // The checkout lease step embeds a FRESH lease from `bodyHtml` and a RESUMED
+  // one from the stored document. Those two have to be the same fragment, or
+  // first visit and resume disagree about the heading outline of the same step
+  // — and B-031 emails a resume link precisely to make resuming normal.
+
+  const rendered = renderDocument({
+    title: 'Storage rental agreement — Demo, unit A-1',
+    template: '<h2>The short version</h2><p>Rent for {{name}}.</p>',
+    values: { name: 'Ada Renter' },
+  })
+
+  it('recovers exactly what renderDocument called the body', () => {
+    expect(bodyOf(rendered.html)).toBe(rendered.bodyHtml)
+  })
+
+  it('drops the document own <h1> rather than injecting a second one', () => {
+    // The regression this exists for: the old inline strip cut at `<body>`,
+    // which keeps the title heading, so a resumed lease step put an <h1> inside
+    // a page that already had "Move in online" as its own.
+    expect(bodyOf(rendered.html)).not.toContain('<h1>')
+    expect(bodyOf(rendered.html)).toContain('<h2>The short version</h2>')
   })
 })
 

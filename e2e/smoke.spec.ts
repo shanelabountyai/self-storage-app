@@ -239,7 +239,7 @@ test('reserving a unit holds it, for free, with no account', async ({ page }) =>
   const email = `e2e-${Date.now()}@demo.example.com`
   await page.getByLabel('First name').fill('Ada')
   await page.getByLabel('Last name').fill('Prospect')
-  await page.getByLabel('Email').fill(email)
+  await page.getByLabel('Email', { exact: true }).fill(email)
   await page.getByLabel('Mobile number').fill('512-555-0142')
   await page.getByRole('button', { name: 'Reserve for free' }).click()
 
@@ -266,12 +266,12 @@ test('an invalid reservation reports the problem next to the field', async ({ pa
   // check, so the server's message is what the renter actually sees.
   await page.getByLabel('First name').fill('Ada')
   await page.getByLabel('Last name').fill('Prospect')
-  await page.getByLabel('Email').fill('ada@nowhere')
+  await page.getByLabel('Email', { exact: true }).fill('ada@nowhere')
   await page.getByLabel('Mobile number').fill('512-555-0142')
   await page.getByRole('button', { name: 'Reserve for free' }).click()
 
   await expect(page.getByRole('main').getByRole('alert')).toBeVisible()
-  await expect(page.getByLabel('Email')).toHaveAttribute('aria-invalid', 'true')
+  await expect(page.getByLabel('Email', { exact: true })).toHaveAttribute('aria-invalid', 'true')
 })
 
 test('the cancel link shows the hold before releasing it', async ({ page }) => {
@@ -281,7 +281,7 @@ test('the cancel link shows the hold before releasing it', async ({ page }) => {
 
   await page.getByLabel('First name').fill('Cancel')
   await page.getByLabel('Last name').fill('Me')
-  await page.getByLabel('Email').fill(`e2e-cancel-${Date.now()}@demo.example.com`)
+  await page.getByLabel('Email', { exact: true }).fill(`e2e-cancel-${Date.now()}@demo.example.com`)
   await page.getByLabel('Mobile number').fill('512-555-0143')
   await page.getByRole('button', { name: 'Reserve for free' }).click()
   await expect(page).toHaveURL(/\/reservations\?token=/)
@@ -339,12 +339,12 @@ test('checkout step 1 creates an account with no password', async ({ page }) => 
 
   // US-501 step 1 / FR-5.1: no password field anywhere, and no verification
   // wall in front of a move-in.
-  await expect(page.getByLabel('Email')).toBeVisible()
+  await expect(page.getByLabel('Email', { exact: true })).toBeVisible()
   await expect(page.locator('input[type="password"]')).toHaveCount(0)
 
   await page.getByLabel('First name').fill('Ada')
   await page.getByLabel('Last name').fill('Renter')
-  await page.getByLabel('Email').fill(`e2e-details-${Date.now()}@demo.example.com`)
+  await page.getByLabel('Email', { exact: true }).fill(`e2e-details-${Date.now()}@demo.example.com`)
   await page.getByLabel('Mobile number').fill('512-555-0100')
   await page.getByLabel('Street address').fill('2400 South Congress Ave')
   await page.getByLabel('City').fill('Austin')
@@ -358,6 +358,54 @@ test('checkout step 1 creates an account with no password', async ({ page }) => 
   await expect(page.getByRole('main')).toContainText('/mo')
 })
 
+test('a checkout step change moves focus and announces where it went', async ({ page }) => {
+  // B-110. The two things the suite had never asserted about dynamic state:
+  // that focus MOVES where it should, and that a live region's text CHANGES on
+  // the handle it was captured from. Structural presence was all that was
+  // checked, and structural presence is exactly the half that was already true
+  // while a renter pressing Continue heard nothing and was left on a submit
+  // button that no longer existed.
+  await page.goto('/storage/tx/houston/demo-e2e')
+  await page
+    .getByRole('listitem')
+    .filter({ hasText: '10x10 Test' })
+    .first()
+    .getByRole('button', { name: 'Rent now' })
+    .click()
+  await expect(page).toHaveURL(/\/checkout\?token=/)
+
+  // Captured BEFORE the action, and asserted on the same handle after: a region
+  // that unmounts and is replaced by a populated one is not announced, and is
+  // what a fresh locator would have hidden.
+  const announcer = page.getByRole('main').getByRole('status').first()
+  // `data-live` is set by the announcer's own effect. Waiting on it rather than
+  // on mere attachment is the difference between a warm run and a cold one:
+  // before hydration, Continue is a plain form post and a full document load,
+  // which remounts the region and announces nothing.
+  await expect(announcer).toHaveAttribute('data-live', 'true')
+  await expect(announcer).toHaveText('')
+
+  await page.getByLabel('First name').fill('Ada')
+  await page.getByLabel('Last name').fill('Renter')
+  await page.getByLabel('Email', { exact: true }).fill(`e2e-focus-${Date.now()}@demo.example.com`)
+  await page.getByLabel('Mobile number').fill('512-555-0100')
+  await page.getByLabel('Street address').fill('2400 South Congress Ave')
+  await page.getByLabel('City').fill('Austin')
+  await page.getByLabel('State').fill('TX')
+  await page.getByLabel('Zip code').fill('78704')
+  await page.getByRole('button', { name: 'Continue', exact: true }).click()
+
+  await expect(page.getByRole('heading', { name: 'Your unit' })).toBeVisible()
+
+  // Says where they are, in the words the progress indicator uses — not that
+  // something happened.
+  await expect(announcer).toHaveText(/Your unit — step 2 of 6/)
+
+  // 2.4.3: focus is on the new step's heading, so the next Tab is into step 2
+  // rather than back at the top of the document.
+  await expect(page.locator('#step')).toBeFocused()
+})
+
 test('checkout step 1 reports a bad field with a suggestion', async ({ page }) => {
   await page.goto('/storage/tx/houston/demo-e2e')
   await page
@@ -369,7 +417,7 @@ test('checkout step 1 reports a bad field with a suggestion', async ({ page }) =
 
   await page.getByLabel('First name').fill('Ada')
   await page.getByLabel('Last name').fill('Renter')
-  await page.getByLabel('Email').fill(`e2e-bad-${Date.now()}@demo.example.com`)
+  await page.getByLabel('Email', { exact: true }).fill(`e2e-bad-${Date.now()}@demo.example.com`)
   await page.getByLabel('Mobile number').fill('555')
   await page.getByLabel('Street address').fill('2400 South Congress Ave')
   await page.getByLabel('City').fill('Austin')
@@ -395,7 +443,7 @@ test('the checkout stepper advances server-side and resumes', async ({ page }) =
 
   await page.getByLabel('First name').fill('Ada')
   await page.getByLabel('Last name').fill('Renter')
-  await page.getByLabel('Email').fill(`e2e-resume-${Date.now()}@demo.example.com`)
+  await page.getByLabel('Email', { exact: true }).fill(`e2e-resume-${Date.now()}@demo.example.com`)
   await page.getByLabel('Mobile number').fill('512-555-0100')
   await page.getByLabel('Street address').fill('2400 South Congress Ave')
   await page.getByLabel('City').fill('Austin')
@@ -422,7 +470,7 @@ test('the protection step cannot be skipped and updates the total', async ({ pag
 
   await page.getByLabel('First name').fill('Ada')
   await page.getByLabel('Last name').fill('Renter')
-  await page.getByLabel('Email').fill(`e2e-prot-${Date.now()}@demo.example.com`)
+  await page.getByLabel('Email', { exact: true }).fill(`e2e-prot-${Date.now()}@demo.example.com`)
   await page.getByLabel('Mobile number').fill('512-555-0100')
   await page.getByLabel('Street address').fill('2400 South Congress Ave')
   await page.getByLabel('City').fill('Austin')
@@ -460,7 +508,7 @@ test('the lease shows a summary first and signs with a typed name', async ({ pag
 
   await page.getByLabel('First name').fill('Ada')
   await page.getByLabel('Last name').fill('Renter')
-  await page.getByLabel('Email').fill(`e2e-lease-${Date.now()}@demo.example.com`)
+  await page.getByLabel('Email', { exact: true }).fill(`e2e-lease-${Date.now()}@demo.example.com`)
   await page.getByLabel('Mobile number').fill('512-555-0100')
   await page.getByLabel('Street address').fill('2400 South Congress Ave')
   await page.getByLabel('City').fill('Austin')
@@ -510,7 +558,7 @@ test('the payment step itemises before it charges and discloses autopay', async 
 
   await page.getByLabel('First name').fill('Ada')
   await page.getByLabel('Last name').fill('Renter')
-  await page.getByLabel('Email').fill(`e2e-pay-${Date.now()}@demo.example.com`)
+  await page.getByLabel('Email', { exact: true }).fill(`e2e-pay-${Date.now()}@demo.example.com`)
   await page.getByLabel('Mobile number').fill('512-555-0100')
   await page.getByLabel('Street address').fill('2400 South Congress Ave')
   await page.getByLabel('City').fill('Austin')

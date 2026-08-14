@@ -37,6 +37,10 @@ function PaymentForm({ returnUrl }: { returnUrl: string }) {
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const errorRef = useRef<HTMLParagraphElement>(null)
+  // The guard that replaces `disabled` (see the button). A ref rather than the
+  // state above because this one is about not charging a card twice, and a ref
+  // is already true by the time a second click lands in the same tick.
+  const inFlight = useRef(false)
 
   useEffect(() => {
     // A decline reported only inside Stripe's iframe is frequently not
@@ -47,8 +51,10 @@ function PaymentForm({ returnUrl }: { returnUrl: string }) {
 
   async function submit(event: React.FormEvent) {
     event.preventDefault()
+    if (inFlight.current) return
     if (!stripe || !elements) return
 
+    inFlight.current = true
     setSubmitting(true)
     setError(null)
     const result = await stripe.confirmPayment({
@@ -63,6 +69,7 @@ function PaymentForm({ returnUrl }: { returnUrl: string }) {
       // B-103: no longer necessarily a card. Stripe's own message is used
       // when there is one; the fallback stopped naming the method.
       setError(result.error.message ?? 'That payment was declined. Try another payment method.')
+      inFlight.current = false
       setSubmitting(false)
       return
     }
@@ -84,12 +91,27 @@ function PaymentForm({ returnUrl }: { returnUrl: string }) {
         {error ?? ''}
       </p>
 
+      {/* Also pre-mounted and empty. A button whose LABEL changes to "Taking
+          payment…" tells a sighted user what is happening and tells a screen
+          reader nothing — the name of a control the user has just left is not
+          re-read. Confirming a card can take several seconds, and silence for
+          several seconds after paying reads as "it didn't work". */}
+      <p role="status" className="text-muted-foreground mt-2 text-sm empty:hidden">
+        {submitting ? 'Taking payment. This can take a few seconds.' : ''}
+      </p>
+
       <PaymentElement options={{ layout: 'tabs' }} />
 
+      {/* `aria-busy` rather than `disabled`. Disabling the element that
+          currently has focus blurs it to <body> in Chromium, so the renter who
+          just pressed Pay loses their place in the document at exactly the
+          moment the page goes quiet — the failure `use-my-location.tsx` already
+          documents, on the screen where it costs the most. A second press is a
+          no-op via `inFlight` instead. */}
       <button
         type="submit"
-        disabled={!stripe || submitting}
-        className="bg-primary text-primary-foreground mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-md px-4 text-base font-medium disabled:opacity-60 sm:w-auto"
+        aria-busy={!stripe || submitting}
+        className="bg-primary text-primary-foreground mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-md px-4 text-base font-medium aria-busy:opacity-60 sm:w-auto"
       >
         {submitting ? 'Taking payment…' : 'Pay and complete move-in'}
       </button>

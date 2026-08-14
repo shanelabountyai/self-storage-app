@@ -41,6 +41,20 @@ const LAST_REVIEWED = '14 August 2026'
 //
 // This file is a claim about the codebase, so it goes stale on merges rather
 // than on edits. CLAUDE.md's end-of-item checklist now names it for that reason.
+//
+// Re-verified 2026-08-14 again, after B-110, and it had gone stale in the
+// UNDERSTATING direction within the same day: four of the six gaps listed here
+// were the defects B-110 exists to fix, and leaving them would have publicly
+// declared the money path broken in ways it no longer is. Removed, each against
+// the code that closed it: step transitions now move focus to the step heading
+// and announce the destination from a region that outlives the step; a resumed
+// lease no longer repeats the page heading (`bodyOf`); the lease summary is
+// named by its own `<h2>`; both payment submits use `aria-busy` with a
+// pre-mounted "Taking payment" region instead of going `disabled` and silent;
+// and every tick box or radio in the public site that CAN carry a validation
+// error now carries it on the control — the rest cannot be wrong, which is why
+// that bullet went rather than being narrowed. What is left of the hold
+// countdown is the no-JavaScript case, and it is stated as exactly that.
 export default function AccessibilityPage() {
   return (
     <ProsePage
@@ -112,25 +126,12 @@ export default function AccessibilityPage() {
         </p>
         <ul className="list-disc space-y-1 pl-5">
           <li>
-            <strong>Renting online.</strong> Moving between steps does not move your place
-            on the page or say that the step changed, so a screen-reader user gets no
-            signal they have advanced. Saved checkouts you return to by email repeat the
-            page heading. The lease summary is announced by the wrong name.
-          </li>
-          <li>
-            <strong>The 30-minute hold on a unit is not announced.</strong> The countdown
-            is shown when the page is drawn and never updates, so if you are reading the
-            lease when it runs out, the expiry is the first you hear of it.
-          </li>
-          <li>
-            <strong>Paying.</strong> While a card is being confirmed the pay button becomes
-            unavailable, which loses your place on the page, and the wait is not announced.
-          </li>
-          <li>
-            <strong>Tick boxes and radio buttons</strong> — agreeing to the lease, choosing
-            a protection level, turning on autopay — do not carry their error on the
-            control itself, so moving between controls does not tell you which one is
-            wrong. The message is on screen next to it.
+            <strong>Renting online without JavaScript.</strong> The whole checkout works
+            with JavaScript turned off, but the countdown on the 30-minute hold does not:
+            it shows the time left when the page was drawn and does not tick down, so if
+            you are reading the lease when it runs out, the expiry can be the first you
+            hear of it. With JavaScript on you are warned five minutes out and can extend
+            the hold in one press.
           </li>
           <li>
             <strong>Our staff-facing screens</strong> have known problems. Three of them do

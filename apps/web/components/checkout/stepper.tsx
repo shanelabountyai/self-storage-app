@@ -11,6 +11,15 @@ const STEP_LABELS: Record<Step, string> = {
   provisioned: 'Done',
 }
 
+/// What a renter is told when a step changes: where they now are, in the same
+/// words the indicator below already uses. Lives here so the announcement and
+/// the indicator cannot drift apart, and so `CheckoutAnnouncer` — a client
+/// component — never has to import `lib/checkout/session` and drag Prisma and
+/// `node:crypto` into the browser bundle for the sake of a label.
+export function stepAnnouncement(step: Step): string {
+  return `${STEP_LABELS[step]} — step ${STEPS.indexOf(step) + 1} of ${STEPS.length}`
+}
+
 export function Stepper({ current }: { current: Step }) {
   const currentIndex = STEPS.indexOf(current)
 

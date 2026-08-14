@@ -39,6 +39,10 @@ function PayForm({ returnUrl, amountLabel }: { returnUrl: string; amountLabel: s
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const errorRef = useRef<HTMLParagraphElement>(null)
+  // The guard that replaces `disabled` (see the button). A ref, not the state
+  // above: this one is about not charging a card twice, and a ref is already
+  // true by the time a second click lands in the same tick.
+  const inFlight = useRef(false)
 
   useEffect(() => {
     // A decline reported only inside Stripe's iframe is frequently not
@@ -48,8 +52,10 @@ function PayForm({ returnUrl, amountLabel }: { returnUrl: string; amountLabel: s
 
   async function submit(event: React.FormEvent) {
     event.preventDefault()
+    if (inFlight.current) return
     if (!stripe || !elements) return
 
+    inFlight.current = true
     setSubmitting(true)
     setError(null)
     const result = await stripe.confirmPayment({
@@ -62,6 +68,7 @@ function PayForm({ returnUrl, amountLabel }: { returnUrl: string; amountLabel: s
       // B-103: no longer necessarily a card. Stripe's own message is used
       // when there is one; the fallback stopped naming the method.
       setError(result.error.message ?? 'That payment was declined. Try another payment method.')
+      inFlight.current = false
       setSubmitting(false)
       return
     }
@@ -79,12 +86,23 @@ function PayForm({ returnUrl, amountLabel }: { returnUrl: string; amountLabel: s
         {error ?? ''}
       </p>
 
+      {/* Also pre-mounted and empty. A button whose LABEL changes to "Taking
+          payment…" is not re-read to a screen reader, so paying was several
+          seconds of silence — which reads as "it didn't work". */}
+      <p role="status" className="text-muted-foreground mt-2 text-sm empty:hidden">
+        {submitting ? 'Taking payment. This can take a few seconds.' : ''}
+      </p>
+
       <PaymentElement options={{ layout: 'tabs' }} />
 
+      {/* `aria-busy` rather than `disabled`, for the reason
+          `use-my-location.tsx` documents: disabling the focused element blurs
+          it to <body> in Chromium, losing the payer's place at exactly the
+          moment the page goes quiet. `inFlight` stops the second press. */}
       <button
         type="submit"
-        disabled={!stripe || submitting}
-        className="bg-primary text-primary-foreground mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-md px-4 text-base font-medium disabled:opacity-60 sm:w-auto"
+        aria-busy={!stripe || submitting}
+        className="bg-primary text-primary-foreground mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-md px-4 text-base font-medium aria-busy:opacity-60 sm:w-auto"
       >
         {submitting ? 'Taking payment…' : `Pay ${amountLabel}`}
       </button>

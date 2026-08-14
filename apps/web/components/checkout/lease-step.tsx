@@ -30,7 +30,10 @@ export function LeaseStep({
     <div className="mt-4">
       {/* Both blocks are server-rendered from templates we control and whose
           merged values are escaped at render time (B-023), so the only markup
-          here is our own. */}
+          here is our own. `lease-summary` is the id on the summary template's
+          own <h2> — it had none until B-110, so this reference dangled and the
+          plain-language summary was an unnamed region rather than a landmark a
+          screen-reader user could jump to. */}
       <section
         aria-labelledby="lease-summary"
         className="border-input rounded-lg border p-4"
@@ -52,13 +55,18 @@ export function LeaseStep({
 
         <h2 className="text-xl font-medium">Sign</h2>
 
-        <label className="mt-3 flex items-start gap-2 text-sm">
-          {/* Consent to transact electronically is its own affirmative act
-              under E-SIGN — not something the signature implies — so it is a
-              separate control, unticked by default. */}
-          <input type="checkbox" name="consented" value="yes" className="mt-1" />
-          <span>{ELECTRONIC_RECORDS_CONSENT}</span>
-        </label>
+        {/* Consent to transact electronically is its own affirmative act under
+            E-SIGN — not something the signature implies — so it is a separate
+            control, unticked by default. Through `Field` so that refusing the
+            sign marks THIS box invalid, rather than only listing the reason in
+            an error summary a control-by-control navigator never passes. */}
+        <Field
+          as="checkbox"
+          name="consented"
+          value="yes"
+          label={ELECTRONIC_RECORDS_CONSENT}
+          className="mt-3 text-sm"
+        />
 
         <div className="mt-4 max-w-sm">
           <Field
