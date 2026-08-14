@@ -10,8 +10,17 @@
 //
 // Specifically outstanding before this is used against a real tenant: the lien
 // and notice language (Texas Property Code ch. 59), the rate-increase notice
-// period (PRD 01 §10 open question), and the protection-plan clause that D-17's
-// auto-enrolment depends on.
+// period (PRD 01 §10 open question), the protection-plan clause that D-17's
+// auto-enrolment depends on, and — added by D-49 — an SCRA clause.
+//
+// On that last one: the lease step asks the renter to declare active-duty
+// service, and nothing here says why. It is deferred rather than drafted
+// because 50 U.S.C. §3958 modifies LIEN ENFORCEMENT, which is the first item on
+// this list, so the two get written together or the second gets rewritten with
+// the first. The protection does not depend on this text — it is statutory, and
+// B-121 is what makes the pipeline honour it. A clause that overreaches (an
+// early-termination right SCRA does not grant for storage) would be a term the
+// operator had signed up to, which is the failure mode worth avoiding here.
 
 export const LEASE_MERGE_FIELDS = [
   'tenantName',
