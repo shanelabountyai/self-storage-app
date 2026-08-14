@@ -3585,7 +3585,7 @@ Both payment submits — checkout's and the portal's — swapped `disabled` for 
 
 ## B-112 — Checkout step 1 down to the field cap, and consumer-sized controls
 
-`PENDING`
+`e5d1f77`
 
 **Built:** step 1 went from fourteen visible fields to seven, plus one read-only line, above the primary action. City and state are derived from the zip through D-14's bundled dataset and shown as text, not as inputs — they were two free-text boxes beside the field that already determines both, and `state` accepted exactly two characters, so a renter typing "Texas" was rejected after submitting by a rule the form invented for itself. A closed `<details>` keeps a way to type them by hand, which is not a rare case: the dataset does not know every zip, a PO box is not where anybody lives, and the refusal for an unknown zip says how to get past it rather than just saying no. The alternate contact and the active-duty declaration moved to the lease step. The two consent boxes moved below Continue.
 
