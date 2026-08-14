@@ -1,5 +1,6 @@
 import { prisma } from '@storage/db'
 import type { FieldErrors } from '@/lib/admin/form-state'
+import { localityForZip } from '@/lib/geo/geocode'
 
 // PRD 01 US-501 step 1 / FR-5.1. "Your details", and the implicit account.
 
@@ -10,9 +11,23 @@ export type DetailsInput = {
   phone: string
   addressLine1: string
   addressLine2?: string
-  city: string
-  state: string
+  /// B-112: normally DERIVED from `postalCode` rather than typed. Still on the
+  /// type, and still accepted, because the dataset does not know every zip and
+  /// a PO box is not where anybody lives — the step keeps a way to enter them
+  /// by hand, behind a disclosure, for exactly those cases.
+  city?: string
+  state?: string
   postalCode: string
+}
+
+/// B-112. What moved off step 1 and onto the lease step.
+///
+/// Both belong with the agreement rather than with "who are you": the
+/// alternate contact is who we write to when a notice bounces (lease clause 9,
+/// "Your address"), and the active-duty declaration is a legal statement that
+/// earns SCRA protections. Step 1 was fourteen fields on a phone immediately
+/// after "Rent now", against §6.4's cap of seven.
+export type LeaseDeclarations = {
   altContactName?: string
   altContactPhone?: string
   activeDutyMilitary?: boolean
@@ -66,15 +81,44 @@ export function validateDetails(input: Partial<DetailsInput>): FieldErrors {
   }
 
   if (!input.addressLine1?.trim()) errors.addressLine1 = 'Enter your street address.'
-  if (!input.city?.trim()) errors.city = 'Enter your city.'
-  if (!/^[A-Za-z]{2}$/.test(input.state?.trim() ?? '')) {
-    errors.state = 'State must be a 2-letter code, for example TX.'
-  }
+
+  // B-112. City and state come from the zip. They are only validated when the
+  // renter has opened the disclosure and typed them, which is the escape hatch
+  // for a zip the dataset does not carry.
+  const typedCity = input.city?.trim() ?? ''
+  const typedState = input.state?.trim() ?? ''
+  const typedEither = typedCity !== '' || typedState !== ''
+
   if (!/^\d{5}(-\d{4})?$/.test(input.postalCode?.trim() ?? '')) {
     errors.postalCode = 'Enter a 5-digit zip code, for example 78704.'
+  } else if (!typedEither && !localityForZip(input.postalCode!)) {
+    // Not "invalid zip" — the zip may be perfectly real and simply newer than
+    // the dataset. 3.3.3 wants the way out, not just the refusal.
+    errors.postalCode =
+      "We don't recognise that zip code. Open \u201cEnter my city and state myself\u201d below and fill them in."
+  }
+
+  if (typedEither) {
+    if (!typedCity) errors.city = 'Enter your city.'
+    if (!/^[A-Za-z]{2}$/.test(typedState)) {
+      errors.state = 'State must be a 2-letter code, for example TX.'
+    }
   }
 
   return errors
+}
+
+/// The city and state for a submission: whatever the renter typed if they used
+/// the disclosure, and otherwise the zip's own. Returns null only when the zip
+/// is unknown AND nothing was typed, which `validateDetails` has already
+/// refused — so callers past validation can treat it as present.
+export function localityFor(
+  input: Partial<DetailsInput>,
+): { city: string; state: string } | null {
+  const city = input.city?.trim()
+  const state = input.state?.trim().toUpperCase()
+  if (city && state && /^[A-Z]{2}$/.test(state)) return { city, state }
+  return localityForZip(input.postalCode ?? '')
 }
 
 /// Creates or links the tenant this checkout belongs to.
@@ -89,7 +133,10 @@ export function validateDetails(input: Partial<DetailsInput>): FieldErrors {
 /// checkout. Blank fields are filled in, because that is strictly additive;
 /// anything already stored is left alone and the values entered here stay on
 /// the checkout session, where staff can reconcile them at move-in.
-export async function upsertTenantForCheckout(input: DetailsInput): Promise<{
+export async function upsertTenantForCheckout(
+  input: DetailsInput,
+  locality: { city: string; state: string },
+): Promise<{
   tenantId: string
   created: boolean
 }> {
@@ -105,12 +152,9 @@ export async function upsertTenantForCheckout(input: DetailsInput): Promise<{
         phone: input.phone.trim(),
         addressLine1: input.addressLine1.trim(),
         addressLine2: input.addressLine2?.trim() || null,
-        city: input.city.trim(),
-        state: input.state.trim().toUpperCase(),
+        city: locality.city,
+        state: locality.state,
         postalCode: input.postalCode.trim(),
-        altContactName: input.altContactName?.trim() || null,
-        altContactPhone: input.altContactPhone?.trim() || null,
-        activeDutyMilitary: input.activeDutyMilitary ?? null,
       },
     })
     return { tenantId: tenant.id, created: true }
@@ -122,16 +166,54 @@ export async function upsertTenantForCheckout(input: DetailsInput): Promise<{
     phone: existing.phone ?? input.phone.trim(),
     addressLine1: existing.addressLine1 ?? input.addressLine1.trim(),
     addressLine2: existing.addressLine2 ?? (input.addressLine2?.trim() || null),
-    city: existing.city ?? input.city.trim(),
-    state: existing.state ?? input.state.trim().toUpperCase(),
+    city: existing.city ?? locality.city,
+    state: existing.state ?? locality.state,
     postalCode: existing.postalCode ?? input.postalCode.trim(),
-    altContactName: existing.altContactName ?? (input.altContactName?.trim() || null),
-    altContactPhone: existing.altContactPhone ?? (input.altContactPhone?.trim() || null),
-    activeDutyMilitary: existing.activeDutyMilitary ?? (input.activeDutyMilitary ?? null),
   }
 
   await prisma.tenant.update({ where: { id: existing.id }, data: fillBlanks })
   return { tenantId: existing.id, created: false }
+}
+
+/// B-112. The two declarations that now arrive with the signature rather than
+/// with the name.
+///
+/// Additive for the same reason `upsertTenantForCheckout` is: the checkout is
+/// unauthenticated, so nothing here may overwrite what an existing tenant
+/// already has on file. An alternate contact silently replaced by a stranger
+/// mid-checkout is how a notice reaches the wrong person.
+export async function recordLeaseDeclarations(
+  tenantId: string,
+  input: LeaseDeclarations,
+): Promise<void> {
+  const existing = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { altContactName: true, altContactPhone: true, activeDutyMilitary: true },
+  })
+  if (!existing) return
+
+  await prisma.tenant.update({
+    where: { id: tenantId },
+    data: {
+      altContactName: existing.altContactName ?? (input.altContactName?.trim() || null),
+      altContactPhone: existing.altContactPhone ?? (input.altContactPhone?.trim() || null),
+      activeDutyMilitary: existing.activeDutyMilitary ?? (input.activeDutyMilitary ?? null),
+    },
+  })
+}
+
+/// The alternate contact is optional, but a number we cannot dial is worse than
+/// none — it looks like a fallback and is not one.
+export function validateDeclarations(input: LeaseDeclarations): FieldErrors {
+  const errors: FieldErrors = {}
+  const phone = input.altContactPhone?.trim() ?? ''
+  if (phone !== '' && (phone.match(PHONE_DIGITS)?.length ?? 0) < 10) {
+    errors.altContactPhone = 'Enter a number with area code, for example 512-555-0100, or leave it blank.'
+  }
+  if (input.altContactName?.trim() && phone === '') {
+    errors.altContactPhone = 'Add a number for your alternate contact, or clear their name.'
+  }
+  return errors
 }
 
 /// Everything step 1 knows before the renter types, when they arrived from a

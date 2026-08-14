@@ -43,6 +43,25 @@ function fromZip(zip: string): GeocodeResult | null {
   }
 }
 
+/// B-112. The city and state a zip code is in — the same bundled dataset D-14
+/// settled on, asked a different question.
+///
+/// Checkout step 1 asked for city and state as free text next to the zip that
+/// already determines both. `state` was a 2-character input, so a renter typing
+/// "Texas" was rejected after submitting, which is a validation error the form
+/// created for itself. Two fields removed from a step that §6.4 caps at seven
+/// and that rendered fourteen.
+///
+/// Returns null for a zip the dataset does not know, which is a real case — new
+/// and retired zips, and PO-box-only ranges — and the reason the step keeps a
+/// way to type them by hand rather than treating the dataset as the authority
+/// on where somebody lives.
+export function localityForZip(zip: string): { city: string; state: string } | null {
+  const record = zipcodes.lookup(zip.trim().slice(0, 5))
+  if (!record?.city || !record.state) return null
+  return { city: record.city, state: record.state }
+}
+
 /// city name (lowercased) -> its zip records, across every state.
 /// Built once on first use; `zipcodes.lookupByName` needs a state, and a user
 /// typing a bare "Tulsa" has not given one.

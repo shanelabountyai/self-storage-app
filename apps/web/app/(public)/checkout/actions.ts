@@ -12,7 +12,10 @@ import {
 import {
   MARKETING_EMAIL_CHECKOUT_DISCLOSURE_VERSION,
   SMS_CONSENT_DISCLOSURE_VERSION,
+  localityFor,
+  recordLeaseDeclarations,
   upsertTenantForCheckout,
+  validateDeclarations,
   validateDetails,
 } from '@/lib/checkout/details'
 import { prisma } from '@storage/db'
@@ -49,9 +52,6 @@ export async function submitDetailsAction(
     city: String(formData.get('city') ?? ''),
     state: String(formData.get('state') ?? ''),
     postalCode: String(formData.get('postalCode') ?? ''),
-    altContactName: String(formData.get('altContactName') ?? ''),
-    altContactPhone: String(formData.get('altContactPhone') ?? ''),
-    activeDutyMilitary: formData.get('activeDutyMilitary') === 'yes',
   }
   const smsConsentChecked = formData.get('smsConsent') === 'yes'
   const marketingConsentChecked = formData.get('marketingConsent') === 'yes'
@@ -59,10 +59,16 @@ export async function submitDetailsAction(
   const errors = validateDetails(input)
   if (Object.keys(errors).length > 0) return fieldError(errors)
 
-  const { tenantId } = await upsertTenantForCheckout(input)
+  // B-112: city and state come from the zip unless the renter opened the
+  // disclosure and typed them. `validateDetails` has already refused the case
+  // where neither is available, so this is present.
+  const locality = localityFor(input)!
+
+  const { tenantId } = await upsertTenantForCheckout(input, locality)
 
   const result = await advance(token, 'details', {
     ...input,
+    ...locality,
     email: input.email.trim().toLowerCase(),
   })
   if (!result.ok) {
@@ -217,11 +223,23 @@ export async function signLeaseAction(_prev: FormState, formData: FormData): Pro
   const data = session.data as Record<string, string | undefined>
   const legalName = `${data.firstName ?? ''} ${data.lastName ?? ''}`.trim()
 
-  const errors = validateSignature({
-    typedName: String(formData.get('typedName') ?? ''),
-    legalName,
-    consented: formData.get('consented') === 'yes',
-  })
+  // B-112: these moved here from step 1, so they are validated here too — and
+  // BEFORE the signature is recorded, or a bad alternate phone would refuse a
+  // lease that had already been signed.
+  const declarations = {
+    altContactName: String(formData.get('altContactName') ?? ''),
+    altContactPhone: String(formData.get('altContactPhone') ?? ''),
+    activeDutyMilitary: formData.get('activeDutyMilitary') === 'yes',
+  }
+
+  const errors = {
+    ...validateDeclarations(declarations),
+    ...validateSignature({
+      typedName: String(formData.get('typedName') ?? ''),
+      legalName,
+      consented: formData.get('consented') === 'yes',
+    }),
+  }
   if (Object.keys(errors).length > 0) return fieldError(errors)
 
   const { ipAddress, userAgent } = await requestMetadata()
@@ -262,9 +280,12 @@ export async function signLeaseAction(_prev: FormState, formData: FormData): Pro
     })
   }
 
+  if (session.tenantId) await recordLeaseDeclarations(session.tenantId, declarations)
+
   const result = await advance(token, 'lease', {
     leaseDocumentId: document.id,
     signedAt: signed.signedAt.toISOString(),
+    ...declarations,
   })
   if (!result.ok) {
     return {

@@ -10,12 +10,26 @@ import {
 // token (1.3.5 Identify Input Purpose) and a keyboard that matches the data
 // (§6.2).
 //
-// B-111: EVERY field carries its `defaultValue`, not just the four that did.
-// The address block had none, so back navigation — which this item is what
-// makes possible — returned a renter to a step with their street, city, state
-// and zip wiped, and Continue then refused the empty form. "Back navigation
-// never loses data" (§6.4) is not a property of the machine alone; a field that
-// does not render what the session holds loses it just as thoroughly.
+// ── B-112: fourteen fields down to seven ─────────────────────────────────────
+//
+// §6.4 caps a step at seven visible fields. This one rendered fourteen, on a
+// phone, immediately after "Rent now" — the first thing a renter meets after
+// deciding to buy. Three changes, none of which drop information:
+//
+//   * City and state are DERIVED from the zip (D-14's bundled dataset) and
+//     shown read-only. They were two free-text inputs beside the field that
+//     already determines both, and `state` accepted exactly two characters —
+//     so typing "Texas" was rejected after submitting, a validation error the
+//     form invented for itself. The disclosure below them is the way out for a
+//     zip the dataset does not carry.
+//   * The alternate contact and the active-duty declaration moved to the lease
+//     step, where they belong: one is who we write to when a notice bounces,
+//     the other is a legal declaration made alongside the agreement.
+//   * The two consent boxes sit BELOW the primary action. Marketing consent is
+//     the only thing on this screen that serves us rather than the renter, and
+//     it was sitting between their phone number and their address.
+//
+// Net: seven fields to fill, plus one read-only line, above Continue.
 //
 // No address-autocomplete API. D-14 settled that this product carries no
 // geocoding vendor and narrowed the open question to map rendering and address
@@ -26,10 +40,18 @@ import {
 export function DetailsStep({
   token,
   prefill,
+  manualLocality = false,
 }: {
   token: string
   prefill: Partial<DetailsInput>
+  /// True only when the stored city/state DISAGREE with what the zip derives —
+  /// which is the only way they got there by hand. Without the distinction the
+  /// disclosure would spring open on every return visit, because the session
+  /// carries a city and state from then on either way, and the step would be
+  /// back over the field cap for anyone who came back to it.
+  manualLocality?: boolean
 }) {
+
   return (
     <AdminForm
       action={submitDetailsAction}
@@ -74,21 +96,6 @@ export function DetailsStep({
         className="flex flex-col gap-1 text-sm sm:col-span-2"
       />
 
-      <label className="flex items-start gap-2 text-sm sm:col-span-2">
-        {/* PRD 05 CN-15: unchecked by default, its own affirmative act — never
-            implied by entering a phone number above. */}
-        <input type="checkbox" name="smsConsent" value="yes" className="mt-1" />
-        <span>{SMS_CONSENT_DISCLOSURE}</span>
-      </label>
-
-      <label className="flex items-start gap-2 text-sm sm:col-span-2">
-        {/* PRD 04 US-13 AC1 / US-9 AC3: unchecked by default. This is the
-            ONLY thing that makes the abandoned-checkout follow-up (US-9)
-            legal to send at all — "no consent, no sequence." */}
-        <input type="checkbox" name="marketingConsent" value="yes" className="mt-1" />
-        <span>{MARKETING_EMAIL_CHECKOUT_DISCLOSURE}</span>
-      </label>
-
       <Field
         name="addressLine1"
         label="Street address"
@@ -105,22 +112,6 @@ export function DetailsStep({
         className="flex flex-col gap-1 text-sm sm:col-span-2"
       />
       <Field
-        name="city"
-        label="City"
-        autoComplete="address-level2"
-        defaultValue={prefill.city ?? ''}
-        required
-      />
-      <Field
-        name="state"
-        label="State"
-        autoComplete="address-level1"
-        maxLength={2}
-        defaultValue={prefill.state ?? ''}
-        required
-        hint="Two-letter code, for example TX."
-      />
-      <Field
         name="postalCode"
         label="Zip code"
         // Numeric here is correct — unlike the search field, this one only ever
@@ -129,48 +120,52 @@ export function DetailsStep({
         autoComplete="postal-code"
         defaultValue={prefill.postalCode ?? ''}
         required
+        hint="Your city and state come from this."
       />
 
-      <fieldset className="text-sm sm:col-span-2">
-        <legend className="font-medium">Alternate contact (optional)</legend>
-        <p className="text-muted-foreground mt-1">
-          Someone we can reach if we cannot reach you. This does not give them access to your unit.
+      {/* Read-only, and real text rather than a disabled input: there is
+          nothing to operate, so nothing should be in the tab order pretending
+          otherwise. Before the renter has submitted anything there is nothing
+          to show, and saying so beats an empty box. */}
+      <div className="text-sm">
+        <p className="text-muted-foreground">City and state</p>
+        <p className="mt-1 font-medium">
+          {prefill.city && prefill.state ? (
+            `${prefill.city}, ${prefill.state}`
+          ) : (
+            <span className="text-muted-foreground font-normal">
+              From your zip code
+            </span>
+          )}
         </p>
+      </div>
+
+      {/* The escape hatch, and not a rare one: the dataset does not know every
+          zip, a PO box is not where anybody lives, and a zip can straddle a
+          boundary. Closed by default so it does not count against the field
+          cap, and a <details> rather than a JS disclosure so it still opens
+          with the bundle disabled. */}
+      <details open={manualLocality} className="text-sm sm:col-span-2">
+        <summary className="inline-flex min-h-11 cursor-pointer items-center underline underline-offset-4">
+          Enter my city and state myself
+        </summary>
         <div className="mt-2 grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field
-            name="altContactName"
-            label="Name"
-            autoComplete="off"
-            defaultValue={prefill.altContactName ?? ''}
+            name="city"
+            label="City"
+            autoComplete="address-level2"
+            defaultValue={prefill.city ?? ''}
           />
           <Field
-            name="altContactPhone"
-            label="Phone"
-            type="tel"
-            inputMode="tel"
-            autoComplete="off"
-            defaultValue={prefill.altContactPhone ?? ''}
+            name="state"
+            label="State"
+            autoComplete="address-level1"
+            maxLength={2}
+            defaultValue={prefill.state ?? ''}
+            hint="Two-letter code, for example TX."
           />
         </div>
-      </fieldset>
-
-      <fieldset className="text-sm sm:col-span-2">
-        <legend className="font-medium">Military service</legend>
-        <label className="mt-2 inline-flex min-h-11 items-center gap-2">
-          <input
-            type="checkbox"
-            name="activeDutyMilitary"
-            value="yes"
-            defaultChecked={prefill.activeDutyMilitary ?? false}
-          />
-          I am on active duty in the US armed forces
-        </label>
-        {/* Self-declared, and it earns real protections — saying why beats an
-            unexplained question about someone's service. */}
-        <p className="text-muted-foreground mt-1">
-          Active-duty servicemembers have extra legal protections. Telling us means we apply them.
-        </p>
-      </fieldset>
+      </details>
 
       <div className="sm:col-span-2">
         <button
@@ -179,6 +174,27 @@ export function DetailsStep({
         >
           Continue
         </button>
+      </div>
+
+      {/* Below the primary action on purpose (B-112). Neither is required to
+          rent, and the marketing one exists for us rather than for the renter —
+          it has no business sitting between their phone number and their
+          address, where it reads as another thing to get through. */}
+      <div className="flex flex-col gap-3 sm:col-span-2">
+        {/* PRD 05 CN-15: unchecked by default, its own affirmative act — never
+            implied by entering a phone number above. */}
+        <label className="flex items-start gap-2 text-sm">
+          <input type="checkbox" name="smsConsent" value="yes" className="mt-1" />
+          <span>{SMS_CONSENT_DISCLOSURE}</span>
+        </label>
+
+        {/* PRD 04 US-13 AC1 / US-9 AC3: unchecked by default. This is the ONLY
+            thing that makes the abandoned-checkout follow-up (US-9) legal to
+            send at all — "no consent, no sequence." */}
+        <label className="flex items-start gap-2 text-sm">
+          <input type="checkbox" name="marketingConsent" value="yes" className="mt-1" />
+          <span>{MARKETING_EMAIL_CHECKOUT_DISCLOSURE}</span>
+        </label>
       </div>
     </AdminForm>
   )

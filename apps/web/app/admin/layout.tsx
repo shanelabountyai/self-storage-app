@@ -38,7 +38,12 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const navItems = visibleNavItems(actor)
 
   return (
-    <div className="flex min-h-screen flex-col">
+    // B-112. The admin density. `CONTROL_CLASS` defaults to §6.2's 44px
+    // consumer target, which is right on a phone and wrong on a settings screen
+    // with forty rows worked at a desk all day. Set here rather than passed
+    // down, so nothing between this layout and an <input> has to know, and so a
+    // new admin screen inherits it without opting in.
+    <div className="flex min-h-screen flex-col" style={{ '--control-h': '2.25rem' } as React.CSSProperties}>
       {/* WCAG 2.4.1 Bypass Blocks. Without this a keyboard or switch user tabs
           the facility switcher, the search, the bell, the user menu, sign-out
           and every nav item — on EVERY page load — before reaching content.

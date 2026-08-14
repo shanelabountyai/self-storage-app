@@ -251,4 +251,17 @@ export function FieldSet({
   )
 }
 
-export const CONTROL_CLASS = 'border-input bg-background h-9 rounded-md border px-2'
+/// B-112. Height comes from `--control-h`, not from a fixed `h-9`.
+///
+/// It was `h-9` — 36px — on every form in the product, against §6.2's ≥44px
+/// touch target, which is a customer-facing failure on the checkout, the portal
+/// and the reservation form alike. But 44px everywhere is wrong too: an admin
+/// screen is a desk, a keyboard and forty rows of settings, and the density
+/// that helps a renter on a phone hurts the person who works here all day.
+///
+/// So: one token, two densities, set by the layout rather than threaded through
+/// as a prop. The DEFAULT is the consumer size, deliberately — a new surface
+/// that forgets to opt in is accessible, not the other way round. The admin
+/// layout opts down. Nothing between the layout and the control has to know.
+export const CONTROL_CLASS =
+  'border-input bg-background h-(--control-h,2.75rem) rounded-md border px-2'

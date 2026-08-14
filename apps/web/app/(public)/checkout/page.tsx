@@ -12,6 +12,7 @@ import { businessDateFor } from '@storage/core/jobs'
 import { publicInventoryForFacility } from '@/lib/inventory/public-inventory'
 import { LOCK_WARNING_MINUTES, STEPS, sessionByToken } from '@/lib/checkout/session'
 import { prefillFromReservation } from '@/lib/checkout/details'
+import { localityForZip } from '@/lib/geo/geocode'
 import { DetailsStep } from '@/components/checkout/details-step'
 import { UnitStep } from '@/components/checkout/unit-step'
 import { ProtectionStep } from '@/components/checkout/protection-step'
@@ -183,6 +184,21 @@ export default async function CheckoutPage({
 
   const remaining = minutesLeft(session.lockExpiresAt)
 
+  // Session data wins over the reservation prefill: if the renter has already
+  // corrected something on this step, their correction is what comes back.
+  const detailsPrefill = { ...prefill, ...(session.data as Partial<typeof prefill>) }
+  // B-112. Whether the stored city and state were TYPED rather than derived —
+  // the only signal that the renter used the disclosure, since the session
+  // carries a city and state from the first submit either way.
+  const derivedLocality = localityForZip(detailsPrefill.postalCode ?? '')
+  const manualLocality = Boolean(
+    detailsPrefill.city &&
+      detailsPrefill.state &&
+      (!derivedLocality ||
+        derivedLocality.city !== detailsPrefill.city ||
+        derivedLocality.state !== detailsPrefill.state),
+  )
+
   // §6.4's back control. Present on every step the renter can leave: not on the
   // first (there is nothing behind it), not on the confirmation (the move-in is
   // done), and withdrawn on the payment step once the charge has left `pending`
@@ -270,7 +286,8 @@ export default async function CheckoutPage({
           {session.step === 'details' && (
             <DetailsStep
               token={token!}
-              prefill={{ ...prefill, ...(session.data as Partial<typeof prefill>) }}
+              prefill={detailsPrefill}
+              manualLocality={manualLocality}
             />
           )}
 
@@ -320,6 +337,19 @@ export default async function CheckoutPage({
               legalName={`${(session.data as Record<string, string>).firstName ?? ''} ${
                 (session.data as Record<string, string>).lastName ?? ''
               }`.trim()}
+              // B-112: moved here from step 1, and prefilled from the session
+              // so B-111's back navigation does not lose them.
+              altContactName={
+                typeof session.data.altContactName === 'string'
+                  ? session.data.altContactName
+                  : undefined
+              }
+              altContactPhone={
+                typeof session.data.altContactPhone === 'string'
+                  ? session.data.altContactPhone
+                  : undefined
+              }
+              activeDutyMilitary={session.data.activeDutyMilitary === true}
             />
           )}
 

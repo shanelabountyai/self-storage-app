@@ -351,8 +351,8 @@ test('checkout step 1 creates an account with no password', async ({ page }) => 
   await page.getByLabel('Email', { exact: true }).fill(`e2e-details-${Date.now()}@demo.example.com`)
   await page.getByLabel('Mobile number').fill('512-555-0100')
   await page.getByLabel('Street address').fill('2400 South Congress Ave')
-  await page.getByLabel('City').fill('Austin')
-  await page.getByLabel('State').fill('TX')
+  // B-112: no city, no state. 78704 derives "Austin, TX" from D-14's bundled
+  // dataset, which is the whole reason those two inputs went away.
   await page.getByLabel('Zip code').fill('78704')
   await page.getByRole('button', { name: 'Continue', exact: true }).click()
 
@@ -394,8 +394,8 @@ test('a checkout step change moves focus and announces where it went', async ({ 
   await page.getByLabel('Email', { exact: true }).fill(`e2e-focus-${Date.now()}@demo.example.com`)
   await page.getByLabel('Mobile number').fill('512-555-0100')
   await page.getByLabel('Street address').fill('2400 South Congress Ave')
-  await page.getByLabel('City').fill('Austin')
-  await page.getByLabel('State').fill('TX')
+  // B-112: no city, no state. 78704 derives "Austin, TX" from D-14's bundled
+  // dataset, which is the whole reason those two inputs went away.
   await page.getByLabel('Zip code').fill('78704')
   await page.getByRole('button', { name: 'Continue', exact: true }).click()
 
@@ -408,6 +408,57 @@ test('a checkout step change moves focus and announces where it went', async ({ 
   // 2.4.3: focus is on the new step's heading, so the next Tab is into step 2
   // rather than back at the top of the document.
   await expect(page.locator('#step')).toBeFocused()
+})
+
+test('checkout step 1 stays inside the field cap, at a consumer tap size', async ({ page }) => {
+  // B-112. §6.4 caps a step at seven visible fields; this one rendered
+  // fourteen, on a phone, immediately after "Rent now". Asserted rather than
+  // described so the next item cannot quietly re-add — which is exactly how it
+  // got to fourteen.
+  await page.goto('/storage/tx/houston/demo-e2e')
+  await page
+    .getByRole('listitem')
+    .filter({ hasText: '10x10 Test' })
+    .first()
+    .getByRole('button', { name: 'Rent now' })
+    .click()
+  await expect(page).toHaveURL(/\/checkout\?token=/)
+
+  const form = page.getByRole('form', { name: 'Your details' })
+  const visibleControls = form.locator(
+    'input:not([type=hidden]):visible, select:visible, textarea:visible',
+  )
+
+  // Seven to fill, and the two consent boxes — which sit BELOW the primary
+  // action, because marketing consent is the only thing on the screen that
+  // serves us rather than the renter.
+  await expect(visibleControls).toHaveCount(9)
+  const names = await visibleControls.evaluateAll((els) =>
+    els.map((el) => (el as HTMLInputElement).name),
+  )
+  expect(names).toEqual([
+    'firstName',
+    'lastName',
+    'email',
+    'phone',
+    'addressLine1',
+    'addressLine2',
+    'postalCode',
+    'smsConsent',
+    'marketingConsent',
+  ])
+
+  // City and state are read-only, derived from the zip, with the way to type
+  // them by hand closed rather than absent.
+  await expect(form.getByText('City and state', { exact: true })).toBeVisible()
+  await expect(page.getByLabel('City')).toBeHidden()
+  await expect(form.getByText('Enter my city and state myself')).toBeVisible()
+
+  // §6.2: ≥44px. `CONTROL_CLASS` was `h-9` — 36px — on every public and portal
+  // form in the product. Asserted on the RENDERED height, because the token now
+  // resolves through a CSS variable and a broken variable would still compile.
+  const zip = page.getByLabel('Zip code')
+  expect((await zip.boundingBox())!.height).toBeGreaterThanOrEqual(44)
 })
 
 test('checkout goes back, from the control and from the progress indicator', async ({ page }) => {
@@ -430,8 +481,8 @@ test('checkout goes back, from the control and from the progress indicator', asy
   await page.getByLabel('Email', { exact: true }).fill(email)
   await page.getByLabel('Mobile number').fill('512-555-0100')
   await page.getByLabel('Street address').fill('2400 South Congress Ave')
-  await page.getByLabel('City').fill('Austin')
-  await page.getByLabel('State').fill('TX')
+  // B-112: no city, no state. 78704 derives "Austin, TX" from D-14's bundled
+  // dataset, which is the whole reason those two inputs went away.
   await page.getByLabel('Zip code').fill('78704')
   await page.getByRole('button', { name: 'Continue', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Your unit' })).toBeVisible()
@@ -476,8 +527,8 @@ test('a total that moves says what moved it', async ({ page }) => {
   await page.getByLabel('Email', { exact: true }).fill(`e2e-note-${Date.now()}@demo.example.com`)
   await page.getByLabel('Mobile number').fill('512-555-0100')
   await page.getByLabel('Street address').fill('2400 South Congress Ave')
-  await page.getByLabel('City').fill('Austin')
-  await page.getByLabel('State').fill('TX')
+  // B-112: no city, no state. 78704 derives "Austin, TX" from D-14's bundled
+  // dataset, which is the whole reason those two inputs went away.
   await page.getByLabel('Zip code').fill('78704')
   await page.getByRole('button', { name: 'Continue', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Your unit' })).toBeVisible()
@@ -516,8 +567,8 @@ test('the sticky price summary does not cover the payment step at 360px', async 
   await page.getByLabel('Email', { exact: true }).fill(`e2e-360-${Date.now()}@demo.example.com`)
   await page.getByLabel('Mobile number').fill('512-555-0100')
   await page.getByLabel('Street address').fill('2400 South Congress Ave')
-  await page.getByLabel('City').fill('Austin')
-  await page.getByLabel('State').fill('TX')
+  // B-112: no city, no state. 78704 derives "Austin, TX" from D-14's bundled
+  // dataset, which is the whole reason those two inputs went away.
   await page.getByLabel('Zip code').fill('78704')
   await page.getByRole('button', { name: 'Continue', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Your unit' })).toBeVisible()
@@ -525,7 +576,10 @@ test('the sticky price summary does not cover the payment step at 360px', async 
   await expect(page.getByRole('heading', { name: 'Protect what you store' })).toBeVisible()
   await page.getByRole('button', { name: 'Continue', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Your lease' })).toBeVisible()
-  await page.getByRole('checkbox').first().check()
+  // Named, not positional. B-112 moved the active-duty declaration onto this
+  // step, so `.first()` is no longer the E-SIGN consent — and checking the
+  // wrong box gets the signature refused for a reason the test cannot see.
+  await page.getByRole('checkbox', { name: /sign this agreement electronically/ }).check()
   await page.getByLabel('Type your full name to sign').fill('Ada Renter')
   await page.getByRole('button', { name: 'Sign and continue' }).click()
   await expect(page.getByRole('heading', { name: 'Payment' })).toBeVisible()
@@ -556,8 +610,8 @@ test('checkout step 1 reports a bad field with a suggestion', async ({ page }) =
   await page.getByLabel('Email', { exact: true }).fill(`e2e-bad-${Date.now()}@demo.example.com`)
   await page.getByLabel('Mobile number').fill('555')
   await page.getByLabel('Street address').fill('2400 South Congress Ave')
-  await page.getByLabel('City').fill('Austin')
-  await page.getByLabel('State').fill('TX')
+  // B-112: no city, no state. 78704 derives "Austin, TX" from D-14's bundled
+  // dataset, which is the whole reason those two inputs went away.
   await page.getByLabel('Zip code').fill('78704')
   await page.getByRole('button', { name: 'Continue', exact: true }).click()
 
@@ -582,8 +636,8 @@ test('the checkout stepper advances server-side and resumes', async ({ page }) =
   await page.getByLabel('Email', { exact: true }).fill(`e2e-resume-${Date.now()}@demo.example.com`)
   await page.getByLabel('Mobile number').fill('512-555-0100')
   await page.getByLabel('Street address').fill('2400 South Congress Ave')
-  await page.getByLabel('City').fill('Austin')
-  await page.getByLabel('State').fill('TX')
+  // B-112: no city, no state. 78704 derives "Austin, TX" from D-14's bundled
+  // dataset, which is the whole reason those two inputs went away.
   await page.getByLabel('Zip code').fill('78704')
   await page.getByRole('button', { name: 'Continue', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Your unit' })).toBeVisible()
@@ -609,8 +663,8 @@ test('the protection step cannot be skipped and updates the total', async ({ pag
   await page.getByLabel('Email', { exact: true }).fill(`e2e-prot-${Date.now()}@demo.example.com`)
   await page.getByLabel('Mobile number').fill('512-555-0100')
   await page.getByLabel('Street address').fill('2400 South Congress Ave')
-  await page.getByLabel('City').fill('Austin')
-  await page.getByLabel('State').fill('TX')
+  // B-112: no city, no state. 78704 derives "Austin, TX" from D-14's bundled
+  // dataset, which is the whole reason those two inputs went away.
   await page.getByLabel('Zip code').fill('78704')
   await page.getByRole('button', { name: 'Continue', exact: true }).click()
   await page.getByRole('button', { name: 'This is right' }).click()
@@ -647,8 +701,8 @@ test('the lease shows a summary first and signs with a typed name', async ({ pag
   await page.getByLabel('Email', { exact: true }).fill(`e2e-lease-${Date.now()}@demo.example.com`)
   await page.getByLabel('Mobile number').fill('512-555-0100')
   await page.getByLabel('Street address').fill('2400 South Congress Ave')
-  await page.getByLabel('City').fill('Austin')
-  await page.getByLabel('State').fill('TX')
+  // B-112: no city, no state. 78704 derives "Austin, TX" from D-14's bundled
+  // dataset, which is the whole reason those two inputs went away.
   await page.getByLabel('Zip code').fill('78704')
   // Each step is awaited before the next click. Two reasons: the server action
   // has to land before the next page exists, and Playwright's `name` match is a
@@ -673,7 +727,10 @@ test('the lease shows a summary first and signs with a typed name', async ({ pag
   await sign.click()
   await expect(page.getByRole('main').getByRole('alert')).toBeVisible()
 
-  await page.getByRole('checkbox').first().check()
+  // Named, not positional. B-112 moved the active-duty declaration onto this
+  // step, so `.first()` is no longer the E-SIGN consent — and checking the
+  // wrong box gets the signature refused for a reason the test cannot see.
+  await page.getByRole('checkbox', { name: /sign this agreement electronically/ }).check()
   await page.getByLabel('Type your full name to sign').fill('AR')
   await sign.click()
   await expect(page.getByRole('main').getByRole('alert')).toContainText('Ada Renter')
@@ -697,8 +754,8 @@ test('the payment step itemises before it charges and discloses autopay', async 
   await page.getByLabel('Email', { exact: true }).fill(`e2e-pay-${Date.now()}@demo.example.com`)
   await page.getByLabel('Mobile number').fill('512-555-0100')
   await page.getByLabel('Street address').fill('2400 South Congress Ave')
-  await page.getByLabel('City').fill('Austin')
-  await page.getByLabel('State').fill('TX')
+  // B-112: no city, no state. 78704 derives "Austin, TX" from D-14's bundled
+  // dataset, which is the whole reason those two inputs went away.
   await page.getByLabel('Zip code').fill('78704')
   await page.getByRole('button', { name: 'Continue', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Your unit' })).toBeVisible()
@@ -707,7 +764,10 @@ test('the payment step itemises before it charges and discloses autopay', async 
   await page.getByRole('button', { name: 'Continue', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'The short version' })).toBeVisible()
 
-  await page.getByRole('checkbox').first().check()
+  // Named, not positional. B-112 moved the active-duty declaration onto this
+  // step, so `.first()` is no longer the E-SIGN consent — and checking the
+  // wrong box gets the signature refused for a reason the test cannot see.
+  await page.getByRole('checkbox', { name: /sign this agreement electronically/ }).check()
   await page.getByLabel('Type your full name to sign').fill('Ada Renter')
   await page.getByRole('button', { name: 'Sign and continue' }).click()
 

@@ -21,11 +21,19 @@ export function LeaseStep({
   leaseHtml,
   legalName,
   signedOn,
+  altContactName,
+  altContactPhone,
+  activeDutyMilitary,
 }: {
   token: string
   summaryHtml: string
   leaseHtml: string
   legalName: string
+  /// B-112. Moved off step 1 to bring it under §6.4's field cap. Prefilled from
+  /// the session so back navigation does not lose them (B-111's rule).
+  altContactName?: string
+  altContactPhone?: string
+  activeDutyMilitary?: boolean
   /// B-111. Set when this lease has already been signed and the renter has come
   /// BACK to the step — which back navigation makes an ordinary thing to do.
   /// Without it the step offers a signature control that `signDocument` refuses
@@ -79,7 +87,48 @@ export function LeaseStep({
       <AdminForm action={signLeaseAction} label="Sign the lease" className="mt-8">
         <input type="hidden" name="token" value={token} />
 
-        <h2 className="text-xl font-medium">Sign</h2>
+        {/* B-112. Moved here from step 1, which rendered fourteen fields on a
+            phone against §6.4's cap of seven. They belong with the agreement
+            rather than with "who are you": clause 9 is about where notices go,
+            and an active-duty declaration is a legal statement, not a contact
+            detail. Both optional, and both say what they are for — an
+            unexplained question about someone's military service on a storage
+            form is the kind of thing people decline to answer. */}
+        <fieldset className="text-sm">
+          <legend className="font-medium">If we cannot reach you (optional)</legend>
+          <p className="text-muted-foreground mt-1 text-pretty">
+            Someone we can contact if a notice about your unit does not reach you. This does not
+            give them access to your unit, and we will not contact them for anything else.
+          </p>
+          <div className="mt-2 grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field
+              name="altContactName"
+              label="Name"
+              autoComplete="off"
+              defaultValue={altContactName ?? ''}
+            />
+            <Field
+              name="altContactPhone"
+              label="Phone"
+              type="tel"
+              inputMode="tel"
+              autoComplete="off"
+              defaultValue={altContactPhone ?? ''}
+            />
+          </div>
+        </fieldset>
+
+        <Field
+          as="checkbox"
+          name="activeDutyMilitary"
+          value="yes"
+          defaultChecked={activeDutyMilitary ?? false}
+          className="mt-4 text-sm"
+          label="I am on active duty in the US armed forces"
+          hint="Self-declared. Active-duty servicemembers have protections under the Servicemembers Civil Relief Act — we cannot sell stored goods or restrict access without a court order. Telling us means we apply them."
+        />
+
+        <h2 className="mt-6 text-xl font-medium">Sign</h2>
 
         {/* Consent to transact electronically is its own affirmative act under
             E-SIGN — not something the signature implies — so it is a separate
