@@ -33,3 +33,24 @@ export function resolveSelectedFacility(
   if (facilities.length > 0) return { mode: 'single', facility: facilities[0] }
   return allowAll ? { mode: 'all' } : { mode: 'none' }
 }
+
+/// PRD 02 US-1 AC2: "All facilities" is offered only where there is something
+/// to see across all of them.
+///
+/// It was `pathname === '/admin'` with a note saying the dashboard was the only
+/// roll-up screen "before B-042's portfolio report". B-113 made four more, and
+/// the mismatch was not cosmetic: the PAGES resolved with `canSeeAll` while the
+/// SWITCHER resolved with this, so a persisted "all" cookie rendered a roll-up
+/// under a switcher displaying a single facility's name.
+export const ROLLUP_ROUTES = [
+  '/admin',
+  '/admin/units',
+  '/admin/delinquency',
+  '/admin/leads',
+  '/admin/tasks',
+  '/admin/reports',
+] as const
+
+export function isRollupRoute(pathname: string): boolean {
+  return ROLLUP_ROUTES.some((route) => pathname === route || pathname.startsWith(`${route}/`))
+}

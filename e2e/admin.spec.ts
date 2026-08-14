@@ -273,4 +273,79 @@ test.describe('template editor (B-053)', () => {
     // the tenant simply never hearing from us.
     await expect(form.getByText(/tenant\.middle_name/).first()).toBeVisible()
   })
+
+
+})
+test.describe('the dashboard (B-113)', () => {
+  test.beforeEach(async ({ page }) => {
+    await signInAsDemoOwner(page)
+  })
+
+  test('every tile links to the list behind it', async ({ page }) => {
+    // Five of seven were dead ends, including both tiles that mean somebody
+    // has to act. "Failed payments today: 3 · needs attention" with nowhere
+    // to go teaches the reader to skip the row — the exact failure that
+    // tile's own rewrite was meant to prevent.
+    await page.goto('/admin')
+    const tiles = page.getByRole('main').locator('a').filter({ hasText: /today|Available now|Occupancy|Money owed/ })
+    const count = await tiles.count()
+    expect(count).toBeGreaterThanOrEqual(6)
+    for (let index = 0; index < count; index += 1) {
+      await expect(tiles.nth(index)).toHaveAttribute('href', /^\/admin\//)
+    }
+  })
+
+  test('reports money owed in dollars, agreeing with the report it links to', async ({ page }) => {
+    // The tile counted `Lease.status = 'delinquent'`, which nothing sets
+    // until B-057, so it read 0 beside real receivables. Both figures now
+    // come from `delinquencyReport` — this asserts they arrive equal on the
+    // two screens, which is the thing a shared module is FOR.
+    await page.goto('/admin')
+    const tile = page.getByRole('link').filter({ hasText: 'Money owed' })
+    await expect(tile).toBeVisible()
+    const shown = (await tile.innerText()).match(/\$[\d,]+\.\d{2}/)?.[0]
+    expect(shown, 'the tile shows a dollar figure, not a count').toBeTruthy()
+
+    const facilityName = await page.getByRole('heading', { level: 1 }).innerText()
+    await page.goto('/admin/reports/delinquency')
+    // `.first()` is the aging table's own row for this facility; the detail
+    // table below it repeats the name once per delinquent tenant.
+    const row = page.getByRole('row').filter({ hasText: facilityName }).first()
+    await expect(row).toContainText(shown!)
+  })
+
+  test('All facilities rolls up instead of sending the owner away', async ({ page }) => {
+    // D-12: owner + all-facilities is the ordinary unrestricted account, so
+    // this is the owner's own default context — not an exotic state.
+    await page.goto('/admin')
+    await page.getByLabel('Switch facility').selectOption('all')
+    await page.getByRole('button', { name: 'Switch', exact: true }).click()
+
+    await expect(page.getByRole('heading', { name: 'All facilities' })).toBeVisible()
+    const rollup = page.getByRole('region', { name: 'Across your facilities' })
+    await expect(rollup).toBeVisible()
+    // Each row links into that facility without changing the switcher.
+    const first = rollup.getByRole('link').first()
+    await expect(first).toHaveAttribute('href', /\/admin\?facility=/)
+    await first.click()
+    await expect(page.getByRole('heading', { level: 1 })).not.toHaveText('All facilities')
+  })
+
+  test('New inquiry opens with a facility selector rather than refusing', async ({ page }) => {
+    // The screen exists so a ringing phone costs one click, and the target is
+    // sixty seconds end to end. "Pick a specific facility above" spent that
+    // budget before the caller finished their sentence.
+    await page.goto('/admin')
+    await page.getByLabel('Switch facility').selectOption('all')
+    await page.getByRole('button', { name: 'Switch', exact: true }).click()
+    // Await the switch landing before navigating: the cookie is set by the
+    // server action, and a `goto` racing it lands on the single-facility page.
+    await expect(page.getByRole('heading', { name: 'All facilities' })).toBeVisible()
+    await page.goto('/admin/leads')
+
+    const form = page.getByRole('form', { name: 'New inquiry' })
+    await expect(form).toBeVisible()
+    await expect(form.getByLabel('Facility')).toBeVisible()
+    await expect(page.getByRole('region', { name: 'Across your facilities' })).toBeVisible()
+  })
 })

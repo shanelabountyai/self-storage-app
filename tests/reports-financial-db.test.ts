@@ -9,6 +9,9 @@ import {
   sumRevenueRows,
 } from '../apps/web/lib/admin/revenue-report'
 import { agingByFacility, delinquencyDetail } from '../apps/web/lib/admin/delinquency-detail'
+import { delinquencyReport } from '../apps/web/lib/admin/reports'
+import { moneyOwedRollup } from '../apps/web/lib/admin/rollups'
+import { formatCents } from '../apps/web/lib/format'
 import type { Actor } from '../apps/web/lib/rbac/actor'
 
 // B-055 / PRD 02 US-39.4 and US-39.5, against real rows.
@@ -319,4 +322,52 @@ describeDb('financial reports', () => {
       expect(report.rows.find((row) => row.facilityId === facilityId)).toBeUndefined()
     })
   })
+
+  describe('the dashboard tile and the report behind it (B-113)', () => {
+    // The tile used to count `Lease.status = 'delinquent'`, and nothing writes
+    // that status until B-057 — so the one screen an owner opens to find out
+    // whether anybody is paying showed 0 next to real receivables. It now reads
+    // `delinquencyReport`, the same call the Delinquency report renders, which
+    // is D-25's rule: the metrics module owns every figure and no tile computes
+    // one inline. These pin that they cannot drift apart again.
+
+    it('reports money owed, in dollars, matching the AR aging report', async () => {
+      const report = await delinquencyReport(actor())
+      const row = report.rows.find((one) => one.facilityId === facilityId)
+
+      expect(row).toBeDefined()
+      // Real receivables exist in this fixture — and not one lease carries
+      // `status: 'delinquent'`, which is exactly the condition under which the
+      // old tile read zero beside them.
+      expect(row!.aging.totalCents).toBeGreaterThan(0)
+      expect(
+        await prisma.lease.count({ where: { facilityId, status: 'delinquent' } }),
+      ).toBe(0)
+
+      // Buckets sum to the total, so the tile's hint ("$X over 30 days") is a
+      // subset of the figure above it rather than a second calculation.
+      const { d0to10, d11to30, d31to60, d61to90, over90, totalCents } = row!.aging
+      expect(d0to10 + d11to30 + d31to60 + d61to90 + over90).toBe(totalCents)
+    })
+
+    it('renders the roll-up from the same rows, not from a second query', async () => {
+      const [report, rollup] = await Promise.all([
+        delinquencyReport(actor()),
+        moneyOwedRollup(actor()),
+      ])
+      expect(rollup.map((row) => row.facilityId)).toEqual(report.rows.map((row) => row.facilityId))
+      for (const row of report.rows) {
+        const rolled = rollup.find((one) => one.facilityId === row.facilityId)!
+        expect(rolled.summary).toBe(formatCents(row.aging.totalCents))
+      }
+    })
+
+    it('shows a role without financial reporting nothing rather than a zero', async () => {
+      // A zero is a claim. A manager who cannot see AR must not be told there
+      // is none — the dashboard omits the tile instead.
+      const rollup = await moneyOwedRollup(actor(['reports:operational']))
+      expect(rollup).toEqual([])
+    })
+  })
+
 })

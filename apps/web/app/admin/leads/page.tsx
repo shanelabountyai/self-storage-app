@@ -5,6 +5,8 @@ import { getSwitcherData } from '@/lib/admin/context'
 import { resolveSelectedFacility } from '@/lib/admin/facility-selection-logic'
 import { facilityLeads, quoteForFacility } from '@/lib/admin/inquiries'
 import { LEAD_SOURCE_LABELS, STAFF_LEAD_SOURCES } from '@storage/core/metrics'
+import { inquiryRollup } from '@/lib/admin/rollups'
+import { FacilityRollup } from '@/components/admin/facility-rollup'
 import { createInquiryAction } from './actions'
 
 export const metadata = { title: 'Inquiries' }
@@ -20,15 +22,32 @@ function formatWhen(at: Date): string {
   return new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' }).format(at)
 }
 
-export default async function LeadsPage() {
+export default async function LeadsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ facility?: string }>
+}) {
+  const { facility: facilityParam } = await searchParams
   const { actor, facilities, cookieValue, canSeeAll } = await getSwitcherData()
-  const selected = resolveSelectedFacility(cookieValue, facilities, canSeeAll)
+  // B-113: the roll-up links into one facility without changing the switcher's
+  // persistent choice — the convention `/admin/tasks` set in B-095.
+  const requested = facilityParam ? facilities.find((f) => f.id === facilityParam) : undefined
+  const selected = requested
+    ? { mode: 'single' as const, facility: requested }
+    : resolveSelectedFacility(cookieValue, facilities, canSeeAll)
 
   if (selected.mode !== 'single') {
+    // An inquiry belongs to one site, so the LIST is still per-facility — but
+    // this screen exists so a ringing phone costs one click, and refusing to
+    // render at all on the owner's own default context is the opposite of that.
+    // B-113: the roll-up says where the inquiries are, and the capture form
+    // below it opens with a facility selector rather than not opening.
     return (
-      <p className="text-muted-foreground text-sm">
-        Pick a specific facility above — an inquiry belongs to one site.
-      </p>
+      <div className="flex max-w-4xl flex-col gap-6">
+        <h1 className="text-lg font-semibold">Inquiries</h1>
+        <FacilityRollup heading="Across your facilities" rows={await inquiryRollup(actor)} />
+        <NewInquiryPrompt facilities={facilities} />
+      </div>
     )
   }
 
@@ -137,5 +156,63 @@ export default async function LeadsPage() {
         </ul>
       </section>
     </div>
+  )
+}
+
+/// PRD 02 §4.8 US-43. "New inquiry" on the all-facilities context.
+///
+/// The screen's whole justification is that a ringing phone costs one click and
+/// the target is sixty seconds end to end. Refusing to render the form until
+/// the owner changes their switcher — on the context an owner is in by default
+/// (D-12) — spent that budget before the caller had finished their sentence.
+///
+/// The facility selector IS the first field, because on a portfolio it is the
+/// first question. The size list is the one thing that cannot render here: it
+/// is per-facility, and the caller's size is captured on the lead's own page a
+/// second later, where the quote is.
+function NewInquiryPrompt({ facilities }: { facilities: { id: string; name: string }[] }) {
+  return (
+    <AdminForm
+      action={createInquiryAction}
+      label="New inquiry"
+      className="border-input flex flex-col gap-3 rounded-lg border p-4"
+    >
+      <h2 className="font-medium">New inquiry</h2>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field name="facilityId" label="Facility" as="select" className="flex flex-col gap-1 text-sm sm:col-span-2">
+          {facilities.map((facility) => (
+            <option key={facility.id} value={facility.id}>
+              {facility.name}
+            </option>
+          ))}
+        </Field>
+        <Field name="firstName" label="First name" />
+        <Field name="lastName" label="Last name" />
+        <Field name="phone" label="Phone" type="tel" hint="How anyone calls them back." />
+        <Field name="email" label="Email (optional)" type="email" />
+        <Field name="source" label="How they got here" as="select" defaultValue="phone">
+          {STAFF_LEAD_SOURCES.map((source) => (
+            <option key={source} value={source}>
+              {LEAD_SOURCE_LABELS[source]}
+            </option>
+          ))}
+        </Field>
+        <Field name="targetMoveInDate" label="When they want it (optional)" type="date" />
+      </div>
+
+      <label className="flex flex-col gap-1 text-sm">
+        What they said
+        <textarea
+          name="message"
+          rows={2}
+          className="border-input bg-background rounded-md border p-2 text-sm"
+        />
+      </label>
+
+      <Button type="submit" className="self-start">
+        Save and quote
+      </Button>
+    </AdminForm>
   )
 }

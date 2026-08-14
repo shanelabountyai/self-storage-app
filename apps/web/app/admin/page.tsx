@@ -5,12 +5,19 @@ import { assertFacilityAccess } from '@/lib/rbac/authorize'
 import { getSwitcherData } from '@/lib/admin/context'
 import { resolveSelectedFacility } from '@/lib/admin/facility-selection-logic'
 import { formatCents } from '@/lib/format'
+import { delinquencyReport } from '@/lib/admin/reports'
+import { dashboardRollup } from '@/lib/admin/rollups'
+import { FacilityRollup } from '@/components/admin/facility-rollup'
 
 /// PRD 02 US-2: every metric links to its facility-scoped detail. A tile with
 /// no destination makes the reader's next question — "which ones?" — a dead
-/// end. `href` is optional only because some tiles have no list to link to
-/// until the feature that owns it ships; those render as plain tiles rather
-/// than as links that go nowhere.
+/// end.
+///
+/// B-113 made `href` REQUIRED. Five of the seven tiles had none, including both
+/// of the two that mean somebody has to act: "Failed payments today: 3 · needs
+/// attention" with nowhere to go teaches the reader to skip the row, which is
+/// the exact failure that tile's own rewrite was meant to prevent. A tile
+/// without a destination is now a type error rather than a judgement call.
 function Tile({
   label,
   value,
@@ -20,21 +27,13 @@ function Tile({
   label: string
   value: string
   hint?: string
-  href?: string
+  href: string
 }) {
-  const body = (
-    <>
+  return (
+    <Link href={href} className="hover:bg-accent block rounded-lg border p-4">
       <p className="text-muted-foreground text-sm">{label}</p>
       <p className="mt-1 text-2xl font-semibold tabular-nums">{value}</p>
       {hint && <p className="text-muted-foreground mt-1 text-xs">{hint}</p>}
-    </>
-  )
-
-  if (!href) return <div className="rounded-lg border p-4">{body}</div>
-
-  return (
-    <Link href={href} className="hover:bg-accent block rounded-lg border p-4">
-      {body}
     </Link>
   )
 }
@@ -42,9 +41,20 @@ function Tile({
 // Facility dashboard (default landing), PRD 02 FR-3. The portfolio roll-up
 // (US-2, "All facilities" view with per-facility cards) is out of B-007's
 // scope — it belongs with the reporting item, B-042.
-export default async function AdminDashboardPage() {
+export default async function AdminDashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ facility?: string }>
+}) {
+  const { facility: facilityParam } = await searchParams
   const { actor, facilities, cookieValue, canSeeAll } = await getSwitcherData()
-  const selected = resolveSelectedFacility(cookieValue, facilities, canSeeAll)
+  // Same convention as `/admin/tasks`: the roll-up links into one facility
+  // without changing the switcher's persistent choice, so an owner looking at
+  // one site does not have to remember to switch back.
+  const requested = facilityParam ? facilities.find((f) => f.id === facilityParam) : undefined
+  const selected = requested
+    ? { mode: 'single' as const, facility: requested }
+    : resolveSelectedFacility(cookieValue, facilities, canSeeAll)
 
   if (selected.mode === 'none') {
     return (
@@ -55,15 +65,22 @@ export default async function AdminDashboardPage() {
   }
 
   if (selected.mode === 'all') {
+    // D-12: owner + all-facilities is the ordinary unrestricted account, so
+    // this is the owner's own default context — not an exotic state to be sent
+    // away from. It answers the two questions the portfolio is opened on and
+    // links each row into that facility's own dashboard.
     return (
-      <p className="text-muted-foreground text-sm">
-        This dashboard shows one facility at a time — pick one above to see today&apos;s activity.
-        For figures across the whole portfolio, use{' '}
-        <Link href="/admin/reports" className="underline underline-offset-4">
-          Reports
-        </Link>
-        , which covers every facility you hold.
-      </p>
+      <div className="flex flex-col gap-4">
+        <h1 className="text-lg font-semibold">All facilities</h1>
+        <FacilityRollup heading="Across your facilities" rows={await dashboardRollup(actor)} />
+        <p className="text-muted-foreground text-sm">
+          For revenue, occupancy and move figures across the portfolio, see{' '}
+          <Link href="/admin/reports" className="underline underline-offset-4">
+            Reports
+          </Link>
+          .
+        </p>
+      </div>
     )
   }
 
@@ -86,7 +103,7 @@ export default async function AdminDashboardPage() {
     movedOutToday,
     paymentsToday,
     failedPayments,
-    delinquentLeases,
+    delinquency,
   ] = await Promise.all([
     prisma.unit.count({ where: { facilityId } }),
     prisma.unit.count({ where: { facilityId, status: 'occupied' } }),
@@ -122,10 +139,23 @@ export default async function AdminDashboardPage() {
         receivedAt: { gte: start, lt: end },
       },
     }),
-    prisma.lease.count({ where: { facilityId, status: 'delinquent' } }),
+    // Money, not a count of a status nothing sets.
+    //
+    // This was `Lease.status = 'delinquent'`, and nothing writes that status
+    // until B-057 — so the tile read 0 beside real receivables, on the one
+    // screen an owner checks to find out whether anybody is paying. It now
+    // comes from the same `delinquencyReport` the Delinquency report renders,
+    // which is D-25's rule: `packages/core/metrics` owns every figure and no
+    // tile computes one inline. A test asserts the two agree.
+    delinquencyReport(actor),
   ])
 
   const occupancyPct = totalUnits === 0 ? 0 : Math.round((occupiedUnits / totalUnits) * 100)
+  // Absent for a role without `reports:financial` — `delinquencyReport` scopes
+  // to the financial facilities, so the tile is omitted rather than rendered as
+  // a zero the reader would believe.
+  const owed = delinquency.rows.find((row) => row.facilityId === facilityId)?.aging
+  const seriouslyLate = owed ? owed.d31to60 + owed.d61to90 + owed.over90 : 0
 
   return (
     <div>
@@ -145,17 +175,49 @@ export default async function AdminDashboardPage() {
           hint={`${occupiedUnits}/${totalUnits} units`}
           href="/admin/units?status=occupied"
         />
-        <Tile label="Move-ins today" value={String(movedInToday)} />
-        <Tile label="Move-outs today" value={String(movedOutToday)} />
+        {/* Both move tiles land on the report's own move-in/move-out section
+            rather than on a list that does not exist yet — B-114 builds the
+            tenant list these will point at. */}
+        <Tile
+          label="Move-ins today"
+          value={String(movedInToday)}
+          href="/admin/reports#moves-heading"
+        />
+        <Tile
+          label="Move-outs today"
+          value={String(movedOutToday)}
+          href="/admin/reports#moves-heading"
+        />
         <Tile
           label="Payments today"
           value={formatCents(paymentsToday._sum.amountCents ?? 0)}
           hint={`${paymentsToday._count} payment${paymentsToday._count === 1 ? '' : 's'}`}
+          // The deposit slip: the day's payments, itemised, with who took them.
+          href="/admin/pos/summary"
         />
         {/* The time window is in the label, not just the query: a count whose
             period the reader has to guess is a count they cannot act on. */}
-        <Tile label="Failed payments today" value={String(failedPayments)} hint="needs attention" />
-        <Tile label="Delinquent leases" value={String(delinquentLeases)} />
+        <Tile
+          label="Failed payments today"
+          value={String(failedPayments)}
+          hint="needs attention"
+          href="/admin/billing"
+        />
+        {owed && (
+          <Tile
+            label="Money owed"
+            value={formatCents(owed.totalCents)}
+            // The window, on the tile rather than in the query. "Delinquent
+            // leases: 0" said nothing and was wrong; this says how much and how
+            // bad.
+            hint={
+              seriouslyLate > 0
+                ? `${formatCents(seriouslyLate)} over 30 days`
+                : 'nothing over 30 days'
+            }
+            href="/admin/delinquency"
+          />
+        )}
       </div>
     </div>
   )

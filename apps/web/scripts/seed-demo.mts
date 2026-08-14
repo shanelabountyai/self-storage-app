@@ -343,6 +343,32 @@ async function seedStaffOwner(facilityIds: string[]) {
       facilityId,
     })),
   })
+
+  // B-113. One additional ALL-FACILITIES assignment, under `regional` rather
+  // than `owner`.
+  //
+  // Without it nothing in the suite could reach "All facilities" at all: the
+  // switcher only offers the option to an actor with `facilityAccess().all`,
+  // and the four roll-up screens this item built were unreachable from any
+  // signed-in session — the headline of the item, with no path to it.
+  //
+  // The role matters and is not incidental. `createOwnerAccount()` refuses to
+  // bootstrap when a usable all-facilities assignment exists **under the owner
+  // role specifically**, so a `regional` one leaves `bootstrap-owner.test.ts`
+  // exactly as it was — which is the constraint the note above this function
+  // is about. `regional` also already carries `reports:financial` and
+  // `reports:rollup`, so the money-owed roll-up renders rather than being
+  // silently empty.
+  //
+  // It does not change the default context either: `resolveSelectedFacility`
+  // falls back to the first facility, not to "all", so every existing spec
+  // still lands on a single site.
+  const regionalRole = await prisma.role.findUnique({ where: { key: 'regional' } })
+  if (regionalRole) {
+    await prisma.staffFacilityAssignment.createMany({
+      data: [{ staffUserId: staffUser.id, roleId: regionalRole.id, facilityId: null }],
+    })
+  }
   // Under --no-logins the account is still created, with its scoped
   // assignments, because a staff list with nobody in it is not a demo. It
   // simply has no password and no second factor, so nobody can sign in as it.

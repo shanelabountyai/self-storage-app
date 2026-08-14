@@ -4,6 +4,7 @@ import { usePathname } from 'next/navigation'
 import { setFacility } from '@/app/admin/actions'
 import {
   ALL_FACILITIES,
+  isRollupRoute,
   resolveSelectedFacility,
   type SwitcherFacility,
 } from '@/lib/admin/facility-selection-logic'
@@ -36,8 +37,9 @@ type Props = {
 export function FacilitySwitcher({ facilities, cookieValue, canSeeAll }: Props) {
   const pathname = usePathname()
   // "All facilities" is offered only on roll-up screens (PRD 02 US-1 AC2).
-  // The dashboard is the only one that exists before B-042's portfolio report.
-  const allowAllOption = canSeeAll && pathname === '/admin'
+  // B-113 made that a shared list rather than one hard-coded route — the
+  // dashboard stopped being the only screen that answers across a portfolio.
+  const allowAllOption = canSeeAll && isRollupRoute(pathname)
   const selected = resolveSelectedFacility(cookieValue, facilities, allowAllOption)
 
   const currentValue =

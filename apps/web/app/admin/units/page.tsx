@@ -10,6 +10,8 @@ import { getSwitcherData } from '@/lib/admin/context'
 import { resolveSelectedFacility } from '@/lib/admin/facility-selection-logic'
 import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
 import { listUnits, unitGroupings } from '@/lib/admin/units'
+import { unitRollup } from '@/lib/admin/rollups'
+import { FacilityRollup } from '@/components/admin/facility-rollup'
 import { currentRatesForFacility } from '@/lib/pricing/unit-type-rates'
 import { previewBulkOperation, type BulkUnitOperation } from '@/lib/admin/units-bulk'
 import { previewLayoutImport } from '@/lib/admin/unit-layout'
@@ -20,6 +22,9 @@ import { applyBulkAction, applyLayoutImportAction, createUnitAction, setUnitStat
 const ALL_STATUSES = ['available', 'reserved', 'occupied', 'overlocked', 'maintenance', 'unrentable'] as const
 
 type SearchParams = {
+  /// B-113: lets the all-facilities roll-up link into one site without changing
+  /// the switcher's persistent choice.
+  facility?: string
   view?: string
   status?: string
   unitTypeId?: string
@@ -75,13 +80,19 @@ export default async function AdminUnitsPage({
 }) {
   const params = await searchParams
   const { actor, facilities, cookieValue, canSeeAll } = await getSwitcherData()
-  const selected = resolveSelectedFacility(cookieValue, facilities, canSeeAll)
+  const requested = params.facility ? facilities.find((f) => f.id === params.facility) : undefined
+  const selected = requested
+    ? { mode: 'single' as const, facility: requested }
+    : resolveSelectedFacility(cookieValue, facilities, canSeeAll)
 
   if (selected.mode !== 'single') {
     return (
       <div className="flex flex-col gap-4">
         <UnitsSubnav />
-        <p className="text-muted-foreground text-sm">Pick a specific facility above to manage its units.</p>
+        <FacilityRollup heading="Across your facilities" rows={await unitRollup(actor)} />
+        <p className="text-muted-foreground text-sm">
+          Open a facility to manage its units — a unit belongs to one site.
+        </p>
       </div>
     )
   }

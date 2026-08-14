@@ -35,7 +35,12 @@ test.describe('signed in as the demo owner', () => {
   test('shows a per-facility row and an all-facilities roll-up', async ({ page }) => {
     await page.goto('/admin/reports')
     await expect(page.getByRole('heading', { name: /^Reports/ })).toBeVisible()
-    await expect(page.getByText('All facilities').first()).toBeVisible()
+    // The report's own roll-up ROW, not the facility switcher's option of the
+    // same name — B-113 made "All facilities" selectable here, so a bare text
+    // match now finds a hidden <option> first.
+    await expect(
+      page.getByRole('row').filter({ hasText: 'All facilities' }).first(),
+    ).toBeVisible()
     await expect(page.getByRole('columnheader', { name: 'Unit occ.' })).toBeVisible()
     await expect(page.getByRole('columnheader', { name: 'Economic occ.' })).toBeVisible()
   })

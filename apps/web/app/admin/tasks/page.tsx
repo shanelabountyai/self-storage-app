@@ -2,9 +2,24 @@ import Link from 'next/link'
 import { getSwitcherData } from '@/lib/admin/context'
 import { resolveSelectedFacility } from '@/lib/admin/facility-selection-logic'
 import { facilityTasks, taskRollup } from '@/lib/admin/tasks'
+import { FacilityRollup } from '@/components/admin/facility-rollup'
 import { completeTaskAction } from './actions'
 
 export const metadata = { title: 'Tasks' }
+
+/// B-113 made the roll-up one shared component, since the dashboard, Units,
+/// Delinquency and Inquiries all needed the shape this screen arrived at first.
+/// This maps the task counts into it.
+function rollupRows(
+  rows: { facilityId: string; facilityName: string; openCount: number; overdueCount: number }[],
+) {
+  return rows.map((row) => ({
+    facilityId: row.facilityId,
+    facilityName: row.facilityName,
+    href: `/admin/tasks?facility=${row.facilityId}`,
+    summary: `${row.openCount} open${row.overdueCount > 0 ? ` · ${row.overdueCount} overdue` : ''}`,
+  }))
+}
 
 // PRD 02 §4.9 US-41 (B-095). "My day": one facility's open tasks, oldest
 // business day first. Mobile-first — a single column of cards, not a wide
@@ -35,7 +50,7 @@ export default async function TasksPage({
       <div className="flex flex-col gap-4">
         <h1 className="text-lg font-semibold">Tasks</h1>
         <p className="text-muted-foreground text-sm">Choose a single facility in the switcher above for its list.</p>
-        {rollup.length > 0 && <Rollup rows={rollup} />}
+        <FacilityRollup heading="Across your facilities" rows={rollupRows(rollup)} />
       </div>
     )
   }
@@ -56,7 +71,9 @@ export default async function TasksPage({
         </p>
       )}
 
-      {rollup.length > 1 && <Rollup rows={rollup} />}
+      {rollup.length > 1 && (
+        <FacilityRollup heading="Across your facilities" rows={rollupRows(rollup)} />
+      )}
 
       {tasks.length === 0 ? (
         <p className="text-muted-foreground text-sm">
@@ -127,24 +144,3 @@ export default async function TasksPage({
   )
 }
 
-function Rollup({ rows }: { rows: { facilityId: string; facilityName: string; openCount: number; overdueCount: number }[] }) {
-  return (
-    <section aria-labelledby="rollup-heading" className="border-input rounded-lg border p-4">
-      <h2 id="rollup-heading" className="text-sm font-medium">
-        Across your facilities
-      </h2>
-      <ul className="mt-2 flex flex-col gap-1 text-sm">
-        {rows.map((row) => (
-          <li key={row.facilityId} className="flex justify-between gap-4">
-            <Link href={`/admin/tasks?facility=${row.facilityId}`} className="underline underline-offset-2">
-              {row.facilityName}
-            </Link>
-            <span className="text-muted-foreground">
-              {row.openCount} open{row.overdueCount > 0 ? ` · ${row.overdueCount} overdue` : ''}
-            </span>
-          </li>
-        ))}
-      </ul>
-    </section>
-  )
-}

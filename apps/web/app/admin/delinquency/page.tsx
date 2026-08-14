@@ -2,6 +2,8 @@ import { getSwitcherData } from '@/lib/admin/context'
 import { resolveSelectedFacility } from '@/lib/admin/facility-selection-logic'
 import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
 import { delinquencyQueue } from '@/lib/admin/delinquency-queue'
+import { moneyOwedRollup } from '@/lib/admin/rollups'
+import { FacilityRollup } from '@/components/admin/facility-rollup'
 import { completeTaskAction } from '@/app/admin/tasks/actions'
 
 export const metadata = { title: 'Delinquency queue' }
@@ -16,19 +18,37 @@ function formatDate(date: Date): string {
   return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(date)
 }
 
-export default async function DelinquencyQueuePage() {
+export default async function DelinquencyQueuePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ facility?: string }>
+}) {
+  const { facility: facilityParam } = await searchParams
   const { actor, facilities, cookieValue, canSeeAll } = await getSwitcherData()
 
   if (!hasPermissionAnywhere(actor, ['delinquency:execute_step'])) {
     return <p className="text-muted-foreground text-sm">You don&apos;t have access to this.</p>
   }
 
-  const selected = resolveSelectedFacility(cookieValue, facilities, canSeeAll)
+  // B-113: the roll-up links into one facility without changing the switcher's
+  // persistent choice — the convention `/admin/tasks` set in B-095.
+  const requested = facilityParam ? facilities.find((f) => f.id === facilityParam) : undefined
+  const selected = requested
+    ? { mode: 'single' as const, facility: requested }
+    : resolveSelectedFacility(cookieValue, facilities, canSeeAll)
   if (selected.mode !== 'single') {
+    // The QUEUE is per-site — a step is executed at one facility — but the
+    // money is not, and an owner asking "who is not paying" on their own
+    // default context deserves an answer rather than an instruction.
     return (
-      <p className="text-muted-foreground text-sm">
-        Pick a single facility above — the delinquency queue is per-site.
-      </p>
+      <div className="flex max-w-3xl flex-col gap-4">
+        <h1 className="text-lg font-semibold">Delinquency</h1>
+        <FacilityRollup heading="Money owed, by facility" rows={await moneyOwedRollup(actor)} />
+        <p className="text-muted-foreground text-sm">
+          Open a facility for the steps due there today — an overlock or a notice is executed at
+          one site.
+        </p>
+      </div>
     )
   }
 
