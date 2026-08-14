@@ -75,10 +75,31 @@ async function claimUnit(
   return rows[0]?.id ?? null
 }
 
+/// The promotion a checkout was started under, snapshotted at that moment.
+///
+/// Locked rather than re-derived, for the same reason `quotedRateCents` is: the
+/// renter is entitled to the price they were shown. Re-evaluating on each
+/// render would let an operator pausing a promo mid-checkout raise a total
+/// between two steps, which is the exact thing §6.4 forbids — and the rate is
+/// already locked, so re-deriving could not produce a different answer for any
+/// other reason.
+export type PromoSnapshot = {
+  promotionId: string
+  promoCodeId: string | null
+  terms: string
+  /// Off the first period, in cents (positive).
+  firstPeriodCents: number
+  schedule: { periodIndex: number; amountCents: number }[]
+}
+
 export type StartInput = {
   facilityId: string
   unitTypeId: string
   quotedRateCents: number
+  /// The offer evaluated SERVER-SIDE at the moment "Rent now" was pressed.
+  /// Never anything the browser posted: a promotion the client could name is a
+  /// discount the client could choose.
+  promo?: PromoSnapshot | null
   /// Set when the renter is converting a free hold. The reservation's unit is
   /// used instead of claiming a new one — they were already promised that unit,
   /// and taking a second would hold two.
@@ -122,6 +143,18 @@ export async function startCheckout(input: StartInput): Promise<StartResult> {
         unitId,
         reservationId,
         quotedRateCents: input.quotedRateCents,
+        promotionId: input.promo?.promotionId ?? null,
+        promoCodeId: input.promo?.promoCodeId ?? null,
+        // The snapshot itself lives in `data`, beside every other thing the
+        // checkout locked. The columns carry the ids because redemption and
+        // reporting join on them.
+        data: (input.promo
+          ? {
+              promoTerms: input.promo.terms,
+              promoFirstPeriodCents: input.promo.firstPeriodCents,
+              promoSchedule: input.promo.schedule,
+            }
+          : {}) as Prisma.InputJsonValue,
         tokenHash: hashSessionToken(token),
         lockExpiresAt: lockUntil(),
       },
@@ -179,6 +212,28 @@ function toView(session: {
     step: session.step as Step,
     data: (session.data ?? {}) as Record<string, unknown>,
     lockLapsed: session.lockExpiresAt.getTime() <= Date.now(),
+  }
+}
+
+/// The promotion snapshot a session locked at "Rent now", if any.
+///
+/// One reader for the price summary, the amount due and the redemption alike,
+/// so the figure advertised, the figure charged and the figure recorded cannot
+/// come from three different evaluations.
+export function promoDiscountOn(session: CheckoutSessionView): {
+  terms: string
+  firstPeriodCents: number
+  schedule: { periodIndex: number; amountCents: number }[]
+} | null {
+  if (!session.promotionId) return null
+  const cents = session.data.promoFirstPeriodCents
+  if (typeof cents !== 'number' || cents <= 0) return null
+  return {
+    terms: typeof session.data.promoTerms === 'string' ? session.data.promoTerms : 'Promotion',
+    firstPeriodCents: cents,
+    schedule: Array.isArray(session.data.promoSchedule)
+      ? (session.data.promoSchedule as { periodIndex: number; amountCents: number }[])
+      : [{ periodIndex: 0, amountCents: cents }],
   }
 }
 

@@ -6,10 +6,10 @@ import { recomputeUnitStatus } from '@/lib/admin/units'
 import { provisionAccessForLease } from '@/lib/access/provision'
 import { createTask } from '@/lib/admin/tasks'
 import { amountDueToday } from './payment'
-import { sessionById } from './session'
+import { promoDiscountOn, sessionById } from './session'
 import { track } from '@/lib/analytics/track'
 import { trackingContext } from '@/lib/analytics/request'
-import { offerFor, redeemPromotion } from '@/lib/promotions/service'
+import { redeemPromotion } from '@/lib/promotions/service'
 
 // PRD 01 FR-4.5 / FR-4.6. Turning a paid checkout into a moved-in tenant.
 //
@@ -191,20 +191,18 @@ export async function provisionMoveIn(sessionId: string): Promise<ProvisionResul
     // back gracefully (reservation completes at standard rate)", so the lease
     // stands and the discount simply does not exist.
     if (session.promotionId) {
-      const offer = await offerFor({
-        facilityId: session.facilityId,
-        unitTypeId: session.unitTypeId,
-        monthlyRateCents: session.quotedRateCents,
-        isNewTenant: true,
-        code: null,
-        client: tx,
-      })
-      // Re-evaluated at redemption rather than trusting the session's stored
-      // figure: the rate could have moved, and the amount that gets redeemed
-      // has to be the one the schedule computes from what is actually charged.
-      // If the promo no longer applies at all, the lease stands at full price.
-      const schedule =
-        offer.offer && offer.offer.promotionId === session.promotionId ? offer.offer.schedule : null
+      // The schedule the session LOCKED, not a fresh evaluation.
+      //
+      // It used to re-derive here, on the reasoning that the rate could have
+      // moved — but `quotedRateCents` is locked on the session, so the only
+      // thing a re-evaluation could change is the promotion itself, and then
+      // the redemption would disagree with what the renter was charged. An
+      // operator pausing a promo between "Rent now" and the card clearing must
+      // not turn a discounted checkout into a full-price lease with no
+      // redemption row to explain it. The cap is still enforced atomically
+      // inside `redeemPromotion`, which is what FR-PROMO-5 actually requires.
+      const promo = promoDiscountOn(session)
+      const schedule = promo?.schedule ?? null
 
       if (schedule) {
         await redeemPromotion(tx, {

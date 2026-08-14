@@ -24,6 +24,11 @@ export type PriceSummaryProps = {
   /// shown as its own line, so the number that changed is identifiable rather
   /// than a bigger total the renter has to account for themselves.
   protectionPremiumCents?: number
+  /// The promotion this checkout locked at "Rent now", in cents off the first
+  /// period, with the terms as its label. Passed through rather than
+  /// re-evaluated so the summary, the amount due and the redemption all agree.
+  promoDiscountCents?: number
+  promoTerms?: string
   /// Rendered when a step has changed the totals, e.g. "Protection plan added".
   /// §6.4: a total that moves without an explicit cause is a defect, so the
   /// cause is stated rather than left to be inferred from a changed number.
@@ -38,9 +43,18 @@ export function PriceSummary({
   adminFeeCents,
   taxRates = [],
   protectionPremiumCents,
+  promoDiscountCents,
+  promoTerms,
   changeNote,
 }: PriceSummaryProps) {
-  const cost = calculateMoveInCost({ webRateCents, streetRateCents, adminFeeCents, taxRates })
+  const cost = calculateMoveInCost({
+    webRateCents,
+    streetRateCents,
+    adminFeeCents,
+    taxRates,
+    promoDiscountCents,
+    promoTerms,
+  })
   const premium = protectionPremiumCents ?? 0
   const dueToday = cost.totalDueTodayCents + premium
   const monthly = cost.ongoingMonthlyCents + premium

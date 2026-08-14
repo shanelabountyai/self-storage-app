@@ -97,4 +97,81 @@ describe('calculateMoveInCost', () => {
     expect(cost.totalDueTodayCents).toBe(15_400)
     expect(cost.savingCents).toBe(2_000)
   })
+
+  describe('promotions (the advertised price and the charged price)', () => {
+    // The bug this exists for: the facility page applied a promotion through
+    // `offerFor` and the checkout charged `calculateMoveInCost` without one, so
+    // the card advertised "50% off your first month" and every figure from
+    // "Rent now" onwards was the full rate. US-301 makes that disagreement a
+    // release-blocking defect, and it is only enforceable because there is one
+    // implementation — so the one implementation had to learn about promos.
+
+    const TAX = [{ jurisdiction: 'state', rateBasisPoints: 825 }]
+
+    it('takes the discount off the total and names which promotion did it', () => {
+      const cost = calculateMoveInCost({
+        webRateCents: 12_900,
+        streetRateCents: 12_900,
+        adminFeeCents: 2_500,
+        promoDiscountCents: 6_450,
+        promoTerms: '50% off your first month',
+      })
+      const line = cost.lines.find((l) => l.key === 'promo')
+      expect(line?.label).toBe('50% off your first month')
+      // Negative, so the column adds up as read rather than needing a rule
+      // about which lines to subtract.
+      expect(line?.amountCents).toBe(-6_450)
+      expect(cost.totalDueTodayCents).toBe(12_900 - 6_450 + 2_500)
+    })
+
+    it('taxes what is actually charged, not the price before the discount', () => {
+      const discounted = calculateMoveInCost({
+        webRateCents: 12_900,
+        streetRateCents: 12_900,
+        adminFeeCents: 2_500,
+        taxRates: TAX,
+        promoDiscountCents: 6_450,
+      })
+      const full = calculateMoveInCost({
+        webRateCents: 12_900,
+        streetRateCents: 12_900,
+        adminFeeCents: 2_500,
+        taxRates: TAX,
+      })
+      expect(discounted.lines.find((l) => l.key === 'tax')!.amountCents).toBeLessThan(
+        full.lines.find((l) => l.key === 'tax')!.amountCents,
+      )
+      // 8.25% of (129.00 - 64.50 + 25.00)
+      expect(discounted.lines.find((l) => l.key === 'tax')!.amountCents).toBe(738)
+    })
+
+    it('leaves the recurring total alone — a first-month promo is not a rent cut', () => {
+      const cost = calculateMoveInCost({
+        webRateCents: 12_900,
+        streetRateCents: 12_900,
+        taxRates: TAX,
+        promoDiscountCents: 6_450,
+      })
+      // "then $X/mo" has to be what the tenant will actually keep paying.
+      expect(cost.ongoingMonthlyCents).toBe(12_900 + Math.round((12_900 * 825) / 10_000))
+    })
+
+    it('renders no promo line when there is no promotion', () => {
+      const cost = calculateMoveInCost({ webRateCents: 12_900, streetRateCents: 12_900 })
+      expect(cost.lines.map((l) => l.key)).not.toContain('promo')
+    })
+
+    it('never lets a promotion exceed the rent it discounts', () => {
+      // A misconfigured promotion must not turn a move-in into a payout.
+      const cost = calculateMoveInCost({
+        webRateCents: 12_900,
+        streetRateCents: 12_900,
+        adminFeeCents: 2_500,
+        promoDiscountCents: 99_999,
+      })
+      expect(cost.totalDueTodayCents).toBe(2_500)
+      expect(cost.lines.find((l) => l.key === 'promo')?.amountCents).toBe(-12_900)
+    })
+  })
+
 })

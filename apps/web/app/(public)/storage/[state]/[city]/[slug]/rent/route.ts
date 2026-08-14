@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { facilityPath, publicFacilityBySlug } from '@/lib/facility/public-facility'
 import { publicInventoryForFacility } from '@/lib/inventory/public-inventory'
 import { startCheckout } from '@/lib/checkout/session'
+import { offerFor } from '@/lib/promotions/service'
 
 // B-020. "Rent now" — starts a checkout session and redirects into the stepper.
 //
@@ -24,12 +25,37 @@ export async function POST(
   const unitType = inventory?.unitTypes.find((type) => type.unitTypeId === unitTypeId)
   if (!unitType) redirect(`${facilityPath(facility)}?unavailable=1`)
 
+  // The promotion the facility page just advertised, re-evaluated here from the
+  // server's own view rather than accepted from the form. Without this the card
+  // said "50% off your first month" and the checkout quoted, summarised and
+  // charged the full rate — the browse estimate applied a promotion the money
+  // path had never heard of, and nothing ever wrote a redemption row either.
+  //
+  // `isNewTenant: true` matches what the facility page assumed when it drew the
+  // badge; the real person is not known until step 1, and provisioning
+  // re-checks eligibility before anything is redeemed.
+  const offer = await offerFor({
+    facilityId: facility.id,
+    unitTypeId,
+    monthlyRateCents: unitType.webRateCents,
+    isNewTenant: true,
+  })
+
   const started = await startCheckout({
     facilityId: facility.id,
     unitTypeId,
     // Rate seen = rate charged: locked from the server's current view, never
     // from anything the browser posted.
     quotedRateCents: unitType.webRateCents,
+    promo: offer.offer
+      ? {
+          promotionId: offer.offer.promotionId,
+          promoCodeId: offer.offer.promoCodeId,
+          terms: offer.offer.terms,
+          firstPeriodCents: offer.offer.firstPeriodCents,
+          schedule: offer.offer.schedule,
+        }
+      : null,
   })
 
   // Someone took the last one while they were reading. Honest, and back to the

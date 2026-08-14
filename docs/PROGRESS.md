@@ -3604,3 +3604,29 @@ Both payment submits — checkout's and the portal's — swapped `disabled` for 
 **Test verification:** unit suite green (2,782 passing, six new — locality derivation, the unknown-zip refusal and its escape, the typed override, the half-typed pair, and the alternate-contact validation). The full e2e suite is green on both projects for the first time this session: 187 passing on desktop-chrome and 187 on mobile-chrome. The field cap is asserted by name and by count so the next item cannot quietly re-add, and the 44px is asserted on the *rendered* height, because the token now resolves through a CSS variable and a broken variable would still compile. Ten checkout specs had their city/state fills removed, and three that checked `getByRole('checkbox').first()` were given the consent box by name — positional was fine until this item put a second checkbox on the lease step, and checking the wrong one refuses the signature for a reason the test cannot see.
 
 The accessibility statement was re-read: nothing it claims changed.
+
+## Defect fix — the advertised price and the charged price disagreed by the promotion
+
+`PENDING`
+
+**Not a backlog item.** Found while answering a question about what the promotions engine actually reaches, between B-112 and B-113, and fixed immediately because it was a live customer-facing money defect.
+
+**What was wrong.** The facility page evaluated `offerFor` per unit type and rendered the badge, the plain-language terms and a discounted first-period price. `Rent now` then called `startCheckout({ quotedRateCents: unitType.webRateCents })` — the **undiscounted** rate — and passed no promotion at all. `checkout_session.promotionId` and `promoCodeId` were columns that had existed since B-070 and that **nothing ever wrote**. So:
+
+- the unit card said "50% off your first month" and the price summary, the amount due and the PaymentIntent all said full price;
+- `provisionMoveIn`'s redemption block is guarded on `if (session.promotionId)`, which was always false, so **no `PromoRedemption` row had ever been written by a real move-in** — for a code promo or an automatic one;
+- `PromoCode.usesCount` had no path to increment, and promo ROI reporting read an empty table.
+
+US-301 makes a disagreement between the browse estimate and the checkout total a release-blocking defect. It was only enforceable because there is one implementation of `calculateMoveInCost` — and the bug was that the browse estimate applied a promotion that one implementation had never heard of.
+
+**The fix.** `calculateMoveInCost` learned about promotions: a `promo` line carrying the promotion's own terms as its label and a negative amount, a reduced total, and a reduced **taxable base** — tax is owed on what is actually charged, not on the price before a discount. The recurring total is deliberately untouched, because "then $X/mo" has to be what the tenant will keep paying. A discount is clamped to the rent it discounts, so a misconfigured promotion cannot turn a move-in into a payout.
+
+`startCheckout` now takes a `PromoSnapshot`, evaluated **server-side** at "Rent now" and at reservation conversion — never a value the browser posted, because a promotion the client can name is a discount the client can choose. `promoDiscountOn(session)` is the single reader used by the price summary, the amount due and the redemption alike.
+
+**Decided:** the offer is **locked**, not re-derived. `provisionMoveIn` used to re-evaluate at redemption on the reasoning that "the rate could have moved" — but `quotedRateCents` is locked on the session, so the only thing a re-evaluation could change is the promotion itself, and then the redemption would disagree with what the renter was charged. An operator pausing a promo between "Rent now" and the card clearing must not turn a discounted checkout into a full-price lease. The cap is still enforced atomically inside `redeemPromotion`, which is what FR-PROMO-5 actually asks for. A test pins it.
+
+**Also fixed:** `formatRate` rendered a negative as `$-64.50`. The sign now goes outside the dollar mark. It reads as a typo on exactly the lines where being unambiguous matters — a discount, a credit, a refund.
+
+**Left behind, both now filed:** **B-122** — no surface passes a `code` to `offerFor`, so a code-gated promotion still cannot be redeemed by anybody. **B-123** — every promotional message goes by email; there is no `marketing_sms` lane at all, and the trap to avoid is sending a promo down the transactional one because the marketing one does not exist.
+
+**Tests:** five arithmetic tests on the cost model (the line and its label, the taxable base, the untouched recurring total, no line when there is no promo, and the clamp), and three against the database — the offer reaching the session and the charged total matching the advertised one, the lock surviving an operator pausing the promotion mid-checkout, and a plain checkout attaching nothing. Full suite green: 2,790 unit tests, 187 e2e on each project.

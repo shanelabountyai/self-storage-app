@@ -10,7 +10,12 @@ import { prisma } from '@storage/db'
 import { billingDayFor } from '@storage/core/billing'
 import { businessDateFor } from '@storage/core/jobs'
 import { publicInventoryForFacility } from '@/lib/inventory/public-inventory'
-import { LOCK_WARNING_MINUTES, STEPS, sessionByToken } from '@/lib/checkout/session'
+import {
+  LOCK_WARNING_MINUTES,
+  STEPS,
+  promoDiscountOn,
+  sessionByToken,
+} from '@/lib/checkout/session'
 import { prefillFromReservation } from '@/lib/checkout/details'
 import { localityForZip } from '@/lib/geo/geocode'
 import { DetailsStep } from '@/components/checkout/details-step'
@@ -183,6 +188,7 @@ export default async function CheckoutPage({
   }
 
   const remaining = minutesLeft(session.lockExpiresAt)
+  const lockedPromo = promoDiscountOn(session)
 
   // Session data wins over the reservation prefill: if the renter has already
   // corrected something on this step, their correction is what comes back.
@@ -479,6 +485,11 @@ export default async function CheckoutPage({
             streetRateCents={unitType.streetRateCents}
             adminFeeCents={inventory!.pricing.adminFeeCents}
             taxRates={inventory!.pricing.taxRates}
+            // The promotion the facility page advertised, locked onto the
+            // session at "Rent now". Until this shipped the card said "50% off"
+            // and every figure from here on said full price.
+            promoDiscountCents={lockedPromo?.firstPeriodCents}
+            promoTerms={lockedPromo?.terms}
             // §6.4: the prop has existed since B-020 and was passed by nobody,
             // which is why choosing a $12/mo protection tier moved both totals
             // with no stated cause one screen before the card form. `advance`

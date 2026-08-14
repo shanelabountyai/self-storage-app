@@ -2,7 +2,7 @@ import { prisma } from '@storage/db'
 import { calculateMoveInCost } from '@storage/core/pricing'
 import { createChargeIntent } from '@/lib/payments/intents'
 import { paymentsEnabled } from '@/lib/payments/stripe'
-import type { CheckoutSessionView } from '@/lib/checkout/session'
+import { promoDiscountOn, type CheckoutSessionView } from '@/lib/checkout/session'
 
 // PRD 01 US-501 step 5 / FR-4.4. What is owed today, and the intent to collect it.
 
@@ -32,10 +32,16 @@ export async function amountDueToday(session: CheckoutSessionView): Promise<Amou
   const premiumCents =
     typeof session.data.protectionPremiumCents === 'number' ? session.data.protectionPremiumCents : 0
 
+  // The promotion this session was started under. Read from the session, never
+  // re-evaluated here: the renter is charged the price they were shown.
+  const promo = promoDiscountOn(session)
+
   const cost = calculateMoveInCost({
     webRateCents: session.quotedRateCents,
     streetRateCents: session.quotedRateCents,
     adminFeeCents: feeRows[0]?.amountCents,
+    promoDiscountCents: promo?.firstPeriodCents,
+    promoTerms: promo?.terms,
     taxRates: taxRows.map((row) => ({
       jurisdiction: row.jurisdiction,
       rateBasisPoints: row.rateBasisPoints,

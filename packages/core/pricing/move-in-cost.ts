@@ -26,6 +26,22 @@ export type MoveInCostInput = {
   /// in that we do not render a $0.00 line.
   adminFeeCents?: number
   taxRates?: readonly TaxRate[]
+  /// What a promotion takes off the FIRST period, in cents (positive).
+  ///
+  /// Added because the facility page advertised a discount and the checkout
+  /// charged the undiscounted rate — the browse estimate applied a promotion
+  /// this function had never heard of, so the two disagreed by exactly the
+  /// discount. US-301 makes that a release-blocking defect, and it is only
+  /// enforceable because there is one implementation; the fix is to teach the
+  /// one implementation about promotions rather than to discount in two places.
+  ///
+  /// It reduces the taxable base as well as the total: tax is owed on what is
+  /// actually charged, not on the price before a discount.
+  promoDiscountCents?: number
+  /// The promotion's plain-language terms, used as the line's label so the
+  /// discount says which promotion it is rather than appearing as an unexplained
+  /// credit (US-301).
+  promoTerms?: string
 }
 
 export type CostLine = {
@@ -57,6 +73,10 @@ function taxOn(baseCents: number, rateBasisPoints: number): number {
 
 export function calculateMoveInCost(input: MoveInCostInput): MoveInCost {
   const { webRateCents, streetRateCents, adminFeeCents, taxRates = [] } = input
+  // Clamped: a promotion may not exceed the rent it discounts, and may never
+  // turn a move-in into a payout.
+  const promoDiscountCents = Math.min(Math.max(0, input.promoDiscountCents ?? 0), webRateCents)
+  const discountedRentCents = webRateCents - promoDiscountCents
 
   // The taxable base is rent plus the admin fee. Texas treats self-storage as a
   // taxable service and the admin fee travels with it (D-10 makes Texas the
@@ -67,8 +87,11 @@ export function calculateMoveInCost(input: MoveInCostInput): MoveInCost {
   // at the payment step.
   // ponytail: one taxable base for rent + admin fee; split per component when
   // a second state's rules actually require it.
+  // Monthly is the STANDARD rate: a first-period promotion does not change what
+  // recurs, and "then $X/mo" has to be the figure the tenant will actually keep
+  // paying.
   const monthlyTaxableBase = webRateCents
-  const todayTaxableBase = webRateCents + (adminFeeCents ?? 0)
+  const todayTaxableBase = discountedRentCents + (adminFeeCents ?? 0)
 
   const taxToday = taxRates.reduce((sum, rate) => sum + taxOn(todayTaxableBase, rate.rateBasisPoints), 0)
   const taxMonthly = taxRates.reduce(
@@ -84,6 +107,15 @@ export function calculateMoveInCost(input: MoveInCostInput): MoveInCost {
       note: 'If you move in part-way through a month, we charge only the days you use and the amount drops.',
     },
   ]
+
+  if (promoDiscountCents > 0) {
+    lines.push({
+      key: 'promo',
+      label: input.promoTerms ?? 'Promotion',
+      amountCents: -promoDiscountCents,
+      note: 'Applied to your first month only. After that you pay the standard rate.',
+    })
+  }
 
   if (adminFeeCents !== undefined && adminFeeCents > 0) {
     lines.push({
@@ -110,7 +142,7 @@ export function calculateMoveInCost(input: MoveInCostInput): MoveInCost {
 
   return {
     lines,
-    totalDueTodayCents: webRateCents + (adminFeeCents ?? 0) + taxToday,
+    totalDueTodayCents: discountedRentCents + (adminFeeCents ?? 0) + taxToday,
     ongoingMonthlyCents: webRateCents + taxMonthly,
     savingCents: Math.max(0, streetRateCents - webRateCents),
   }

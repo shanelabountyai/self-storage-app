@@ -3,6 +3,7 @@
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { cancelReservation, reservationByToken } from '@/lib/reservations/reserve'
+import { offerFor } from '@/lib/promotions/service'
 import { startCheckout } from '@/lib/checkout/session'
 import type { FormState } from '@/lib/admin/form-state'
 
@@ -57,11 +58,31 @@ export async function completeMoveInFromReservationAction(
   // startCheckout reuses the reservation's own unit rather than claiming a
   // second one (session.ts's own note) — the whole reason this passes
   // reservationId instead of just starting a checkout from the unit type.
+  // Evaluated at conversion rather than carried on the hold: `Reservation` has
+  // no promotion columns, and a free hold can sit for days, so the honest
+  // answer is the offer that is live when they come back to finish. Same
+  // server-side evaluation as "Rent now" — never a value the browser sent.
+  const offer = await offerFor({
+    facilityId: reservation.facilityId,
+    unitTypeId: reservation.unitTypeId,
+    monthlyRateCents: reservation.quotedRateCents,
+    isNewTenant: true,
+  })
+
   const started = await startCheckout({
     facilityId: reservation.facilityId,
     unitTypeId: reservation.unitTypeId,
     quotedRateCents: reservation.quotedRateCents,
     reservationId: reservation.id,
+    promo: offer.offer
+      ? {
+          promotionId: offer.offer.promotionId,
+          promoCodeId: offer.offer.promoCodeId,
+          terms: offer.offer.terms,
+          firstPeriodCents: offer.offer.firstPeriodCents,
+          schedule: offer.offer.schedule,
+        }
+      : null,
   })
   if (!started.ok) {
     return {

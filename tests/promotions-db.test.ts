@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { prisma } from '../packages/db'
 import { offerFor, redeemPromotion } from '../apps/web/lib/promotions/service'
+import { promoDiscountOn, sessionByToken, startCheckout } from '../apps/web/lib/checkout/session'
+import { amountDueToday } from '../apps/web/lib/checkout/payment'
 import { discountForLeasePeriod, markDiscountApplied } from '../apps/web/lib/promotions/billing'
 
 // B-070 / PRD 04 FR-PROMO-3/4/5, against real rows.
@@ -275,4 +277,107 @@ describeDb('promotions', () => {
       expect((await discountForLeasePeriod(leaseId, 0))?.amountCents).toBe(6_450)
     })
   })
+
+  describe('the advertised price and the charged price (found 2026-08-14)', () => {
+    // `startCheckout` claims a unit, and the suite's one fixture unit is
+    // already spoken for by the lease above. Each of these gets its own.
+    let sequence = 0
+    async function availableUnit() {
+      sequence += 1
+      await prisma.unit.create({
+        data: { facilityId, unitTypeId, number: `PC-${suffix.slice(0, 3)}-${sequence}` },
+      })
+    }
+
+    // The defect: the facility page priced a promotion through `offerFor`, and
+    // "Rent now" started a checkout at `unitType.webRateCents` with no promo
+    // attached at all. `checkout_session.promotionId` was a column nothing ever
+    // wrote, so the card advertised a discount, the checkout charged full
+    // price, and `provisionMoveIn`'s redemption block — guarded on that same
+    // column — never ran for anybody. No `PromoRedemption` row had ever been
+    // written by a real move-in, for a code promo or an automatic one.
+
+    it('carries the offer onto the session and charges the discounted total', async () => {
+      await availableUnit()
+      await makePromotion()
+      const offer = await offerFor({
+        facilityId,
+        unitTypeId,
+        monthlyRateCents: RENT,
+        isNewTenant: true,
+      })
+      expect(offer.offer?.firstPeriodCents).toBe(RENT / 2)
+
+      const started = await startCheckout({
+        facilityId,
+        unitTypeId,
+        quotedRateCents: RENT,
+        promo: {
+          promotionId: offer.offer!.promotionId,
+          promoCodeId: offer.offer!.promoCodeId,
+          terms: offer.offer!.terms,
+          firstPeriodCents: offer.offer!.firstPeriodCents,
+          schedule: offer.offer!.schedule,
+        },
+      })
+      if (!started.ok) throw new Error('no unit to start a checkout on')
+
+      const session = await sessionByToken(started.token)
+      expect(session?.promotionId).toBe(offer.offer!.promotionId)
+
+      const due = await amountDueToday(session!)
+      const promoLine = due.lines.find((line) => line.key === 'promo')
+      expect(promoLine?.amountCents).toBe(-(RENT / 2))
+      // The figure the unit card advertised, arrived at by the money path.
+      expect(due.totalDueTodayCents).toBe(RENT - RENT / 2)
+      // And the recurring figure is untouched — this is a first-month promo.
+      expect(due.ongoingMonthlyCents).toBe(RENT)
+    })
+
+    it('locks the offer, so pausing the promotion mid-checkout cannot raise the total', async () => {
+      await availableUnit()
+      const promotion = await makePromotion()
+      const offer = await offerFor({ facilityId, unitTypeId, monthlyRateCents: RENT, isNewTenant: true })
+      const started = await startCheckout({
+        facilityId,
+        unitTypeId,
+        quotedRateCents: RENT,
+        promo: {
+          promotionId: offer.offer!.promotionId,
+          promoCodeId: null,
+          terms: offer.offer!.terms,
+          firstPeriodCents: offer.offer!.firstPeriodCents,
+          schedule: offer.offer!.schedule,
+        },
+      })
+      if (!started.ok) throw new Error('no unit to start a checkout on')
+
+      // The operator pauses it while the renter is on step 3.
+      await prisma.promotion.update({ where: { id: promotion.id }, data: { status: 'paused' } })
+
+      const session = await sessionByToken(started.token)
+      const due = await amountDueToday(session!)
+      // §6.4: a total may not move under a renter mid-checkout. `quotedRateCents`
+      // has always been locked for exactly this reason; the discount is now too.
+      expect(due.totalDueTodayCents).toBe(RENT - RENT / 2)
+      expect(promoDiscountOn(session!)?.schedule).toEqual(offer.offer!.schedule)
+    })
+
+    it('attaches nothing when no promotion is live', async () => {
+      await availableUnit()
+      const offer = await offerFor({ facilityId, unitTypeId, monthlyRateCents: RENT, isNewTenant: true })
+      expect(offer.offer).toBeNull()
+
+      const started = await startCheckout({ facilityId, unitTypeId, quotedRateCents: RENT })
+      if (!started.ok) throw new Error('no unit to start a checkout on')
+      const session = await sessionByToken(started.token)
+
+      expect(session?.promotionId).toBeNull()
+      expect(promoDiscountOn(session!)).toBeNull()
+      const due = await amountDueToday(session!)
+      expect(due.lines.map((line) => line.key)).not.toContain('promo')
+      expect(due.totalDueTodayCents).toBe(RENT)
+    })
+  })
+
 })
