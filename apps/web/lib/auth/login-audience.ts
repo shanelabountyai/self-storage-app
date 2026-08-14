@@ -15,6 +15,19 @@ export function audienceFor(from: string | undefined): AuthAudience {
   return from?.startsWith('/admin') ? 'staff' : 'tenant'
 }
 
+/// The same reading, but honest about not knowing.
+///
+/// `audienceFor` has to return something because a redirect target must exist,
+/// and its tenant default is right for that. It is wrong for deciding which
+/// table to look an account up in, where "no `from`" means "nobody told us"
+/// rather than "tenant" — see `resolveAudience` in lib/auth/accounts.ts for what
+/// that default cost. Anything that resolves an ACCOUNT takes this and passes it
+/// as a hint; anything that picks a REDIRECT keeps `audienceFor`.
+export function audienceHint(from: string | undefined): AuthAudience | null {
+  if (!from) return null
+  return from.startsWith('/admin') ? 'staff' : 'tenant'
+}
+
 export function defaultRedirectFor(audience: AuthAudience): string {
   return audience === 'staff' ? '/admin' : '/portal'
 }

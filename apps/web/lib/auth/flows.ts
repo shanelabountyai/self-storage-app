@@ -1,6 +1,6 @@
 import type { AuthAudience } from '@storage/db'
 import { recordAudit } from '@storage/core/audit'
-import { findSubjectByEmail, setPassword } from './accounts'
+import { findSubjectByEmail, resolveAudience, setPassword } from './accounts'
 import { sendAuthEmail } from './send-auth-email'
 import { consumeToken, mintToken } from './tokens'
 
@@ -21,12 +21,19 @@ function baseUrl(): string {
 /// at a sign-in that asks for the code.
 export async function requestMagicLink(
   email: string,
-  audience: AuthAudience,
+  hint: AuthAudience | null,
   ipAddress?: string | null,
 ): Promise<void> {
+  // Resolved from the address, not assumed from the URL — see resolveAudience.
+  // The staff refusal below now applies to the account that actually exists,
+  // rather than to whatever the query parameter implied: previously a staff
+  // member on the tenant-shaped form was refused only as a side effect of not
+  // existing in the Tenant table, which happened to be the right outcome for
+  // the wrong reason and stopped being reliable the moment resolution improved.
+  const audience = await resolveAudience(email, hint)
   if (audience === 'staff') return
 
-  const subject = await findSubjectByEmail(email, audience)
+  const subject = audience && (await findSubjectByEmail(email, audience))
   if (!subject) return
 
   const { token, expiresAt } = await mintToken({
@@ -47,11 +54,12 @@ export async function requestMagicLink(
 
 export async function requestPasswordReset(
   email: string,
-  audience: AuthAudience,
+  hint: AuthAudience | null,
   ipAddress?: string | null,
 ): Promise<void> {
-  const subject = await findSubjectByEmail(email, audience)
-  if (!subject) return
+  const audience = await resolveAudience(email, hint)
+  const subject = audience && (await findSubjectByEmail(email, audience))
+  if (!subject || !audience) return
 
   const { token, expiresAt } = await mintToken({
     purpose: 'password_reset',

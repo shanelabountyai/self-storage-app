@@ -37,6 +37,53 @@ async function findAccount(
   return { ...staff, disabled: staff.deletedAt !== null || staff.status !== 'active' }
 }
 
+/// Which audience an email address belongs to, for the surfaces that cannot know.
+///
+/// `/login` and `/forgot-password` serve both audiences from one form, and until
+/// now they inferred the audience from the `from` query parameter alone —
+/// defaulting to `tenant` when it was absent. That default is wrong far more
+/// often than it looks: a staff member who types either URL, follows a bookmark,
+/// or is redirected there by the reset flow (which does not carry `from`) is
+/// looked up in the Tenant table, where they do not exist. Password reset then
+/// reports "a link is on its way" and sends nothing, and sign-in reports
+/// "incorrect email or password" about a password that is correct. Both failures
+/// blame the user for a query parameter they never saw. It cost this project's
+/// own owner three rounds of debugging on the day the first real account was
+/// created, and both the UX and accessibility reviews raised it as their
+/// top finding.
+///
+/// The `hint` is now a preference rather than a verdict: the hinted audience is
+/// tried first, and the other is tried when there is no usable account there.
+/// So a correct `from` still steers, a missing one no longer decides, and a
+/// wrong one no longer locks anybody out.
+///
+/// Disabled accounts are skipped rather than claimed, so a deactivated staff
+/// member who is also a tenant resolves to their tenant account instead of
+/// resolving to nothing.
+///
+/// **Nothing here is enumerable**: every caller responds identically whether
+/// this returns an audience or null — the same "if that email has an account"
+/// message, the same generic sign-in failure.
+///
+/// When an address is BOTH staff and tenant — an employee who rents a unit —
+/// and there is no hint, staff wins. That case is genuinely ambiguous and this
+/// is the safer half: the portal's own links carry `from`, so a tenant arriving
+/// the ordinary way still resolves to tenant, whereas a locked-out staff member
+/// is the one with no other route in.
+export async function resolveAudience(
+  email: string,
+  hint?: AuthAudience | null,
+): Promise<AuthAudience | null> {
+  const order: AuthAudience[] = hint === 'tenant' ? ['tenant', 'staff'] : ['staff', 'tenant']
+
+  for (const audience of order) {
+    const account = await findAccount(email, audience)
+    if (account && !account.disabled) return audience
+  }
+
+  return null
+}
+
 export class LoginThrottledError extends Error {
   // Explicit field, not a constructor-parameter-property: see the comment on
   // ForbiddenError in lib/rbac/authorize.ts.

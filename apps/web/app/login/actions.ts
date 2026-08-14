@@ -3,7 +3,8 @@
 import { AuthError } from 'next-auth'
 import { signIn } from '@/auth'
 import { checkLoginThrottle } from '@/lib/auth/rate-limit'
-import { audienceFor, safeRedirectTarget } from '@/lib/auth/login-audience'
+import { resolveAudience } from '@/lib/auth/accounts'
+import { audienceHint, audienceFor, safeRedirectTarget } from '@/lib/auth/login-audience'
 import { requestMetadata } from '@/lib/http/request-metadata'
 import { fieldError, success, type FormState } from '@/lib/admin/form-state'
 
@@ -26,8 +27,6 @@ export async function signInWithPasswordAction(
   const password = String(formData.get('password') ?? '')
   const code = String(formData.get('code') ?? '').trim()
   const from = String(formData.get('from') ?? '') || undefined
-  const audience = audienceFor(from)
-  const redirectTo = safeRedirectTarget(from, audience)
 
   if (!email || !password) {
     return fieldError({
@@ -35,6 +34,18 @@ export async function signInWithPasswordAction(
       ...(password ? {} : { password: 'Enter your password.' }),
     })
   }
+
+  // Resolved from the address rather than assumed from `from`. A staff member
+  // who reaches this page without `?from=/admin` — by typing it, by bookmark,
+  // or by the redirect the reset flow performs — used to be looked up in the
+  // Tenant table and told their correct password was incorrect.
+  //
+  // Falls back to `audienceFor` when the address matches no account at all,
+  // which keeps the timing and the throttle key identical to a real miss:
+  // authenticateWithPassword still runs its dummy KDF, and nothing about the
+  // response distinguishes "no such account" from "wrong password".
+  const audience = (await resolveAudience(email, audienceHint(from))) ?? audienceFor(from)
+  const redirectTo = safeRedirectTarget(from, audience)
 
   // Checked here, ahead of signIn(): Auth.js sanitises everything an
   // authorize() throws or returns into one generic "CredentialsSignin" before
