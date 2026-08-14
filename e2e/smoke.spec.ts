@@ -297,8 +297,12 @@ test('the cancel link shows the hold before releasing it', async ({ page }) => {
 
   await page.getByRole('button', { name: 'Cancel this reservation' }).click()
   // The cancel form is gone once the hold is, so the outcome is reported by the
-  // state that replaced it.
-  await expect(page.getByRole('main').getByRole('status')).toContainText('back available')
+  // state that replaced it — `.first()` because B-111 stopped `AdminForm`
+  // hiding its own empty live region, and the cancel form is still mounted
+  // while this resolves.
+  await expect(page.getByRole('main').getByRole('status').first()).toContainText(
+    'back available',
+  )
   await expect(page.getByRole('button', { name: 'Cancel this reservation' })).toHaveCount(0)
 })
 
@@ -404,6 +408,138 @@ test('a checkout step change moves focus and announces where it went', async ({ 
   // 2.4.3: focus is on the new step's heading, so the next Tab is into step 2
   // rather than back at the top of the document.
   await expect(page.locator('#step')).toBeFocused()
+})
+
+test('checkout goes back, from the control and from the progress indicator', async ({ page }) => {
+  // B-111 / §6.4: "back navigation never loses data". `canEnter` has said since
+  // B-020 that a completed step may be returned to; until this item nothing
+  // rendered a control, so a renter who mistyped the address that receives the
+  // lease, the receipt and the gate code found out at step 4 and could only
+  // abandon.
+  const email = `e2e-back-${Date.now()}@demo.example.com`
+  await page.goto('/storage/tx/houston/demo-e2e')
+  await page
+    .getByRole('listitem')
+    .filter({ hasText: '10x10 Test' })
+    .first()
+    .getByRole('button', { name: 'Rent now' })
+    .click()
+
+  await page.getByLabel('First name').fill('Ada')
+  await page.getByLabel('Last name').fill('Renter')
+  await page.getByLabel('Email', { exact: true }).fill(email)
+  await page.getByLabel('Mobile number').fill('512-555-0100')
+  await page.getByLabel('Street address').fill('2400 South Congress Ave')
+  await page.getByLabel('City').fill('Austin')
+  await page.getByLabel('State').fill('TX')
+  await page.getByLabel('Zip code').fill('78704')
+  await page.getByRole('button', { name: 'Continue', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Your unit' })).toBeVisible()
+
+  // The control names its destination rather than saying "Back" — a one-word
+  // accessible name makes a screen-reader user infer where it goes.
+  await page.getByRole('button', { name: 'Back to your details' }).click()
+  await expect(page.getByRole('heading', { name: 'Your details' })).toBeVisible()
+  await expect(page.getByLabel('Email', { exact: true })).toHaveValue(email)
+
+  // Forward again re-asks nothing, then back again from the progress
+  // indicator, which is the other half of the requirement.
+  await page.getByRole('button', { name: 'Continue', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Your unit' })).toBeVisible()
+  await page.getByRole('button', { name: 'This is right' }).click()
+  await expect(page.getByRole('heading', { name: 'Protect what you store' })).toBeVisible()
+
+  const progress = page.getByRole('navigation', { name: 'Checkout progress' })
+  await progress.getByRole('button', { name: /Your details/ }).click()
+  await expect(page.getByRole('heading', { name: 'Your details' })).toBeVisible()
+  await expect(page.getByLabel('Email', { exact: true })).toHaveValue(email)
+
+  // Step 1 has nothing behind it, so it offers no way back rather than a
+  // control that can only be refused.
+  await expect(page.getByRole('button', { name: /^Back to/ })).toHaveCount(0)
+})
+
+test('a total that moves says what moved it', async ({ page }) => {
+  // §6.4: `PriceSummaryProps.changeNote` existed from B-020 and was passed by
+  // nobody, so choosing a protection tier moved both totals with no stated
+  // cause, one screen before the card form.
+  await page.goto('/storage/tx/houston/demo-e2e')
+  await page
+    .getByRole('listitem')
+    .filter({ hasText: '10x10 Test' })
+    .first()
+    .getByRole('button', { name: 'Rent now' })
+    .click()
+
+  await page.getByLabel('First name').fill('Ada')
+  await page.getByLabel('Last name').fill('Renter')
+  await page.getByLabel('Email', { exact: true }).fill(`e2e-note-${Date.now()}@demo.example.com`)
+  await page.getByLabel('Mobile number').fill('512-555-0100')
+  await page.getByLabel('Street address').fill('2400 South Congress Ave')
+  await page.getByLabel('City').fill('Austin')
+  await page.getByLabel('State').fill('TX')
+  await page.getByLabel('Zip code').fill('78704')
+  await page.getByRole('button', { name: 'Continue', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Your unit' })).toBeVisible()
+  await page.getByRole('button', { name: 'This is right' }).click()
+  await expect(page.getByRole('heading', { name: 'Protect what you store' })).toBeVisible()
+
+  const summary = page.getByRole('complementary', { name: 'What you are paying' })
+  await page.getByRole('radio', { name: /\$5,000 cover/ }).check()
+  await page.getByRole('button', { name: 'Continue', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Your lease' })).toBeVisible()
+  await expect(summary.getByRole('status')).toContainText(/Protection plan added/)
+
+  // Cleared by the next step, not left standing — a note that outlives its
+  // cause attributes the current total to a change two steps ago.
+  await page.getByRole('button', { name: 'Back to protection' }).click()
+  await expect(page.getByRole('heading', { name: 'Protect what you store' })).toBeVisible()
+  await expect(summary.getByRole('status')).toHaveText('')
+})
+
+test('the sticky price summary does not cover the payment step at 360px', async ({ page }) => {
+  // §6.4 wants the summary persistent on every viewport; it must not buy that
+  // by sitting on top of the control that charges. Asserted against the LOWEST
+  // interactive element of the payment step — everything above it, the Payment
+  // Element's own submit included, clears the bar if this does.
+  await page.setViewportSize({ width: 360, height: 640 })
+  await page.goto('/storage/tx/houston/demo-e2e')
+  await page
+    .getByRole('listitem')
+    .filter({ hasText: '10x10 Test' })
+    .first()
+    .getByRole('button', { name: 'Rent now' })
+    .click()
+
+  await page.getByLabel('First name').fill('Ada')
+  await page.getByLabel('Last name').fill('Renter')
+  await page.getByLabel('Email', { exact: true }).fill(`e2e-360-${Date.now()}@demo.example.com`)
+  await page.getByLabel('Mobile number').fill('512-555-0100')
+  await page.getByLabel('Street address').fill('2400 South Congress Ave')
+  await page.getByLabel('City').fill('Austin')
+  await page.getByLabel('State').fill('TX')
+  await page.getByLabel('Zip code').fill('78704')
+  await page.getByRole('button', { name: 'Continue', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Your unit' })).toBeVisible()
+  await page.getByRole('button', { name: 'This is right' }).click()
+  await expect(page.getByRole('heading', { name: 'Protect what you store' })).toBeVisible()
+  await page.getByRole('button', { name: 'Continue', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Your lease' })).toBeVisible()
+  await page.getByRole('checkbox').first().check()
+  await page.getByLabel('Type your full name to sign').fill('Ada Renter')
+  await page.getByRole('button', { name: 'Sign and continue' }).click()
+  await expect(page.getByRole('heading', { name: 'Payment' })).toBeVisible()
+
+  const back = page.getByRole('button', { name: /^Go back|^Back to/ })
+  await back.scrollIntoViewIfNeeded()
+  const summary = page.getByRole('complementary', { name: 'What you are paying' })
+  const [controlBox, summaryBox] = [await back.boundingBox(), await summary.boundingBox()]
+
+  // `sticky` keeps the summary in flow, so it reserves its own space rather
+  // than floating over what precedes it. That is the property being pinned:
+  // swapping it for `fixed` would pass every other assertion here and hide the
+  // control that charges behind the total.
+  expect(controlBox!.y + controlBox!.height).toBeLessThanOrEqual(summaryBox!.y + 1)
 })
 
 test('checkout step 1 reports a bad field with a suggestion', async ({ page }) => {

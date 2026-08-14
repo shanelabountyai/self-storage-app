@@ -1,5 +1,5 @@
 import { AdminForm, Field } from '@/components/admin/form'
-import { signLeaseAction } from '@/app/(public)/checkout/actions'
+import { advanceAction, signLeaseAction } from '@/app/(public)/checkout/actions'
 import { ELECTRONIC_RECORDS_CONSENT } from '@/lib/lease/template'
 
 // PRD 01 US-501 step 4 / FR-4.2.
@@ -20,11 +20,18 @@ export function LeaseStep({
   summaryHtml,
   leaseHtml,
   legalName,
+  signedOn,
 }: {
   token: string
   summaryHtml: string
   leaseHtml: string
   legalName: string
+  /// B-111. Set when this lease has already been signed and the renter has come
+  /// BACK to the step — which back navigation makes an ordinary thing to do.
+  /// Without it the step offers a signature control that `signDocument` refuses
+  /// as `already_signed`, so the renter is told their own lease cannot be
+  /// signed and has no way forward at all.
+  signedOn?: string
 }) {
   return (
     <div className="mt-4">
@@ -50,6 +57,25 @@ export function LeaseStep({
         />
       </section>
 
+      {signedOn ? (
+        <AdminForm action={advanceAction} label="Continue from your signed lease" className="mt-8">
+          <input type="hidden" name="token" value={token} />
+          <input type="hidden" name="from" value="lease" />
+
+          <h2 className="text-xl font-medium">Signed</h2>
+          <p className="mt-2 text-pretty">
+            You signed this agreement on <strong>{signedOn}</strong> as {legalName}. Signing again
+            is not needed and would not change it — a signed lease is fixed, which is the point of
+            signing one.
+          </p>
+          <button
+            type="submit"
+            className="bg-primary text-primary-foreground mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-md px-4 text-base font-medium sm:w-auto"
+          >
+            Continue to payment
+          </button>
+        </AdminForm>
+      ) : (
       <AdminForm action={signLeaseAction} label="Sign the lease" className="mt-8">
         <input type="hidden" name="token" value={token} />
 
@@ -90,6 +116,7 @@ export function LeaseStep({
           the next step.
         </p>
       </AdminForm>
+      )}
     </div>
   )
 }

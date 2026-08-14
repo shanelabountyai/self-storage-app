@@ -15,11 +15,19 @@ export function ProtectionStep({
   plans,
   defaultTier,
   required,
+  waiver,
 }: {
   token: string
   plans: readonly PlanOption[]
+  /// B-111: the renter's own earlier choice when they have come back to this
+  /// step, and only otherwise the recommended tier. §6.4's "going forward
+  /// re-asks nothing" — a renter who came back to fix their email must not find
+  /// their protection choice quietly reset to ours on the way past.
   defaultTier: string | null
   required: boolean
+  /// Their own-cover details, if they gave them. Read from the stored waiver
+  /// rather than the session, because that is where `recordWaiver` put them.
+  waiver?: { carrier: string; policyNumber: string; expiresAt: string } | null
 }) {
   return (
     <AdminForm action={submitProtectionAction} label="Protect what you store" className="mt-4">
@@ -65,7 +73,13 @@ export function ProtectionStep({
           ))}
 
           <label className="border-input flex min-h-11 cursor-pointer items-start gap-3 rounded-lg border p-3">
-            <input type="radio" name="tier" value="__waiver__" className="mt-1" />
+            <input
+              type="radio"
+              name="tier"
+              value="__waiver__"
+              defaultChecked={defaultTier === '__waiver__'}
+              className="mt-1"
+            />
             <span>
               <span className="font-medium">I have my own cover</span>
               <span className="text-muted-foreground block text-sm">
@@ -83,12 +97,23 @@ export function ProtectionStep({
       <fieldset className="border-input mt-4 rounded-lg border p-3">
         <legend className="px-1 text-sm font-medium">If you are using your own cover</legend>
         <div className="mt-2 grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field name="carrier" label="Insurer" autoComplete="off" />
-          <Field name="policyNumber" label="Policy number" autoComplete="off" />
+          <Field
+            name="carrier"
+            label="Insurer"
+            autoComplete="off"
+            defaultValue={waiver?.carrier ?? ''}
+          />
+          <Field
+            name="policyNumber"
+            label="Policy number"
+            autoComplete="off"
+            defaultValue={waiver?.policyNumber ?? ''}
+          />
           <Field
             name="expiresAt"
             label="Policy runs out"
             type="date"
+            defaultValue={waiver?.expiresAt ?? ''}
             className="flex flex-col gap-1 text-sm sm:col-span-2"
             hint="We will remind you before it runs out."
           />

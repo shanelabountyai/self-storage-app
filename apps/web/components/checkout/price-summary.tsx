@@ -48,10 +48,15 @@ export function PriceSummary({
   return (
     <aside
       aria-labelledby="summary-heading"
-      // Sticky at the bottom on mobile (§6.4 "collapsible on mobile"), in the
-      // normal flow on wider screens. A <details> rather than a JS disclosure
-      // so it works with the bundle disabled, like the rest of the public path.
-      className="border-input bg-background sticky bottom-0 z-10 rounded-lg border p-4 sm:static"
+      // Sticky at the bottom on EVERY viewport. It used to drop to `static`
+      // above `sm`, which on a single-column page resolves to "the last element
+      // on the page" — so the desktop reading of §6.4's persistent summary was
+      // a total the renter had to scroll to, on the steps where it moves most.
+      // `sticky` keeps the element in flow, so it reserves its own space and
+      // never covers the content below it; a <details> rather than a JS
+      // disclosure so it works with the bundle disabled, like the rest of the
+      // public path.
+      className="border-input bg-background sticky bottom-0 z-10 rounded-lg border p-4"
     >
       <h2 id="summary-heading" className="sr-only">
         What you are paying
@@ -95,8 +100,11 @@ export function PriceSummary({
 
       {/* 4.1.3: rendered unconditionally and empty, so a total changing between
           steps is a mutation the screen reader announces rather than a node
-          inserted already populated. */}
-      <p role="status" className="mt-2 text-sm font-medium empty:hidden">
+          inserted already populated. `empty:mt-0` and NOT `empty:hidden` —
+          `display:none` would pull it out of the accessibility tree until it
+          had text, which is the very thing this comment claims it does not do
+          (see the note in `gate-code-panel.tsx`). */}
+      <p role="status" className="mt-2 text-sm font-medium empty:mt-0">
         {changeNote ?? ''}
       </p>
     </aside>

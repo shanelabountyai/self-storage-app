@@ -10,6 +10,13 @@ import {
 // token (1.3.5 Identify Input Purpose) and a keyboard that matches the data
 // (§6.2).
 //
+// B-111: EVERY field carries its `defaultValue`, not just the four that did.
+// The address block had none, so back navigation — which this item is what
+// makes possible — returned a renter to a step with their street, city, state
+// and zip wiped, and Continue then refused the empty form. "Back navigation
+// never loses data" (§6.4) is not a property of the machine alone; a field that
+// does not render what the session holds loses it just as thoroughly.
+//
 // No address-autocomplete API. D-14 settled that this product carries no
 // geocoding vendor and narrowed the open question to map rendering and address
 // autocomplete; both still want a billed key. The browser's own autofill does
@@ -86,6 +93,7 @@ export function DetailsStep({
         name="addressLine1"
         label="Street address"
         autoComplete="address-line1"
+        defaultValue={prefill.addressLine1 ?? ''}
         required
         className="flex flex-col gap-1 text-sm sm:col-span-2"
       />
@@ -93,14 +101,22 @@ export function DetailsStep({
         name="addressLine2"
         label="Flat, suite or unit (optional)"
         autoComplete="address-line2"
+        defaultValue={prefill.addressLine2 ?? ''}
         className="flex flex-col gap-1 text-sm sm:col-span-2"
       />
-      <Field name="city" label="City" autoComplete="address-level2" required />
+      <Field
+        name="city"
+        label="City"
+        autoComplete="address-level2"
+        defaultValue={prefill.city ?? ''}
+        required
+      />
       <Field
         name="state"
         label="State"
         autoComplete="address-level1"
         maxLength={2}
+        defaultValue={prefill.state ?? ''}
         required
         hint="Two-letter code, for example TX."
       />
@@ -111,6 +127,7 @@ export function DetailsStep({
         // takes digits.
         inputMode="numeric"
         autoComplete="postal-code"
+        defaultValue={prefill.postalCode ?? ''}
         required
       />
 
@@ -120,15 +137,32 @@ export function DetailsStep({
           Someone we can reach if we cannot reach you. This does not give them access to your unit.
         </p>
         <div className="mt-2 grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field name="altContactName" label="Name" autoComplete="off" />
-          <Field name="altContactPhone" label="Phone" type="tel" inputMode="tel" autoComplete="off" />
+          <Field
+            name="altContactName"
+            label="Name"
+            autoComplete="off"
+            defaultValue={prefill.altContactName ?? ''}
+          />
+          <Field
+            name="altContactPhone"
+            label="Phone"
+            type="tel"
+            inputMode="tel"
+            autoComplete="off"
+            defaultValue={prefill.altContactPhone ?? ''}
+          />
         </div>
       </fieldset>
 
       <fieldset className="text-sm sm:col-span-2">
         <legend className="font-medium">Military service</legend>
         <label className="mt-2 inline-flex min-h-11 items-center gap-2">
-          <input type="checkbox" name="activeDutyMilitary" value="yes" />
+          <input
+            type="checkbox"
+            name="activeDutyMilitary"
+            value="yes"
+            defaultChecked={prefill.activeDutyMilitary ?? false}
+          />
           I am on active duty in the US armed forces
         </label>
         {/* Self-declared, and it earns real protections — saying why beats an

@@ -226,7 +226,16 @@ export async function advance(
     // a forged request. Either way the server's step is the truth.
     if (session.step !== from) return { ok: false as const, reason: 'out_of_order' as const }
 
-    const merged = { ...((session.data ?? {}) as Record<string, unknown>), ...data }
+    const merged = {
+      ...((session.data ?? {}) as Record<string, unknown>),
+      ...data,
+      // §6.4's "a total that moves has to say why", with the emphasis on the
+      // "next step" half: written here rather than by each caller so it is
+      // CLEARED by every transition that does not set one. A note left standing
+      // is worse than none — it attributes the current total to a change two
+      // steps ago.
+      changeNote: typeof data.changeNote === 'string' ? data.changeNote : null,
+    }
     const target = nextStep(session.step as Step)
 
     const updated = await tx.checkoutSession.update({
@@ -239,6 +248,64 @@ export async function advance(
         lockExpiresAt: lockUntil(),
         ...(typeof data.email === 'string' ? { email: data.email } : {}),
         ...(target === 'provisioned' ? { status: 'completed' as const } : {}),
+      },
+    })
+
+    return { ok: true as const, session: toView(updated) }
+  })
+}
+
+export type GoBackResult =
+  | { ok: true; session: CheckoutSessionView }
+  | { ok: false; reason: 'not_found' | 'paid' | 'not_active' | 'lock_lapsed' | 'not_yet_reached' }
+
+/// §6.4's "back navigation never loses data", finally given a mover.
+///
+/// `canEnter` has said since B-020 that "the renter may always go back to a
+/// step they have already completed" and nothing rendered a control, so a
+/// renter who mistyped the email that receives the lease, the receipt and the
+/// gate code found out at step 4 and could only abandon.
+///
+/// Going back is activity, so it renews the lock for the same reason advancing
+/// does — someone correcting an answer is not someone who has wandered off.
+/// Nothing is unwound: the data stays, the signed lease stays signed, the unit
+/// stays held. Only the step moves.
+///
+/// Refused once the session is no longer `active`, which is the state
+/// `provisionMoveIn` commits in the same transaction as the lease and the
+/// ledger. That is the server-side half of "Back is refused once payment has
+/// succeeded"; the payment step also hides the control the moment its own
+/// `Payment` row leaves `pending`, because a bank debit that is `processing`
+/// has not succeeded and must not be walked away from either.
+export async function goBack(token: string, to: Step): Promise<GoBackResult> {
+  return prisma.$transaction(async (tx) => {
+    const session = await tx.checkoutSession.findUnique({
+      where: { tokenHash: hashSessionToken(token) },
+    })
+    if (!session) return { ok: false as const, reason: 'not_found' as const }
+    if (session.status === 'completed') return { ok: false as const, reason: 'paid' as const }
+    if (session.status !== 'active') return { ok: false as const, reason: 'not_active' as const }
+    if (session.lockExpiresAt.getTime() <= Date.now()) {
+      return { ok: false as const, reason: 'lock_lapsed' as const }
+    }
+    // Forward is `advance`'s job and has validation attached to it. This moves
+    // one way only, and a request to "go back" to a step ahead is a forged one.
+    const current = session.step as Step
+    if (to === current || !canEnter(current, to)) {
+      return { ok: false as const, reason: 'not_yet_reached' as const }
+    }
+
+    const updated = await tx.checkoutSession.update({
+      where: { id: session.id },
+      data: {
+        step: to,
+        // Same reason `advance` clears it: the note explains the last thing
+        // that moved a total, and going back is not that.
+        data: {
+          ...((session.data ?? {}) as Record<string, unknown>),
+          changeNote: null,
+        } as Prisma.InputJsonValue,
+        lockExpiresAt: lockUntil(),
       },
     })
 

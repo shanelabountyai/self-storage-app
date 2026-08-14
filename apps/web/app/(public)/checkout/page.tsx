@@ -3,13 +3,14 @@ import { AdminForm } from '@/components/admin/form'
 import { PriceSummary } from '@/components/checkout/price-summary'
 import { CheckoutAnnouncer } from '@/components/checkout/announcer'
 import { LockWarning } from '@/components/checkout/lock-warning'
-import { stepAnnouncement, Stepper } from '@/components/checkout/stepper'
+import { BackControl } from '@/components/checkout/back-control'
+import { labelForStep, stepAnnouncement, Stepper } from '@/components/checkout/stepper'
 import { SITE } from '@/lib/site-config'
 import { prisma } from '@storage/db'
 import { billingDayFor } from '@storage/core/billing'
 import { businessDateFor } from '@storage/core/jobs'
 import { publicInventoryForFacility } from '@/lib/inventory/public-inventory'
-import { LOCK_WARNING_MINUTES, sessionByToken } from '@/lib/checkout/session'
+import { LOCK_WARNING_MINUTES, STEPS, sessionByToken } from '@/lib/checkout/session'
 import { prefillFromReservation } from '@/lib/checkout/details'
 import { DetailsStep } from '@/components/checkout/details-step'
 import { UnitStep } from '@/components/checkout/unit-step'
@@ -119,6 +120,18 @@ export default async function CheckoutPage({
   const prefill = await prefillFromReservation(reservation?.reservationId ?? null)
 
   const plans = session.step === 'insurance' ? await currentPlans(session.facilityId) : []
+  // B-111: what they chose last time, if they have been here before. Back
+  // navigation makes returning to a completed step ordinary, and §6.4's "going
+  // forward re-asks nothing" means their answer, not our recommendation.
+  const chosenProtection =
+    typeof session.data.protection === 'string' ? session.data.protection : null
+  const priorWaiver =
+    session.step === 'insurance' && chosenProtection === 'waiver'
+      ? await prisma.protectionWaiver.findUnique({
+          where: { checkoutSessionId: session.id },
+          select: { carrier: true, policyNumber: true, expiresAt: true },
+        })
+      : null
   const facilityPolicy = await prisma.facility.findUnique({
     where: { id: session.facilityId },
     select: { protectionRequired: true, billingPolicy: true, timezone: true },
@@ -126,11 +139,20 @@ export default async function CheckoutPage({
 
   // The lease is built once and reused. Re-rendering on every page view would
   // move the hash under a signer part-way through the step.
-  let lease: { summaryHtml: string; leaseHtml: string } | null = null
+  let lease: { summaryHtml: string; leaseHtml: string; signedOn?: string } | null = null
   if (session.step === 'lease') {
     const existing = await existingLeaseDocument(session.id)
     if (existing?.content) {
       lease = {
+        // B-111: set only when the renter has come BACK to a lease they already
+        // signed. `signDocument` refuses a second signature, so without this
+        // the step would offer a control that can only fail.
+        signedOn: existing.signature
+          ? new Intl.DateTimeFormat('en-US', {
+              dateStyle: 'long',
+              timeZone: facilityPolicy?.timezone ?? 'UTC',
+            }).format(existing.signature.signedAt)
+          : undefined,
         // The stored document is a complete HTML document; only its body can be
         // embedded in this page, and `bodyOf` drops the document's own <h1> so
         // a resumed lease step has the same heading outline as a first visit.
@@ -161,6 +183,19 @@ export default async function CheckoutPage({
 
   const remaining = minutesLeft(session.lockExpiresAt)
 
+  // §6.4's back control. Present on every step the renter can leave: not on the
+  // first (there is nothing behind it), not on the confirmation (the move-in is
+  // done), and withdrawn on the payment step once the charge has left `pending`
+  // — at which point "nothing has been charged yet" would be a lie and `goBack`
+  // would refuse anyway.
+  const stepIndex = STEPS.indexOf(session.step)
+  const previousStep = stepIndex > 0 ? STEPS[stepIndex - 1] : null
+  const canGoBack =
+    previousStep !== null &&
+    session.step !== 'provisioned' &&
+    !session.lockLapsed &&
+    !(session.step === 'payment' && payment?.available && payment.settling)
+
   return (
     <div className="mx-auto w-full max-w-2xl px-4 py-12">
       <h1 className="text-3xl font-semibold tracking-tight text-balance">Move in online</h1>
@@ -175,7 +210,7 @@ export default async function CheckoutPage({
       />
 
       <div className="mt-6">
-        <Stepper current={session.step} />
+        <Stepper current={session.step} token={token} />
       </div>
 
       {/* FR-4.1's unit-lost fallback. The renter keeps every answer they have
@@ -257,8 +292,22 @@ export default async function CheckoutPage({
             <ProtectionStep
               token={token!}
               plans={plans}
-              defaultTier={defaultTier(plans)}
+              defaultTier={
+                chosenProtection === 'waiver'
+                  ? '__waiver__'
+                  : (chosenProtection ?? defaultTier(plans))
+              }
               required={facilityPolicy?.protectionRequired ?? true}
+              waiver={
+                priorWaiver && {
+                  // Nullable on the model — a waiver can also be raised by
+                  // staff from a document with the details still to come.
+                  carrier: priorWaiver.carrier ?? '',
+                  policyNumber: priorWaiver.policyNumber ?? '',
+                  // `<input type="date">` takes yyyy-mm-dd and nothing else.
+                  expiresAt: priorWaiver.expiresAt?.toISOString().slice(0, 10) ?? '',
+                }
+              }
             />
           )}
 
@@ -267,6 +316,7 @@ export default async function CheckoutPage({
               token={token!}
               summaryHtml={lease.summaryHtml}
               leaseHtml={lease.leaseHtml}
+              signedOn={lease.signedOn}
               legalName={`${(session.data as Record<string, string>).firstName ?? ''} ${
                 (session.data as Record<string, string>).lastName ?? ''
               }`.trim()}
@@ -364,6 +414,24 @@ export default async function CheckoutPage({
               </button>
             </AdminForm>
           )}
+
+          {/* §6.4. Below Continue, same height, next in the tab order. Inside
+              the step section on purpose: it unmounts with the step, so its
+              success message never competes with the announcer above — only a
+              REFUSAL renders here, and a refusal is exactly what the renter
+              needs to see in place. */}
+          {canGoBack && previousStep && (
+            <BackControl
+              token={token!}
+              to={previousStep}
+              label={`Back to ${labelForStep(previousStep).toLowerCase()}`}
+              note={
+                session.step === 'payment'
+                  ? 'Nothing has been charged yet. Your unit stays held while you go back.'
+                  : undefined
+              }
+            />
+          )}
         </section>
       )}
 
@@ -381,6 +449,14 @@ export default async function CheckoutPage({
             streetRateCents={unitType.streetRateCents}
             adminFeeCents={inventory!.pricing.adminFeeCents}
             taxRates={inventory!.pricing.taxRates}
+            // §6.4: the prop has existed since B-020 and was passed by nobody,
+            // which is why choosing a $12/mo protection tier moved both totals
+            // with no stated cause one screen before the card form. `advance`
+            // writes it and clears it, so it always describes the step just
+            // taken and never the one before that.
+            changeNote={
+              typeof session.data.changeNote === 'string' ? session.data.changeNote : undefined
+            }
           />
         </div>
       )}

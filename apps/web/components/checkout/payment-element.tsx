@@ -86,7 +86,7 @@ function PaymentForm({ returnUrl }: { returnUrl: string }) {
         ref={errorRef}
         tabIndex={-1}
         role="alert"
-        className="text-sm font-medium text-red-700 empty:hidden"
+        className="text-sm font-medium text-red-700"
       >
         {error ?? ''}
       </p>
@@ -96,7 +96,7 @@ function PaymentForm({ returnUrl }: { returnUrl: string }) {
           reader nothing — the name of a control the user has just left is not
           re-read. Confirming a card can take several seconds, and silence for
           several seconds after paying reads as "it didn't work". */}
-      <p role="status" className="text-muted-foreground mt-2 text-sm empty:hidden">
+      <p role="status" className="text-muted-foreground mt-2 text-sm empty:mt-0">
         {submitting ? 'Taking payment. This can take a few seconds.' : ''}
       </p>
 

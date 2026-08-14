@@ -4,6 +4,7 @@ import { prisma } from '../packages/db'
 import {
   advance,
   canEnter,
+  goBack,
   expireCheckoutSessions,
   extendLock,
   hashSessionToken,
@@ -387,4 +388,121 @@ describeDb('checkout session', () => {
       ).toBe(1)
     })
   })
+
+  describe('going back (B-111)', () => {
+    it('moves to a completed step and keeps every answer', async () => {
+      const started = await start()
+      if (!started.ok) throw new Error('unreachable')
+
+      await advance(started.token, 'details', { firstName: 'Ada', email: 'ada@example.com' })
+      await advance(started.token, 'unit_assign', {})
+      await advance(started.token, 'insurance', { protection: 'standard' })
+
+      const back = await goBack(started.token, 'details')
+      expect(back).toMatchObject({ ok: true })
+      if (!back.ok) throw new Error('unreachable')
+
+      // §6.4: "back navigation never loses data". Nothing is unwound — only
+      // the step moves, which is what lets the renter walk forward again
+      // without being re-asked anything.
+      expect(back.session.step).toBe('details')
+      expect(back.session.data).toMatchObject({
+        firstName: 'Ada',
+        email: 'ada@example.com',
+        protection: 'standard',
+      })
+    })
+
+    it('refuses a step the renter has not reached, and refuses standing still', async () => {
+      const started = await start()
+      if (!started.ok) throw new Error('unreachable')
+
+      // Forward is `advance`'s job, and it has validation attached to it. A
+      // post asking to "go back" to step 5 is a forged one.
+      expect(await goBack(started.token, 'payment')).toMatchObject({
+        ok: false,
+        reason: 'not_yet_reached',
+      })
+      expect(await goBack(started.token, 'details')).toMatchObject({
+        ok: false,
+        reason: 'not_yet_reached',
+      })
+    })
+
+    it('refuses once the move-in has completed', async () => {
+      const started = await start()
+      if (!started.ok) throw new Error('unreachable')
+      for (const step of ['details', 'unit_assign', 'insurance', 'lease', 'payment'] as const) {
+        await advance(started.token, step, {})
+      }
+
+      // `advance` into `provisioned` closes the session, which is the same
+      // state `provisionMoveIn` commits alongside the lease and the ledger.
+      // Money has moved; there is nothing to go back to.
+      expect(await goBack(started.token, 'lease')).toMatchObject({ ok: false, reason: 'paid' })
+    })
+
+    it('refuses once the hold has lapsed', async () => {
+      const started = await start()
+      if (!started.ok) throw new Error('unreachable')
+      await advance(started.token, 'details', {})
+      await prisma.checkoutSession.update({
+        where: { id: started.sessionId },
+        data: { lockExpiresAt: new Date(Date.now() - 1000) },
+      })
+
+      // The unit may already be someone else's. The renter gets the unit-lost
+      // fallback, not a walk back through steps for a unit we cannot give them.
+      expect(await goBack(started.token, 'details')).toMatchObject({
+        ok: false,
+        reason: 'lock_lapsed',
+      })
+    })
+
+    it('renews the hold, because correcting an answer is activity', async () => {
+      const started = await start()
+      if (!started.ok) throw new Error('unreachable')
+      await advance(started.token, 'details', {})
+      await prisma.checkoutSession.update({
+        where: { id: started.sessionId },
+        data: { lockExpiresAt: new Date(Date.now() + 60_000) },
+      })
+
+      const back = await goBack(started.token, 'details')
+      if (!back.ok) throw new Error('unreachable')
+      expect(back.session.lockExpiresAt.getTime()).toBeGreaterThan(
+        Date.now() + (LOCK_MINUTES - 1) * 60_000,
+      )
+    })
+  })
+
+  describe('the price summary change note (B-111)', () => {
+    it('is written by the step that moved a total and cleared by the next one', async () => {
+      const started = await start()
+      if (!started.ok) throw new Error('unreachable')
+
+      await advance(started.token, 'details', {})
+      await advance(started.token, 'unit_assign', { changeNote: 'Protection plan added.' })
+      expect((await sessionByToken(started.token))?.data.changeNote).toBe(
+        'Protection plan added.',
+      )
+
+      // The half that matters: a note left standing attributes the current
+      // total to a change two steps ago, which is worse than no note at all.
+      await advance(started.token, 'insurance', {})
+      expect((await sessionByToken(started.token))?.data.changeNote).toBeNull()
+    })
+
+    it('is cleared by going back', async () => {
+      const started = await start()
+      if (!started.ok) throw new Error('unreachable')
+      await advance(started.token, 'details', {})
+      await advance(started.token, 'unit_assign', { changeNote: 'Protection plan added.' })
+
+      const back = await goBack(started.token, 'details')
+      if (!back.ok) throw new Error('unreachable')
+      expect(back.session.data.changeNote).toBeNull()
+    })
+  })
+
 })

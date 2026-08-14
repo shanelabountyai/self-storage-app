@@ -1,7 +1,14 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { advance, extendLock, relock, sendCheckoutResumeLink, type Step } from '@/lib/checkout/session'
+import {
+  advance,
+  extendLock,
+  goBack,
+  relock,
+  sendCheckoutResumeLink,
+  type Step,
+} from '@/lib/checkout/session'
 import {
   MARKETING_EMAIL_CHECKOUT_DISCLOSURE_VERSION,
   SMS_CONSENT_DISCLOSURE_VERSION,
@@ -156,6 +163,16 @@ export async function submitProtectionAction(
   const result = await advance(token, 'insurance', {
     protection: choice.kind === 'waiver' ? 'waiver' : choice.tier,
     protectionPremiumCents: premiumCents,
+    // §6.4: this is the one step that moves both totals, and until B-111 the
+    // cause was returned as a form message into a component `revalidatePath`
+    // unmounts — so a renter chose a $12/mo tier, watched two numbers change,
+    // and was given no reason, one screen before the card form. Carried on the
+    // session instead, where the price summary can render it and `advance`
+    // clears it on the next step.
+    changeNote:
+      premiumCents > 0
+        ? `Protection plan added — ${(premiumCents / 100).toFixed(2)} dollars a month.`
+        : 'Your own cover recorded — no protection charge added.',
   })
   if (!result.ok) {
     return {
@@ -312,6 +329,38 @@ export async function advanceAction(_prev: FormState, formData: FormData): Promi
 
   revalidatePath('/checkout')
   return { status: 'success', message: `Moved on to ${result.session.step.replace('_', ' ')}.` }
+}
+
+/// §6.4's back navigation. One action for both the Back control beside Continue
+/// and the completed steps in the progress indicator, so there is one set of
+/// rules about what may be gone back to rather than two that can disagree.
+export async function goBackAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const token = String(formData.get('token') ?? '')
+  const to = String(formData.get('to') ?? '') as Step
+
+  const result = await goBack(token, to)
+  if (!result.ok) {
+    return {
+      status: 'error',
+      message:
+        result.reason === 'paid'
+          ? 'Your payment has gone through and your unit is yours, so there is nothing to go back to. Reload the page to see your gate code.'
+          : result.reason === 'lock_lapsed'
+            ? 'The 30 minutes we were holding your unit ran out. Nothing has been charged — see below for what we can do.'
+            : result.reason === 'not_yet_reached'
+              ? 'You have not got that far yet. Carry on from where you are.'
+              : 'We could not go back to that step. Reload the page and try again.',
+      fieldErrors: {},
+    }
+  }
+
+  revalidatePath('/checkout')
+  // Deliberately empty. This is the one transition whose form SURVIVES it — the
+  // progress indicator does not unmount when the step below it changes — so a
+  // message here would be a second live region announcing the same move as
+  // `CheckoutAnnouncer`, half a second apart. The announcer owns it; the empty
+  // string keeps `AdminForm`'s region present and silent.
+  return { status: 'success', message: '' }
 }
 
 /// 2.2.1's extension. Deliberately a control the renter can activate, not just

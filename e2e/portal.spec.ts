@@ -168,7 +168,15 @@ test.describe('signed in as the demo tenant', () => {
     await page.getByLabel('ZIP code').fill('78704')
     await page.getByRole('button', { name: 'Save address' }).click()
 
-    await expect(page.getByRole('main').getByRole('status').first()).toContainText('address is updated')
+    // Scoped to the form that saved, not to the first status region on the
+    // page. B-111 stopped `AdminForm` hiding its live region while empty
+    // (`display:none` had been taking it out of the accessibility tree until
+    // the moment it had text, which is the failure the region exists to
+    // avoid), so this screen now correctly exposes three of them and `.first()`
+    // is whichever comes first in the DOM rather than whichever just spoke.
+    await expect(
+      page.getByRole('form', { name: 'Mailing address' }).getByRole('status'),
+    ).toContainText('address is updated')
     await expect(page.getByText('Previous addresses')).toBeVisible()
   })
 
@@ -179,9 +187,9 @@ test.describe('signed in as the demo tenant', () => {
     await page.getByLabel('New email address').fill(`changed-${Date.now()}@example.com`)
     await page.getByRole('button', { name: 'Send confirmation link' }).click()
 
-    await expect(page.getByRole('main').getByRole('status').first()).toContainText(
-      'Nothing changes until you open it',
-    )
+    await expect(
+      page.getByRole('form', { name: 'Change email address' }).getByRole('status'),
+    ).toContainText('Nothing changes until you open it')
     // Still the old address on the account.
     await expect(page.getByText(/Your email is/)).toHaveText(before!)
   })

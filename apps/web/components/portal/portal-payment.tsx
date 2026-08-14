@@ -89,7 +89,7 @@ function PayForm({ returnUrl, amountLabel }: { returnUrl: string; amountLabel: s
       {/* Also pre-mounted and empty. A button whose LABEL changes to "Taking
           payment…" is not re-read to a screen reader, so paying was several
           seconds of silence — which reads as "it didn't work". */}
-      <p role="status" className="text-muted-foreground mt-2 text-sm empty:hidden">
+      <p role="status" className="text-muted-foreground mt-2 text-sm empty:mt-0">
         {submitting ? 'Taking payment. This can take a few seconds.' : ''}
       </p>
 

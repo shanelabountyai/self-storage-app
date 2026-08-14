@@ -59,7 +59,22 @@ export async function amountDueToday(session: CheckoutSessionView): Promise<Amou
 
 export type PaymentSetup =
   | { available: false }
-  | { available: true; clientSecret: string; paymentId: string; totalDueTodayCents: number }
+  | {
+      available: true
+      clientSecret: string
+      paymentId: string
+      totalDueTodayCents: number
+      /// B-111. Whether this charge has left `pending`.
+      ///
+      /// It is what withdraws the Back control on the payment step. The
+      /// session's own `status` is the server-side refusal and it is the right
+      /// one — `provisionMoveIn` sets it in the same transaction as the lease
+      /// and the ledger — but it flips when the WEBHOOK lands, and a renter
+      /// whose card has just cleared is looking at the screen before that. A
+      /// bank debit counts too: B-103's ACH sits in `processing` for days, and
+      /// "nothing has been charged yet" is false the moment it is initiated.
+      settling: boolean
+    }
 
 /// Creates the PaymentIntent for this checkout.
 ///
@@ -91,11 +106,17 @@ export async function preparePayment(session: CheckoutSessionView): Promise<Paym
     surface: 'checkout',
   })
 
+  const row = await prisma.payment.findUnique({
+    where: { id: intent.paymentId },
+    select: { status: true },
+  })
+
   return {
     available: true,
     clientSecret: intent.clientSecret,
     paymentId: intent.paymentId,
     totalDueTodayCents: due.totalDueTodayCents,
+    settling: row?.status === 'succeeded' || row?.status === 'processing',
   }
 }
 

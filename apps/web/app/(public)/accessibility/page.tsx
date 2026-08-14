@@ -55,6 +55,16 @@ const LAST_REVIEWED = '14 August 2026'
 // error now carries it on the control — the rest cannot be wrong, which is why
 // that bullet went rather than being narrowed. What is left of the hold
 // countdown is the no-JavaScript case, and it is stated as exactly that.
+//
+// B-111 made one claim above TRUE that had been overstated since B-094. "A
+// successful save is announced too" rested on `AdminForm` rendering its live
+// region before the event it reports — which it did, styled `empty:hidden`,
+// which is `display:none`, which kept it out of the accessibility tree until
+// the instant it had text. That is the same "region that appears with the
+// event" failure the region exists to avoid, and it applied to every form in
+// the product. `gate-code-panel.tsx` had diagnosed it in B-105 and named the
+// file; nothing changed it until now. The sentence stays because it is now
+// accurate, not because it always was.
 export default function AccessibilityPage() {
   return (
     <ProsePage

@@ -35,8 +35,17 @@ export function AdminForm({ action, children, className, label }: AdminFormProps
         {/* Rendered unconditionally and empty, then written into. A live region
             inserted into the DOM already populated is unreliably announced by
             VoiceOver and routinely missed by NVDA — the region has to pre-exist
-            the event it reports (FR-20). */}
-        <p role="status" className="col-span-full text-sm font-medium text-green-700 empty:hidden">
+            the event it reports (FR-20).
+
+            It carried `empty:hidden` until B-111, which is `display:none`, which
+            takes the element out of the accessibility tree right up until the
+            moment it has text — the same "region that appears with the event"
+            failure, moved from "not in the DOM" to "in the DOM but not exposed",
+            and defeating the sentence above it in every form in the product.
+            `gate-code-panel.tsx` diagnosed this in B-105 and named this file;
+            nothing changed it. An empty <p> has no visible footprint, so the
+            class bought nothing. */}
+        <p role="status" className="col-span-full text-sm font-medium text-green-700">
           {state.status === 'success' ? state.message : ''}
         </p>
 
