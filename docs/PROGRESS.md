@@ -3513,7 +3513,7 @@ waiting for a storage vendor since B-023. This closes it.
 
 ## B-109 — Stale copy, dead references and enum identifiers on staff screens
 
-`<SHA>`
+`5a9b5d8`
 
 **Built:** the D-15 "no internal identifier renders" guard now scans `/admin` as well as the customer routes, and everything it found is fixed. A shared `packages/core/labels` turns unit, lease and lead statuses into words for every select, badge and chip. Bulk edit's Reason is a `<select>` of the audit reason catalogue with an optional free-text note beside it, and the layout importer got the same treatment. The homepage's size question now links to the size guide rather than the FAQ.
 
