@@ -10,7 +10,7 @@ export const metadata = metadataFor(
 /// credibility rests on the record, not the intention — an undated one is a
 /// claim about a codebase that has since moved. Update this when the claims are
 /// re-verified, not when the page is edited.
-const LAST_REVIEWED = '31 July 2026'
+const LAST_REVIEWED = '14 August 2026'
 
 // PRD 01 §6.8 requires a public accessibility statement. Unlike the legal pages
 // this describes our own conformance, so every sentence has to be true of the
@@ -27,6 +27,20 @@ const LAST_REVIEWED = '31 July 2026'
 // An overstated accessibility statement is the first document quoted in a demand
 // letter, and it converts a fixable bug into an alleged misrepresentation. When
 // in doubt, claim less.
+//
+// Re-verified 2026-08-14, and it had gone stale in BOTH directions in twelve
+// days — which is the lesson worth keeping. It disclaimed renting, paying and
+// account management as "not built yet" when all three had shipped, so the page
+// was publicly certifying that the money path had never been assessed. It
+// understated form errors, which B-094 had since built properly. And it still
+// claimed automated tests on "every page" plus recorded screen-reader passes,
+// when `/messaging-policy` is in no scan, the sign-in and account-security
+// pages are in none at all, checkout is scanned only in its "session not found"
+// state, and PROGRESS.md's own B-093 entry says in as many words that the
+// VoiceOver pass has never been run.
+//
+// This file is a claim about the codebase, so it goes stale on merges rather
+// than on edits. CLAUDE.md's end-of-item checklist now names it for that reason.
 export default function AccessibilityPage() {
   return (
     <ProsePage
@@ -56,6 +70,11 @@ export default function AccessibilityPage() {
             sideways scrolling.
           </li>
           <li>Form fields have real labels, not just placeholder text.</li>
+          <li>
+            When a form rejects something you typed, the message is tied to the field
+            itself, so a screen reader reads it out with that field rather than leaving you
+            to hunt for it. A successful save is announced too.
+          </li>
           <li>Animation respects your system&apos;s reduced-motion setting.</li>
           <li>
             Where we embed a map, the address and a directions link are given as text
@@ -66,39 +85,57 @@ export default function AccessibilityPage() {
 
       <Section heading="How we check">
         <p>
-          Automated accessibility tests run against every page of this public site on
-          every change, at both phone and desktop widths, and they block a release if they
-          fail. They also fail on checks the tool could not decide, so &ldquo;we did not
-          test that&rdquo; cannot quietly read as &ldquo;that passed&rdquo;.
+          Automated accessibility tests run on every change, at both phone and desktop
+          widths, and they block a release if they fail. They also fail on checks the tool
+          could not decide, so &ldquo;we did not test that&rdquo; cannot quietly read as
+          &ldquo;that passed&rdquo;.
+        </p>
+        <p>
+          They do not yet cover everything. As of {LAST_REVIEWED} our text-message policy
+          page, our sign-in and account-security pages, and the rental checkout in its
+          working state are all outside that run. We would rather name the gaps than let a
+          general claim cover them.
         </p>
         <p>
           Automated testing is a floor, not a ceiling — it catches roughly a third of real
           problems, and it cannot judge whether a screen reader says something that makes
-          sense. Manual keyboard and screen-reader passes are part of how we work, and we
-          record each one rather than trusting memory.
+          sense. We test by keyboard by hand. <strong>A full screen-reader pass has not
+          been carried out yet</strong>, so nothing on this page rests on one.
         </p>
       </Section>
 
       <Section heading="Where we fall short today">
         <p>
-          This site is under active construction, and several flows described in our plans
-          are not built yet. We would rather say so than claim conformance for pages that
-          do not exist. Specifically, as of {LAST_REVIEWED}:
+          This site is under active construction. These are the problems we know about, as
+          of {LAST_REVIEWED}. If one of them blocks you, tell us and we will help you
+          finish what you were doing by phone or email in the meantime.
         </p>
         <ul className="list-disc space-y-1 pl-5">
           <li>
-            Renting online, paying a bill, and managing your account are not built yet, so
-            no claim here covers them.
+            <strong>Renting online.</strong> Moving between steps does not move your place
+            on the page or say that the step changed, so a screen-reader user gets no
+            signal they have advanced. Saved checkouts you return to by email repeat the
+            page heading. The lease summary is announced by the wrong name.
           </li>
           <li>
-            Our staff-facing screens have known accessibility problems and are not yet in
-            the automated test run. They are being fixed next. No customer uses them, but
-            we are not going to describe them as done.
+            <strong>The 30-minute hold on a unit is not announced.</strong> The countdown
+            is shown when the page is drawn and never updates, so if you are reading the
+            lease when it runs out, the expiry is the first you hear of it.
           </li>
           <li>
-            Form errors are shown in text next to the field, but are not yet announced to
-            screen-reader users as they happen. That work lands with the first flow that
-            can produce one.
+            <strong>Paying.</strong> While a card is being confirmed the pay button becomes
+            unavailable, which loses your place on the page, and the wait is not announced.
+          </li>
+          <li>
+            <strong>Tick boxes and radio buttons</strong> — agreeing to the lease, choosing
+            a protection level, turning on autopay — do not carry their error on the
+            control itself, so moving between controls does not tell you which one is
+            wrong. The message is on screen next to it.
+          </li>
+          <li>
+            <strong>Our staff-facing screens</strong> have known problems. Three of them do
+            not reflow at 320px wide, and long lists are not paginated. No customer uses
+            them, but we are not going to describe them as done.
           </li>
           <li>
             The map we embed comes from OpenStreetMap and is not fully accessible. We
