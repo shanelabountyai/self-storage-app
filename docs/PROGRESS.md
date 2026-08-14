@@ -3531,7 +3531,7 @@ waiting for a storage vendor since B-023. This closes it.
 
 ## B-110 — Checkout dynamic state
 
-`PENDING`
+`9e7d6d6`
 
 **Built:** the checkout stepper now tells you when it has moved. A `CheckoutAnnouncer` sits above everything conditional on the page, holds the one live region, and is driven by the server's own props rather than by a form result — which is what makes it work at all, because `revalidatePath('/checkout')` unmounts the step on the same render that would have announced it. On a transition it writes the destination in the progress indicator's own words ("Your unit — step 2 of 6") and moves focus to `#step`, the heading that has carried `tabIndex={-1}` since B-020 and had never once been focused. The same component covers the two other transitions that had the identical bug: extending the hold and being re-locked onto another unit.
 
