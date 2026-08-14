@@ -3607,7 +3607,7 @@ The accessibility statement was re-read: nothing it claims changed.
 
 ## Defect fix — the advertised price and the charged price disagreed by the promotion
 
-`PENDING`
+`17566d1`
 
 **Not a backlog item.** Found while answering a question about what the promotions engine actually reaches, between B-112 and B-113, and fixed immediately because it was a live customer-facing money defect.
 
