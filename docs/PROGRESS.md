@@ -3633,7 +3633,7 @@ US-301 makes a disagreement between the browse estimate and the checkout total a
 
 ## B-113 — Admin dashboard drill-through and an "All facilities" that rolls up
 
-`PENDING`
+`b2f8b2d`
 
 **Built:** every dashboard tile links to the list behind it, and `href` is now a **required** prop rather than an optional one — a tile without a destination is a type error. Five of seven had none, including both of the two that mean somebody has to act: "Failed payments today: 3 · needs attention" with nowhere to go teaches the reader to skip the row, which is the exact failure that tile's own rewrite was meant to prevent.
 
