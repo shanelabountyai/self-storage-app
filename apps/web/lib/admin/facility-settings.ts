@@ -426,6 +426,20 @@ export type OperationsPolicyInput = {
   /// PRD 02 US-33 (B-078). How far a drawer may be out at close-out before
   /// the close demands a written explanation.
   drawerVarianceThresholdCents: number
+  // ── PRD 10 (B-100). Refer a friend. ──────────────────────────────────────
+  //
+  // Eight columns, eight controls, in the item that adds them. The PRD says so
+  // itself, citing this codebase's own rule — `billingPolicy`,
+  // `invoiceLeadDays` and the late-fee ladder all shipped reachable only from
+  // a database client and took two clean-up passes to close.
+  referralEnabled: boolean
+  referralRewardCents: number
+  refereeRewardCents: number
+  referralMinimumStayDays: number
+  referralAnnualCap: number
+  referralInviteExpiryDays: number
+  referralOpenInviteCap: number
+  referralCrossFacility: boolean
 }
 
 export async function updateOperationsPolicy(
@@ -448,6 +462,14 @@ export async function updateOperationsPolicy(
     abandonmentFollowUpHours: row.abandonmentFollowUpHours,
     rateIncreaseNoticeDays: row.rateIncreaseNoticeDays,
     drawerVarianceThresholdCents: row.drawerVarianceThresholdCents,
+    referralEnabled: row.referralEnabled,
+    referralRewardCents: row.referralRewardCents,
+    refereeRewardCents: row.refereeRewardCents,
+    referralMinimumStayDays: row.referralMinimumStayDays,
+    referralAnnualCap: row.referralAnnualCap,
+    referralInviteExpiryDays: row.referralInviteExpiryDays,
+    referralOpenInviteCap: row.referralOpenInviteCap,
+    referralCrossFacility: row.referralCrossFacility,
   })
 
   await recordAudit({

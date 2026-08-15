@@ -25,6 +25,7 @@
     "./marketing": "./marketing/index.ts",
     "./analytics": "./analytics/index.ts",
     "./promotions": "./promotions/index.ts",
+    "./referrals": "./referrals/index.ts",
     "./delinquency": "./delinquency/index.ts",
     "./notices": "./notices/index.ts",
     "./auctions": "./auctions/index.ts",

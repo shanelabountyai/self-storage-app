@@ -703,6 +703,55 @@ export async function updateOperationsPolicyAction(
     unit: 'dollars',
   })
 
+  // ── PRD 10 (B-100). Refer a friend. ────────────────────────────────────
+  //
+  // Both reward amounts are entered in dollars and stored in cents, like every
+  // other money field here. Capped at $500: the program pays TWICE per
+  // referral, so a mistyped 5000 is a $10,000 exposure per move-in, and the
+  // ceiling is the cheap version of finding that out on an invoice.
+  const referrerReward = parseScaled(formData.get('referralRewardDollars'), {
+    scale: 100,
+    min: 0,
+    max: 500,
+    unit: 'dollars',
+  })
+  const refereeReward = parseScaled(formData.get('refereeRewardDollars'), {
+    scale: 100,
+    min: 0,
+    max: 500,
+    unit: 'dollars',
+  })
+  // Minimum 1 on both caps. Zero would mean "the program is on but nothing can
+  // ever qualify", which is indistinguishable from a bug to whoever set it —
+  // turning the program OFF is the way to express that, and it has its own
+  // control.
+  const referralCap = parseScaled(formData.get('referralAnnualCap'), {
+    scale: 1,
+    min: 1,
+    max: 1_000,
+    unit: 'referrals',
+  })
+  const openInviteCap = parseScaled(formData.get('referralOpenInviteCap'), {
+    scale: 1,
+    min: 1,
+    max: 100,
+    unit: 'invites',
+  })
+  const inviteExpiry = parseScaled(formData.get('referralInviteExpiryDays'), {
+    scale: 1,
+    min: 1,
+    max: 365,
+    unit: 'days',
+  })
+  // Zero IS meaningful here, unlike the caps: it means no minimum stay, so a
+  // reward is never cancelled for an early move-out.
+  const minimumStay = parseScaled(formData.get('referralMinimumStayDays'), {
+    scale: 1,
+    min: 0,
+    max: 365,
+    unit: 'days',
+  })
+
   const errors: FieldErrors = {}
   if ('error' in accessCap) errors.authorizedAccessCap = accessCap.error
   if ('error' in cashApproval) errors.cashApprovalThresholdDollars = cashApproval.error
@@ -712,6 +761,12 @@ export async function updateOperationsPolicyAction(
   if ('error' in leadHours) errors.leadFollowUpHours = leadHours.error
   if ('error' in rateNoticeDays) errors.rateIncreaseNoticeDays = rateNoticeDays.error
   if ('error' in drawerVariance) errors.drawerVarianceThresholdDollars = drawerVariance.error
+  if ('error' in referrerReward) errors.referralRewardDollars = referrerReward.error
+  if ('error' in refereeReward) errors.refereeRewardDollars = refereeReward.error
+  if ('error' in referralCap) errors.referralAnnualCap = referralCap.error
+  if ('error' in openInviteCap) errors.referralOpenInviteCap = openInviteCap.error
+  if ('error' in inviteExpiry) errors.referralInviteExpiryDays = inviteExpiry.error
+  if ('error' in minimumStay) errors.referralMinimumStayDays = minimumStay.error
 
   // PRD 04 US-9 AC2 (B-073). "+1h, +24h, +72h (configurable)" — three
   // strictly-increasing hour offsets, same shape as the retry/dunning day
@@ -734,7 +789,13 @@ export async function updateOperationsPolicyAction(
     'error' in holdGraceDays ||
     'error' in leadHours ||
     'error' in rateNoticeDays ||
-    'error' in drawerVariance
+    'error' in drawerVariance ||
+    'error' in referrerReward ||
+    'error' in refereeReward ||
+    'error' in referralCap ||
+    'error' in openInviteCap ||
+    'error' in inviteExpiry ||
+    'error' in minimumStay
   ) {
     return fieldError(errors)
   }
@@ -750,6 +811,14 @@ export async function updateOperationsPolicyAction(
       abandonmentFollowUpHours: abandonmentHours,
       rateIncreaseNoticeDays: rateNoticeDays.value,
       drawerVarianceThresholdCents: drawerVariance.value,
+      referralEnabled: formData.get('referralEnabled') === 'yes',
+      referralCrossFacility: formData.get('referralCrossFacility') === 'yes',
+      referralRewardCents: referrerReward.value,
+      refereeRewardCents: refereeReward.value,
+      referralAnnualCap: referralCap.value,
+      referralOpenInviteCap: openInviteCap.value,
+      referralInviteExpiryDays: inviteExpiry.value,
+      referralMinimumStayDays: minimumStay.value,
     })
   } catch (error) {
     return asFormError(error, 'Could not save the operations policy.')

@@ -23,6 +23,12 @@ export const MARKETING_CHANNELS = [
   /// B-097's counter capture. Present so one vocabulary covers every lead.
   'phone',
   'walk_in',
+  /// PRD 10 FR-REF-3 (B-100). A tenant's own referral link, and deliberately
+  /// NOT `referral` above — that one means a link from another website, and
+  /// the two have completely different costs. One is free traffic somebody
+  /// else chose to send; this one is traffic the business pays $50 twice for.
+  /// The report exists to tell them apart, so the vocabulary has to.
+  'referral_tenant',
 ] as const
 
 export type MarketingChannel = (typeof MARKETING_CHANNELS)[number]
@@ -170,6 +176,18 @@ export function touchFrom(
 export const ATTRIBUTION_COOKIE_DAYS = 90
 export const FIRST_TOUCH_COOKIE = 'st_ft'
 export const LAST_TOUCH_COOKIE = 'st_lt'
+
+/// PRD 10 FR-REF-3 (B-100). The referral code a visitor arrived on, kept
+/// alongside the touch cookies and for the same 90 days.
+///
+/// Its OWN cookie rather than a field on the touch, and that is load-bearing:
+/// FR-REF-3 says "last-touch does not overwrite a referral. If somebody
+/// arrives on a tenant's link and later clicks an ad, the referral still
+/// pays." The touch cookie is rewritten on every new session by design, so
+/// storing the code in it would delete the tenant's claim the first time the
+/// friend clicked anything else — and the alternative teaches tenants the
+/// program does not work.
+export const REFERRAL_COOKIE = 'st_ref'
 
 /// What goes in the cookie. Short keys because a cookie is sent on every
 /// request to the site, and a landing page URL is already long.

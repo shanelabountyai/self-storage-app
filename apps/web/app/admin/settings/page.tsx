@@ -950,6 +950,77 @@ export default async function AdminSettingsPage() {
             defaultValue={facility.leadFollowUpHours}
             hint="Hours. A phone or walk-in inquiry with no disposition after this becomes a task on the morning sweep — US-43's “never silently ageing in new”."
           />
+          {/* PRD 10 (B-100). Refer a friend — eight columns, eight controls,
+              in the item that adds them. OFF by default: the program pays real
+              money on a rule set the attorney pass has not reviewed (§9), so
+              an operator turns it on knowingly rather than discovering it is
+              already running. */}
+          <Field
+            name="referralEnabled"
+            as="checkbox"
+            label="Run the refer-a-friend program at this facility"
+            defaultChecked={facility.referralEnabled}
+            hint="Off by default. Nothing is minted, attributed or paid while this is off."
+          />
+          <Field
+            name="referralRewardDollars"
+            label="Reward the referrer ($)"
+            type="text"
+            inputMode="decimal"
+            defaultValue={(facility.referralRewardCents / 100).toFixed(2)}
+            hint="Comes off their next invoice after the referral qualifies."
+          />
+          <Field
+            name="refereeRewardDollars"
+            label="Reward the new tenant ($)"
+            type="text"
+            inputMode="decimal"
+            defaultValue={(facility.refereeRewardCents / 100).toFixed(2)}
+            hint="Comes off their first invoice. Separate from the referrer's, so “$75 to them, $25 to you” is possible."
+          />
+          <Field
+            name="referralAnnualCap"
+            label="Most referrals one tenant can earn (12 months)"
+            type="number"
+            min={1}
+            max={1000}
+            defaultValue={facility.referralAnnualCap}
+            hint="Bounds what a single farmed account can cost."
+          />
+          <Field
+            name="referralOpenInviteCap"
+            label="Unused invites a tenant may hold at once"
+            type="number"
+            min={1}
+            max={100}
+            defaultValue={facility.referralOpenInviteCap}
+            hint="Minting a hundred codes and posting them is the same attack as one permanent code."
+          />
+          <Field
+            name="referralInviteExpiryDays"
+            label="An unused invite expires after (days)"
+            type="number"
+            min={1}
+            max={365}
+            defaultValue={facility.referralInviteExpiryDays}
+            hint="Gives outstanding exposure a horizon instead of letting it accumulate for the life of the tenancy."
+          />
+          <Field
+            name="referralMinimumStayDays"
+            label="Minimum stay before a reward is safe (days)"
+            type="number"
+            min={0}
+            max={365}
+            defaultValue={facility.referralMinimumStayDays}
+            hint="0 means none. An unapplied reward is cancelled if they leave sooner; one already applied is never clawed back."
+          />
+          <Field
+            name="referralCrossFacility"
+            as="checkbox"
+            label="Pay a referral when the friend rents at a different location"
+            defaultChecked={facility.referralCrossFacility}
+            hint="Off by default — referrals are local, and cross-facility is a different economic bet."
+          />
           <Field
             name="drawerVarianceThresholdDollars"
             label="Drawer over/short needing a note ($)"

@@ -54,6 +54,12 @@ export const NOINDEX_PREFIXES = [
   '/reset-password',
   '/confirm-email',
   '/api',
+  /// PRD 10 (B-100). A referral link is a single-use bearer token worth $50.
+  /// Indexing one publishes it — which is the coupon-site exposure the
+  /// single-use design exists to bound, except with a search engine doing the
+  /// posting. The middleware stamps `X-Robots-Tag` from this same list, so a
+  /// crawler that ignores robots.txt is covered too.
+  '/r',
 ] as const
 
 export function isNoindexPath(pathname: string): boolean {

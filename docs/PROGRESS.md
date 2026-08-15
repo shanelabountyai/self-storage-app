@@ -3948,3 +3948,34 @@ Added `db:migrate:e2e`, migrating and seeding the `public` schema of the `storag
 **Documents corrected:** D-7 now describes the per-facility window and carries the correction inline with why the "7 days" figure was wrong on both halves. D-50, which B-118 opened and which deliberately deferred this, is closed out with the resolution.
 
 **Test verification:** unit suite green, **2,856 passing** (up 8 — the default proving nothing changed for anyone who does not configure it, grace 0, a longer grace across a month boundary, the negative clamp, three for the generated sentence, and a DB-level test that `createReservation` genuinely reads the column and produces a shorter expiry than the default would have). Typecheck, lint and the schema-drift check clean. Full e2e green: **867 passed, 5 skipped, 0 failed of 872**, both projects — unchanged from before this item, which is the point: the default preserves every existing hold window exactly.
+
+## B-100 (part 1 of 2) — Referral program: the engine
+
+`XXXXXXX`
+
+**NOT COMPLETE. The backlog row is deliberately left unticked.** B-100 is an L item and this entry covers the half that is built and tested; the rest is named at the bottom and is the next session's work. Recording it this way rather than marking the row ✅ because a row ticked on a feature nothing can trigger is exactly the kind of claim `PROGRESS.md` exists to prevent.
+
+**Built — the engine, end to end and tested:**
+
+- **`packages/core/referrals`** — the rules, pure. The 8-character alphabet (§5.1) excludes `0/O/1/I/l` as the PRD requires and `U` as well, because "V" dictated over a phone is heard as "U" and that is the same failure the PRD's own exclusions exist to prevent. `evaluateReferral` judges all seven fraud rules from a facts object and returns the FIRST failing one — a referral that breaks three rules is still one conversation, and listing all three buries the one the tenant can act on.
+- **The refusal vocabulary is a closed set with a written sentence per reason**, which the row states as an acceptance criterion rather than a nicety: "a refusal that does not say what would have qualified is a 3.3.3 failure and a support call." A test asserts no message contains "not eligible", that each is a real sentence, and that each names its rule.
+- **`ReferralInvite` + `Referral`** with the seven facility columns the PRD lists, plus `referralCrossFacility` — §5.4 describes cross-facility as an operator opt-in and §6.1's column list omits it, so it is added rather than hardcoded.
+- **`lib/referrals/service.ts`** — minting (with the open-invite cap, and expired invites deliberately not counted against it), `/r/{code}` lookup, and qualification with every §5.4 rule evaluated against real rows.
+- **The single-use guarantee is atomic**, per §6.1: a conditional `updateMany ... where redeemedAt IS NULL` decides the winner when two friends complete a move-in in the same instant. A DB test drives both concurrently and asserts exactly one earns, the invite is spent once, and **the loser is recorded as refused rather than dropped** — §5.4's "a refused referral never silently drops".
+- **`/r/{code}`** sets a 90-day first-party cookie and 302s to the facility page. FR-REF-3's canonical-redirect trap is closed **by construction**: the destination comes from `facilityPath()`, which builds the canonical path from the facility record, so the facility page has no reason to redirect again. The cookie carries the invite id, never the referrer's name — the referee learning which friend gets paid for them is a conversation neither asked for.
+- **A dead code never shows a stranger an error.** §5.1's AC is explicit about this, and `usableInvite` returning null is an ordinary outcome routed to `/storage/search`, not an exception.
+- **Eight settings controls in the same item as the eight columns** — the repo's first hard-won rule, which PRD 10 §6.1 cites by name. `referralEnabled` defaults **false**: the program pays real money on a rule set the attorney pass has not reviewed (§9), so an operator turns it on knowingly.
+
+**Found — `/r` was not in `NOINDEX_PREFIXES`.** A referral link is a single-use bearer token worth $50, and indexing one publishes it — the coupon-site exposure the single-use design exists to bound, with a search engine doing the posting. Added, which also covers crawlers that ignore robots.txt since the middleware stamps `X-Robots-Tag` from the same list.
+
+**Decided — the self-referral check matches on what this build actually has.** §5.4 says "email, phone (last 10 digits) and payment fingerprint". The card fingerprint is not stored and cannot be: the browser talks to Stripe directly to keep the integration in SAQ-A. Email, normalised phone and the tenant id are what is matched, and the code says so rather than implying a check it does not perform.
+
+**Still to build, and none of it is started:**
+1. **The trigger.** Nothing calls `qualifyReferral` yet. §4 fires it on the `move_in_completed` signal gated on the payment having cleared — `provisionMoveIn` is where that goes.
+2. **The discount hand-off (§6.2).** Rewards are recorded as owed and reach no invoice. They must go through B-070's structured-discount path, not a second mechanism.
+3. **Attribution into leads and reservations (§5.3)** — the cookie is set and read by nothing, so no `referral_tenant` channel is recorded yet. The channel value itself is added.
+4. **The portal invite control (§5.1 AC)** — minting has no UI, so no tenant can share anything.
+5. **Comms (§6.3)** — four transactional templates.
+6. **Clawback (§4.1)** — the refund and minimum-stay reversals.
+
+**Test verification:** unit suite green, **2,898 passing** (up 42 — 22 pure-rule tests including the "never says just 'not eligible'" assertion, and 20 DB-level covering minting, the caps, case-insensitive lookup, every fraud refusal, snapshotting, and the concurrent single-use race). Typecheck, lint and the schema-drift check clean. Full e2e green: **867 passed, 5 skipped, 0 failed of 872** — unchanged, as it should be for an engine nothing calls yet.

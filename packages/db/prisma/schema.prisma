@@ -627,6 +627,35 @@ model Facility {
   /// never built: a renter picking the maximum 14-day-out move-in would have
   /// lost the unit a week before the day they reserved it for.
   reservationHoldGraceDays Int       @default(1)
+  // ── PRD 10 (B-100). Refer a friend. ──────────────────────────────────────
+  //
+  // Every one of these is a column that configures behaviour, so every one
+  // gets its control in this same item — the PRD says so explicitly, citing
+  // this codebase's own first hard-won rule.
+  //
+  /// OFF by default, deliberately. The program pays real money on a rule set
+  /// an attorney has not reviewed (§9), so an operator turns it on knowingly
+  /// rather than discovering it is already running.
+  referralEnabled          Boolean   @default(false)
+  /// §3. Both sides separately configurable, because "give the new customer
+  /// $75 and the referrer $25" is a real campaign and a single shared field
+  /// would need a migration to allow it. Both default to $50.
+  referralRewardCents      Int       @default(5000)
+  refereeRewardCents       Int       @default(5000)
+  /// §4.1. Move out inside this and an unapplied reward is cancelled; an
+  /// already-applied one is NOT clawed back.
+  referralMinimumStayDays  Int       @default(30)
+  /// §5.4. Qualifying referrals one referrer may earn per rolling 12 months.
+  referralAnnualCap        Int       @default(10)
+  /// §5.1. An unused invite dies after this, so outstanding exposure has a
+  /// horizon rather than accumulating for the life of the tenancy.
+  referralInviteExpiryDays Int       @default(60)
+  /// §5.1/§5.4. Unredeemed invites one tenant may hold at once. Minting a
+  /// hundred and posting them all is the same attack as a permanent code.
+  referralOpenInviteCap    Int       @default(5)
+  /// §5.4. Referrals are local by default; cross-facility is a different
+  /// economic bet an operator opts into.
+  referralCrossFacility    Boolean   @default(false)
   /// Days of notice the lease requires before a move-out. 0 means none.
   moveOutNoticeDays   Int            @default(10)
   /// PRD 02 US-11 (B-076). Minimum advance notice before a tenant rate
@@ -712,6 +741,8 @@ model Facility {
   drawerSessions         DrawerSession[]
   products               Product[]
   merchandiseSales       MerchandiseSale[]
+  referralInvites        ReferralInvite[]
+  referrals              Referral[]
 
   @@index([state])
   @@map("facility")
@@ -961,6 +992,12 @@ model Tenant {
   accessGrants     AccessGrant[]
   reservations     Reservation[]
   checkoutSessions CheckoutSession[]
+  // PRD 10 (B-100). Three relations because a tenant plays three roles: the
+  // one who mints invites, the one credited for a referral, and the one who
+  // was referred.
+  referralInvites   ReferralInvite[] @relation("ReferralInvitesMinted")
+  referralsMade     Referral[]       @relation("ReferralsMade")
+  referralsReceived Referral[]       @relation("ReferralsReceived")
   leads            Lead[]
   consents         Consent[]
   messages         Message[]
@@ -1117,6 +1154,7 @@ model Lease {
   notices                Notice[]
   rateChanges            LeaseRateChange[]
   rateIncreases          TenantRateIncrease[]
+  referrals              Referral[]
   authorizedAccessPeople AuthorizedAccessPerson[]
   payLinks               PayLink[]
   holds                  LeaseHold[]
@@ -2808,6 +2846,7 @@ model Lead {
   reservations   Reservation[]
   consents       Consent[]
   activities     LeadActivity[]
+  referrals      Referral[]
 
   @@index([facilityId, status])
   @@index([facilityId, contactedAt])
@@ -3885,4 +3924,102 @@ model AuctionAdvertisement {
 
   @@index([auctionCaseId, runDate])
   @@map("auction_advertisement")
+}
+
+// ------------------------------------------------------- referrals (PRD 10) ----
+//
+// Refer a friend (B-100). Marketing owns the definition and the qualification;
+// billing owns the money, through the SAME structured-discount path promotions
+// use (§6.2). There is no second discount mechanism.
+
+enum ReferralState {
+  /// The link was used — a lead or a reservation exists, but no lease yet.
+  shared
+  /// Moved in, but the payment has not cleared or the clawback window is open.
+  pending
+  /// Qualified and the rewards are owed.
+  earned
+  /// A rule refused it. `refusedReason` says which, always.
+  refused
+  /// The invite expired before anybody rented on it.
+  expired
+  /// Qualified and then unwound — a refunded payment inside the window (§4.1).
+  clawed_back
+}
+
+/// PRD 10 §5.1. One code, one friend, one use.
+///
+/// A permanent per-tenant code is the obvious design and the one that gets
+/// posted to a coupon site, after which the business pays $50 to a stranger for
+/// every rental it would have had anyway. Single-use closes that structurally:
+/// a posted code is worth exactly one rental to whoever finds it first, and the
+/// tenant's other invites are untouched.
+model ReferralInvite {
+  id               String    @id @default(cuid())
+  /// 8 characters, no 0/O/1/I/l/U — it gets read aloud over a phone.
+  code             String    @unique
+  referrerTenantId String
+  facilityId       String
+  createdAt        DateTime  @default(now()) @db.Timestamptz(6)
+  expiresAt        DateTime  @db.Timestamptz(6)
+  /// Set by the ATOMIC conditional update that makes "one use" true against
+  /// two friends completing a move-in in the same minute (§6.1). Consumed when
+  /// a referral QUALIFIES, not when the link is clicked — a friend who clicks
+  /// and does not rent has used nothing up.
+  redeemedAt       DateTime? @db.Timestamptz(6)
+  redeemedByReferralId String? @unique
+
+  referrerTenant Tenant     @relation("ReferralInvitesMinted", fields: [referrerTenantId], references: [id], onDelete: Cascade)
+  facility       Facility   @relation(fields: [facilityId], references: [id], onDelete: Restrict)
+  referrals      Referral[]
+
+  @@index([referrerTenantId, redeemedAt])
+  @@index([facilityId])
+  @@map("referral_invite")
+}
+
+model Referral {
+  id               String        @id @default(cuid())
+  inviteId         String
+  referrerTenantId String
+  /// Set as soon as the link produces a lead, before anybody rents.
+  refereeLeadId    String?
+  refereeTenantId  String?
+  refereeLeaseId   String?
+  facilityId       String
+  state            ReferralState @default(shared)
+  /// One of `packages/core/referrals`' refusal keys. Never free text: §5.7
+  /// requires staff to answer "why didn't I get my $50" from this record, and
+  /// a reason somebody typed once cannot be reported on or counted.
+  refusedReason    String?
+  qualifiedAt      DateTime?     @db.Timestamptz(6)
+  /// SNAPSHOTTED at qualification, both of them, for the same reason a promo
+  /// schedule is (FR-PROMO-4): changing the program next quarter must not
+  /// silently rewrite what somebody was already promised.
+  referrerRewardCents Int        @default(0)
+  refereeRewardCents  Int        @default(0)
+  /// Where each reward actually landed. Null until the invoice exists — the
+  /// referrer's may be up to a month out, which is why the portal states the
+  /// date rather than saying "eventually".
+  referrerRewardInvoiceId String?
+  refereeRewardInvoiceId  String?
+  createdAt        DateTime      @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime      @updatedAt @db.Timestamptz(6)
+
+  invite         ReferralInvite @relation(fields: [inviteId], references: [id], onDelete: Restrict)
+  referrerTenant Tenant         @relation("ReferralsMade", fields: [referrerTenantId], references: [id], onDelete: Cascade)
+  refereeTenant  Tenant?        @relation("ReferralsReceived", fields: [refereeTenantId], references: [id], onDelete: SetNull)
+  refereeLead    Lead?          @relation(fields: [refereeLeadId], references: [id], onDelete: SetNull)
+  refereeLease   Lease?         @relation(fields: [refereeLeaseId], references: [id], onDelete: SetNull)
+  facility       Facility       @relation(fields: [facilityId], references: [id], onDelete: Restrict)
+
+  /// §5.4: "One qualifying referral per referee, ever." Enforced in the
+  /// database rather than only in the evaluator, because the evaluator reads
+  /// before it writes and two move-ins in the same second both pass a read.
+  /// Partial — a referee may be REFUSED more than once without that blocking
+  /// a later legitimate referral.
+  @@index([refereeTenantId, state])
+  @@index([referrerTenantId, state])
+  @@index([facilityId, qualifiedAt])
+  @@map("referral")
 }
