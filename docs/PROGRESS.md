@@ -3709,7 +3709,7 @@ The accessibility statement was re-read and one clause added: it already claimed
 
 ## B-125 — e2e runs against a production build, not the dev server
 
-`PENDING`
+`ffbe20a`
 
 **Built:** `build:test`, `start:test` and `e2e:server` in the root `package.json`, and `playwright.config.ts` now starts `npm run e2e:server` — a real build, served — instead of `npm run dev:test`. `E2E_DEV=1` keeps the dev server for debugging one spec, where the error overlay and source maps are worth more than fidelity. Both paths use the `:test` env variants, so the server under test reads the same database as the specs.
 
