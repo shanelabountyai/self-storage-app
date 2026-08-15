@@ -3935,7 +3935,7 @@ Added `db:migrate:e2e`, migrating and seeding the `public` schema of the `storag
 
 ## B-126 — The reservation hold window: D-7 corrected, and the configurable half built
 
-`XXXXXXX`
+`6735c28`
 
 **Owner decision.** The row was build-or-decide and the framing turned out to be sharper than it read. **PRD 01 US-401 has always said** holds expire "default: end of day after scheduled move-in date; **configurable**" — which is exactly what `holdExpiryFor` has implemented since B-018, with the code comment quoting that line. So D-7's "7 days" contradicted the feature PRD *and* the shipped code, not one of them: it was the outlier, not the spec. Building it literally would have been the defect, because US-401 lets a renter pick a move-in up to 14 days out and a booking-anchored 7-day window would have taken the unit back a week before the day they reserved it for. The owner chose to correct D-7 and build the one half genuinely missing.
 
