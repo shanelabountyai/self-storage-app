@@ -37,7 +37,8 @@ A bare `pkill -f playwright` matches **every project on the machine**, not this 
 
 - **Always open a PR as a draft**: `gh pr create --draft`. Mark it ready (`gh pr ready`) only when the feature is complete and the local suites are green.
 - **Why:** the full e2e + Lighthouse run is ~30 minutes of Actions time, and it is meant to be spent on PRs that are actually up for review.
-- **Known gap (2026-08-15):** `.github/workflows/ci.yml` triggers on bare `pull_request` with no draft filter, so it currently runs `npm run test:e2e` and `npx lhci autorun` on drafts too. Until that is split — cheap checks (lint, typecheck, unit, drift) always; e2e and Lighthouse gated on `github.event.pull_request.draft == false` — a draft costs the same as a ready PR.
+- **CI is split into two lanes to make that pay off** (`.github/workflows/ci.yml`, 2026-08-15). `verify` runs on every PR push — lint, typecheck, unit, build, schema drift. `e2e` runs only on merges to `main` or when `github.event.pull_request.draft == false`, and carries a 60-minute cap because the job previously had no timeout at all and inherited GitHub's six-hour maximum. `paths-ignore` skips both lanes for `**.md` and `docs/**`.
+- **The demo seed belongs to the heavy lane only.** `npm run db:seed:demo` is what the e2e suite asserts against by name; the unit suite creates its own fixtures and needs none of it (locally it runs against `storage_test`, which has only roles and permissions). Moving it out of the fast lane is safe for that reason and no other — if a unit test ever starts depending on demo data, it will pass locally and fail in CI.
 
 ## Four rules this codebase learned the hard way
 
