@@ -3,6 +3,8 @@ import { facilityPath, publicFacilityBySlug } from '@/lib/facility/public-facili
 import { publicInventoryForFacility } from '@/lib/inventory/public-inventory'
 import { startCheckout } from '@/lib/checkout/session'
 import { offerFor } from '@/lib/promotions/service'
+import { cookies } from 'next/headers'
+import { REFERRAL_COOKIE } from '@storage/core/marketing'
 
 // B-020. "Rent now" — starts a checkout session and redirects into the stepper.
 //
@@ -47,6 +49,13 @@ export async function POST(
     code: String(form.get('promo') ?? '').trim() || null,
   })
 
+  // PRD 10 FR-REF-3 (B-100). The referral this visitor arrived on, read here
+  // — the one point in the flow that has both a request (so cookies) and the
+  // session about to be created. Carried as an id only; whether it actually
+  // pays is judged at qualification, against rules this route knows nothing
+  // about.
+  const referralInviteId = (await cookies()).get(REFERRAL_COOKIE)?.value ?? null
+
   const started = await startCheckout({
     facilityId: facility.id,
     unitTypeId,
@@ -62,6 +71,7 @@ export async function POST(
           schedule: offer.offer.schedule,
         }
       : null,
+    referralInviteId,
   })
 
   // Someone took the last one while they were reading. Honest, and back to the

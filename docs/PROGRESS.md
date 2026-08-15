@@ -3949,7 +3949,7 @@ Added `db:migrate:e2e`, migrating and seeding the `public` schema of the `storag
 
 **Test verification:** unit suite green, **2,856 passing** (up 8 — the default proving nothing changed for anyone who does not configure it, grace 0, a longer grace across a month boundary, the negative clamp, three for the generated sentence, and a DB-level test that `createReservation` genuinely reads the column and produces a shorter expiry than the default would have). Typecheck, lint and the schema-drift check clean. Full e2e green: **867 passed, 5 skipped, 0 failed of 872**, both projects — unchanged from before this item, which is the point: the default preserves every existing hold window exactly.
 
-## B-100 (part 1 of 2) — Referral program: the engine
+## B-100 (part 1) — Referral program: the engine
 
 `792af15`
 
@@ -3979,3 +3979,23 @@ Added `db:migrate:e2e`, migrating and seeding the `public` schema of the `storag
 6. **Clawback (§4.1)** — the refund and minimum-stay reversals.
 
 **Test verification:** unit suite green, **2,898 passing** (up 42 — 22 pure-rule tests including the "never says just 'not eligible'" assertion, and 20 DB-level covering minting, the caps, case-insensitive lookup, every fraud refusal, snapshotting, and the concurrent single-use race). Typecheck, lint and the schema-drift check clean. Full e2e green: **867 passed, 5 skipped, 0 failed of 872** — unchanged, as it should be for an engine nothing calls yet.
+
+## B-100 (part 2) — Referrals: the trigger and the money
+
+`XXXXXXX`
+
+**Still not the whole row.** Part 1 built the engine; this makes it run and pay. What remains after this is the portal invite control, lead/reservation attribution, comms and clawback — listed at the bottom, and the backlog row stays unticked until they land.
+
+**Built — the trigger.** `provisionMoveIn` calls `qualifyReferral` after its transaction commits. That is §4's signal exactly: "a referral qualifies when the referee's move-in is complete AND their first payment has cleared", and provisioning is the one point where both are true. Outside the transaction and unable to fail it, per FR-4.6 and §5.4's "a refused referral never silently drops — the referee's move-in completes at the standard rate with the reason logged."
+
+**Decided — the referral rides on the checkout session, not the cookie.** `provisionMoveIn` runs from the Stripe webhook as often as from the browser, and a webhook has no cookies. Reading the cookie at provisioning time would have attributed referrals only when the renter still had the tab open, which is the subset of move-ins least likely to need it. The `/rent` route reads the cookie once — the one point with both a request and the session about to exist — and snapshots the invite id, exactly as it already snapshots the promotion.
+
+**Built — the money, through the existing path.** `lib/referrals/billing.ts` is deliberately the same shape as `lib/promotions/billing.ts`: answer what comes off this invoice, and record that it was applied inside the caller's transaction. §6.2 is explicit that there is no second discount mechanism. `buildInvoice` gained `extraDiscounts`, so a promotion and a referral reward each keep their **own line** — §5.5 makes that an acceptance criterion ("two separate discount lines with distinct descriptions, not one merged figure"), and each discount is capped by what is left after the ones before it, so the stack can never exceed the rent.
+
+**Found — a real defect, and it was mine.** `generateInvoiceForPeriod` skipped any invoice whose **total** was zero. A referral reward larger than one month's rent takes the total to zero legitimately, so the invoice was skipped, `markReferralRewardApplied` never ran, and the reward would have been re-applied **in full, every month, forever**. The skip now tests the **subtotal**: a lease with nothing to charge is still skipped, but a lease with real charges that a credit happens to cover in full gets its invoice — which is also the invoice the tenant should be able to see, saying they owe nothing this month *because* of a credit. Found by the stack-cap test, which is the only place a discount legitimately equals the charges.
+
+**Found — the trigger was imported and never called.** The insertion silently no-oped on a mismatched anchor, so `provisionMoveIn` imported `qualifyReferral` and did nothing with it. `npm run lint`'s unused-import warning caught it; the typecheck did not, and neither did any test, because nothing had asserted the trigger fires. There is now a test in `provision-db.test.ts` that drives a real session to provisioning and asserts the referral is earned and the invite consumed — the test that would have caught it.
+
+**Test verification:** unit suite green, **2,903 passing** (up 5 from part 1 — four for the billing hand-off, one for the trigger), **run twice with identical results** per the shared-state rule. Typecheck and lint clean, back to the four pre-existing warnings. Full e2e green: **867 passed, 5 skipped, 0 failed of 872**, both projects.
+
+**Still to build:** the portal invite control (§5.1 AC — minting has no UI, so no tenant can share anything yet), lead and reservation attribution (§5.3 — the cookie is set and read only by `/rent`), the four comms templates (§6.3), and clawback (§4.1).

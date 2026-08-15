@@ -233,14 +233,18 @@ export type QualifyResult =
 /// returns having WRITTEN something — an earned referral or a refused one with
 /// its reason — and none of them throws into the move-in.
 export async function qualifyReferral(input: {
-  inviteCode: string
+  /// The invite's id, as the checkout session carries it. An id rather than a
+  /// code because the session snapshotted what `/r/{code}` resolved — passing
+  /// the code again would mean resolving it a second time, and a code that had
+  /// been redeemed in between would resolve to nothing rather than to the
+  /// refusal the tenant is owed an explanation for.
+  inviteId: string
   refereeTenantId: string
   refereeLeaseId: string
   refereeFacilityId: string
 }): Promise<QualifyResult> {
-  const code = input.inviteCode.trim().toUpperCase()
   const invite = await prisma.referralInvite.findUnique({
-    where: { code },
+    where: { id: input.inviteId },
     select: { id: true, referrerTenantId: true, facilityId: true },
   })
   // No such code. Nothing to record against and nobody to tell — the visitor

@@ -45,14 +45,29 @@ export type BuildInvoiceInput = {
   /// period, which is the ordinary monthly case.
   prorateFrom?: Date
   prorateTo?: Date
-  /// PRD 04 FR-PROMO-4 / PRD 10 (B-070). Money off this period, in positive
-  /// cents, from a promotion's snapshotted schedule or a referral reward.
+  /// PRD 04 FR-PROMO-4 (B-070). Money off this period, in positive cents, from
+  /// a promotion's snapshotted schedule.
   ///
   /// Capped at the charges — a discount larger than the bill would turn into a
   /// credit, and a promotion that pays a tenant is not a promotion.
   discountCents?: number
   /// What the tenant reads on the line. "First month free", "SPRING25".
   discountDescription?: string
+  /// PRD 10 §5.5 (B-100). Further discounts that stack with the promotion
+  /// above, each keeping its OWN line.
+  ///
+  /// A list rather than a second scalar, and separate lines rather than one
+  /// merged figure, because §5.5 makes both an acceptance criterion: "the
+  /// invoice shows two separate discount lines with distinct descriptions, not
+  /// one merged figure." A tenant who was given a promotional rate AND earned
+  /// a referral reward is owed an invoice that says so — merging them reads as
+  /// one unexplained number and is the version somebody queries at the counter.
+  ///
+  /// They stack deliberately (§5.5): a promotion is a price the business
+  /// advertises, a referral reward is payment for work a tenant did, and
+  /// refusing to stack them means a friend referred during a "first month free"
+  /// campaign earns nothing.
+  extraDiscounts?: readonly { amountCents: number; description: string }[]
 }
 
 export type BuiltInvoice = {
@@ -121,19 +136,46 @@ export function buildInvoice(input: BuildInvoiceInput): BuiltInvoice {
   // gross and then subtracting the discount would over-collect tax on money
   // nobody paid, which is not a rounding difference: it is collecting a state's
   // tax on a sale that did not happen, on every discounted invoice.
-  const requested = Math.max(0, Math.floor(input.discountCents ?? 0))
-  const discount = Math.min(requested, subtotal)
-  if (discount > 0) {
+  // Each discount is capped by what is LEFT after the ones before it, so the
+  // stack as a whole can never exceed the charges — §5.5's "the floor is zero,
+  // never a credit". Capping each against the full subtotal independently
+  // would let two $50 rewards take $100 off a $60 invoice.
+  const requested: { amountCents: number; description: string }[] = []
+  if ((input.discountCents ?? 0) > 0) {
+    requested.push({
+      amountCents: Math.floor(input.discountCents!),
+      description: input.discountDescription?.trim() || 'Discount',
+    })
+  }
+  for (const extra of input.extraDiscounts ?? []) {
+    if (extra.amountCents > 0) {
+      requested.push({
+        amountCents: Math.floor(extra.amountCents),
+        description: extra.description.trim() || 'Discount',
+      })
+    }
+  }
+
+  let discount = 0
+  for (const one of requested) {
+    const remaining = subtotal - discount
+    if (remaining <= 0) break
+    const applied = Math.min(Math.max(0, one.amountCents), remaining)
+    if (applied === 0) continue
     lines.push({
       type: 'discount',
-      description: input.discountDescription?.trim() || 'Discount',
+      description: one.description,
       quantity: 1,
       // Positive cents, subtracted from the total below rather than stored
       // negative. B-055's revenue report sums these as "given away", and a
       // negative here would report the discount as negative money given away.
-      unitAmountCents: discount,
-      amountCents: discount,
+      unitAmountCents: applied,
+      amountCents: applied,
     })
+    discount += applied
+  }
+
+  if (discount > 0) {
     // Taxable base shrinks by whatever share of the discount landed on taxable
     // charges. Capped at the base itself so a discount bigger than the taxable
     // rent cannot drive it negative and produce a tax credit.

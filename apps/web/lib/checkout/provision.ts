@@ -11,6 +11,7 @@ import { track } from '@/lib/analytics/track'
 import { trackingContext } from '@/lib/analytics/request'
 import { redeemPromotion } from '@/lib/promotions/service'
 import { syncActiveDutyHolds } from '@/lib/tenants/active-duty'
+import { qualifyReferral } from '@/lib/referrals/service'
 
 // PRD 01 FR-4.5 / FR-4.6. Turning a paid checkout into a moved-in tenant.
 //
@@ -238,6 +239,37 @@ export async function provisionMoveIn(sessionId: string): Promise<ProvisionResul
 
     return lease.id
   })
+
+  // PRD 10 §4 (B-100). Qualification: "a referral qualifies when the referee's
+  // move-in is complete AND their first payment has cleared."
+  //
+  // Both are true exactly here — `provisionMoveIn` runs off a settled payment,
+  // which is why this is the signal rather than the reservation or the lease
+  // signature. Not at reservation: a free hold costs nothing and expires on
+  // its own, and paying $50 a hold is a business somebody discovers in a week.
+  //
+  // AFTER the transaction and unable to fail it, which is FR-4.6's rule and
+  // §5.4's: "a refused referral never silently drops. The referee's move-in
+  // completes at the standard rate with the reason logged." A referral that
+  // throws — or one that is refused — must never un-move-in somebody who has
+  // paid. `qualifyReferral` records the refusal itself, so a caught error here
+  // is the genuinely exceptional case rather than the refusal path.
+  const referralInviteId =
+    typeof data.referralInviteId === 'string' ? data.referralInviteId : null
+  if (referralInviteId) {
+    try {
+      await qualifyReferral({
+        inviteId: referralInviteId,
+        refereeTenantId: row.tenantId!,
+        refereeLeaseId: leaseId,
+        refereeFacilityId: session.facilityId,
+      })
+    } catch {
+      // Swallowed deliberately. The tenant is moved in and has paid; a
+      // referral that could not be judged is a $50 question for a human, not
+      // a reason to fail a completed rental.
+    }
+  }
 
   // PRD 04 US-15 AC3: "`move_in_completed` is fired server-side from the admin
   // dashboard's move-in event (client analytics can't see it)."

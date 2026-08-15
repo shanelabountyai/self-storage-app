@@ -104,6 +104,15 @@ export type StartInput = {
   /// used instead of claiming a new one — they were already promised that unit,
   /// and taking a second would hold two.
   reservationId?: string
+  /// PRD 10 FR-REF-3 (B-100). The referral invite this checkout arrived on.
+  ///
+  /// Snapshotted onto the session at "Rent now" for the same reason the promo
+  /// is: `provisionMoveIn` runs from the Stripe webhook as often as from the
+  /// browser, and a webhook has no cookies. Reading the cookie at provisioning
+  /// time would attribute a referral only when the renter happened to still
+  /// have the tab open, which is the subset of move-ins least likely to need
+  /// it. The session is the one thing both paths share.
+  referralInviteId?: string | null
 }
 
 export type StartResult =
@@ -148,13 +157,16 @@ export async function startCheckout(input: StartInput): Promise<StartResult> {
         // The snapshot itself lives in `data`, beside every other thing the
         // checkout locked. The columns carry the ids because redemption and
         // reporting join on them.
-        data: (input.promo
-          ? {
-              promoTerms: input.promo.terms,
-              promoFirstPeriodCents: input.promo.firstPeriodCents,
-              promoSchedule: input.promo.schedule,
-            }
-          : {}) as Prisma.InputJsonValue,
+        data: {
+          ...(input.promo
+            ? {
+                promoTerms: input.promo.terms,
+                promoFirstPeriodCents: input.promo.firstPeriodCents,
+                promoSchedule: input.promo.schedule,
+              }
+            : {}),
+          ...(input.referralInviteId ? { referralInviteId: input.referralInviteId } : {}),
+        } as Prisma.InputJsonValue,
         tokenHash: hashSessionToken(token),
         lockExpiresAt: lockUntil(),
       },

@@ -77,6 +77,10 @@ describeDb('move-in provisioning', () => {
     await prisma.leaseRateChange.deleteMany({ where: { lease: { facilityId } } })
     await prisma.domainEvent.deleteMany({ where: { facilityId } })
     await prisma.document.deleteMany({ where: { facilityId } })
+    // Before the leases and the facility: both referral tables restrict their
+    // facility, and Referral restricts its invite (B-100).
+    await prisma.referral.deleteMany({ where: { facilityId } })
+    await prisma.referralInvite.deleteMany({ where: { facilityId } })
     await prisma.lease.deleteMany({ where: { facilityId } })
     await prisma.checkoutSession.deleteMany({ where: { facilityId } })
     await prisma.reservation.deleteMany({ where: { facilityId } })
@@ -84,6 +88,7 @@ describeDb('move-in provisioning', () => {
     await prisma.unitTypeRate.deleteMany({ where: { facilityId } })
     await prisma.feeSchedule.deleteMany({ where: { facilityId } })
     await prisma.unitType.deleteMany({ where: { facilityId } })
+    await prisma.tenant.deleteMany({ where: { email: { contains: suffix } } })
     await prisma.tenant.deleteMany({ where: { id: tenantId } })
     await prisma.facility.deleteMany({ where: { id: facilityId } })
     await prisma.$disconnect()
@@ -122,6 +127,75 @@ describeDb('move-in provisioning', () => {
     // And it is gone from what the public site can sell.
     const inventory = await publicInventoryForFacility(slug)
     expect(inventory?.unitTypes[0]?.availableCount ?? 0).toBe(0)
+  })
+
+  it('qualifies a referral the checkout arrived on (B-100)', async () => {
+    // The trigger. `qualifyReferral` was imported and then never called for a
+    // while — lint caught it, and this is the test that would have. §4's
+    // signal is a COMPLETED, PAID move-in, and `provisionMoveIn` is where both
+    // are true at once.
+    const referrer = await prisma.tenant.create({
+      data: { email: `refr-${suffix}@example.com`, firstName: 'Rae', lastName: 'Referrer' },
+    })
+    const referrerUnit = await prisma.unit.create({
+      data: { facilityId, unitTypeId, number: `RF-${suffix}` },
+    })
+    await prisma.lease.create({
+      data: {
+        facilityId,
+        tenantId: referrer.id,
+        unitId: referrerUnit.id,
+        status: 'active',
+        startDate: new Date('2026-07-01T00:00:00Z'),
+        billingDay: 1,
+        monthlyRateCents: 12_900,
+      },
+    })
+    await prisma.facility.update({
+      where: { id: facilityId },
+      data: { referralEnabled: true },
+    })
+    const invite = await prisma.referralInvite.create({
+      data: {
+        code: `PRV${suffix.slice(0, 5).toUpperCase()}`,
+        referrerTenantId: referrer.id,
+        facilityId,
+        expiresAt: new Date(Date.now() + 86_400_000),
+      },
+    })
+
+    const started = await startCheckout({
+      facilityId,
+      unitTypeId,
+      quotedRateCents: 12_900,
+      referralInviteId: invite.id,
+    })
+    if (!started.ok) throw new Error('could not start checkout')
+    await prisma.checkoutSession.update({
+      where: { id: started.sessionId },
+      // The referral rides on the session, not a cookie: provisioning runs
+      // from the Stripe webhook as often as from the browser, and a webhook
+      // has no cookies.
+      data: { tenantId, data: { referralInviteId: invite.id } },
+    })
+
+    const result = await provisionMoveIn(started.sessionId)
+    expect(result.ok).toBe(true)
+
+    const referral = await prisma.referral.findFirstOrThrow({
+      where: { inviteId: invite.id },
+    })
+    expect(referral.state).toBe('earned')
+    expect(referral.referrerTenantId).toBe(referrer.id)
+    expect(referral.refereeTenantId).toBe(tenantId)
+    // Consumed on qualification, per §5.1's AC.
+    const after = await prisma.referralInvite.findUniqueOrThrow({ where: { id: invite.id } })
+    expect(after.redeemedAt).not.toBeNull()
+
+    await prisma.facility.update({
+      where: { id: facilityId },
+      data: { referralEnabled: false },
+    })
   })
 
   it('carries the renter’s autopay choice from checkout onto the lease', async () => {

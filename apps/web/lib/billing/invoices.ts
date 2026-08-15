@@ -4,6 +4,7 @@ import { effectiveByGroup } from '@storage/core/facility-settings'
 import { OCCUPYING_LEASE_STATUSES } from '@storage/core/inventory'
 import { nextInvoiceNumber } from '@/lib/billing/numbering'
 import { discountForLeasePeriod, markDiscountApplied } from '@/lib/promotions/billing'
+import { markReferralRewardApplied, referralRewardsForLease } from '@/lib/referrals/billing'
 import {
   buildInvoice,
   formatInvoiceNumber,
@@ -187,18 +188,43 @@ async function createInvoiceForPeriod(input: CreateInput): Promise<string | 'ski
   // promised.
   const discount = await discountForLeasePeriod(lease.id, input.periodIndex)
 
+  // PRD 10 §6.2 (B-100). Referral rewards ride the SAME structured-discount
+  // path, as their own lines rather than merged into the promotion's — §5.5
+  // requires "two separate discount lines with distinct descriptions". They
+  // stack: a promotion is a price the business advertises, a referral reward
+  // is payment for work a tenant did.
+  const rewards = await referralRewardsForLease(lease.id)
+
   const built = buildInvoice({
     period,
     charges: chargesFor(lease),
     taxRates,
     ...(shouldProrate ? { prorateFrom: period.start, prorateTo: input.prorateTo } : {}),
     ...(discount ? { discountCents: discount.amountCents, discountDescription: discount.description } : {}),
+    ...(rewards.length > 0
+      ? {
+          extraDiscounts: rewards.map((reward) => ({
+            amountCents: reward.amountCents,
+            description: reward.description,
+          })),
+        }
+      : {}),
   })
 
   // Nothing to bill — a lease at zero rent with no protection. Recording a
   // zero invoice would put a $0.00 line in a tenant's history and an empty
   // charge on the ledger.
-  if (built.totalCents === 0) return 'skipped'
+  //
+  // Tested on the SUBTOTAL, not the total (B-100). A lease with real charges
+  // that a discount happens to cover in full is a different thing entirely
+  // from a lease with nothing to charge: the tenant owes nothing this month
+  // BECAUSE of a credit, and that is precisely the invoice they should be able
+  // to see. Skipping it also lost the record that the credit had been
+  // applied — `markReferralRewardApplied` runs inside the transaction below —
+  // so a reward larger than one month's rent would have been re-applied in
+  // full every month, forever. Found by the stack-cap test, which is the only
+  // place a discount legitimately equals the charges.
+  if (built.subtotalCents === 0) return 'skipped'
 
   try {
     return await prisma.$transaction(async (tx) => {
@@ -267,6 +293,17 @@ async function createInvoiceForPeriod(input: CreateInput): Promise<string | 'ski
       // promotion looking spent — and a re-run of the nightly job then cannot
       // discount the same period a second time.
       if (discount) await markDiscountApplied(tx, discount.redemptionId, input.periodIndex)
+
+      // Same transaction, same reason: a rolled-back invoice must never leave a
+      // referral looking paid, or the next nightly run credits the same $50 a
+      // second time.
+      //
+      // Recorded for every reward that was OFFERED, including one the stack cap
+      // reduced to nothing. That is deliberate: §5.5 caps the stack at the
+      // rent, so a reward can legitimately be worth zero on a small invoice,
+      // and leaving it unmarked would carry it forward to be paid in full next
+      // month — turning a capped reward into a deferred one nobody promised.
+      for (const reward of rewards) await markReferralRewardApplied(tx, reward, invoice.id)
 
       return number
     })

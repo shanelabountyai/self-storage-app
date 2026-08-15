@@ -8,6 +8,7 @@ import {
   usableInvite,
 } from '../apps/web/lib/referrals/service'
 import { REFERRAL_CODE_LENGTH } from '../packages/core/referrals'
+import { generateInvoices } from '../apps/web/lib/billing/invoices'
 
 // B-100 / PRD 10 §5.1, §5.3, §5.4, §6.1, against real rows.
 //
@@ -231,7 +232,7 @@ describeDb('referral program core', () => {
       const { referee, leaseId } = await refereeWithLease()
 
       const result = await qualifyReferral({
-        inviteCode: minted.code,
+        inviteId: minted.inviteId,
         refereeTenantId: referee.id,
         refereeLeaseId: leaseId,
         refereeFacilityId: facilityId,
@@ -266,7 +267,7 @@ describeDb('referral program core', () => {
 
       const { referee, leaseId } = await refereeWithLease()
       await qualifyReferral({
-        inviteCode: minted.code,
+        inviteId: minted.inviteId,
         refereeTenantId: referee.id,
         refereeLeaseId: leaseId,
         refereeFacilityId: facilityId,
@@ -282,7 +283,7 @@ describeDb('referral program core', () => {
       const { referee, leaseId } = await refereeWithLease({ email: referrer.email.toUpperCase() })
 
       const result = await qualifyReferral({
-        inviteCode: minted.code,
+        inviteId: minted.inviteId,
         refereeTenantId: referee.id,
         refereeLeaseId: leaseId,
         refereeFacilityId: facilityId,
@@ -306,7 +307,7 @@ describeDb('referral program core', () => {
       const { referee, leaseId } = await refereeWithLease({ phone: formatted })
 
       const result = await qualifyReferral({
-        inviteCode: minted.code,
+        inviteId: minted.inviteId,
         refereeTenantId: referee.id,
         refereeLeaseId: leaseId,
         refereeFacilityId: facilityId,
@@ -327,7 +328,7 @@ describeDb('referral program core', () => {
       const leaseId = await makeLease(returning.id)
 
       const result = await qualifyReferral({
-        inviteCode: minted.code,
+        inviteId: minted.inviteId,
         refereeTenantId: returning.id,
         refereeLeaseId: leaseId,
         refereeFacilityId: facilityId,
@@ -344,7 +345,7 @@ describeDb('referral program core', () => {
       const { referee, leaseId } = await refereeWithLease()
 
       const earned = await qualifyReferral({
-        inviteCode: first.code,
+        inviteId: first.inviteId,
         refereeTenantId: referee.id,
         refereeLeaseId: leaseId,
         refereeFacilityId: facilityId,
@@ -352,7 +353,7 @@ describeDb('referral program core', () => {
       expect(earned.ok).toBe(true)
 
       const again = await qualifyReferral({
-        inviteCode: second.code,
+        inviteId: second.inviteId,
         refereeTenantId: referee.id,
         refereeLeaseId: leaseId,
         refereeFacilityId: facilityId,
@@ -368,7 +369,7 @@ describeDb('referral program core', () => {
       const { referee, leaseId } = await refereeWithLease({}, otherFacilityId)
 
       const refused = await qualifyReferral({
-        inviteCode: minted.code,
+        inviteId: minted.inviteId,
         refereeTenantId: referee.id,
         refereeLeaseId: leaseId,
         refereeFacilityId: otherFacilityId,
@@ -388,7 +389,7 @@ describeDb('referral program core', () => {
       const { referee, leaseId } = await refereeWithLease({}, otherFacilityId)
 
       const result = await qualifyReferral({
-        inviteCode: minted.code,
+        inviteId: minted.inviteId,
         refereeTenantId: referee.id,
         refereeLeaseId: leaseId,
         refereeFacilityId: otherFacilityId,
@@ -405,7 +406,7 @@ describeDb('referral program core', () => {
       const a = await refereeWithLease()
       expect(
         (await qualifyReferral({
-          inviteCode: first.code,
+          inviteId: first.inviteId,
           refereeTenantId: a.referee.id,
           refereeLeaseId: a.leaseId,
           refereeFacilityId: facilityId,
@@ -414,7 +415,7 @@ describeDb('referral program core', () => {
 
       const b = await refereeWithLease()
       const capped = await qualifyReferral({
-        inviteCode: second.code,
+        inviteId: second.inviteId,
         refereeTenantId: b.referee.id,
         refereeLeaseId: b.leaseId,
         refereeFacilityId: facilityId,
@@ -429,7 +430,7 @@ describeDb('referral program core', () => {
       // to record against — and crucially, the move-in still completes.
       const { referee, leaseId } = await refereeWithLease()
       const result = await qualifyReferral({
-        inviteCode: 'NOSUCHCD',
+        inviteId: 'no-such-invite-id',
         refereeTenantId: referee.id,
         refereeLeaseId: leaseId,
         refereeFacilityId: facilityId,
@@ -449,13 +450,13 @@ describeDb('referral program core', () => {
 
       const [first, second] = await Promise.all([
         qualifyReferral({
-          inviteCode: minted.code,
+          inviteId: minted.inviteId,
           refereeTenantId: a.referee.id,
           refereeLeaseId: a.leaseId,
           refereeFacilityId: facilityId,
         }),
         qualifyReferral({
-          inviteCode: minted.code,
+          inviteId: minted.inviteId,
           refereeTenantId: b.referee.id,
           refereeLeaseId: b.leaseId,
           refereeFacilityId: facilityId,
@@ -476,4 +477,108 @@ describeDb('referral program core', () => {
       expect(refused[0].refusedReason).toBe('invite_already_used')
     })
   })
+
+  describe('the reward reaches an invoice — §6.2 and §5.5', () => {
+    // The hand-off. Marketing decides who is owed; billing pays it, through the
+    // SAME structured-discount path promotions use. There is no second
+    // mechanism, and these prove the money actually arrives.
+
+    async function earnReferral() {
+      const minted = await mintInvite(referrerId)
+      if (!minted.ok) throw new Error('unreachable')
+      const referee = await makeTenant()
+      const leaseId = await makeLease(referee.id)
+      const result = await qualifyReferral({
+        inviteId: minted.inviteId,
+        refereeTenantId: referee.id,
+        refereeLeaseId: leaseId,
+        refereeFacilityId: facilityId,
+      })
+      if (!result.ok) throw new Error(`expected an earned referral, got ${result.refusal}`)
+      return { refereeLeaseId: leaseId, referralId: result.referralId }
+    }
+
+    it('puts the referee credit on their invoice as its own line', async () => {
+      const { refereeLeaseId, referralId } = await earnReferral()
+
+      // Billed within the lead window of the SECOND period: under anniversary
+      // billing (D-27) the move-in payment buys the first one, so the first
+      // generated invoice is a month out. Getting this wrong makes every
+      // assertion below fail with "no invoice", which reads like a broken
+      // hand-off and is a wrong date.
+      await generateInvoices(facilityId, new Date('2026-08-28T12:00:00Z'), () => {})
+
+      const invoice = await prisma.invoice.findFirst({
+        where: { leaseId: refereeLeaseId },
+        include: { lineItems: true },
+      })
+      expect(invoice, 'the referee should have been invoiced').not.toBeNull()
+
+      const discountLines = invoice!.lineItems.filter((line) => line.type === 'discount')
+      expect(discountLines).toHaveLength(1)
+      // §5.5: distinct descriptions, not one merged figure.
+      expect(discountLines[0].description).toContain('Referral credit')
+      expect(discountLines[0].amountCents).toBe(5_000)
+      expect(invoice!.discountCents).toBe(5_000)
+
+      // Recorded against the referral, so the nightly run cannot pay it twice.
+      const referral = await prisma.referral.findUniqueOrThrow({ where: { id: referralId } })
+      expect(referral.refereeRewardInvoiceId).toBe(invoice!.id)
+    })
+
+    it('never pays the same reward twice across nightly re-runs', async () => {
+      // The catch-up path regenerates missed dates; without the recorded
+      // invoice id this would credit $50 every night.
+      const { refereeLeaseId } = await earnReferral()
+
+      await generateInvoices(facilityId, new Date('2026-08-28T12:00:00Z'), () => {})
+      await generateInvoices(facilityId, new Date('2026-08-28T12:00:00Z'), () => {})
+      await generateInvoices(facilityId, new Date('2026-08-29T12:00:00Z'), () => {})
+
+      const invoices = await prisma.invoice.findMany({
+        where: { leaseId: refereeLeaseId },
+        include: { lineItems: true },
+      })
+      const credits = invoices.flatMap((invoice) =>
+        invoice.lineItems.filter((line) => line.description.includes('Referral credit')),
+      )
+      expect(credits).toHaveLength(1)
+    })
+
+    it('pays the referrer on their own next invoice, not the referee’s', async () => {
+      await earnReferral()
+
+      await generateInvoices(facilityId, new Date('2026-08-28T12:00:00Z'), () => {})
+
+      const referrerInvoice = await prisma.invoice.findFirst({
+        where: { leaseId: referrerLeaseId },
+        include: { lineItems: true },
+      })
+      expect(referrerInvoice, 'the referrer should have been invoiced too').not.toBeNull()
+      const thanks = referrerInvoice!.lineItems.filter((line) =>
+        line.description.includes('Referral credit'),
+      )
+      expect(thanks).toHaveLength(1)
+      expect(thanks[0].amountCents).toBe(5_000)
+    })
+
+    it('caps the stack at the rent — the floor is zero, never a credit', async () => {
+      // §5.5's AC. A reward larger than the invoice takes it to zero and stops.
+      await prisma.facility.update({
+        where: { id: facilityId },
+        data: { refereeRewardCents: 99_999 },
+      })
+      const { refereeLeaseId } = await earnReferral()
+
+      await generateInvoices(facilityId, new Date('2026-08-28T12:00:00Z'), () => {})
+
+      const invoice = await prisma.invoice.findFirstOrThrow({
+        where: { leaseId: refereeLeaseId },
+      })
+      expect(invoice.totalCents).toBe(0)
+      expect(invoice.discountCents).toBeLessThanOrEqual(invoice.subtotalCents)
+      expect(invoice.totalCents).toBeGreaterThanOrEqual(0)
+    })
+  })
+
 })
