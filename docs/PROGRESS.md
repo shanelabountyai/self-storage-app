@@ -3798,7 +3798,7 @@ The portal's nine account links go from one flat row (which wrapped to four line
 
 ## B-118 — Facility page: hero photo, sticky rent CTA, and the hold window stated before the form
 
-`PENDING`
+`101430f`
 
 **Built:** the first 1–3 photos move above the fold — directly under the facility name, above the contact block — as the LCP element, with explicit `width`/`height` (a 4:3 pair matching the display box, not the source image's own unknown dimensions), `fetchPriority="high"` on the first photo only, and `loading="eager"`. The rest of the gallery stays at its original position, `loading="lazy"`, never repeating what the hero already showed. A facility with no photos renders neither section — no placeholder, no empty frame. The stale header comment claiming the gallery was "missing on purpose" (true before B-067, false since) is deleted. Below `sm`, a sticky "Rent now" bar appears once the units section scrolls past — pure CSS (`sticky bottom-0`, the same technique `price-summary.tsx` already uses for the checkout stepper), no JavaScript. It names the cheapest available size in the visitor's own current filter and carries both a real "Rent now" (POSTs to the same `/rent` route every unit card uses) and a "Reserve free" link.
 
