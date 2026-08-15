@@ -3689,7 +3689,7 @@ The accessibility statement was re-read. Its staff-screens paragraph — "long l
 
 ## B-124 — A validation error no longer discards what was typed
 
-`PENDING`
+`7ee46d3`
 
 **Built:** `AdminForm` writes the submitted values back into the form's own controls whenever the action comes back `error` or `confirm`. Every form in the product inherits it; not one of the 156 actions that return `fieldError` changed.
 
