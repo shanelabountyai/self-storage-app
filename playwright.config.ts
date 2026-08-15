@@ -25,14 +25,36 @@ export default defineConfig({
     { name: 'desktop-chrome', use: { ...devices['Desktop Chrome'] }, dependencies: ['setup'] },
   ],
   webServer: {
-    // `dev:test`, NOT `dev`. The server under test has to read the SAME
-    // database as the specs do, and `npm run dev` loads only .env.local -
-    // which points at the deployed dev branch. Two databases is a split brain
-    // that produces failures nobody can reproduce: a spec seeds a record the
-    // app cannot see.
-    command: 'npm run dev:test',
+    // B-125. A real build, served — not the dev server.
+    //
+    // A dev server is not the artifact we deploy. It compiles lazily, skips
+    // minification and bundle splitting, serves an error overlay in place of
+    // our real error boundaries, and caches differently, so a suite that only
+    // ever ran against it has never exercised what a renter gets. That is not
+    // theoretical here: under a full parallel sweep Turbopack served the
+    // checkout a stylesheet that did not yet carry `h-(--control-h,2.75rem)`,
+    // so the zip field rendered at its content height of 21px and failed §6.2's
+    // 44px assertion — intermittently, across three sweeps, reading exactly
+    // like a broken tap target. 21px was the height rule being ABSENT.
+    //
+    // `E2E_DEV=1` keeps the dev server for debugging a single spec, where the
+    // error overlay and source maps are genuinely worth more than fidelity.
+    //
+    // Either way it is the `:test` variant, NOT the bare script. The server
+    // under test has to read the SAME database as the specs, and `npm run dev`
+    // and `npm run build` load only .env.local — which points at the deployed
+    // dev branch. Two databases is a split brain that produces failures nobody
+    // can reproduce: a spec seeds a record the app cannot see.
+    command: process.env.E2E_DEV ? 'npm run dev:test' : 'npm run e2e:server',
     url: baseURL,
-    reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
+    // Never adopt a server we did not start on the production path. Playwright
+    // reuses whatever is already listening, so a dev server left running on
+    // 3000 would be tested INSTEAD of the build, silently — the whole defect
+    // class this item exists to close. Refusing to bind is a loud failure; a
+    // silently wrong server is not.
+    reuseExistingServer: !!process.env.E2E_DEV && !process.env.CI,
+    // 120s was sized for a dev server, which is ready in under a second and
+    // compiles on demand. A cold build takes longer than that on its own.
+    timeout: 300_000,
   },
 })

@@ -3706,3 +3706,30 @@ The accessibility statement was re-read. Its staff-screens paragraph — "long l
 **Test verification:** unit suite green (2,800 passing, 8 skipped, 0 failed — unchanged, this is client behaviour). Full e2e green for the first time this session: **388 passed, 8 skipped, 0 failed of 396**, on both projects. B-114's give-up is reversed — the lease step's name-mismatch assertion is restored, and a new assertion pins the fix itself: the consent tick must survive the refusal. Run as a negative control with the restore disabled, that assertion fails exactly where it should, so it is a test rather than decoration. The four highest-risk specs for a change at this level all pass: the append-only tax rate confirmed before it publishes, an invalid settings submit reporting next to the field, the retry schedule refused in the wrong order, and the late-fee ladder refusing an uncapped percentage.
 
 The accessibility statement was re-read and one clause added: it already claimed a rejection message is tied to its field, which was true and hollow while the field it pointed at had just been emptied. It now also says what you entered is still there.
+
+## B-125 — e2e runs against a production build, not the dev server
+
+`PENDING`
+
+**Built:** `build:test`, `start:test` and `e2e:server` in the root `package.json`, and `playwright.config.ts` now starts `npm run e2e:server` — a real build, served — instead of `npm run dev:test`. `E2E_DEV=1` keeps the dev server for debugging one spec, where the error overlay and source maps are worth more than fidelity. Both paths use the `:test` env variants, so the server under test reads the same database as the specs.
+
+**Why, beyond the flake that raised it.** The dev server is not the artifact we deploy: it compiles lazily, skips minification and bundle splitting, serves an error overlay in place of our real error boundaries, and caches differently. A suite that only ever ran against it had never exercised what a renter gets, and every dev-only difference was a defect class the suite was structurally blind to. That is not hypothetical here — this repo has already shipped a green build whose every runtime query threw.
+
+**The flake it closes.** Under a full parallel sweep, Turbopack served the checkout a stylesheet that did not yet carry `h-(--control-h,2.75rem)`, so the zip field rendered at its content height of **21px** and failed §6.2's 44px assertion. It passed in isolation, passed on a freshly restarted server, and failed intermittently across three sweeps in one session — reading exactly like a broken tap target. The value was the tell: 21px is the height rule being **absent**, not wrong.
+
+**Decided — `reuseExistingServer` is false on the production path.** Playwright adopts whatever is already listening, so a dev server left running on 3000 would be tested *instead of* the build, silently, which is the entire defect class this item exists to close. It is now `!!process.env.E2E_DEV && !process.env.CI`: refusing to bind is a loud failure, and a silently wrong server is not.
+
+**Decided — the `webServer` timeout goes from 120s to 300s.** 120s was sized for a dev server, which is ready in under a second and compiles on demand. A cold build takes longer than that on its own, and a timeout here would look like a hung suite.
+
+**Found — Playwright suppresses `webServer` stdout by default**, so the build produces no output in the run log and it is easy to believe no build happened. The `[WebServer]` lines this repo's logs already carried were stderr. Confirm a build ran by the timestamp on `apps/web/.next/BUILD_ID`, not by reading the log.
+
+**Measured, same suite, same machine, only the server moved:**
+
+| | dev server | production build |
+|---|---|---|
+| full 396-test sweep | 1.8 min | **50 s** |
+| the 21px flake | intermittent across three sweeps | did not recur |
+
+**Left behind:** most pages here are statically prerendered and query the database at BUILD time, so the build bakes them from the test database as it stands when it runs. Nothing in the suite depends on that today — 388 passed on the first attempt with no prerender breakage — but a future spec that seeds a record and then asserts it on a *static* page will fail for that reason and not an obvious one. `npm run db:seed:test` before `e2e:server` is the fix if it ever bites.
+
+**Test verification:** full e2e green against the build on the first run — **388 passed, 8 skipped, 0 failed of 396**, on both projects, in 50s. The `E2E_DEV=1` fallback was exercised separately and still starts the dev server and passes. Unit suite untouched at 2,800 passing.
