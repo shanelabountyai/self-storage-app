@@ -3655,7 +3655,7 @@ The delinquency tile counted `Lease.status = 'delinquent'`. Nothing writes that 
 
 ## B-114 — The Tenants screen lists tenants
 
-`PENDING`
+`f01ba78`
 
 **Built:** `/admin/tenants` answers a question before you ask one. It was a heading, a search box and nothing else until you typed, so the one screen named after tenants answered none of "who are my tenants", "who owes me money" or "who moved in this week", and every past-due question routed through Reports. It now opens on a list scoped to the switcher's facility, newest lease first, paginated at 25 with "Showing 1–25 of 143" in a `role="status"` region. Columns: name (the row's `<th scope="row">`, linking to the profile) · facility and unit(s) · lease status in plain words · balance · days past due. The five filters — All · Past due · Moved in this month · Ending soon · Former tenants — are `<Link>`s carrying `?filter=`, not client state, because FR-22 wants a view somebody can send to a colleague. A past-due cell reads "40 days past due" in words beside the amber, never the amber alone (1.4.1).
 
