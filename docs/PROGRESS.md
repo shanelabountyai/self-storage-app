@@ -3780,7 +3780,7 @@ The accessibility statement was re-read and one clause added: it already claimed
 
 ## B-117 — Navigation hierarchy, admin and portal
 
-`PENDING`
+`7716178`
 
 **Built:** the admin left nav is grouped into four labelled sections — **Today** (Dashboard, Tasks, Inquiries), **Property** (Units, Walkthrough, Maintenance, Overlocks, Gate Activity, Keypad Queue, Gate Health), **Money & tenants** (Tenants, Billing, POS, Delinquency, Rate Increases, Auctions, Reports), **Admin** (Settings) — instead of twenty destinations in one undifferentiated column. Below `sm`, only Today renders as the horizontal strip; the rest sit behind a native `<details>` "More" disclosure, open by default when the current page lives inside it, so arriving at Settings by a bookmark does not read as "lost the nav." **Leases** and **Audit Log** are deleted from the catalog, not hidden — both resolved only to the shared "built in a later backlog item" placeholder, and a nav promising two destinations it does not have reads as unfinished to the person being asked to trust it with rent. Leases stay reachable from the tenant profile.
 
