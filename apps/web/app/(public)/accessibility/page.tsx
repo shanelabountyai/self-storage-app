@@ -97,7 +97,9 @@ export default function AccessibilityPage() {
           <li>
             When a form rejects something you typed, the message is tied to the field
             itself, so a screen reader reads it out with that field rather than leaving you
-            to hunt for it. A successful save is announced too.
+            to hunt for it — and what you already entered is still there, so you fix the one
+            thing we asked about rather than filling the form in again. A successful save is
+            announced too.
           </li>
           <li>Animation respects your system&apos;s reduced-motion setting.</li>
           <li>

@@ -736,24 +736,24 @@ test('the lease shows a summary first and signs with a typed name', async ({ pag
   await expect(alert).toContainText('Type your full name')
   await expect(alert).toContainText('Tick the box to agree to sign electronically')
 
-  // ONE error round trip, not three. This test used to submit three times —
-  // empty, then a deliberately mistyped name, then the right one — and that
-  // path is not reliably drivable while B-124 stands: a field error re-renders
-  // the step EMPTY, so anything typed while that commit is in flight is
-  // discarded after `check()`/`fill()` have already returned successfully, and
-  // the next submit sends a blank form and gets the previous error back. In
-  // isolation it passes; under parallel checkout load it failed roughly one run
-  // in three. Restore the name-mismatch assertion when B-124 makes the step
-  // keep what was typed — that is the item that can test it deterministically.
-  //
   // Named, not positional. B-112 moved the active-duty declaration onto this
   // step, so `.first()` is no longer the E-SIGN consent — and checking the
   // wrong box gets the signature refused for a reason the test cannot see.
   const consent = page.getByRole('checkbox', { name: /sign this agreement electronically/ })
+  const typedName = page.getByLabel('Type your full name to sign')
   await consent.check()
-  await page.getByLabel('Type your full name to sign').fill('Ada Renter')
+  await typedName.fill('AR')
+  await sign.click()
+  await expect(alert).toContainText('That does not match the name on the lease')
+
+  // B-124: the refusal must not take the consent tick with it. React 19 resets
+  // a form once its action completes, so this step used to come back EMPTY —
+  // and the renter, having fixed only the name they were told about, was then
+  // refused for a box they had already ticked. This assertion is the whole
+  // point of that fix; without it the next line would have to re-tick.
   await expect(consent).toBeChecked()
-  await expect(page.getByLabel('Type your full name to sign')).toHaveValue('Ada Renter')
+
+  await typedName.fill('Ada Renter')
   await sign.click()
   // `exact`, because the payment step also renders an "Automatic payments"
   // heading (B-025's autopay disclosure) and Playwright matches an accessible

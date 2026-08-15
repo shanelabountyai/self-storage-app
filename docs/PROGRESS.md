@@ -3686,3 +3686,23 @@ Full sweep: **387 passed, 8 skipped, 1 failed of 396** — the one failure being
 **Left behind:** the name-mismatch assertion on the lease step. It cannot be driven deterministically while a field error discards what was typed, so B-124 owns restoring it — that is the item that can test it honestly.
 
 The accessibility statement was re-read. Its staff-screens paragraph — "long lists are not paginated" — still holds: `/admin/tenants` and the funnel report are the only two admin screens that paginate, and Units, Tasks, Leads and Delinquency still do not.
+
+## B-124 — A validation error no longer discards what was typed
+
+`PENDING`
+
+**Built:** `AdminForm` writes the submitted values back into the form's own controls whenever the action comes back `error` or `confirm`. Every form in the product inherits it; not one of the 156 actions that return `fieldError` changed.
+
+**Found — nothing in this codebase was clearing those fields. React 19 was.** A `<form action>` is reset by the framework once its action resolves. That is right after a success and wrong after a failure, and it is why the diagnosis written into B-124's own row was wrong: the row prescribed echoing submitted values through `FormState` and consuming them as `defaultValue`/`defaultChecked`, which **could not have worked** — the inputs never remount, so a changed `defaultValue` is inert. The row has been corrected rather than left to mislead the next reader.
+
+**What it cost as a customer-facing defect.** On the lease step — the last screen before payment — mistyping your signature cleared the **e-sign consent tick and the typed name** along with it. The renter fixed the one thing the error named, pressed Sign, and was refused with "Tick the box to agree to sign electronically" for a box they had ticked thirty seconds earlier. The three declarations above it went the same way. WCAG 3.3.3 is not satisfied by an error that names a field the form has just emptied.
+
+**Decided — at the form, not in `Field`.** `Field` already reads the form state and would have been the smaller change, but the protection step's radios are raw `<input>`s inside a `FieldSet` and `Field` never sees them; so would every future raw control be. Restoring from the submitted `FormData` against `form.elements` covers every control type in every form, including ones not yet written.
+
+**Decided — four kinds of control are deliberately skipped.** Passwords, because putting a credential back into the DOM after the framework cleared it is the opposite of a favour, and `/login`, `/reset-password` and `/reauth` all use this component. Hidden fields, which are rendered from server props and were never lost. File inputs, which cannot be set programmatically. And **buttons** — the first version of this fix blanked the confirm-and-echo step's named `confirmed=yes` button, which would have quietly disarmed the control that publishes an append-only tax row. `form.elements` contains buttons, and a restore pass that does not know it will find that out expensively.
+
+**Left behind:** this runs on the client, so a form submitted with JavaScript disabled still comes back empty. Fixing that needs the server action itself to echo, which is the `FormState` change this item found it did not need — worth doing only if a no-JS path is ever a stated requirement. Nothing in the suite exercises one on a form; `smoke.spec.ts` covers no-JS for search, which is a GET.
+
+**Test verification:** unit suite green (2,800 passing, 8 skipped, 0 failed — unchanged, this is client behaviour). Full e2e green for the first time this session: **388 passed, 8 skipped, 0 failed of 396**, on both projects. B-114's give-up is reversed — the lease step's name-mismatch assertion is restored, and a new assertion pins the fix itself: the consent tick must survive the refusal. Run as a negative control with the restore disabled, that assertion fails exactly where it should, so it is a test rather than decoration. The four highest-risk specs for a change at this level all pass: the append-only tax rate confirmed before it publishes, an invalid settings submit reporting next to the field, the retry schedule refused in the wrong order, and the late-fee ladder refusing an uncapped percentage.
+
+The accessibility statement was re-read and one clause added: it already claimed a rejection message is tied to its field, which was true and hollow while the field it pointed at had just been emptied. It now also says what you entered is still there.

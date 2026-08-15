@@ -1,6 +1,14 @@
 'use client'
 
-import { createContext, useActionState, useContext, useEffect, useId, useRef } from 'react'
+import {
+  createContext,
+  useActionState,
+  useCallback,
+  useContext,
+  useEffect,
+  useId,
+  useRef,
+} from 'react'
 import { IDLE_FORM_STATE, type FormState } from '@/lib/admin/form-state'
 
 // PRD 02 FR-19/FR-20. The one place admin forms get their error and success
@@ -18,8 +26,33 @@ type AdminFormProps = {
 }
 
 export function AdminForm({ action, children, className, label }: AdminFormProps) {
-  const [state, formAction] = useActionState(action, IDLE_FORM_STATE)
   const summaryRef = useRef<HTMLDivElement>(null)
+  const formRef = useRef<HTMLFormElement>(null)
+  const submitted = useRef<FormData | null>(null)
+
+  // B-124. Keep what was typed when the action comes back with an error.
+  //
+  // React 19 RESETS a form once its action completes — nothing in this codebase
+  // clears the fields, the framework does. That is right after a success and
+  // wrong after a failure: the step re-renders empty, so the lease step's e-sign
+  // consent tick and typed signature vanished and the next press was refused
+  // with "Tick the box to agree to sign electronically" for a box the renter had
+  // ticked, on the last screen before payment. WCAG 3.3.3 is not met by an error
+  // that names a field the form has just emptied.
+  //
+  // Done here, at the form, rather than in `Field`: the protection step's radios
+  // are raw <input>s inside a FieldSet, and a fix that only knew about `Field`
+  // would leave them — and every future raw control — still clearing. One place,
+  // every control, no change to any of the 156 actions that return `fieldError`.
+  const rememberSubmission = useCallback(
+    async (state: FormState, formData: FormData) => {
+      submitted.current = formData
+      return action(state, formData)
+    },
+    [action],
+  )
+
+  const [state, formAction] = useActionState(rememberSubmission, IDLE_FORM_STATE)
 
   useEffect(() => {
     // Focus the summary on failure so the user hears the count and can reach
@@ -29,9 +62,43 @@ export function AdminForm({ action, children, className, label }: AdminFormProps
     if (state.status === 'error' || state.status === 'confirm') summaryRef.current?.focus()
   }, [state])
 
+  useEffect(() => {
+    // Only on the branches that keep the user on this form. A success is
+    // allowed to clear — "add a note" then leaving the note behind is the bug,
+    // not the reset.
+    if (state.status !== 'error' && state.status !== 'confirm') return
+    const form = formRef.current
+    const data = submitted.current
+    if (!form || !data) return
+
+    for (const element of Array.from(form.elements)) {
+      const control = element as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
+      if (!control.name) continue
+      const type = 'type' in control ? control.type : ''
+      // Never a password — restoring one would put a credential back into the
+      // DOM after the framework had cleared it, which is the opposite of a
+      // favour. `hidden` is rendered from server props and never lost; `file`
+      // cannot be set programmatically at all.
+      if (type === 'password' || type === 'hidden' || type === 'file') continue
+      // Buttons are in `form.elements` too, and the confirm-and-echo step's
+      // button is a NAMED one carrying `confirmed=yes`. Writing a submitted
+      // value into it — there is none, so the empty string — is how a
+      // restore-what-was-typed pass would quietly disarm the control that
+      // publishes an append-only tax row.
+      if (type === 'submit' || type === 'button' || type === 'reset' || type === 'image') continue
+
+      const values = data.getAll(control.name).map(String)
+      if (type === 'checkbox' || type === 'radio') {
+        ;(control as HTMLInputElement).checked = values.includes(control.value)
+      } else {
+        control.value = values[0] ?? ''
+      }
+    }
+  }, [state])
+
   return (
     <FormStateContext.Provider value={state}>
-      <form action={formAction} className={className} aria-label={label}>
+      <form ref={formRef} action={formAction} className={className} aria-label={label}>
         {/* Rendered unconditionally and empty, then written into. A live region
             inserted into the DOM already populated is unreliably announced by
             VoiceOver and routinely missed by NVDA — the region has to pre-exist
