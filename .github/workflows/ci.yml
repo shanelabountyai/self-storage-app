@@ -3,6 +3,14 @@ name: CI
 on:
   push:
     branches: [main]
+    # Was on `pull_request` only, which missed the case that actually happens
+    # here: this project commits straight to main, and every completed item is
+    # followed by a small commit that touches ONLY docs/PROGRESS.md to record
+    # the SHA. Without this, each of those paid for a full verify + e2e run to
+    # prove a markdown edit had not broken Postgres.
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
   pull_request:
     paths-ignore:
       - '**.md'
@@ -128,6 +136,12 @@ jobs:
         run: npm run db:seed:demo
 
       - run: npm run build
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('**/package-lock.json') }}
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
