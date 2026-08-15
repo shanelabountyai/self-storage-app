@@ -3951,7 +3951,7 @@ Added `db:migrate:e2e`, migrating and seeding the `public` schema of the `storag
 
 ## B-100 (part 1 of 2) — Referral program: the engine
 
-`XXXXXXX`
+`792af15`
 
 **NOT COMPLETE. The backlog row is deliberately left unticked.** B-100 is an L item and this entry covers the half that is built and tested; the rest is named at the bottom and is the next session's work. Recording it this way rather than marking the row ✅ because a row ticked on a feature nothing can trigger is exactly the kind of claim `PROGRESS.md` exists to prevent.
 
