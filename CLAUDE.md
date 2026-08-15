@@ -33,6 +33,12 @@ A bare `pkill -f playwright` matches **every project on the machine**, not this 
 
 **The tell that separates a cross-project kill from a memory kill is which process died.** Jetsam takes the LARGEST process, which is the server. A `playwright` pattern takes the RUNNER and leaves the server listening. A dead runner beside a healthy server is positive evidence that something on the machine did it — check `lsof -ti :3000` before reaching for `/Library/Logs/DiagnosticReports/JetsamEvent-*.ips`.
 
+## Pull requests
+
+- **Always open a PR as a draft**: `gh pr create --draft`. Mark it ready (`gh pr ready`) only when the feature is complete and the local suites are green.
+- **Why:** the full e2e + Lighthouse run is ~30 minutes of Actions time, and it is meant to be spent on PRs that are actually up for review.
+- **Known gap (2026-08-15):** `.github/workflows/ci.yml` triggers on bare `pull_request` with no draft filter, so it currently runs `npm run test:e2e` and `npx lhci autorun` on drafts too. Until that is split — cheap checks (lint, typecheck, unit, drift) always; e2e and Lighthouse gated on `github.event.pull_request.draft == false` — a draft costs the same as a ready PR.
+
 ## Four rules this codebase learned the hard way
 
 - **A new column that configures behaviour gets its control in the same item.** Each one is individually defensible to defer, and they accumulate: `billingPolicy`, `invoiceLeadDays`, `prorateOnMoveIn`, `paymentRetryDays` and the late-fee ladder all shipped reachable only from a database client, and took two separate clean-up passes to close. If an operator would ever need to change it, it needs a form field before the item is done.

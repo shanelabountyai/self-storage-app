@@ -11,6 +11,7 @@ import {
 } from '@/lib/checkout/session'
 import {
   MARKETING_EMAIL_CHECKOUT_DISCLOSURE_VERSION,
+  MARKETING_SMS_DISCLOSURE_VERSION,
   SMS_CONSENT_DISCLOSURE_VERSION,
   localityFor,
   recordLeaseDeclarations,
@@ -56,6 +57,8 @@ export async function submitDetailsAction(
   }
   const smsConsentChecked = formData.get('smsConsent') === 'yes'
   const marketingConsentChecked = formData.get('marketingConsent') === 'yes'
+  // D-51 (B-123). Its own box, never inferred from the two above.
+  const marketingSmsChecked = formData.get('marketingSmsConsent') === 'yes'
 
   const errors = validateDetails(input)
   if (Object.keys(errors).length > 0) return fieldError(errors)
@@ -109,6 +112,27 @@ export async function submitDetailsAction(
     state: marketingConsentChecked ? 'granted' : 'revoked',
     source: 'checkout_step_1',
     disclosureVersion: MARKETING_EMAIL_CHECKOUT_DISCLOSURE_VERSION,
+    ipAddress: (await requestMetadata()).ipAddress,
+  })
+
+  // PRD 04 US-13 AC1/AC3, D-51 (B-123). The marketing TEXT lane, recorded
+  // separately from all three above and from `account_sms` in particular: a
+  // tenant who agreed to gate codes by text has not agreed to be texted about
+  // a sale, and TCPA express written consent has to be provably to the thing
+  // it was given for. Recorded either way for the same reason as the others —
+  // a declined box is evidence the disclosure was shown and answered.
+  //
+  // Nothing sends on this lane yet (D-51): the disclosure is draft pending
+  // legal review and A2P 10DLC needs its own marketing campaign registered.
+  // Capturing now is deliberate — it is the same reasoning PRD 05 CN-15
+  // applied to `account_sms`, that consent should exist before the channel
+  // does, and every row carries the version of the text actually shown.
+  await recordConsent({
+    tenantId,
+    channel: 'marketing_sms',
+    state: marketingSmsChecked ? 'granted' : 'revoked',
+    source: 'checkout_step_1',
+    disclosureVersion: MARKETING_SMS_DISCLOSURE_VERSION,
     ipAddress: (await requestMetadata()).ipAddress,
   })
 

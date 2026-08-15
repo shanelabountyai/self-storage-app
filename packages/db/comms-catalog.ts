@@ -714,6 +714,52 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
       'facility.phone',
     ],
   },
+  // ── D-51 (B-123): the marketing SMS lane's templates ──────────────────────
+  //
+  // Same keys as the email versions above, `channel: 'sms'` — the same
+  // one-row-per-channel pattern B-074 established for `access_suspended`.
+  //
+  // TEMPLATES ONLY. No notification RULE dispatches any of these, deliberately
+  // and per D-51: the lane ships complete and dark, because the disclosure copy
+  // is awaiting the legal review PRD 04 AC3 names (Q5) and A2P 10DLC needs a
+  // MARKETING campaign registered separately from the transactional one (PRD
+  // 05 §6.3). Seeding the content now means the campaign registration can cite
+  // real message samples — which is what a carrier review actually asks for —
+  // and turning the lane on later is a rule row rather than a copywriting job.
+  //
+  // Written short on purpose. These are the only marketing messages in the
+  // catalog that cost the recipient money to receive, and every one of them
+  // gets the STOP/HELP line appended by `deliverForRule` (FR-11) on top of
+  // what is here, so the body has to leave room for it inside one segment.
+  {
+    key: 'lead_drip_quote_recap',
+    classification: 'marketing',
+    channel: 'sms',
+    bodyText:
+      '{{facility.name}}: your {{unit.size}} quote is {{lead.quoted_price}}. Details and availability: {{links.facility_page}}',
+    requiredMergeFields: [
+      'facility.name',
+      'unit.size',
+      'lead.quoted_price',
+      'links.facility_page',
+    ],
+  },
+  {
+    key: 'lead_drip_promo_nudge',
+    classification: 'marketing',
+    channel: 'sms',
+    // `lead.promo_line` stays required here exactly as it is on the email
+    // version: a nudge rendered with nothing to nudge about is a marketing text
+    // sent for no reason, which on this channel the recipient pays for.
+    bodyText:
+      '{{facility.name}}: {{lead.promo_line}} on {{unit.size}} storage right now. Book: {{links.facility_page}}',
+    requiredMergeFields: [
+      'facility.name',
+      'lead.promo_line',
+      'unit.size',
+      'links.facility_page',
+    ],
+  },
   {
     // PRD 04 US-7 (B-071). "As an operator, I get more Google reviews from
     // happy tenants." One ask, one link, no pressure — a request that reads

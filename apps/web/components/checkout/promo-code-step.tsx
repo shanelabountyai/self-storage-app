@@ -1,4 +1,5 @@
 import { AdminForm, Field } from '@/components/admin/form'
+import type { FormState } from '@/lib/admin/form-state'
 
 // PRD 04 §3.6 US-11 AC3 (B-122). The code box inside the checkout.
 //
@@ -24,7 +25,11 @@ export function PromoCodeStep({
   appliedTerms,
 }: {
   token: string
-  action: (prev: never, formData: FormData) => Promise<never>
+  /// The same signature `AdminForm` takes. Typed properly rather than `any`:
+  /// the earlier `any` needed an eslint-disable, and an edit that inserted a
+  /// comment between the directive and its target silently un-suppressed it —
+  /// a lint error is the cheap version of that lesson.
+  action: (state: FormState, formData: FormData) => Promise<FormState>
   /// The promotion currently on this checkout, if any. Shown so the renter can
   /// see what a code would be competing with — FR-PROMO-4 allows only one, and
   /// "why did nothing change" is the support call this prevents.
@@ -46,12 +51,10 @@ export function PromoCodeStep({
         </p>
       )}
 
-      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any -- the
-          action's FormState generics are erased crossing the client boundary */}
       {/* The FORM's name, which must not repeat the field's. Both were "Promo
           code", so a screen reader announced "Promo code, form — Promo code,
           edit text" and neither said what the form was for. */}
-      <AdminForm action={action as any} label="Add a promo code" className="mt-2 flex flex-col gap-2">
+      <AdminForm action={action} label="Add a promo code" className="mt-2 flex flex-col gap-2">
         <input type="hidden" name="token" value={token} />
         <Field
           name="promo"

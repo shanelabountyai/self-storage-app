@@ -2,6 +2,7 @@ import { AdminForm, Field } from '@/components/admin/form'
 import { submitDetailsAction } from '@/app/(public)/checkout/actions'
 import {
   MARKETING_EMAIL_CHECKOUT_DISCLOSURE,
+  MARKETING_SMS_DISCLOSURE,
   SMS_CONSENT_DISCLOSURE,
   type DetailsInput,
 } from '@/lib/checkout/details'
@@ -194,6 +195,19 @@ export function DetailsStep({
         <label className="flex items-start gap-2 text-sm">
           <input type="checkbox" name="marketingConsent" value="yes" className="mt-1" />
           <span>{MARKETING_EMAIL_CHECKOUT_DISCLOSURE}</span>
+        </label>
+
+        {/* PRD 04 US-13 AC1/AC3, D-51 (B-123). A FOURTH box, and separate from
+            the SMS one above on purpose: TCPA needs express written consent to
+            marketing texts specifically, so agreeing to gate codes by text
+            cannot be read as agreeing to be texted about a sale. One box
+            covering both would make it impossible to show which was given.
+
+            Last of the four, and unchecked like the rest — it is the one that
+            asks for the most and offers the renter the least. */}
+        <label className="flex items-start gap-2 text-sm">
+          <input type="checkbox" name="marketingSmsConsent" value="yes" className="mt-1" />
+          <span>{MARKETING_SMS_DISCLOSURE}</span>
         </label>
       </div>
     </AdminForm>

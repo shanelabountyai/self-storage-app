@@ -1289,14 +1289,31 @@ async function notificationAllowed(
   return row ? row.enabled : defaultNotificationPreference(category, channel)
 }
 
-/// PRD 05 §5.1/FR-5. Whether this tenant has said yes to ANY SMS at all.
-/// `account_sms` gates every classification sent by SMS in this item —
-/// there is no `marketing_sms` capture flow yet (B-072 shipped
-/// `marketing_email` only), so a marketing SMS rule would have nothing to
-/// check and none is seeded.
-async function smsConsentGranted(tenantId: string | null): Promise<boolean> {
+/// PRD 05 §5.1/FR-5, PRD 04 US-13 AC3, D-51 (B-123). Whether this tenant has
+/// said yes to THIS KIND of SMS.
+///
+/// The lane is chosen by classification, and that is the whole point of the
+/// function. It used to check `account_sms` for every classification, with a
+/// comment explaining that this was safe because no marketing SMS rule existed
+/// — true at the time and load-bearing on nobody enforcing it. The first
+/// marketing rule anyone wired to SMS would have sent under TRANSACTIONAL
+/// consent, which is the compliance failure PRD 05's two-lane split exists to
+/// prevent, with nothing in the code to stop it. B-123's row named that trap
+/// exactly: "a promo sent down the transactional lane because the marketing
+/// lane does not exist."
+///
+/// Now the lane must exist to be used. `marketing_sms` is separate express
+/// written consent (TCPA), captured with its own disclosure and its own
+/// version — never implied by `account_sms`, which a tenant grants so we can
+/// text them a gate code. A global STOP still stops both, because that is
+/// enforced by the suppression list a layer up rather than here.
+async function smsConsentGranted(
+  tenantId: string | null,
+  classification: MessageClassification,
+): Promise<boolean> {
   if (!tenantId) return false
-  return (await currentConsent({ tenantId }, 'account_sms')) === 'granted'
+  const lane = classification === 'marketing' ? 'marketing_sms' : 'account_sms'
+  return (await currentConsent({ tenantId }, lane)) === 'granted'
 }
 
 /// B-074 FR-7's email fallback, shared by every `sms_preferred_email_fallback`
@@ -1460,7 +1477,7 @@ async function deliverSmsForRule(
   // tenant cannot be texted is still one they can be emailed.
   const phone = normalizePhoneE164(recipient.phone)
   const smsAllowed = await notificationAllowed(recipient.tenantId, rule.category, 'sms')
-  const consented = await smsConsentGranted(recipient.tenantId)
+  const consented = await smsConsentGranted(recipient.tenantId, rule.classification)
   const smsSuppression = phone ? await suppressionFor(phone, rule.classification, 'sms') : null
   const messagingServiceSid = recipient.facility?.smsMessagingServiceSid ?? null
 
@@ -1476,8 +1493,25 @@ async function deliverSmsForRule(
             ? `suppressed: ${smsSuppression}`
             : null
 
+  // D-51 (B-123). A marketing SMS never falls back to email, whatever the
+  // rule's `channelPolicy` says.
+  //
+  // `sendEmailFallback` is deliberately simpler than the email path — its own
+  // comment says so — and skips the marketing quiet-hours, daily-cap and
+  // unsubscribe-link branches, plus the `marketing_email` consent check that
+  // lives in `deliverForRule`. So a marketing SMS that could not be sent would
+  // arrive as a marketing EMAIL that passed none of the marketing gates, to
+  // somebody whose only recorded consent might be for texts. That is the same
+  // cross-lane send this item exists to prevent, pointing the other way.
+  //
+  // The marketing email lane has its own rules and its own consent; if a
+  // campaign should also go by email, that is a rule row, not a silent
+  // fallback across lanes.
+  const marketingFallbackRefused = rule.classification === 'marketing'
   if (notViableReason) {
-    if (fallbackEligible) return sendEmailFallback(idempotencyKey, rule, recipient, context, base)
+    if (fallbackEligible && !marketingFallbackRefused) {
+      return sendEmailFallback(idempotencyKey, rule, recipient, context, base)
+    }
     await writeMessage(idempotencyKey, {
       ...base, templateVersion: 0, toAddress: phone ?? '', subject: null, body: '',
       status: smsSuppression ? 'suppressed' : 'failed',
@@ -1502,6 +1536,37 @@ async function deliverSmsForRule(
       status: 'deferred', error: 'deferred: sms_quiet_hours', channel: 'sms',
     })
     return 'deferred'
+  }
+
+  // FR-MSG-5's cap, on this lane too (D-51). The email path has enforced "max
+  // one marketing message a day per contact, across sequences" centrally since
+  // B-072; a marketing SMS with no equivalent would let a tenant on both lanes
+  // receive one of each, which is two marketing messages in a day by a
+  // technicality. Keyed on the address like the email one, and phone numbers
+  // and email addresses never collide as strings, so the same rolling window
+  // covers each contact method separately without either being special-cased.
+  //
+  // CANCELLED rather than deferred, unlike quiet hours: a text held back for
+  // eight hours is the same text, but one held back a day is yesterday's
+  // campaign arriving late.
+  if (rule.classification === 'marketing') {
+    const rollingDayAgo = new Date(now.getTime() - 24 * 3_600_000)
+    const sentToday = await prisma.message.findFirst({
+      where: {
+        toAddress: phone!,
+        classification: 'marketing',
+        status: { in: ['sent', 'delivered'] },
+        sentAt: { gte: rollingDayAgo },
+      },
+      select: { id: true },
+    })
+    if (sentToday) {
+      await writeMessage(idempotencyKey, {
+        ...base, templateVersion: 0, toAddress: phone!, subject: null, body: '',
+        status: 'cancelled', error: 'skipped: marketing_daily_cap', channel: 'sms',
+      })
+      return 'cancelled'
+    }
   }
 
   const template = await effectiveTemplate(rule.templateKey, 'sms', recipient.facility?.id ?? null)

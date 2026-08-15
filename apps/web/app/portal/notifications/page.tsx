@@ -3,7 +3,8 @@ import Link from 'next/link'
 import { AdminForm } from '@/components/admin/form'
 import { requireTenantActor } from '@/lib/rbac/session'
 import { currentPreferences, NOTIFICATION_CATEGORIES, smsConsentView } from '@/lib/portal/notifications'
-import { revokeSmsAction, setPreferencesAction } from './actions'
+import { MARKETING_SMS_DISCLOSURE } from '@/lib/checkout/details'
+import { revokeSmsAction, setMarketingSmsAction, setPreferencesAction } from './actions'
 
 export const metadata: Metadata = { title: 'Notification preferences' }
 
@@ -27,9 +28,10 @@ function formatWhen(date: Date): string {
 
 export default async function NotificationsPage() {
   const actor = await requireTenantActor()
-  const [grid, consent] = await Promise.all([
+  const [grid, consent, marketingSms] = await Promise.all([
     currentPreferences(actor.tenantId),
     smsConsentView(actor.tenantId),
+    smsConsentView(actor.tenantId, 'marketing_sms'),
   ])
 
   return (
@@ -148,6 +150,80 @@ export default async function NotificationsPage() {
             </button>
           </AdminForm>
         )}
+      </section>
+
+      {/* D-51 (B-123). Its own section, below the account-text one and
+          deliberately not folded into it: the two are different permissions
+          with different law behind them, and a single "texts" switch would
+          make turning promotions off cost somebody their gate code. */}
+      <section aria-labelledby="marketing-sms-heading" className="flex flex-col gap-3">
+        <h2 id="marketing-sms-heading" className="font-medium">
+          Marketing text messages
+        </h2>
+        <p className="text-muted-foreground max-w-prose text-sm text-pretty">
+          Separate from the account texts above. Turning these off never affects payment reminders
+          or gate codes, and turning them on is not required to rent.
+        </p>
+
+        {marketingSms.state ? (
+          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+            <dt className="text-muted-foreground">Status</dt>
+            <dd>
+              {marketingSms.state === 'granted'
+                ? 'Granted — marketing texts are on'
+                : 'Revoked — marketing texts are off'}
+            </dd>
+            {marketingSms.capturedAt && (
+              <>
+                <dt className="text-muted-foreground">As of</dt>
+                <dd>{formatWhen(marketingSms.capturedAt)}</dd>
+              </>
+            )}
+            {marketingSms.source && (
+              <>
+                <dt className="text-muted-foreground">Recorded from</dt>
+                <dd>{marketingSms.source.replace(/_/g, ' ')}</dd>
+              </>
+            )}
+            {marketingSms.disclosureVersion && (
+              <>
+                <dt className="text-muted-foreground">Disclosure version</dt>
+                <dd>{marketingSms.disclosureVersion}</dd>
+              </>
+            )}
+          </dl>
+        ) : (
+          <p className="text-muted-foreground text-sm">
+            We have never asked you about marketing texts, so none are sent.
+          </p>
+        )}
+
+        <AdminForm
+          action={setMarketingSmsAction}
+          label="Marketing text messages"
+          className="flex flex-col gap-2"
+        >
+          {/* The disclosure is shown HERE, at the point of granting, not only
+              at checkout — express written consent is consent to the words the
+              person was actually shown, and a bare "on" switch is consent to
+              nothing in particular. The version recorded is this text's. */}
+          <p className="text-muted-foreground max-w-prose text-xs text-pretty">
+            {MARKETING_SMS_DISCLOSURE}
+          </p>
+          <input
+            type="hidden"
+            name="marketingSms"
+            value={marketingSms.state === 'granted' ? 'no' : 'yes'}
+          />
+          <button
+            type="submit"
+            className="border-input hover:bg-accent inline-flex min-h-11 items-center justify-center self-start rounded-md border px-4 text-sm font-medium"
+          >
+            {marketingSms.state === 'granted'
+              ? 'Turn off marketing texts'
+              : 'Turn on marketing texts'}
+          </button>
+        </AdminForm>
       </section>
 
       <Link href="/portal" className="text-sm underline underline-offset-4">

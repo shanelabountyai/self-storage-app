@@ -634,10 +634,10 @@ test('checkout step 1 stays inside the field cap, at a consumer tap size', async
     'input:not([type=hidden]):visible, select:visible, textarea:visible',
   )
 
-  // Seven to fill, and the two consent boxes — which sit BELOW the primary
-  // action, because marketing consent is the only thing on the screen that
-  // serves us rather than the renter.
-  await expect(visibleControls).toHaveCount(9)
+  // Seven to fill, and the three consent boxes — which sit BELOW the primary
+  // action, because consent is the only thing on the screen that serves us
+  // rather than the renter.
+  await expect(visibleControls).toHaveCount(10)
   const names = await visibleControls.evaluateAll((els) =>
     els.map((el) => (el as HTMLInputElement).name),
   )
@@ -651,7 +651,19 @@ test('checkout step 1 stays inside the field cap, at a consumer tap size', async
     'postalCode',
     'smsConsent',
     'marketingConsent',
+    // D-51 (B-123). Marketing TEXTS, separate from `smsConsent` (which is
+    // transactional) and from `marketingConsent` (which is email). Three boxes
+    // because they are three different permissions, and TCPA express written
+    // consent has to be provably to the thing it was given for.
+    'marketingSmsConsent',
   ])
+
+  // Every consent box unchecked by default — PRD 04 US-13 AC1, and the one
+  // property that makes the record mean anything. A pre-ticked box is not
+  // consent, it is a default somebody failed to notice.
+  for (const name of ['smsConsent', 'marketingConsent', 'marketingSmsConsent']) {
+    await expect(form.locator(`input[name="${name}"]`)).not.toBeChecked()
+  }
 
   // City and state are read-only, derived from the zip, with the way to type
   // them by hand closed rather than absent.

@@ -55,6 +55,36 @@ export const MARKETING_EMAIL_CHECKOUT_DISCLOSURE =
 
 export const MARKETING_EMAIL_CHECKOUT_DISCLOSURE_VERSION = 'v1'
 
+/// PRD 04 US-13 AC1/AC3, D-51 (B-123). The MARKETING text lane, and the reason
+/// it is a fourth checkbox rather than a clause bolted onto the SMS one above.
+///
+/// TCPA treats promotional texts differently from transactional ones: they need
+/// express WRITTEN consent, and that consent must be to receive marketing
+/// specifically — a tenant agreeing to gate codes by text has not agreed to be
+/// texted about a sale, and merging the two would make it impossible to show
+/// which they actually said yes to. The two lanes stay separate all the way
+/// down: separate consent channel, separate disclosure, separate version,
+/// separate opt-out, separate check at send time (`smsConsentGranted`).
+///
+/// The FCC's own conditions are the reason each clause is here: it names the
+/// sender, says what will be sent, states that consent is not a condition of
+/// purchase, gives the opt-out, and warns about rates.
+///
+/// **DRAFT COPY, and this one is not merely the usual D-10 caveat.** PRD 04's
+/// own AC3 defers the final wording to legal review (Open Questions Q5), and
+/// nothing may send on this lane until that lands AND a separate A2P 10DLC
+/// MARKETING campaign is registered (PRD 05 §6.3) — a transactional
+/// registration does not cover promotional traffic. D-51 records both, and
+/// records that the lane ships dark because of them.
+export const MARKETING_SMS_DISCLOSURE =
+  'I agree to receive marketing text messages about promotions and pricing from this facility at the number above. Consent is not a condition of renting. Message frequency varies. Message and data rates may apply. Reply STOP to opt out, HELP for help.'
+
+/// Bumped when the text above changes — and it WILL change, because it is
+/// awaiting the legal review AC3 names. Recorded on every consent row so a
+/// dispute reads what the renter was actually shown; a version that never moved
+/// while the copy did would make every row before the change unprovable.
+export const MARKETING_SMS_DISCLOSURE_VERSION = 'v1-draft'
+
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 /// Deliberately loose. This is a trust boundary, so the job is to reject
 /// obvious nonsense and typos, not to enforce a format that turns away a real

@@ -509,7 +509,7 @@ export default async function CheckoutPage({
           {session.step !== 'payment' && session.step !== 'provisioned' && (
             <PromoCodeStep
               token={token!}
-              action={applyPromoCodeAction as never}
+              action={applyPromoCodeAction}
               appliedTerms={lockedPromo?.terms ?? null}
             />
           )}

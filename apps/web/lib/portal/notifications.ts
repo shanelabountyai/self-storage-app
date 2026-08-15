@@ -1,5 +1,5 @@
 import { prisma, type ConsentState } from '@storage/db'
-import { currentConsent } from '@storage/core/consent'
+import { currentConsent, recordConsent } from '@storage/core/consent'
 import {
   defaultNotificationPreference,
   type NotificationCategoryKey,
@@ -59,13 +59,21 @@ export type SmsConsentView = {
 
 /// CN-13 AC: "SMS consent state (granted/revoked, timestamp, disclosure
 /// version, capture source) is displayed read-only." Read from the newest
-/// `account_sms` row directly rather than through `currentConsent` alone —
+/// row of that channel directly rather than through `currentConsent` alone —
 /// that returns only the state, and the portal needs the whole row.
-export async function smsConsentView(tenantId: string): Promise<SmsConsentView> {
+///
+/// B-123 made the channel a parameter rather than copying the function: the
+/// marketing text lane needs exactly the same four facts displayed, and two
+/// near-identical readers are how the two lanes come to show different things
+/// about the same kind of record.
+export async function smsConsentView(
+  tenantId: string,
+  channel: 'account_sms' | 'marketing_sms' = 'account_sms',
+): Promise<SmsConsentView> {
   const [state, row] = await Promise.all([
-    currentConsent({ tenantId }, 'account_sms'),
+    currentConsent({ tenantId }, channel),
     prisma.consent.findFirst({
-      where: { tenantId, channel: 'account_sms' },
+      where: { tenantId, channel },
       orderBy: { capturedAt: 'desc' },
       select: { capturedAt: true, disclosureVersion: true, source: true },
     }),
@@ -76,6 +84,32 @@ export async function smsConsentView(tenantId: string): Promise<SmsConsentView> 
     disclosureVersion: row?.disclosureVersion ?? null,
     source: row?.source ?? null,
   }
+}
+
+/// D-51 (B-123). The tenant's own switch for MARKETING texts.
+///
+/// Consent-only, and deliberately NOT `applySmsStop`. Revoking here must not
+/// touch the suppression list, because that list is address-keyed and global:
+/// a STOP silences every SMS to that number including payment reminders and
+/// gate codes, which is the right answer to "stop texting me" and the wrong
+/// answer to "stop texting me about sales". A tenant turning marketing off
+/// keeps their gate code.
+///
+/// Granting from here is a real opt-in and is stamped with the disclosure
+/// version the portal showed, the same as the checkout capture — a consent row
+/// with no version is one nobody can later prove the wording of.
+export async function setMarketingSmsConsent(
+  tenantId: string,
+  granted: boolean,
+  disclosureVersion: string,
+): Promise<void> {
+  await recordConsent({
+    tenantId,
+    channel: 'marketing_sms',
+    state: granted ? 'granted' : 'revoked',
+    source: 'portal_preferences',
+    disclosureVersion,
+  })
 }
 
 export type RevokeSmsResult = { revoked: boolean }

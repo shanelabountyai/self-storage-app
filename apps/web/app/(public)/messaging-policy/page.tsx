@@ -115,6 +115,16 @@ export default function MessagingPolicyPage() {
           just the offers. We will keep emailing you about your account, because those messages are
           part of your rental agreement.
         </p>
+        {/* B-123 / D-51. The marketing-only switch now exists, so the page has
+            to say so: telling somebody their only option is STOP, when STOP
+            also costs them their gate code, pushes them into giving up more
+            than they meant to. */}
+        <p className="text-pretty">
+          <strong>If it is only the offers you want to stop</strong>, do not reply STOP — turn
+          marketing texts off on your{' '}
+          <strong>Notifications</strong> page instead. That leaves your account and payment texts
+          working, and you can switch the offers back on there whenever you like.
+        </p>
         <p className="text-pretty">
           To start again, reply <strong>START</strong> or <strong>UNSTOP</strong>, or turn texts
           back on from your Notifications page. For help, reply <strong>HELP</strong> — you will get our
