@@ -62,6 +62,13 @@ async function assertTenantAccess(
   return accessible
 }
 
+/// B-114. Exported because the screen has to SAY it is capping.
+///
+/// A search that silently drops the twenty-sixth match is a search that lies,
+/// and this repo seeds a tenant called "Ada Renter" in twenty suites — the one
+/// somebody is looking for is exactly the one past the limit.
+export const TENANT_SEARCH_LIMIT = 25
+
 export type TenantSearchResult = {
   tenantId: string
   name: string
@@ -106,7 +113,7 @@ export async function searchTenants(actor: Actor, query: string): Promise<Tenant
         ],
       })),
     },
-    take: 25,
+    take: TENANT_SEARCH_LIMIT,
     orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
     select: {
       id: true,

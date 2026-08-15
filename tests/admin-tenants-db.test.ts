@@ -10,6 +10,7 @@ import {
   updateTenantAddress,
   updateTenantContact,
 } from '../apps/web/lib/admin/tenants'
+import { listTenants } from '../apps/web/lib/admin/tenant-list'
 import type { Actor } from '../apps/web/lib/rbac/actor'
 import { ForbiddenError } from '../apps/web/lib/rbac/authorize'
 
@@ -405,6 +406,119 @@ describeDb('admin tenant profile', () => {
       const types = profile.documents.map((d) => d.type)
       expect(types).toContain('id_copy')
       expect(types).toContain('lease')
+    })
+  })
+
+  describe('the tenant list (B-114)', () => {
+    // The screen was a heading, a search box and nothing else until you typed,
+    // so "who are my tenants" and "who owes me money" had no answer here and
+    // every past-due question routed through Reports. Scoped to facility A
+    // throughout, because this suite shares a database with twenty others.
+
+    it('lists tenants without being asked a question first', async () => {
+      const list = await listTenants(managerAt(facilityAId), { facilityId: facilityAId })
+
+      expect(list.total).toBeGreaterThan(0)
+      const row = list.rows.find((one) => one.tenantId === tenantId)
+      expect(row).toBeDefined()
+      expect(row!.units).toEqual([{ facilityName: expect.any(String), unitNumber: 'A-9' }])
+      // Plain words, never the enum (B-109's rule).
+      expect(row!.statusLabel).toBe('Active')
+    })
+
+    it('reports the balance from the ledger and the age from the metrics module', async () => {
+      const list = await listTenants(managerAt(facilityAId), { facilityId: facilityAId })
+      const row = list.rows.find((one) => one.tenantId === tenantId)!
+
+      expect(row.balanceCents).toBe(12_900)
+      // A charge with no invoice behind it is money owed but not money LATE —
+      // `daysPastDue` ages from the oldest unpaid invoice's original due date,
+      // and there is no invoice here. The distinction is the whole reason the
+      // screen shows both columns.
+      expect(row.daysPastDue).toBe(0)
+    })
+
+    it('treats past due as owing money AND being late, not either one', async () => {
+      const actor = managerAt(facilityAId)
+      const before = await listTenants(actor, { facilityId: facilityAId, filter: 'past_due' })
+      expect(before.rows.map((row) => row.tenantId)).not.toContain(tenantId)
+
+      const invoice = await prisma.invoice.create({
+        data: {
+          facilityId: facilityAId,
+          leaseId: leaseAId,
+          number: `T${suffix}0001`,
+          issueDate: new Date('2026-06-01T00:00:00Z'),
+          periodStart: new Date('2026-06-01T00:00:00Z'),
+          periodEnd: new Date('2026-07-01T00:00:00Z'),
+          dueDate: new Date('2026-06-01T00:00:00Z'),
+          totalCents: 12_900,
+          amountPaidCents: 0,
+          status: 'open',
+        },
+      })
+
+      try {
+        const after = await listTenants(actor, {
+          facilityId: facilityAId,
+          filter: 'past_due',
+          asOf: new Date('2026-07-01T00:00:00Z'),
+        })
+        const row = after.rows.find((one) => one.tenantId === tenantId)
+        expect(row).toBeDefined()
+        expect(row!.daysPastDue).toBe(30)
+      } finally {
+        await prisma.invoice.delete({ where: { id: invoice.id } })
+      }
+    })
+
+    it('does not call a tenant former while they still hold a unit', async () => {
+      const list = await listTenants(managerAt(facilityAId), {
+        facilityId: facilityAId,
+        filter: 'former',
+      })
+      expect(list.rows.map((row) => row.tenantId)).not.toContain(tenantId)
+    })
+
+    it('pages, and reports the whole count rather than the page size', async () => {
+      const list = await listTenants(managerAt(facilityAId), { facilityId: facilityAId, page: 1 })
+      expect(list.pageSize).toBe(25)
+      expect(list.rows.length).toBeLessThanOrEqual(list.pageSize)
+      // "Showing 1–25 of 143" is only honest if the total is the total.
+      expect(list.total).toBeGreaterThanOrEqual(list.rows.length)
+
+      const beyond = await listTenants(managerAt(facilityAId), {
+        facilityId: facilityAId,
+        page: 999,
+      })
+      expect(beyond.rows).toEqual([])
+      expect(beyond.total).toBe(list.total)
+    })
+
+    it('never widens the actor own scope', async () => {
+      // Asking for facility B as a manager of facility A returns nothing —
+      // the switcher narrows access, it does not grant it (RBAC-1).
+      const list = await listTenants(managerAt(facilityAId), { facilityId: facilityBId })
+      expect(list.rows).toEqual([])
+    })
+
+    it('refuses an actor without tenants:view', async () => {
+      const noAccess: Actor = {
+        kind: 'staff',
+        staffUserId: staffId,
+        assignments: [
+          {
+            facilityId: facilityAId,
+            roleKey: 'counter',
+            rank: 10,
+            permissions: new Set(['payments:take']),
+            limits: { maxFeeWaiverCents: 0, maxRefundCents: 0, maxCreditCents: 0 },
+          },
+        ],
+      }
+      await expect(listTenants(noAccess, { facilityId: facilityAId })).rejects.toBeInstanceOf(
+        ForbiddenError,
+      )
     })
   })
 })

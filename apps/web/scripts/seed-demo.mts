@@ -629,14 +629,41 @@ async function seedLifecycleStates(seeded: SeededFacility, startIndex: number, i
     // The only ledger write in this whole seed — a real unpaid charge so the
     // portal dashboard's past-due banner and suspended gate-code panel
     // (B-034) have a genuine signal to render instead of an empty $0.
+    const owedCents = delinquentSlot.rate + delinquentLease.protectionCents
     await prisma.ledgerEntry.create({
       data: {
         facilityId: facility.id,
         leaseId: delinquentLease.id,
         type: 'charge',
-        amountCents: delinquentSlot.rate + delinquentLease.protectionCents,
+        amountCents: owedCents,
         description: 'Monthly rent + protection plan',
         occurredAt: daysAgo(35),
+      },
+    })
+
+    // B-114. The INVOICE behind that charge, unpaid and overdue.
+    //
+    // Without it the seed had a tenant who owed money and was not late: every
+    // aging figure in the product reads `daysPastDue` from the oldest unpaid
+    // INVOICE's original due date (D-25), and there were no invoices anywhere
+    // in the demo data at all. So the delinquency report bucketed the whole
+    // portfolio at 0–10 days, the tenant list could never show a past-due row,
+    // and the one lifecycle state the seed calls `delinquent` demonstrated
+    // owing rather than delinquency.
+    //
+    // Dated to match the ledger charge, so the two tell the same story.
+    await prisma.invoice.create({
+      data: {
+        facilityId: facility.id,
+        leaseId: delinquentLease.id,
+        number: `DEMO-${facility.slug.slice(-6).toUpperCase()}-0001`,
+        issueDate: daysAgo(35),
+        dueDate: daysAgo(35),
+        periodStart: daysAgo(35),
+        periodEnd: daysAgo(5),
+        totalCents: owedCents,
+        amountPaidCents: 0,
+        status: 'open',
       },
     })
   }

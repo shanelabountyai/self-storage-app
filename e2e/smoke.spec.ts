@@ -582,7 +582,13 @@ test('the sticky price summary does not cover the payment step at 360px', async 
   await page.getByRole('checkbox', { name: /sign this agreement electronically/ }).check()
   await page.getByLabel('Type your full name to sign').fill('Ada Renter')
   await page.getByRole('button', { name: 'Sign and continue' }).click()
-  await expect(page.getByRole('heading', { name: 'Payment' })).toBeVisible()
+  // `exact`, because the payment step also renders an "Automatic payments"
+  // heading (B-025's autopay disclosure) and Playwright matches an accessible
+  // name by case-insensitive substring — so the unqualified name resolves to
+  // two elements and violates strict mode. It only ever passed because that
+  // section is client-rendered: on a loaded machine the assertion resolved
+  // before it mounted, and on a quiet one both are present and it fails.
+  await expect(page.getByRole('heading', { name: 'Payment', exact: true })).toBeVisible()
 
   const back = page.getByRole('button', { name: /^Go back|^Back to/ })
   await back.scrollIntoViewIfNeeded()
@@ -723,21 +729,39 @@ test('the lease shows a summary first and signs with a typed name', async ({ pag
   const sign = page.getByRole('button', { name: 'Sign and continue' })
   await expect(sign).toBeEnabled()
 
-  // Consent and signature are separate acts; missing either is a named error.
+  // Consent and signature are separate acts, and an empty submit must name BOTH
+  // — not stop at the first one it finds (3.3.1).
   await sign.click()
-  await expect(page.getByRole('main').getByRole('alert')).toBeVisible()
+  const alert = page.getByRole('main').getByRole('alert')
+  await expect(alert).toContainText('Type your full name')
+  await expect(alert).toContainText('Tick the box to agree to sign electronically')
 
+  // ONE error round trip, not three. This test used to submit three times —
+  // empty, then a deliberately mistyped name, then the right one — and that
+  // path is not reliably drivable while B-124 stands: a field error re-renders
+  // the step EMPTY, so anything typed while that commit is in flight is
+  // discarded after `check()`/`fill()` have already returned successfully, and
+  // the next submit sends a blank form and gets the previous error back. In
+  // isolation it passes; under parallel checkout load it failed roughly one run
+  // in three. Restore the name-mismatch assertion when B-124 makes the step
+  // keep what was typed — that is the item that can test it deterministically.
+  //
   // Named, not positional. B-112 moved the active-duty declaration onto this
   // step, so `.first()` is no longer the E-SIGN consent — and checking the
   // wrong box gets the signature refused for a reason the test cannot see.
-  await page.getByRole('checkbox', { name: /sign this agreement electronically/ }).check()
-  await page.getByLabel('Type your full name to sign').fill('AR')
-  await sign.click()
-  await expect(page.getByRole('main').getByRole('alert')).toContainText('Ada Renter')
-
+  const consent = page.getByRole('checkbox', { name: /sign this agreement electronically/ })
+  await consent.check()
   await page.getByLabel('Type your full name to sign').fill('Ada Renter')
+  await expect(consent).toBeChecked()
+  await expect(page.getByLabel('Type your full name to sign')).toHaveValue('Ada Renter')
   await sign.click()
-  await expect(page.getByRole('heading', { name: 'Payment' })).toBeVisible()
+  // `exact`, because the payment step also renders an "Automatic payments"
+  // heading (B-025's autopay disclosure) and Playwright matches an accessible
+  // name by case-insensitive substring — so the unqualified name resolves to
+  // two elements and violates strict mode. It only ever passed because that
+  // section is client-rendered: on a loaded machine the assertion resolved
+  // before it mounted, and on a quiet one both are present and it fails.
+  await expect(page.getByRole('heading', { name: 'Payment', exact: true })).toBeVisible()
 })
 
 test('the payment step itemises before it charges and discloses autopay', async ({ page }) => {

@@ -150,3 +150,52 @@ test.describe('the tenant ledger (B-049)', () => {
     ).toEqual([])
   })
 })
+
+test.describe('the tenant list (B-114)', () => {
+  test.beforeEach(async ({ page }) => {
+    await signInAsDemoOwner(page)
+  })
+
+  test('lists tenants without being asked a question first (B-114)', async ({ page }) => {
+    // The screen was a heading, a search box and nothing else until you typed.
+    await page.goto('/admin/tenants')
+
+    await expect(page.getByRole('status').filter({ hasText: /Showing \d+–\d+ of \d+/ })).toBeVisible()
+    await expect(page.getByRole('columnheader', { name: 'Balance' })).toBeVisible()
+    await expect(page.getByRole('columnheader', { name: 'Days past due' })).toBeVisible()
+
+    // The row is a link to the profile, which is the next thing anybody wants.
+    const firstRow = page.getByRole('row').nth(1)
+    await expect(firstRow.getByRole('link')).toHaveAttribute('href', /\/admin\/tenants\/.+/)
+  })
+
+  test('filter chips are links, so a view is shareable (B-114)', async ({ page }) => {
+    await page.goto('/admin/tenants')
+    const filters = page.getByRole('navigation', { name: 'Filter tenants' })
+    await expect(filters.getByRole('link', { name: 'All' })).toHaveAttribute('aria-current', 'page')
+
+    await filters.getByRole('link', { name: 'Past due' }).click()
+    // A URL somebody can send to a colleague — not client state.
+    await expect(page).toHaveURL(/\/admin\/tenants\?filter=past_due/)
+    await expect(
+      page.getByRole('navigation', { name: 'Filter tenants' }).getByRole('link', { name: 'Past due' }),
+    ).toHaveAttribute('aria-current', 'page')
+  })
+
+  test('a past-due row carries the words, not only a colour (B-114)', async ({ page }) => {
+    // 1.4.1. This is the column somebody acts on, and a tinted row says
+    // nothing to anyone who cannot see the tint.
+    await page.goto('/admin/tenants?filter=past_due')
+    const row = page.getByRole('row').filter({ hasText: 'Dana Delinquent' }).first()
+    await expect(row).toBeVisible()
+    await expect(row).toContainText(/days past due/)
+  })
+
+  test('a truncated search says so rather than dropping matches (B-114)', async ({ page }) => {
+    // The demo seed carries far fewer than 25 matching tenants, so this
+    // asserts the honest case: an uncapped result set claims nothing.
+    await page.goto('/admin/tenants?q=demo.example.com')
+    await expect(page.getByText(/Showing the first 25 matches/)).toHaveCount(0)
+    await expect(page.getByRole('row').nth(1)).toBeVisible()
+  })
+})

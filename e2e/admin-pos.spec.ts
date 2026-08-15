@@ -82,6 +82,20 @@ test.describe('signed in as the demo owner', () => {
   })
 
   test('the deposit slip lists the day’s payments with who took them', async ({ page }) => {
+    // Takes its own payment rather than relying on the cash test above.
+    //
+    // `fullyParallel` gives no ordering between the two, so this only ever
+    // passed because payments here are real and permanent and previous runs
+    // had left some behind. Re-seeding the demo data wipes them
+    // (`payment.deleteMany`), and the test then failed with nothing to list —
+    // which reads as a broken deposit slip and is not one.
+    await page.goto(`/admin/pos?q=${DEMO_POS_TENANT_EMAIL}`)
+    await page.getByRole('link', { name: 'Alex Active' }).first().click()
+    await page.getByLabel('Amount ($)').fill('5')
+    await page.getByLabel('Cash tendered ($)').fill('5')
+    await page.getByRole('button', { name: 'Record payment' }).click()
+    await expect(page.getByRole('main').getByRole('status').first()).toContainText(/Receipt #\d+/)
+
     await page.goto('/admin/pos/summary')
     await expect(page.getByRole('heading', { level: 1, name: 'Daily payments' })).toBeVisible()
     // The cash payment taken above is on today's slip, attributed to the
