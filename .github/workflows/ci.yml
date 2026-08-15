@@ -4,17 +4,19 @@ on:
   push:
     branches: [main]
   pull_request:
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
 
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  # Fast lane: every PR push. Lint, types, unit tests, build.
   verify:
     runs-on: ubuntu-latest
-
-    # Throwaway Postgres so migrations are proven to apply from scratch and the
-    # raw-SQL constraints in them are exercised for real (tests/db-constraints).
+    timeout-minutes: 20
     services:
       postgres:
         image: postgres:17
@@ -53,34 +55,78 @@ jobs:
 
       - run: npm run db:generate
 
-      # Fails if a migration is missing, out of order, or does not apply cleanly
-      # to an empty database.
       - name: Apply migrations
         run: npx dotenv -e .env.local -- npx prisma migrate deploy --schema packages/db/prisma/schema.prisma
 
-      # Roles and permissions are reference data, not fixtures — authorization
-      # does not work without them, so every environment gets them.
       - name: Seed roles and permissions
         run: npm run db:seed
 
-      # The e2e suite asserts against the demo facilities by name (search
-      # ranking, the facility page, the axe route list), so CI has to have them.
-      # Without this the smoke suite was checking the "we have no facilities
-      # listed yet" template and calling it a pass.
-      - name: Seed demo facilities for e2e
-        run: npm run db:seed:demo
-
-      # Catches a schema.prisma edit that was never turned into a migration:
-      # exit code 2 means the migrated database and the datamodel disagree.
       - name: Check for schema drift
         run: |
           npx dotenv -e .env.local -- npx prisma migrate diff \
             --from-schema-datasource packages/db/prisma/schema.prisma \
             --to-schema-datamodel packages/db/prisma/schema.prisma \
             --exit-code
+
       - run: npm run lint
       - run: npm run typecheck
       - run: npm run test
+      - run: npm run build
+
+  # Heavy lane: merges to main and non-draft PRs only.
+  # 60-min cap: this repo previously had NO timeout and inherited GitHub's
+  # 6-hour max — same exposure that burned rental-business once.
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    needs: verify
+    if: github.ref == 'refs/heads/main' || github.event.pull_request.draft == false
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - name: Provision CI env
+        run: |
+          {
+            echo 'DATABASE_URL=postgresql://ci:ci@localhost:5432/ci'
+            echo 'DIRECT_URL=postgresql://ci:ci@localhost:5432/ci'
+            echo "AUTH_SECRET=$(openssl rand -base64 32)"
+            echo 'AUTH_URL=http://localhost:3000'
+          } > .env.local
+
+      - run: npm run db:generate
+
+      - name: Apply migrations
+        run: npx dotenv -e .env.local -- npx prisma migrate deploy --schema packages/db/prisma/schema.prisma
+
+      - name: Seed roles and permissions
+        run: npm run db:seed
+
+      # e2e asserts against demo facilities by name — heavy lane only.
+      - name: Seed demo facilities for e2e
+        run: npm run db:seed:demo
+
       - run: npm run build
 
       - name: Install Playwright browsers
@@ -101,9 +147,7 @@ jobs:
           path: playwright-report/
           retention-days: 7
 
-      # Reported, not enforced: the current advisories come from version pins
-      # inside next and eslint that we cannot override without breaking the
-      # dependency tree. See _overrides_note in package.json.
+      # Reported, not enforced: see _overrides_note in package.json.
       - name: Dependency audit (report only)
         continue-on-error: true
         run: npm audit --audit-level=moderate
