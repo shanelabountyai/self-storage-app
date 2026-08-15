@@ -3816,7 +3816,7 @@ The portal's nine account links go from one flat row (which wrapped to four line
 
 ## B-119 — The accessibility scan contract
 
-`XXXXXXX`
+`5900834`
 
 **Built:** `PUBLIC_ROUTES` in `e2e/a11y.spec.ts` now genuinely is the contract it claims to be — added `/messaging-policy`, `/login`, `/forgot-password`, `/reset-password` and `/unsubscribe/not-a-real-token`. A new `ADMIN_ROUTES` list in `e2e/admin.spec.ts` grew from 7 routes to the full ~42-route enumeration of every static `apps/web/app/admin/**/page.tsx`, plus `/mfa` and `/reauth` scanned signed-in, with a header comment naming exactly what stays out (dynamic per-entity routes already owned by their own topic spec files) and why. `e2e/portal.spec.ts` gained the same treatment — a `PORTAL_ROUTES` list covering all nine portal pages except `/portal/pay`, whose existing test drives a real lease rather than a bare `goto` and was kept instead of duplicated. Admin and portal both gained the 200%-zoom and forced-text-spacing loops that only public routes had before. `e2e/smoke.spec.ts`'s move-in walk now calls `assertNoAxeViolations(page)` after every `advance` — steps 1 through 5 of checkout, confirmed clean at each. The existing focus/live-region test (B-110) was extended to check a second step transition, not just the first, so "focus moves and the live region's text changes" is now asserted more than once per suite run rather than trusted to generalise from one sample.
 
