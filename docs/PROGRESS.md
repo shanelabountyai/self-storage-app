@@ -3762,7 +3762,7 @@ The accessibility statement was re-read and one clause added: it already claimed
 
 ## B-116 — 320px reflow on the three admin routes that fail it, and the unit list's volume
 
-`PENDING`
+`e1db355`
 
 **Built:** `/admin/units`, `/admin/units/types` and `/admin/settings` all reflow cleanly at 320px now — `REFLOW_PENDING` is deleted from `e2e/admin.spec.ts`, not repointed, and its `test.fixme` is gone. `listUnits` paginates at 50 with a "Showing X–Y of Z" count line and page state in the URL, reusing `tenant-list.ts`'s shape rather than inventing a second one. Below `sm`, the units table becomes a card per unit — the same "one legible card instead of a horizontally-scrolled sliver of a six-column table" treatment B-115 gave task cards. "Add a unit" and "Import layout" moved to a new `/admin/units/setup` tab, off the screen worked from every day. Occupied rows — table and card alike — name the tenant and link to their profile: "who is in B-14?" no longer means leaving for Tenants and searching.
 
