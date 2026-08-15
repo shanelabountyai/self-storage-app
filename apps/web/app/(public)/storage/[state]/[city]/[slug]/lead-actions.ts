@@ -4,6 +4,7 @@ import { cookies, headers } from 'next/headers'
 import {
   decodeTouch,
   FIRST_TOUCH_COOKIE,
+  REFERRAL_COOKIE,
   LAST_TOUCH_COOKIE,
 } from '@storage/core/marketing'
 import { captureLead } from '@/lib/marketing/lead-capture'
@@ -47,6 +48,9 @@ export async function submitLeadAction(_prev: FormState, formData: FormData): Pr
     {
       firstTouch: decodeTouch(cookieStore.get(FIRST_TOUCH_COOKIE)?.value),
       lastTouch: decodeTouch(cookieStore.get(LAST_TOUCH_COOKIE)?.value),
+      // PRD 10 FR-REF-3 (B-100). Its own cookie, so a later ad click cannot
+      // overwrite the tenant's claim.
+      referralInviteId: cookieStore.get(REFERRAL_COOKIE)?.value ?? null,
       landingPage: headerList.get('referer'),
       referrer: headerList.get('referer'),
       gclid: null,

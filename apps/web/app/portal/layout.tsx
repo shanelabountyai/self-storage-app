@@ -72,6 +72,9 @@ export default async function PortalLayout({ children }: { children: React.React
                 <Link href="/portal/notifications" className="underline underline-offset-2">
                   Notifications
                 </Link>
+                <Link href="/portal/refer" className="underline underline-offset-2">
+                  Refer a friend
+                </Link>
               </div>
             </details>
             <span aria-hidden="true" className="border-muted-foreground/40 h-4 border-l" />

@@ -96,6 +96,7 @@ describeDb('referral program core', () => {
   })
 
   afterEach(async () => {
+    await prisma.domainEvent.deleteMany({ where: { facilityId: { in: [facilityId, otherFacilityId] } } })
     await prisma.referral.deleteMany({ where: { facilityId: { in: [facilityId, otherFacilityId] } } })
     await prisma.referralInvite.deleteMany({
       where: { facilityId: { in: [facilityId, otherFacilityId] } },
@@ -476,6 +477,56 @@ describeDb('referral program core', () => {
       expect(refused).toHaveLength(1)
       expect(refused[0].refusedReason).toBe('invite_already_used')
     })
+  })
+
+  it('emits referral.qualified and referral.refused for the comms layer (§6.3)', async () => {
+    // The events exist and fire; no rule consumes them yet, which is a
+    // deliberate no-op — `processCommsEvent` returns before resolving a
+    // recipient when no rule matches. §6.3's four templates need a recipient
+    // per RULE rather than per event (one referral tells two different people
+    // two different things), and that is a change to the comms core rather
+    // than a catalog entry. Asserted now so the payload the templates will
+    // read is pinned before anything renders from it.
+    const minted = await mintInvite(referrerId)
+    if (!minted.ok) throw new Error('unreachable')
+    const referee = await makeTenant()
+    const leaseId = await makeLease(referee.id)
+
+    const earned = await qualifyReferral({
+      inviteId: minted.inviteId,
+      refereeTenantId: referee.id,
+      refereeLeaseId: leaseId,
+      refereeFacilityId: facilityId,
+    })
+    expect(earned.ok).toBe(true)
+
+    const qualified = await prisma.domainEvent.findFirstOrThrow({
+      where: { name: 'referral.qualified', facilityId },
+      orderBy: { occurredAt: 'desc' },
+    })
+    const payload = qualified.payload as Record<string, unknown>
+    // Both people and both amounts, because the two messages address them
+    // differently and each needs its own figure.
+    expect(payload.referrerTenantId).toBe(referrerId)
+    expect(payload.refereeTenantId).toBe(referee.id)
+    expect(payload.referrerRewardCents).toBe(5_000)
+    expect(payload.refereeRewardCents).toBe(5_000)
+
+    // And a refusal carries the KEY, not a rendered sentence — so the message
+    // and the staff record can never disagree about the same refusal.
+    const second = await mintInvite(referrerId)
+    if (!second.ok) throw new Error('unreachable')
+    await qualifyReferral({
+      inviteId: second.inviteId,
+      refereeTenantId: referee.id,
+      refereeLeaseId: leaseId,
+      refereeFacilityId: facilityId,
+    })
+    const refused = await prisma.domainEvent.findFirstOrThrow({
+      where: { name: 'referral.refused', facilityId },
+      orderBy: { occurredAt: 'desc' },
+    })
+    expect((refused.payload as Record<string, unknown>).refusal).toBe('already_referred')
   })
 
   describe('the reward reaches an invoice — §6.2 and §5.5', () => {

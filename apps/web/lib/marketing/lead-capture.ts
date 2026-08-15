@@ -50,6 +50,12 @@ export type LeadContext = {
   /// For rate limiting. Hashed before it touches the database — see
   /// `submitterHash` — so the raw address never lands anywhere.
   ip: string | null
+  /// PRD 10 FR-REF-3 (B-100). The referral invite this visitor arrived on, if
+  /// any. Read from its own cookie rather than the touch, because "last-touch
+  /// does not overwrite a referral" — a friend who clicks a tenant's link and
+  /// later clicks an ad still pays the tenant, and the touch cookie is
+  /// rewritten on every new session by design.
+  referralInviteId?: string | null
 }
 
 export type CaptureResult =
@@ -127,6 +133,16 @@ export async function captureLead(
       }),
     }
 
+  // FR-REF-3: the derived channel is `referral_tenant`, distinct from
+  // `referral` (a link from another website), because the two have completely
+  // different costs and the report exists to tell them apart. Applied AFTER
+  // the ordinary derivation and unconditionally — this is the "last touch does
+  // not overwrite a referral" rule: the tenant did the work, and letting a
+  // later ad click take the credit teaches tenants the program does not work.
+  const touch: TouchPoint = context.referralInviteId
+    ? { ...thisTouch, channel: 'referral_tenant' }
+    : thisTouch
+
   // FR-LEAD-1's dedup.
   const existing = keys.email || keys.phone
     ? await prisma.lead.findFirst({
@@ -161,7 +177,7 @@ export async function captureLead(
         leadId: existing.id,
         type: 'inquiry',
         body: describeSubmission(input),
-        channel: thisTouch.channel,
+        channel: touch.channel,
       },
     })
 
@@ -192,7 +208,7 @@ export async function captureLead(
       })
     }
 
-    await emitLeadEvent(existing.id, input.facilityId, thisTouch.channel, true)
+    await emitLeadEvent(existing.id, input.facilityId, touch.channel, true)
     return { ok: true, leadId: existing.id, deduplicated: true }
   }
 
@@ -210,7 +226,7 @@ export async function captureLead(
       source: 'web',
       status: 'new',
       targetMoveInDate: input.moveInDate ?? null,
-      channel: thisTouch.channel,
+      channel: touch.channel,
       firstTouchSource: firstTouch.source,
       firstTouchMedium: firstTouch.medium,
       firstTouchCampaign: firstTouch.campaign,
@@ -245,7 +261,7 @@ export async function captureLead(
     await raiseLeadDripStep(lead.id, input.facilityId, 1)
   }
 
-  await emitLeadEvent(lead.id, input.facilityId, thisTouch.channel, false)
+  await emitLeadEvent(lead.id, input.facilityId, touch.channel, false)
   return { ok: true, leadId: lead.id, deduplicated: false }
 }
 

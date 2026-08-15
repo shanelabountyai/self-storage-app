@@ -3999,3 +3999,25 @@ Added `db:migrate:e2e`, migrating and seeding the `public` schema of the `storag
 **Test verification:** unit suite green, **2,903 passing** (up 5 from part 1 — four for the billing hand-off, one for the trigger), **run twice with identical results** per the shared-state rule. Typecheck and lint clean, back to the four pre-existing warnings. Full e2e green: **867 passed, 5 skipped, 0 failed of 872**, both projects.
 
 **Still to build:** the portal invite control (§5.1 AC — minting has no UI, so no tenant can share anything yet), lead and reservation attribution (§5.3 — the cookie is set and read only by `/rent`), the four comms templates (§6.3), and clawback (§4.1).
+
+## B-100 (part 3) — Referrals: the tenant's side, attribution, and the events
+
+`XXXXXXX`
+
+**The backlog row is now ticked.** Parts 1–3 together cover everything the row lists. Two things from PRD 10 that the row does not list are deliberately left, and are named at the bottom with the item that should own them.
+
+**Built — attribution (§5.3).** A lead captured while the referral cookie is present records the channel as **`referral_tenant`**, distinct from `referral` (a link from another website) because the two have completely different costs and the report exists to tell them apart. Applied *after* the ordinary derivation and unconditionally, which is FR-REF-3's "last-touch does not overwrite a referral" — a friend who clicks a tenant's link and later clicks an ad still pays the tenant, because the tenant did the work and the alternative teaches tenants the program does not work. The referral rides in its **own** cookie for exactly this reason: the touch cookie is rewritten every session by design, so storing the code there would have deleted the claim on the friend's second visit.
+
+**Built — the tenant's side (§5.1, §5.2).** `/portal/refer` lists outstanding invites, each as **selectable text with its link**, plus the plain-language terms; minting is a form post, so the page works with the bundle disabled. `ShareInvite` layers §5.2's three-step degradation on top — native share sheet (which opens Messages on a phone), then clipboard, then the text that was already on the page.
+
+**§5.2 is a permanent non-goal, and the code is shaped so it stays one.** There is no recipient field anywhere in this feature and there must never be: a "give us your friend's number and we'll text them" field makes *this business* the sender of an unsolicited commercial message to somebody who never consented — CAN-SPAM liability attaches to the sender, not to whoever typed the address, and as SMS it is a TCPA problem with statutory damages **per message**. The component carries that reasoning in full, because the field is the obvious next feature request and the comment is what should stop it.
+
+**Built — the events (§6.3).** `referral.qualified` and `referral.refused` are in the catalog and emitted, the qualified one inside the transaction (an event for a referral that rolled back would tell two people about money nobody owes). The refusal carries the refusal **key**, not a rendered sentence, so the eventual message and the staff record can never disagree about the same refusal. A test pins both payloads.
+
+**Decided — the four templates are NOT wired, and the reason is architectural rather than time.** The comms core resolves **one recipient per event** and then runs every applicable rule against it (`processCommsEvent`). §6.3 needs one referral to tell *two different people two different things*, which needs a recipient per **rule**, not per event. That is a change to the comms core, not a catalog entry, and doing it badly — two rules both resolving to the referrer — would send the referee's message to the wrong person. The events fire and no rule consumes them, which `processCommsEvent` handles as a clean no-op: it returns before resolving a recipient when no rule matches.
+
+**Left behind, with the item that should own it:**
+- **The four comms templates (§6.3)** — needs per-rule recipient resolution in the comms core first, as above. Natural home is **B-101**, which already opens the referral surfaces.
+- **Clawback (§4.1)** — the refunded-payment reversal and the minimum-stay rule. `referralMinimumStayDays` is stored and has its control; nothing reads it yet. Not in the row's cited sections (§5.1/§5.3/§5.4/§5.5/§6), which is why it is not blocking the tick, but it is real money and should be its own row.
+
+**Test verification:** unit suite green, **2,905 passing**. Typecheck and lint clean — six warnings, all the pre-existing `_prev`/`_formData` shape that every other server action in the codebase already carries. Full e2e green: **867 passed, 5 skipped, 0 failed of 872**, both projects.

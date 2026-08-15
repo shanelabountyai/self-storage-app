@@ -62,6 +62,22 @@ export const EVENT_NAMES = [
   /// that is not expiring is never scanned into a notice at all.
   'payment_method.expiring',
 
+  // Referrals (PRD 10 §6.3, B-100)
+  //
+  // Both audiences of `referral.qualified` are people with an existing
+  // relationship with this business — the referrer is a tenant, the referee has
+  // just moved in. §6.3 is explicit that nothing here ever messages the
+  // PROSPECT: the invite reaches them from their friend's own phone, and this
+  // system is never the sender (§5.2).
+  /// A referral met every rule and both rewards are owed. Payload carries both
+  /// tenant ids and both amounts, so the two rules can address the two people
+  /// with different words.
+  'referral.qualified',
+  /// A rule refused it. The payload carries the refusal key, which is what lets
+  /// the message say WHICH rule in plain language rather than "not eligible" —
+  /// the same 3.3.3 standard the portal and the staff record are held to.
+  'referral.refused',
+
   // Protection / proof of insurance (PRD 02 US-44, D-17)
   /// A recorded proof-of-insurance waiver runs out within 30 days.
   'protection.proof_expiring',

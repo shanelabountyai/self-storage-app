@@ -1,5 +1,6 @@
 import { randomInt } from 'node:crypto'
 import { prisma, type Prisma } from '@storage/db'
+import { emitEvent } from '@storage/core/events'
 import {
   evaluateReferral,
   REFERRAL_REFUSAL_MESSAGES,
@@ -272,6 +273,22 @@ export async function qualifyReferral(input: {
       },
       select: { id: true },
     })
+    // §6.3: the referrer is told WHY, in plain language. The refusal key
+    // travels on the payload rather than the rendered sentence, so the message
+    // and the staff record can never say different things about the same
+    // refusal.
+    await emitEvent({
+      name: 'referral.refused',
+      entityType: 'Referral',
+      entityId: refused.id,
+      facilityId: invite.facilityId,
+      payload: {
+        referrerTenantId: invite.referrerTenantId,
+        refereeTenantId: input.refereeTenantId,
+        refusal: verdict.refusal,
+      },
+    })
+
     return { ok: false, refusal: verdict.refusal, message: verdict.message, referralId: refused.id }
   }
 
@@ -329,6 +346,25 @@ export async function qualifyReferral(input: {
         referralId: referral.id,
       }
     }
+
+    // Inside the transaction, like every other event this codebase emits from
+    // one: an event for a referral that rolled back would tell two people about
+    // money nobody owes.
+    await emitEvent(
+      {
+        name: 'referral.qualified',
+        entityType: 'Referral',
+        entityId: referral.id,
+        facilityId: invite.facilityId,
+        payload: {
+          referrerTenantId: invite.referrerTenantId,
+          refereeTenantId: input.refereeTenantId,
+          referrerRewardCents: rewards.referralRewardCents,
+          refereeRewardCents: rewards.refereeRewardCents,
+        },
+      },
+      tx,
+    )
 
     return {
       ok: true as const,
