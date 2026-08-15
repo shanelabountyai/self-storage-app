@@ -4002,7 +4002,7 @@ Added `db:migrate:e2e`, migrating and seeding the `public` schema of the `storag
 
 ## B-100 (part 3) — Referrals: the tenant's side, attribution, and the events
 
-`XXXXXXX`
+`32b724d`
 
 **The backlog row is now ticked.** Parts 1–3 together cover everything the row lists. Two things from PRD 10 that the row does not list are deliberately left, and are named at the bottom with the item that should own them.
 
