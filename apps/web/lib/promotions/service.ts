@@ -1,8 +1,8 @@
 import { prisma, type Prisma } from '@storage/db'
 import {
+  describeCodeOutcome,
   evaluatePromotions,
-  REJECTION_MESSAGES,
-  type CodeRejection,
+  type CodeOutcome,
   type EligibilityResult,
   type PromotionCandidate,
 } from '@storage/core/promotions'
@@ -78,6 +78,10 @@ export type PromoLookup = {
   /// Badges for a facility page: automatic promos only, since a code-gated one
   /// is invisible without its code.
   badges: { promotionId: string; terms: string }[]
+  /// B-122. What became of a typed code — applied, superseded by a better offer
+  /// already applying, or refused and by which rule. Null when none was typed.
+  codeOutcome: CodeOutcome | null
+  /// The same thing as one sentence, for a field error or a live region.
   problem: string | null
 }
 
@@ -106,7 +110,12 @@ export async function offerFor(input: {
       promotionId: result.promotion.id,
       terms: result.terms,
     })),
-    problem: evaluation.rejection ? REJECTION_MESSAGES[evaluation.rejection as CodeRejection] : null,
+    codeOutcome: evaluation.codeOutcome,
+    // Every outcome gets a sentence, including the two that are not failures —
+    // `problem` keeps its name because every existing caller reads it that way,
+    // but a code that APPLIED now says so too, and the surfaces decide whether
+    // that reads as an error or as confirmation.
+    problem: evaluation.codeOutcome ? describeCodeOutcome(evaluation.codeOutcome) : null,
   }
 }
 

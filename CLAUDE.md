@@ -18,6 +18,21 @@ Multi-facility self-storage platform. Learning project, built to professional st
 - Also update the same-day PRD when an item settles something the PRD left open, and append owner decisions to `07-decisions.md` with a new D-number rather than resolving them silently.
 - Commit after every completed item with a message like `B-012: unit CRUD`, then push.
 
+## This project owns :3000, and its cleanup must not reach other projects
+
+**`baseURL` is hardcoded to `localhost:3000` in `playwright.config.ts`**, so this repo cannot move off port 3000 without an edit — it is the incumbent, and every other project is allocated around it (the port map lives in the global `~/.claude/CLAUDE.md`).
+
+**The pre-sweep cleanup must be anchored to `$PWD`:**
+
+```bash
+pkill -9 -f "$PWD.*playwright"      # NOT `pkill -f playwright`
+lsof -ti :3000 | xargs -r kill -9
+```
+
+A bare `pkill -f playwright` matches **every project on the machine**, not this one. It killed the rental platform's test runs twice on 2026-08-15 while a sweep was running here — a clean SIGKILL partway through, no failures, no summary, which reads exactly like a broken build on the receiving end. The reverse can happen to this repo just as easily.
+
+**The tell that separates a cross-project kill from a memory kill is which process died.** Jetsam takes the LARGEST process, which is the server. A `playwright` pattern takes the RUNNER and leaves the server listening. A dead runner beside a healthy server is positive evidence that something on the machine did it — check `lsof -ti :3000` before reaching for `/Library/Logs/DiagnosticReports/JetsamEvent-*.ips`.
+
 ## Four rules this codebase learned the hard way
 
 - **A new column that configures behaviour gets its control in the same item.** Each one is individually defensible to defer, and they accumulate: `billingPolicy`, `invoiceLeadDays`, `prorateOnMoveIn`, `paymentRetryDays` and the late-fee ladder all shipped reachable only from a database client, and took two separate clean-up passes to close. If an operator would ever need to change it, it needs a form field before the item is done.

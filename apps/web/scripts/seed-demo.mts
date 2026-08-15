@@ -14,6 +14,7 @@ import {
   DEMO_TENANT_EMAIL,
   DEMO_TENANT_PASSWORD,
   DEMO_POS_TENANT_EMAIL,
+  DEMO_PROMO_CODE,
 } from './demo-credentials.ts'
 
 // Demo/dev data — two facilities and tenants in every lifecycle state
@@ -149,6 +150,18 @@ async function teardown() {
   await prisma.staffFacilityAssignment.deleteMany({ where: { facilityId: { in: facilityIds } } })
   await prisma.domainEvent.deleteMany({ where })
   await prisma.jobRun.deleteMany({ where })
+
+  // B-122. Promotions carry no facilityId column — `facilityIds` is an array —
+  // so they cannot ride on `where` like everything above. Marked by the same
+  // DEMO_PREFIX in their NAME instead, and the codes go first because
+  // PromoCode.promotionId is Restrict. Redemptions are left alone: a redeemed
+  // promo is evidence a move-in happened, and the leases are already gone.
+  await prisma.promoCode.deleteMany({
+    where: { promotion: { name: { startsWith: DEMO_PREFIX } } },
+  })
+  await prisma.promotion.deleteMany({
+    where: { name: { startsWith: DEMO_PREFIX }, redemptions: { none: {} } },
+  })
 
   // The demo staff user is deliberately NOT deleted. Once it has signed in and
   // done anything, it owns AuditLog rows, and AuditLog.actorStaffId is
@@ -803,7 +816,7 @@ async function main() {
   // suite passed or failed on which tests happened to finish first, and a
   // handful of leaked holds pushed it over for good. 250 gives a full run four
   // times the room it needs, so cleanup between runs stops being load-bearing.
-  await seedFacility({
+  const sandbox = await seedFacility({
     slug: `${DEMO_PREFIX}e2e`,
     name: 'Demo — E2E Sandbox',
     city: 'Houston',
@@ -812,6 +825,34 @@ async function main() {
     unitTypes: [
       { name: '10x10 Test', widthFt: 10, lengthFt: 10, climate: true, driveUp: false, street: 14_900, web: 12_900, count: 250 },
     ],
+  })
+
+  // B-122. A code-gated promotion, so the code entry has something real to
+  // accept — and so `PromoCode.usesCount` has a path to move at all, which
+  // until this item it did not, anywhere.
+  //
+  // GATED, not automatic, and scoped to the sandbox facility: both halves of
+  // that keep it invisible to every existing assertion. An automatic promo
+  // would change the advertised price on a facility the smoke suite checks
+  // totals against; this one changes nothing until a test types the code.
+  //
+  // `newTenantOnly: false` deliberately — the public checkout evaluates as a
+  // new tenant, and making the seeded code depend on that would test the flag
+  // rather than the code path this item built.
+  const demoPromotion = await prisma.promotion.create({
+    data: {
+      name: `${DEMO_PREFIX}Half off your first month`,
+      type: 'percent_off',
+      value: 50,
+      durationPeriods: 1,
+      status: 'active',
+      displayMode: 'code',
+      facilityIds: [sandbox.facility.id],
+      termsText: 'Half off your first month. New rentals only, one per customer.',
+    },
+  })
+  await prisma.promoCode.create({
+    data: { promotionId: demoPromotion.id, code: DEMO_PROMO_CODE },
   })
 
   // Every lifecycle state exists at BOTH facilities, so facility scoping is

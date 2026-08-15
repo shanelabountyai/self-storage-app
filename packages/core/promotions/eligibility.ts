@@ -70,14 +70,31 @@ export type CodeRejection =
   | 'fully_redeemed'
   | 'not_active'
 
+/// What became of the code the prospect typed. Null when they typed none.
+///
+/// B-122 replaced a bare `rejection` with this. A rejection is only two of the
+/// three things that can happen to a typed code, and the missing one is not an
+/// edge case: FR-PROMO-4 forbids stacking, so a valid code worth less than the
+/// automatic promo already on the unit is *correctly* ignored — and a renter
+/// who typed a real code, saw no rejection and watched the total not move has
+/// been told nothing at all. `superseded` is that case, said out loud.
+export type CodeOutcome =
+  /// The typed code won and is the offer now applied.
+  | { kind: 'applied'; terms: string }
+  /// The code is real but a better offer was already applying. FR-PROMO-4's
+  /// no-stacking rule, stated to the renter rather than silently enforced.
+  | { kind: 'superseded'; keptTerms: string }
+  /// It did not apply, and this is which rule refused it.
+  | { kind: 'rejected'; rejection: CodeRejection }
+
 export type Evaluation = {
   /// The best applicable promo, or null.
   best: EligibilityResult | null
   /// Every promo that would apply without a code, for the badges a facility
   /// page shows per unit type.
   automatic: EligibilityResult[]
-  /// Set only when a code was typed and did not work.
-  rejection: CodeRejection | null
+  /// What happened to the typed code. Null when nothing was typed.
+  codeOutcome: CodeOutcome | null
 }
 
 /// FR-PROMO-3's evaluator.
@@ -137,8 +154,32 @@ export function evaluatePromotions(
   return {
     best,
     automatic: applicable.filter((result) => result.promotion.displayMode === 'auto'),
-    rejection,
+    codeOutcome: outcomeFor(typed, rejection, applicable, best),
   }
+}
+
+/// The three fates of a typed code, decided in the order they can be known.
+function outcomeFor(
+  typed: string | null,
+  rejection: CodeRejection | null,
+  applicable: readonly EligibilityResult[],
+  best: EligibilityResult | null,
+): CodeOutcome | null {
+  if (!typed) return null
+  if (rejection) return { kind: 'rejected', rejection }
+
+  // Matched on the RESULT's own code rather than by re-comparing strings: the
+  // evaluator already did the case-insensitive match, and doing it twice is
+  // how the two copies come to disagree.
+  const matched = applicable.find((result) => result.code !== null)
+  // Every branch above says a code was typed and none was disqualified, so a
+  // code with no applicable result is one whose promotion produced a zero
+  // schedule — "not a code of ours" is the honest thing to say about a
+  // discount worth nothing.
+  if (!matched) return { kind: 'rejected', rejection: 'unknown_code' }
+
+  if (best && best.code === null) return { kind: 'superseded', keptTerms: best.terms }
+  return { kind: 'applied', terms: matched.terms }
 }
 
 function disqualify(
@@ -177,4 +218,25 @@ export const REJECTION_MESSAGES: Record<CodeRejection, string> = {
   window_closed: 'That code has expired.',
   fully_redeemed: 'That code has been fully claimed.',
   not_active: 'That code is not currently running.',
+}
+
+/// One sentence for whatever became of the code, for the field error and the
+/// live region alike.
+///
+/// Every branch says which rule decided it. A generic "that code is not valid"
+/// is a support call — and under WCAG 3.3.3 an error that does not say what to
+/// do about it is a failure, which is why the seven refusals above were written
+/// as seven distinct sentences in B-070 and then read by nothing until now.
+export function describeCodeOutcome(outcome: CodeOutcome): string {
+  switch (outcome.kind) {
+    case 'applied':
+      return `Code applied — ${outcome.terms}.`
+    case 'superseded':
+      // Not framed as a failure: the renter is better off than the code would
+      // have made them, and saying "that code did not work" about a offer we
+      // declined on their behalf is both wrong and alarming.
+      return `We kept your better offer — ${outcome.keptTerms}. Only one promotion applies at a time.`
+    case 'rejected':
+      return REJECTION_MESSAGES[outcome.rejection]
+  }
 }

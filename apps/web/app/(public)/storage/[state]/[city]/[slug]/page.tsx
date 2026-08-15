@@ -35,6 +35,8 @@ import { LeadForm } from '@/components/marketing/lead-form'
 import { submitLeadAction, trackPageView } from './lead-actions'
 import { citySlugPath } from '@/lib/marketing/paths'
 import { offerFor } from '@/lib/promotions/service'
+import { PromoCodeEntry } from '@/components/promo-code-entry'
+import type { CodeOutcome } from '@storage/core/promotions'
 import { visibleReviewsForFacility } from '@/lib/reviews/public'
 import {
   applyFilters,
@@ -271,18 +273,59 @@ function features(unitType: PublicUnitType): string[] {
   return list
 }
 
+/// Everything except the code itself, so a GET form applying one does not drop
+/// the filters and sort the renter already chose.
+///
+/// `unavailable` and `soldout` are deliberately NOT carried: both are one-shot
+/// notices about something that just happened, and re-attaching them to a
+/// promo-code submit would re-show "someone took the last one" for a unit
+/// nobody was trying to take.
+function carriedQuery(query: {
+  size?: string
+  features?: string | string[]
+  sort?: string
+  from?: string
+}): Record<string, string | string[]> {
+  const carried: Record<string, string | string[]> = {}
+  if (query.size) carried.size = query.size
+  if (query.sort) carried.sort = query.sort
+  if (query.from) carried.from = query.from
+  // Kept repeatable rather than comma-joined: `parseFilters` reads repeated
+  // `features` parameters and does not split a string, so a join would leave
+  // one value matching no `FeatureKey` and quietly clear every feature filter.
+  if (query.features) carried.features = query.features
+  return carried
+}
+
+/// The most useful of many per-size verdicts on one typed code.
+///
+/// Applied beats superseded beats rejected: if the code worked anywhere on this
+/// page, that is the fact the renter needs, and the sizes it does not cover are
+/// visible as cards without a badge.
+function bestOutcome(outcomes: readonly CodeOutcome[]): CodeOutcome | null {
+  const rank = { applied: 0, superseded: 1, rejected: 2 } as const
+  return [...outcomes].sort((a, b) => rank[a.kind] - rank[b.kind])[0] ?? null
+}
+
 function UnitTypeCard({
   unitType,
   phone,
   pricing,
   facility,
   promo,
+  code,
 }: {
   unitType: PublicUnitType
   phone: Phone
   pricing: PublicPricingContext
   facility: PublicFacility
-  promo: { terms: string; firstPeriodCents: number } | null
+  promo: { terms: string; firstPeriodCents: number; fromCode: boolean } | null
+  /// B-122. Carried into the "Rent now" POST so the route re-evaluates the same
+  /// code and locks the same offer onto the session. Without it a renter who
+  /// applied a code and pressed Rent now would be quoted the automatic promo,
+  /// or none — the browse estimate and the money path disagreeing again, which
+  /// is exactly the defect B-070's own comment describes.
+  code: string | null
 }) {
   const available = unitType.availableCount
   const saving = Math.max(0, unitType.streetRateCents - unitType.webRateCents)
@@ -315,7 +358,13 @@ function UnitTypeCard({
         <p className="border-input mt-2 rounded-md border p-2 text-sm">
           <span className="font-medium">{promo.terms}</span>
           <span className="text-muted-foreground block text-xs">
-            Applied to your first invoice. Nothing to enter — it is already in the total below.
+            {/* B-122: the reassurance splits once a code can unlock a promo.
+                "Nothing to enter" was true of every promotion that could exist
+                before this item and is a lie about a code-gated one — the
+                renter typed the thing it says there is nothing to type. */}
+            {promo.fromCode
+              ? 'Applied to your first invoice. Your code carries through to checkout.'
+              : 'Applied to your first invoice. Nothing to enter — it is already in the total below.'}
           </span>
         </p>
       )}
@@ -364,6 +413,7 @@ function UnitTypeCard({
                 visit (B-020). */}
             <form method="POST" action={`${facilityPath(facility)}/rent`}>
               <input type="hidden" name="unitTypeId" value={unitType.unitTypeId} />
+              {code && <input type="hidden" name="promo" value={code} />}
               <button
                 type="submit"
                 className="bg-primary text-primary-foreground inline-flex min-h-11 items-center rounded-md px-4 text-sm font-medium"
@@ -509,16 +559,18 @@ function UnitList({
   filtered,
   facility,
   promos,
+  code,
 }: {
   unitTypes: PublicUnitType[] | null
   phone: Phone
   pricing: PublicPricingContext
   filtered: boolean
   facility: PublicFacility
+  code: string | null
   /// Keyed by unit type: eligibility is per size (FR-PROMO-1's unit-type
   /// targeting), so one badge for the whole page would be wrong the moment a
   /// promo applies to 10x10s only.
-  promos: Map<string, { terms: string; firstPeriodCents: number }>
+  promos: Map<string, { terms: string; firstPeriodCents: number; fromCode: boolean }>
 }) {
   if (unitTypes === null) {
     // US-103: an inventory read that fails shows a call-to-confirm notice, never
@@ -581,6 +633,7 @@ function UnitList({
               pricing={pricing}
               facility={facility}
               promo={promos.get(unitType.unitTypeId) ?? null}
+              code={code}
             />
           ))}
         </ul>
@@ -598,6 +651,7 @@ function UnitList({
               pricing={pricing}
               facility={facility}
               promo={promos.get(unitType.unitTypeId) ?? null}
+              code={code}
             />
             ))}
           </ul>
@@ -649,6 +703,10 @@ export default async function FacilityPage({
     from?: string
     unavailable?: string
     soldout?: string
+    /// B-122. What the renter typed into the code box. Re-evaluated server-side
+    /// on this render; nothing about the discount travels in the URL except the
+    /// string they typed.
+    promo?: string
   }>
 }) {
   const { state, city, slug } = await params
@@ -720,21 +778,38 @@ export default async function FacilityPage({
   // applies to 10x10s only. `isNewTenant: true` because an anonymous visitor
   // browsing prices is, as far as anything here knows, a new customer; checkout
   // re-evaluates against the real person before anything is redeemed.
-  const promos = new Map<string, { terms: string; firstPeriodCents: number }>()
+  //
+  // B-122: the typed code goes in here too, so a code-gated promo produces a
+  // real badge and a real figure on the card it applies to — the same evaluator
+  // and the same numbers the "Rent now" POST will re-derive a moment later.
+  const typedCode = query.promo?.trim() || null
+  const promos = new Map<string, { terms: string; firstPeriodCents: number; fromCode: boolean }>()
+  const outcomes: CodeOutcome[] = []
   for (const unitType of unitTypes ?? []) {
     const lookup = await offerFor({
       facilityId: facility.id,
       unitTypeId: unitType.unitTypeId,
       monthlyRateCents: unitType.webRateCents,
       isNewTenant: true,
+      code: typedCode,
     })
+    if (lookup.codeOutcome) outcomes.push(lookup.codeOutcome)
     if (lookup.offer) {
       promos.set(unitType.unitTypeId, {
         terms: lookup.offer.terms,
         firstPeriodCents: lookup.offer.firstPeriodCents,
+        fromCode: lookup.offer.promoCodeId !== null,
       })
     }
   }
+  // One message beside the box, from many per-size answers.
+  //
+  // A code can legitimately be "not for this size" on the 5x5 and applied on
+  // the 10x10 — FR-PROMO-1 lets a promo target sizes — so a per-card message
+  // would say the code failed directly above a card showing the discount. The
+  // page-level line reports the best thing that happened anywhere on it, and
+  // each card keeps showing its own true figure regardless.
+  const codeOutcome = bestOutcome(outcomes)
 
   // PRD 04 US-6 (B-071). `schemaAggregateRating` is almost always null — see
   // D-33: manually transcribed reviews never qualify for the JSON-LD markup,
@@ -899,6 +974,21 @@ export default async function FacilityPage({
           </div>
         )}
 
+        {/* PRD 04 US-11 AC3 (B-122). Below the filters and above the cards, so
+            the badges and figures the code changes are the next thing read.
+            The filters, sort and size ride along as hidden inputs — a GET form
+            replaces the whole query string, so without them applying a code
+            would silently clear the choices the renter had already made. */}
+        {unitTypes !== null && unitTypes.length > 0 && (
+          <div className="mt-4">
+            <PromoCodeEntry
+              outcome={codeOutcome}
+              value={typedCode ?? ''}
+              carry={carriedQuery(query)}
+            />
+          </div>
+        )}
+
         <div className="mt-4">
           <UnitList
             unitTypes={visible}
@@ -907,6 +997,7 @@ export default async function FacilityPage({
             filtered={hasActiveFilters(filters)}
             facility={facility}
             promos={promos}
+            code={typedCode}
           />
         </div>
       </section>
@@ -940,6 +1031,10 @@ export default async function FacilityPage({
             <div className="flex gap-2">
               <form method="POST" action={`${facilityPath(facility)}/rent`}>
                 <input type="hidden" name="unitTypeId" value={cheapestAvailable.unitTypeId} />
+                {/* B-122. The sticky bar starts the same checkout as a card, so
+                    it has to carry the same code — a renter who applied one and
+                    then used this button instead would silently lose it. */}
+                {typedCode && <input type="hidden" name="promo" value={typedCode} />}
                 <button
                   type="submit"
                   className="bg-primary text-primary-foreground inline-flex min-h-11 items-center rounded-md px-4 text-sm font-medium"

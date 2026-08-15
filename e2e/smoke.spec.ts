@@ -1,6 +1,7 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from '@playwright/test'
 import { LEGAL_PAGES } from '../apps/web/lib/site-config'
+import { DEMO_PROMO_CODE } from '../apps/web/scripts/demo-credentials'
 
 test('home page renders its search hero', async ({ page }) => {
   await page.goto('/')
@@ -262,6 +263,101 @@ test('the sticky Rent now bar actually starts a checkout (B-118)', async ({ page
   await expect(page).toHaveURL(/\/checkout\?token=/)
 })
 
+// ── B-122: promo codes ───────────────────────────────────────────────────────
+//
+// `offerFor` has taken a `code` since B-070 and no surface passed one, so a
+// code-gated promotion could be created in admin, was correctly hidden from the
+// badges, and could never be redeemed by anybody. The seeded demo code is gated
+// and scoped to the sandbox facility precisely so it is invisible to every
+// other assertion in this file until one of these tests types it.
+
+test('a promo code applies from the facility page and shows its terms (B-122)', async ({ page }) => {
+  await page.goto('/storage/tx/houston/demo-e2e')
+
+  // Nothing before the code is entered: gated means gated, and a badge here
+  // would make the code pointless.
+  await expect(page.getByText('Half off your first month')).toHaveCount(0)
+
+  await page.getByLabel('Have a promo code?').fill(DEMO_PROMO_CODE)
+  await page.getByRole('button', { name: 'Apply code' }).click()
+
+  // The outcome is announced from a live region, not left to be inferred from
+  // a changed number (§6.4, and 4.1.3).
+  await expect(page.getByRole('status').filter({ hasText: /Code applied/ })).toBeVisible()
+  // And the money actually moved: the card now carries the badge and its terms.
+  await expect(page.getByText('Half off your first month').first()).toBeVisible()
+  // Shareable and survives a reload, because it is in the URL.
+  await expect(page).toHaveURL(new RegExp(`promo=${DEMO_PROMO_CODE}`, 'i'))
+})
+
+test('a refused code says WHICH rule refused it, not just that it failed (B-122)', async ({ page }) => {
+  // The seeded promotion is scoped to the sandbox facility, so the same code
+  // at Austin is a real `not_for_this_facility` — a distinct message, which is
+  // the whole point: `REJECTION_MESSAGES` has distinguished seven refusals
+  // since B-070 and nothing had ever displayed one. A generic "that code is
+  // not valid" is a support call and a 3.3.3 failure.
+  await page.goto('/storage/tx/austin/demo-austin-south')
+
+  await page.getByLabel('Have a promo code?').fill(DEMO_PROMO_CODE)
+  await page.getByRole('button', { name: 'Apply code' }).click()
+
+  await expect(page.getByRole('status').filter({ hasText: /different location/ })).toBeVisible()
+  // The field keeps what was typed — 3.3.3 again: an error that clears the
+  // thing it is complaining about makes the renter retype it to find out what
+  // was wrong.
+  await expect(page.getByLabel('Have a promo code?')).toHaveValue(DEMO_PROMO_CODE)
+})
+
+test('an unknown code is named as unknown, and nothing is discounted (B-122)', async ({ page }) => {
+  await page.goto('/storage/tx/houston/demo-e2e')
+
+  await page.getByLabel('Have a promo code?').fill('NOT-A-REAL-CODE')
+  await page.getByRole('button', { name: 'Apply code' }).click()
+
+  await expect(page.getByRole('status').filter({ hasText: /not one of ours/ })).toBeVisible()
+  await expect(page.getByText('Half off your first month')).toHaveCount(0)
+})
+
+test('a code entered on the facility page carries into the checkout total (B-122)', async ({ page }) => {
+  // The join that did not exist. The code had to survive the "Rent now" POST
+  // and be RE-EVALUATED server-side there — the form carries the string only,
+  // never a discount — or the card would advertise half off and the checkout
+  // would quote full price, which is the exact defect B-070's own comment
+  // describes about the automatic case.
+  await page.goto(`/storage/tx/houston/demo-e2e?promo=${DEMO_PROMO_CODE}`)
+  await expect(page.getByText('Half off your first month').first()).toBeVisible()
+
+  await page.getByRole('button', { name: 'Rent now' }).first().click()
+  await expect(page).toHaveURL(/\/checkout\?token=/)
+
+  // $129 web rate, half off the first month → $64.50 off, and the summary says
+  // so in the renter's own words rather than only in a smaller number.
+  const priceSummary = page.getByRole('complementary', { name: 'What you are paying' })
+  // The <summary> element itself — "Due today" also matches the "Total due
+  // today" line inside the disclosure it opens.
+  await priceSummary.locator('summary').click()
+  await expect(priceSummary.getByText('Half off your first month')).toBeVisible()
+})
+
+test('a promo code can be entered during checkout, and the total follows (B-122)', async ({ page }) => {
+  // Started with NO code, the way most renters arrive — then entered at the
+  // price summary, which is where a code from an email actually gets used.
+  await page.goto('/storage/tx/houston/demo-e2e')
+  await page.getByRole('button', { name: 'Rent now' }).first().click()
+  await expect(page).toHaveURL(/\/checkout\?token=/)
+
+  const priceSummary = page.getByRole('complementary', { name: 'What you are paying' })
+  await expect(priceSummary.getByText('Half off your first month')).toHaveCount(0)
+
+  await page.getByText('Have a promo code?').click()
+  await page.getByRole('textbox', { name: 'Promo code' }).fill(DEMO_PROMO_CODE)
+  await page.getByRole('button', { name: 'Apply code' }).click()
+
+  await expect(page.getByRole('status').filter({ hasText: /Code applied/ })).toBeVisible()
+  await priceSummary.locator('summary').click()
+  await expect(priceSummary.getByText('Half off your first month')).toBeVisible()
+})
+
 test('the sticky bar is absent above sm — each unit card already carries its own buttons', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chrome', 'desktop-only assertion')
   await page.goto('/storage/tx/austin/demo-austin-south')
@@ -279,13 +375,23 @@ test('filters narrow the list and survive into the URL', async ({ page }) => {
   // `exact` because B-068's lead form added a "Size you are interested in"
   // select further down the page — two controls may legitimately mention size,
   // so the filter is addressed precisely rather than by substring.
+  //
+  // B-122 hit the same thing twice more on this one page, which is the lesson
+  // worth keeping: `getByRole`'s `name` is a SUBSTRING match, so the promo
+  // box's "Apply code" button started matching `{ name: 'Apply' }`, and its
+  // (deliberately pre-mounted, deliberately empty) live region became a second
+  // `role="status"` here. Neither is a defect in the page — a page may have
+  // two live regions and two buttons whose labels share a word — so both
+  // locators are narrowed rather than the page changed.
   await page.getByLabel('Size', { exact: true }).selectOption('small')
   // 3.2.2: selecting must not navigate on its own.
   await expect(page).not.toHaveURL(/size=small/)
 
-  await page.getByRole('button', { name: 'Apply' }).click()
+  await page.getByRole('button', { name: 'Apply', exact: true }).click()
   await expect(page).toHaveURL(/size=small/)
-  await expect(page.getByRole('status')).toContainText('1 size matches')
+  await expect(page.getByRole('status').filter({ hasText: /sizes? match/ })).toContainText(
+    '1 size matches',
+  )
 })
 
 test('a filter combination with no matches offers a way out', async ({ page }) => {

@@ -363,6 +363,104 @@ describeDb('promotions', () => {
       expect(promoDiscountOn(session!)?.schedule).toEqual(offer.offer!.schedule)
     })
 
+    // ── B-122 ────────────────────────────────────────────────────────────
+    //
+    // The gap this closes: `offerFor` has taken a `code` since B-070 and NO
+    // surface passed one. A code-gated promotion could be created in admin, was
+    // correctly hidden from the badges, and could then never be redeemed by
+    // anybody — `PromoCode.usesCount` had no path to increment at all. These
+    // walk the whole way, because the halves each worked in isolation and it
+    // was the join between them that did not exist.
+
+    it('a code-gated promo reaches the session and the discounted total', async () => {
+      await availableUnit()
+      const promotion = await makePromotion({ displayMode: 'code' })
+      await prisma.promoCode.create({
+        data: { promotionId: promotion.id, code: `walk-${suffix}` },
+      })
+
+      // Typed on the facility page, upper-cased the way a renter copies it out
+      // of an email — FR-PROMO-2 says codes are case-insensitive.
+      const offer = await offerFor({
+        facilityId,
+        unitTypeId,
+        monthlyRateCents: RENT,
+        isNewTenant: true,
+        code: `WALK-${suffix}`,
+      })
+      expect(offer.codeOutcome?.kind).toBe('applied')
+      expect(offer.offer?.promoCodeId).toBeTruthy()
+
+      const started = await startCheckout({
+        facilityId,
+        unitTypeId,
+        quotedRateCents: RENT,
+        promo: {
+          promotionId: offer.offer!.promotionId,
+          promoCodeId: offer.offer!.promoCodeId,
+          terms: offer.offer!.terms,
+          firstPeriodCents: offer.offer!.firstPeriodCents,
+          schedule: offer.offer!.schedule,
+        },
+      })
+      if (!started.ok) throw new Error('no unit to start a checkout on')
+
+      const session = await sessionByToken(started.token)
+      // The column that makes `provisionMoveIn`'s redemption block run at all.
+      expect(session?.promoCodeId).toBe(offer.offer!.promoCodeId)
+
+      const due = await amountDueToday(session!)
+      expect(due.totalDueTodayCents).toBe(RENT - RENT / 2)
+    })
+
+    it('increments the code’s own usesCount when the move-in redeems it', async () => {
+      // The counter that had no path to move. Without it a partner allocation
+      // (`maxUses`) could never be spent, so a code with a cap of 100 was in
+      // practice unlimited — and the one refusal `offerFor` already knew how to
+      // report was unreachable.
+      const promotion = await makePromotion({ displayMode: 'code' })
+      const code = await prisma.promoCode.create({
+        data: { promotionId: promotion.id, code: `uses-${suffix}`, maxUses: 5 },
+      })
+
+      await prisma.$transaction((tx) =>
+        redeemPromotion(tx, {
+          promotionId: promotion.id,
+          promoCodeId: code.id,
+          facilityId,
+          leaseId,
+          schedule: [{ periodIndex: 0, amountCents: 6_450 }],
+          totalCents: 6_450,
+        }),
+      )
+
+      const after = await prisma.promoCode.findUniqueOrThrow({ where: { id: code.id } })
+      expect(after.usesCount).toBe(1)
+    })
+
+    it('keeps the better automatic offer when the typed code is worth less', async () => {
+      // FR-PROMO-4's no-stacking rule, and the half of it that had no way to be
+      // said out loud before B-122: the code is real, it applies, and it loses.
+      await makePromotion({ name: `Auto ${suffix}`, value: 100 })
+      const gated = await makePromotion({ name: `Gated ${suffix}`, displayMode: 'code', value: 10 })
+      await prisma.promoCode.create({
+        data: { promotionId: gated.id, code: `worse-${suffix}` },
+      })
+
+      const lookup = await offerFor({
+        facilityId,
+        unitTypeId,
+        monthlyRateCents: RENT,
+        isNewTenant: true,
+        code: `worse-${suffix}`,
+      })
+
+      expect(lookup.codeOutcome?.kind).toBe('superseded')
+      // The renter keeps the 100%-off, not the 10% they typed.
+      expect(lookup.offer?.firstPeriodCents).toBe(RENT)
+      expect(lookup.problem).toContain('kept your better offer')
+    })
+
     it('attaches nothing when no promotion is live', async () => {
       await availableUnit()
       const offer = await offerFor({ facilityId, unitTypeId, monthlyRateCents: RENT, isNewTenant: true })

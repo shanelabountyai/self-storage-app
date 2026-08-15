@@ -29,6 +29,7 @@ import {
   type ProtectionChoice,
 } from '@/lib/protection/plans'
 import { sessionByToken } from '@/lib/checkout/session'
+import { offerFor } from '@/lib/promotions/service'
 import { existingLeaseDocument } from '@/lib/lease/build'
 import { ELECTRONIC_RECORDS_CONSENT_VERSION, signDocument, validateSignature } from '@/lib/lease/sign'
 import { requestMetadata } from '@/lib/http/request-metadata'
@@ -325,6 +326,97 @@ export async function setAutopayAction(_prev: FormState, formData: FormData): Pr
       ? 'Automatic payments are on. We will email you before every charge.'
       : 'Automatic payments are off. We will email you when each payment is due.',
   }
+}
+
+/// PRD 04 US-11 AC3 (B-122). A promo code entered during checkout.
+///
+/// Re-evaluated server-side from the session's OWN facility, unit type and
+/// locked rate — the form transmits the typed string and nothing else, so a
+/// hand-crafted post can name a code but never name a discount. The offer that
+/// comes back is written to the session snapshot exactly as `startCheckout`
+/// writes the one from "Rent now", which is what makes the summary, the amount
+/// due today and the eventual redemption row agree; they all read that snapshot.
+///
+/// Refused after the payment step. A promotion applied to a charge already
+/// authorised would change a total the renter has approved — §6.4's own rule —
+/// and `provisionMoveIn` redeems the schedule the session locked, so a late
+/// change would write a redemption for money nobody was charged.
+export async function applyPromoCodeAction(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const token = String(formData.get('token') ?? '')
+  const session = await sessionByToken(token)
+  if (!session) {
+    return { status: 'error', message: 'We could not find that checkout.', fieldErrors: {} }
+  }
+  if (session.step === 'provisioned' || session.status === 'completed') {
+    return {
+      status: 'error',
+      message: 'This checkout is finished, so a code can no longer be added to it.',
+      fieldErrors: {},
+    }
+  }
+
+  const code = String(formData.get('promo') ?? '').trim()
+  if (!code) {
+    return { status: 'error', message: 'Enter a code first.', fieldErrors: { promo: 'Enter a code first.' } }
+  }
+
+  const lookup = await offerFor({
+    facilityId: session.facilityId,
+    unitTypeId: session.unitTypeId,
+    // The LOCKED rate, never a fresh one. The renter is entitled to the price
+    // they were shown, and evaluating a percentage promo against a rate that
+    // had since moved would compute a discount off a number nobody quoted.
+    monthlyRateCents: session.quotedRateCents,
+    // Matches what "Rent now" assumed. The real person is not known until step
+    // 1 and `provisionMoveIn` re-checks eligibility before redeeming anything.
+    isNewTenant: true,
+    code,
+  })
+
+  // Nothing is written on a refusal — the offer already on the session stands.
+  // A rejected code that cleared an automatic promotion would make typing a
+  // wrong code cost the renter money.
+  if (lookup.codeOutcome?.kind === 'rejected') {
+    return {
+      status: 'error',
+      message: lookup.problem ?? 'That code did not work.',
+      fieldErrors: { promo: lookup.problem ?? 'That code did not work.' },
+    }
+  }
+
+  await prisma.checkoutSession.update({
+    where: { id: session.id },
+    data: {
+      promotionId: lookup.offer?.promotionId ?? null,
+      promoCodeId: lookup.offer?.promoCodeId ?? null,
+      data: {
+        ...session.data,
+        promoTerms: lookup.offer?.terms ?? null,
+        promoFirstPeriodCents: lookup.offer?.firstPeriodCents ?? null,
+        promoSchedule: lookup.offer?.schedule ?? null,
+        // Deliberately CLEARED, not written.
+        //
+        // Every other step writes `changeNote` because the control that moved
+        // the total is on a different part of the page from the total. This one
+        // is not: the code box sits directly under the summary, and its own
+        // `role="status"` says the whole sentence. Writing the same words into
+        // the summary's live region as well made a screen reader announce
+        // "Code applied — half off your first month" twice, from two regions,
+        // which is how a helpful announcement becomes noise people turn off.
+        //
+        // §6.4's "a total that moves must state its cause" is still satisfied
+        // and more durably than a note would: the discount is now a named line
+        // in the summary's own itemisation, which survives a reload.
+        changeNote: null,
+      } as never,
+    },
+  })
+
+  revalidatePath('/checkout')
+  return { status: 'success', message: lookup.problem ?? 'Code applied.' }
 }
 
 export async function advanceAction(_prev: FormState, formData: FormData): Promise<FormState> {

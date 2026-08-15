@@ -4,7 +4,7 @@ import {
   discountForPeriod,
   discountSchedule,
   evaluatePromotions,
-  REJECTION_MESSAGES,
+  describeCodeOutcome,
   type PromotionCandidate,
 } from '../packages/core/promotions'
 import { buildInvoice } from '../packages/core/billing/invoice-lines'
@@ -149,12 +149,46 @@ describe('evaluatePromotions — FR-PROMO-3', () => {
     const wrongFacility = promo({ displayMode: 'code', codes: ['other'], facilityIds: ['f2'] })
     const result = evaluatePromotions([wrongFacility], { ...context, code: 'other' })
     expect(result.best).toBeNull()
-    expect(result.rejection).toBe('not_for_this_facility')
-    expect(REJECTION_MESSAGES[result.rejection!]).toContain('different location')
+    expect(result.codeOutcome).toEqual({ kind: 'rejected', rejection: 'not_for_this_facility' })
+    expect(describeCodeOutcome(result.codeOutcome!)).toContain('different location')
   })
 
   it('reports an unknown code as unknown', () => {
-    expect(evaluatePromotions([promo()], { ...context, code: 'nope' }).rejection).toBe('unknown_code')
+    expect(evaluatePromotions([promo()], { ...context, code: 'nope' }).codeOutcome).toEqual({
+      kind: 'rejected',
+      rejection: 'unknown_code',
+    })
+  })
+
+  // B-122. The third fate of a typed code, and the one a bare `rejection` had
+  // no way to express: the code is real, it applies, and it is worth LESS than
+  // the automatic promotion already on the unit. FR-PROMO-4 forbids stacking,
+  // so keeping the better one is correct — and saying nothing about it leaves a
+  // renter who typed a genuine code watching the total not move, which is the
+  // exact complaint the rejection messages exist to prevent.
+  it('keeps the better automatic offer and says so, rather than silently ignoring the code', () => {
+    const generous = promo({ id: 'auto', value: 100 })
+    const stingy = promo({ id: 'gated', displayMode: 'code', codes: ['meh'], value: 10 })
+
+    const result = evaluatePromotions([generous, stingy], { ...context, code: 'meh' })
+
+    expect(result.best?.promotion.id).toBe('auto')
+    expect(result.codeOutcome?.kind).toBe('superseded')
+    expect(describeCodeOutcome(result.codeOutcome!)).toContain('kept your better offer')
+    // Not framed as a failure — the renter is better off than the code alone
+    // would have made them.
+    expect(describeCodeOutcome(result.codeOutcome!)).not.toContain('not')
+  })
+
+  it('reports a code that beats the automatic offer as applied', () => {
+    const stingy = promo({ id: 'auto', value: 10 })
+    const generous = promo({ id: 'gated', displayMode: 'code', codes: ['big'], value: 100 })
+
+    const result = evaluatePromotions([stingy, generous], { ...context, code: 'big' })
+
+    expect(result.best?.promotion.id).toBe('gated')
+    expect(result.codeOutcome?.kind).toBe('applied')
+    expect(describeCodeOutcome(result.codeOutcome!)).toContain('Code applied')
   })
 
   it('respects targeting, windows and the new-tenant flag', () => {

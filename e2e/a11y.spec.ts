@@ -18,6 +18,12 @@ const PUBLIC_ROUTES = [
   // The filtered view is a different template from the unfiltered one — it
   // renders the "nothing matches those filters" state and the applied controls.
   '/storage/tx/austin/demo-austin-south?size=small&features=climate&sort=size',
+  // B-122. The promo-code box in its REFUSED state, which is different markup
+  // from the resting one — `aria-invalid`, a described-by error, and red text
+  // on a background nothing else on this page puts it on. The resting state
+  // rides along on the two routes above; this is the one worth naming, because
+  // an error message that fails contrast is an error message nobody reads.
+  '/storage/tx/austin/demo-austin-south?promo=NOT-A-REAL-CODE',
   '/storage/size-guide',
   '/storage/tx/austin/demo-austin-south/reserve?unitType=INVALID',
   // The token-less and bad-token states of the reservation page are the ones a

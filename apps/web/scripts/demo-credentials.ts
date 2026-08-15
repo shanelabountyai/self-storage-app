@@ -41,3 +41,16 @@ export const DEMO_POS_TENANT_EMAIL = `pos-tenant@${DEMO_EMAIL_DOMAIN}`
 //
 // Base32, 20 bytes, as RFC 4226 §4 R6 recommends.
 export const DEMO_STAFF_TOTP_SECRET = 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP'
+
+// B-122. A code-gated promotion the e2e suite can actually type in.
+//
+// Code-gated deliberately, and that is what makes it safe to seed at all: an
+// AUTOMATIC promotion changes every price on the facility it touches, and the
+// smoke suite asserts real totals. A gated one is invisible until somebody
+// enters the code, so it disturbs nothing until a test asks for it.
+//
+// Scoped to the e2e sandbox facility for the same reason the POS tenant is its
+// own tenant — the sandbox is where checkout tests already take real units, and
+// Austin's and Dallas's advertised prices stay exactly as every other suite
+// expects them.
+export const DEMO_PROMO_CODE = 'E2ESAVE'

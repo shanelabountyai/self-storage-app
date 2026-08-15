@@ -40,7 +40,8 @@ import {
   type PublicFacility,
 } from '@/lib/facility/public-facility'
 import type { DayOfWeek } from '@storage/core/facility-settings'
-import { advanceAction, relockAction } from './actions'
+import { advanceAction, applyPromoCodeAction, relockAction } from './actions'
+import { PromoCodeStep } from '@/components/checkout/promo-code-step'
 
 export const metadata = {
   title: 'Move in online',
@@ -499,6 +500,19 @@ export default async function CheckoutPage({
               typeof session.data.changeNote === 'string' ? session.data.changeNote : undefined
             }
           />
+          {/* PRD 04 US-11 AC3 (B-122). Directly under the summary, because the
+              summary is what the code changes — and not on the payment step,
+              where the total has already been authorised (§6.4) and
+              `provisionMoveIn` is about to redeem the schedule the session
+              locked. The action refuses a completed checkout regardless; this
+              is the same rule stated where the renter can see it. */}
+          {session.step !== 'payment' && session.step !== 'provisioned' && (
+            <PromoCodeStep
+              token={token!}
+              action={applyPromoCodeAction as never}
+              appliedTerms={lockedPromo?.terms ?? null}
+            />
+          )}
         </div>
       )}
     </div>

@@ -34,11 +34,17 @@ export async function POST(
   // `isNewTenant: true` matches what the facility page assumed when it drew the
   // badge; the real person is not known until step 1, and provisioning
   // re-checks eligibility before anything is redeemed.
+  // B-122: the code the renter typed on the facility page rides along in the
+  // form, and is RE-EVALUATED here rather than trusted. The form carries the
+  // string only — never a discount, a promotion id or an amount — so the worst
+  // a hand-crafted POST can do is name a code that this call then judges on its
+  // own terms, exactly as if it had been typed into the box.
   const offer = await offerFor({
     facilityId: facility.id,
     unitTypeId,
     monthlyRateCents: unitType.webRateCents,
     isNewTenant: true,
+    code: String(form.get('promo') ?? '').trim() || null,
   })
 
   const started = await startCheckout({
