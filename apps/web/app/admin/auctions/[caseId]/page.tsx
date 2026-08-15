@@ -110,7 +110,7 @@ export default async function AuctionCasePage({
         {view.steps.length === 0 ? (
           <p className="text-muted-foreground text-sm">No timeline is pinned to this case.</p>
         ) : (
-          <div className="overflow-x-auto">
+          <div tabIndex={0} className="overflow-x-auto">
             <table className="w-full min-w-max text-left text-sm">
               <thead>
                 <tr className="text-muted-foreground">

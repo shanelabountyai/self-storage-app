@@ -244,7 +244,7 @@ export default async function ReportsPage({
         </div>
         {/* Wide table: scrolls inside its own container rather than pushing the
             page sideways. */}
-        <div className="overflow-x-auto">
+        <div tabIndex={0} className="overflow-x-auto">
           <table className="w-full text-sm">
             <caption className="sr-only">
               Outstanding balances per facility, aged into 0–10, 11–30, 31–60, 61–90 and over-90-day

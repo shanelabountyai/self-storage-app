@@ -95,7 +95,7 @@ export default async function LeadPage({ params }: { params: Promise<{ leadId: s
             ? 'First-period prices below include the promotion the website is currently advertising, so this screen and the website agree.'
             : 'No promotion is running at this facility right now, so nothing here is discounted. If one is running off-system, say so on the call — this screen only knows about promotions set up in Settings.'}
         </p>
-        <div className="overflow-x-auto">
+        <div tabIndex={0} className="overflow-x-auto">
           <table className="w-full min-w-2xl border-collapse text-sm">
             <caption className="sr-only">Sizes, prices and what today would cost</caption>
             <thead>

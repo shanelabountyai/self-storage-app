@@ -121,7 +121,7 @@ export default async function KeypadDevPage() {
         {recentEvents.length === 0 ? (
           <p className="text-muted-foreground text-sm">Nothing yet — try a code above.</p>
         ) : (
-          <div className="overflow-x-auto">
+          <div tabIndex={0} className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead>
                 <tr className="text-muted-foreground">

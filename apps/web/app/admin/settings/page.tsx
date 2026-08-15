@@ -224,7 +224,7 @@ export default async function AdminSettingsPage() {
 
           <div>
             <h3 className="mb-2 text-sm font-medium">Office hours</h3>
-            <div className="overflow-x-auto">
+            <div tabIndex={0} className="overflow-x-auto">
               <table className="w-full min-w-max text-left">
                 <thead className="sr-only">
                   <tr>
@@ -250,7 +250,7 @@ export default async function AdminSettingsPage() {
 
           <div>
             <h3 className="mb-2 text-sm font-medium">Gate hours</h3>
-            <div className="overflow-x-auto">
+            <div tabIndex={0} className="overflow-x-auto">
               <table className="w-full min-w-max text-left">
                 <thead className="sr-only">
                   <tr>
@@ -294,7 +294,7 @@ export default async function AdminSettingsPage() {
         </p>
 
         {settings.currentTaxComponents.length > 0 && (
-          <div className="overflow-x-auto">
+          <div tabIndex={0} className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead>
                 <tr className="text-muted-foreground">
@@ -370,7 +370,7 @@ export default async function AdminSettingsPage() {
         </p>
 
         {settings.currentFeeSchedule.length > 0 && (
-          <div className="overflow-x-auto">
+          <div tabIndex={0} className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead>
                 <tr className="text-muted-foreground">
@@ -589,7 +589,7 @@ export default async function AdminSettingsPage() {
         </p>
 
         {lateFeeSteps.length > 0 && (
-          <div className="overflow-x-auto">
+          <div tabIndex={0} className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <caption className="sr-only">The late-fee ladder in force today</caption>
               <thead>
@@ -1027,7 +1027,7 @@ export default async function AdminSettingsPage() {
         </p>
 
         {plans.length > 0 && (
-          <div className="overflow-x-auto">
+          <div tabIndex={0} className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead>
                 <tr className="text-muted-foreground">

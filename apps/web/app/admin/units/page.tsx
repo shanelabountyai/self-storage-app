@@ -230,7 +230,7 @@ export default async function AdminUnitsPage({
       </p>
 
       {view === 'list' ? (
-        <div className="overflow-x-auto">
+        <div tabIndex={0} className="overflow-x-auto">
         <table className="hidden w-full min-w-max text-left text-sm sm:table">
           <thead>
             <tr className="text-muted-foreground">
@@ -480,7 +480,7 @@ export default async function AdminUnitsPage({
               )}
             </p>
 
-            <div className="overflow-x-auto">
+            <div tabIndex={0} className="overflow-x-auto">
             <table className="w-full min-w-max text-left text-xs">
               <thead>
                 <tr className="text-muted-foreground">

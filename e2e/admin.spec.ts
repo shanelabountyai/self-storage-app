@@ -30,17 +30,71 @@ test.describe('signed in as the demo owner', () => {
     await signInAsDemoOwner(page)
   })
 
-  // B-115: /admin/tasks and /admin/delinquency joined this list rather than
-  // waiting for B-116 — a task card is the screen a manager works from a
-  // phone on the property, and it is exactly what changed here.
+  // B-119 (accessibility review 2026-08-12, test gap 2). "Coverage grew by
+  // accident rather than by contract" — B-115 added Tasks and Delinquency,
+  // B-116 fixed three routes' reflow, and nothing ever stepped back to name
+  // every route admin actually has. This is that list: every STATIC admin
+  // page — one with no `[param]` segment — belongs here, or nobody checks it.
+  //
+  // Left out on purpose, not by accident, and each covered elsewhere:
+  //   - `/admin/[section]` itself is the placeholder catch-all (nav.ts); its
+  //     two live slugs, `/admin/leads` and `/admin/units/ready`, are below.
+  //   - Per-entity dynamic routes — `/admin/tenants/{id}`, its ledger,
+  //     statements, notices and transfer sub-routes, `/admin/leads/{id}`,
+  //     `/admin/auctions/{id}` — need a real demo id, which this list (one
+  //     static string per route) cannot hold without breaking on every
+  //     reseed. Each already has its own axe scan against real demo data in
+  //     its topic file — admin-tenants.spec.ts, admin-pos.spec.ts,
+  //     admin-tasks.spec.ts, admin-reports.spec.ts, admin-billing-runs.spec.ts,
+  //     admin-move-out.spec.ts, portal-move-out.spec.ts, pay-link.spec.ts —
+  //     which is real coverage, not a gap; it is just not THIS list.
+  //   - `/mfa` and `/reauth`: PRD 01 US-701 routes that need a session and
+  //     redirect to `/login` without one, so they belong in an
+  //     authenticated list — this one — rather than a11y.spec.ts's public one.
   const ADMIN_ROUTES = [
     '/admin',
     '/admin/units',
     '/admin/units/types',
-    '/admin/settings',
-    '/admin/dev/keypad',
-    '/admin/tasks',
+    '/admin/units/ready',
+    '/admin/units/setup',
+    '/admin/tenants',
+    '/admin/tenants/former',
+    '/admin/leads',
+    '/admin/billing',
     '/admin/delinquency',
+    '/admin/overlocks',
+    '/admin/walkthrough',
+    '/admin/maintenance',
+    '/admin/auctions',
+    '/admin/rate-increases',
+    '/admin/pos',
+    '/admin/pos/drawer',
+    '/admin/pos/merchandise',
+    '/admin/pos/summary',
+    '/admin/tasks',
+    '/admin/access',
+    '/admin/access/queue',
+    '/admin/access/health',
+    '/admin/reports',
+    '/admin/reports/delinquency',
+    '/admin/reports/deliverability',
+    '/admin/reports/deposits',
+    '/admin/reports/funnel',
+    '/admin/reports/rent-roll',
+    '/admin/reports/revenue',
+    '/admin/settings',
+    '/admin/settings/delinquency',
+    '/admin/settings/marketing',
+    '/admin/settings/notices',
+    '/admin/settings/org',
+    '/admin/settings/promotions',
+    '/admin/settings/reviews',
+    '/admin/settings/staff',
+    '/admin/settings/suppressions',
+    '/admin/settings/templates',
+    '/admin/dev/keypad',
+    '/mfa',
+    '/reauth',
   ]
 
   for (const route of ADMIN_ROUTES) {
@@ -74,6 +128,42 @@ test.describe('signed in as the demo owner', () => {
         () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
       )
       expect(overflow, 'admin scrolls horizontally at 320px').toBe(false)
+    })
+  }
+
+  // B-119 (test gap 6). Axe and reflow were the only two of a11y.spec.ts's
+  // four PUBLIC_ROUTES loops that ever ran anywhere near admin — 200% zoom
+  // and forced text spacing had never touched a staff-facing screen at all.
+  test.describe('text zoomed to 200%', () => {
+    test.use({ viewport: { width: 640, height: 512 }, deviceScaleFactor: 2 })
+
+    for (const route of ADMIN_ROUTES) {
+      test(`${route} survives 200% zoom`, async ({ page }) => {
+        // The outer describe's beforeEach (line ~30) already signs in.
+        await page.goto(route)
+        const overflow = await page.evaluate(
+          () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+        )
+        expect(overflow, 'admin scrolls horizontally at 200% zoom').toBe(false)
+      })
+    }
+  })
+
+  const TEXT_SPACING = `* {
+    line-height: 1.5 !important;
+    letter-spacing: 0.12em !important;
+    word-spacing: 0.16em !important;
+  }
+  p { margin-bottom: 2em !important; }`
+
+  for (const route of ADMIN_ROUTES) {
+    test(`${route} tolerates forced text spacing`, async ({ page }) => {
+      await page.goto(route)
+      await page.addStyleTag({ content: TEXT_SPACING })
+      const overflow = await page.evaluate(
+        () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+      )
+      expect(overflow, 'content is clipped when text spacing is increased').toBe(false)
     })
   }
 

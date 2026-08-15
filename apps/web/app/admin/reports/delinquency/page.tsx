@@ -81,11 +81,18 @@ export default async function DelinquencyPage() {
           </div>
           <div className="border-input rounded-lg border p-4">
             <dt className="text-muted-foreground text-sm">Of which former tenants</dt>
-            <dd className="text-xl font-semibold">{formatCents(report.endedLeaseExposureCents)}</dd>
-            <p className="text-muted-foreground mt-1 text-xs text-pretty">
-              Leases that have already ended. Still here on purpose — this is the money that goes
-              missing when a report filters to active tenants.
-            </p>
+            {/* B-119 (test gap 3): axe's `definition-list` rule — a <div>
+                inside <dl> may hold only <dt>/<dd> pairs, and this note was a
+                third sibling. Nested inside the <dd> instead, which is valid
+                flow content, rather than dropped or moved outside the pair it
+                explains. */}
+            <dd className="text-xl font-semibold">
+              {formatCents(report.endedLeaseExposureCents)}
+              <p className="text-muted-foreground mt-1 text-xs font-normal text-pretty">
+                Leases that have already ended. Still here on purpose — this is the money that goes
+                missing when a report filters to active tenants.
+              </p>
+            </dd>
           </div>
           <div className="border-input rounded-lg border p-4">
             <dt className="text-muted-foreground text-sm">Leases with a balance</dt>
@@ -98,7 +105,7 @@ export default async function DelinquencyPage() {
         <h2 id="buckets-heading" className="font-medium">
           By facility
         </h2>
-        <div className="overflow-x-auto">
+        <div tabIndex={0} className="overflow-x-auto">
           <table className="w-full min-w-3xl border-collapse text-sm">
             <caption className="sr-only">Outstanding balance by aging bucket, per facility</caption>
             <thead>
@@ -178,7 +185,7 @@ export default async function DelinquencyPage() {
         <h2 id="detail-heading" className="font-medium">
           Tenant detail
         </h2>
-        <div className="overflow-x-auto">
+        <div tabIndex={0} className="overflow-x-auto">
           <table className="w-full min-w-4xl border-collapse text-sm">
             <caption className="sr-only">
               Every lease carrying a balance, oldest debt first

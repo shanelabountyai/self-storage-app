@@ -52,7 +52,7 @@ export default async function StaffSecurityPage() {
         </p>
       )}
 
-      <div className="overflow-x-auto">
+      <div tabIndex={0} className="overflow-x-auto">
         <table className="w-full min-w-2xl text-left text-sm">
           <caption className="sr-only">
             Staff accounts, their two-factor status and remaining recovery codes

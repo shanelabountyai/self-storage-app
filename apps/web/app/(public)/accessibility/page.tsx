@@ -10,7 +10,7 @@ export const metadata = metadataFor(
 /// credibility rests on the record, not the intention — an undated one is a
 /// claim about a codebase that has since moved. Update this when the claims are
 /// re-verified, not when the page is edited.
-const LAST_REVIEWED = '14 August 2026'
+const LAST_REVIEWED = '15 August 2026'
 
 // PRD 01 §6.8 requires a public accessibility statement. Unlike the legal pages
 // this describes our own conformance, so every sentence has to be true of the
@@ -65,6 +65,22 @@ const LAST_REVIEWED = '14 August 2026'
 // the product. `gate-code-panel.tsx` had diagnosed it in B-105 and named the
 // file; nothing changed it until now. The sentence stays because it is now
 // accurate, not because it always was.
+//
+// Re-verified 2026-08-15, after B-119, and it had gone stale in the
+// UNDERSTATING direction again: the three named gaps were exactly what B-119
+// closed. `/messaging-policy` is scanned now, so is every sign-in and
+// account-security page (`/login`, `/forgot-password`, `/reset-password`,
+// `/unsubscribe`, plus `/mfa` and `/reauth` scanned signed-in), and checkout
+// is scanned at every reachable step, not just "session not found". What is
+// left of that gap is named precisely instead of dropped outright: the
+// confirmation screen still is not scanned, because it only renders after a
+// real Stripe redirect and there is no way to simulate a completed
+// PaymentIntent from outside Stripe's own iframe. B-119 also found and fixed
+// two real defects the wider scan turned up — 33 scrollable tables missing a
+// keyboard stop, and two report pages nesting a stray `<p>` beside `<dt>`/
+// `<dd>` inside a `<dl>` — neither of which had been exercised by any test
+// before this pass, which is the whole reason coverage work like this earns
+// its place here rather than being assumed complete once written.
 export default function AccessibilityPage() {
   return (
     <ProsePage
@@ -117,10 +133,10 @@ export default function AccessibilityPage() {
           &ldquo;that passed&rdquo;.
         </p>
         <p>
-          They do not yet cover everything. As of {LAST_REVIEWED} our text-message policy
-          page, our sign-in and account-security pages, and the rental checkout in its
-          working state are all outside that run. We would rather name the gaps than let a
-          general claim cover them.
+          They do not yet cover everything. As of {LAST_REVIEWED} the checkout&apos;s
+          confirmation screen is outside that run — it only exists after a real payment
+          redirect, and we cannot simulate that from outside the card processor&apos;s own
+          frame. We would rather name the gap than let a general claim cover it.
         </p>
         <p>
           Automated testing is a floor, not a ceiling — it catches roughly a third of real

@@ -92,7 +92,7 @@ export default async function FunnelPage({
         </button>
       </form>
 
-      <div className="overflow-x-auto">
+      <div tabIndex={0} className="overflow-x-auto">
         <table className="w-full min-w-2xl border-collapse text-sm">
           <caption className="sr-only">
             Funnel steps with conversion rates for {range.label}

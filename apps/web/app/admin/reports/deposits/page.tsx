@@ -69,7 +69,7 @@ export default async function DepositsPage({
         </p>
       )}
 
-      <div className="overflow-x-auto">
+      <div tabIndex={0} className="overflow-x-auto">
         <table className="w-full min-w-2xl border-collapse text-sm">
           <caption className="sr-only">
             Recorded payments by method against drawer close-outs, per facility per day

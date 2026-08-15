@@ -30,6 +30,19 @@ const PUBLIC_ROUTES = [
   '/terms',
   '/privacy',
   '/accessibility',
+  '/messaging-policy',
+  // B-119 (accessibility review 2026-08-12, test gap 1). Reachable by anyone
+  // signed out — a bounced staff or tenant visit, a support email's link, a
+  // mistyped one — and none of the five had ever been scanned. `/mfa` and
+  // `/reauth` are NOT here: both require a session and just redirect to
+  // `/login` without one, so they are scanned signed in, in `admin.spec.ts`,
+  // alongside every other route that needs an actor.
+  '/login',
+  '/forgot-password',
+  // No token, same as the reservation/checkout bad-token states above — the
+  // state an expired or already-used email link actually lands on.
+  '/reset-password',
+  '/unsubscribe/not-a-real-token',
 ]
 
 // B-093. Everything below is a check axe structurally cannot make: it scans one

@@ -77,7 +77,7 @@ export function StatementView({ statement }: { statement: LeaseStatement }) {
             Nothing was charged or paid on this unit in {statement.label}.
           </p>
         ) : (
-          <div className="overflow-x-auto">
+          <div tabIndex={0} className="overflow-x-auto">
             <table className="w-full min-w-lg text-left text-sm">
               <caption className="sr-only">
                 Charges and payments for unit {statement.unitNumber} in {statement.label}

@@ -121,7 +121,7 @@ export default async function RevenuePage({
         </dl>
       </section>
 
-      <div className="overflow-x-auto">
+      <div tabIndex={0} className="overflow-x-auto">
         <table className="w-full min-w-4xl border-collapse text-sm">
           <caption className="sr-only">
             Billed and collected by category, per facility, for {range.label}
@@ -162,29 +162,39 @@ export default async function RevenuePage({
         <h2 id="adjustments-heading" className="font-medium">
           Given away and written off
         </h2>
+        {/* B-119 (test gap 3): axe's `definition-list` rule — a <div> inside
+            <dl> may hold only <dt>/<dd> pairs, and each note here was a third
+            sibling. Nested inside its <dd> instead, valid flow content,
+            rather than dropped or separated from the figure it explains. */}
         <dl className="grid gap-3 sm:grid-cols-3">
           <div className="border-input rounded-lg border p-4">
             <dt className="text-muted-foreground text-sm">Discounts and promos</dt>
-            <dd className="text-lg font-semibold">{formatCents(report.total.discountsCents)}</dd>
-            <p className="text-muted-foreground mt-1 text-xs text-pretty">
-              On invoices issued in this range. Not deducted from billed above — billed is what was
-              charged, this is what was let go.
-            </p>
+            <dd className="text-lg font-semibold">
+              {formatCents(report.total.discountsCents)}
+              <p className="text-muted-foreground mt-1 text-xs font-normal text-pretty">
+                On invoices issued in this range. Not deducted from billed above — billed is what was
+                charged, this is what was let go.
+              </p>
+            </dd>
           </div>
           <div className="border-input rounded-lg border p-4">
             <dt className="text-muted-foreground text-sm">Written off</dt>
-            <dd className="text-lg font-semibold">{formatCents(report.total.writeOffsCents)}</dd>
-            <p className="text-muted-foreground mt-1 text-xs text-pretty">
-              Balances given up on in this range. Gone from AR, never collected.
-            </p>
+            <dd className="text-lg font-semibold">
+              {formatCents(report.total.writeOffsCents)}
+              <p className="text-muted-foreground mt-1 text-xs font-normal text-pretty">
+                Balances given up on in this range. Gone from AR, never collected.
+              </p>
+            </dd>
           </div>
           <div className="border-input rounded-lg border p-4">
             <dt className="text-muted-foreground text-sm">Refunded</dt>
-            <dd className="text-lg font-semibold">{formatCents(report.total.refundsCents)}</dd>
-            <p className="text-muted-foreground mt-1 text-xs text-pretty">
-              Shown for information only. A refund unwinds the original payment, so collected above
-              is <em>already</em> net of this — adding it again would double-count.
-            </p>
+            <dd className="text-lg font-semibold">
+              {formatCents(report.total.refundsCents)}
+              <p className="text-muted-foreground mt-1 text-xs font-normal text-pretty">
+                Shown for information only. A refund unwinds the original payment, so collected above
+                is <em>already</em> net of this — adding it again would double-count.
+              </p>
+            </dd>
           </div>
         </dl>
       </section>

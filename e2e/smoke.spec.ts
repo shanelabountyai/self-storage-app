@@ -1,3 +1,4 @@
+import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from '@playwright/test'
 import { LEGAL_PAGES } from '../apps/web/lib/site-config'
 
@@ -495,6 +496,17 @@ test('a checkout step change moves focus and announces where it went', async ({ 
   // 2.4.3: focus is on the new step's heading, so the next Tab is into step 2
   // rather than back at the top of the document.
   await expect(page.locator('#step')).toBeFocused()
+
+  // B-119: proven for a SECOND transition, not just the first hop into the
+  // stepper — a handler wired to "the step after Details" specifically would
+  // have passed the assertions above and still left every later Continue
+  // silent.
+  await page.getByRole('button', { name: 'This is right' }).click()
+  // The stepper's own short label ("Protection"), not the step's page
+  // heading ("Protect what you store") — the same distinction B-110's
+  // comment already draws for step 2's "Your unit".
+  await expect(announcer).toHaveText(/Protection — step 3 of 6/)
+  await expect(page.locator('#step')).toBeFocused()
 })
 
 test('checkout step 1 stays inside the field cap, at a consumer tap size', async ({ page }) => {
@@ -851,6 +863,24 @@ test('the lease shows a summary first and signs with a typed name', async ({ pag
   await expect(page.getByRole('heading', { name: 'Payment', exact: true })).toBeVisible()
 })
 
+// B-119 (accessibility review 2026-08-12, test gap 4). Checkout had been
+// scanned exactly once — `/checkout?token=not-a-real-session`, the "session
+// not found" state — so five of its six steps and the confirmation screen
+// had never been seen by any tool. That gap is why finding 5's dangling
+// `aria-labelledby` survived to a source review rather than failing a test.
+// Called after each `advance` in the walk below, not folded into a
+// PUBLIC_ROUTES-style list: every step needs the PREVIOUS steps' real data
+// already filled in to reach it at all, so there is no bare URL to `goto`.
+async function assertNoAxeViolations(page: import('@playwright/test').Page): Promise<void> {
+  const { violations } = await new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+    .analyze()
+  expect(
+    violations.map((v) => `${v.id}: ${v.help}`),
+    'axe found accessibility violations',
+  ).toEqual([])
+}
+
 test('the payment step itemises before it charges and discloses autopay', async ({ page }) => {
   await page.goto('/storage/tx/houston/demo-e2e')
   await page
@@ -859,6 +889,7 @@ test('the payment step itemises before it charges and discloses autopay', async 
     .first()
     .getByRole('button', { name: 'Rent now' })
     .click()
+  await assertNoAxeViolations(page) // step 1: Your details
 
   await page.getByLabel('First name').fill('Ada')
   await page.getByLabel('Last name').fill('Renter')
@@ -870,10 +901,15 @@ test('the payment step itemises before it charges and discloses autopay', async 
   await page.getByLabel('Zip code').fill('78704')
   await page.getByRole('button', { name: 'Continue', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Your unit' })).toBeVisible()
+  await assertNoAxeViolations(page) // step 2: Your unit
+
   await page.getByRole('button', { name: 'This is right' }).click()
   await expect(page.getByRole('heading', { name: 'Protect what you store' })).toBeVisible()
+  await assertNoAxeViolations(page) // step 3: Protection
+
   await page.getByRole('button', { name: 'Continue', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'The short version' })).toBeVisible()
+  await assertNoAxeViolations(page) // step 4: Your lease
 
   // Named, not positional. B-112 moved the active-duty declaration onto this
   // step, so `.first()` is no longer the E-SIGN consent — and checking the
@@ -884,6 +920,7 @@ test('the payment step itemises before it charges and discloses autopay', async 
 
   // 3.3.4: everything being charged, itemised, before the act that charges it.
   await expect(page.getByRole('heading', { name: 'What you are paying today' })).toBeVisible()
+  await assertNoAxeViolations(page) // step 5: Payment
   await expect(page.getByRole('main')).toContainText('Total due today')
   await expect(page.getByRole('main')).toContainText('Then each month')
 

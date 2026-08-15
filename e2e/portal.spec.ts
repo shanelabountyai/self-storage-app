@@ -25,19 +25,87 @@ test.describe('signed in as the demo tenant', () => {
     await signInAsDemoTenant(page)
   })
 
-  test('/portal has no WCAG 2.1 AA violations', async ({ page }) => {
-    await page.goto('/portal')
-    await expect(page.getByRole('main')).toBeVisible()
+  // B-119 (accessibility review 2026-08-12, test gap 2). Every STATIC portal
+  // page — no `[param]` segment — belongs here, or nobody checks it, the same
+  // contract admin.spec.ts's ADMIN_ROUTES keeps.
+  //
+  // Left out on purpose: `/portal/documents/{id}` and
+  // `/portal/statements/{leaseId}/{period}` need a real document/statement id.
+  // `/portal/pay` needs a real lease id to render its actual content rather
+  // than an empty-state stand-in, and the axe scan a few lines below already
+  // reaches it that way — through a real "Pay now" click — rather than a bare
+  // `goto` with no lease in the URL at all.
+  const PORTAL_ROUTES = [
+    '/portal',
+    '/portal/access',
+    '/portal/contact',
+    '/portal/documents',
+    '/portal/methods',
+    '/portal/move-out',
+    '/portal/notifications',
+    '/portal/protection',
+    '/portal/statements',
+  ]
 
-    const { violations } = await new AxeBuilder({ page })
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-      .analyze()
+  for (const route of PORTAL_ROUTES) {
+    test(`${route} has no WCAG 2.1 AA violations`, async ({ page }) => {
+      await page.goto(route)
+      await expect(page.getByRole('main')).toBeVisible()
 
-    expect(
-      violations.map((v) => `${v.id}: ${v.help}`),
-      'axe found accessibility violations',
-    ).toEqual([])
+      const { violations } = await new AxeBuilder({ page })
+        .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+        .analyze()
+
+      expect(
+        violations.map((v) => `${v.id}: ${v.help}`),
+        'axe found accessibility violations',
+      ).toEqual([])
+    })
+  }
+
+  for (const route of PORTAL_ROUTES) {
+    test(`${route} reflows to 320px without horizontal scroll`, async ({ page }) => {
+      await page.setViewportSize({ width: 320, height: 800 })
+      await page.goto(route)
+      const overflow = await page.evaluate(
+        () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+      )
+      expect(overflow, 'portal scrolls horizontally at 320px').toBe(false)
+    })
+  }
+
+  test.describe('text zoomed to 200%', () => {
+    test.use({ viewport: { width: 640, height: 512 }, deviceScaleFactor: 2 })
+
+    for (const route of PORTAL_ROUTES) {
+      test(`${route} survives 200% zoom`, async ({ page }) => {
+        // The outer describe's beforeEach already signs in.
+        await page.goto(route)
+        const overflow = await page.evaluate(
+          () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+        )
+        expect(overflow, 'portal scrolls horizontally at 200% zoom').toBe(false)
+      })
+    }
   })
+
+  const TEXT_SPACING = `* {
+    line-height: 1.5 !important;
+    letter-spacing: 0.12em !important;
+    word-spacing: 0.16em !important;
+  }
+  p { margin-bottom: 2em !important; }`
+
+  for (const route of PORTAL_ROUTES) {
+    test(`${route} tolerates forced text spacing`, async ({ page }) => {
+      await page.goto(route)
+      await page.addStyleTag({ content: TEXT_SPACING })
+      const overflow = await page.evaluate(
+        () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+      )
+      expect(overflow, 'content is clipped when text spacing is increased').toBe(false)
+    })
+  }
 
   test('shows the past-due banner and a suspended gate-code panel, not a code', async ({ page }) => {
     await page.goto('/portal')
@@ -140,21 +208,10 @@ test.describe('signed in as the demo tenant', () => {
   // `authTime` in the JWT, and the decision itself is already covered
   // directly by tests/reauth.test.ts's boundary cases. See PROGRESS.md.
 
-  for (const route of ['/portal/documents', '/portal/contact']) {
-    test(`${route} has no WCAG 2.1 AA violations`, async ({ page }) => {
-      await page.goto(route)
-      await expect(page.getByRole('main')).toBeVisible()
-
-      const { violations } = await new AxeBuilder({ page })
-        .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-        .analyze()
-
-      expect(
-        violations.map((v) => `${v.id}: ${v.help}`),
-        'axe found accessibility violations',
-      ).toEqual([])
-    })
-  }
+  // /portal/documents and /portal/contact's axe coverage now lives in
+  // PORTAL_ROUTES above — this used to be its own small loop, which is the
+  // exact "coverage grew by accident" shape B-119 closes: two lists that
+  // could silently drift apart about which routes are actually checked.
 
   test('saving an address keeps the previous one on file', async ({ page }) => {
     // PRD 02 US-13: the address of record is a history, because "which

@@ -118,7 +118,7 @@ export default async function DrawerPage() {
             </dl>
 
             {view.checks.length > 0 && (
-              <div className="overflow-x-auto">
+              <div tabIndex={0} className="overflow-x-auto">
                 <table className="w-full border-collapse text-sm">
                   <caption className="sr-only">Cheques and money orders in this drawer session</caption>
                   <thead>

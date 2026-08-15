@@ -178,7 +178,7 @@ export default async function AdminUnitTypesPage({
       {/* B-116. Neither table on this page had the overflow-x-auto wrapper the
           units screen's table gets — a 522px table scrolled the whole document
           sideways at 320px rather than just itself. */}
-      <div className="overflow-x-auto">
+      <div tabIndex={0} className="overflow-x-auto">
       <table className="w-full min-w-max text-left text-sm">
         <thead>
           <tr className="text-muted-foreground">
@@ -285,7 +285,7 @@ export default async function AdminUnitTypesPage({
             existing lease&apos;s rent (US-9). Future-dated rows take effect on their own date.
           </p>
 
-          <div className="overflow-x-auto">
+          <div tabIndex={0} className="overflow-x-auto">
           <table className="w-full min-w-max text-left text-sm">
             <thead>
               <tr className="text-muted-foreground">

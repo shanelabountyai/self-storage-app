@@ -41,7 +41,7 @@ export default async function NotificationsPage() {
           What we send, and how
         </h2>
         <AdminForm action={setPreferencesAction} label="Notification preferences" className="flex flex-col gap-4">
-          <div className="overflow-x-auto">
+          <div tabIndex={0} className="overflow-x-auto">
             <table className="w-full min-w-md border-collapse text-sm">
               <thead>
                 <tr className="border-input border-b text-left">

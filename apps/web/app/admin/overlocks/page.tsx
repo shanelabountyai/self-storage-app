@@ -57,7 +57,7 @@ export default async function OverlocksPage() {
       {rows.length === 0 ? (
         <p className="text-muted-foreground text-sm">No live overlocks at this facility.</p>
       ) : (
-        <div className="overflow-x-auto">
+        <div tabIndex={0} className="overflow-x-auto">
           <table className="w-full min-w-max text-left text-sm">
             <thead>
               <tr className="text-muted-foreground">

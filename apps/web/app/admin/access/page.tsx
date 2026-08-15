@@ -139,7 +139,7 @@ export default async function AccessEventsPage({
         </section>
       )}
 
-      <div className="overflow-x-auto">
+      <div tabIndex={0} className="overflow-x-auto">
         <table className="w-full min-w-3xl border-collapse text-sm">
           <caption className="sr-only">Gate attempts for {range.label}, newest first</caption>
           <thead>

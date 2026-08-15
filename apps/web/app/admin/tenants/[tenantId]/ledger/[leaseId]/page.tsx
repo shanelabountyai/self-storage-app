@@ -122,7 +122,7 @@ export default async function LedgerPage({
       {ledger.lines.length === 0 ? (
         <p className="text-muted-foreground text-sm">Nothing has been posted to this lease yet.</p>
       ) : (
-        <div className="overflow-x-auto">
+        <div tabIndex={0} className="overflow-x-auto">
           <table className="w-full text-sm">
             <caption className="sr-only">
               Every entry on this lease in date order, with the running balance

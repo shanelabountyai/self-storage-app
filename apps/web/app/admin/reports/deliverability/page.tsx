@@ -99,7 +99,7 @@ export default async function DeliverabilityPage({
         <h2 id="overall-heading" className="font-medium">
           Overall
         </h2>
-        <div className="overflow-x-auto">
+        <div tabIndex={0} className="overflow-x-auto">
           <table className="w-full min-w-md border-collapse text-sm">
             <caption className="sr-only">Sends, delivery rate, bounce rate and SMS failure rate for {range.label}</caption>
             <thead>
@@ -121,7 +121,7 @@ export default async function DeliverabilityPage({
         <h2 id="templates-heading" className="font-medium">
           By template
         </h2>
-        <div className="overflow-x-auto">
+        <div tabIndex={0} className="overflow-x-auto">
           <table className="w-full min-w-2xl border-collapse text-sm">
             <caption className="sr-only">Sends and delivery outcomes broken down by template and channel</caption>
             <thead>
@@ -158,7 +158,7 @@ export default async function DeliverabilityPage({
         <h2 id="daily-heading" className="font-medium">
           By day
         </h2>
-        <div className="overflow-x-auto">
+        <div tabIndex={0} className="overflow-x-auto">
           <table className="w-full min-w-md border-collapse text-sm">
             <caption className="sr-only">Sends per day for {range.label}</caption>
             <thead>
@@ -204,7 +204,7 @@ export default async function DeliverabilityPage({
             Nothing has exhausted its retries and needed a human — this is the state to expect.
           </p>
         ) : (
-          <div className="overflow-x-auto">
+          <div tabIndex={0} className="overflow-x-auto">
             <table className="w-full min-w-2xl border-collapse text-sm">
               <caption className="sr-only">Events that exhausted every retry attempt and need a human look</caption>
               <thead>

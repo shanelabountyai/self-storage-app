@@ -94,7 +94,7 @@ export default async function RateIncreasesPage() {
         {review.rows.length === 0 ? (
           <p className="text-muted-foreground text-sm">Nothing scheduled.</p>
         ) : (
-          <div className="overflow-x-auto">
+          <div tabIndex={0} className="overflow-x-auto">
             <table className="w-full min-w-2xl border-collapse text-sm">
               <caption className="sr-only">
                 Scheduled tenant rate increases with their current and new rates, dates and status
@@ -182,7 +182,7 @@ export default async function RateIncreasesPage() {
         {eligible.length === 0 ? (
           <p className="text-muted-foreground text-sm">No lease meets the rule right now.</p>
         ) : (
-          <div className="overflow-x-auto">
+          <div tabIndex={0} className="overflow-x-auto">
             <table className="w-full min-w-2xl border-collapse text-sm">
               <caption className="sr-only">Leases eligible for a rule-based rate increase</caption>
               <thead>
