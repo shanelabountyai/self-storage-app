@@ -3841,7 +3841,7 @@ None of these were skipped for lack of trying — I cannot physically operate a 
 
 ## B-120 — The e2e suite is not repeatable, and it does not notice when it is testing the wrong application
 
-`XXXXXXX`
+`111b9b2`
 
 **Built, two of three:** `apps/web/package.json`'s `dev` and `start` scripts now pin `-p 3000` explicitly instead of letting Next.js pick the port. Verified directly, not assumed: with a dummy listener genuinely holding port 3000 (bound IPv6, matching how Next itself binds — an IPv4-only dummy listener does not collide with it at all, which is what a first pass at this test got wrong), `next dev` with no `-p` prints "Port 3000 is in use... using available port 3001 instead" and keeps running; `next dev -p 3000` against the same occupied port throws `EADDRINUSE` and exits. Traced to Next's own source (`start-server.js`): the auto-retry is gated on `allowRetry = portSource === 'default'`, so an explicit port is the whole fix — one flag, no Playwright-side workaround needed, and it protects `npm run dev` too, not just e2e. `next start` (production) never retried regardless of the flag — `isDev` gates the retry — so B-125's production-build convention had already closed this for every normal `test:e2e` run; the explicit port matters for `E2E_DEV=1` debugging, which still runs the dev server.
 
