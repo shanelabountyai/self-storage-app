@@ -3736,7 +3736,7 @@ The accessibility statement was re-read and one clause added: it already claimed
 
 ## B-115 — Tasks and delinquency cards name and link their subject
 
-`PENDING`
+`0f3d975`
 
 **Built:** `resolveTaskSubjects` (new: `apps/web/lib/admin/task-subjects.ts`), called once inside `facilityTasks` — the shared read both `/admin/tasks` and `/admin/delinquency` sit on (B-095's rule: the queue has one implementation). Every `TaskRow` now carries `subject: { label, href }`. A card used to say "Fit an overlock / Lease · Aug 12 / Unassigned"; it now says "Fit an overlock / Unit B-14 — Ada Renter [linked] / Aug 12". The delinquency queue additionally carries `balanceCents` and `daysPastDue` per task, read from `@storage/core/metrics` (D-25) rather than recomputed — the figure that queue exists for, rendered in words next to the amber (1.4.1: "40 days past due", never colour alone). The `/admin/tasks` type filter chip now reads the catalog label ("Payment failed — autopay has stopped retrying") instead of the raw `Task.type` key, per B-109's rule that admin may use industry vocabulary and may not render enum identifiers.
 
