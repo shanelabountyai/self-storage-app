@@ -3887,7 +3887,7 @@ Added `db:migrate:e2e`, migrating and seeding the `public` schema of the `storag
 
 ## B-122 — A renter can actually enter a promo code
 
-`XXXXXXX`
+`b0b4140`
 
 **Built:** a code box on the facility page and a second one at the checkout price summary, both re-evaluating server-side. The facility page's is a GET form, so the code lands in the URL — shareable, survives a reload, works with the bundle disabled, and rides the same query-string pattern the filters and sort already use; the filters, sort and size travel with it as hidden inputs so applying a code cannot silently clear them. The code carries into the "Rent now" POST, which **re-derives** the offer rather than accepting anything the form said, and onto the checkout session's existing `PromoSnapshot` — the same snapshot the summary, the amount due today and the redemption row all read, so there is still exactly one place the discount is decided. The checkout's box posts to a server action instead, and is deliberately absent from the payment step: the total there has been authorised (§6.4) and `provisionMoveIn` is about to redeem the schedule the session locked.
 
