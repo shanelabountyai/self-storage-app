@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import { ForbiddenError } from '@/lib/rbac/authorize'
 import { needsMfaEnrollment } from '@/lib/auth/mfa'
-import { visibleNavItems } from '@/lib/admin/nav'
+import { groupedNavItems } from '@/lib/admin/nav'
 import { getSwitcherData } from '@/lib/admin/context'
 import { Header } from '@/components/admin/header'
 import { SideNav } from '@/components/admin/side-nav'
@@ -35,7 +35,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     redirect('/mfa')
   }
 
-  const navItems = visibleNavItems(actor)
+  const navGroups = groupedNavItems(actor)
 
   return (
     // B-112. The admin density. `CONTROL_CLASS` defaults to §6.2's 44px
@@ -63,7 +63,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         canSeeAll={canSeeAll}
       />
       <div className="flex flex-1 flex-col sm:flex-row">
-        <SideNav items={navItems} />
+        <SideNav groups={navGroups} />
         {/* B-116. `contain: layout` (Tailwind's arbitrary-property syntax)
             is load-bearing, not decoration. Units, unit types and settings all
             carry a table wrapped in `overflow-x-auto` — correctly clipped and

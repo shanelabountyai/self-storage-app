@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import type { Actor, Assignment } from '../apps/web/lib/rbac/actor'
-import { NAV_ITEMS, navItemForSection, visibleNavItems } from '../apps/web/lib/admin/nav'
+import {
+  NAV_GROUP_ORDER,
+  NAV_ITEMS,
+  groupedNavItems,
+  navItemForSection,
+  visibleNavItems,
+} from '../apps/web/lib/admin/nav'
 import { ROLES } from '../packages/db/rbac-catalog'
 
 function assignmentFor(roleKey: string, facilityId: string | null): Assignment {
@@ -36,7 +42,6 @@ describe('nav catalog', () => {
       'Dashboard',
       'Units',
       'Tenants',
-      'Leases',
       'Billing',
       'Delinquency',
       'Auctions',
@@ -44,16 +49,72 @@ describe('nav catalog', () => {
       'Tasks',
       'Reports',
       'Settings',
-      'Audit Log',
     ]) {
       expect(labels).toContain(expected)
     }
   })
 
-  it('resolves a section slug back to its nav item', () => {
+  // B-117 (UX review 2026-08-12, findings 11/16). Both resolved only to the
+  // "built in a later backlog item" placeholder — a nav promising two
+  // destinations it does not have reads as unfinished to the person being
+  // asked to trust it with rent. Leases stay reachable from the tenant
+  // profile; re-add either the day its own screen ships.
+  it('no longer offers Leases or Audit Log — neither has a screen', () => {
+    const labels = NAV_ITEMS.map((i) => i.label)
+    expect(labels).not.toContain('Leases')
+    expect(labels).not.toContain('Audit Log')
+  })
+
+  it('resolves a section slug back to its nav item, and falls through cleanly for one removed', () => {
     expect(navItemForSection('units')?.label).toBe('Units')
-    expect(navItemForSection('audit-log')?.label).toBe('Audit Log')
+    expect(navItemForSection('audit-log')).toBeUndefined()
     expect(navItemForSection('nonexistent')).toBeUndefined()
+  })
+
+  it('every item belongs to exactly one of the four groups, in the fixed display order', () => {
+    expect(NAV_GROUP_ORDER).toEqual(['today', 'property', 'money', 'admin'])
+    for (const item of NAV_ITEMS) {
+      expect(NAV_GROUP_ORDER).toContain(item.group)
+    }
+  })
+})
+
+describe('groupedNavItems', () => {
+  it('puts Walkthrough and Tasks in Today/Property, not buried past position 8', () => {
+    const actor = staff(assignmentFor('owner', null))
+    const groups = groupedNavItems(actor)
+    const today = groups.find((g) => g.key === 'today')!
+    const property = groups.find((g) => g.key === 'property')!
+    expect(today.items.map((i) => i.key)).toContain('tasks')
+    expect(property.items.map((i) => i.key)).toContain('walkthrough')
+  })
+
+  it('drops a group with nothing visible in it, rather than rendering a bare heading', () => {
+    // Every Property-group item is gated on one of units:edit,
+    // delinquency:execute_step, access:events or tenants:view — an actor
+    // holding none of those sees no Property group at all.
+    const actor: Actor = {
+      kind: 'staff',
+      staffUserId: 'staff-none',
+      assignments: [
+        {
+          facilityId: 'facility-a',
+          roleKey: 'counter',
+          rank: 10,
+          permissions: new Set(['payments:take']),
+          limits: { maxFeeWaiverCents: 0, maxRefundCents: 0, maxCreditCents: 0 },
+        },
+      ],
+    }
+    const groups = groupedNavItems(actor)
+    expect(groups.find((g) => g.key === 'property')).toBeUndefined()
+    expect(groups.map((g) => g.key)).toEqual(['today', 'money'])
+  })
+
+  it('groups stay in NAV_GROUP_ORDER regardless of how NAV_ITEMS is ordered', () => {
+    const actor = staff(assignmentFor('owner', null))
+    const keys = groupedNavItems(actor).map((g) => g.key)
+    expect(keys).toEqual([...keys].sort((a, b) => NAV_GROUP_ORDER.indexOf(a) - NAV_GROUP_ORDER.indexOf(b)))
   })
 })
 
@@ -69,11 +130,10 @@ describe('nav visibility by role', () => {
     const actor = staff(assignmentFor('counter', 'facility-a'))
     const keys = visibleNavItems(actor).map((i) => i.key)
     expect(keys).toEqual(
-      expect.arrayContaining(['dashboard', 'tenants', 'leases', 'billing', 'pos', 'tasks']),
+      expect.arrayContaining(['dashboard', 'tenants', 'billing', 'pos', 'tasks']),
     )
     expect(keys).not.toContain('units')
     expect(keys).not.toContain('settings')
-    expect(keys).not.toContain('audit-log')
     expect(keys).not.toContain('auctions')
   })
 

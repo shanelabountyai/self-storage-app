@@ -35,31 +35,46 @@ export default async function PortalLayout({ children }: { children: React.React
       <header className="border-b">
         <div className="mx-auto flex w-full max-w-4xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
           <span className="mr-auto text-sm font-medium">{userName}</span>
-          <nav aria-label="Your account" className="flex flex-wrap gap-4 text-sm">
+          {/* B-117 (UX review 2026-08-12, finding 16). Nine links in one flat
+              row wrapped to four lines above the balance at 360px. Ordered by
+              how often somebody actually comes here — the four a tenant
+              checks routinely stay one tap away; the four that are a once-a-
+              while errand sit behind Manage; Move out is separated on its
+              own, because it is the one irreversible destination in the
+              list and does not belong beside "check my statement." */}
+          <nav aria-label="Your account" className="flex flex-wrap items-center gap-4 text-sm">
             <Link href="/portal" className="underline underline-offset-2">
               Overview
-            </Link>
-            <Link href="/portal/documents" className="underline underline-offset-2">
-              Documents
-            </Link>
-            <Link href="/portal/statements" className="underline underline-offset-2">
-              Statements
-            </Link>
-            <Link href="/portal/access" className="underline underline-offset-2">
-              Who can get in
-            </Link>
-            <Link href="/portal/protection" className="underline underline-offset-2">
-              Protection
             </Link>
             <Link href="/portal/methods" className="underline underline-offset-2">
               Payment methods
             </Link>
-            <Link href="/portal/contact" className="underline underline-offset-2">
-              Contact details
+            <Link href="/portal/statements" className="underline underline-offset-2">
+              Statements
             </Link>
-            <Link href="/portal/notifications" className="underline underline-offset-2">
-              Notifications
+            <Link href="/portal/documents" className="underline underline-offset-2">
+              Documents
             </Link>
+            <details className="text-sm">
+              <summary className="inline-flex min-h-11 cursor-pointer items-center underline underline-offset-2">
+                Manage
+              </summary>
+              <div className="flex flex-col gap-2 pt-2">
+                <Link href="/portal/access" className="underline underline-offset-2">
+                  Who can get in
+                </Link>
+                <Link href="/portal/protection" className="underline underline-offset-2">
+                  Protection
+                </Link>
+                <Link href="/portal/contact" className="underline underline-offset-2">
+                  Contact details
+                </Link>
+                <Link href="/portal/notifications" className="underline underline-offset-2">
+                  Notifications
+                </Link>
+              </div>
+            </details>
+            <span aria-hidden="true" className="border-muted-foreground/40 h-4 border-l" />
             <Link href="/portal/move-out" className="underline underline-offset-2">
               Move out
             </Link>

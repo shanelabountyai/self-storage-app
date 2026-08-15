@@ -212,3 +212,34 @@ test.describe('signed in as the demo tenant', () => {
   // temporary key, and a temporary revealable credential on a non-suspended
   // demo tenant — see PROGRESS.md's B-034 entry.
 })
+
+test.describe('the account nav (B-117)', () => {
+  test.beforeEach(async ({ page }) => {
+    await signInAsDemoTenant(page)
+  })
+
+  test('the four frequent links are one tap away; the rest sit behind Manage', async ({ page }) => {
+    await page.goto('/portal')
+    const nav = page.getByRole('navigation', { name: 'Your account' })
+
+    for (const label of ['Overview', 'Payment methods', 'Statements', 'Documents']) {
+      await expect(nav.getByRole('link', { name: label })).toBeVisible()
+    }
+    // Not rendered until Manage opens — a closed <details> keeps its content
+    // out of the accessibility tree entirely, not merely hidden from view.
+    for (const label of ['Who can get in', 'Protection', 'Contact details', 'Notifications']) {
+      await expect(nav.getByRole('link', { name: label })).toHaveCount(0)
+    }
+
+    await nav.getByText('Manage').click()
+    for (const label of ['Who can get in', 'Protection', 'Contact details', 'Notifications']) {
+      await expect(nav.getByRole('link', { name: label })).toBeVisible()
+    }
+  })
+
+  test('Move out stays reachable without opening Manage — it is not one of the four errands', async ({ page }) => {
+    await page.goto('/portal')
+    const nav = page.getByRole('navigation', { name: 'Your account' })
+    await expect(nav.getByRole('link', { name: 'Move out' })).toBeVisible()
+  })
+})

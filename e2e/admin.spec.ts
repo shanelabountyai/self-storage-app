@@ -419,3 +419,42 @@ test.describe('units (B-116)', () => {
     )
   })
 })
+
+test.describe('nav grouping (B-117)', () => {
+  test.beforeEach(async ({ page }) => {
+    await signInAsDemoOwner(page)
+  })
+
+  test('the desktop nav is grouped into four labelled sections, and drops Leases/Audit Log', async ({ page }) => {
+    // Explicit rather than relying on the project's own default viewport —
+    // this is a claim about the DESKTOP markup specifically, and mobile-chrome
+    // defaults to 412px, below the `sm` breakpoint that switches it on.
+    await page.setViewportSize({ width: 1024, height: 800 })
+    await page.goto('/admin')
+    const nav = page.getByRole('navigation', { name: 'Admin' })
+    for (const heading of ['Today', 'Property', 'Money & tenants', 'Admin']) {
+      await expect(nav.getByRole('heading', { name: heading })).toBeVisible()
+    }
+    await expect(nav.getByRole('link', { name: 'Leases' })).toHaveCount(0)
+    await expect(nav.getByRole('link', { name: 'Audit Log' })).toHaveCount(0)
+    // Neither placeholder route is reachable by URL either, now that nothing
+    // in the nav names it.
+    const response = await page.goto('/admin/leases')
+    expect(response?.status()).toBe(404)
+  })
+
+  test('below sm, Tasks is in the Today strip and everything else sits behind More', async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 800 })
+    await page.goto('/admin')
+    const nav = page.getByRole('navigation', { name: 'Admin' })
+
+    // Visible without opening anything — Walkthrough and Tasks used to sit at
+    // positions 9 and 14 in one flat list.
+    await expect(nav.getByRole('link', { name: 'Tasks' })).toBeVisible()
+
+    const more = nav.getByText('More')
+    await expect(nav.getByRole('link', { name: 'Settings' })).toHaveCount(0)
+    await more.click()
+    await expect(nav.getByRole('link', { name: 'Settings' })).toBeVisible()
+  })
+})
