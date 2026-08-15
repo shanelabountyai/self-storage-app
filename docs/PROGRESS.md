@@ -3982,7 +3982,7 @@ Added `db:migrate:e2e`, migrating and seeding the `public` schema of the `storag
 
 ## B-100 (part 2) — Referrals: the trigger and the money
 
-`XXXXXXX`
+`fdfb49e`
 
 **Still not the whole row.** Part 1 built the engine; this makes it run and pay. What remains after this is the portal invite control, lead/reservation attribution, comms and clawback — listed at the bottom, and the backlog row stays unticked until they land.
 
