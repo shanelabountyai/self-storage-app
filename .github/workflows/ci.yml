@@ -59,6 +59,24 @@ jobs:
             echo 'DIRECT_URL=postgresql://ci:ci@localhost:5432/ci'
             echo "AUTH_SECRET=$(openssl rand -base64 32)"
             echo 'AUTH_URL=http://localhost:3000'
+            # Required for the Lighthouse SEO assertion, and NOT cosmetic.
+            #
+            # `robots.ts` blanket-serves `Disallow: /` whenever
+            # NEXT_PUBLIC_SITE_URL is unset, deliberately: an unset value means
+            # the app is answering on a `.vercel.app` host, and a preview twin
+            # of the real site is the worst thing there is to have indexed.
+            # That is correct production behaviour and is kept.
+            #
+            # But it also meant CI measured SEO against a site that tells every
+            # crawler to go away, so Lighthouse's `is-crawlable` audit failed on
+            # EVERY url — three identical 0.69s on the facility page and 0.63
+            # elsewhere, which reads like a page problem and is not one. Setting
+            # it here makes CI measure the configured-domain path, which is the
+            # one that actually ships. The unset path keeps its own coverage in
+            # tests/seo-urls.test.ts.
+            #
+            # Set in BOTH jobs so the two blocks stay identical and cannot drift.
+            echo 'NEXT_PUBLIC_SITE_URL=http://localhost:3000'
           } > .env.local
 
       - run: npm run db:generate
@@ -121,6 +139,24 @@ jobs:
             echo 'DIRECT_URL=postgresql://ci:ci@localhost:5432/ci'
             echo "AUTH_SECRET=$(openssl rand -base64 32)"
             echo 'AUTH_URL=http://localhost:3000'
+            # Required for the Lighthouse SEO assertion, and NOT cosmetic.
+            #
+            # `robots.ts` blanket-serves `Disallow: /` whenever
+            # NEXT_PUBLIC_SITE_URL is unset, deliberately: an unset value means
+            # the app is answering on a `.vercel.app` host, and a preview twin
+            # of the real site is the worst thing there is to have indexed.
+            # That is correct production behaviour and is kept.
+            #
+            # But it also meant CI measured SEO against a site that tells every
+            # crawler to go away, so Lighthouse's `is-crawlable` audit failed on
+            # EVERY url — three identical 0.69s on the facility page and 0.63
+            # elsewhere, which reads like a page problem and is not one. Setting
+            # it here makes CI measure the configured-domain path, which is the
+            # one that actually ships. The unset path keeps its own coverage in
+            # tests/seo-urls.test.ts.
+            #
+            # Set in BOTH jobs so the two blocks stay identical and cannot drift.
+            echo 'NEXT_PUBLIC_SITE_URL=http://localhost:3000'
           } > .env.local
 
       - run: npm run db:generate
