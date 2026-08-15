@@ -21,6 +21,7 @@ import { tenantAccessHistory } from '@/lib/access/event-log'
 import { logManualDocument, type DocumentType } from '@/lib/documents/store'
 import { createTask } from '@/lib/admin/tasks'
 import { activeHolds, type ActiveHold } from '@/lib/admin/holds'
+import { syncActiveDutyHolds } from '@/lib/tenants/active-duty'
 import { refundablePayments } from '@/lib/billing/refunds'
 
 // PRD 02 §4.4 US-13. "Any staffer can pick up any conversation" — search,
@@ -208,6 +209,10 @@ export type TenantProfile = {
   altContactName: string | null
   altContactPhone: string | null
   altContactEmail: string | null
+  /// B-121. The SCRA declaration. `null` means nobody has ever been asked —
+  /// which is a different fact from "asked and said no", and the profile shows
+  /// it as such rather than collapsing both into an unticked box.
+  activeDutyMilitary: boolean | null
   address: Awaited<ReturnType<typeof currentAddress>>
   addressHistory: Awaited<ReturnType<typeof addressHistory>>
   leases: TenantLeaseSummary[]
@@ -274,6 +279,7 @@ export async function tenantProfile(actor: Actor, tenantId: string): Promise<Ten
         altContactName: true,
         altContactPhone: true,
         altContactEmail: true,
+        activeDutyMilitary: true,
         emailUndeliverableAt: true,
       },
     }),
@@ -439,6 +445,7 @@ export async function tenantProfile(actor: Actor, tenantId: string): Promise<Ten
     altContactName: tenant.altContactName,
     altContactPhone: tenant.altContactPhone,
     altContactEmail: tenant.altContactEmail,
+    activeDutyMilitary: tenant.activeDutyMilitary,
     address,
     addressHistory: history,
     leases: leaseSummaries,
@@ -535,6 +542,47 @@ export async function updateTenantContact(
     entityId: tenantId,
   })
   return {}
+}
+
+/// B-121 / D-49. Records the SCRA declaration a staffer was told on the phone
+/// or at the counter, and raises the hold that acts on it.
+///
+/// Setting it TRUE places a `military_scra` hold on every lease the tenant
+/// holds, at every facility — see `syncActiveDutyHolds` for why that
+/// deliberately outruns the acting staffer's own facility scope.
+///
+/// Setting it FALSE records the correction and stops there. It does NOT lift
+/// the hold, and that asymmetry is the point: US-42 makes lifting a
+/// `military_scra` hold manager-or-above, so letting anyone with `tenants:edit`
+/// undo the protection by unticking a box would route straight around the one
+/// restriction that matters. The screen says so where the control is.
+export async function updateTenantActiveDuty(
+  actor: Actor,
+  tenantId: string,
+  activeDutyMilitary: boolean,
+): Promise<{ heldLeases: number }> {
+  const [facilityId] = await assertTenantAccess(actor, tenantId, 'tenants:edit')
+
+  const before = await prisma.tenant.findUniqueOrThrow({
+    where: { id: tenantId },
+    select: { activeDutyMilitary: true },
+  })
+
+  await prisma.tenant.update({ where: { id: tenantId }, data: { activeDutyMilitary } })
+
+  await recordAudit({
+    actor: toAuditActor(actor),
+    facilityId,
+    action: 'tenant.active_duty_recorded',
+    entityType: 'Tenant',
+    entityId: tenantId,
+    before: { activeDutyMilitary: before.activeDutyMilitary },
+    after: { activeDutyMilitary },
+  })
+
+  if (!activeDutyMilitary) return { heldLeases: 0 }
+  const { placed } = await syncActiveDutyHolds(tenantId, 'staff')
+  return { heldLeases: placed.length }
 }
 
 export type AddressChangeResult = { ok: true } | { ok: false; problems: FieldProblems }

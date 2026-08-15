@@ -2,12 +2,13 @@ import Link from 'next/link'
 import { getAdminActor } from '@/lib/admin/context'
 import { tenantProfile } from '@/lib/admin/tenants'
 import { formatCents } from '@/lib/format'
-import { AdminForm, Field } from '@/components/admin/form'
+import { AdminForm, Field, FieldSet } from '@/components/admin/form'
 import {
   addNoteAction,
   flagAddressReturnedAction,
   logDocumentAction,
   setNotePinnedAction,
+  updateActiveDutyAction,
   updateAddressAction,
   liftHoldAction,
   placeHoldAction,
@@ -228,6 +229,68 @@ export default async function TenantProfilePage({
             className="border-input hover:bg-accent col-span-2 inline-flex min-h-11 items-center justify-center self-start rounded-md border px-4 text-sm font-medium"
           >
             Save contact details
+          </button>
+        </AdminForm>
+      </section>
+
+      {/* B-121 / D-49. Its own section, not a fifth box in the contact grid:
+          this is a legal-status declaration with automatic consequences on
+          every lease the tenant holds, and filing it beside "alternate contact
+          email" would read as one more optional detail. */}
+      <section aria-labelledby="scra-heading" className="flex flex-col gap-3">
+        <h2 id="scra-heading" className="font-medium">
+          Military service
+        </h2>
+        <AdminForm action={updateActiveDutyAction} label="Military service" className="flex max-w-lg flex-col gap-3">
+          <input type="hidden" name="tenantId" value={tenantId} />
+          <FieldSet
+            name="activeDutyMilitary"
+            legend="Active-duty military (SCRA)"
+            hint={
+              profile.activeDutyMilitary === null
+                ? 'Nobody has recorded an answer for this tenant. Recording yes stops collections, late fees, gate suspension, auction and marketing on every lease they hold — including at other facilities.'
+                : 'Recording yes stops collections, late fees, gate suspension, auction and marketing on every lease they hold — including at other facilities.'
+            }
+          >
+            <div className="mt-3 flex flex-col gap-2">
+              <label className="border-input flex min-h-11 cursor-pointer items-start gap-3 rounded-lg border p-3">
+                <input
+                  type="radio"
+                  name="activeDutyMilitary"
+                  value="yes"
+                  defaultChecked={profile.activeDutyMilitary === true}
+                  className="mt-1"
+                />
+                <span>
+                  <span className="font-medium">Yes — on active duty</span>
+                  <span className="text-muted-foreground block text-sm">
+                    Places an SCRA hold on every current lease straight away.
+                  </span>
+                </span>
+              </label>
+              <label className="border-input flex min-h-11 cursor-pointer items-start gap-3 rounded-lg border p-3">
+                <input
+                  type="radio"
+                  name="activeDutyMilitary"
+                  value="no"
+                  defaultChecked={profile.activeDutyMilitary === false}
+                  className="mt-1"
+                />
+                <span>
+                  <span className="font-medium">No</span>
+                  <span className="text-muted-foreground block text-sm">
+                    Corrects the record only. A hold already in force stays until a manager lifts it
+                    on the lease below.
+                  </span>
+                </span>
+              </label>
+            </div>
+          </FieldSet>
+          <button
+            type="submit"
+            className="border-input hover:bg-accent inline-flex min-h-11 items-center justify-center self-start rounded-md border px-4 text-sm font-medium"
+          >
+            Save military service
           </button>
         </AdminForm>
       </section>

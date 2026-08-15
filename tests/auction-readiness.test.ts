@@ -32,6 +32,7 @@ function ready(overrides: Partial<ReadinessInput> = {}): ReadinessInput {
     steps: [step()],
     containsVehicle: false,
     lienNoticeServed: true,
+    blockedByHold: false,
     approved: true,
     outstandingCents: 60_000,
     status: 'eligible',
@@ -46,6 +47,19 @@ describe('auctionReadiness — the happy path', () => {
 })
 
 describe('auctionReadiness — the hard blocks', () => {
+  // B-121. `block_auction` sat in the holds catalog from B-096 and nothing read
+  // it. The nightly engine halting on `halt_dunning` first is what hid it: no
+  // case could be OPENED under a hold, so nobody noticed that a case opened
+  // BEFORE the hold went on could still be walked all the way to a sale.
+  it('blocks a lease under a hold that stops sale', () => {
+    const result = auctionReadiness(ready({ blockedByHold: true }))
+    expect(result.ready).toBe(false)
+    const blocker = result.blockers.find((one) => one.kind === 'on_hold')!
+    expect(blocker.message).toContain('SCRA')
+    // Says what to do instead, since "work around it" is the actual risk here.
+    expect(blocker.message).toContain('do not work around it')
+  })
+
   it('blocks a unit containing a vehicle, and says why it cannot be worked around', () => {
     // "Running one silently through this pipeline is a wrongful sale by
     // construction." No override exists anywhere in the codebase.

@@ -197,7 +197,21 @@ export async function recordLeaseDeclarations(
     data: {
       altContactName: existing.altContactName ?? (input.altContactName?.trim() || null),
       altContactPhone: existing.altContactPhone ?? (input.altContactPhone?.trim() || null),
-      activeDutyMilitary: existing.activeDutyMilitary ?? (input.activeDutyMilitary ?? null),
+      // B-121: additive here means "only ever towards protection", which is NOT
+      // what `existing ?? input` did. A returning tenant who rented once
+      // without ticking the box has `false` on file, not null — and `false ??
+      // true` is `false`, so the declaration of somebody who had since deployed
+      // was read, validated, written to the checkout session and then silently
+      // dropped on the floor. The exact renter this whole item exists for.
+      //
+      // true wins whichever side it is on; a checkout can never take the
+      // protection away, because an unauthenticated form must not be able to
+      // clear a servicemember's flag by leaving a box unticked. Only the staff
+      // path can go back the other way, and even that does not lift the hold.
+      activeDutyMilitary:
+        existing.activeDutyMilitary === true || input.activeDutyMilitary === true
+          ? true
+          : (existing.activeDutyMilitary ?? input.activeDutyMilitary ?? null),
     },
   })
 }

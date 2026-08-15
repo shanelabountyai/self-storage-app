@@ -67,6 +67,37 @@ test.describe('signed in as the demo owner', () => {
     ).toEqual([])
   })
 
+  test('the military-service control states its consequences before it is used (B-121)', async ({
+    page,
+  }) => {
+    await page.goto('/admin/tenants?q=dana@demo.example.com')
+    await page.getByRole('link', { name: 'Dana Delinquent' }).click()
+
+    const scra = page.getByRole('group', { name: /Active-duty military/ })
+    await expect(scra).toBeVisible()
+    // The consequence is on screen BEFORE the choice, not discovered after it:
+    // recording yes halts collections on leases at facilities this staffer may
+    // not even be able to open.
+    await expect(scra).toContainText('every lease they hold')
+    await expect(scra).toContainText('including at other facilities')
+    // And the asymmetry that keeps US-42's manager-only lift honest.
+    await expect(scra).toContainText('until a manager lifts it')
+
+    // Records "No", deliberately, and never "Yes".
+    //
+    // This is the B-120 discipline applied to a spec that has to mutate shared
+    // demo state: recording no writes the flag and places NO hold, so a full
+    // sweep leaves Dana exactly as dunnable as it found her — while a "Yes"
+    // here would halt collections on the tenant that the portal past-due
+    // banner, the delinquency queue and the dunning specs all depend on being
+    // chased. The placing side is proved 11 ways over in
+    // tests/active-duty-scra-db.test.ts against disposable fixtures.
+    await scra.getByRole('radio', { name: /^No/ }).check()
+    await page.getByRole('button', { name: 'Save military service' }).click()
+
+    await expect(page.getByRole('status').filter({ hasText: /not active-duty/ })).toBeVisible()
+  })
+
   test('adding a note shows it immediately, with author and pin control', async ({ page }) => {
     await page.goto('/admin/tenants?q=dana@demo.example.com')
     await page.getByRole('link', { name: 'Dana Delinquent' }).click()

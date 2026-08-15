@@ -907,11 +907,20 @@ model Tenant {
   state                        String?
   postalCode                   String?
   country                      String?   @default("US")
-  /// Self-declared at move-in (US-501 step 1). NOT verification — it is the
-  /// flag that tells staff to check before any delinquency action, because
-  /// selling an active-duty servicemember's goods without a court order is a
-  /// federal problem (SCRA). B-096's LeaseHold is what acts on it; null means
-  /// never asked.
+  /// Self-declared at the lease step (US-501 step 4, moved there by B-112). NOT
+  /// verification — it is the flag that tells staff to check before any
+  /// delinquency action, because selling an active-duty servicemember's goods
+  /// without a court order is a federal problem (SCRA). Null means never asked.
+  ///
+  /// B-096's LeaseHold is what acts on it, and B-121 is what connects the two:
+  /// setting this true raises a system-placed `military_scra` hold on every
+  /// lease the tenant holds (`lib/tenants/active-duty.ts`). Until then this
+  /// column was written and read by nothing, so a renter who ticked the box was
+  /// dunned and auctioned like anyone else while the file showed we had asked.
+  ///
+  /// Setting it back to false does NOT lift the hold — US-42 makes that
+  /// manager-only, and a declaration being withdrawn is not the same fact as a
+  /// manager deciding the protection no longer applies.
   activeDutyMilitary           Boolean?
   altContactName               String?
   altContactPhone              String?
@@ -3475,7 +3484,13 @@ model LeaseHold {
   reason        String
   /// US-16's document store: the deployment order, the bankruptcy notice.
   documentId    String?
-  placedByStaffId String
+  /// Null means the system raised it, not a person — B-121's SCRA hold, placed
+  /// off the tenant's own active-duty declaration at move-in. Nullable rather
+  /// than attributed to whoever happened to be nearby: a hold that protects a
+  /// servicemember across every facility they rent at cannot honestly carry the
+  /// name of one site's counter staffer, and inventing a "system" StaffUser row
+  /// would put a fake person in the staff list and the audit log.
+  placedByStaffId String?
   liftedAt      DateTime? @db.Timestamptz(6)
   liftedByStaffId String?
   liftReason    String?
@@ -3488,7 +3503,7 @@ model LeaseHold {
   createdAt     DateTime  @default(now()) @db.Timestamptz(6)
 
   lease         Lease      @relation(fields: [leaseId], references: [id], onDelete: Restrict)
-  placedByStaff StaffUser  @relation("HoldPlacedBy", fields: [placedByStaffId], references: [id], onDelete: Restrict)
+  placedByStaff StaffUser?  @relation("HoldPlacedBy", fields: [placedByStaffId], references: [id], onDelete: Restrict)
   liftedByStaff StaffUser? @relation("HoldLiftedBy", fields: [liftedByStaffId], references: [id], onDelete: Restrict)
 
   @@index([leaseId, liftedAt])

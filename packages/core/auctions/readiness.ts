@@ -9,6 +9,7 @@
 // there is no override.
 
 export type BlockerKind =
+  | 'on_hold'
   | 'contains_vehicle'
   | 'no_timeline'
   | 'step_not_executed'
@@ -53,6 +54,14 @@ export type ReadinessInput = {
   /// preceded by no served notice is the single most common wrongful-sale
   /// claim there is.
   lienNoticeServed: boolean
+  /// Whether a hold declaring `block_auction` is in force on this lease
+  /// (B-121). The catalog has carried that effect since B-096 and NOTHING read
+  /// it — not this function, not `approveAuction`, not `scheduleSale` — so an
+  /// SCRA, bankruptcy, deceased or litigation hold stopped the nightly engine
+  /// from opening a case and then stopped nothing at all once a manager was
+  /// looking at one. The engine halting first made the gap invisible: every
+  /// case that existed had been opened before the hold was placed.
+  blockedByHold: boolean
   /// Regional or owner approval, per the AC.
   approved: boolean
   /// What the lease still owes. A tenant who paid is not auctionable, whatever
@@ -79,6 +88,20 @@ export function auctionReadiness(input: ReadinessInput): Readiness {
     blockers.push({
       kind: 'cancelled',
       message: 'This case was cancelled. Start a new one if the lease has fallen behind again.',
+    })
+  }
+
+  // First among the substantive rules, ahead even of the vehicle carve-out:
+  // more paperwork does not resolve it either, and of everything on this list
+  // it is the one where proceeding is a federal matter rather than a state
+  // lien-law defect.
+  if (input.blockedByHold) {
+    blockers.push({
+      kind: 'on_hold',
+      message:
+        'A hold on this lease blocks sale — see the account holds on the tenant profile. ' +
+        'Military (SCRA), bankruptcy, deceased and litigation holds all stop a lien sale. ' +
+        'Lift the hold first if it genuinely no longer applies; do not work around it.',
     })
   }
 

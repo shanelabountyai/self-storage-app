@@ -18,6 +18,7 @@ import { requirePermission } from '@/lib/rbac/authorize'
 import { toAuditActor } from '@/lib/rbac/audit-actor'
 import type { Actor } from '@/lib/rbac/actor'
 import { recomputeUnitStatus } from '@/lib/admin/units'
+import { leaseHasEffect } from '@/lib/admin/holds'
 import { storeGeneratedDocument } from '@/lib/documents/store'
 import { formatCents } from '@/lib/format'
 
@@ -151,7 +152,7 @@ export async function auctionCase(actor: Actor, caseId: string): Promise<Auction
   if (!row) return null
   requirePermission(actor, 'tenants:view', row.facilityId)
 
-  const [ledger, stepRuns, servedLienNotice, approver] = await Promise.all([
+  const [ledger, stepRuns, servedLienNotice, approver, blockedByHold] = await Promise.all([
     prisma.ledgerEntry.aggregate({ where: { leaseId: row.leaseId }, _sum: { amountCents: true } }),
     prisma.delinquencyStepRun.findMany({
       where: { leaseId: row.leaseId, supersededAt: null },
@@ -169,6 +170,7 @@ export async function auctionCase(actor: Actor, caseId: string): Promise<Auction
           select: { firstName: true, lastName: true },
         })
       : null,
+    leaseHasEffect(row.leaseId, 'block_auction'),
   ])
 
   const taskIds = stepRuns.map((run) => run.taskId).filter((id): id is string => !!id)
@@ -201,6 +203,7 @@ export async function auctionCase(actor: Actor, caseId: string): Promise<Auction
     steps,
     containsVehicle: row.containsVehicle,
     lienNoticeServed: Boolean(servedLienNotice),
+    blockedByHold,
     approved: Boolean(row.approvedAt),
     outstandingCents,
     status: row.status,
@@ -339,6 +342,20 @@ export async function approveAuction(
     }
   }
   if (!reasonCode.trim()) return { ok: false, reason: 'An approval has to record why.' }
+  // B-121. Refused here as well as in `auctionReadiness`, for the same reason
+  // the vehicle rule is refused twice: readiness governs SCHEDULING, and an
+  // approval recorded against a case that may never be scheduled is a
+  // signed-off decision to sell a servicemember's property sitting in the file.
+  // The check is on the effect, never the hold type — a new hold that declares
+  // `block_auction` gets this by saying so, per US-42.
+  if (await leaseHasEffect(row.leaseId, 'block_auction')) {
+    return {
+      ok: false,
+      reason:
+        'A hold on this lease blocks sale — Military (SCRA), bankruptcy, deceased and litigation ' +
+        'holds all do. It has to be lifted on the tenant profile before this can be approved.',
+    }
+  }
   if (row.containsVehicle) {
     // Refused here as well as at scheduling: approving a case that can never
     // be scheduled would leave a signed-off record of a sale nobody may run.

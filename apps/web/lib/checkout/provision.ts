@@ -10,6 +10,7 @@ import { promoDiscountOn, sessionById } from './session'
 import { track } from '@/lib/analytics/track'
 import { trackingContext } from '@/lib/analytics/request'
 import { redeemPromotion } from '@/lib/promotions/service'
+import { syncActiveDutyHolds } from '@/lib/tenants/active-duty'
 
 // PRD 01 FR-4.5 / FR-4.6. Turning a paid checkout into a moved-in tenant.
 //
@@ -114,6 +115,24 @@ export async function provisionMoveIn(sessionId: string): Promise<ProvisionResul
         protectionWaivedAt: protectionTier === 'waiver' ? new Date() : null,
       },
     })
+
+    // B-121 / D-49. The active-duty declaration from the lease step becomes the
+    // hold that actually stops the pipeline, before this lease can be dunned by
+    // anything.
+    //
+    // INSIDE the transaction, which is the one place this file's own FR-4.6
+    // split does not apply. FR-4.6 keeps gate codes and emails out here because
+    // a hardware queue must never un-move-in somebody who has paid — the risk
+    // it manages is a customer-facing dead end. This is the opposite direction:
+    // a moved-in servicemember with no hold is not an inconvenience, it is the
+    // federal exposure, and the failure has to take the move-in with it so the
+    // webhook's own redelivery gets another go. It is also one insert into a
+    // table we hold the parent row for, so "it might fail on its own" is close
+    // to hypothetical.
+    // No `if declared` here — `syncActiveDutyHolds` reads the flag itself and
+    // is a no-op for everybody else, which is one query rather than two and,
+    // more to the point, one place the guard can be got wrong.
+    await syncActiveDutyHolds(row.tenantId!, 'checkout', tx, startDate)
 
     // US-11's clock, started at the only moment it can be. See the model's own
     // comment: a lease created without this row is a tenant permanently

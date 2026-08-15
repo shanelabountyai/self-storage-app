@@ -31,6 +31,15 @@ export const AUDIT_ACTIONS = [
 
   // Tenants
   { action: 'tenant.contact_updated', label: 'Tenant contact info updated', requiresReason: false },
+  /// B-121 / D-49. Its own action rather than `tenant.contact_updated`, which is
+  /// where it started: the question an SCRA claim asks is "when did you know?",
+  /// and the answer has to be findable. Filed under contact details it is one
+  /// unremarkable row among every phone-number correction ever made.
+  ///
+  /// `requiresReason: false` — the before/after snapshot IS the fact, and there
+  /// is no discretion to explain. That is the opposite of `hold.lifted`, which
+  /// is somebody deciding the protection no longer applies.
+  { action: 'tenant.active_duty_recorded', label: 'Active-duty military status recorded', requiresReason: false },
   { action: 'tenant.note_added', label: 'Note added to tenant', requiresReason: false },
   { action: 'document.logged', label: 'Document logged', requiresReason: false },
   { action: 'task.completed', label: 'Task completed', requiresReason: false },

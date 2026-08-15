@@ -108,7 +108,13 @@ export async function activeHolds(leaseId: string, asOf: Date = new Date()): Pro
         reason: row.reason,
         effectiveFrom: row.effectiveFrom,
         effectiveTo: row.effectiveTo,
-        placedByName: `${row.placedByStaff.firstName} ${row.placedByStaff.lastName}`,
+        // B-121: no staff row means the system raised it off the tenant's own
+        // declaration. Named as that rather than left blank or shown as
+        // "Unknown" — a hold nobody appears to have placed is the kind of thing
+        // a manager lifts to find out what it was.
+        placedByName: row.placedByStaff
+          ? `${row.placedByStaff.firstName} ${row.placedByStaff.lastName}`
+          : 'Automatically, from the tenant’s declaration',
         liftRequiresManager: spec?.liftRequiresManager ?? false,
         estateContactName: row.estateContactName,
         estateContactPhone: row.estateContactPhone,

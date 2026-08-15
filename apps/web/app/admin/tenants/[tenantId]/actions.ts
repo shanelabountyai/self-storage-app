@@ -7,6 +7,7 @@ import {
   flagTenantAddressReturned,
   logTenantDocument,
   setTenantNotePinned,
+  updateTenantActiveDuty,
   updateTenantAddress,
   updateTenantContact,
   type LoggableDocumentType,
@@ -42,6 +43,33 @@ export async function updateContactAction(_prev: FormState, formData: FormData):
 
   revalidateProfile(tenantId)
   return success('Contact details saved.')
+}
+
+/// B-121 / D-49. Records the SCRA declaration and raises the hold that acts on
+/// it. The success line names how many leases were covered, because "every
+/// lease the tenant holds" is the part a staffer cannot verify from this screen
+/// — the other facility's lease is not on it.
+export async function updateActiveDutyAction(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const actor = await requireStaffActor()
+  const tenantId = String(formData.get('tenantId') ?? '')
+  const declared = formData.get('activeDutyMilitary') === 'yes'
+
+  const { heldLeases } = await updateTenantActiveDuty(actor, tenantId, declared)
+
+  revalidateProfile(tenantId)
+  if (!declared) {
+    return success(
+      'Recorded as not active-duty. Any SCRA hold already in force stays until a manager lifts it.',
+    )
+  }
+  return success(
+    heldLeases === 0
+      ? 'Recorded as active-duty. An SCRA hold was already in force on every current lease.'
+      : `Recorded as active-duty. An SCRA hold was placed on ${heldLeases} lease${heldLeases === 1 ? '' : 's'}.`,
+  )
 }
 
 export async function updateAddressAction(_prev: FormState, formData: FormData): Promise<FormState> {
