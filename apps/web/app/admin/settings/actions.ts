@@ -656,6 +656,23 @@ export async function updateOperationsPolicyAction(
     max: 90,
     unit: 'days',
   })
+  // PRD 01 US-401, B-126 / D-50. Zero is legitimate and means the hold dies at
+  // end of the move-in day itself — an operator who wants the unit back the
+  // moment somebody fails to turn up is making a real choice, the same as the
+  // drawer-variance zero below. Negative is refused by the parser's own `min`,
+  // and `holdExpiryFor` clamps as a backstop: a hold expiring BEFORE the date
+  // the renter reserved it for is never a deliberate configuration.
+  //
+  // 30 is the ceiling because US-401 caps the move-in date itself at 14 days
+  // out; a grace longer than the booking window is a unit held off the market
+  // for over six weeks by one form submission.
+  const holdGraceDays = parseScaled(formData.get('reservationHoldGraceDays'), {
+    scale: 1,
+    min: 0,
+    max: 30,
+    unit: 'days',
+  })
+
   // PRD 02 US-43. At least an hour — zero would make every inquiry overdue the
   // moment it was taken, which is a queue nobody reads. A week is the ceiling
   // because past that the lead has rented somewhere else.
@@ -691,6 +708,7 @@ export async function updateOperationsPolicyAction(
   if ('error' in cashApproval) errors.cashApprovalThresholdDollars = cashApproval.error
   if ('error' in writeOff) errors.writeOffThresholdDollars = writeOff.error
   if ('error' in noticeDays) errors.moveOutNoticeDays = noticeDays.error
+  if ('error' in holdGraceDays) errors.reservationHoldGraceDays = holdGraceDays.error
   if ('error' in leadHours) errors.leadFollowUpHours = leadHours.error
   if ('error' in rateNoticeDays) errors.rateIncreaseNoticeDays = rateNoticeDays.error
   if ('error' in drawerVariance) errors.drawerVarianceThresholdDollars = drawerVariance.error
@@ -713,6 +731,7 @@ export async function updateOperationsPolicyAction(
     'error' in cashApproval ||
     'error' in writeOff ||
     'error' in noticeDays ||
+    'error' in holdGraceDays ||
     'error' in leadHours ||
     'error' in rateNoticeDays ||
     'error' in drawerVariance
@@ -726,6 +745,7 @@ export async function updateOperationsPolicyAction(
       cashApprovalThresholdCents: cashApproval.value,
       writeOffThresholdCents: writeOff.value,
       moveOutNoticeDays: noticeDays.value,
+      reservationHoldGraceDays: holdGraceDays.value,
       leadFollowUpHours: leadHours.value,
       abandonmentFollowUpHours: abandonmentHours,
       rateIncreaseNoticeDays: rateNoticeDays.value,

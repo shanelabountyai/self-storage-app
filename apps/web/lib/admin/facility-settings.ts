@@ -405,6 +405,12 @@ export type OperationsPolicyInput = {
   cashApprovalThresholdCents: number
   writeOffThresholdCents: number
   moveOutNoticeDays: number
+  /// PRD 01 US-401, B-126 / D-50. Days after the renter's chosen move-in date
+  /// that a free reservation hold survives. Here rather than in billing policy
+  /// for the same reason `moveOutNoticeDays` is: it is a promise made to a
+  /// prospect about how long we will keep a unit off the market, not a
+  /// decision about money.
+  reservationHoldGraceDays: number
   /// PRD 02 US-43. How long a new inquiry may sit uncontacted before the
   /// morning sweep turns it into a task.
   leadFollowUpHours: number
@@ -437,6 +443,7 @@ export async function updateOperationsPolicy(
     cashApprovalThresholdCents: row.cashApprovalThresholdCents,
     writeOffThresholdCents: row.writeOffThresholdCents,
     moveOutNoticeDays: row.moveOutNoticeDays,
+    reservationHoldGraceDays: row.reservationHoldGraceDays,
     leadFollowUpHours: row.leadFollowUpHours,
     abandonmentFollowUpHours: row.abandonmentFollowUpHours,
     rateIncreaseNoticeDays: row.rateIncreaseNoticeDays,

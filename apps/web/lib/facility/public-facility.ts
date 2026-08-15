@@ -23,6 +23,13 @@ export type PublicFacility = {
   latitude: number | null
   longitude: number | null
   timezone: string
+  /// PRD 01 US-401, B-126 / D-50. Days after the renter's chosen move-in date
+  /// that a free hold survives. Public because the reserve page's trust line
+  /// states the window BEFORE the renter hands over their details, and a
+  /// promise about how long we hold a unit has to be the number the code will
+  /// actually use — B-118 shipped that line as prose for exactly this reason,
+  /// when there was no setting to read.
+  reservationHoldGraceDays: number
   amenities: string[]
   /// Null when the operator has not configured hours yet, or when the stored
   /// JSON is malformed. The page says "call for hours" rather than inventing
@@ -89,6 +96,7 @@ export const publicFacilityBySlug = cache(async function publicFacilityBySlug(
       latitude: true,
       longitude: true,
       timezone: true,
+      reservationHoldGraceDays: true,
       amenities: true,
       officeHours: true,
       gateHours: true,

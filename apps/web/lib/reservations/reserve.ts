@@ -19,6 +19,11 @@ import { trackingContext } from '@/lib/analytics/request'
 // different window at one site.
 export const MAX_MOVE_IN_DAYS_AHEAD = 14
 
+/// US-401's stated default: "end of day AFTER scheduled move-in date". One day
+/// of grace. Named rather than inlined so the schema default, the settings
+/// form's fallback and this function cannot drift apart into three numbers.
+export const DEFAULT_HOLD_GRACE_DAYS = 1
+
 /// The UTC offset a zone is at for a given instant, in milliseconds. Derived by
 /// rendering the same instant twice and differencing, which is the only way to
 /// get it out of Intl without shipping a timezone database.
@@ -28,8 +33,9 @@ function offsetMsAt(instant: Date, timeZone: string): number {
   return asUtc.getTime() - asZone.getTime()
 }
 
-/// US-401: holds expire "end of day after scheduled move-in date". A renter who
-/// says they are moving in on the 8th keeps the unit through the 9th.
+/// US-401: holds expire "end of day after scheduled move-in date; configurable".
+/// A renter who says they are moving in on the 8th keeps the unit through the
+/// 9th, at the default grace of one day.
 ///
 /// "End of day" means end of day where the unit physically is (CLAUDE.md: UTC
 /// in the database, facility-local for anything a human reasons about), so this
@@ -37,7 +43,22 @@ function offsetMsAt(instant: Date, timeZone: string): number {
 /// to an instant. The offset is re-read at the *target* instant rather than at
 /// the move-in date, so a hold spanning a DST change still lands on local
 /// midnight rather than an hour either side of it.
-export function holdExpiryFor(moveInDate: Date, timezone: string): Date {
+///
+/// B-126 / D-50 made the grace a parameter rather than the hardcoded `+ 1` it
+/// had been since B-018 — the second half of US-401's own sentence, which said
+/// "configurable" and was not. It defaults to 1 so every existing facility and
+/// every caller that does not care keeps exactly the window it had; the AC's
+/// stated default and the code's default are the same number on purpose.
+///
+/// Anchored to the move-in date, never the booking date. D-7 described a
+/// 7-day-from-booking window and B-126 corrected it rather than building it:
+/// US-401 lets a renter pick a move-in up to 14 days out, so booking-anchored
+/// expiry would take the unit back a week before the day they reserved it for.
+export function holdExpiryFor(
+  moveInDate: Date,
+  timezone: string,
+  graceDays: number = DEFAULT_HOLD_GRACE_DAYS,
+): Date {
   const [year, month, day] = new Intl.DateTimeFormat('en-CA', {
     timeZone: timezone,
     year: 'numeric',
@@ -49,9 +70,33 @@ export function holdExpiryFor(moveInDate: Date, timezone: string): Date {
     .map(Number)
 
   // Date.UTC normalises the roll-over, so "the 31st + 1" is the 1st of the next
-  // month without any calendar arithmetic here.
-  const guess = Date.UTC(year, month - 1, day + 1, 23, 59, 59, 999)
+  // month without any calendar arithmetic here — and the same is true of a
+  // grace of 3 crossing a month or year boundary.
+  //
+  // Negative grace is clamped rather than trusted: it would expire the hold
+  // BEFORE the move-in date the renter chose, which is never a deliberate
+  // operator choice. The settings form refuses it too; this is the backstop for
+  // anything that reaches the function another way.
+  const guess = Date.UTC(year, month - 1, day + Math.max(0, graceDays), 23, 59, 59, 999)
   return new Date(guess + offsetMsAt(new Date(guess), timezone))
+}
+
+/// The same rule in a renter's words, for the reserve page's trust line.
+///
+/// Beside `holdExpiryFor` on purpose: these are the two halves of one promise —
+/// what the code does, and what we tell the renter it does — and B-118 is the
+/// evidence for keeping them in one file. That item found the sentence and the
+/// function had already disagreed (the row asked for "7 days"; the code did
+/// something else entirely), which is exactly what happens when the wording
+/// lives somewhere the rule does not.
+///
+/// Three cases rather than one template with a plural `s`: 0 and 1 are not
+/// "0 days" and "1 day" to somebody deciding whether to hand over their phone
+/// number — they are "the day you picked" and "the day after".
+export function holdWindowSentence(graceDays: number): string {
+  if (graceDays <= 0) return 'Free to hold through the end of your move-in date'
+  if (graceDays === 1) return 'Free to hold through the day after your move-in date'
+  return `Free to hold for ${graceDays} days after your move-in date`
 }
 
 function newToken(): string {
@@ -139,9 +184,9 @@ export async function createReservation(input: ReserveInput): Promise<ReserveRes
   const email = input.email.trim().toLowerCase()
   const facility = await prisma.facility.findUniqueOrThrow({
     where: { id: input.facilityId },
-    select: { timezone: true },
+    select: { timezone: true, reservationHoldGraceDays: true },
   })
-  const expiresAt = holdExpiryFor(input.moveInDate, facility.timezone)
+  const expiresAt = holdExpiryFor(input.moveInDate, facility.timezone, facility.reservationHoldGraceDays)
   const token = newToken()
 
   const result = await prisma.$transaction(async (tx) => {

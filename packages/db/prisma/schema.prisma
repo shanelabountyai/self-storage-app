@@ -613,6 +613,20 @@ model Facility {
   /// 8am-8pm to clear Florida's mini-TCPA window) is this pair of fields.
   smsQuietHoursStartHour  Int       @default(8)
   smsQuietHoursEndHour    Int       @default(21)
+  /// PRD 01 US-401 (B-018), made configurable by B-126 / D-50.
+  ///
+  /// Days AFTER the renter's own chosen move-in date that a free reservation
+  /// hold survives. `1` is US-401's stated default — "end of day after
+  /// scheduled move-in date" — so the shipped behaviour is unchanged at the
+  /// default and every existing row keeps exactly the window it had.
+  ///
+  /// `0` is legitimate and means the hold dies at end of the move-in day
+  /// itself, for an operator who wants the unit back the moment somebody fails
+  /// to turn up. Anchored to the MOVE-IN DATE rather than the booking date,
+  /// which is US-401's rule and the reason D-7's "7 days from booking" was
+  /// never built: a renter picking the maximum 14-day-out move-in would have
+  /// lost the unit a week before the day they reserved it for.
+  reservationHoldGraceDays Int       @default(1)
   /// Days of notice the lease requires before a move-out. 0 means none.
   moveOutNoticeDays   Int            @default(10)
   /// PRD 02 US-11 (B-076). Minimum advance notice before a tenant rate

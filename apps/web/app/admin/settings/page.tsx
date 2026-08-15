@@ -933,6 +933,15 @@ export default async function AdminSettingsPage() {
             hint="0 means none. The portal enforces this; staff can override."
           />
           <Field
+            name="reservationHoldGraceDays"
+            label="Keep a free hold this long after the move-in date (days)"
+            type="number"
+            min={0}
+            max={30}
+            defaultValue={facility.reservationHoldGraceDays}
+            hint="1 is the default: the unit is held through the day after the date the renter picked. 0 releases it at the end of the move-in day itself."
+          />
+          <Field
             name="leadFollowUpHours"
             label="Call an inquiry back within"
             type="number"

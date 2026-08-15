@@ -7,6 +7,7 @@ import {
   expireReservations,
   hashReservationToken,
   holdExpiryFor,
+  holdWindowSentence,
   reservationByToken,
   sendExpiringSoonReminders,
   MAX_MOVE_IN_DAYS_AHEAD,
@@ -60,6 +61,63 @@ describe('holdExpiryFor', () => {
     // (CST, UTC-6), not at the move-in date (CDT, UTC-5).
     const expiry = holdExpiryFor(new Date('2026-10-31T15:00:00Z'), 'America/Chicago')
     expect(expiry.toISOString()).toBe('2026-11-02T05:59:59.999Z')
+  })
+
+  // ── B-126 / D-50: the grace is configurable ─────────────────────────────
+  //
+  // US-401 has said "configurable" since B-018 and it was a hardcoded `+ 1`.
+  // Every test above passes the default implicitly, which is the property
+  // that matters most here: making it configurable changed nothing for
+  // anybody who does not configure it.
+
+  it('defaults to one day of grace, matching US-401 and every existing facility', () => {
+    const withDefault = holdExpiryFor(new Date('2026-08-08T15:00:00Z'), 'America/Chicago')
+    const explicitOne = holdExpiryFor(new Date('2026-08-08T15:00:00Z'), 'America/Chicago', 1)
+    expect(withDefault.toISOString()).toBe(explicitOne.toISOString())
+    expect(withDefault.toISOString()).toBe('2026-08-10T04:59:59.999Z')
+  })
+
+  it('a grace of 0 expires at the end of the move-in day itself', () => {
+    // A real operator choice, not a misconfiguration: the unit comes back the
+    // moment somebody fails to turn up.
+    const expiry = holdExpiryFor(new Date('2026-08-08T15:00:00Z'), 'America/Chicago', 0)
+    expect(expiry.toISOString()).toBe('2026-08-09T04:59:59.999Z')
+  })
+
+  it('a longer grace still rolls over a month boundary correctly', () => {
+    // `Date.UTC` normalises this, so 31 Aug + 3 is 3 Sep without any calendar
+    // arithmetic in the function.
+    const expiry = holdExpiryFor(new Date('2026-08-31T15:00:00Z'), 'America/Chicago', 3)
+    expect(expiry.toISOString().slice(0, 10)).toBe('2026-09-04')
+  })
+
+  it('clamps a negative grace rather than expiring the hold before the move-in date', () => {
+    // The settings form's `min: 0` refuses this, so the clamp is the backstop
+    // for anything reaching the function another way. A hold that expires
+    // before the date the renter reserved it for is never a deliberate
+    // configuration, and it is the exact failure D-7's booking-anchored window
+    // would have produced for a 14-day-out move-in.
+    const clamped = holdExpiryFor(new Date('2026-08-08T15:00:00Z'), 'America/Chicago', -5)
+    const zero = holdExpiryFor(new Date('2026-08-08T15:00:00Z'), 'America/Chicago', 0)
+    expect(clamped.toISOString()).toBe(zero.toISOString())
+  })
+})
+
+describe('holdWindowSentence — B-126', () => {
+  // The reserve page's trust line is GENERATED from the setting now, so the
+  // wording cannot go stale when an operator changes it. B-118 shipped it as
+  // fixed prose precisely because there was nothing to read.
+  it('says the day after, at the default', () => {
+    expect(holdWindowSentence(1)).toContain('day after your move-in date')
+  })
+
+  it('says the move-in day itself at zero, not "0 days"', () => {
+    expect(holdWindowSentence(0)).toContain('end of your move-in date')
+    expect(holdWindowSentence(0)).not.toContain('0 days')
+  })
+
+  it('counts plainly above one', () => {
+    expect(holdWindowSentence(3)).toContain('3 days after your move-in date')
   })
 })
 
@@ -146,6 +204,36 @@ describeDb('reservation service', () => {
     // and the public read counts it. There is no separate counter to drift.
     const after = await publicInventoryForFacility(slug)
     expect(after?.unitTypes[0].availableCount).toBe(1)
+  })
+
+  it('honours the facility’s own hold grace, not a hardcoded day (B-126)', async () => {
+    // The wiring, not the arithmetic — `holdExpiryFor`'s own tests cover the
+    // maths. What this proves is that `createReservation` READS the column:
+    // the setting existed but was ignored, which is the exact shape of the
+    // defect D-7 vs US-401 turned out to be.
+    await prisma.facility.update({
+      where: { id: facilityId },
+      data: { reservationHoldGraceDays: 0 },
+    })
+    try {
+      const result = await createReservation(input(`grace0-${suffix}@example.com`))
+      expect(result.ok).toBe(true)
+      if (!result.ok) throw new Error('unreachable')
+
+      // Grace 0 means end of the move-in day itself, facility-local.
+      const expected = holdExpiryFor(input(`x@example.com`).moveInDate, 'America/Chicago', 0)
+      expect(result.expiresAt.toISOString()).toBe(expected.toISOString())
+
+      // And it is genuinely shorter than the default would have been — a test
+      // that passed at both values would be proving nothing.
+      const atDefault = holdExpiryFor(input(`x@example.com`).moveInDate, 'America/Chicago')
+      expect(result.expiresAt.getTime()).toBeLessThan(atDefault.getTime())
+    } finally {
+      await prisma.facility.update({
+        where: { id: facilityId },
+        data: { reservationHoldGraceDays: 1 },
+      })
+    }
   })
 
   it('never hands the same unit to two simultaneous reservations', async () => {
