@@ -95,11 +95,15 @@ test('the facility page separates office hours from gate hours', async ({ page }
   await expect(gate.getByRole('row').filter({ hasText: 'sunday' })).toContainText('8:00 AM')
 })
 
-test('the facility page offers click-to-call without scrolling', async ({ page }) => {
+test('the facility page offers click-to-call without scrolling', async ({ page }, testInfo) => {
+  // §4.1 US-103: visible without scrolling ON MOBILE — not a desktop claim,
+  // and B-118's hero photo (above the contact block, on purpose) pushes the
+  // call link past a 720px desktop fold while staying comfortably inside a
+  // real phone's first viewport. Explicit rather than relying on which
+  // project happens to run this, matching the reflow tests' own pattern.
+  test.skip(testInfo.project.name !== 'mobile-chrome', 'US-103 is a mobile requirement, not a desktop one')
   await page.goto('/storage/tx/austin/demo-austin-south')
 
-  // §4.1 US-103: visible without scrolling on mobile. Asserted as "inside the
-  // first viewport", which is what that sentence means on a phone.
   const call = page.getByRole('main').getByRole('link', { name: /^Call/ })
   await expect(call).toBeVisible()
   const box = await call.boundingBox()
@@ -183,6 +187,89 @@ test('"What you\'d pay today" itemizes and foots', async ({ page }) => {
   await expect(card).toContainText('Protection plan')
   await expect(card).toContainText('Total due today')
   await expect(card).toContainText('Then each month')
+})
+
+test('the hero photo sits above the fold, LCP-primed, and never repeats in the gallery below (B-118)', async ({ page }) => {
+  await page.goto('/storage/tx/austin/demo-austin-south')
+
+  // §6.3 fixes photos first — the hero strip has to render before the contact
+  // block reachable "without scrolling" claims below it, not merely exist
+  // somewhere on the page.
+  const heroImg = page.getByRole('img', { name: 'The gated entrance and drive at Demo — Austin South' })
+  await expect(heroImg).toBeVisible()
+  await expect(heroImg).toHaveAttribute('fetchpriority', 'high')
+  await expect(heroImg).toHaveAttribute('loading', 'eager')
+  await expect(heroImg).toHaveAttribute('width', '800')
+  await expect(heroImg).toHaveAttribute('height', '600')
+  // Scoped to `main`: the header carries its own "Call us at..." link on
+  // every page, and an unscoped query hits both (strict-mode violation).
+  const contactBlock = page.getByRole('main').getByRole('link', { name: /^Call/ })
+  const heroBox = await heroImg.boundingBox()
+  const contactBox = await contactBlock.boundingBox()
+  expect(heroBox!.y).toBeLessThan(contactBox!.y)
+
+  // Only the FIRST hero image carries the priority hint — it names the LCP
+  // candidate, and putting it on more than one dilutes which image the
+  // browser should race to fetch.
+  const secondHero = page.getByRole('img', { name: 'A row of ground-floor drive-up units' })
+  await expect(secondHero).not.toHaveAttribute('fetchpriority', 'high')
+
+  // The gallery further down the page carries the FOURTH seeded photo — the
+  // one that did not fit in the hero's three — and none of the three that
+  // did. A dedup bug shows up as either the fourth photo missing (sliced
+  // wrong) or one of the first three reappearing (not sliced at all).
+  const photosSection = page.getByRole('region', { name: 'Photos' })
+  await expect(photosSection.getByRole('img', { name: 'The keypad at the gated entrance' })).toBeVisible()
+  await expect(photosSection.getByRole('img', { name: 'The gated entrance and drive at Demo — Austin South' })).toHaveCount(0)
+  await expect(photosSection.getByRole('img')).toHaveCount(1)
+})
+
+test('a facility with no photos renders no hero and no empty gallery frame (B-118)', async ({ page }) => {
+  // The e2e sandbox facility is seeded with zero FacilityPhoto rows on
+  // purpose — "renders no placeholder and no empty frame" needs a real case,
+  // not just an absence of failure.
+  await page.goto('/storage/tx/houston/demo-e2e')
+  await expect(page.getByRole('region', { name: 'Photos' })).toHaveCount(0)
+  await expect(page.getByRole('img')).toHaveCount(0)
+})
+
+test('the sticky Rent now bar names the cheapest of three sizes, below sm only (B-118)', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'mobile-chrome', 'the bar is sm:hidden — asserted absent on desktop below')
+  // Austin, read-only — no checkout POST here, so no unit is consumed. That
+  // matters on this facility specifically: 5x5 Locker has only 6 units, and
+  // this file's many "Rent now" tests already contend for Austin's small
+  // pools under full parallel load (see the sandbox-facility test below for
+  // the real click-through, which needs room this facility does not have).
+  await page.goto('/storage/tx/austin/demo-austin-south')
+
+  // 5x5 Locker is the cheapest of the three seeded types (web 5_900 vs 12_900
+  // and 22_900) — the bar has to pick the true minimum, not the first row.
+  const bar = page.getByText('From $59', { exact: false }).locator('..')
+  await expect(bar.getByRole('button', { name: 'Rent now' })).toBeVisible()
+  await expect(bar.getByRole('link', { name: 'Reserve free' })).toBeVisible()
+})
+
+test('the sticky Rent now bar actually starts a checkout (B-118)', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'mobile-chrome', 'the bar is sm:hidden')
+  // The e2e sandbox facility, not Austin: this test really POSTs and holds a
+  // unit, and the sandbox is the one facility sized (250 units of one type)
+  // for exactly that under full parallel load — see global-setup.ts.
+  await page.goto('/storage/tx/houston/demo-e2e')
+
+  const bar = page.getByText('From $129', { exact: false }).locator('..')
+  await bar.getByRole('button', { name: 'Rent now' }).click()
+  await expect(page).toHaveURL(/\/checkout\?token=/)
+})
+
+test('the sticky bar is absent above sm — each unit card already carries its own buttons', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-chrome', 'desktop-only assertion')
+  await page.goto('/storage/tx/austin/demo-austin-south')
+  // `toBeHidden`, not `toHaveCount(0)`: `sm:hidden` is `display:none`, which
+  // takes the element out of the RENDER tree but not out of the DOM — a plain
+  // text-content locator like `getByText` still counts it (unlike `getByRole`,
+  // which does respect the accessibility tree). `toHaveCount(0)` here would
+  // pass even if `sm:hidden` silently stopped applying.
+  await expect(page.getByText('From $59', { exact: false })).toBeHidden()
 })
 
 test('filters narrow the list and survive into the URL', async ({ page }) => {

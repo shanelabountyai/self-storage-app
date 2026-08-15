@@ -61,9 +61,20 @@ export default async function ReservePage({
 
       <h1 className="text-3xl font-semibold tracking-tight text-balance">Reserve this unit</h1>
 
-      {/* §6.6: the trust line belongs beside the decision, not in the lease. */}
+      {/* §6.6: the trust line belongs beside the decision, not in the lease —
+          and it has to say what actually happens. B-118 found the row asked
+          for "Free to hold for 7 days" (D-7's stated default), but B-018 never
+          built a fixed or facility-configurable window: `holdExpiryFor` (see
+          lib/reservations/reserve.ts) expires a hold at the end of the day
+          AFTER whichever move-in date the renter is about to type below —
+          longer than 7 days for anyone moving in more than 6 days out,
+          shorter for anyone moving in sooner. "7 days" would be wrong for
+          most renters on exactly the question this line exists to answer
+          honestly. D-7 vs. what shipped is filed as B-126/D-50 rather than
+          resolved here — this states the real rule, not a fixed number. */}
       <p className="text-muted-foreground mt-2 text-pretty">
-        Free to hold · No credit card needed · Cancel any time
+        Free to hold through the day after your move-in date · No credit card needed · Cancel any
+        time
       </p>
 
       <div className="border-input mt-6 rounded-lg border p-4">

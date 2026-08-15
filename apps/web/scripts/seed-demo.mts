@@ -204,6 +204,14 @@ async function seedFacility(input: {
   postalCode: string
   addressLine1: string
   unitTypes: { name: string; widthFt: number; lengthFt: number; climate: boolean; driveUp: boolean; street: number; web: number; count: number }[]
+  /// B-118. Empty on every facility until now — nothing in the demo data could
+  /// exercise the hero photo it built, which is exactly the state "renders no
+  /// placeholder and no empty frame" already covers correctly for two of the
+  /// three demo facilities left this way on purpose. `url` is a self-contained
+  /// `data:` URI, not a third party image host — this project does not point
+  /// its own test suite at a network dependency it does not control (the same
+  /// reasoning `ACCESS_CODE_ENCRYPTION_KEY` stays unconfigured everywhere here).
+  photos?: { alt: string; kind: string }[]
 }) {
   // B-015 ranks facilities by distance, so a facility without coordinates is
   // invisible to search. Demo sites take their zip centroid, which is accurate
@@ -235,6 +243,23 @@ async function seedFacility(input: {
     create: { slug: input.slug, ...facilityData },
     update: facilityData,
   })
+
+  // Deleted and recreated rather than upserted: FacilityPhoto has no natural
+  // key beyond its own id, and this facility row can be KEPT across a re-run
+  // (see the audit-history note above) — without this, every re-run would add
+  // another copy rather than replacing the set.
+  await prisma.facilityPhoto.deleteMany({ where: { facilityId: facility.id } })
+  if (input.photos && input.photos.length > 0) {
+    await prisma.facilityPhoto.createMany({
+      data: input.photos.map((photo, index) => ({
+        facilityId: facility.id,
+        url: `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='800' height='600'%3E%3Crect width='800' height='600' fill='%23${index % 2 === 0 ? 'ddd' : 'ccc'}'/%3E%3C/svg%3E`,
+        alt: photo.alt,
+        kind: photo.kind as never,
+        position: index,
+      })),
+    })
+  }
 
   // Texas is the seeded compliance default (D-10). Rates are basis points.
   await prisma.taxComponent.createMany({
@@ -734,6 +759,19 @@ async function main() {
       { name: '10x10 Climate', widthFt: 10, lengthFt: 10, climate: true, driveUp: false, street: 14_900, web: 12_900, count: 10 },
       { name: '10x20 Drive-Up', widthFt: 10, lengthFt: 20, climate: false, driveUp: true, street: 24_900, web: 22_900, count: 8 },
       { name: '5x5 Locker', widthFt: 5, lengthFt: 5, climate: true, driveUp: false, street: 6_900, web: 5_900, count: 6 },
+    ],
+    // B-118's hero strip (the first 3) and the lazy gallery further down (the
+    // rest) both read from this set — the primary demo facility, so the
+    // a11y/reflow sweep that already covers it exercises both. FOUR rows, not
+    // three: with exactly three the lower gallery section never renders at
+    // all, and a dedup test that can pass on an empty, nonexistent section
+    // proves nothing. Dallas and the e2e sandbox stay at zero on purpose, so
+    // "no placeholder, no empty frame" keeps a real case too.
+    photos: [
+      { alt: 'The gated entrance and drive at Demo — Austin South', kind: 'exterior' },
+      { alt: 'A row of ground-floor drive-up units', kind: 'unit' },
+      { alt: 'The climate-controlled hallway leading to indoor units', kind: 'hallway' },
+      { alt: 'The keypad at the gated entrance', kind: 'gate' },
     ],
   })
 

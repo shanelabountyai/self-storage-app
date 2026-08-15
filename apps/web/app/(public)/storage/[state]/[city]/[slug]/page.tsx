@@ -48,11 +48,11 @@ import {
 
 // PRD 01 §4.1 US-103 — the facility detail page.
 //
-// Section order follows §6.3 exactly: name/address/call/directions → gate &
-// office hours → available units → amenities → map → FAQ. The photo gallery
-// US-103 also asks for is missing on purpose: nothing in the product stores a
-// photo yet, and B-067 owns photo management *with required alt text*. A
-// gallery built here would either ship without alt text or duplicate that item.
+// Section order follows §6.3 exactly: name → hero photo → contact block →
+// gate & office hours → available units → amenities → map → FAQ. B-118 moved
+// the photo gallery's first 1–3 images above the contact block, as the LCP
+// element; the rest of the gallery stays at its original position, further
+// down the page.
 
 // B-016 prerendered this segment with `generateStaticParams` and a 300s
 // `revalidate`. B-017 added filter and sort parameters, and a route that reads
@@ -687,6 +687,23 @@ export default async function FacilityPage({
   const embed = mapEmbedUrl(facility)
   const phone = phoneFor(facility)
 
+  // B-118. Split once, used by the hero strip above the fold and the lazy
+  // gallery further down — never the same photo twice on one page load.
+  const heroPhotos = facility.photos.slice(0, 3)
+  const restPhotos = facility.photos.slice(3)
+
+  // The cheapest AVAILABLE size in the renter's own current filter — `visible`,
+  // not the unfiltered `unitTypes` — so the sticky bar never quotes a price for
+  // a size the renter has just filtered out. Null (no bar) when nothing here is
+  // rentable right now; a fabricated price on an empty facility is worse than
+  // no bar at all.
+  const cheapestAvailable = (visible ?? [])
+    .filter((unitType) => unitType.availableCount > 0)
+    .reduce<PublicUnitType | null>(
+      (min, unitType) => (min === null || unitType.webRateCents < min.webRateCents ? unitType : min),
+      null,
+    )
+
   // PRD 04 FR-AN-2. Server-side, so it survives an ad blocker and a declined
   // consent — this is the top of the funnel and the denominator of every
   // conversion rate below it. Not awaited: `track` never throws and never
@@ -805,6 +822,47 @@ export default async function FacilityPage({
         <p className="mt-3 text-lg text-pretty">{facility.heroCopy}</p>
       )}
 
+      {/* B-118 (UX review 2026-08-12, finding 7). §6.3 fixes photos first, and
+          the gallery used to render ~700 lines down the page — after the hours
+          table, every unit card and a paragraph of marketing copy. A renter
+          comparing three sites on a phone judges "clean, lit, not a dump" from
+          an image, and this page was giving it to them last.
+          Up to three photos, pulled off the front of the gallery so nothing
+          renders twice; `restPhotos` (below, at the original position) keeps
+          `loading="lazy"`. A facility with none renders no placeholder and no
+          empty frame — there is nothing honest to reserve the space for. */}
+      {heroPhotos.length > 0 && (
+        <ul className={`mt-4 grid gap-2 ${heroPhotos.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+          {heroPhotos.map((photo, index) => (
+            <li key={photo.url} className={heroPhotos.length === 3 && index === 0 ? 'col-span-2' : undefined}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={photo.url}
+                alt={photo.alt}
+                // The LCP candidate. `fetchPriority` on the first image only —
+                // it is the hint that this is THE largest content paint, and
+                // putting it on more than one dilutes which image the browser
+                // should race to fetch first.
+                fetchPriority={index === 0 ? 'high' : undefined}
+                loading="eager"
+                decoding="async"
+                // Real per-photo pixel dimensions are not stored (FacilityPhoto
+                // has no width/height column) and the display box is always
+                // 4:3 via `object-cover` regardless of the source image's own
+                // ratio — so these attributes exist to give the browser the
+                // ASPECT RATIO for its CLS reservation before either CSS or the
+                // bytes arrive, matching the `aspect-4/3` class below rather
+                // than claiming a specific rendered size. 800×600 is 4:3 at a
+                // size no real facility photo is smaller than.
+                width={800}
+                height={600}
+                className="aspect-4/3 w-full rounded-lg border object-cover"
+              />
+            </li>
+          ))}
+        </ul>
+      )}
+
       <ContactBlock facility={facility} phone={phone} />
 
       {/* §6.6: the commitment terms belong next to the decision, not buried in
@@ -852,6 +910,53 @@ export default async function FacilityPage({
           />
         </div>
       </section>
+
+      {/* B-118 (UX review 2026-08-12, finding 14). §6.2's sticky "Rent now" bar
+          — below `sm` only; a comparer who has scrolled past the units section
+          to read amenities, the map or the FAQ no longer has Rent/Reserve on
+          screen at all, and this repeats them without scrolling back up.
+
+          Pure CSS, the same technique `price-summary.tsx` uses for the
+          checkout stepper's own persistent total: `sticky bottom-0` on an
+          element placed immediately after the units section keeps it in
+          normal flow (so it never covers content) while the units section
+          itself is still on screen — there is nothing to add, the cards above
+          already carry their own buttons. Once the visitor scrolls past this
+          point, the element's own position would scroll off the bottom of the
+          viewport, and `sticky` pins it there instead; scrolling back up into
+          the units section returns it to normal flow and it disappears again.
+          No JavaScript, no IntersectionObserver, works with the bundle
+          disabled like the rest of this page.
+
+          Null, not a fabricated placeholder, when nothing here is rentable —
+          `cheapestAvailable` already excludes a sold-out size. */}
+      {cheapestAvailable && (
+        <div className="border-input bg-background sticky bottom-0 z-10 -mx-4 mt-4 border-t p-4 sm:hidden">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm font-medium">
+              From {formatRate(cheapestAvailable.webRateCents)}
+              <span className="text-muted-foreground font-normal">/mo</span>
+            </p>
+            <div className="flex gap-2">
+              <form method="POST" action={`${facilityPath(facility)}/rent`}>
+                <input type="hidden" name="unitTypeId" value={cheapestAvailable.unitTypeId} />
+                <button
+                  type="submit"
+                  className="bg-primary text-primary-foreground inline-flex min-h-11 items-center rounded-md px-4 text-sm font-medium"
+                >
+                  Rent now
+                </button>
+              </form>
+              <Link
+                href={`${facilityPath(facility)}/reserve?unitType=${cheapestAvailable.unitTypeId}`}
+                className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
+              >
+                Reserve free
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
 
       {facility.amenities.length > 0 && (
         <section aria-labelledby="amenities" className="mt-10">
@@ -935,23 +1040,25 @@ export default async function FacilityPage({
         </section>
       )}
 
-      {/* US-2 AC1's photo set. Alt text is a required column, so there is no
-          decorative-image branch here — every one of these describes something
-          a renter is trying to judge from a screen. `loading="lazy"` on all but
-          the first, which is above the fold and is the LCP candidate. */}
-      {facility.photos.length > 0 && (
+      {/* US-2 AC1's photo set, minus the 1–3 pulled above the fold as the hero
+          (B-118) — `restPhotos`, never `facility.photos`, or the same image
+          renders twice on the page. Alt text is a required column, so there is
+          no decorative-image branch here — every one of these describes
+          something a renter is trying to judge from a screen. Always
+          `loading="lazy"`: the LCP candidate is the hero now, not this section. */}
+      {restPhotos.length > 0 && (
         <section aria-labelledby="photos" className="mt-10">
           <h2 id="photos" className="text-xl font-medium">
             Photos
           </h2>
           <ul className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
-            {facility.photos.map((photo, index) => (
+            {restPhotos.map((photo) => (
               <li key={photo.url}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={photo.url}
                   alt={photo.alt}
-                  loading={index === 0 ? 'eager' : 'lazy'}
+                  loading="lazy"
                   decoding="async"
                   // A fixed aspect ratio reserves the space before the bytes
                   // arrive. Without it every photo that loads shoves the page
