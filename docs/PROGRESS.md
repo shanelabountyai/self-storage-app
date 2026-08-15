@@ -3857,7 +3857,7 @@ Added `db:migrate:e2e`, migrating and seeding the `public` schema of the `storag
 
 ## B-121 — The active-duty declaration reaches the delinquency pipeline
 
-`XXXXXXX`
+`3b29a71`
 
 **Built:** `Tenant.activeDutyMilitary` now does something. `lib/tenants/active-duty.ts`'s `syncActiveDutyHolds` places a `military_scra` `LeaseHold` on every non-ended lease the tenant holds, and it is called from two places: inside `provisionMoveIn`'s transaction, so a web move-in by a servicemember is protected before the lease can be dunned by anything; and from a new **Military service** control on the tenant profile, so a declaration taken at the counter or on the phone does the same. The tenant profile shows the declaration as a three-state fact — yes, no, and *nobody has ever been asked*, which is a different thing and now reads as one.
 
