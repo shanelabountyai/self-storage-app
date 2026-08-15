@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { getSwitcherData } from '@/lib/admin/context'
 import { resolveSelectedFacility } from '@/lib/admin/facility-selection-logic'
 import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
@@ -5,6 +6,7 @@ import { delinquencyQueue } from '@/lib/admin/delinquency-queue'
 import { moneyOwedRollup } from '@/lib/admin/rollups'
 import { FacilityRollup } from '@/components/admin/facility-rollup'
 import { completeTaskAction } from '@/app/admin/tasks/actions'
+import { formatCents } from '@/lib/format'
 
 export const metadata = { title: 'Delinquency queue' }
 
@@ -92,8 +94,31 @@ export default async function DelinquencyQueuePage({
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
                       <p className="font-medium">{task.label}</p>
+                      {/* B-115, UX review 2026-08-12 finding 9: who this step
+                          is for, linked to their profile. */}
+                      <p className="text-sm">
+                        {task.subject.href ? (
+                          <Link href={task.subject.href} className="underline underline-offset-2">
+                            {task.subject.label}
+                          </Link>
+                        ) : (
+                          <span className="text-muted-foreground">{task.subject.label}</span>
+                        )}
+                      </p>
+                      {/* The figure this queue exists for, from the metrics
+                          module (D-25) — never zeroed and never colour alone
+                          (1.4.1): the word "past due" carries the fact, the
+                          amber only underlines it. */}
+                      {task.balanceCents > 0 && (
+                        <p className="text-sm">
+                          <span className="font-medium tabular-nums">{formatCents(task.balanceCents)}</span>
+                          {task.daysPastDue > 0 && (
+                            <span className="text-amber-800"> — {task.daysPastDue} days past due</span>
+                          )}
+                        </p>
+                      )}
                       <p className="text-muted-foreground text-sm">
-                        {task.entityType} · Due {formatDate(task.businessDate)}
+                        Due {formatDate(task.businessDate)}
                         {task.priority === 'high' && <span className="font-medium"> · High priority</span>}
                       </p>
                     </div>

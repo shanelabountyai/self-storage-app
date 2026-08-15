@@ -9,6 +9,7 @@ import { isOverdue } from '@storage/core/access'
 import { parseWeeklySchedule, type WeeklySchedule } from '@storage/core/facility-settings'
 import { settleCommandForTask } from '@/lib/access/manual-adapter'
 import { confirmOverlockApplied, confirmOverlockRemoved } from '@/lib/delinquency/overlock'
+import { fallbackSubject, resolveTaskSubjects, type TaskSubject } from '@/lib/admin/task-subjects'
 
 // PRD 02 §4.9 US-41 (B-095). One task queue. Every function here is generic
 // over `type` — the catalog (packages/core/tasks) is what a caller adds to,
@@ -98,6 +99,10 @@ export type TaskRow = {
   /// fields (e.g. a photo for `overlock_apply`) instead of a note-only form
   /// that `completeTask` would then refuse.
   requiredProofFields: readonly string[]
+  /// B-115. What this task is ABOUT — a name to read and, where one exists, a
+  /// place to go. Always present: `resolveTaskSubjects` falls back to a named
+  /// "no longer exists" line rather than leaving a card with nothing here.
+  subject: TaskSubject
 }
 
 /// Whether a task has gone overdue.
@@ -190,6 +195,8 @@ export async function facilityTasks(
     },
   })
 
+  const subjects = await resolveTaskSubjects(tasks)
+
   return tasks.map((task) => ({
     id: task.id,
     type: task.type,
@@ -210,6 +217,7 @@ export async function facilityTasks(
     assigneeName: task.assignee ? `${task.assignee.firstName} ${task.assignee.lastName}` : null,
     status: task.status,
     requiredProofFields: taskTypeSpec(task.type)?.requiredProofFields ?? ['note'],
+    subject: subjects.get(`${task.entityType}:${task.entityId}`) ?? fallbackSubject(task.entityType),
   }))
 }
 

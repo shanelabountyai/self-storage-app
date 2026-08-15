@@ -92,6 +92,12 @@ test.describe('signed in as the demo owner', () => {
       .catch(() => true)
     test.skip(alreadyCompletedToday, 'a returned-mail task was already raised and completed today — see the note above')
 
+    // B-115, UX review 2026-08-12 finding 9: the card used to say "Tenant"
+    // where a tenant's name belongs. This is the one point in the suite where
+    // a real Tenant-entityType task exists to check it against — the seeded
+    // demo data carries none.
+    await expect(card.getByRole('link', { name: 'Dana Delinquent' })).toBeVisible()
+
     await card.getByPlaceholder('What did you do?').fill('Confirmed a current address on file.')
     await card.getByRole('button', { name: 'Complete' }).click()
 

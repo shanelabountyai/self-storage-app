@@ -30,7 +30,18 @@ test.describe('signed in as the demo owner', () => {
     await signInAsDemoOwner(page)
   })
 
-  const ADMIN_ROUTES = ['/admin', '/admin/units', '/admin/units/types', '/admin/settings', '/admin/dev/keypad']
+  // B-115: /admin/tasks and /admin/delinquency joined this list rather than
+  // waiting for B-116 — a task card is the screen a manager works from a
+  // phone on the property, and it is exactly what changed here.
+  const ADMIN_ROUTES = [
+    '/admin',
+    '/admin/units',
+    '/admin/units/types',
+    '/admin/settings',
+    '/admin/dev/keypad',
+    '/admin/tasks',
+    '/admin/delinquency',
+  ]
 
   for (const route of ADMIN_ROUTES) {
     test(`${route} has no WCAG 2.1 AA violations`, async ({ page }) => {

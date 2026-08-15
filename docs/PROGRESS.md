@@ -3733,3 +3733,29 @@ The accessibility statement was re-read and one clause added: it already claimed
 **Left behind:** most pages here are statically prerendered and query the database at BUILD time, so the build bakes them from the test database as it stands when it runs. Nothing in the suite depends on that today — 388 passed on the first attempt with no prerender breakage — but a future spec that seeds a record and then asserts it on a *static* page will fail for that reason and not an obvious one. `npm run db:seed:test` before `e2e:server` is the fix if it ever bites.
 
 **Test verification:** full e2e green against the build on the first run — **388 passed, 8 skipped, 0 failed of 396**, on both projects, in 50s. The `E2E_DEV=1` fallback was exercised separately and still starts the dev server and passes. Unit suite untouched at 2,800 passing.
+
+## B-115 — Tasks and delinquency cards name and link their subject
+
+`PENDING`
+
+**Built:** `resolveTaskSubjects` (new: `apps/web/lib/admin/task-subjects.ts`), called once inside `facilityTasks` — the shared read both `/admin/tasks` and `/admin/delinquency` sit on (B-095's rule: the queue has one implementation). Every `TaskRow` now carries `subject: { label, href }`. A card used to say "Fit an overlock / Lease · Aug 12 / Unassigned"; it now says "Fit an overlock / Unit B-14 — Ada Renter [linked] / Aug 12". The delinquency queue additionally carries `balanceCents` and `daysPastDue` per task, read from `@storage/core/metrics` (D-25) rather than recomputed — the figure that queue exists for, rendered in words next to the amber (1.4.1: "40 days past due", never colour alone). The `/admin/tasks` type filter chip now reads the catalog label ("Payment failed — autopay has stopped retrying") instead of the raw `Task.type` key, per B-109's rule that admin may use industry vocabulary and may not render enum identifiers.
+
+**Decided — batched by entityType, one query per type in play.** Sorted the same way `tenant-list.ts` batches ledger balances: group the page's tasks by `entityType`, one `findMany({ where: { id: { in: [...] } } })` per type, never one query per row. Seven entity types are in play across the fifteen catalog task types — `Lease`, `Tenant`, `Invoice`, `Payment`, `Lead`, `GateCommand`, `Facility` — and every one resolves to a name and, where a destination exists, a link:
+
+| entityType | resolves via | links to |
+|---|---|---|
+| Lease | tenant + unit | tenant profile |
+| Tenant | tenant | tenant profile |
+| Invoice | its lease's tenant + unit | tenant profile |
+| Payment | the tenant who paid | tenant profile |
+| Lead | name, or phone, or email | `/admin/leads/{id}` |
+| GateCommand | its credential's or grant's tenant | tenant profile, or unlinked if the grant is for an authorized person rather than the tenant |
+| Facility | — | "Facility-wide", never linked — `gate_drift_review` and `daily_walkthrough` are the whole site's business, not one tenant's, and the page header already names the facility |
+
+**Decided — a deleted subject renders unlinked, not broken.** The row's own requirement. `resolveTaskSubjects` returns a `Map` that simply has no entry for a row `findMany` didn't return; `fallbackSubject(entityType)` supplies a plain-words line ("This lease no longer exists.") rather than a raw id or a dead link. Exercised directly: `facilityTasks` given a task pointed at a tenant id that does not exist still returns a row, with that fallback as its subject.
+
+**Decided — `gate_manual_action` mirrors `manual-adapter.ts`'s own lookup order rather than reimplementing it differently.** That file already resolves "who is standing at the gate" to build the keypad instruction (credential's grant first, the command's own `grantId` only when there is no credential) — the subject resolver reads the same two tables in the same order, so the name on the task card and the name in the instruction can never disagree.
+
+**Test verification:** unit suite green (2,812 passing, 12 new — one per entity type, the deleted-subject fallback, an unrecognised entityType, `facilityTasks` carrying a subject on every row, and the delinquency queue's balance/days-past-due against real ledger and invoice rows). Full e2e green: **396 passed, 8 skipped, 0 failed of 404**, on both projects. `/admin/tasks` and `/admin/delinquency` joined `ADMIN_ROUTES` in `admin.spec.ts` — this item is the one that checks their layout at 320px rather than leaving it to B-116, and both pass. `admin-tasks.spec.ts`'s existing returned-mail flow gained an assertion that the card links to "Dana Delinquent" while that task is genuinely open.
+
+**Left behind, honestly:** that last assertion did not execute in this session's verification runs — the returned-mail task is idempotent per (tenant, business day) and every run today (this item's own sweep and the B-114/B-124/B-125 verification sweeps before it) had already completed it, so the demo database held zero open tasks by the time this item's e2e ran. It will run for real on the next calendar day, or against a fresh seed. The subject resolution it exercises is the same code path two DB-level tests already prove directly against a real `Tenant` row — `resolveTaskSubjects` returning the exact `{label, href}` shape, and `facilityTasks` wiring it onto a real row — so this is a coverage gap in *when* the e2e assertion runs, not in whether the feature works.

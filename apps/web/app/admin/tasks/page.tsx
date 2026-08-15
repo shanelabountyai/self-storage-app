@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { taskTypeSpec } from '@storage/core/tasks'
 import { getSwitcherData } from '@/lib/admin/context'
 import { resolveSelectedFacility } from '@/lib/admin/facility-selection-logic'
 import { facilityTasks, taskRollup } from '@/lib/admin/tasks'
@@ -62,8 +63,11 @@ export default async function TasksPage({
       <h1 className="text-lg font-semibold">Tasks — {selected.facility.name}</h1>
 
       {typeParam && (
+        // B-115, UX review 2026-08-12 finding 9: the catalog label, never the
+        // raw `Task.type` key — B-109's rule that admin may use industry
+        // vocabulary, it may not render enum identifiers.
         <p className="text-muted-foreground text-sm">
-          Filtered to &ldquo;{typeParam}&rdquo;.{' '}
+          Filtered to &ldquo;{taskTypeSpec(typeParam)?.label ?? typeParam}&rdquo;.{' '}
           <Link href={`/admin/tasks?facility=${selected.facility.id}`} className="underline underline-offset-2">
             Show every open task
           </Link>
@@ -86,8 +90,20 @@ export default async function TasksPage({
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
                   <p className="font-medium">{task.label}</p>
+                  {/* B-115, UX review 2026-08-12 finding 9: what this task is
+                      ABOUT, not the raw `entityType`. Linked where there is
+                      somewhere to go; named honestly where there is not. */}
+                  <p className="text-sm">
+                    {task.subject.href ? (
+                      <Link href={task.subject.href} className="underline underline-offset-2">
+                        {task.subject.label}
+                      </Link>
+                    ) : (
+                      <span className="text-muted-foreground">{task.subject.label}</span>
+                    )}
+                  </p>
                   <p className="text-muted-foreground text-sm">
-                    {task.entityType} · {formatDate(task.businessDate)}
+                    {formatDate(task.businessDate)}
                     {task.priority === 'high' && <span className="font-medium"> · High priority</span>}
                   </p>
                 </div>
