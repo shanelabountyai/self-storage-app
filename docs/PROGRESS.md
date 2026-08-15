@@ -3911,7 +3911,7 @@ Added `db:migrate:e2e`, migrating and seeding the `public` schema of the `storag
 
 ## B-123 — Marketing SMS: the lane, built and deliberately dark
 
-`XXXXXXX`
+`7c11133`
 
 **Owner decision first (D-51).** The row was explicitly build-or-decide, and the owner chose to build. The lane exists end to end and **nothing sends on it**, because the two remaining blockers are not code: PRD 04 AC3's disclosure copy is awaiting the legal review Open Question Q5 names, and A2P 10DLC needs a **marketing** campaign registered separately from the transactional one (PRD 05 §6.3). D-51 records the choice, the reasoning and both blockers.
 
