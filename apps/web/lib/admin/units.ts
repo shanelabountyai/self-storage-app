@@ -146,14 +146,73 @@ export async function recomputeUnitStatus(
 
 export type { UnitFilters } from './unit-query'
 
-export async function listUnits(actor: Actor, facilityId: string, filters: UnitFilters = {}) {
-  return prisma.unit.findMany({
-    // Same selector bulk operations use — the rows the operator sees are the
-    // rows a bulk edit will consider.
-    where: unitWhere(actor, facilityId, filters),
-    include: { unitType: { select: { id: true, name: true, widthFt: true, lengthFt: true } } },
-    orderBy: [{ building: 'asc' }, { floor: 'asc' }, { number: 'asc' }],
-  })
+/// B-116 (UX review 2026-08-12 finding 12; accessibility review finding 7,
+/// D-48). `listUnits` had no `take`: a single facility renders ~100 rows, the
+/// portfolio 290, each carrying a status `<select>`, a submit button and a
+/// "Report issue" link — roughly 900 tab stops between the top of the table
+/// and the bulk-edit heading below it. Same page size as the tenant list
+/// (`tenant-list.ts`), not a second convention.
+export const UNIT_PAGE_SIZE = 50
+
+export type UnitOccupant = { tenantId: string; tenantName: string }
+
+export type UnitList = {
+  rows: (Awaited<ReturnType<typeof prisma.unit.findMany>>[number] & {
+    unitType: { id: string; name: string; widthFt: number; lengthFt: number }
+    /// Who is in this unit, if anyone — B-116: "who is in B-14?" used to be
+    /// answerable only by leaving this screen for Tenants and searching.
+    /// `null` for a vacant unit; present whenever a non-ended lease exists,
+    /// including an overlocked one — an overlock does not evict the tenant.
+    occupant: UnitOccupant | null
+  })[]
+  total: number
+  page: number
+  pageSize: number
+}
+
+export async function listUnits(
+  actor: Actor,
+  facilityId: string,
+  filters: UnitFilters = {},
+  options: { page?: number } = {},
+): Promise<UnitList> {
+  const page = Math.max(1, options.page ?? 1)
+  const where = unitWhere(actor, facilityId, filters)
+
+  const [rows, total] = await Promise.all([
+    prisma.unit.findMany({
+      // Same selector bulk operations use — the rows the operator sees are
+      // the rows a bulk edit will consider. Bulk edit itself reads `where`
+      // again through `evaluateBulkOperation`, unpaginated by design — a
+      // change applies to everything the filter matches, not just this page.
+      where,
+      include: { unitType: { select: { id: true, name: true, widthFt: true, lengthFt: true } } },
+      orderBy: [{ building: 'asc' }, { floor: 'asc' }, { number: 'asc' }],
+      skip: (page - 1) * UNIT_PAGE_SIZE,
+      take: UNIT_PAGE_SIZE,
+    }),
+    prisma.unit.count({ where }),
+  ])
+
+  const leases = rows.length
+    ? await prisma.lease.findMany({
+        where: { unitId: { in: rows.map((u) => u.id) }, status: { in: [...OCCUPYING_LEASE_STATUSES] }, deletedAt: null },
+        select: { unitId: true, tenantId: true, tenant: { select: { firstName: true, lastName: true } } },
+      })
+    : []
+  const occupantByUnit = new Map<string, UnitOccupant>(
+    leases.map((lease) => [
+      lease.unitId!,
+      { tenantId: lease.tenantId, tenantName: `${lease.tenant.firstName} ${lease.tenant.lastName}` },
+    ]),
+  )
+
+  return {
+    rows: rows.map((unit) => ({ ...unit, occupant: occupantByUnit.get(unit.id) ?? null })),
+    total,
+    page,
+    pageSize: UNIT_PAGE_SIZE,
+  }
 }
 
 /// Distinct buildings and floors present at a facility, for filter dropdowns

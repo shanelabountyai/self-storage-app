@@ -175,7 +175,11 @@ export default async function AdminUnitTypesPage({
     <div className="flex max-w-4xl flex-col gap-6">
       <h1 className="text-lg font-semibold">{selected.facility.name} unit types</h1>
 
-      <table className="w-full text-left text-sm">
+      {/* B-116. Neither table on this page had the overflow-x-auto wrapper the
+          units screen's table gets — a 522px table scrolled the whole document
+          sideways at 320px rather than just itself. */}
+      <div className="overflow-x-auto">
+      <table className="w-full min-w-max text-left text-sm">
         <thead>
           <tr className="text-muted-foreground">
             <th scope="col" className="pb-2 font-normal">Name</th>
@@ -265,6 +269,7 @@ export default async function AdminUnitTypesPage({
           )}
         </tbody>
       </table>
+      </div>
 
       {historyFor && (
         <section aria-labelledby="rates-heading" className="flex flex-col gap-3 rounded-md border p-3">
@@ -280,7 +285,8 @@ export default async function AdminUnitTypesPage({
             existing lease&apos;s rent (US-9). Future-dated rows take effect on their own date.
           </p>
 
-          <table className="w-full text-left text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-max text-left text-sm">
             <thead>
               <tr className="text-muted-foreground">
                 <th scope="col" className="pb-1 font-normal">Effective from</th>
@@ -303,6 +309,7 @@ export default async function AdminUnitTypesPage({
               )}
             </tbody>
           </table>
+          </div>
 
           <form action={publishRateAction} className="flex flex-wrap items-end gap-3">
             <input type="hidden" name="facilityId" value={facilityId} />

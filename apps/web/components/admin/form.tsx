@@ -330,5 +330,17 @@ export function FieldSet({
 /// as a prop. The DEFAULT is the consumer size, deliberately — a new surface
 /// that forgets to opt in is accessible, not the other way round. The admin
 /// layout opts down. Nothing between the layout and the control has to know.
+// B-116. `max-w-full`: a native `<select>` with no width set sizes itself to
+// its LONGEST option's text — "Required — a plan, or proof of the tenant's own
+// cover" ran the settings `protectionRequired` control out to 341px, wider
+// than a 320px phone, and no `overflow-x-auto` wrapper catches a control that
+// overflows its own row rather than a table. `max-width` (not `width`) is the
+// half of the pair that only ever shrinks: it caps a control that would
+// otherwise be too wide and leaves every fixed-width field (`w-20`, `w-28`,
+// the many number and short-text inputs already sized deliberately) exactly
+// as it was, because an explicit `width` always wins over a wider `max-width`.
+// Chromium truncates the closed control's displayed text with an ellipsis
+// when its content exceeds this cap; the dropdown's own option list is
+// unaffected and still shows the full text.
 export const CONTROL_CLASS =
-  'border-input bg-background h-(--control-h,2.75rem) rounded-md border px-2'
+  'border-input bg-background h-(--control-h,2.75rem) max-w-full rounded-md border px-2'

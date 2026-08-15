@@ -146,9 +146,9 @@ export default function AccessibilityPage() {
             the hold in one press.
           </li>
           <li>
-            <strong>Our staff-facing screens</strong> have known problems. Three of them do
-            not reflow at 320px wide, and long lists are not paginated. No customer uses
-            them, but we are not going to describe them as done.
+            <strong>Our staff-facing screens</strong> have known problems. Long lists on Tasks,
+            Leads and Delinquency are not paginated. No customer uses them, but we are not
+            going to describe them as done.
           </li>
           <li>
             The map we embed comes from OpenStreetMap and is not fully accessible. We

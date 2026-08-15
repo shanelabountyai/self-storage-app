@@ -6,6 +6,10 @@ import { usePathname } from 'next/navigation'
 const TABS = [
   { href: '/admin/units', label: 'Inventory' },
   { href: '/admin/units/types', label: 'Types' },
+  // B-116: "Add a unit" and "Import layout" moved here from the daily
+  // inventory screen — two once-per-facility setup jobs, not something that
+  // belongs below the bulk-edit section of the page worked from every day.
+  { href: '/admin/units/setup', label: 'Setup' },
 ] as const
 
 export function UnitsSubnav() {

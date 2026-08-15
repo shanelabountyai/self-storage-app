@@ -336,19 +336,19 @@ describe.skipIf(!hasDatabase)('recomputeUnitStatus', () => {
 
 describe.skipIf(!hasDatabase)('listUnits', () => {
   it('is facility-scoped and refuses a facility the actor cannot see', async () => {
-    const units = await listUnits(ownerAt(facilityAId), facilityAId)
-    expect(units.every((u) => u.facilityId === facilityAId)).toBe(true)
+    const list = await listUnits(ownerAt(facilityAId), facilityAId)
+    expect(list.rows.every((u) => u.facilityId === facilityAId)).toBe(true)
 
     await expect(listUnits(ownerAt(facilityAId), facilityBId)).rejects.toBeInstanceOf(ForbiddenError)
   })
 
   it('filters by status and unit number search', async () => {
     const byStatus = await listUnits(ownerAt(facilityAId), facilityAId, { status: 'maintenance' })
-    expect(byStatus.every((u) => u.status === 'maintenance')).toBe(true)
+    expect(byStatus.rows.every((u) => u.status === 'maintenance')).toBe(true)
 
     const bySearch = await listUnits(ownerAt(facilityAId), facilityAId, { search: 'a-2' })
-    expect(bySearch.every((u) => u.number.toLowerCase().includes('a-2'))).toBe(true)
-    expect(bySearch.length).toBeGreaterThan(0)
+    expect(bySearch.rows.every((u) => u.number.toLowerCase().includes('a-2'))).toBe(true)
+    expect(bySearch.rows.length).toBeGreaterThan(0)
   })
 
   it('reports distinct buildings and floors for filters', async () => {
@@ -357,5 +357,56 @@ describe.skipIf(!hasDatabase)('listUnits', () => {
     expect(groupings.buildings).toContain('Building A')
     expect(groupings.floors).toEqual([...groupings.floors].sort((a, b) => a - b))
     expect(groupings.floors).toContain(2)
+  })
+
+  // B-116. `take`-less: a single facility rendered ~100 rows, each carrying a
+  // status select, a submit and a link — roughly 900 tab stops before the
+  // bulk-edit heading. Isolated with its own filter (`search: 'page-'`) rather
+  // than counting the file's incidental fixtures, which earlier blocks in this
+  // suite keep adding to.
+  it('paginates at 50, and reports the true total rather than the page size', async () => {
+    for (let i = 0; i < 52; i++) {
+      await createUnit(ownerAt(facilityAId), facilityAId, unitInput(`PAGE-${String(i).padStart(3, '0')}`))
+    }
+
+    const first = await listUnits(ownerAt(facilityAId), facilityAId, { search: 'page-' })
+    expect(first.rows).toHaveLength(50)
+    expect(first.total).toBe(52)
+    expect(first.page).toBe(1)
+    expect(first.pageSize).toBe(50)
+
+    const second = await listUnits(ownerAt(facilityAId), facilityAId, { search: 'page-' }, { page: 2 })
+    expect(second.rows).toHaveLength(2)
+    expect(second.total).toBe(52)
+    // The two pages are disjoint and together cover every match — a unit
+    // present on both, or missing from both, is the actual failure a
+    // skip/take off-by-one produces.
+    const ids = new Set([...first.rows, ...second.rows].map((u) => u.id))
+    expect(ids.size).toBe(52)
+  })
+
+  it('names the tenant occupying a unit, and leaves a vacant one null', async () => {
+    const unit = await createUnit(ownerAt(facilityAId), facilityAId, unitInput('A-OCC'))
+    const vacant = await createUnit(ownerAt(facilityAId), facilityAId, unitInput('A-VAC'))
+    const lease = await prisma.lease.create({
+      data: {
+        facilityId: facilityAId,
+        tenantId,
+        unitId: unit.id,
+        status: 'active',
+        startDate: new Date('2026-01-01T00:00:00Z'),
+        billingDay: 1,
+        monthlyRateCents: 10_000,
+      },
+    })
+
+    const list = await listUnits(ownerAt(facilityAId), facilityAId, { search: 'a-occ' })
+    expect(list.rows[0].occupant).toEqual({ tenantId, tenantName: 'Pat Renter' })
+
+    const vacantList = await listUnits(ownerAt(facilityAId), facilityAId, { search: 'a-vac' })
+    expect(vacantList.rows[0].id).toBe(vacant.id)
+    expect(vacantList.rows[0].occupant).toBeNull()
+
+    await prisma.lease.delete({ where: { id: lease.id } })
   })
 })

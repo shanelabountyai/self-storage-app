@@ -62,23 +62,12 @@ test.describe('signed in as the demo owner', () => {
   // 1.4.10 Reflow, which PRD 02 FR-16 applies to admin as well as the customer
   // site. B-094 fixed the shell — a fixed 192px side nav beside the content, a
   // header that could not wrap, an unbreakable JSON example, and two unwrapped
-  // hours tables — and the dashboard now reflows cleanly. It did NOT finish the
-  // dense screens: the unit list, the unit-type list and the settings forms
-  // still push the page sideways at 320px.
-  //
-  // Left as `fixme` rather than deleted, so the gap stays enumerated in the test
-  // output instead of living only in a document. Reflow was not in B-094's
-  // scope — the row covers the shell, the error pattern and the axe run — and
-  // finishing it means reworking three data-dense layouts, which is its own
-  // item. Tracked in PROGRESS.md under B-094.
-  const REFLOW_PENDING = ['/admin/units', '/admin/units/types', '/admin/settings']
+  // hours tables. B-116 finished the three it left: the unit list, the
+  // unit-type list and the settings forms. All three shared one real cause,
+  // not three — see `[contain:layout]` on `<main>` in `admin/layout.tsx`.
 
   for (const route of ADMIN_ROUTES) {
     test(`${route} reflows to 320px without horizontal scroll`, async ({ page }) => {
-      test.fixme(
-        REFLOW_PENDING.includes(route),
-        'dense admin layout still overflows at 320px — see PROGRESS.md, B-094',
-      )
       await page.setViewportSize({ width: 320, height: 800 })
       await page.goto(route)
       const overflow = await page.evaluate(
@@ -358,5 +347,75 @@ test.describe('the dashboard (B-113)', () => {
     await expect(form).toBeVisible()
     await expect(form.getByLabel('Facility')).toBeVisible()
     await expect(page.getByRole('region', { name: 'Across your facilities' })).toBeVisible()
+  })
+})
+
+test.describe('units (B-116)', () => {
+  test.beforeEach(async ({ page }) => {
+    await signInAsDemoOwner(page)
+  })
+
+  test('add-a-unit and import-layout moved off the daily inventory screen', async ({ page }) => {
+    await page.goto('/admin/units')
+    await expect(page.getByRole('heading', { name: 'Add a unit' })).toHaveCount(0)
+    await expect(page.getByRole('heading', { name: 'Import layout (JSON)' })).toHaveCount(0)
+
+    await page.getByRole('link', { name: 'Add or import units' }).click()
+    await expect(page).toHaveURL(/\/admin\/units\/setup/)
+    await expect(page.getByRole('heading', { name: 'Add a unit' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Import layout (JSON)' })).toBeVisible()
+  })
+
+  test('/admin/units/setup has no WCAG 2.1 AA violations', async ({ page }) => {
+    await page.goto('/admin/units/setup')
+    await expect(page.getByRole('main')).toBeVisible()
+
+    const { violations } = await new AxeBuilder({ page })
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+      .analyze()
+
+    expect(
+      violations.map((v) => `${v.id}: ${v.help}`),
+      'axe found accessibility violations',
+    ).toEqual([])
+  })
+
+  test('an occupied unit names the tenant and links to their profile', async ({ page }) => {
+    // Not scoped to the table's own `row` role: below `sm` the table is
+    // `hidden` in favour of the card list, which carries the identical link
+    // with no table semantics at all. `.first()` rather than a strict single
+    // match, because POS's own real, permanent walk-in move-ins
+    // (admin-pos.spec.ts) can leave this demo tenant (B-034) holding more
+    // than one unit across a session's repeated sweeps.
+    await page.goto('/admin/units')
+    const link = page.getByRole('main').getByRole('link', { name: 'Alex Active' }).first()
+    await expect(link).toBeVisible()
+    await expect(link).toHaveAttribute('href', /\/admin\/tenants\/.+/)
+  })
+
+  test('paginates at 50, and the total is the true total rather than the page size', async ({ page }) => {
+    // The e2e sandbox facility seeds 250 units specifically to give this a
+    // real fifth page — Austin and Dallas both stay under 50 on purpose.
+    await page.goto('/admin')
+    await page.getByLabel('Switch facility').selectOption({ label: 'Demo — E2E Sandbox' })
+    await page.getByRole('button', { name: 'Switch', exact: true }).click()
+    // Waited rather than raced: the cookie is set by the server action, and a
+    // `goto` straight to /admin/units before it lands reads the OLD facility
+    // — the same trap "New inquiry opens with a facility selector" above
+    // already documents.
+    await expect(page.getByRole('heading', { name: 'Demo — E2E Sandbox' })).toBeVisible()
+    await page.goto('/admin/units')
+
+    await expect(page.getByRole('status').filter({ hasText: /Showing \d+–\d+ of \d+/ })).toHaveText(
+      'Showing 1–50 of 250',
+    )
+    const nav = page.getByRole('navigation', { name: 'Pages' })
+    await expect(nav.getByText('Page 1 of 5')).toBeVisible()
+
+    await nav.getByRole('link', { name: 'Next' }).click()
+    await expect(page).toHaveURL(/[?&]page=2/)
+    await expect(page.getByRole('status').filter({ hasText: /Showing \d+–\d+ of \d+/ })).toHaveText(
+      'Showing 51–100 of 250',
+    )
   })
 })

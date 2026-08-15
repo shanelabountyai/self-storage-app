@@ -14,10 +14,9 @@ import { unitRollup } from '@/lib/admin/rollups'
 import { FacilityRollup } from '@/components/admin/facility-rollup'
 import { currentRatesForFacility } from '@/lib/pricing/unit-type-rates'
 import { previewBulkOperation, type BulkUnitOperation } from '@/lib/admin/units-bulk'
-import { previewLayoutImport } from '@/lib/admin/unit-layout'
 import type { UnitFilters } from '@/lib/admin/unit-query'
 import { formatCents } from '@/lib/format'
-import { applyBulkAction, applyLayoutImportAction, createUnitAction, setUnitStatusAction } from './actions'
+import { applyBulkAction, setUnitStatusAction } from './actions'
 
 const ALL_STATUSES = ['available', 'reserved', 'occupied', 'overlocked', 'maintenance', 'unrentable'] as const
 
@@ -31,6 +30,7 @@ type SearchParams = {
   building?: string
   floor?: string
   q?: string
+  page?: string
   // Bulk preview is driven by search params so it is a GET — linkable,
   // re-renderable, and impossible to trigger as a side effect.
   op?: string
@@ -39,7 +39,6 @@ type SearchParams = {
   opBuilding?: string
   opFloor?: string
   opDoorType?: string
-  layout?: string
 }
 
 function filtersFrom(params: SearchParams): UnitFilters {
@@ -108,9 +107,10 @@ export default async function AdminUnitsPage({
   const facilityId = selected.facility.id
   const filters = filtersFrom(params)
   const view = params.view === 'grid' ? 'grid' : 'list'
+  const page = Number.parseInt(params.page ?? '1', 10) || 1
 
-  const [units, groupings, unitTypes, rates] = await Promise.all([
-    listUnits(actor, facilityId, filters),
+  const [list, groupings, unitTypes, rates] = await Promise.all([
+    listUnits(actor, facilityId, filters, { page }),
     unitGroupings(facilityId),
     prisma.unitType.findMany({ where: { facilityId }, select: { id: true, name: true }, orderBy: { name: 'asc' } }),
     // Rates resolve from effective-dated history (B-011), not a column.
@@ -119,11 +119,13 @@ export default async function AdminUnitsPage({
 
   const operation = operationFrom(params)
   const preview = operation ? await previewBulkOperation(actor, facilityId, filters, operation) : null
-  const layoutPlan = params.layout ? await previewLayoutImport(actor, facilityId, params.layout) : null
 
-  // Grid grouping: building, then floor (US-5 AC).
-  const groups = new Map<string, typeof units>()
-  for (const unit of units) {
+  // Grid grouping: building, then floor (US-5 AC), over the current PAGE of
+  // units — B-116 paginates `listUnits` itself, so both views share one page
+  // of rows and one "Showing X–Y of Z" rather than the grid quietly showing
+  // more than the list claims exists.
+  const groups = new Map<string, typeof list.rows>()
+  for (const unit of list.rows) {
     const key = `${unit.building ?? 'Unassigned'} · Floor ${unit.floor}`
     const bucket = groups.get(key)
     if (bucket) bucket.push(unit)
@@ -137,26 +139,37 @@ export default async function AdminUnitsPage({
     return `/admin/units?${next.toString()}`
   }
 
+  const from = list.total > 0 ? (list.page - 1) * list.pageSize + 1 : 0
+  const to = Math.min(list.page * list.pageSize, list.total)
+  const lastPage = Math.max(1, Math.ceil(list.total / list.pageSize))
+
   return (
     <div className="flex max-w-5xl flex-col gap-6">
       <UnitsSubnav />
 
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-lg font-semibold">{selected.facility.name} units</h1>
-        <div className="flex gap-2 text-sm">
-          <Link
-            href={linkTo({ view: undefined })}
-            aria-current={view === 'list' ? 'page' : undefined}
-            className={view === 'list' ? 'font-medium underline underline-offset-2' : 'text-muted-foreground'}
-          >
-            List
-          </Link>
-          <Link
-            href={linkTo({ view: 'grid' })}
-            aria-current={view === 'grid' ? 'page' : undefined}
-            className={view === 'grid' ? 'font-medium underline underline-offset-2' : 'text-muted-foreground'}
-          >
-            Grid
+        <div className="flex items-center gap-4 text-sm">
+          <div className="flex gap-2">
+            <Link
+              href={linkTo({ view: undefined, page: undefined })}
+              aria-current={view === 'list' ? 'page' : undefined}
+              className={view === 'list' ? 'font-medium underline underline-offset-2' : 'text-muted-foreground'}
+            >
+              List
+            </Link>
+            <Link
+              href={linkTo({ view: 'grid', page: undefined })}
+              aria-current={view === 'grid' ? 'page' : undefined}
+              className={view === 'grid' ? 'font-medium underline underline-offset-2' : 'text-muted-foreground'}
+            >
+              Grid
+            </Link>
+          </div>
+          {/* B-116: two once-per-facility setup jobs, off the screen worked
+              from every day. */}
+          <Link href="/admin/units/setup" className="text-muted-foreground underline underline-offset-2">
+            Add or import units
           </Link>
         </div>
       </div>
@@ -211,14 +224,14 @@ export default async function AdminUnitsPage({
         <Link href="/admin/units" className="text-muted-foreground pb-2 text-sm underline underline-offset-2">Clear</Link>
       </form>
 
-      <p className="text-muted-foreground text-sm">
-        {units.length} unit{units.length === 1 ? '' : 's'}
+      <p className="text-muted-foreground text-sm" role="status">
+        {list.total > 0 ? `Showing ${from}–${to} of ${list.total}` : 'No units'}
         {Object.values(filters).some(Boolean) ? ' matching the filter' : ''}
       </p>
 
       {view === 'list' ? (
         <div className="overflow-x-auto">
-        <table className="w-full min-w-max text-left text-sm">
+        <table className="hidden w-full min-w-max text-left text-sm sm:table">
           <thead>
             <tr className="text-muted-foreground">
               <th scope="col" className="pb-2 font-normal">Unit</th>
@@ -226,11 +239,14 @@ export default async function AdminUnitsPage({
               <th scope="col" className="pb-2 font-normal">Location</th>
               <th scope="col" className="pb-2 font-normal">Rate</th>
               <th scope="col" className="pb-2 font-normal">Status</th>
+              {/* B-116, UX review finding 12: "who is in B-14?" used to mean
+                  leaving this screen for Tenants and searching. */}
+              <th scope="col" className="pb-2 font-normal">Tenant</th>
               <th scope="col" className="pb-2 font-normal"><span className="sr-only">Actions</span></th>
             </tr>
           </thead>
           <tbody>
-            {units.map((unit) => (
+            {list.rows.map((unit) => (
               <tr key={unit.id} className="border-t align-middle">
                 <th scope="row" className="py-2 text-left font-medium">{unit.number}</th>
                 <td className="py-2">
@@ -247,6 +263,15 @@ export default async function AdminUnitsPage({
                   })()}
                 </td>
                 <td className="py-2"><UnitStatusBadge status={unit.status} /></td>
+                <td className="py-2">
+                  {unit.occupant ? (
+                    <Link href={`/admin/tenants/${unit.occupant.tenantId}`} className="underline underline-offset-2">
+                      {unit.occupant.tenantName}
+                    </Link>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )}
+                </td>
                 <td className="py-2">
                   {/* Only the three manual statuses are offered — the derived
                       ones are not a human's to set (US-8), so they never
@@ -295,6 +320,13 @@ export default async function AdminUnitsPage({
                       <p className="truncate text-sm font-medium">{unit.number}</p>
                       <p className="text-muted-foreground truncate text-xs">{unit.unitType.name}</p>
                       <UnitStatusBadge status={unit.status} className="mt-1" />
+                      {unit.occupant && (
+                        <p className="truncate text-xs">
+                          <Link href={`/admin/tenants/${unit.occupant.tenantId}`} className="underline underline-offset-2">
+                            {unit.occupant.tenantName}
+                          </Link>
+                        </p>
+                      )}
                     </div>
                   </li>
                 ))}
@@ -305,10 +337,98 @@ export default async function AdminUnitsPage({
         </div>
       )}
 
+      {/* B-116. Below `sm`, the table above is hidden and this card list is
+          the only rendering — each unit's actionable controls (the status
+          select, the "Report issue" link) turned into one legible card
+          instead of a horizontally-scrolled sliver of a six-column table.
+          Only for list view; grid view's tiles are already card-shaped. */}
+      {view === 'list' && (
+        <ul className="flex flex-col gap-3 sm:hidden">
+          {list.rows.map((unit) => (
+            <li key={unit.id} className="border-input rounded-lg border p-4">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <p className="font-medium">{unit.number}</p>
+                  <p className="text-muted-foreground text-sm">
+                    {unit.unitType.name} · {unit.unitType.widthFt}×{unit.unitType.lengthFt}
+                  </p>
+                </div>
+                <UnitStatusBadge status={unit.status} />
+              </div>
+              <p className="text-muted-foreground mt-1 text-sm">
+                {[unit.building, `Floor ${unit.floor}`].filter(Boolean).join(' · ')}
+              </p>
+              <p className="mt-1 text-sm">
+                {(() => {
+                  const rate = rates.get(unit.unitTypeId)
+                  return rate ? formatCents(rate.streetRateCents) : <span className="text-muted-foreground">not priced</span>
+                })()}
+              </p>
+              <p className="mt-1 text-sm">
+                {unit.occupant ? (
+                  <Link href={`/admin/tenants/${unit.occupant.tenantId}`} className="underline underline-offset-2">
+                    {unit.occupant.tenantName}
+                  </Link>
+                ) : (
+                  <span className="text-muted-foreground">Vacant</span>
+                )}
+              </p>
+
+              <form action={setUnitStatusAction} className="mt-3 flex flex-wrap items-end gap-2">
+                <input type="hidden" name="facilityId" value={facilityId} />
+                <input type="hidden" name="unitId" value={unit.id} />
+                <label className="sr-only" htmlFor={`status-m-${unit.id}`}>Set {unit.number} status</label>
+                <select
+                  id={`status-m-${unit.id}`}
+                  name="operationalStatus"
+                  defaultValue={unit.operationalStatus}
+                  className="border-input bg-background h-9 rounded-md border px-2 text-sm"
+                >
+                  {MANUAL_UNIT_STATUSES.map((s) => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+                <button
+                  type="submit"
+                  className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-3 text-sm font-medium"
+                >
+                  Set status
+                </button>
+              </form>
+              <Link
+                href={`/admin/maintenance?unit=${unit.id}`}
+                className="mt-2 inline-block text-sm underline underline-offset-2"
+              >
+                Report issue on {unit.number}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {lastPage > 1 && (
+        <nav aria-label="Pages" className="flex flex-wrap items-center gap-3 text-sm">
+          {list.page > 1 && (
+            <Link href={linkTo({ page: String(list.page - 1) })} className="underline underline-offset-2">
+              Previous
+            </Link>
+          )}
+          <span className="text-muted-foreground">Page {list.page} of {lastPage}</span>
+          {list.page < lastPage && (
+            <Link href={linkTo({ page: String(list.page + 1) })} className="underline underline-offset-2">
+              Next
+            </Link>
+          )}
+        </nav>
+      )}
+
       <section aria-labelledby="bulk-heading" className="flex flex-col gap-3 border-t pt-6">
         <h2 id="bulk-heading" className="text-base font-medium">Bulk edit</h2>
         <p className="text-muted-foreground text-xs">
-          Applies to the {units.length} unit{units.length === 1 ? '' : 's'} currently filtered above.
+          {/* The FULL filtered count, not this page's row count — bulk edit
+              itself is never paginated (US-7): it applies to everything the
+              filter matches. */}
+          Applies to the {list.total} unit{list.total === 1 ? '' : 's'} currently filtered above.
           Preview first — blocked units are skipped and listed with a reason.
         </p>
 
@@ -360,7 +480,8 @@ export default async function AdminUnitsPage({
               )}
             </p>
 
-            <table className="w-full text-left text-xs">
+            <div className="overflow-x-auto">
+            <table className="w-full min-w-max text-left text-xs">
               <thead>
                 <tr className="text-muted-foreground">
                   <th scope="col" className="pb-1 font-normal">Unit</th>
@@ -381,6 +502,7 @@ export default async function AdminUnitsPage({
                 ))}
               </tbody>
             </table>
+            </div>
 
             {preview.applyCount > 0 && (
               <form action={applyBulkAction} className="flex flex-wrap items-end gap-3">
@@ -427,115 +549,6 @@ export default async function AdminUnitsPage({
                 </label>
                 <Button type="submit">Apply to {preview.applyCount}</Button>
               </form>
-            )}
-          </div>
-        )}
-      </section>
-
-      <section aria-labelledby="add-heading" className="flex flex-col gap-3 border-t pt-6">
-        <h2 id="add-heading" className="text-base font-medium">Add a unit</h2>
-        {unitTypes.length === 0 ? (
-          <p className="text-muted-foreground text-sm">
-            Create a <Link href="/admin/units/types" className="underline underline-offset-2">unit type</Link> first.
-          </p>
-        ) : (
-          <form action={createUnitAction} className="flex flex-wrap items-end gap-3">
-            <input type="hidden" name="facilityId" value={facilityId} />
-            <label className="flex flex-col gap-1 text-sm">
-              Number
-              <input name="number" required className="border-input bg-background h-9 w-28 rounded-md border px-2" />
-            </label>
-            <label className="flex flex-col gap-1 text-sm">
-              Type
-              <select name="unitTypeId" required className="border-input bg-background h-9 rounded-md border px-2">
-                {unitTypes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-              </select>
-            </label>
-            <label className="flex flex-col gap-1 text-sm">
-              Building
-              <input name="building" className="border-input bg-background h-9 w-28 rounded-md border px-2" />
-            </label>
-            <label className="flex flex-col gap-1 text-sm">
-              Floor
-              <input name="floor" type="number" min="1" defaultValue={1} className="border-input bg-background h-9 w-20 rounded-md border px-2" />
-            </label>
-            <Button type="submit">Add unit</Button>
-          </form>
-        )}
-      </section>
-
-      <section aria-labelledby="import-heading" className="flex flex-col gap-3 border-t pt-6">
-        <h2 id="import-heading" className="text-base font-medium">Import layout (JSON)</h2>
-        <p className="text-muted-foreground text-xs">
-          Creates missing units and updates existing ones, matched by number. Never changes
-          occupancy. Example:{' '}
-          {/* One unbreakable token, so it pushed the page sideways at phone
-              width until `break-all` let it wrap (1.4.10). */}
-          <code className="break-all">{`[{"number":"A-1","unitTypeName":"10x10","building":"A","floor":1}]`}</code>
-        </p>
-
-        <form method="GET" className="flex flex-col gap-2">
-          <label htmlFor="layout" className="sr-only">Layout JSON</label>
-          <textarea
-            id="layout"
-            name="layout"
-            rows={4}
-            defaultValue={params.layout ?? ''}
-            className="border-input bg-background rounded-md border p-2 font-mono text-xs"
-          />
-          <div><Button type="submit" variant="outline">Preview import</Button></div>
-        </form>
-
-        {layoutPlan && (
-          <div className="flex flex-col gap-3 rounded-md border p-3">
-            {layoutPlan.issues.length > 0 ? (
-              <ul className="text-sm text-red-700 dark:text-red-400">
-                {layoutPlan.issues.map((issue, i) => (
-                  <li key={i}>
-                    {issue.index >= 0 ? `Row ${issue.index + 1}: ` : ''}{issue.field} — {issue.message}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <>
-                <p className="text-sm">
-                  <strong>{layoutPlan.createCount}</strong> to create, <strong>{layoutPlan.updateCount}</strong> to update
-                  {layoutPlan.errorCount > 0 && <>, <strong>{layoutPlan.errorCount}</strong> unresolved</>}.
-                </p>
-                <ul className="text-xs">
-                  {layoutPlan.rows.map((row) => (
-                    <li key={row.number} className={row.action === 'error' ? 'text-red-700 dark:text-red-400' : ''}>
-                      {row.number}: {row.detail}
-                    </li>
-                  ))}
-                </ul>
-                {layoutPlan.errorCount === 0 && (
-                  <form action={applyLayoutImportAction} className="flex flex-wrap items-end gap-3">
-                    <input type="hidden" name="facilityId" value={facilityId} />
-                    <input type="hidden" name="layoutJson" value={params.layout ?? ''} />
-                    <label className="flex flex-col gap-1 text-sm">
-                      Reason
-                      <select
-                        name="reasonCode"
-                        defaultValue="management_approval"
-                        required
-                        className="border-input bg-background h-9 rounded-md border px-2"
-                      >
-                        {REASON_CODES.map((code) => (
-                          <option key={code} value={code}>{labelForStatus(code)}</option>
-                        ))}
-                      </select>
-                    </label>
-                    <Button type="submit">Import {layoutPlan.createCount + layoutPlan.updateCount}</Button>
-                  </form>
-                )}
-                {layoutPlan.errorCount > 0 && (
-                  <p className="text-muted-foreground text-xs">
-                    Nothing is imported until every row resolves — a half-imported layout is
-                    worse than none.
-                  </p>
-                )}
-              </>
             )}
           </div>
         )}

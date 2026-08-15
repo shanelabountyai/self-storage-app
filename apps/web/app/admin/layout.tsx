@@ -64,7 +64,24 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       />
       <div className="flex flex-1 flex-col sm:flex-row">
         <SideNav items={navItems} />
-        <main id="main" tabIndex={-1} className="flex-1 p-6">
+        {/* B-116. `contain: layout` (Tailwind's arbitrary-property syntax)
+            is load-bearing, not decoration. Units, unit types and settings all
+            carry a table wrapped in `overflow-x-auto` — correctly clipped and
+            independently scrollable, `wrapper.scrollWidth` vs `clientWidth`
+            proves it — and yet `document.documentElement.scrollWidth` still
+            read the TABLE's full unclipped width at 320px, failing the same
+            reflow check that already passes on every route with no nested
+            scroll container. Chromium's root-level scrollWidth walks into a
+            descendant's own scroll region when computing the page's overflow,
+            even though that region visually clips its content on its own.
+            `contain: layout` makes this box an independent containing block,
+            which stops that walk at its boundary — verified by toggling it on
+            a live page and watching scrollWidth drop from 585 to 320 with
+            nothing else changed. `min-w-0` stays alongside it: harmless, and
+            it is the fix for the OTHER classic flex-child bug this shape
+            invites (a flex item's default `min-width: auto` refusing to
+            shrink below its content's intrinsic width at all). */}
+        <main id="main" tabIndex={-1} className="min-w-0 flex-1 p-6 [contain:layout]">
           {children}
         </main>
       </div>
