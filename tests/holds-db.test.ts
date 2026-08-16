@@ -5,6 +5,7 @@ import { DEFAULT_LATE_FEE_STEPS } from '../packages/core/billing'
 import { activeHolds, leaseHasEffect, liftHold, placeHold } from '../apps/web/lib/admin/holds'
 import { assessLateFees } from '../apps/web/lib/billing/late-fees'
 import type { Actor } from '../apps/web/lib/rbac/actor'
+import type { PermissionKey } from '@storage/db/rbac-catalog'
 
 // B-096 / PRD 02 §4.4 US-42. Holds against real rows, and the halts firing.
 
@@ -36,7 +37,7 @@ function actor(staffUserId: string, rank: number): Actor {
         facilityId,
         roleKey: rank >= 20 ? 'manager' : 'counter',
         rank,
-        permissions: new Set(['tenants:view', 'tenants:edit']),
+        permissions: new Set<PermissionKey>(['tenants:view', 'tenants:edit']),
         limits: { maxFeeWaiverCents: 0, maxRefundCents: 0, maxCreditCents: 0 },
       },
     ],

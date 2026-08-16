@@ -17,6 +17,7 @@ import {
 } from '../apps/web/lib/auctions/service'
 import { verifyDocument } from '../apps/web/lib/documents/store'
 import type { Actor } from '../apps/web/lib/rbac/actor'
+import type { PermissionKey } from '@storage/db/rbac-catalog'
 
 // B-062 / PRD 02 §4.6 US-28, against real rows.
 //
@@ -36,7 +37,7 @@ let regionalId = ''
 let managerId = ''
 let timelineId = ''
 
-function actorWith(staffUserId: string, rank: number, permissions: string[]): Actor {
+function actorWith(staffUserId: string, rank: number, permissions: PermissionKey[]): Actor {
   return {
     kind: 'staff',
     staffUserId,
@@ -45,14 +46,14 @@ function actorWith(staffUserId: string, rank: number, permissions: string[]): Ac
         facilityId,
         roleKey: rank >= 30 ? 'regional' : 'manager',
         rank,
-        permissions: new Set(permissions),
+        permissions: new Set<PermissionKey>(permissions),
         limits: { maxFeeWaiverCents: null, maxRefundCents: null, maxCreditCents: null },
       },
     ],
   }
 }
 
-const ALL = ['tenants:view', 'tenants:edit', 'auctions:approve', 'units:edit']
+const ALL: PermissionKey[] = ['tenants:view', 'tenants:edit', 'auctions:approve', 'units:edit']
 const regional = () => actorWith(regionalId, 30, ALL)
 const manager = () => actorWith(managerId, 20, ALL)
 

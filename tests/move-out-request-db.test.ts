@@ -9,6 +9,7 @@ import {
 } from '../apps/web/lib/portal/move-out'
 import { completeMoveOut, previewMoveOut } from '../apps/web/lib/admin/move-out'
 import type { Actor } from '../apps/web/lib/rbac/actor'
+import type { PermissionKey } from '@storage/db/rbac-catalog'
 
 // B-041 / PRD 01 US-707; PRD 02 US-14, US-41.
 
@@ -31,7 +32,7 @@ function managerActor(): Actor {
         facilityId,
         roleKey: 'manager',
         rank: 20,
-        permissions: new Set(['tenants:view', 'leases:move_out']),
+        permissions: new Set<PermissionKey>(['tenants:view', 'leases:move_out']),
         limits: { maxFeeWaiverCents: 5_000, maxRefundCents: 0, maxCreditCents: 5_000 },
       },
     ],

@@ -4167,3 +4167,31 @@ Three findings from the 2026-08-12 reviews, all in a shipped auth flow.
 **Test verification:** unit suite green, **2,933 passing** (up 1 — both leases carrying the tier and the premium, and every lease id returned). Typecheck and lint clean. Full e2e green: **870 passed, 6 skipped, 0 failed of 876** — unchanged.
 
 **Left for part 5:** the UI. Add and remove units, one lock/warning/extension covering the basket, per-unit itemisation with a change note naming which unit moved the total, and per-unit `<fieldset>` grouping so N "Remove" controls do not share an accessible name.
+
+## Chore — `tests/` and `e2e/` were typechecked by nothing
+
+`PENDING`
+
+**Not a backlog row.** A gap that two items had already paid for, closed before it charged a third.
+
+**Found:** `apps/web/tsconfig.json` lives in `apps/web`, so its `include` covers `apps/web/**` and stops there. The repo-root `tests/` and `e2e/` directories — 55 test files and every spec — were outside every TypeScript program in the repo. `npm run typecheck` did not read them, so neither did CI. Vitest and Playwright each transpile a file at a time without checking types *across* files, which is why a green suite proved nothing about them: a test could import a name that did not exist and only fail at runtime, if that line ever ran.
+
+**It had already cost two items.** B-119 shipped a spec missing its `AxeBuilder` import, which surfaced as a runtime `ReferenceError` under Playwright rather than as a compile error. B-106 part 2 shipped a fixture silently short a newly-required field. Two separate items paying for the same missing check is what made it worth its own config rather than a third patch.
+
+**Built:** `tsconfig.tests.json` at the repo root, covering `tests/`, `e2e/`, `scripts/` and the app's ambient type declarations, wired into `npm run typecheck` so CI enforces it. Deliberately a second project rather than a widened `include` on the app's — pulling tests into the Next.js program would put them in the build graph, and that config carries Next-specific plugins and `.next/types` globs that mean nothing here.
+
+**Turning it on found 28 errors already in the tree.** Most were one mechanical shape: `permissions: new Set(...)` inferring `Set<string>` where `Assignment` wants `Set<PermissionKey>`, across 51 files. Three were not mechanical, and are the reason this was worth doing:
+
+- **A step demanding a proof field that does not exist.** `tests/active-duty-scra-db.test.ts` built a delinquency timeline whose overlock step required `lock_serial` — never a member of `PROOF_FIELDS`. It survived because the field is stored as JSON and nothing at runtime checks membership. Harmless in that test only because the SCRA hold halts the engine before the step runs; a test that *did* reach it would have asserted against proof the product cannot collect. Now `photo_reference`, matching the product's own default overlock step.
+- **An `Actor` fixture reaching through a union it had not narrowed.** `assignments` exists on one branch of `Actor`; the helper declared the whole union and every call site indexed into `.assignments[0]` anyway. Fixed at the helper — `Extract<Actor, { kind: 'staff' }>` — rather than at each call site.
+- **Three tests asserting on properties of a branch they had not checked.** `verifyTotp(...).reason`, `fieldError(...).message` and `bootstrapOwner(...).existingEmail` each read a field that exists on only one arm of a result union. Narrowed rather than cast: asserting `reason` without first asserting `ok === false` is how a test keeps passing if the function starts *succeeding* on malformed input.
+
+**Decided — narrow, never cast.** Every fix above asserts the branch it then reads. A `as` would have made the same 28 errors disappear in a fraction of the time and left the tests exactly as blind as they were, which is the whole thing this config exists to stop.
+
+**Also removed:** a `status: 'inactive'` field two `facility-settings-db` tests passed to `FacilityDetailsInput`, which has never had that field and whose updater has never written one. Both tests assert a `ForbiddenError`, so the field was inert — checked before deleting, rather than assumed.
+
+**Test verification:** unit suite green, **2,933 passing, 8 skipped of 2,941** — identical to the count before, so no test was lost or disabled to make the types pass. Typecheck clean across both projects; lint 0 errors.
+
+Full e2e green against a production build: **870 passed, 6 skipped, 0 failed, 0 flaky of 876** — unchanged from B-106 part 4, which is the point: this closed a hole in the checking, it did not change what the code does.
+
+**Left behind:** `apps/web/tsconfig.json` and `tsconfig.tests.json` now state their compiler options separately rather than sharing a base. Two small duplicated blocks beat a third config for two consumers; if a third program ever appears, extract the base then.

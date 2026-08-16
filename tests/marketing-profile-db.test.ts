@@ -11,6 +11,7 @@ import {
 } from '../apps/web/lib/admin/marketing-profile'
 import { publicFacilityBySlug } from '../apps/web/lib/facility/public-facility'
 import type { Actor } from '../apps/web/lib/rbac/actor'
+import type { PermissionKey } from '@storage/db/rbac-catalog'
 
 // B-067 / PRD 04 US-2, US-5, against real rows.
 //
@@ -25,7 +26,7 @@ let facilityId = ''
 let staffId = ''
 const slug = `marketing-${suffix}`
 
-function actor(permissions: string[] = ['facility:settings']): Actor {
+function actor(permissions: PermissionKey[] = ['facility:settings']): Actor {
   return {
     kind: 'staff',
     staffUserId: staffId,
@@ -34,7 +35,7 @@ function actor(permissions: string[] = ['facility:settings']): Actor {
         facilityId,
         roleKey: 'manager',
         rank: 20,
-        permissions: new Set(permissions),
+        permissions: new Set<PermissionKey>(permissions),
         limits: { maxFeeWaiverCents: 0, maxRefundCents: 0, maxCreditCents: 0 },
       },
     ],

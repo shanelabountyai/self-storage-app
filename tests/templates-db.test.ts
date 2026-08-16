@@ -7,6 +7,7 @@ import {
   templatesFor,
 } from '../apps/web/lib/admin/templates'
 import type { Actor } from '../apps/web/lib/rbac/actor'
+import type { PermissionKey } from '@storage/db/rbac-catalog'
 
 // B-053 / PRD 05 CN-16. The editor against real rows.
 
@@ -18,7 +19,7 @@ let facilityId = ''
 let staffId = ''
 const KEY = 'invoice_due_soon'
 
-function actor(permissions: string[] = ['facility:settings']): Actor {
+function actor(permissions: PermissionKey[] = ['facility:settings']): Actor {
   return {
     kind: 'staff',
     staffUserId: staffId,
@@ -27,7 +28,7 @@ function actor(permissions: string[] = ['facility:settings']): Actor {
         facilityId,
         roleKey: 'manager',
         rank: 20,
-        permissions: new Set(permissions),
+        permissions: new Set<PermissionKey>(permissions),
         limits: { maxFeeWaiverCents: 0, maxRefundCents: 0, maxCreditCents: 0 },
       },
     ],

@@ -11,6 +11,7 @@ import {
   rateHistoryForUnitType,
 } from '../apps/web/lib/pricing/unit-type-rates'
 import { ROLES } from '../packages/db/rbac-catalog'
+import type { PermissionKey } from '@storage/db/rbac-catalog'
 
 const hasDatabase = Boolean(process.env.DATABASE_URL)
 
@@ -27,7 +28,7 @@ function assignmentFor(roleKey: string, fid: string | null): Assignment {
     facilityId: fid,
     roleKey: role.key,
     rank: role.rank,
-    permissions: new Set(role.permissions),
+    permissions: new Set<PermissionKey>(role.permissions),
     limits: {
       maxFeeWaiverCents: role.maxFeeWaiverCents,
       maxRefundCents: role.maxRefundCents,

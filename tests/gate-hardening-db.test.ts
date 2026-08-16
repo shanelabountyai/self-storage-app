@@ -20,6 +20,7 @@ import { gateHealth } from '../apps/web/lib/admin/gate-health'
 import { accessCodeEncryptionKey, hashCode } from '../apps/web/lib/access/secret'
 import { ForbiddenError } from '../apps/web/lib/rbac/authorize'
 import type { Actor } from '../apps/web/lib/rbac/actor'
+import type { PermissionKey } from '@storage/db/rbac-catalog'
 
 // B-080 / PRD 03 FR-9, FR-10, SR-4 — against real rows.
 
@@ -44,7 +45,7 @@ function actor(facilityIds: (string | null)[] = [facilityId]): Actor {
       facilityId: id,
       roleKey: 'manager',
       rank: 20,
-      permissions: new Set(['facility:settings', 'access:events'] as never),
+      permissions: new Set<PermissionKey>(['facility:settings', 'access:events'] as never),
       limits: { maxFeeWaiverCents: null, maxRefundCents: null, maxCreditCents: null },
     })),
   }

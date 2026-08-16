@@ -4,6 +4,7 @@ import { prisma } from '../packages/db'
 import { delinquencyReport, movesReport, occupancyReport, rentRoll } from '../apps/web/lib/admin/reports'
 import type { Actor } from '../apps/web/lib/rbac/actor'
 import { ForbiddenError } from '../apps/web/lib/rbac/authorize'
+import type { PermissionKey } from '@storage/db/rbac-catalog'
 
 // B-042 / PRD 02 US-39. The adapter between real rows and the metrics module.
 
@@ -26,7 +27,7 @@ function actorFor(facilityIds: (string | null)[]): Actor {
       facilityId: id,
       roleKey: 'manager',
       rank: 20,
-      permissions: new Set(['tenants:view', 'reports:operational', 'reports:financial']),
+      permissions: new Set<PermissionKey>(['tenants:view', 'reports:operational', 'reports:financial']),
       limits: { maxFeeWaiverCents: 0, maxRefundCents: 0, maxCreditCents: 0 },
     })),
   }

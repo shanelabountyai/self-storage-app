@@ -4,6 +4,7 @@ import { prisma } from '../packages/db'
 import { createMaintenanceTicket, setTicketStatus, ticketsForFacility, assignTicket } from '../apps/web/lib/admin/maintenance'
 import { setUnitOperationalStatus, UnitStatusChangeBlockedError } from '../apps/web/lib/admin/units'
 import type { Actor } from '../apps/web/lib/rbac/actor'
+import type { PermissionKey } from '@storage/db/rbac-catalog'
 
 // B-060 / PRD 02 §4.9 US-37, against real rows.
 //
@@ -29,7 +30,7 @@ function actor(): Actor {
         facilityId,
         roleKey: 'manager',
         rank: 20,
-        permissions: new Set(['units:edit', 'tenants:view']),
+        permissions: new Set<PermissionKey>(['units:edit', 'tenants:view']),
         limits: { maxFeeWaiverCents: 0, maxRefundCents: 0, maxCreditCents: 0 },
       },
     ],

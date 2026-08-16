@@ -5,6 +5,7 @@ import { runDelinquencyTimeline } from '../apps/web/lib/delinquency/engine'
 import { saveTimeline } from '../apps/web/lib/admin/delinquency-timeline'
 import type { TimelineStep } from '../packages/core/delinquency'
 import type { Actor } from '../apps/web/lib/rbac/actor'
+import type { PermissionKey } from '@storage/db/rbac-catalog'
 
 // B-057 / PRD 02 FR-5, US-25, US-28, against real rows.
 
@@ -30,7 +31,7 @@ function actor(): Actor {
         facilityId,
         roleKey: 'manager',
         rank: 20,
-        permissions: new Set(['facility:settings']),
+        permissions: new Set<PermissionKey>(['facility:settings']),
         limits: { maxFeeWaiverCents: 0, maxRefundCents: 0, maxCreditCents: 0 },
       },
     ],

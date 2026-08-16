@@ -3,6 +3,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { prisma } from '../packages/db'
 import type { Actor } from '../apps/web/lib/rbac/actor'
 import { ForbiddenError } from '../apps/web/lib/rbac/authorize'
+import type { PermissionKey } from '@storage/db/rbac-catalog'
 import {
   AuthorizedAccessCapError,
   cascadeAuthorizedAccess,
@@ -31,7 +32,7 @@ const managerActor = (): Actor => ({
       facilityId,
       roleKey: 'manager',
       rank: 20,
-      permissions: new Set(['access:manage_grants']),
+      permissions: new Set<PermissionKey>(['access:manage_grants']),
       limits: { maxFeeWaiverCents: 5_000, maxRefundCents: 0, maxCreditCents: 5_000 },
     },
   ],
@@ -46,7 +47,7 @@ const underprivilegedActor = (): Actor => ({
       facilityId,
       roleKey: 'counter',
       rank: 10,
-      permissions: new Set(),
+      permissions: new Set<PermissionKey>(),
       limits: { maxFeeWaiverCents: 0, maxRefundCents: 0, maxCreditCents: 0 },
     },
   ],

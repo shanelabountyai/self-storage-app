@@ -11,6 +11,7 @@ import { saveNoticeTemplate, exampleNoticeTemplate } from '../apps/web/lib/admin
 import { verifyDocument } from '../apps/web/lib/documents/store'
 import { recordConsent } from '../packages/core/consent'
 import type { Actor } from '../apps/web/lib/rbac/actor'
+import type { PermissionKey } from '@storage/db/rbac-catalog'
 
 // B-061 / PRD 02 §4.6 US-27, §4.2 US-13, against real rows.
 //
@@ -29,7 +30,7 @@ let leaseId = ''
 let staffId = ''
 let invoiceId = ''
 
-function actor(permissions: string[] = ['delinquency:execute_step', 'tenants:view', 'facility:settings']): Actor {
+function actor(permissions: PermissionKey[] = ['delinquency:execute_step', 'tenants:view', 'facility:settings']): Actor {
   return {
     kind: 'staff',
     staffUserId: staffId,
@@ -38,7 +39,7 @@ function actor(permissions: string[] = ['delinquency:execute_step', 'tenants:vie
         facilityId,
         roleKey: 'manager',
         rank: 20,
-        permissions: new Set(permissions),
+        permissions: new Set<PermissionKey>(permissions),
         limits: { maxFeeWaiverCents: 0, maxRefundCents: 0, maxCreditCents: 0 },
       },
     ],

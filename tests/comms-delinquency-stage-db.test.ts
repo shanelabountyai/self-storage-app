@@ -7,6 +7,7 @@ import { requestOverlock, confirmOverlockApplied, releaseOverlock, confirmOverlo
 import { generateNotice } from '../apps/web/lib/notices/service'
 import { saveNoticeTemplate, exampleNoticeTemplate } from '../apps/web/lib/admin/notice-templates'
 import type { Actor } from '../apps/web/lib/rbac/actor'
+import type { PermissionKey } from '@storage/db/rbac-catalog'
 
 // B-063 / PRD 05 CN-11, CN-12, against real rows and the real seeded catalog.
 //
@@ -45,7 +46,7 @@ function actor(): Actor {
         facilityId,
         roleKey: 'manager',
         rank: 20,
-        permissions: new Set(['delinquency:execute_step', 'tenants:view', 'facility:settings']),
+        permissions: new Set<PermissionKey>(['delinquency:execute_step', 'tenants:view', 'facility:settings']),
         limits: { maxFeeWaiverCents: 0, maxRefundCents: 0, maxCreditCents: 0 },
       },
     ],

@@ -4,6 +4,7 @@ import { prisma } from '../packages/db'
 import { leaseLedger } from '../apps/web/lib/admin/ledger'
 import { ForbiddenError } from '../apps/web/lib/rbac/authorize'
 import type { Actor } from '../apps/web/lib/rbac/actor'
+import type { PermissionKey } from '@storage/db/rbac-catalog'
 
 // B-049 / PRD 02 US-24. The ledger against real rows, and its reconciliation.
 
@@ -20,7 +21,7 @@ let invoiceCounter = 0
 
 const d = (iso: string) => new Date(`${iso}T12:00:00.000Z`)
 
-function actorAt(facility: string, permissions: string[] = ['tenants:view']): Actor {
+function actorAt(facility: string, permissions: PermissionKey[] = ['tenants:view']): Actor {
   return {
     kind: 'staff',
     staffUserId: 'staff-ledger',
@@ -29,7 +30,7 @@ function actorAt(facility: string, permissions: string[] = ['tenants:view']): Ac
         facilityId: facility,
         roleKey: 'manager',
         rank: 20,
-        permissions: new Set(permissions),
+        permissions: new Set<PermissionKey>(permissions),
         limits: { maxFeeWaiverCents: 0, maxRefundCents: 0, maxCreditCents: 0 },
       },
     ],

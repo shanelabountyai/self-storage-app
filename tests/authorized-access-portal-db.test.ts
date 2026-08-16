@@ -11,6 +11,7 @@ import { authorizedAccessForTenant } from '../apps/web/lib/portal/authorized-acc
 import { evaluateAccessSuspensions } from '../apps/web/lib/access/delinquency-gate'
 import { ensureGrantForHolder, transitionGrant } from '../apps/web/lib/access/service'
 import type { Actor } from '../apps/web/lib/rbac/actor'
+import type { PermissionKey } from '@storage/db/rbac-catalog'
 
 // B-105 / PRD 03 US-9 AC4: "tenant self-service from the portal is Phase 2 and
 // inherits the same cap."
@@ -41,7 +42,7 @@ function staffActor(): Actor {
         facilityId,
         roleKey: 'manager',
         rank: 20,
-        permissions: new Set(['access:manage_grants'] as never),
+        permissions: new Set<PermissionKey>(['access:manage_grants'] as never),
         limits: { maxFeeWaiverCents: null, maxRefundCents: null, maxCreditCents: null },
       },
     ],

@@ -11,6 +11,7 @@ import {
 } from '../apps/web/lib/admin/inquiries'
 import { raiseLeadFollowUps } from '../apps/web/lib/admin/lead-follow-up'
 import type { Actor } from '../apps/web/lib/rbac/actor'
+import type { PermissionKey } from '@storage/db/rbac-catalog'
 
 // B-097 / PRD 02 §4.8 US-43, against real rows.
 //
@@ -27,7 +28,7 @@ let facilityId = ''
 let unitTypeId = ''
 let staffId = ''
 
-function actor(permissions: string[] = ['tenants:view', 'tenants:edit']): Actor {
+function actor(permissions: PermissionKey[] = ['tenants:view', 'tenants:edit']): Actor {
   return {
     kind: 'staff',
     staffUserId: staffId,
@@ -36,7 +37,7 @@ function actor(permissions: string[] = ['tenants:view', 'tenants:edit']): Actor 
         facilityId,
         roleKey: 'manager',
         rank: 20,
-        permissions: new Set(permissions),
+        permissions: new Set<PermissionKey>(permissions),
         limits: { maxFeeWaiverCents: 0, maxRefundCents: 0, maxCreditCents: 0 },
       },
     ],

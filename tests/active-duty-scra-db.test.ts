@@ -10,6 +10,7 @@ import { saveTimeline } from '../apps/web/lib/admin/delinquency-timeline'
 import { approveAuction, openAuctionCase } from '../apps/web/lib/auctions/service'
 import type { TimelineStep } from '../packages/core/delinquency'
 import type { Actor } from '../apps/web/lib/rbac/actor'
+import type { PermissionKey } from '@storage/db/rbac-catalog'
 
 // B-121 / PRD 02 §4.9 US-42, PRD 01 US-501 step 4, D-49, 50 U.S.C. §3958.
 //
@@ -38,7 +39,7 @@ const noop = () => {}
 /// Scoped to AUSTIN only, deliberately and throughout: the whole point of the
 /// cross-facility assertion below is that a staffer who cannot see Dallas still
 /// protects the Dallas lease.
-function actor(staffUserId: string, rank: number): Actor {
+function actor(staffUserId: string, rank: number): Extract<Actor, { kind: 'staff' }> {
   return {
     kind: 'staff',
     staffUserId,
@@ -47,7 +48,7 @@ function actor(staffUserId: string, rank: number): Actor {
         facilityId: austinId,
         roleKey: rank >= 20 ? 'manager' : 'counter',
         rank,
-        permissions: new Set(['tenants:view', 'tenants:edit', 'facility:settings', 'auctions:approve']),
+        permissions: new Set<PermissionKey>(['tenants:view', 'tenants:edit', 'facility:settings', 'auctions:approve']),
         limits: { maxFeeWaiverCents: 0, maxRefundCents: 0, maxCreditCents: 0 },
       },
     ],
@@ -249,7 +250,7 @@ describeDb('the active-duty declaration reaches the pipeline', () => {
           step(1, 'Late notice'),
           step(10, 'Overlock', {
             staffTaskLabel: 'Overlock the unit',
-            requiredProofFields: ['lock_serial'],
+            requiredProofFields: ['photo_reference'],
           }),
         ],
       })

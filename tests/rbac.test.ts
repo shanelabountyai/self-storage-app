@@ -23,7 +23,7 @@ function assignmentFor(roleKey: string, facilityId: string | null): Assignment {
     facilityId,
     roleKey: role.key,
     rank: role.rank,
-    permissions: new Set(role.permissions),
+    permissions: new Set<PermissionKey>(role.permissions),
     limits: {
       maxFeeWaiverCents: role.maxFeeWaiverCents,
       maxRefundCents: role.maxRefundCents,

@@ -4,6 +4,7 @@ import { prisma } from '../packages/db'
 import { requestOverlock, confirmOverlockApplied, releaseOverlock } from '../apps/web/lib/delinquency/overlock'
 import { overlockReconciliation } from '../apps/web/lib/delinquency/overlock-reconciliation'
 import type { Actor } from '../apps/web/lib/rbac/actor'
+import type { PermissionKey } from '@storage/db/rbac-catalog'
 
 // B-060 / PRD 02 §4.6 US-36, against real rows.
 //
@@ -29,7 +30,7 @@ function actor(): Actor {
         facilityId,
         roleKey: 'manager',
         rank: 20,
-        permissions: new Set(['tenants:view']),
+        permissions: new Set<PermissionKey>(['tenants:view']),
         limits: { maxFeeWaiverCents: 0, maxRefundCents: 0, maxCreditCents: 0 },
       },
     ],

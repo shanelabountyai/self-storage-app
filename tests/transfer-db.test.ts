@@ -5,6 +5,7 @@ import { completeTransfer, previewTransfer, transferTargets } from '../apps/web/
 import { processCommsEvent } from '../apps/web/lib/comms/service'
 import * as provider from '../apps/web/lib/comms/provider'
 import type { Actor } from '../apps/web/lib/rbac/actor'
+import type { PermissionKey } from '@storage/db/rbac-catalog'
 
 // B-077 / PRD 02 §4.3 US-14 (transfer), against real rows.
 //
@@ -46,7 +47,7 @@ function manager(): Actor {
         facilityId,
         roleKey: 'manager',
         rank: 20,
-        permissions: new Set(PERMISSIONS as never),
+        permissions: new Set<PermissionKey>(PERMISSIONS as never),
         limits: { maxFeeWaiverCents: null, maxRefundCents: null, maxCreditCents: null },
       },
     ],
@@ -63,7 +64,7 @@ function counter(): Actor {
         facilityId,
         roleKey: 'counter',
         rank: 10,
-        permissions: new Set(['tenants:view'] as never),
+        permissions: new Set<PermissionKey>(['tenants:view'] as never),
         limits: { maxFeeWaiverCents: null, maxRefundCents: null, maxCreditCents: null },
       },
     ],

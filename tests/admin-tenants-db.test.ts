@@ -13,6 +13,7 @@ import {
 import { listTenants } from '../apps/web/lib/admin/tenant-list'
 import type { Actor } from '../apps/web/lib/rbac/actor'
 import { ForbiddenError } from '../apps/web/lib/rbac/authorize'
+import type { PermissionKey } from '@storage/db/rbac-catalog'
 
 // B-038 / PRD 02 §4.4 US-13, US-16.
 
@@ -35,7 +36,7 @@ function managerAt(facilityId: string): Actor {
         facilityId,
         roleKey: 'manager',
         rank: 20,
-        permissions: new Set(['tenants:view', 'tenants:edit']),
+        permissions: new Set<PermissionKey>(['tenants:view', 'tenants:edit']),
         limits: { maxFeeWaiverCents: 5_000, maxRefundCents: 0, maxCreditCents: 5_000 },
       },
     ],
@@ -52,7 +53,7 @@ function bookkeeperAt(facilityId: string): Actor {
         roleKey: 'bookkeeper',
         rank: 10,
         // View only — no tenants:edit, matching the real seeded role exactly.
-        permissions: new Set(['tenants:view']),
+        permissions: new Set<PermissionKey>(['tenants:view']),
         limits: { maxFeeWaiverCents: 0, maxRefundCents: 0, maxCreditCents: 0 },
       },
     ],
@@ -67,7 +68,7 @@ const ownerAllFacilities: Actor = {
       facilityId: null,
       roleKey: 'owner',
       rank: 40,
-      permissions: new Set(['tenants:view', 'tenants:edit']),
+      permissions: new Set<PermissionKey>(['tenants:view', 'tenants:edit']),
       limits: { maxFeeWaiverCents: null, maxRefundCents: null, maxCreditCents: null },
     },
   ],
@@ -511,7 +512,7 @@ describeDb('admin tenant profile', () => {
             facilityId: facilityAId,
             roleKey: 'counter',
             rank: 10,
-            permissions: new Set(['payments:take']),
+            permissions: new Set<PermissionKey>(['payments:take']),
             limits: { maxFeeWaiverCents: 0, maxRefundCents: 0, maxCreditCents: 0 },
           },
         ],

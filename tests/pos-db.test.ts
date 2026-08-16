@@ -4,6 +4,7 @@ import { prisma } from '../packages/db'
 import { dailyPaymentsSummary, facilityDayBounds, recordCounterPayment } from '../apps/web/lib/admin/pos'
 import type { Actor } from '../apps/web/lib/rbac/actor'
 import { ForbiddenError } from '../apps/web/lib/rbac/authorize'
+import type { PermissionKey } from '@storage/db/rbac-catalog'
 
 // B-039 / PRD 02 §4.8 US-32.
 
@@ -28,7 +29,7 @@ function staffActor(staffUserId: string, roleKey: 'counter' | 'manager', facilit
         facilityId: facility,
         roleKey,
         rank: roleKey === 'manager' ? 20 : 10,
-        permissions: new Set(['tenants:view', 'payments:take']),
+        permissions: new Set<PermissionKey>(['tenants:view', 'payments:take']),
         limits: { maxFeeWaiverCents: 0, maxRefundCents: 0, maxCreditCents: 0 },
       },
     ],

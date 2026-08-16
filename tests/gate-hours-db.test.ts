@@ -6,6 +6,7 @@ import { drainGateCommands } from '../apps/web/lib/access/service'
 import { evaluateKeypadEntry } from '../apps/web/lib/access/simulator'
 import { accessEventLog, summariseFlags } from '../apps/web/lib/access/event-log'
 import type { Actor } from '../apps/web/lib/rbac/actor'
+import type { PermissionKey } from '@storage/db/rbac-catalog'
 
 // B-064 / PRD 03 US-4, US-5, FR-4, FR-5, against real rows.
 //
@@ -37,7 +38,7 @@ let credentialId = ''
 let staffId = ''
 const CODE = `${Math.floor(100_000 + Math.random() * 899_999)}`
 
-function actor(permissions: string[] = ['access:events', 'access:manage_grants']): Actor {
+function actor(permissions: PermissionKey[] = ['access:events', 'access:manage_grants']): Actor {
   return {
     kind: 'staff',
     staffUserId: staffId,
@@ -46,7 +47,7 @@ function actor(permissions: string[] = ['access:events', 'access:manage_grants']
         facilityId,
         roleKey: 'manager',
         rank: 20,
-        permissions: new Set(permissions),
+        permissions: new Set<PermissionKey>(permissions),
         limits: { maxFeeWaiverCents: 0, maxRefundCents: 0, maxCreditCents: 0 },
       },
     ],

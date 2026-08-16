@@ -4,6 +4,7 @@ import { prisma } from '../packages/db'
 import { runDunning } from '../apps/web/lib/billing/dunning'
 import { placeHold } from '../apps/web/lib/admin/holds'
 import type { Actor } from '../apps/web/lib/rbac/actor'
+import type { PermissionKey } from '@storage/db/rbac-catalog'
 
 // B-052 / PRD 05 CN-3, CN-5. The ladder against real rows.
 
@@ -33,7 +34,7 @@ function manager(): Actor {
         facilityId,
         roleKey: 'manager',
         rank: 20,
-        permissions: new Set(['tenants:view', 'tenants:edit']),
+        permissions: new Set<PermissionKey>(['tenants:view', 'tenants:edit']),
         limits: { maxFeeWaiverCents: 0, maxRefundCents: 0, maxCreditCents: 0 },
       },
     ],

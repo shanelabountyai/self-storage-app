@@ -16,6 +16,7 @@ import { authenticateWithPassword, setPassword } from '../apps/web/lib/auth/acco
 import { requestMagicLink } from '../apps/web/lib/auth/flows'
 import { resetStaffMfa, staffSecurityRows } from '../apps/web/lib/admin/staff-security'
 import type { Actor } from '../apps/web/lib/rbac/actor'
+import type { PermissionKey } from '@storage/db/rbac-catalog'
 
 // B-079 / PRD 00 §7.1, against real rows. tests/totp.test.ts already proves the
 // algorithm against the RFC vectors; this proves the things only a database can
@@ -45,7 +46,7 @@ function ownerActor(staffUserId: string): Actor {
         facilityId: null,
         roleKey: 'owner',
         rank: 40,
-        permissions: new Set(['users:manage'] as never),
+        permissions: new Set<PermissionKey>(['users:manage'] as never),
         limits: { maxFeeWaiverCents: null, maxRefundCents: null, maxCreditCents: null },
       },
     ],

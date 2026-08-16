@@ -4,6 +4,7 @@ import { prisma } from '../packages/db'
 import { createReview, reviewsForFacility, setReviewVisibility } from '../apps/web/lib/admin/reviews'
 import { visibleReviewsForFacility } from '../apps/web/lib/reviews/public'
 import type { Actor } from '../apps/web/lib/rbac/actor'
+import type { PermissionKey } from '@storage/db/rbac-catalog'
 
 // B-071 / PRD 04 §3.4 FR-REV-1/FR-REV-2, US-6, against real rows.
 
@@ -23,7 +24,7 @@ function actor(): Actor {
         facilityId,
         roleKey: 'manager',
         rank: 20,
-        permissions: new Set(['facility:settings']),
+        permissions: new Set<PermissionKey>(['facility:settings']),
         limits: { maxFeeWaiverCents: 0, maxRefundCents: 0, maxCreditCents: 0 },
       },
     ],

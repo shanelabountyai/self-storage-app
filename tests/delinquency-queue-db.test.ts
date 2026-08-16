@@ -4,6 +4,7 @@ import { prisma } from '../packages/db'
 import { createTask } from '../apps/web/lib/admin/tasks'
 import { delinquencyQueue } from '../apps/web/lib/admin/delinquency-queue'
 import type { Actor } from '../apps/web/lib/rbac/actor'
+import type { PermissionKey } from '@storage/db/rbac-catalog'
 
 // B-059 / PRD 02 §4.6 US-26, against real rows.
 //
@@ -29,7 +30,7 @@ function actor(): Actor {
         facilityId,
         roleKey: 'manager',
         rank: 20,
-        permissions: new Set(['tenants:view', 'delinquency:execute_step']),
+        permissions: new Set<PermissionKey>(['tenants:view', 'delinquency:execute_step']),
         limits: { maxFeeWaiverCents: 0, maxRefundCents: 0, maxCreditCents: 0 },
       },
     ],

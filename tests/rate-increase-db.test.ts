@@ -15,6 +15,7 @@ import {
 import { processCommsEvent } from '../apps/web/lib/comms/service'
 import * as provider from '../apps/web/lib/comms/provider'
 import type { Actor } from '../apps/web/lib/rbac/actor'
+import type { PermissionKey } from '@storage/db/rbac-catalog'
 
 // B-076 / PRD 02 §4.3 US-11, PRD 05 CN-9, against real rows and the real
 // seeded catalog.
@@ -57,7 +58,7 @@ function actorWith(staffUserId: string, rank: number): Actor {
         facilityId,
         roleKey: rank >= 30 ? 'regional' : 'manager',
         rank,
-        permissions: new Set(PERMISSIONS as never),
+        permissions: new Set<PermissionKey>(PERMISSIONS as never),
         limits: { maxFeeWaiverCents: null, maxRefundCents: null, maxCreditCents: null },
       },
     ],

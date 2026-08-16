@@ -14,6 +14,7 @@ import { flagTenantAddressReturned } from '../apps/web/lib/admin/tenants'
 import * as accessProvision from '../apps/web/lib/access/provision'
 import type { Actor } from '../apps/web/lib/rbac/actor'
 import { ForbiddenError } from '../apps/web/lib/rbac/authorize'
+import type { PermissionKey } from '@storage/db/rbac-catalog'
 
 // B-095 / PRD 02 §4.9 US-41.
 
@@ -27,7 +28,7 @@ let tenantId = ''
 let leaseId = ''
 let counterId = ''
 
-function actorAt(staffUserId: string, facility: string, permissions: string[] = ['tenants:view', 'tenants:edit']): Actor {
+function actorAt(staffUserId: string, facility: string, permissions: PermissionKey[] = ['tenants:view', 'tenants:edit']): Actor {
   return {
     kind: 'staff',
     staffUserId,
@@ -36,7 +37,7 @@ function actorAt(staffUserId: string, facility: string, permissions: string[] = 
         facilityId: facility,
         roleKey: 'manager',
         rank: 20,
-        permissions: new Set(permissions),
+        permissions: new Set<PermissionKey>(permissions),
         limits: { maxFeeWaiverCents: 0, maxRefundCents: 0, maxCreditCents: 0 },
       },
     ],

@@ -4,6 +4,7 @@ import { prisma } from '../packages/db'
 import { DEFAULT_LATE_FEE_STEPS } from '../packages/core/billing'
 import { assessLateFees, waiveFeeInvoice } from '../apps/web/lib/billing/late-fees'
 import type { Actor } from '../apps/web/lib/rbac/actor'
+import type { PermissionKey } from '@storage/db/rbac-catalog'
 
 // B-047 / PRD 02 US-21. Assessment and waiver against real rows.
 
@@ -25,7 +26,7 @@ const recordItem = (outcome: { itemId: string; ok: boolean; message?: string }) 
   collected.push(outcome)
 }
 
-function actorWith(options: { permissions?: string[]; maxFeeWaiverCents?: number | null; rank?: number }): Actor {
+function actorWith(options: { permissions?: PermissionKey[]; maxFeeWaiverCents?: number | null; rank?: number }): Actor {
   return {
     kind: 'staff',
     // A real row: `audit_log.actorStaffId` is a foreign key, which is the point
@@ -36,7 +37,7 @@ function actorWith(options: { permissions?: string[]; maxFeeWaiverCents?: number
         facilityId,
         roleKey: 'manager',
         rank: options.rank ?? 20,
-        permissions: new Set(options.permissions ?? ['fees:waive']),
+        permissions: new Set<PermissionKey>(options.permissions ?? ['fees:waive']),
         limits: {
           maxFeeWaiverCents: options.maxFeeWaiverCents === undefined ? 5_000 : options.maxFeeWaiverCents,
           maxRefundCents: 0,

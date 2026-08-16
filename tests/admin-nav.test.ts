@@ -8,6 +8,7 @@ import {
   visibleNavItems,
 } from '../apps/web/lib/admin/nav'
 import { ROLES } from '../packages/db/rbac-catalog'
+import type { PermissionKey } from '@storage/db/rbac-catalog'
 
 function assignmentFor(roleKey: string, facilityId: string | null): Assignment {
   const role = ROLES.find((r) => r.key === roleKey)!
@@ -15,7 +16,7 @@ function assignmentFor(roleKey: string, facilityId: string | null): Assignment {
     facilityId,
     roleKey: role.key,
     rank: role.rank,
-    permissions: new Set(role.permissions),
+    permissions: new Set<PermissionKey>(role.permissions),
     limits: {
       maxFeeWaiverCents: role.maxFeeWaiverCents,
       maxRefundCents: role.maxRefundCents,
@@ -101,7 +102,7 @@ describe('groupedNavItems', () => {
           facilityId: 'facility-a',
           roleKey: 'counter',
           rank: 10,
-          permissions: new Set(['payments:take']),
+          permissions: new Set<PermissionKey>(['payments:take']),
           limits: { maxFeeWaiverCents: 0, maxRefundCents: 0, maxCreditCents: 0 },
         },
       ],

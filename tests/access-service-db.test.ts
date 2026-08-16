@@ -17,6 +17,7 @@ import { hashCode } from '../apps/web/lib/access/secret'
 import * as adapters from '../apps/web/lib/access/adapter'
 import type { Actor } from '../apps/web/lib/rbac/actor'
 import { ForbiddenError } from '../apps/web/lib/rbac/authorize'
+import type { PermissionKey } from '@storage/db/rbac-catalog'
 
 // B-027 / PRD 03 FR-1–FR-3.
 
@@ -38,7 +39,7 @@ const ownerActor = (): Actor => ({
       facilityId,
       roleKey: 'owner',
       rank: 40,
-      permissions: new Set(['access:view_codes']),
+      permissions: new Set<PermissionKey>(['access:view_codes']),
       limits: { maxFeeWaiverCents: null, maxRefundCents: null, maxCreditCents: null },
     },
   ],
@@ -54,7 +55,7 @@ const bookkeeperActor = (): Actor => ({
       facilityId,
       roleKey: 'bookkeeper',
       rank: 10,
-      permissions: new Set(),
+      permissions: new Set<PermissionKey>(),
       limits: { maxFeeWaiverCents: 0, maxRefundCents: 0, maxCreditCents: 0 },
     },
   ],

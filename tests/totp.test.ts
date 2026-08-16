@@ -152,9 +152,16 @@ describe('verifyTotp', () => {
   })
 
   it('rejects malformed input without consulting the secret', () => {
-    expect(verifyTotp(SEED, '12345', now).reason).toBe('malformed')
-    expect(verifyTotp(SEED, 'abcdef', now).reason).toBe('malformed')
-    expect(verifyTotp(SEED, '', now).reason).toBe('malformed')
+    // Narrowed rather than reaching through the union: `reason` exists only
+    // on the failing branch, and asserting it without checking `ok` first is
+    // how a test would keep passing if the function started SUCCEEDING on
+    // malformed input.
+    for (const bad of ['12345', 'abcdef', '']) {
+      const result = verifyTotp(SEED, bad, now)
+      expect(result.ok, bad).toBe(false)
+      if (result.ok) throw new Error('unreachable')
+      expect(result.reason).toBe('malformed')
+    }
   })
 
   it('accepts a code typed with a space in it', () => {

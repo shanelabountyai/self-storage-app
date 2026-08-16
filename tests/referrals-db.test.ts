@@ -14,6 +14,7 @@ import { revenueReport } from '../apps/web/lib/admin/revenue-report'
 import type { Actor } from '../apps/web/lib/rbac/actor'
 import * as provider from '../apps/web/lib/comms/provider'
 import { vi } from 'vitest'
+import type { PermissionKey } from '@storage/db/rbac-catalog'
 
 // B-100 / PRD 10 §5.1, §5.3, §5.4, §6.1, against real rows.
 //
@@ -572,7 +573,7 @@ describeDb('referral program core', () => {
           facilityId,
           roleKey: 'manager',
           rank: 20,
-          permissions: new Set(['reports:financial']),
+          permissions: new Set<PermissionKey>(['reports:financial']),
           limits: { maxFeeWaiverCents: 0, maxRefundCents: 0, maxCreditCents: 0 },
         },
       ],

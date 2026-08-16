@@ -13,6 +13,7 @@ import {
 } from '../apps/web/lib/admin/facility-settings'
 import { CLOSED_ALL_WEEK } from '../packages/core/facility-settings'
 import { ROLES } from '../packages/db/rbac-catalog'
+import type { PermissionKey } from '@storage/db/rbac-catalog'
 
 const hasDatabase = Boolean(process.env.DATABASE_URL)
 
@@ -28,7 +29,7 @@ function assignmentFor(roleKey: string, facilityId: string | null): Assignment {
     facilityId,
     roleKey: role.key,
     rank: role.rank,
-    permissions: new Set(role.permissions),
+    permissions: new Set<PermissionKey>(role.permissions),
     limits: {
       maxFeeWaiverCents: role.maxFeeWaiverCents,
       maxRefundCents: role.maxRefundCents,
@@ -159,7 +160,6 @@ describe.skipIf(!hasDatabase)('updateFacilityDetails', () => {
         state: 'TX',
         postalCode: '00000',
         timezone: 'America/Chicago',
-        status: 'inactive' as const,
         phone: null,
         email: null,
       }),
@@ -177,7 +177,6 @@ describe.skipIf(!hasDatabase)('updateFacilityDetails', () => {
         state: 'TX',
         postalCode: '00000',
         timezone: 'America/Chicago',
-        status: 'inactive' as const,
         phone: null,
         email: null,
       }),

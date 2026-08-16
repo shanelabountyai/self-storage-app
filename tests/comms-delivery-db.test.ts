@@ -8,6 +8,7 @@ import {
   suppressionList,
 } from '../apps/web/lib/admin/suppressions'
 import type { Actor } from '../apps/web/lib/rbac/actor'
+import type { PermissionKey } from '@storage/db/rbac-catalog'
 
 // B-054 / PRD 05 FR-14, FR-15, CN-20. The consequences of a bounce, against
 // real rows — the suppression, the tenant flag and the task have to happen
@@ -31,7 +32,7 @@ function actor(): Actor {
         facilityId,
         roleKey: 'manager',
         rank: 20,
-        permissions: new Set(['facility:settings']),
+        permissions: new Set<PermissionKey>(['facility:settings']),
         limits: { maxFeeWaiverCents: 0, maxRefundCents: 0, maxCreditCents: 0 },
       },
     ],

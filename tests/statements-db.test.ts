@@ -10,6 +10,7 @@ import {
 import { reconciles } from '../packages/core/billing'
 import { ForbiddenError } from '../apps/web/lib/rbac/authorize'
 import type { Actor } from '../apps/web/lib/rbac/actor'
+import type { PermissionKey } from '@storage/db/rbac-catalog'
 
 // B-102 / PRD 01 US-705, against real ledger rows. The pure suite proves the
 // arithmetic; this proves the boundaries — which entries fall in which month at
@@ -36,7 +37,7 @@ function actor(facilityIds: (string | null)[] = [facilityId]): Actor {
       facilityId: id,
       roleKey: 'manager',
       rank: 20,
-      permissions: new Set(['tenants:view'] as never),
+      permissions: new Set<PermissionKey>(['tenants:view'] as never),
       limits: { maxFeeWaiverCents: null, maxRefundCents: null, maxCreditCents: null },
     })),
   }
@@ -277,7 +278,7 @@ describeDb('monthly statements (US-705)', () => {
             facilityId,
             roleKey: 'counter',
             rank: 10,
-            permissions: new Set(['payments:take'] as never),
+            permissions: new Set<PermissionKey>(['payments:take'] as never),
             limits: { maxFeeWaiverCents: null, maxRefundCents: null, maxCreditCents: null },
           },
         ],

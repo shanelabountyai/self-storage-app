@@ -6,6 +6,7 @@ import { switchGateAdapter } from '../apps/web/lib/access/manual-adapter'
 import { manualQueue } from '../apps/web/lib/access/manual-queue'
 import { completeTask } from '../apps/web/lib/admin/tasks'
 import type { Actor } from '../apps/web/lib/rbac/actor'
+import type { PermissionKey } from '@storage/db/rbac-catalog'
 
 // B-065 / PRD 03 US-6, against real rows.
 //
@@ -33,7 +34,7 @@ function actor(): Actor {
         facilityId,
         roleKey: 'manager',
         rank: 20,
-        permissions: new Set(['tenants:view', 'tenants:edit', 'facility:settings']),
+        permissions: new Set<PermissionKey>(['tenants:view', 'tenants:edit', 'facility:settings']),
         limits: { maxFeeWaiverCents: 0, maxRefundCents: 0, maxCreditCents: 0 },
       },
     ],

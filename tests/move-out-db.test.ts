@@ -9,6 +9,7 @@ import {
 } from '../apps/web/lib/admin/move-out'
 import type { Actor } from '../apps/web/lib/rbac/actor'
 import { ForbiddenError } from '../apps/web/lib/rbac/authorize'
+import type { PermissionKey } from '@storage/db/rbac-catalog'
 
 // B-040 / PRD 02 US-14 (move-out), PRD 03 US-2.
 
@@ -33,7 +34,7 @@ function actorOf(staffUserId: string, rank: number): Actor {
         facilityId,
         roleKey: rank >= 20 ? 'manager' : 'counter',
         rank,
-        permissions: new Set(['tenants:view', 'leases:move_out', 'units:edit', 'reports:financial']),
+        permissions: new Set<PermissionKey>(['tenants:view', 'leases:move_out', 'units:edit', 'reports:financial']),
         limits: { maxFeeWaiverCents: 0, maxRefundCents: 0, maxCreditCents: 0 },
       },
     ],

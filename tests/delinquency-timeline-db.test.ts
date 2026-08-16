@@ -9,6 +9,7 @@ import {
 } from '../apps/web/lib/admin/delinquency-timeline'
 import type { TimelineStep } from '../packages/core/delinquency'
 import type { Actor } from '../apps/web/lib/rbac/actor'
+import type { PermissionKey } from '@storage/db/rbac-catalog'
 
 // B-056 / PRD 02 §4.6 US-25, US-29, against real rows.
 //
@@ -24,7 +25,7 @@ let facilityId = ''
 let staffId = ''
 let leaseId = ''
 
-function actor(permissions: string[] = ['facility:settings']): Actor {
+function actor(permissions: PermissionKey[] = ['facility:settings']): Actor {
   return {
     kind: 'staff',
     staffUserId: staffId,
@@ -33,7 +34,7 @@ function actor(permissions: string[] = ['facility:settings']): Actor {
         facilityId,
         roleKey: 'manager',
         rank: 20,
-        permissions: new Set(permissions),
+        permissions: new Set<PermissionKey>(permissions),
         limits: { maxFeeWaiverCents: 0, maxRefundCents: 0, maxCreditCents: 0 },
       },
     ],

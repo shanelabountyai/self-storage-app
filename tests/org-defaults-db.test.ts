@@ -10,6 +10,7 @@ import {
 } from '../apps/web/lib/admin/org-defaults'
 import { ForbiddenError } from '../apps/web/lib/rbac/authorize'
 import type { Actor } from '../apps/web/lib/rbac/actor'
+import type { PermissionKey } from '@storage/db/rbac-catalog'
 
 // B-079 / PRD 02 US-4, against real rows. The properties only a database shows:
 // a push writes ordinary effective-dated rows into the facility's OWN tables,
@@ -40,7 +41,7 @@ function actor(options: { allFacilities?: boolean; facilityIds?: string[] } = {}
       ...assignment,
       roleKey: 'owner',
       rank: 40,
-      permissions: new Set(['org:defaults', 'facility:settings'] as never),
+      permissions: new Set<PermissionKey>(['org:defaults', 'facility:settings'] as never),
       limits: { maxFeeWaiverCents: null, maxRefundCents: null, maxCreditCents: null },
     })),
   }
@@ -223,14 +224,14 @@ describeDb('org defaults (US-4)', () => {
           facilityId: null,
           roleKey: 'owner',
           rank: 40,
-          permissions: new Set(['org:defaults'] as never),
+          permissions: new Set<PermissionKey>(['org:defaults'] as never),
           limits: { maxFeeWaiverCents: null, maxRefundCents: null, maxCreditCents: null },
         },
         {
           facilityId: facilityA,
           roleKey: 'manager',
           rank: 20,
-          permissions: new Set(['facility:settings'] as never),
+          permissions: new Set<PermissionKey>(['facility:settings'] as never),
           limits: { maxFeeWaiverCents: null, maxRefundCents: null, maxCreditCents: null },
         },
       ],

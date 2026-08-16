@@ -66,9 +66,16 @@ describe('address and map links', () => {
     latitude: 30.2456,
     longitude: -97.7583,
     timezone: 'America/Chicago',
+    reservationHoldGraceDays: 1,
     amenities: [],
     officeHours: null,
     gateHours: null,
+    seoTitle: null,
+    metaDescription: null,
+    heroCopy: null,
+    longDescription: null,
+    photos: [],
+    faqs: [],
   }
 
   it('formats one-line addresses with and without a second line', () => {

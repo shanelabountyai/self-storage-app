@@ -13,6 +13,7 @@ import { delinquencyReport } from '../apps/web/lib/admin/reports'
 import { moneyOwedRollup } from '../apps/web/lib/admin/rollups'
 import { formatCents } from '../apps/web/lib/format'
 import type { Actor } from '../apps/web/lib/rbac/actor'
+import type { PermissionKey } from '@storage/db/rbac-catalog'
 
 // B-055 / PRD 02 US-39.4 and US-39.5, against real rows.
 //
@@ -37,7 +38,7 @@ let endedLeaseId = ''
 let activeTenantId = ''
 let invoiceCounter = 0
 
-function actor(permissions: string[] = ['reports:financial', 'reports:operational']): Actor {
+function actor(permissions: PermissionKey[] = ['reports:financial', 'reports:operational']): Actor {
   return {
     kind: 'staff',
     staffUserId: staffId,
@@ -46,7 +47,7 @@ function actor(permissions: string[] = ['reports:financial', 'reports:operationa
         facilityId,
         roleKey: 'manager',
         rank: 20,
-        permissions: new Set(permissions),
+        permissions: new Set<PermissionKey>(permissions),
         limits: { maxFeeWaiverCents: 0, maxRefundCents: 0, maxCreditCents: 0 },
       },
     ],

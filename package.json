@@ -11,7 +11,7 @@
     "build": "dotenv -e .env.local -- npm run build -w web",
     "start": "dotenv -e .env.local -- npm run start -w web",
     "lint": "npm run lint -w web",
-    "typecheck": "npm run typecheck -w web",
+    "typecheck": "npm run typecheck -w web && tsc --noEmit -p tsconfig.tests.json",
     "test": "dotenv -e .env.test -e .env.local -- vitest run",
     "test:watch": "dotenv -e .env.test -e .env.local -- vitest",
     "test:integration": "RUN_LIVE_INTEGRATION=1 dotenv -e .env.test -e .env.local -- vitest run tests/integration-money-loop.test.ts",

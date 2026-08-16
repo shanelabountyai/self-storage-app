@@ -6,6 +6,7 @@ import { recordCounterPayment } from '../apps/web/lib/admin/pos'
 import { adjustStock, facilityProducts, merchandiseReport, sellMerchandise, upsertProduct } from '../apps/web/lib/admin/merchandise'
 import { depositsReport } from '../apps/web/lib/admin/deposits-report'
 import type { Actor } from '../apps/web/lib/rbac/actor'
+import type { PermissionKey } from '@storage/db/rbac-catalog'
 
 // B-078 / PRD 02 US-33, US-34, US-39.6, against real rows.
 //
@@ -23,7 +24,7 @@ let staffId = ''
 let tenantId = ''
 let leaseId = ''
 
-const PERMISSIONS = [
+const PERMISSIONS: PermissionKey[] = [
   'payments:take',
   'drawer:manage',
   'merchandise:manage',
@@ -31,7 +32,7 @@ const PERMISSIONS = [
   'reports:financial',
 ]
 
-function actorWith(rank: number, permissions: string[] = PERMISSIONS): Actor {
+function actorWith(rank: number, permissions: PermissionKey[] = PERMISSIONS): Actor {
   return {
     kind: 'staff',
     staffUserId: staffId,
@@ -40,7 +41,7 @@ function actorWith(rank: number, permissions: string[] = PERMISSIONS): Actor {
         facilityId,
         roleKey: rank >= 20 ? 'manager' : 'counter',
         rank,
-        permissions: new Set(permissions as never),
+        permissions: new Set<PermissionKey>(permissions as never),
         limits: { maxFeeWaiverCents: null, maxRefundCents: null, maxCreditCents: null },
       },
     ],

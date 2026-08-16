@@ -11,6 +11,7 @@ import {
 } from '../apps/web/lib/comms/detectors'
 import { commsDashboard } from '../apps/web/lib/admin/comms-dashboard'
 import * as provider from '../apps/web/lib/comms/provider'
+import type { PermissionKey } from '@storage/db/rbac-catalog'
 
 // B-075 / PRD 05 CN-19, FR-19, against real rows and the real seeded roles.
 //
@@ -142,7 +143,7 @@ describeDb('comms observability (FR-19/CN-19)', () => {
       ])
 
       const owner = { kind: 'staff' as const, staffUserId: 'x', assignments: [
-        { facilityId, roleKey: 'owner', rank: 100, permissions: new Set(['reports:operational'] as never), limits: { maxFeeWaiverCents: null, maxRefundCents: null, maxCreditCents: null } },
+        { facilityId, roleKey: 'owner', rank: 100, permissions: new Set<PermissionKey>(['reports:operational'] as never), limits: { maxFeeWaiverCents: null, maxRefundCents: null, maxCreditCents: null } },
       ] }
       const report = await commsDashboard(owner, { from, to })
 
@@ -171,7 +172,7 @@ describeDb('comms observability (FR-19/CN-19)', () => {
         },
       })
       const owner = { kind: 'staff' as const, staffUserId: 'x', assignments: [
-        { facilityId, roleKey: 'owner', rank: 100, permissions: new Set(['reports:operational'] as never), limits: { maxFeeWaiverCents: null, maxRefundCents: null, maxCreditCents: null } },
+        { facilityId, roleKey: 'owner', rank: 100, permissions: new Set<PermissionKey>(['reports:operational'] as never), limits: { maxFeeWaiverCents: null, maxRefundCents: null, maxCreditCents: null } },
       ] }
       const report = await commsDashboard(owner, {
         from: new Date('2026-01-01'),

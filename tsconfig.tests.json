@@ -1,0 +1,41 @@
+{
+  // Typechecks the code `apps/web/tsconfig.json` cannot see.
+  //
+  // That config lives in apps/web, so its `**/*.ts` covers apps/web and nothing
+  // else — the repo-root `tests/` and `e2e/` directories were typechecked by
+  // NOTHING. It cost B-119 a missing `AxeBuilder` import that only surfaced as
+  // a runtime ReferenceError under Playwright, and B-106 a test fixture silently
+  // missing a newly-required field. Two items paying for the same gap is what
+  // made it worth its own config.
+  //
+  // Deliberately separate rather than widening the app's `include`: pulling
+  // tests into the Next.js program would put them in the build graph, and the
+  // app's config carries Next-specific plugins and `.next/types` globs that
+  // mean nothing here.
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "allowImportingTsExtensions": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "react-jsx",
+    // Mirrors the alias `vitest.config.ts` sets, so a test importing `@/lib/...`
+    // resolves the same way at typecheck time as it does at run time.
+    "paths": {
+      "@/*": ["./apps/web/*"]
+    }
+  },
+  "include": ["tests/**/*.ts", "e2e/**/*.ts", "scripts/**/*.mts", "apps/web/types/**/*.d.ts"],
+  "exclude": [
+    "node_modules",
+    // Same iCloud conflict-copy problem the app's config documents.
+    "**/* ?.ts",
+    "**/* ?.tsx"
+  ]
+}

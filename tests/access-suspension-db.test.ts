@@ -7,6 +7,7 @@ import {
 } from '../apps/web/lib/access/delinquency-gate'
 import { placeHold } from '../apps/web/lib/admin/holds'
 import type { Actor } from '../apps/web/lib/rbac/actor'
+import type { PermissionKey } from '@storage/db/rbac-catalog'
 
 // B-098 / PRD 02 US-45, decided as D-16. The rule against real grants.
 
@@ -37,7 +38,7 @@ function manager(): Actor {
         facilityId,
         roleKey: 'manager',
         rank: 20,
-        permissions: new Set(['tenants:view', 'tenants:edit']),
+        permissions: new Set<PermissionKey>(['tenants:view', 'tenants:edit']),
         limits: { maxFeeWaiverCents: 0, maxRefundCents: 0, maxCreditCents: 0 },
       },
     ],

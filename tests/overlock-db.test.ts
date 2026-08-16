@@ -9,6 +9,7 @@ import {
 import { completeTask } from '../apps/web/lib/admin/tasks'
 import { restoreAccessIfSettled } from '../apps/web/lib/access/delinquency-gate'
 import type { Actor } from '../apps/web/lib/rbac/actor'
+import type { PermissionKey } from '@storage/db/rbac-catalog'
 
 // B-058 / PRD 03 US-3, PRD 02 US-25, against real rows.
 //
@@ -35,7 +36,7 @@ function actor(): Actor {
         facilityId,
         roleKey: 'manager',
         rank: 20,
-        permissions: new Set(['tenants:view', 'tenants:edit']),
+        permissions: new Set<PermissionKey>(['tenants:view', 'tenants:edit']),
         limits: { maxFeeWaiverCents: 0, maxRefundCents: 0, maxCreditCents: 0 },
       },
     ],

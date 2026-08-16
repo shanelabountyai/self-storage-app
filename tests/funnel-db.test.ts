@@ -4,6 +4,7 @@ import { prisma } from '../packages/db'
 import { track } from '../apps/web/lib/analytics/track'
 import { funnelReport } from '../apps/web/lib/analytics/funnel'
 import type { Actor } from '../apps/web/lib/rbac/actor'
+import type { PermissionKey } from '@storage/db/rbac-catalog'
 
 // B-069 / PRD 04 US-15 AC4, FR-AN-2, against real rows.
 
@@ -16,7 +17,7 @@ let staffId = ''
 
 const RANGE = { from: new Date('2026-05-01T00:00:00Z'), to: new Date('2026-06-01T00:00:00Z') }
 
-function actor(permissions: string[] = ['reports:operational']): Actor {
+function actor(permissions: PermissionKey[] = ['reports:operational']): Actor {
   return {
     kind: 'staff',
     staffUserId: staffId,
@@ -25,7 +26,7 @@ function actor(permissions: string[] = ['reports:operational']): Actor {
         facilityId,
         roleKey: 'manager',
         rank: 20,
-        permissions: new Set(permissions),
+        permissions: new Set<PermissionKey>(permissions),
         limits: { maxFeeWaiverCents: 0, maxRefundCents: 0, maxCreditCents: 0 },
       },
     ],

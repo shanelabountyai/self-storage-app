@@ -4,6 +4,7 @@ import { prisma } from '../packages/db'
 import { applyPayment } from '../apps/web/lib/billing/allocation'
 import { refundPayment, refundablePayments } from '../apps/web/lib/billing/refunds'
 import type { Actor } from '../apps/web/lib/rbac/actor'
+import type { PermissionKey } from '@storage/db/rbac-catalog'
 
 // B-048 / PRD 02 US-22, US-23. Allocation and refunds against real rows.
 
@@ -20,7 +21,7 @@ let invoiceCounter = 0
 
 const d = (iso: string) => new Date(`${iso}T00:00:00.000Z`)
 
-function actorWith(options: { permissions?: string[]; maxRefundCents?: number | null } = {}): Actor {
+function actorWith(options: { permissions?: PermissionKey[]; maxRefundCents?: number | null } = {}): Actor {
   return {
     kind: 'staff',
     staffUserId: staffId,
@@ -29,7 +30,7 @@ function actorWith(options: { permissions?: string[]; maxRefundCents?: number | 
         facilityId,
         roleKey: 'manager',
         rank: 20,
-        permissions: new Set(options.permissions ?? ['refunds:approve']),
+        permissions: new Set<PermissionKey>(options.permissions ?? ['refunds:approve']),
         limits: {
           maxFeeWaiverCents: 0,
           maxRefundCents: options.maxRefundCents === undefined ? 50_000 : options.maxRefundCents,

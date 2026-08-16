@@ -67,9 +67,11 @@ describe('fieldError', () => {
   it('counts the problems so the summary can be read aloud', () => {
     const one = fieldError({ state: 'bad' })
     expect(one.status).toBe('error')
+    if (one.status !== 'error') throw new Error('unreachable')
     expect(one.message).toContain('one field')
 
     const two = fieldError({ state: 'bad', name: 'bad' })
+    if (two.status !== 'error') throw new Error('unreachable')
     expect(two.message).toContain('2 fields')
   })
 })

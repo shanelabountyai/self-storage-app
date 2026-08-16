@@ -5,6 +5,7 @@ import { resolveTaskSubjects, fallbackSubject } from '../apps/web/lib/admin/task
 import { createTask, facilityTasks } from '../apps/web/lib/admin/tasks'
 import { delinquencyQueue } from '../apps/web/lib/admin/delinquency-queue'
 import type { Actor } from '../apps/web/lib/rbac/actor'
+import type { PermissionKey } from '@storage/db/rbac-catalog'
 
 // PRD 02 §4.9 US-41, §4.6 US-26, §5.5 FR-22 (B-115, UX review 2026-08-12
 // finding 9). `TaskRow` carried `entityType`/`entityId` since B-095 and
@@ -29,7 +30,7 @@ function actor(): Actor {
         facilityId,
         roleKey: 'manager',
         rank: 20,
-        permissions: new Set(['tenants:view', 'delinquency:execute_step']),
+        permissions: new Set<PermissionKey>(['tenants:view', 'delinquency:execute_step']),
         limits: { maxFeeWaiverCents: 0, maxRefundCents: 0, maxCreditCents: 0 },
       },
     ],

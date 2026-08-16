@@ -157,6 +157,9 @@ describe.skipIf(!hasDatabase)('createOwnerAccount', () => {
       createdStaffIds.push(recovery.staffUserId)
     } else {
       expect(recovery.reason).toBe('owner_exists')
+      // Narrowed on the reason, not just on `created`: the refusal union has
+      // two branches and `existingEmail` is on one of them.
+      if (recovery.reason !== 'owner_exists') throw new Error('unreachable')
       expect(ours.has(recovery.existingEmail ?? '')).toBe(false)
     }
   })
