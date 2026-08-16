@@ -4132,7 +4132,7 @@ Three findings from the 2026-08-12 reviews, all in a shipped auth flow.
 
 ## B-106 (part 3 of 4) — Provisioning N leases
 
-`XXXXXXX`
+`820dd5a`
 
 **The money path can now complete a multi-unit checkout; the UI still cannot start one.** That ordering is deliberate and is the reason this is its own part: a UI that lets a renter build a two-unit basket against provisioning that creates one lease would charge for two units and hand over one, with no record of the second and no way back. Provisioning goes first, proven by tests that build a two-line basket directly.
 
