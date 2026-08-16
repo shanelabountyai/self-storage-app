@@ -4198,7 +4198,7 @@ Full e2e green against a production build: **870 passed, 6 skipped, 0 failed, 0 
 
 ## B-106 (part 5 of 5) — The basket becomes editable, and three decisions land (D-53, D-54, D-55)
 
-`PENDING`
+`1104766`
 
 **The last part of the invasive row.** Parts 1–4 built the machinery — a start-date window, a basket table, per-line leases, per-unit protection — with no UI able to produce more than one unit. This gives it one, and settles the three questions parts 3 and 4 deliberately refused to guess at.
 
