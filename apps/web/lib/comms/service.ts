@@ -10,6 +10,7 @@ import type {
 import { codeForLease } from '@/lib/access/provision'
 import { mintPayLink, payLinkUrl } from '@/lib/portal/pay-links'
 import { leaseHasEffect } from '@/lib/admin/holds'
+import { REFERRAL_REFUSAL_MESSAGES, type ReferralRefusal } from '@storage/core/referrals'
 import { daysPastDue } from '@storage/core/metrics'
 import { formatCents } from '@/lib/format'
 import { facilityPath } from '@/lib/facility/public-facility'
@@ -536,6 +537,29 @@ const invoiceContext: ContextExtender = async (event, recipient) => {
   }
 }
 
+/// PRD 10 §3 (B-101). "$50 comes off your invoice on {date}" — or, honestly,
+/// without the date when there is no invoice to name yet.
+///
+/// The referrer's credit lands on their NEXT invoice, which may be up to a
+/// month away (§3), and the portal states the date because "you'll get it
+/// eventually" is the version that generates a phone call. The same rule
+/// applies to the message: name the date when one is known, and say plainly
+/// that it is the next invoice when it is not. Inventing a date would be worse
+/// than omitting one.
+async function referralRewardContext(
+  event: DomainEvent,
+  side: 'referrer' | 'referee',
+): Promise<MergeContext> {
+  const payload = event.payload as Record<string, unknown>
+  const cents = typeof payload.rewardCents === 'number' ? payload.rewardCents : 0
+  const amount = formatCents(cents)
+  const line =
+    side === 'referee'
+      ? `${amount} comes off your first invoice.`
+      : `${amount} comes off your next invoice.`
+  return { 'referral.reward_line': line }
+}
+
 const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
   // CN-7: the gate code line, only after the credential is actually issued —
   // never a placeholder that looks like a code. `codeForLease` (B-029) already
@@ -551,6 +575,32 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
         : 'Your gate code will be texted to you within 15 minutes.',
       'billing.first_charge_line': charge,
     }
+  },
+
+  // PRD 10 §6.3 (B-101). The reward line and the refusal sentence.
+  //
+  // Both are computed HERE rather than written into the template, for the same
+  // reason the gate-code line is: the template must not be able to render a
+  // figure that disagrees with what was actually recorded. The amount comes
+  // from the referral row's own SNAPSHOT (§6.1), not from the facility's
+  // current setting — changing the program next quarter must not rewrite what
+  // somebody was already promised, and a template reading today's setting
+  // would do exactly that.
+  'referral.qualified': async (event) => referralRewardContext(event, 'referrer'),
+  'referral.reward_granted': async (event) => referralRewardContext(event, 'referee'),
+
+  'referral.refused': async (event) => {
+    const payload = event.payload as Record<string, unknown>
+    const refusal = typeof payload.refusal === 'string' ? payload.refusal : null
+    // The same closed vocabulary the staff record and the portal read, so all
+    // three say the same thing about the same refusal. An unrecognised key
+    // falls back to a sentence that still says what to do, never to
+    // "not eligible" — the row forbids that in as many words.
+    const message =
+      refusal && refusal in REFERRAL_REFUSAL_MESSAGES
+        ? REFERRAL_REFUSAL_MESSAGES[refusal as ReferralRefusal]
+        : 'We could not confirm this referral. Call us and we will look at it with you.'
+    return { 'referral.refusal_reason': message }
   },
 
   'reservation.expiring_soon': async (_event, recipient) => {

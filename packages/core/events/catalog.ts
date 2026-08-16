@@ -69,11 +69,24 @@ export const EVENT_NAMES = [
   // just moved in. §6.3 is explicit that nothing here ever messages the
   // PROSPECT: the invite reaches them from their friend's own phone, and this
   // system is never the sender (§5.2).
-  /// A referral met every rule and both rewards are owed. Payload carries both
-  /// tenant ids and both amounts, so the two rules can address the two people
-  /// with different words.
+  // ONE event per RECIPIENT, not one per referral (B-101).
+  //
+  // A qualifying referral has two things to say to two different people — "your
+  // friend moved in" and "a credit is coming" — and `processCommsEvent`
+  // resolves ONE recipient per event, then runs every matching rule against it.
+  // Two rules on a single `referral.qualified` would both address the same
+  // person, which is how the referee's message reaches the referrer.
+  //
+  // Splitting by recipient fits the architecture instead of fighting it: each
+  // event names a Tenant, the existing Tenant resolver reaches them, and each
+  // has exactly one rule. They are also genuinely different facts, which is why
+  // this reads as a better model rather than a workaround.
+  /// To the REFERRER: their friend moved in and the credit is owed.
   'referral.qualified',
-  /// A rule refused it. The payload carries the refusal key, which is what lets
+  /// To the REFEREE: a credit is coming off their first invoice. Its own event
+  /// rather than a second rule on the one above, per the note.
+  'referral.reward_granted',
+  /// To the REFERRER. The payload carries the refusal KEY, which is what lets
   /// the message say WHICH rule in plain language rather than "not eligible" —
   /// the same 3.3.3 standard the portal and the staff record are held to.
   'referral.refused',

@@ -7,6 +7,7 @@ import { ShareInvite } from '@/components/portal/share-invite'
 import { siteOrigin } from '@/lib/marketing/origin'
 import { formatRate } from '@/lib/format'
 import { mintInviteAction } from './actions'
+import { referralsForTenant, REFERRAL_STATE_LABELS } from '@/lib/referrals/portal'
 
 export const metadata: Metadata = { title: 'Refer a friend' }
 
@@ -47,6 +48,7 @@ export default async function ReferPage() {
   })
 
   const facility = lease?.facility ?? null
+  const referrals = await referralsForTenant(actor.tenantId)
   const invites = facility
     ? await prisma.referralInvite.findMany({
         where: {
@@ -129,6 +131,85 @@ export default async function ReferPage() {
                 Make a new invite
               </button>
             </AdminForm>
+          </section>
+
+          <section aria-labelledby="referrals-heading" className="flex flex-col gap-3">
+            <h2 id="referrals-heading" className="font-medium">
+              Your referrals
+            </h2>
+
+            {referrals.length === 0 ? (
+              <p className="text-muted-foreground text-sm">
+                Nothing yet. When a friend uses one of your invites, it will show up here.
+              </p>
+            ) : (
+              // A real <table> with <th scope>, which the row states as an
+              // acceptance criterion rather than a preference (1.3.1): a
+              // <div> grid gives a screen-reader user no way to associate a
+              // cell with its column, and this table's whole content is
+              // "which friend, what state, when".
+              <div tabIndex={0} className="overflow-x-auto">
+                <table className="w-full border-collapse text-sm">
+                  <caption className="sr-only">
+                    Every friend you have referred, what state their referral is in, and when the
+                    credit lands
+                  </caption>
+                  <thead>
+                    <tr className="border-input border-b text-left">
+                      <th scope="col" className="py-2 pr-4">
+                        Friend
+                      </th>
+                      <th scope="col" className="py-2 pr-4">
+                        State
+                      </th>
+                      <th scope="col" className="py-2 pr-4">
+                        Credit
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {referrals.map((referral) => (
+                      <tr key={referral.id} className="border-input border-b align-top">
+                        <th scope="row" className="py-2 pr-4 text-left font-medium">
+                          {/* §5.6: first name and initial only, ever. Their
+                              unit, balance and move-in date are things the
+                              friend never agreed to share with whoever
+                              referred them. */}
+                          {referral.friend ?? <span className="text-muted-foreground">Not used yet</span>}
+                        </th>
+                        <td className="py-2 pr-4">
+                          {/* In WORDS, never a coloured pill alone (1.4.1).
+                              Colour is not the only way anything in this
+                              codebase says something, and a state a
+                              colour-blind tenant cannot read is a state they
+                              have to phone about. */}
+                          {REFERRAL_STATE_LABELS[referral.state]}
+                          {referral.refusedReason && (
+                            <span className="text-muted-foreground mt-1 block text-xs text-pretty">
+                              {referral.refusedReason}
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-2 pr-4 tabular-nums">
+                          {referral.state === 'earned' ? (
+                            <>
+                              {formatRate(referral.rewardCents)}
+                              <span className="text-muted-foreground block text-xs">
+                                {referral.creditDate
+                                  ? `on your ${formatDate(referral.creditDate)} invoice`
+                                  : 'on your next invoice'}
+                              </span>
+                            </>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </section>
 
           <section aria-labelledby="terms-heading" className="flex flex-col gap-2">

@@ -22,6 +22,14 @@ import { prisma, type Prisma } from '@storage/db'
 // Both are expressed the same way: an earned referral with no invoice recorded
 // for that side yet, on a lease that belongs to that side.
 
+/// The description prefix every referral discount line carries.
+///
+/// The revenue report splits referral rewards from promotional discounts on
+/// this (§5.7), because both are `type: 'discount'` line items — deliberately,
+/// since to billing they are the same thing: money off an invoice. Exported so
+/// the writer and the reader share one string rather than two that can drift.
+export const REFERRAL_DISCOUNT_PREFIX = 'Referral credit'
+
 export type ReferralReward = {
   referralId: string
   amountCents: number
@@ -65,7 +73,7 @@ export async function referralRewardsForLease(
     rewards.push({
       referralId: asReferee.id,
       amountCents: asReferee.refereeRewardCents,
-      description: 'Referral credit — welcome',
+      description: `${REFERRAL_DISCOUNT_PREFIX} — welcome`,
       side: 'referee',
     })
   }
@@ -90,7 +98,7 @@ export async function referralRewardsForLease(
     rewards.push({
       referralId: referral.id,
       amountCents: referral.referrerRewardCents,
-      description: 'Referral credit — thank you',
+      description: `${REFERRAL_DISCOUNT_PREFIX} — thank you`,
       side: 'referrer',
     })
   }

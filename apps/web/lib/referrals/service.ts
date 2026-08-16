@@ -277,13 +277,16 @@ export async function qualifyReferral(input: {
     // travels on the payload rather than the rendered sentence, so the message
     // and the staff record can never say different things about the same
     // refusal.
+    // Addressed to the REFERRER — they are the one who asks why. `entityType:
+    // 'Tenant'` so the existing resolver reaches them; the referral id travels
+    // in the payload for the staff record to join on.
     await emitEvent({
       name: 'referral.refused',
-      entityType: 'Referral',
-      entityId: refused.id,
+      entityType: 'Tenant',
+      entityId: invite.referrerTenantId,
       facilityId: invite.facilityId,
       payload: {
-        referrerTenantId: invite.referrerTenantId,
+        referralId: refused.id,
         refereeTenantId: input.refereeTenantId,
         refusal: verdict.refusal,
       },
@@ -350,17 +353,33 @@ export async function qualifyReferral(input: {
     // Inside the transaction, like every other event this codebase emits from
     // one: an event for a referral that rolled back would tell two people about
     // money nobody owes.
+    // Two events, one per person — see the catalog's note. Both inside the
+    // transaction: an event for a referral that rolled back would tell two
+    // people about money nobody owes.
     await emitEvent(
       {
         name: 'referral.qualified',
-        entityType: 'Referral',
-        entityId: referral.id,
+        entityType: 'Tenant',
+        entityId: invite.referrerTenantId,
         facilityId: invite.facilityId,
         payload: {
-          referrerTenantId: invite.referrerTenantId,
+          referralId: referral.id,
           refereeTenantId: input.refereeTenantId,
-          referrerRewardCents: rewards.referralRewardCents,
-          refereeRewardCents: rewards.refereeRewardCents,
+          rewardCents: rewards.referralRewardCents,
+        },
+      },
+      tx,
+    )
+    await emitEvent(
+      {
+        name: 'referral.reward_granted',
+        entityType: 'Tenant',
+        entityId: input.refereeTenantId,
+        facilityId: invite.facilityId,
+        payload: {
+          referralId: referral.id,
+          referrerTenantId: invite.referrerTenantId,
+          rewardCents: rewards.refereeRewardCents,
         },
       },
       tx,

@@ -10,6 +10,7 @@ import {
 import { orderFor } from '@/lib/billing/allocation'
 import { financialFacilities } from '@/lib/admin/reports'
 import type { Actor } from '@/lib/rbac/actor'
+import { REFERRAL_DISCOUNT_PREFIX } from '@/lib/referrals/billing'
 
 // PRD 02 US-39.5 (B-055). Billed vs collected, by category.
 //
@@ -37,6 +38,15 @@ export type RevenueRow = {
   /// US-39.5's "discounts/promos given" — invoice lines of type `discount` on
   /// invoices issued in the range. Positive cents: what was given away.
   discountsCents: number
+  /// PRD 10 §5.7 (B-101). The referral share of `discountsCents`, split out.
+  ///
+  /// "One is acquisition cost and the other is a price decision" — the row's
+  /// own words, and the reason this is not a presentation detail. A promotion
+  /// is the business choosing to advertise a lower price; a referral reward is
+  /// what it paid a tenant for bringing somebody in, and that number is the one
+  /// compared against the aggregator fee it displaces. Merged, neither
+  /// question can be answered.
+  referralRewardsCents: number
   /// US-39.5's "write-offs" — ledger entries of type `write_off` in the range,
   /// as positive cents. Written off, not collected and no longer expected.
   writeOffsCents: number
@@ -64,6 +74,7 @@ function emptyRow(facilityId: string, facilityName: string): RevenueRow {
     billed: emptyCategoryTotals(),
     collected: emptyCategoryTotals(),
     discountsCents: 0,
+    referralRewardsCents: 0,
     writeOffsCents: 0,
     unappliedCents: 0,
     refundsCents: 0,
@@ -112,12 +123,23 @@ async function facilityRevenue(
       status: { not: 'void' },
       issueDate: { gte: start, lt: end },
     },
-    select: { lineItems: { select: { type: true, amountCents: true } } },
+    // `description` too (B-101): it is what tells a referral reward from a
+    // promotional discount, since both are the same line TYPE.
+    select: { lineItems: { select: { type: true, amountCents: true, description: true } } },
   })
   row.billed = sumCategoryTotals(issued.map((invoice) => billedByCategory(invoice.lineItems)))
-  row.discountsCents = issued
+  const discountLines = issued
     .flatMap((invoice) => invoice.lineItems)
     .filter((line) => line.type === 'discount')
+  row.discountsCents = discountLines.reduce((sum, line) => sum + line.amountCents, 0)
+  // Identified by the description the referral hand-off writes
+  // (`lib/referrals/billing.ts`), which is the only thing distinguishing the
+  // two on an invoice line — they are deliberately the same line TYPE, because
+  // to billing they are the same thing: money off. The split is a reporting
+  // question, not a billing one, so it lives here rather than as a second
+  // line-item type nothing else would use.
+  row.referralRewardsCents = discountLines
+    .filter((line) => line.description.startsWith(REFERRAL_DISCOUNT_PREFIX))
     .reduce((sum, line) => sum + line.amountCents, 0)
 
   // ── Collected ───────────────────────────────────────────────────────
@@ -230,6 +252,7 @@ export function sumRevenueRows(rows: readonly RevenueRow[]): RevenueRow {
   total.collected = sumCategoryTotals(rows.map((row) => row.collected))
   for (const row of rows) {
     total.discountsCents += row.discountsCents
+    total.referralRewardsCents += row.referralRewardsCents
     total.writeOffsCents += row.writeOffsCents
     total.unappliedCents += row.unappliedCents
     total.refundsCents += row.refundsCents

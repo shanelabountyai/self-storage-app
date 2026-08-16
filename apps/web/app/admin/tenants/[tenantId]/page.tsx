@@ -19,6 +19,7 @@ import {
 } from './actions'
 import { HOLD_TYPES, type HoldEffect } from '@storage/core/holds'
 import { leaseStatusLabel } from '@storage/core/labels'
+import { referralsForStaff, REFERRAL_STATE_LABELS } from '@/lib/referrals/portal'
 
 /// The effects in an operator's words, on the banner. The catalog names them
 /// for code; a staffer needs to know what stopped.
@@ -73,6 +74,9 @@ export default async function TenantProfilePage({
   const { tenantId } = await params
   const actor = await getAdminActor()
   const profile = await tenantProfile(actor, tenantId)
+  // PRD 10 §5.7 (B-101). Both sides — this tenant may be the referrer on one
+  // and the referee on another.
+  const referrals = await referralsForStaff(tenantId)
 
   return (
     <div className="flex flex-col gap-8">
@@ -232,6 +236,79 @@ export default async function TenantProfilePage({
           </button>
         </AdminForm>
       </section>
+
+      {referrals.length > 0 && (
+        // PRD 10 §5.7 (B-101). "A referral record is visible on both tenants'
+        // profiles, with the reward state and, when refused, the rule that
+        // refused it." The AC behind it is the one that matters: "a tenant
+        // asking 'why didn't I get my $50' must be answerable at the counter
+        // in one screen."
+        <section aria-labelledby="referrals-heading" className="flex flex-col gap-3">
+          <h2 id="referrals-heading" className="font-medium">
+            Referrals
+          </h2>
+          <div tabIndex={0} className="overflow-x-auto">
+            <table className="w-full border-collapse text-sm">
+              <caption className="sr-only">
+                Referrals this tenant made or arrived on, with the reward state and the rule that
+                refused any that did not pay
+              </caption>
+              <thead>
+                <tr className="border-input border-b text-left">
+                  <th scope="col" className="py-2 pr-4">
+                    Who
+                  </th>
+                  <th scope="col" className="py-2 pr-4">
+                    State
+                  </th>
+                  <th scope="col" className="py-2 pr-4">
+                    Rewards
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {referrals.map((referral) => (
+                  <tr key={referral.id} className="border-input border-b align-top">
+                    <th scope="row" className="py-2 pr-4 text-left font-medium">
+                      {referral.role === 'referrer'
+                        ? `Referred ${referral.refereeName ?? 'nobody yet'}`
+                        : `Referred by ${referral.referrerName}`}
+                    </th>
+                    <td className="py-2 pr-4">
+                      {/* In words, never a colour alone — the same 1.4.1 rule
+                          the portal table follows. */}
+                      {REFERRAL_STATE_LABELS[referral.state]}
+                      {referral.refusedReason && (
+                        <>
+                          <span className="text-muted-foreground mt-1 block text-xs text-pretty">
+                            {referral.refusedReason}
+                          </span>
+                          {/* The rule's own key beside the sentence: the
+                              staffer reads the sentence to the tenant and can
+                              match the key to the rule in the PRD. */}
+                          <span className="text-muted-foreground block font-mono text-xs">
+                            {referral.refusedRule}
+                          </span>
+                        </>
+                      )}
+                    </td>
+                    <td className="py-2 pr-4 tabular-nums">
+                      {referral.state === 'earned' ? (
+                        <>
+                          {formatCents(referral.referrerRewardCents)} referrer ·{' '}
+                          {formatCents(referral.refereeRewardCents)} new tenant
+                        </>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
 
       {/* B-121 / D-49. Its own section, not a fifth box in the contact grid:
           this is a legal-status declaration with automatic consequences on

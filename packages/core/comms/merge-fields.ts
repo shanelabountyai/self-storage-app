@@ -55,6 +55,29 @@ export const EVENT_MERGE_FIELDS: Record<string, readonly MergeFieldSpec[]> = {
     { field: 'unit.number', description: 'Unit number', sample: 'A-12' },
     { field: 'lease.move_out_date', description: 'The move-out date requested', sample: 'September 30, 2026' },
   ],
+  // PRD 10 §6.3 (B-101). One entry per RECIPIENT event — the split exists so
+  // each message can address one person; see the event catalog's own note.
+  'referral.qualified': [
+    {
+      field: 'referral.reward_line',
+      description: 'What the referrer gets and when',
+      sample: '$50.00 comes off your next invoice.',
+    },
+  ],
+  'referral.reward_granted': [
+    {
+      field: 'referral.reward_line',
+      description: 'What the new tenant gets and when',
+      sample: '$50.00 comes off your first invoice.',
+    },
+  ],
+  'referral.refused': [
+    {
+      field: 'referral.refusal_reason',
+      description: 'Which rule refused the referral, in plain language',
+      sample: 'Your friend has rented with us before. The reward is for new customers only, so a returning tenant does not qualify.',
+    },
+  ],
   'reservation.expiring_soon': [
     { field: 'unit.size', description: 'Unit size held', sample: '10x10' },
     { field: 'reservation.expires_at', description: 'When the hold ends', sample: 'Friday, September 12 at 5:00 PM' },

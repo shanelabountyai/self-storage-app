@@ -760,6 +760,71 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
       'links.facility_page',
     ],
   },
+  // ── PRD 10 §6.3 (B-101). Refer a friend. ─────────────────────────────────
+  //
+  // All THREE are `transactional`, not marketing, and that is a classification
+  // decision rather than a convenience: each one describes a change to money on
+  // an account the recipient already holds. §6.3 says so in as many words.
+  //
+  // Every recipient here has an existing relationship with this business — the
+  // referrer is a tenant, the referee has just moved in. Nothing in this
+  // feature ever messages the PROSPECT: the invite reaches them from their
+  // friend's own phone, and this system is never the sender (§5.2).
+  {
+    key: 'referral_qualified_referrer',
+    classification: 'transactional',
+    subject: 'Your referral credit is on the way',
+    bodyText: [
+      'Hi {{tenant.first_name}},',
+      '',
+      'Good news — the friend you referred to {{facility.name}} has moved in and their first payment has cleared, so your referral credit is confirmed.',
+      '',
+      '{{referral.reward_line}}',
+      '',
+      'Thank you for the recommendation. It genuinely helps.',
+    ].join('\n'),
+    requiredMergeFields: ['tenant.first_name', 'facility.name', 'referral.reward_line'],
+  },
+  {
+    key: 'referral_reward_granted_referee',
+    classification: 'transactional',
+    subject: 'A credit is coming off your first invoice',
+    bodyText: [
+      'Hi {{tenant.first_name}},',
+      '',
+      'Welcome to {{facility.name}}. Because you came to us on a friend\u2019s invite, a credit applies to your account.',
+      '',
+      '{{referral.reward_line}}',
+      '',
+      'Nothing to do — it will be on the invoice when it arrives.',
+    ].join('\n'),
+    requiredMergeFields: ['tenant.first_name', 'facility.name', 'referral.reward_line'],
+  },
+  {
+    // §5.4's AC, as a message: "a tenant asking 'why didn't I get my $50' must
+    // be answerable at the counter in one screen" — and answerable without
+    // them having to ask, which is what this template is for. The reason comes
+    // from the same closed vocabulary the staff record and the portal read, so
+    // all three say the same thing about the same refusal.
+    key: 'referral_refused_referrer',
+    classification: 'transactional',
+    subject: 'About your referral at {{facility.name}}',
+    bodyText: [
+      'Hi {{tenant.first_name}},',
+      '',
+      'We looked at a referral on your account and it did not qualify for a credit this time. Here is why:',
+      '',
+      '{{referral.refusal_reason}}',
+      '',
+      'If that does not look right, call {{facility.phone}} and we will go through it with you.',
+    ].join('\n'),
+    requiredMergeFields: [
+      'tenant.first_name',
+      'facility.name',
+      'referral.refusal_reason',
+      'facility.phone',
+    ],
+  },
   {
     // PRD 04 US-7 (B-071). "As an operator, I get more Google reviews from
     // happy tenants." One ask, one link, no pressure — a request that reads
@@ -902,6 +967,25 @@ export const COMMS_RULES: readonly CommsRuleSeed[] = [
   {
     event: 'lease.moved_out',
     templateKey: 'lease_moved_out_confirmation',
+    classification: 'transactional',
+  },
+
+  // PRD 10 §6.3 (B-101). One rule per event, and one event per RECIPIENT —
+  // see the event catalog's own note for why that split exists rather than two
+  // rules on a single `referral.qualified`.
+  {
+    event: 'referral.qualified',
+    templateKey: 'referral_qualified_referrer',
+    classification: 'transactional',
+  },
+  {
+    event: 'referral.reward_granted',
+    templateKey: 'referral_reward_granted_referee',
+    classification: 'transactional',
+  },
+  {
+    event: 'referral.refused',
+    templateKey: 'referral_refused_referrer',
     classification: 'transactional',
   },
   {

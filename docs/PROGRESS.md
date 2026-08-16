@@ -4021,3 +4021,27 @@ Added `db:migrate:e2e`, migrating and seeding the `public` schema of the `storag
 - **Clawback (§4.1)** — the refunded-payment reversal and the minimum-stay rule. `referralMinimumStayDays` is stored and has its control; nothing reads it yet. Not in the row's cited sections (§5.1/§5.3/§5.4/§5.5/§6), which is why it is not blocking the tick, but it is real money and should be its own row.
 
 **Test verification:** unit suite green, **2,905 passing**. Typecheck and lint clean — six warnings, all the pre-existing `_prev`/`_formData` shape that every other server action in the codebase already carries. Full e2e green: **867 passed, 5 skipped, 0 failed of 872**, both projects.
+
+## B-101 — Referral visibility, and the comms B-100 deferred
+
+`XXXXXXX`
+
+**Built — the four §6.3 templates, and a better answer than the one B-100 flagged.** B-100 left these deferred, saying the comms core needed per-**rule** recipient resolution. It does not. `processCommsEvent` resolves one recipient per **event**, so the fix is one event per recipient: `referral.qualified` to the referrer, `referral.reward_granted` to the referee, `referral.refused` to the referrer — each naming a `Tenant`, each reaching the existing resolver, each with exactly one rule. No change to the comms core at all, and it reads as a better model rather than a workaround, because they *are* three different facts. The clawback template has no trigger to fire it and is not seeded; clawback itself is still unbuilt (§4.1).
+
+**Found — the merge-field registry caught a real gap.** `EVENT_MERGE_FIELDS` declares which fields each event can supply, and `checkPublishable` fails a template using one its event cannot. The three new templates used `referral.reward_line` and `referral.refusal_reason` before either was registered, and the build-time gate caught it — which is exactly the failure that would otherwise have surfaced as a send failing in production. The registry's own comment already said a field added to the extenders belongs there too; now it is.
+
+**Found — a fixture without a phone number.** The refusal template requires `facility.phone` ("call us and we will go through it with you" is the point of that message), and FR-9 fails a render loudly rather than sending one with a hole in it. The test facility had none. That is the guard working; the fixture was wrong.
+
+**Built — the portal list (§5.6).** A real `<table>` with `<th scope>`, which the row states as an acceptance criterion rather than a preference: a `<div>` grid gives a screen-reader user no way to associate a cell with its column, and this table's entire content is "which friend, what state, when". Every state is carried **in words** — never a coloured pill alone (1.4.1).
+
+**Decided — the privacy shaping lives in the query, not the component.** §5.6 is emphatic that "the referee's identity beyond first name and initial is never shown — the referrer knowing their friend's unit number, balance or move-in date is a privacy leak the friend never agreed to." `referralsForTenant` selects the first and last name and nothing else, so the page cannot render what it was never given. A page that received the whole tenant row and displayed part of it is one refactor away from leaking the rest.
+
+**Built — the staff view (§5.7)** on both tenant profiles, showing which side this tenant is on, the reward state, and **the rule that refused it** — the refusal sentence for reading aloud, and the rule's key beside it for matching against the PRD. The AC behind it is "a tenant asking 'why didn't I get my $50' must be answerable at the counter in one screen."
+
+**Built — the revenue split (§5.7).** Referral rewards come out of the promotional-discount figure and get their own tile. "One is acquisition cost and the other is a price decision" — merged, neither question is answerable, and the referral number is specifically the one compared against the aggregator fee it displaces. Both are the same line *type* deliberately, because to billing they are the same thing: money off. The split is a reporting question, so it is done in the report, matched on a description prefix both the writer and the reader import from one place rather than two strings that can drift.
+
+**`referral_tenant` in the funnel report** needed no change: the channel filter is derived from the data rather than a hardcoded list, so it appears as soon as a lead carries it — which B-100 wired.
+
+**Left behind:** clawback (§4.1) — the refunded-payment reversal and the minimum-stay rule. `referralMinimumStayDays` is stored and has its control; nothing reads it. It is real money and belongs in its own row rather than smuggled into this one.
+
+**Test verification:** unit suite green, **2,912 passing**, run twice with identical results. Typecheck, lint and the schema-drift check clean. Full e2e green: **867 passed, 5 skipped, 0 failed of 872**, both projects.

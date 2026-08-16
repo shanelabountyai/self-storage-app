@@ -9,6 +9,11 @@ import {
 } from '../apps/web/lib/referrals/service'
 import { REFERRAL_CODE_LENGTH } from '../packages/core/referrals'
 import { generateInvoices } from '../apps/web/lib/billing/invoices'
+import { processCommsEvent } from '../apps/web/lib/comms/service'
+import { revenueReport } from '../apps/web/lib/admin/revenue-report'
+import type { Actor } from '../apps/web/lib/rbac/actor'
+import * as provider from '../apps/web/lib/comms/provider'
+import { vi } from 'vitest'
 
 // B-100 / PRD 10 §5.1, §5.3, §5.4, §6.1, against real rows.
 //
@@ -37,6 +42,11 @@ async function makeFacility(name: string): Promise<string> {
       state: 'TX',
       postalCode: '78704',
       timezone: 'America/Chicago',
+      // The refusal template requires `facility.phone` — "call us and we will
+      // go through it with you" is the whole point of that message, and FR-9
+      // fails a render loudly rather than sending one with a hole in it. A
+      // facility without a phone is not a realistic fixture here.
+      phone: '512-555-0100',
       // The program is off by default (§6.1), so every test that expects a
       // referral to work has to turn it on — which is itself the coverage for
       // "off by default" being real.
@@ -479,14 +489,12 @@ describeDb('referral program core', () => {
     })
   })
 
-  it('emits referral.qualified and referral.refused for the comms layer (§6.3)', async () => {
-    // The events exist and fire; no rule consumes them yet, which is a
-    // deliberate no-op — `processCommsEvent` returns before resolving a
-    // recipient when no rule matches. §6.3's four templates need a recipient
-    // per RULE rather than per event (one referral tells two different people
-    // two different things), and that is a change to the comms core rather
-    // than a catalog entry. Asserted now so the payload the templates will
-    // read is pinned before anything renders from it.
+  it('emits one event per RECIPIENT, so each message reaches the right person (§6.3)', async () => {
+    // `processCommsEvent` resolves ONE recipient per event and runs every
+    // matching rule against it. Two rules on a single `referral.qualified`
+    // would both address the same person — which is how the referee's message
+    // reaches the referrer. Splitting by recipient fits the architecture
+    // instead of fighting it, and these assert the split is real.
     const minted = await mintInvite(referrerId)
     if (!minted.ok) throw new Error('unreachable')
     const referee = await makeTenant()
@@ -500,20 +508,27 @@ describeDb('referral program core', () => {
     })
     expect(earned.ok).toBe(true)
 
-    const qualified = await prisma.domainEvent.findFirstOrThrow({
+    const toReferrer = await prisma.domainEvent.findFirstOrThrow({
       where: { name: 'referral.qualified', facilityId },
       orderBy: { occurredAt: 'desc' },
     })
-    const payload = qualified.payload as Record<string, unknown>
-    // Both people and both amounts, because the two messages address them
-    // differently and each needs its own figure.
-    expect(payload.referrerTenantId).toBe(referrerId)
-    expect(payload.refereeTenantId).toBe(referee.id)
-    expect(payload.referrerRewardCents).toBe(5_000)
-    expect(payload.refereeRewardCents).toBe(5_000)
+    // Entity is the TENANT being written to, so the existing resolver reaches
+    // them — not the Referral, which has no resolver and never needed one.
+    expect(toReferrer.entityType).toBe('Tenant')
+    expect(toReferrer.entityId).toBe(referrerId)
+    expect((toReferrer.payload as Record<string, unknown>).rewardCents).toBe(5_000)
 
-    // And a refusal carries the KEY, not a rendered sentence — so the message
-    // and the staff record can never disagree about the same refusal.
+    const toReferee = await prisma.domainEvent.findFirstOrThrow({
+      where: { name: 'referral.reward_granted', facilityId },
+      orderBy: { occurredAt: 'desc' },
+    })
+    expect(toReferee.entityType).toBe('Tenant')
+    expect(toReferee.entityId).toBe(referee.id)
+    expect((toReferee.payload as Record<string, unknown>).rewardCents).toBe(5_000)
+
+    // And a refusal goes to the referrer, carrying the KEY rather than a
+    // rendered sentence — so the message, the portal and the staff record can
+    // never disagree about the same refusal.
     const second = await mintInvite(referrerId)
     if (!second.ok) throw new Error('unreachable')
     await qualifyReferral({
@@ -526,7 +541,148 @@ describeDb('referral program core', () => {
       where: { name: 'referral.refused', facilityId },
       orderBy: { occurredAt: 'desc' },
     })
+    expect(refused.entityId).toBe(referrerId)
     expect((refused.payload as Record<string, unknown>).refusal).toBe('already_referred')
+  })
+
+  it('splits referral rewards out of promotional discounts in the revenue report (§5.7)', async () => {
+    // "One is acquisition cost and the other is a price decision" — the row's
+    // own words. Merged, neither question is answerable, and the referral
+    // figure is specifically the one compared against the aggregator fee it
+    // displaces. Coupled to the description prefix the hand-off writes, which
+    // is why both sides share one exported constant.
+    const minted = await mintInvite(referrerId)
+    if (!minted.ok) throw new Error('unreachable')
+    const referee = await makeTenant()
+    const leaseId = await makeLease(referee.id)
+    await qualifyReferral({
+      inviteId: minted.inviteId,
+      refereeTenantId: referee.id,
+      refereeLeaseId: leaseId,
+      refereeFacilityId: facilityId,
+    })
+
+    await generateInvoices(facilityId, new Date('2026-08-28T12:00:00Z'), () => {})
+
+    const actor: Actor = {
+      kind: 'staff',
+      staffUserId: 'test-staff',
+      assignments: [
+        {
+          facilityId,
+          roleKey: 'manager',
+          rank: 20,
+          permissions: new Set(['reports:financial']),
+          limits: { maxFeeWaiverCents: 0, maxRefundCents: 0, maxCreditCents: 0 },
+        },
+      ],
+    }
+    const report = await revenueReport(actor, new Date('2026-08-01'), new Date('2026-10-01'))
+
+    // Both sides paid $50, and every cent of it is referral rather than promo.
+    expect(report.total.referralRewardsCents).toBe(10_000)
+    expect(report.total.discountsCents).toBe(10_000)
+    // The promotional share is what is left once referrals come out — zero
+    // here, because no promotion was involved.
+    expect(report.total.discountsCents - report.total.referralRewardsCents).toBe(0)
+  })
+
+  describe('the messages — §6.3', () => {
+    // The real seeded templates and rules, end to end through the real
+    // recipient resolvers. The property that matters is WHO each one reaches:
+    // a referral says two different things to two different people, and the
+    // failure this guards is the referee's message going to the referrer.
+    const sends: { to: string; text: string; subject: string }[] = []
+
+    beforeAll(() => {
+      vi.spyOn(provider, 'selectProvider').mockImplementation(() => ({
+        name: 'test',
+        async sendEmail(email) {
+          sends.push({ to: email.to, text: email.text ?? '', subject: email.subject ?? '' })
+          return { ok: true, providerMessageId: `test_${sends.length}` }
+        },
+      }))
+      vi.spyOn(provider, 'commsEnabled').mockReturnValue(true)
+      vi.spyOn(provider, 'effectiveRecipient').mockImplementation((address: string) => address)
+    })
+
+    afterEach(() => {
+      sends.length = 0
+    })
+
+    it('tells each side its own thing, at its own address', async () => {
+      const minted = await mintInvite(referrerId)
+      if (!minted.ok) throw new Error('unreachable')
+      const referee = await makeTenant()
+      const leaseId = await makeLease(referee.id)
+      await qualifyReferral({
+        inviteId: minted.inviteId,
+        refereeTenantId: referee.id,
+        refereeLeaseId: leaseId,
+        refereeFacilityId: facilityId,
+      })
+
+      const referrer = await prisma.tenant.findUniqueOrThrow({ where: { id: referrerId } })
+      const qualified = await prisma.domainEvent.findFirstOrThrow({
+        where: { name: 'referral.qualified', facilityId },
+      })
+      const granted = await prisma.domainEvent.findFirstOrThrow({
+        where: { name: 'referral.reward_granted', facilityId },
+      })
+
+      await processCommsEvent(qualified)
+      await processCommsEvent(granted)
+
+      const toReferrer = sends.find((send) => send.to === referrer.email)
+      const toReferee = sends.find((send) => send.to === referee.email)
+      expect(toReferrer, 'the referrer should have been written to').toBeTruthy()
+      expect(toReferee, 'the referee should have been written to').toBeTruthy()
+
+      // Each says the thing that belongs to that person, and the amounts come
+      // from the referral's own snapshot rather than today's setting.
+      expect(toReferrer!.text).toContain('has moved in')
+      expect(toReferrer!.text).toContain('$50.00 comes off your next invoice')
+      expect(toReferee!.text).toContain('Welcome')
+      expect(toReferee!.text).toContain('$50.00 comes off your first invoice')
+      // The one failure worth naming: crossing them over.
+      expect(toReferee!.text).not.toContain('has moved in')
+    })
+
+    it('tells the referrer WHICH rule refused, in the words the record uses', async () => {
+      // §5.4's AC as a message. A refusal that does not say what would have
+      // qualified is a support call — the row forbids "not eligible" outright.
+      const minted = await mintInvite(referrerId)
+      if (!minted.ok) throw new Error('unreachable')
+      const referrer = await prisma.tenant.findUniqueOrThrow({ where: { id: referrerId } })
+      // Find-or-create: an earlier test in this file already made a tenant on
+      // the referrer's own email (that is what a self-referral IS), and
+      // Tenant.email is unique. Tenants are deliberately not cleaned between
+      // tests here — the fixtures are shared and cheap — so this reuses.
+      const selfReferral =
+        (await prisma.tenant.findFirst({
+          where: { email: { equals: referrer.email, mode: 'insensitive' }, id: { not: referrerId } },
+        })) ?? (await makeTenant({ email: referrer.email.toUpperCase() }))
+      const leaseId = await makeLease(selfReferral.id)
+
+      await qualifyReferral({
+        inviteId: minted.inviteId,
+        refereeTenantId: selfReferral.id,
+        refereeLeaseId: leaseId,
+        refereeFacilityId: facilityId,
+      })
+
+      const refused = await prisma.domainEvent.findFirstOrThrow({
+        where: { name: 'referral.refused', facilityId },
+      })
+      await processCommsEvent(refused)
+
+      const message = sends.find((send) => send.to === referrer.email)
+      expect(message, 'the referrer should have been told').toBeTruthy()
+      // The exact sentence from the closed vocabulary — so the email, the
+      // portal and the staff record cannot drift apart.
+      expect(message!.text).toContain('A referral has to bring in someone new')
+      expect(message!.text.toLowerCase()).not.toContain('not eligible')
+    })
   })
 
   describe('the reward reaches an invoice — §6.2 and §5.5', () => {

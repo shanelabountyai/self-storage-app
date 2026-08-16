@@ -170,10 +170,26 @@ export default async function RevenuePage({
           <div className="border-input rounded-lg border p-4">
             <dt className="text-muted-foreground text-sm">Discounts and promos</dt>
             <dd className="text-lg font-semibold">
-              {formatCents(report.total.discountsCents)}
+              {formatCents(report.total.discountsCents - report.total.referralRewardsCents)}
               <p className="text-muted-foreground mt-1 text-xs font-normal text-pretty">
                 On invoices issued in this range. Not deducted from billed above — billed is what was
                 charged, this is what was let go.
+              </p>
+            </dd>
+          </div>
+          {/* PRD 10 §5.7 (B-101). Split out, not merged into the figure above:
+              a promotion is the business advertising a lower price, a referral
+              reward is what it PAID a tenant for bringing somebody in. One is a
+              price decision and the other is acquisition cost, and the second
+              is the number that gets compared against the aggregator fee it
+              displaces — which is what decides whether the program continues. */}
+          <div className="border-input rounded-lg border p-4">
+            <dt className="text-muted-foreground text-sm">Referral rewards</dt>
+            <dd className="text-lg font-semibold">
+              {formatCents(report.total.referralRewardsCents)}
+              <p className="text-muted-foreground mt-1 text-xs font-normal text-pretty">
+                Acquisition cost, not a price decision — what the referral program paid out on
+                invoices issued in this range, both sides included.
               </p>
             </dd>
           </div>
