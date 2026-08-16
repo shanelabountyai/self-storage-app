@@ -15,7 +15,14 @@ import type { CheckoutSessionView } from '@/lib/checkout/session'
 /// Every field is filled here or the render throws (B-023's FR-6 rule), so a
 /// missing rate or an unnamed facility fails before anything is signed rather
 /// than producing a lease with a hole in it.
-export async function leaseValuesFor(session: CheckoutSessionView): Promise<Record<string, string>> {
+export async function leaseValuesFor(
+  session: CheckoutSessionView,
+  /// D-53 (B-106 part 5). Which unit this agreement is for. Defaults to the
+  /// first line, which for every single-unit checkout is the session's own
+  /// unit — so a caller that does not know about baskets still describes the
+  /// same lease it always did.
+  line: CheckoutSessionView['units'][number] = session.units[0],
+): Promise<Record<string, string>> {
   const facility = await prisma.facility.findUniqueOrThrow({
     where: { id: session.facilityId },
     select: {
@@ -32,11 +39,11 @@ export async function leaseValuesFor(session: CheckoutSessionView): Promise<Reco
     },
   })
   const unitType = await prisma.unitType.findUniqueOrThrow({
-    where: { id: session.unitTypeId },
+    where: { id: line.unitTypeId },
     select: { widthFt: true, lengthFt: true },
   })
-  const unit = session.unitId
-    ? await prisma.unit.findUnique({ where: { id: session.unitId }, select: { number: true } })
+  const unit = line.unitId
+    ? await prisma.unit.findUnique({ where: { id: line.unitId }, select: { number: true } })
     : null
 
   const data = session.data as Record<string, string | number | undefined>
@@ -106,7 +113,7 @@ export async function leaseValuesFor(session: CheckoutSessionView): Promise<Reco
       .join(', '),
     unitNumber: unit?.number ?? 'to be assigned',
     unitSize: `${unitType.widthFt} feet by ${unitType.lengthFt} feet`,
-    monthlyRate: `${formatRate(session.quotedRateCents + premiumCents)}`,
+    monthlyRate: `${formatRate(line.quotedRateCents + premiumCents)}`,
     protectionSummary,
     moveInDate: new Intl.DateTimeFormat('en-US', {
       dateStyle: 'long',
@@ -124,31 +131,80 @@ export async function leaseValuesFor(session: CheckoutSessionView): Promise<Reco
 /// Renders the summary and the full lease, and stores the lease as a document.
 /// The stored document is what gets signed, so it is created before the
 /// signature exists rather than assembled afterwards.
-export async function buildLeaseDocument(session: CheckoutSessionView) {
-  const values = await leaseValuesFor(session)
-  const summaryHtml = renderTemplate(LEASE_SUMMARY_TEMPLATE, values)
-
-  const { id, rendered } = await storeGeneratedDocument({
-    facilityId: session.facilityId,
-    type: 'lease',
-    subjectType: 'CheckoutSession',
-    subjectId: session.id,
-    title: `Storage rental agreement — ${values.facilityName}, unit ${values.unitNumber}`,
-    template: LEASE_TEMPLATE,
-    values,
-  })
-
-  // `bodyHtml` for the on-page render; the stored `html` stays the complete,
-  // hashed, signed document.
-  return { documentId: id, html: rendered.bodyHtml, summaryHtml, values }
+/// D-53. One agreement per unit, keyed to the basket line it describes.
+///
+/// The enforceable object in this codebase is the `Lease` row and it is per
+/// unit — delinquency, overlock, lien notices and auction all key on a lease.
+/// A single combined agreement would mean auctioning one unit cites a document
+/// that also covers the units the tenant still rents.
+///
+/// Keyed on `CheckoutSessionUnit` rather than the session, so a renter who
+/// removes a line and adds another does not inherit the removed unit's
+/// agreement. `existingLeaseDocuments` reads the same key back.
+export async function buildLeaseDocuments(session: CheckoutSessionView) {
+  const built = []
+  for (const line of session.units) {
+    const values = await leaseValuesFor(session, line)
+    const { id, rendered } = await storeGeneratedDocument({
+      facilityId: session.facilityId,
+      type: 'lease',
+      subjectType: 'CheckoutSessionUnit',
+      subjectId: line.id,
+      title: `Storage rental agreement — ${values.facilityName}, unit ${values.unitNumber}`,
+      template: LEASE_TEMPLATE,
+      values,
+    })
+    built.push({
+      lineId: line.id,
+      documentId: id,
+      unitName: values.unitNumber,
+      // `bodyHtml` for the on-page render; the stored `html` stays the
+      // complete, hashed, signed document.
+      html: rendered.bodyHtml,
+      summaryHtml: renderTemplate(LEASE_SUMMARY_TEMPLATE, values),
+    })
+  }
+  return built
 }
 
-/// The lease already built for this session, if any. Re-rendering on every page
-/// view would change the hash under a signer mid-step.
-export async function existingLeaseDocument(sessionId: string) {
-  return prisma.document.findFirst({
-    where: { subjectType: 'CheckoutSession', subjectId: sessionId, type: 'lease', deletedAt: null },
+/// The leases already built for this session, one per basket line, in basket
+/// order. Re-rendering on every page view would change the hash under a signer
+/// mid-step, so the stored document is what comes back.
+///
+/// A line with no document yet is absent rather than null-padded — the caller
+/// treats "fewer documents than lines" as "rebuild", which is what happens when
+/// a renter adds a unit after reaching the lease step.
+export async function existingLeaseDocuments(session: CheckoutSessionView) {
+  const lineIds = session.units.map((line) => line.id)
+  const documents = await prisma.document.findMany({
+    where: {
+      type: 'lease',
+      deletedAt: null,
+      OR: [
+        { subjectType: 'CheckoutSessionUnit', subjectId: { in: lineIds } },
+        // Sessions that reached the lease step before D-53 stored one document
+        // against the SESSION. Read so a checkout in flight across the deploy
+        // still finds the lease it may already have signed, rather than being
+        // handed a fresh unsigned one to sign a second time.
+        { subjectType: 'CheckoutSession', subjectId: session.id },
+      ],
+    },
     include: { signature: true },
-    orderBy: { createdAt: 'desc' },
+    orderBy: { createdAt: 'asc' },
   })
+
+  // Basket order, and at most one document per line — a rebuild after a removed
+  // line can leave an older row behind, and the newest is the one on screen.
+  return session.units
+    .map((line, index) => {
+      const forLine = documents.filter(
+        (document) =>
+          (document.subjectType === 'CheckoutSessionUnit' && document.subjectId === line.id) ||
+          // The legacy row can only ever have described the primary unit.
+          (document.subjectType === 'CheckoutSession' && index === 0),
+      )
+      const document = forLine[forLine.length - 1]
+      return document ? { lineId: line.id, document } : null
+    })
+    .filter((entry) => entry !== null)
 }

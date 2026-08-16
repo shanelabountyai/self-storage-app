@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from '@playwright/test'
 import { LEGAL_PAGES } from '../apps/web/lib/site-config'
@@ -1077,4 +1078,70 @@ test('an unknown checkout link says so and charges nothing', async ({ page }) =>
   await page.goto('/checkout?token=not-a-real-session')
   await expect(page.getByRole('heading', { level: 1 })).toContainText("couldn't find that checkout")
   await expect(page.getByRole('main')).toContainText('Nothing has been charged')
+})
+
+// B-106 part 5. The multi-unit basket, driven the way a renter drives it.
+//
+// Scoped to its own fresh checkout session and its own tenant email, per the
+// e2e shared-fixture discipline: it only ever ADDS a unit to a session it
+// started itself and then removes it again, so it leaves the demo facility's
+// availability exactly as it found it and nothing else asserts a fixed value
+// against what it touched.
+test('a renter can rent two units in one checkout, and the summary itemises them', async ({
+  page,
+}) => {
+  await page.goto('/storage/tx/houston/demo-e2e')
+  await page
+    .getByRole('listitem')
+    .filter({ hasText: '10x10 Test' })
+    .first()
+    .getByRole('button', { name: 'Rent now' })
+    .click()
+  await expect(page).toHaveURL(/\/checkout\?token=/)
+
+  await page.getByLabel('First name').fill('Ada')
+  await page.getByLabel('Last name').fill('Renter')
+  // Random, not `Date.now()`: the two Playwright projects run this at the
+  // same millisecond and collided on the tenant email's unique index.
+  const email = `e2e-basket-${randomUUID()}@demo.example.com`
+  await page.getByLabel('Email', { exact: true }).fill(email)
+  await page.getByLabel('Mobile number').fill('512-555-0100')
+  await page.getByLabel('Street address').fill('2400 South Congress Ave')
+  await page.getByLabel('Zip code').fill('78704')
+  await page.getByRole('button', { name: 'Continue', exact: true }).click()
+
+  await expect(page.getByRole('heading', { name: 'Your unit' })).toBeVisible()
+  // One unit, so there is nothing to remove and no Remove control at all —
+  // withheld rather than disabled.
+  await expect(page.getByRole('button', { name: /^Remove / })).toHaveCount(0)
+
+  await page.getByLabel('Size to add').selectOption({ index: 0 })
+  await page.getByRole('button', { name: 'Add to my rental' }).click()
+
+  // Two named groups, so the two Remove controls do not share one accessible
+  // name (2.4.4/4.1.2) — the criterion the row states outright. Asserted as
+  // "two DISTINCT names", not merely "two buttons": two controls both reading
+  // "Remove" would satisfy a count and fail the requirement.
+  const removeControls = page.getByRole('button', { name: /^Remove / })
+  await expect(removeControls).toHaveCount(2)
+  const names = await removeControls.allInnerTexts()
+  expect(new Set(names).size, `expected two distinct names, got ${JSON.stringify(names)}`).toBe(2)
+
+  // §6.4: the total moved, and the note says WHICH unit moved it.
+  const summary = page.getByRole('complementary')
+  await expect(summary).toContainText(/Unit .+ added/)
+
+  // The itemisation. The summary is a <details>, collapsed by default, so it
+  // is opened the way a renter opens it rather than by reading hidden text.
+  await summary.getByText('Due today').first().click()
+  for (const name of names) {
+    await expect(summary).toContainText(name.replace(/^Remove /, ''))
+  }
+
+  await assertNoAxeViolations(page)
+
+  // Put it back exactly as found — the fixture discipline above.
+  await removeControls.last().click()
+  await expect(page.getByRole('button', { name: /^Remove / })).toHaveCount(0)
+  await expect(summary).toContainText(/taken out of your rental/)
 })

@@ -54,7 +54,8 @@ export async function occupancyFactsForMany(
   )
   if (unitIds.length === 0) return facts
 
-  const [leases, reservations, checkoutLocks, overlocks, blockingTickets] = await Promise.all([
+  const [leases, reservations, checkoutLocks, basketLocks, overlocks, blockingTickets] =
+    await Promise.all([
     client.lease.findMany({
       where: {
         unitId: { in: [...unitIds] },
@@ -73,6 +74,19 @@ export async function occupancyFactsForMany(
     client.checkoutSession.findMany({
       where: { unitId: { in: [...unitIds] }, status: 'active', lockExpiresAt: { gt: new Date() } },
       select: { id: true, unitId: true },
+    }),
+    // B-106 part 5. The BASKET holds units too, and only the first of them is
+    // the session's own `unitId`. Without this a renter who added a second unit
+    // held it in their checkout while the public site went on selling it — the
+    // overselling failure the lock exists to prevent, arriving by a door the
+    // lock did not cover. Same expiry rule, read through the session because
+    // one lock covers the whole basket.
+    client.checkoutSessionUnit.findMany({
+      where: {
+        unitId: { in: [...unitIds] },
+        session: { status: 'active', lockExpiresAt: { gt: new Date() } },
+      },
+      select: { checkoutSessionId: true, unitId: true },
     }),
     // B-058. `appliedAt` not null, not merely requested: a lock that has been
     // ASKED for is a task in somebody's queue, and the unit is not overlocked
@@ -100,6 +114,14 @@ export async function occupancyFactsForMany(
   for (const session of checkoutLocks) {
     const entry = session.unitId ? facts.get(session.unitId) : undefined
     if (entry) entry.activeCheckoutLock = { id: session.id }
+  }
+  // After the session pass, so a unit held by both reports the same lock id
+  // either way — the basket line and the session's own column name one lock.
+  for (const line of basketLocks) {
+    const entry = line.unitId ? facts.get(line.unitId) : undefined
+    if (entry && !entry.activeCheckoutLock) {
+      entry.activeCheckoutLock = { id: line.checkoutSessionId }
+    }
   }
   for (const overlock of overlocks) {
     const entry = facts.get(overlock.unitId)

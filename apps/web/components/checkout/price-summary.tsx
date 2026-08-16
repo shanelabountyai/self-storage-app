@@ -1,3 +1,4 @@
+import { Fragment } from 'react'
 import { calculateMoveInCost, type TaxRate } from '@storage/core/pricing'
 import { formatRate } from '@/lib/format'
 
@@ -14,10 +15,22 @@ import { formatRate } from '@/lib/format'
 // defect, which is only enforceable because there is one implementation.
 
 export type PriceSummaryProps = {
-  unitLabel: string
+  /// B-106 part 5. Every unit in the basket, in the order it was added.
+  ///
+  /// The row requires the summary to itemise per unit, and the totals are
+  /// derived from this list rather than passed alongside it — the alternative
+  /// was a summed `webRateCents` prop next to a `units` prop for display, which
+  /// is two sources for one number and exactly how a summary starts disagreeing
+  /// with the charge. US-301 makes that disagreement release-blocking.
+  units: readonly {
+    id: string
+    /// The unit number once claimed; the size alone before that.
+    name: string
+    label: string
+    rateCents: number
+    streetRateCents: number
+  }[]
   facilityName: string
-  webRateCents: number
-  streetRateCents: number
   adminFeeCents?: number
   taxRates?: readonly TaxRate[]
   /// Once the renter has chosen at step 3. Added to the recurring total and
@@ -36,10 +49,8 @@ export type PriceSummaryProps = {
 }
 
 export function PriceSummary({
-  unitLabel,
+  units,
   facilityName,
-  webRateCents,
-  streetRateCents,
   adminFeeCents,
   taxRates = [],
   protectionPremiumCents,
@@ -47,6 +58,13 @@ export function PriceSummary({
   promoTerms,
   changeNote,
 }: PriceSummaryProps) {
+  // The same arithmetic `amountDueToday` does, and deliberately the same shape:
+  // the admin fee and the tax are charged ONCE for the checkout (the fee opens
+  // an account; the tax follows the summed rent it is levied on), while the
+  // protection premium is per unit under D-52.
+  const webRateCents = units.reduce((sum, unit) => sum + unit.rateCents, 0)
+  const streetRateCents = units.reduce((sum, unit) => sum + unit.streetRateCents, 0)
+
   const cost = calculateMoveInCost({
     webRateCents,
     streetRateCents,
@@ -55,7 +73,8 @@ export function PriceSummary({
     promoDiscountCents,
     promoTerms,
   })
-  const premium = protectionPremiumCents ?? 0
+  const premiumPerUnit = protectionPremiumCents ?? 0
+  const premium = premiumPerUnit * units.length
   const dueToday = cost.totalDueTodayCents + premium
   const monthly = cost.ongoingMonthlyCents + premium
 
@@ -87,23 +106,61 @@ export function PriceSummary({
         </summary>
 
         <p className="text-muted-foreground mt-3 text-sm">
-          {unitLabel} at {facilityName}
+          {units.length === 1 ? units[0].label : `${units.length} units`} at {facilityName}
         </p>
 
         <dl className="mt-3 flex flex-col gap-2 text-sm">
           {cost.lines.map((line) => (
-            <div key={line.key} className="flex justify-between gap-4">
-              <dt>{line.label}</dt>
-              <dd className="tabular-nums">
-                {line.key === 'protection'
-                  ? protectionPremiumCents === undefined
-                    ? 'chosen at checkout'
-                    : premium === 0
-                      ? 'your own cover'
-                      : formatRate(premium)
-                  : formatRate(line.amountCents)}
-              </dd>
-            </div>
+            // A Fragment, not a wrapping <div>: a <dl> may directly contain
+            // <div> groups, but nesting the per-unit rows inside ANOTHER <div>
+            // (or, as this first did, inside a nested <dl>) puts the <dt>/<dd>
+            // outside any list their own <dl> owns. axe caught it; the fix is
+            // to keep every group a direct child.
+            <Fragment key={line.key}>
+              <div className="flex justify-between gap-4">
+                <dt>{line.label}</dt>
+                <dd className="tabular-nums">
+                  {line.key === 'protection' ? (
+                    protectionPremiumCents === undefined ? (
+                      'chosen at checkout'
+                    ) : premium === 0 ? (
+                      'your own cover'
+                    ) : (
+                      <>
+                        {formatRate(premium)}
+                        {/* D-52 makes the premium multiply, and §6.4 makes
+                            that a disclosure rather than a nicety: a renter
+                            who chose one $12 plan must not meet $36 with
+                            nothing saying why. Inside the <dd> because a <p>
+                            is not a legal child of a <dl>. */}
+                        {units.length > 1 && (
+                          <span className="text-muted-foreground block text-xs">
+                            {formatRate(premiumPerUnit)} × {units.length} units
+                          </span>
+                        )}
+                      </>
+                    )
+                  ) : (
+                    formatRate(line.amountCents)
+                  )}
+                </dd>
+              </div>
+
+              {/* The row's criterion: the summary ITEMISES per unit. Only worth
+                  rendering once there is more than one — for a single unit the
+                  breakdown would restate the line directly above it. Rendered
+                  as further groups in the SAME list, indented, so a
+                  screen-reader user meets the rent total and then its parts
+                  rather than two unrelated lists of numbers. */}
+              {units.length > 1 &&
+                line.key === 'rent' &&
+                units.map((unit) => (
+                  <div key={unit.id} className="text-muted-foreground flex justify-between gap-4">
+                    <dt className="pl-4">{unit.name}</dt>
+                    <dd className="tabular-nums">{formatRate(unit.rateCents)}</dd>
+                  </div>
+                ))}
+            </Fragment>
           ))}
           <div className="flex justify-between gap-4 border-t pt-2 font-medium">
             <dt>Total due today</dt>

@@ -445,6 +445,56 @@ describeDb('access control service', () => {
     }
   })
 
+  // D-54 (B-106 part 5). The grant is keyed `(facilityId, tenantId)`, so a
+  // credential per LEASE handed a three-unit renter three PINs that opened the
+  // same gate with identical permissions and hours. B-106 part 4 shipped
+  // exactly that, and nothing asserted otherwise — which is why this test
+  // exists rather than only the fix.
+  it('issues one code per tenant per facility, not one per unit they rent', async () => {
+    const original = process.env.ACCESS_CODE_ENCRYPTION_KEY
+    process.env.ACCESS_CODE_ENCRYPTION_KEY = randomUUID().replace(/-/g, '').padEnd(64, '1').slice(0, 64)
+
+    try {
+      const unitType = await prisma.unitType.findFirstOrThrow({ where: { facilityId } })
+      const second = await prisma.unit.create({
+        data: { facilityId, unitTypeId: unitType.id, number: `B-${suffix.slice(0, 4)}` },
+      })
+      const secondLease = await prisma.lease.create({
+        data: {
+          facilityId,
+          tenantId,
+          unitId: second.id,
+          status: 'active',
+          startDate: new Date(),
+          monthlyRateCents: 9_900,
+          billingDay: 1,
+        },
+      })
+
+      const first = await provisionAccessForLease(leaseId)
+      if (!('code' in first)) throw new Error('expected a freshly issued code')
+      const alsoTheirs = await provisionAccessForLease(secondLease.id)
+
+      // The second unit mints nothing: the tenant already has a working code
+      // for this gate.
+      expect(alsoTheirs).toMatchObject({ alreadyProvisioned: true })
+      expect(
+        await prisma.accessCredential.count({ where: { facilityId, state: 'active' } }),
+      ).toBe(1)
+
+      // ...and the portal card for the SECOND unit shows that same code rather
+      // than falling back to "it will be texted to you", which is what a
+      // `leaseId` match returned before D-54.
+      expect(await codeForLease(secondLease.id)).toBe(first.code)
+      expect(await codeForLease(leaseId)).toBe(first.code)
+
+      await prisma.lease.delete({ where: { id: secondLease.id } })
+      await prisma.unit.delete({ where: { id: second.id } })
+    } finally {
+      process.env.ACCESS_CODE_ENCRYPTION_KEY = original
+    }
+  })
+
   it('resolves the checkout session that became this lease', async () => {
     const session = await prisma.checkoutSession.create({
       data: {

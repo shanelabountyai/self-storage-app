@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { prisma } from '../packages/db'
-import { startCheckout, sessionByToken } from '../apps/web/lib/checkout/session'
-import { buildLeaseDocument } from '../apps/web/lib/lease/build'
+import { addUnitToBasket, startCheckout, sessionByToken } from '../apps/web/lib/checkout/session'
+import { buildLeaseDocuments, existingLeaseDocuments } from '../apps/web/lib/lease/build'
 import { SMS_CONSENT_DISCLOSURE_VERSION } from '../apps/web/lib/checkout/details'
 import { ELECTRONIC_RECORDS_CONSENT_VERSION } from '../apps/web/lib/lease/sign'
 import { submitDetailsAction, signLeaseAction } from '../apps/web/app/(public)/checkout/actions'
@@ -78,6 +78,7 @@ describeDb('SMS consent at checkout step 1', () => {
     await prisma.consent.deleteMany({ where: { tenant: { email: { contains: 'consent-' } } } })
     await prisma.tenant.deleteMany({ where: { email: { contains: 'consent-' } } })
     await prisma.unit.deleteMany({ where: { facilityId } })
+    await prisma.unitTypeRate.deleteMany({ where: { facilityId } })
     await prisma.unitType.deleteMany({ where: { facilityId } })
     await prisma.facility.deleteMany({ where: { id: facilityId } })
     await prisma.$disconnect()
@@ -145,6 +146,19 @@ describeDb('notice-email consent at lease signing', () => {
       data: { facilityId, name: `10x10n ${suffix}`, widthFt: 10, lengthFt: 10 },
     })
     unitTypeId = unitType.id
+    // B-106 part 5. `addUnitToBasket` prices a new line from the PUBLISHED
+    // rate rather than from its caller — every other path in this file hands
+    // `startCheckout` a `quotedRateCents` directly, which is why no rate
+    // existed here before.
+    await prisma.unitTypeRate.create({
+      data: {
+        facilityId,
+        unitTypeId,
+        streetRateCents: 14_900,
+        webRateCents: 12_900,
+        effectiveFrom: new Date('2020-01-01T00:00:00Z'),
+      },
+    })
   })
 
   afterAll(async () => {
@@ -155,13 +169,19 @@ describeDb('notice-email consent at lease signing', () => {
     await prisma.consent.deleteMany({ where: { tenant: { email: { contains: 'notice-sign-' } } } })
     await prisma.tenant.deleteMany({ where: { email: { contains: 'notice-sign-' } } })
     await prisma.unit.deleteMany({ where: { facilityId } })
+    await prisma.unitTypeRate.deleteMany({ where: { facilityId } })
     await prisma.unitType.deleteMany({ where: { facilityId } })
     await prisma.facility.deleteMany({ where: { id: facilityId } })
     await prisma.$disconnect()
   })
 
   async function sessionAtLeaseStep() {
-    const unit = await prisma.unit.create({
+    // A unit for `startCheckout` to claim. The session then KEEPS whatever it
+    // claimed rather than being repointed at this row: `CheckoutSession.unitId`
+    // is unique, and repointing left the claimed unit held by the basket line
+    // while its session pointed elsewhere — so the next `claimUnit` picked a
+    // unit an older session's column still named, and the create collided.
+    await prisma.unit.create({
       data: { facilityId, unitTypeId, number: `L-${randomUUID().slice(0, 6)}` },
     })
     const email = `notice-sign-${randomUUID()}@example.com`
@@ -175,7 +195,6 @@ describeDb('notice-email consent at lease signing', () => {
       data: {
         step: 'lease',
         tenantId: tenant.id,
-        unitId: unit.id,
         data: {
           firstName: 'Ada',
           lastName: 'Renter',
@@ -188,9 +207,53 @@ describeDb('notice-email consent at lease signing', () => {
     })
     const view = await sessionByToken(started.token)
     if (!view) throw new Error('unreachable')
-    await buildLeaseDocument(view)
+    await buildLeaseDocuments(view)
     return { token: started.token, tenantId: tenant.id }
   }
+
+
+  // D-53 (B-106 part 5). N agreements, ONE signature.
+  it('signs every agreement in a multi-unit basket from a single signing action', async () => {
+    const { token } = await sessionAtLeaseStep()
+
+    // A second unit, added the way the step's own control adds one.
+    await prisma.unit.create({
+      data: { facilityId, unitTypeId, number: `L2-${randomUUID().slice(0, 6)}` },
+    })
+    const added = await addUnitToBasket(token, unitTypeId)
+    if (!added.ok) throw new Error(`expected the add to succeed: ${JSON.stringify(added)}`)
+
+    // Rebuilt because the basket grew — a line added after reaching this step
+    // has no agreement yet, and the renter must not sign a set missing one.
+    const view = await sessionByToken(token)
+    if (!view) throw new Error('unreachable')
+    await buildLeaseDocuments(view)
+
+    const before = await existingLeaseDocuments(view)
+    expect(before).toHaveLength(2)
+    // Each agreement covers ONE unit, which is the whole point of D-53: an
+    // auction of one unit must not cite a document covering the other.
+    const numbers = view.units.map((line) => line.unitId)
+    expect(new Set(numbers).size).toBe(2)
+
+    const form = new FormData()
+    form.set('token', token)
+    form.set('typedName', 'Ada Renter')
+    form.set('consented', 'yes')
+    // Through `callAction` for the same reason every other action call here is:
+    // `revalidatePath` throws outside a real Next request, and the signatures
+    // this test cares about have already committed by the time it runs.
+    await callAction(() => signLeaseAction({ status: 'idle' }, form))
+
+    const after = await existingLeaseDocuments(view)
+    expect(after).toHaveLength(2)
+    // Both signed, by one action — not one signed and one left behind, which
+    // is the partial state D-53 rejected N separate ceremonies to avoid.
+    expect(after.every((entry) => entry.document.signature !== null)).toBe(true)
+    // One signing moment for the set, so a receipt can state a single date.
+    const [first, second] = after.map((entry) => entry.document.signature!.signedAt.getTime())
+    expect(Math.abs(first - second)).toBeLessThan(5_000)
+  })
 
   it('records notice_email consent, granted, when the lease is signed', async () => {
     const { token, tenantId } = await sessionAtLeaseStep()

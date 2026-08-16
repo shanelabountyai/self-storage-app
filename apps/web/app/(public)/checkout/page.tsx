@@ -26,7 +26,7 @@ import { LeaseStep } from '@/components/checkout/lease-step'
 import { PaymentStep } from '@/components/checkout/payment-step'
 import { amountDueToday, preparePayment } from '@/lib/checkout/payment'
 import { currentPlans, defaultTier } from '@/lib/protection/plans'
-import { buildLeaseDocument, existingLeaseDocument } from '@/lib/lease/build'
+import { buildLeaseDocuments, existingLeaseDocuments } from '@/lib/lease/build'
 import { bodyOf, renderTemplate } from '@/lib/documents/render'
 import { LEASE_SUMMARY_TEMPLATE } from '@/lib/lease/template'
 import { leaseValuesFor } from '@/lib/lease/build'
@@ -150,32 +150,50 @@ export default async function CheckoutPage({
     },
   })
 
-  // The lease is built once and reused. Re-rendering on every page view would
-  // move the hash under a signer part-way through the step.
-  let lease: { summaryHtml: string; leaseHtml: string; signedOn?: string } | null = null
+  // D-53. One agreement per unit, signed by one action. Built once and reused:
+  // re-rendering on every page view would move the hash under a signer
+  // part-way through the step.
+  let leases: { unitName: string; summaryHtml: string; leaseHtml: string }[] = []
+  let signedOn: string | undefined
   if (session.step === 'lease') {
-    const existing = await existingLeaseDocument(session.id)
-    if (existing?.content) {
-      lease = {
-        // B-111: set only when the renter has come BACK to a lease they already
-        // signed. `signDocument` refuses a second signature, so without this
-        // the step would offer a control that can only fail.
-        signedOn: existing.signature
-          ? new Intl.DateTimeFormat('en-US', {
-              dateStyle: 'long',
-              timeZone: facilityPolicy?.timezone ?? 'UTC',
-            }).format(existing.signature.signedAt)
-          : undefined,
-        // The stored document is a complete HTML document; only its body can be
-        // embedded in this page, and `bodyOf` drops the document's own <h1> so
-        // a resumed lease step has the same heading outline as a first visit.
-        // See renderDocument's note.
-        leaseHtml: bodyOf(existing.content),
-        summaryHtml: renderTemplate(LEASE_SUMMARY_TEMPLATE, await leaseValuesFor(session)),
-      }
+    const existing = await existingLeaseDocuments(session)
+    // Fewer documents than lines means the renter added a unit after reaching
+    // this step, so the set is rebuilt rather than part-rendered. `storeGenerated`
+    // is keyed per line, so the units that already have one keep their hash.
+    if (existing.length === session.units.length && existing.every((entry) => entry.document.content)) {
+      // B-111: set only when the renter has come BACK to leases they already
+      // signed. `signDocument` refuses a second signature, so without this the
+      // step would offer a control that can only fail. One `signedAt` for the
+      // set under D-53, so the first is the whole set's.
+      const signature = existing[0].document.signature
+      signedOn = signature
+        ? new Intl.DateTimeFormat('en-US', {
+            dateStyle: 'long',
+            timeZone: facilityPolicy?.timezone ?? 'UTC',
+          }).format(signature.signedAt)
+        : undefined
+
+      leases = await Promise.all(
+        existing.map(async (entry) => {
+          const line = session.units.find((candidate) => candidate.id === entry.lineId)
+          const values = await leaseValuesFor(session, line)
+          return {
+            unitName: values.unitNumber,
+            // The stored document is a complete HTML document; only its body
+            // can be embedded in this page, and `bodyOf` drops the document's
+            // own <h1> so a resumed lease step has the same heading outline as
+            // a first visit. See renderDocument's note.
+            leaseHtml: bodyOf(entry.document.content!),
+            summaryHtml: renderTemplate(LEASE_SUMMARY_TEMPLATE, values),
+          }
+        }),
+      )
     } else {
-      const built = await buildLeaseDocument(session)
-      lease = { leaseHtml: built.html, summaryHtml: built.summaryHtml }
+      leases = (await buildLeaseDocuments(session)).map((built) => ({
+        unitName: built.unitName,
+        leaseHtml: built.html,
+        summaryHtml: built.summaryHtml,
+      }))
     }
   }
 
@@ -201,6 +219,56 @@ export default async function CheckoutPage({
     isoDate(businessDateFor(new Date(), facilityPolicy?.timezone ?? 'America/Chicago')),
     facilityPolicy?.maxCheckoutStartDaysAhead ?? 0,
   )
+
+  // B-106 part 5. The basket, resolved for display: a unit number per line
+  // (only a claimed unit has one) and a size label from the facility's own
+  // catalogue, so a line whose type differs from the session's still reads
+  // correctly. One query for every number rather than one per line.
+  const basketUnits = await prisma.unit.findMany({
+    where: { id: { in: session.units.map((line) => line.unitId).filter((id) => id !== null) } },
+    select: { id: true, number: true },
+  })
+  const numberByUnitId = new Map(basketUnits.map((unit) => [unit.id, unit.number]))
+  const labelFor = (typeId: string) => {
+    const type = inventory?.unitTypes.find((candidate) => candidate.unitTypeId === typeId)
+    return type ? `${type.widthFt} foot by ${type.lengthFt} foot ${type.name}` : 'Storage unit'
+  }
+  const basketLines = session.units.map((line) => ({
+    id: line.id,
+    unitNumber: line.unitId ? (numberByUnitId.get(line.unitId) ?? null) : null,
+    unitLabel: labelFor(line.unitTypeId),
+    quotedRateCents: line.quotedRateCents,
+  }))
+  // Only sizes with something genuinely on the shelf. `availableCount` already
+  // excludes units held by a live lock, so this cannot offer the renter a unit
+  // another checkout is part-way through taking.
+  const addableTypes = (inventory?.unitTypes ?? [])
+    .filter((type) => type.availableCount > 0)
+    .map((type) => ({
+      unitTypeId: type.unitTypeId,
+      label: `${type.widthFt} foot by ${type.lengthFt} foot ${type.name}`,
+      webRateCents: type.webRateCents,
+    }))
+
+  // The same lines the summary prices. The street rate comes from the
+  // catalogue rather than the basket — only the WEB rate is locked onto a line
+  // (it is the one the renter is entitled to), and street is display-only:
+  // `calculateMoveInCost` uses it for the strike-through saving and nothing
+  // else. Falling back to the quoted rate means "no saving", never a fabricated
+  // one, which is the rule `savingCents` already states.
+  const summaryUnits = session.units.map((line, index) => {
+    const type = inventory?.unitTypes.find(
+      (candidate) => candidate.unitTypeId === line.unitTypeId,
+    )
+    const number = line.unitId ? numberByUnitId.get(line.unitId) : null
+    return {
+      id: line.id,
+      name: number ? `Unit ${number}` : `Unit ${index + 1}`,
+      label: labelFor(line.unitTypeId),
+      rateCents: line.quotedRateCents,
+      streetRateCents: type?.streetRateCents ?? line.quotedRateCents,
+    }
+  })
 
   const remaining = minutesLeft(session.lockExpiresAt)
   const lockedPromo = promoDiscountOn(session)
@@ -315,10 +383,9 @@ export default async function CheckoutPage({
           {session.step === 'unit_assign' && unitType && (
             <UnitStep
               token={token!}
-              unitNumber={reservation?.unit?.number ?? null}
-              unitLabel={`${unitType.widthFt} foot by ${unitType.lengthFt} foot ${unitType.name}`}
+              lines={basketLines}
+              addableTypes={addableTypes}
               facilityName={inventory!.facility.name}
-              quotedRateCents={session.quotedRateCents}
               // B-106. The renter's own earlier answer survives a step back
               // (§6.4), falling back to today when they have not chosen yet.
               startDate={
@@ -354,12 +421,11 @@ export default async function CheckoutPage({
             />
           )}
 
-          {session.step === 'lease' && lease && (
+          {session.step === 'lease' && leases.length > 0 && (
             <LeaseStep
               token={token!}
-              summaryHtml={lease.summaryHtml}
-              leaseHtml={lease.leaseHtml}
-              signedOn={lease.signedOn}
+              leases={leases}
+              signedOn={signedOn}
               legalName={`${(session.data as Record<string, string>).firstName ?? ''} ${
                 (session.data as Record<string, string>).lastName ?? ''
               }`.trim()}
@@ -494,15 +560,23 @@ export default async function CheckoutPage({
       {unitType && (
         <div className="mt-8">
           <PriceSummary
-            unitLabel={`${unitType.widthFt} foot by ${unitType.lengthFt} foot ${unitType.name}`}
+            // B-106 part 5. The whole basket, so the summary's arithmetic is
+            // `amountDueToday`'s arithmetic. It used to be handed the session's
+            // single `quotedRateCents` and one unit's street rate, which for a
+            // two-unit basket would have advertised one unit's rent one screen
+            // before charging for two — the release-blocking disagreement
+            // US-301 names, and the reason the summary takes the lines rather
+            // than a pre-summed total.
+            units={summaryUnits}
             facilityName={inventory!.facility.name}
-            webRateCents={session.quotedRateCents}
+            // Per unit, as D-52 has it. The summary multiplies by the basket
+            // size itself rather than being handed a product, so the "× N"
+            // disclosure and the figure cannot come apart.
             protectionPremiumCents={
               typeof session.data.protectionPremiumCents === 'number'
                 ? session.data.protectionPremiumCents
                 : undefined
             }
-            streetRateCents={unitType.streetRateCents}
             adminFeeCents={inventory!.pricing.adminFeeCents}
             taxRates={inventory!.pricing.taxRates}
             // The promotion the facility page advertised, locked onto the

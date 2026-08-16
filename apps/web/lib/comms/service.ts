@@ -560,6 +560,49 @@ async function referralRewardContext(
   return { 'referral.reward_line': line }
 }
 
+/// D-55. Every unit the renter moved into, as a readable list.
+///
+/// A multi-unit checkout provisions N leases in one transaction and emits ONE
+/// `lease.moved_in` for the primary one, so the event's own entity names a
+/// single unit while the renter rented several.
+///
+/// The other units are found through the BASKET, not through the leases: a
+/// lease carries no checkout id (`leaseIdForSession` matches on tenant+unit for
+/// the same reason), while `CheckoutSessionUnit` records exactly which units
+/// were bought together. Going lease → line → session → lines is therefore the
+/// only link that actually exists, rather than one inferred from timestamps.
+async function movedInUnitList(leaseId: string): Promise<string> {
+  const lease = await prisma.lease.findUnique({
+    where: { id: leaseId },
+    select: { unitId: true, unit: { select: { number: true } } },
+  })
+  if (!lease) return ''
+  const own = lease.unit?.number ?? ''
+
+  // Newest first: a unit can have been in an earlier, abandoned basket too, and
+  // the one that produced THIS lease is the most recent to have claimed it.
+  const line = await prisma.checkoutSessionUnit.findFirst({
+    where: { unitId: lease.unitId },
+    orderBy: { createdAt: 'desc' },
+    select: { checkoutSessionId: true },
+  })
+  // A lease with no basket behind it — staff-created, or migrated from before
+  // the basket existed — is one unit by definition.
+  if (!line) return own
+
+  const lines = await prisma.checkoutSessionUnit.findMany({
+    where: { checkoutSessionId: line.checkoutSessionId },
+    select: { unit: { select: { number: true } } },
+    orderBy: { createdAt: 'asc' },
+  })
+  const numbers = lines
+    .map((row) => row.unit?.number)
+    .filter((number): number is string => Boolean(number))
+  if (numbers.length === 0) return own
+  if (numbers.length === 1) return numbers[0]
+  return `${numbers.slice(0, -1).join(', ')} and ${numbers[numbers.length - 1]}`
+}
+
 const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
   // CN-7: the gate code line, only after the credential is actually issued —
   // never a placeholder that looks like a code. `codeForLease` (B-029) already
@@ -574,6 +617,7 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
         ? `Your gate code is ${code}.`
         : 'Your gate code will be texted to you within 15 minutes.',
       'billing.first_charge_line': charge,
+      'unit.number_list': await movedInUnitList(event.entityId),
     }
   },
 

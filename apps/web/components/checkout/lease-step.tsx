@@ -17,8 +17,7 @@ import { ELECTRONIC_RECORDS_CONSENT } from '@/lib/lease/template'
 
 export function LeaseStep({
   token,
-  summaryHtml,
-  leaseHtml,
+  leases,
   legalName,
   signedOn,
   altContactName,
@@ -26,8 +25,10 @@ export function LeaseStep({
   activeDutyMilitary,
 }: {
   token: string
-  summaryHtml: string
-  leaseHtml: string
+  /// D-53 (B-106 part 5). One agreement per unit, in basket order. A single
+  /// signing action signs all of them — so this is a list to READ, never a list
+  /// of separate signature ceremonies.
+  leases: readonly { unitName: string; summaryHtml: string; leaseHtml: string }[]
   legalName: string
   /// B-112. Moved off step 1 to bring it under §6.4's field cap. Prefilled from
   /// the session so back navigation does not lose them (B-111's rule).
@@ -43,27 +44,51 @@ export function LeaseStep({
 }) {
   return (
     <div className="mt-4">
-      {/* Both blocks are server-rendered from templates we control and whose
-          merged values are escaped at render time (B-023), so the only markup
-          here is our own. `lease-summary` is the id on the summary template's
-          own <h2> — it had none until B-110, so this reference dangled and the
-          plain-language summary was an unnamed region rather than a landmark a
-          screen-reader user could jump to. */}
-      <section
-        aria-labelledby="lease-summary"
-        className="border-input rounded-lg border p-4"
-        dangerouslySetInnerHTML={{ __html: summaryHtml }}
-      />
+      {leases.length > 1 && (
+        <p className="text-pretty">
+          You are renting {leases.length} units, so there is one agreement for each. They are the
+          same terms — signing once at the bottom signs all {leases.length}.
+        </p>
+      )}
 
-      <section aria-labelledby="lease-full" className="mt-6">
-        <h2 id="lease-full" className="text-xl font-medium">
-          The full agreement
-        </h2>
-        <div
-          className="prose-sm mt-3 max-w-none"
-            dangerouslySetInnerHTML={{ __html: leaseHtml }}
-        />
-      </section>
+      {leases.map((lease, index) => (
+        <div key={lease.unitName} className={index === 0 && leases.length === 1 ? '' : 'mt-6'}>
+          {leases.length > 1 && (
+            <h2 className="text-xl font-medium">Agreement for {lease.unitName}</h2>
+          )}
+
+          {/* Both blocks are server-rendered from templates we control and
+              whose merged values are escaped at render time (B-023), so the
+              only markup here is our own. `lease-summary` is the id on the
+              summary template's own <h2> — it had none until B-110, so this
+              reference dangled and the plain-language summary was an unnamed
+              region rather than a landmark a screen-reader user could jump to.
+
+              The id is suffixed per agreement: N sections all pointing
+              `aria-labelledby` at one id is a duplicate-id violation AND gives
+              every region the same accessible name, which is the exact failure
+              the row calls out for the Remove controls (4.1.2). The templates
+              render their own heading id, so the wrapper carries the suffix. */}
+          <section
+            aria-label={
+              leases.length > 1 ? `What this means in plain English — ${lease.unitName}` : undefined
+            }
+            aria-labelledby={leases.length > 1 ? undefined : 'lease-summary'}
+            className="border-input mt-3 rounded-lg border p-4"
+            dangerouslySetInnerHTML={{ __html: lease.summaryHtml }}
+          />
+
+          <section aria-labelledby={`lease-full-${index}`} className="mt-6">
+            <h3 id={`lease-full-${index}`} className="text-lg font-medium">
+              {leases.length > 1 ? `The full agreement for ${lease.unitName}` : 'The full agreement'}
+            </h3>
+            <div
+              className="prose-sm mt-3 max-w-none"
+              dangerouslySetInnerHTML={{ __html: lease.leaseHtml }}
+            />
+          </section>
+        </div>
+      ))}
 
       {signedOn ? (
         <AdminForm action={advanceAction} label="Continue from your signed lease" className="mt-8">
@@ -72,9 +97,11 @@ export function LeaseStep({
 
           <h2 className="text-xl font-medium">Signed</h2>
           <p className="mt-2 text-pretty">
-            You signed this agreement on <strong>{signedOn}</strong> as {legalName}. Signing again
-            is not needed and would not change it — a signed lease is fixed, which is the point of
-            signing one.
+            You signed{' '}
+            {leases.length === 1 ? 'this agreement' : `all ${leases.length} agreements`} on{' '}
+            <strong>{signedOn}</strong> as {legalName}. Signing again is not needed and would not
+            change {leases.length === 1 ? 'it' : 'them'} — a signed lease is fixed, which is the
+            point of signing one.
           </p>
           <button
             type="submit"
@@ -84,7 +111,11 @@ export function LeaseStep({
           </button>
         </AdminForm>
       ) : (
-      <AdminForm action={signLeaseAction} label="Sign the lease" className="mt-8">
+      <AdminForm
+        action={signLeaseAction}
+        label={leases.length === 1 ? 'Sign the lease' : `Sign all ${leases.length} agreements`}
+        className="mt-8"
+      >
         <input type="hidden" name="token" value={token} />
 
         {/* B-112. Moved here from step 1, which rendered fourteen fields on a
@@ -158,10 +189,11 @@ export function LeaseStep({
           type="submit"
           className="bg-primary text-primary-foreground mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-md px-4 text-base font-medium sm:w-auto"
         >
-          Sign and continue
+          {leases.length === 1 ? 'Sign and continue' : `Sign all ${leases.length} and continue`}
         </button>
         <p className="text-muted-foreground mt-2 text-sm text-pretty">
-          You will get a copy by email, and you can download it any time. Nothing is charged until
+          You will get {leases.length === 1 ? 'a copy' : 'copies'} by email, and you can download
+          {leases.length === 1 ? ' it ' : ' them '}any time. Nothing is charged until
           the next step.
         </p>
       </AdminForm>

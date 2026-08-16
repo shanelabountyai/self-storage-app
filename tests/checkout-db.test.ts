@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { prisma } from '../packages/db'
 import {
+  addUnitToBasket,
   advance,
   canEnter,
   goBack,
@@ -11,6 +12,7 @@ import {
   LOCK_MINUTES,
   nextStep,
   relock,
+  removeUnitFromBasket,
   sendCheckoutResumeLink,
   sessionByToken,
   startCheckout,
@@ -109,6 +111,145 @@ describeDb('checkout session', () => {
   })
 
   const start = () => startCheckout({ facilityId, unitTypeId, quotedRateCents: 12_900 })
+
+
+  // B-106 part 5. The basket becomes editable.
+  describe('adding and removing units', () => {
+    it('claims a second unit, prices it from the catalogue, and names it in the change note', async () => {
+      const started = await start()
+      if (!started.ok) throw new Error('expected a session')
+
+      const added = await addUnitToBasket(started.token, unitTypeId)
+      if (!added.ok) throw new Error(`expected the add to succeed: ${JSON.stringify(added)}`)
+
+      expect(added.session.units).toHaveLength(2)
+      // The rate comes from the published UnitTypeRate, never from the caller —
+      // a price the browser can name is a price the browser can choose.
+      expect(added.session.units[1].quotedRateCents).toBe(12_900)
+      expect(added.session.units[1].unitId).not.toBe(started.unitId)
+
+      // §6.4 and the row: the note names WHICH unit moved the total, not just
+      // that one did.
+      const second = await prisma.unit.findUniqueOrThrow({
+        where: { id: added.session.units[1].unitId! },
+        select: { number: true },
+      })
+      expect(added.changeNote).toContain(second.number)
+
+      // Both units are off the market, under ONE lock.
+      const inventory = await publicInventoryForFacility(slug)
+      expect(inventory?.unitTypes[0].availableCount).toBe(0)
+    })
+
+    it('renews the one lock that covers the whole basket rather than starting a second', async () => {
+      const started = await start()
+      if (!started.ok) throw new Error('expected a session')
+
+      // Wound back so a renewal is observable rather than a same-millisecond
+      // no-op.
+      await prisma.checkoutSession.update({
+        where: { id: started.sessionId },
+        data: { lockExpiresAt: new Date(Date.now() + 5 * 60_000) },
+      })
+
+      const added = await addUnitToBasket(started.token, unitTypeId)
+      if (!added.ok) throw new Error('expected the add to succeed')
+
+      // 2.2.1: one countdown for the basket. N independent timers cannot be
+      // warned about or extended in any usable way, which is why the lock lives
+      // on the session and adding a unit renews THAT.
+      const remainingMinutes = (added.session.lockExpiresAt.getTime() - Date.now()) / 60_000
+      expect(remainingMinutes).toBeGreaterThan(LOCK_MINUTES - 1)
+    })
+
+    it('puts a removed unit straight back on sale and refuses to empty the basket', async () => {
+      const started = await start()
+      if (!started.ok) throw new Error('expected a session')
+      const added = await addUnitToBasket(started.token, unitTypeId)
+      if (!added.ok) throw new Error('expected the add to succeed')
+
+      const removed = await removeUnitFromBasket(started.token, added.session.units[1].id)
+      if (!removed.ok) throw new Error('expected the remove to succeed')
+      expect(removed.session.units).toHaveLength(1)
+
+      // Back on the market immediately. Holding a unit the renter has just
+      // taken out of their basket is the overselling failure in reverse.
+      const inventory = await publicInventoryForFacility(slug)
+      expect(inventory?.unitTypes[0].availableCount).toBe(1)
+
+      // The last unit cannot be removed — a checkout with nothing in it is not
+      // a cheaper checkout, it is a broken one.
+      const last = await removeUnitFromBasket(started.token, removed.session.units[0].id)
+      expect(last).toMatchObject({ ok: false, reason: 'last_unit' })
+    })
+
+    it('repoints the session primary when the FIRST line is the one removed', async () => {
+      const started = await start()
+      if (!started.ok) throw new Error('expected a session')
+      const added = await addUnitToBasket(started.token, unitTypeId)
+      if (!added.ok) throw new Error('expected the add to succeed')
+
+      const secondUnitId = added.session.units[1].unitId
+      const removed = await removeUnitFromBasket(started.token, added.session.units[0].id)
+      if (!removed.ok) throw new Error('expected the remove to succeed')
+
+      // Otherwise `session.unitId` names a unit that is back on sale, and the
+      // confirmation page, the reservation join and `leaseIdForSession` all
+      // read it.
+      const row = await prisma.checkoutSession.findUniqueOrThrow({
+        where: { id: started.sessionId },
+        select: { unitId: true },
+      })
+      expect(row.unitId).toBe(secondUnitId)
+      expect(removed.session.units[0].unitId).toBe(secondUnitId)
+    })
+
+    it('refuses a unit type belonging to another facility', async () => {
+      const started = await start()
+      if (!started.ok) throw new Error('expected a session')
+
+      const other = await prisma.facility.create({
+        data: {
+          name: 'Elsewhere',
+          slug: `elsewhere-${suffix}`,
+          addressLine1: '2 Storage Way',
+          city: 'Austin',
+          state: 'TX',
+          postalCode: '78704',
+          timezone: 'America/Chicago',
+        },
+      })
+      const otherType = await prisma.unitType.create({
+        data: { facilityId: other.id, name: `5x5 ${suffix}`, widthFt: 5, lengthFt: 5 },
+      })
+
+      const added = await addUnitToBasket(started.token, otherType.id)
+      expect(added).toMatchObject({ ok: false, reason: 'sold_out' })
+
+      await prisma.unitType.deleteMany({ where: { facilityId: other.id } })
+      await prisma.facility.delete({ where: { id: other.id } })
+    })
+
+    it('refuses to sell a unit type with no published rate rather than pricing it at zero', async () => {
+      const started = await start()
+      if (!started.ok) throw new Error('expected a session')
+
+      // A type whose only rate starts in the future: `currentRateForUnitType`
+      // returns null, and the alternative to refusing is renting it for free.
+      const unpriced = await prisma.unitType.create({
+        data: { facilityId, name: `5x10 ${suffix}`, widthFt: 5, lengthFt: 10 },
+      })
+      await prisma.unit.create({
+        data: { facilityId, unitTypeId: unpriced.id, number: 'C-1', status: 'available' },
+      })
+
+      const added = await addUnitToBasket(started.token, unpriced.id)
+      expect(added).toMatchObject({ ok: false, reason: 'sold_out' })
+
+      await prisma.unit.deleteMany({ where: { unitTypeId: unpriced.id } })
+      await prisma.unitType.delete({ where: { id: unpriced.id } })
+    })
+  })
 
   it('takes a unit off the market for the length of the lock', async () => {
     const before = await publicInventoryForFacility(slug)

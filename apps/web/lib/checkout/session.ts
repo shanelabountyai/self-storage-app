@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { type Prisma, prisma } from '@storage/db'
 import { recomputeUnitStatus } from '@/lib/admin/units'
+import { currentRateForUnitType } from '@/lib/pricing/unit-type-rates'
 import { sendDirectEmail } from '@/lib/comms/service'
 
 // PRD 01 FR-4.1. The server-side checkout state machine.
@@ -315,6 +316,157 @@ export type CheckoutBasketLine = {
   unitTypeId: string
   unitId: string | null
   quotedRateCents: number
+}
+
+export type BasketResult =
+  | { ok: true; session: CheckoutSessionView; changeNote: string }
+  | {
+      ok: false
+      reason: 'not_found' | 'not_active' | 'lock_lapsed' | 'sold_out' | 'last_unit' | 'no_such_line'
+    }
+
+/// B-106 part 5. Adds another unit of `unitTypeId` to the basket.
+///
+/// The rate is read from the unit type HERE rather than taken from the form,
+/// for the same reason the promotion is snapshotted at "Rent now": a price the
+/// browser can name is a price the browser can choose. It is then locked onto
+/// the line, so the rest of the checkout charges what this moment advertised
+/// even if an operator republishes the rate mid-basket (US-301).
+///
+/// One lock covers the whole basket — the lock lives on the SESSION, so adding
+/// a unit renews the single countdown rather than starting a second one. That
+/// is what makes 2.2.1 satisfiable here at all: N independent timers cannot be
+/// warned about or extended in any usable way, which the row says outright.
+export async function addUnitToBasket(token: string, unitTypeId: string): Promise<BasketResult> {
+  const current = await prisma.checkoutSession.findUnique({
+    where: { tokenHash: hashSessionToken(token) },
+    select: { facilityId: true },
+  })
+  if (!current) return { ok: false, reason: 'not_found' }
+
+  // Scoped to the session's own facility, so a posted id from another
+  // facility's catalogue claims nothing.
+  const unitType = await prisma.unitType.findFirst({
+    where: { id: unitTypeId, facilityId: current.facilityId },
+    select: { id: true, name: true, widthFt: true, lengthFt: true },
+  })
+  if (!unitType) return { ok: false, reason: 'sold_out' }
+
+  // `currentRateForUnitType` returns null for a type whose only rates start in
+  // the future, and its own note says callers must handle that rather than
+  // defaulting to zero and quietly renting something for free. Treated as
+  // unavailable: a unit with no published price is not one we can sell today.
+  const rate = await currentRateForUnitType(unitTypeId)
+  if (!rate) return { ok: false, reason: 'sold_out' }
+
+  return prisma.$transaction(async (tx) => {
+    const session = await tx.checkoutSession.findUnique({
+      where: { tokenHash: hashSessionToken(token) },
+    })
+    if (!session) return { ok: false as const, reason: 'not_found' as const }
+    if (session.status !== 'active') return { ok: false as const, reason: 'not_active' as const }
+    if (session.lockExpiresAt.getTime() <= Date.now()) {
+      return { ok: false as const, reason: 'lock_lapsed' as const }
+    }
+
+    const unitId = await claimUnit(tx, session.facilityId, unitTypeId)
+    if (!unitId) return { ok: false as const, reason: 'sold_out' as const }
+
+    const unit = await tx.unit.findUniqueOrThrow({
+      where: { id: unitId },
+      select: { number: true },
+    })
+
+    await tx.checkoutSessionUnit.create({
+      data: {
+        checkoutSessionId: session.id,
+        unitTypeId,
+        unitId,
+        quotedRateCents: rate.webRateCents,
+      },
+    })
+    await recomputeUnitStatus(unitId, tx)
+
+    // §6.4, and the row's own criterion: the note names WHICH unit moved the
+    // total. "Your total changed" on a screen with three units in it tells the
+    // renter a number moved and leaves them to find out which line did it.
+    const changeNote = `Unit ${unit.number} added — ${unitType.widthFt}×${unitType.lengthFt} ${unitType.name}.`
+
+    const updated = await tx.checkoutSession.update({
+      where: { id: session.id },
+      // Adding is activity, so it renews the lock — same rule as advancing.
+      data: {
+        lockExpiresAt: lockUntil(),
+        data: {
+          ...((session.data ?? {}) as Record<string, unknown>),
+          changeNote,
+        } as Prisma.InputJsonValue,
+      },
+      include: { units: { orderBy: { createdAt: 'asc' } } },
+    })
+    return { ok: true as const, session: toView(updated), changeNote }
+  })
+}
+
+/// Removes a basket line and puts its unit back on sale.
+///
+/// Refuses to empty the basket: a checkout with no units is not a cheaper
+/// checkout, it is a broken one, and the renter who wants that wants to
+/// abandon. The control is withheld rather than offered-and-refused when only
+/// one line is left (B-093's rule), so this is the server half of a decision
+/// the UI has already made.
+export async function removeUnitFromBasket(token: string, lineId: string): Promise<BasketResult> {
+  return prisma.$transaction(async (tx) => {
+    const session = await tx.checkoutSession.findUnique({
+      where: { tokenHash: hashSessionToken(token) },
+      include: { units: { orderBy: { createdAt: 'asc' } } },
+    })
+    if (!session) return { ok: false as const, reason: 'not_found' as const }
+    if (session.status !== 'active') return { ok: false as const, reason: 'not_active' as const }
+    if (session.lockExpiresAt.getTime() <= Date.now()) {
+      return { ok: false as const, reason: 'lock_lapsed' as const }
+    }
+    if (session.units.length <= 1) return { ok: false as const, reason: 'last_unit' as const }
+
+    const line = session.units.find((candidate) => candidate.id === lineId)
+    if (!line) return { ok: false as const, reason: 'no_such_line' as const }
+
+    const unit = line.unitId
+      ? await tx.unit.findUnique({ where: { id: line.unitId }, select: { number: true } })
+      : null
+
+    await tx.checkoutSessionUnit.delete({ where: { id: line.id } })
+    // Straight back on the market. Holding a unit the renter has just taken out
+    // of their basket is the overselling failure in reverse.
+    if (line.unitId) await recomputeUnitStatus(line.unitId, tx)
+
+    const remaining = session.units.filter((candidate) => candidate.id !== lineId)
+    const changeNote = `Unit ${unit?.number ?? 'removed'} taken out of your rental.`
+
+    const updated = await tx.checkoutSession.update({
+      where: { id: session.id },
+      data: {
+        lockExpiresAt: lockUntil(),
+        // The session's own `unitId`/`unitTypeId`/`quotedRateCents` name the
+        // PRIMARY unit — what `leaseId` means on the way out, and what the
+        // reservation and reporting joins read. Removing the first line has to
+        // repoint them or they name a unit that is back on sale.
+        ...(line.unitId === session.unitId
+          ? {
+              unitId: remaining[0].unitId,
+              unitTypeId: remaining[0].unitTypeId,
+              quotedRateCents: remaining[0].quotedRateCents,
+            }
+          : {}),
+        data: {
+          ...((session.data ?? {}) as Record<string, unknown>),
+          changeNote,
+        } as Prisma.InputJsonValue,
+      },
+      include: { units: { orderBy: { createdAt: 'asc' } } },
+    })
+    return { ok: true as const, session: toView(updated), changeNote }
+  })
 }
 
 export type AdvanceResult =

@@ -60,7 +60,7 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
     bodyText: [
       "Hi {{tenant.first_name}}, you're moved in!",
       '',
-      'Your unit is {{unit.number}} at {{facility.name}}, {{facility.address}}.',
+      'Your unit is {{unit.number_list}} at {{facility.name}}, {{facility.address}}.',
       '',
       '{{access.gate_code_line}}',
       '',
@@ -72,7 +72,7 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
     ].join('\n'),
     requiredMergeFields: [
       'tenant.first_name',
-      'unit.number',
+      'unit.number_list',
       'facility.name',
       'facility.address',
       'access.gate_code_line',

@@ -2,10 +2,12 @@
 
 import { revalidatePath } from 'next/cache'
 import {
+  addUnitToBasket,
   advance,
   extendLock,
   goBack,
   relock,
+  removeUnitFromBasket,
   sendCheckoutResumeLink,
   type Step,
 } from '@/lib/checkout/session'
@@ -33,7 +35,7 @@ import { sessionByToken } from '@/lib/checkout/session'
 import { offerFor } from '@/lib/promotions/service'
 import { isoDate, judgeStartDate, startDateWindow } from '@storage/core/checkout'
 import { businessDateFor } from '@storage/core/jobs'
-import { existingLeaseDocument } from '@/lib/lease/build'
+import { existingLeaseDocuments } from '@/lib/lease/build'
 import { ELECTRONIC_RECORDS_CONSENT_VERSION, signDocument, validateSignature } from '@/lib/lease/sign'
 import { requestMetadata } from '@/lib/http/request-metadata'
 
@@ -238,8 +240,9 @@ export async function signLeaseAction(_prev: FormState, formData: FormData): Pro
     return { status: 'error', message: 'We could not find that checkout.', fieldErrors: {} }
   }
 
-  const document = await existingLeaseDocument(session.id)
-  if (!document) {
+  // D-53. Every agreement in the basket, signed by this one action.
+  const documents = await existingLeaseDocuments(session)
+  if (documents.length !== session.units.length) {
     return {
       status: 'error',
       message: 'We could not find your lease. Reload the page and it will be rebuilt.',
@@ -270,25 +273,37 @@ export async function signLeaseAction(_prev: FormState, formData: FormData): Pro
   if (Object.keys(errors).length > 0) return fieldError(errors)
 
   const { ipAddress, userAgent } = await requestMetadata()
-  const signed = await signDocument({
-    documentId: document.id,
-    typedName: String(formData.get('typedName') ?? ''),
-    legalName,
-    consented: true,
-    ipAddress,
-    userAgent,
-  })
-
-  if (!signed.ok) {
-    return {
-      status: 'error',
-      message:
-        signed.reason === 'already_signed'
-          ? 'This lease has already been signed.'
-          : 'We could not record your signature. Reload the page and try again.',
-      fieldErrors: {},
+  // D-53: one signing action, N agreements. Sequential rather than parallel so
+  // a refusal names the agreement that refused, and `already_signed` is treated
+  // as success for the SET — a renter who signed two of three and hit a
+  // transport error must be able to press the button again rather than be told
+  // the lease is already signed and left with one unsigned unit.
+  const signatures = []
+  for (const entry of documents) {
+    const signed = await signDocument({
+      documentId: entry.document.id,
+      typedName: String(formData.get('typedName') ?? ''),
+      legalName,
+      consented: true,
+      ipAddress,
+      userAgent,
+    })
+    if (!signed.ok && signed.reason !== 'already_signed') {
+      return {
+        status: 'error',
+        message: 'We could not record your signature. Reload the page and try again.',
+        fieldErrors: {},
+      }
     }
+    if (signed.ok) signatures.push(signed)
   }
+
+  // Every document already carried a signature, and none was written now. That
+  // is the genuine "you have already signed" case.
+  if (signatures.length === 0) {
+    return { status: 'error', message: 'This lease has already been signed.', fieldErrors: {} }
+  }
+  const signed = signatures[0]
 
   // PRD 02 US-13: distinct from the E-SIGN consent `signDocument` just
   // recorded on the document itself — this is the specifically-typed record
@@ -310,7 +325,10 @@ export async function signLeaseAction(_prev: FormState, formData: FormData): Pro
   if (session.tenantId) await recordLeaseDeclarations(session.tenantId, declarations)
 
   const result = await advance(token, 'lease', {
-    leaseDocumentId: document.id,
+    // The primary unit's agreement. Every document in the set is signed and
+    // stored; this names the one the confirmation and the receipt link to,
+    // matching `leaseId` alongside `leaseIds` on the provisioning side.
+    leaseDocumentId: documents[0].document.id,
     signedAt: signed.signedAt.toISOString(),
     ...declarations,
   })
@@ -504,6 +522,64 @@ export async function confirmUnitAction(
 
   revalidatePath('/checkout')
   return { status: 'success', message: 'Unit confirmed. Next: protection.' }
+}
+
+// B-106 part 5. Adding and removing units in one checkout.
+//
+// Both mutate the basket and then re-render the same step rather than
+// advancing: the renter is still deciding what they are renting, and a change
+// that moved them forward would make "add another" a one-way door.
+//
+// The success message is the same string the summary's change note carries, so
+// what a screen-reader user hears and what a sighted user reads under the
+// total are one sentence rather than two that can drift apart.
+
+/// Shared refusal wording. The reasons are the same on both paths and each one
+/// says what the renter can do next, never just what failed.
+function basketRefusal(reason: string): FormState {
+  if (reason === 'lock_lapsed') {
+    return {
+      status: 'error',
+      message:
+        'The 30 minutes we were holding your units ran out. Nothing has been charged — see below for what we can do.',
+      fieldErrors: {},
+    }
+  }
+  if (reason === 'sold_out') {
+    return {
+      status: 'error',
+      message:
+        'That size just went. Nothing has changed in your rental — pick another size, or carry on with what you have.',
+      fieldErrors: {},
+    }
+  }
+  if (reason === 'last_unit') {
+    return {
+      status: 'error',
+      message:
+        'This is the only unit in your rental, so there is nothing to take it out of. To stop renting, just close this page — nothing has been charged.',
+      fieldErrors: {},
+    }
+  }
+  return { status: 'error', message: 'We could not change your rental. Reload the page and try again.', fieldErrors: {} }
+}
+
+export async function addUnitAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const token = String(formData.get('token') ?? '')
+  const result = await addUnitToBasket(token, String(formData.get('unitTypeId') ?? ''))
+  if (!result.ok) return basketRefusal(result.reason)
+
+  revalidatePath('/checkout')
+  return { status: 'success', message: result.changeNote }
+}
+
+export async function removeUnitAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const token = String(formData.get('token') ?? '')
+  const result = await removeUnitFromBasket(token, String(formData.get('lineId') ?? ''))
+  if (!result.ok) return basketRefusal(result.reason)
+
+  revalidatePath('/checkout')
+  return { status: 'success', message: result.changeNote }
 }
 
 export async function advanceAction(_prev: FormState, formData: FormData): Promise<FormState> {

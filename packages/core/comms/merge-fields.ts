@@ -44,6 +44,12 @@ export const EVENT_MERGE_FIELDS: Record<string, readonly MergeFieldSpec[]> = {
   'lease.moved_in': [
     { field: 'unit.number', description: 'Unit number', sample: 'A-12' },
     { field: 'unit.size', description: 'Unit size', sample: '10x10' },
+    // D-55 (B-106 part 5). A multi-unit checkout emits ONE move-in event, so
+    // the welcome names every unit it covers rather than only the primary one
+    // `unit.number` resolves to. Reads "A-12" for a single unit and
+    // "A-12, B-04 and C-11" for three, so one template serves both without a
+    // conditional the template language does not have.
+    { field: 'unit.number_list', description: 'Every unit this move-in covers', sample: 'A-12 and B-04' },
     { field: 'access.gate_code_line', description: 'The gate-code sentence, or a fallback if no code is issued yet', sample: 'Your gate code is 4821.' },
     { field: 'billing.first_charge_line', description: 'What was charged today and what recurs', sample: 'You were charged $161.00 today. After that, rent is $129.00/mo, billed on day 12 of each month.' },
   ],

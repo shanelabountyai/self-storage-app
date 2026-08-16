@@ -22,14 +22,28 @@ export async function provisionAccessForLease(leaseId: string): Promise<AccessPr
   })
   if (!lease) return { ok: false, reason: 'lease_not_found' }
 
+  const grant = await ensureGrant(lease.facilityId, lease.tenantId, 'system:move_in')
+  await transitionGrant(grant.grantId, 'active', 'system:move_in')
+
+  // D-54. The idempotency check is on the GRANT, not on the lease.
+  //
+  // It used to ask "does this LEASE have a credential", which made a
+  // three-unit checkout mint three PINs — and the grant is keyed
+  // `(facilityId, tenantId)`, so all three opened the same gate with the same
+  // permissions and the same hours. Three codes for one door is not a smaller
+  // version of per-unit access; it is three times as much for a tenant to leak
+  // and for staff to revoke, for no door it can distinguish.
+  //
+  // Kept AFTER `transitionGrant` deliberately: a tenant whose access was
+  // suspended and who is now renting another unit must have the grant
+  // reactivated whether or not a credential already exists, which is what the
+  // per-lease version did too. Only the minting changes.
   const existing = await prisma.accessCredential.findFirst({
-    where: { leaseId, state: 'active' },
+    where: { grantId: grant.grantId, state: 'active' },
     select: { id: true, grantId: true },
   })
   if (existing) return { ok: true, grantId: existing.grantId, alreadyProvisioned: true }
 
-  const grant = await ensureGrant(lease.facilityId, lease.tenantId, 'system:move_in')
-  await transitionGrant(grant.grantId, 'active', 'system:move_in')
   const credential = await issueCredential(grant.grantId, leaseId)
 
   // PRD 03 US-4. Push the facility's gate hours to this grant now. Without it a
@@ -63,8 +77,26 @@ export async function codeForLease(leaseId: string): Promise<string | null> {
   const key = accessCodeEncryptionKey()
   if (!key) return null
 
+  // D-54. The code is the tenant's, not the lease's, so this resolves through
+  // the lease to the tenant's grant rather than matching on `leaseId`.
+  //
+  // The credential still RECORDS the lease that first caused it to exist, and
+  // a per-lease match still finds it — but only for that one lease. A tenant
+  // renting a second unit would have seen "your gate code will be texted to
+  // you" on the portal card for a unit whose code was already in their hand,
+  // for a code that opens the same gate. The lease is the way in to the
+  // tenant; the grant is what actually holds the credential.
+  const lease = await prisma.lease.findUnique({
+    where: { id: leaseId },
+    select: { facilityId: true, tenantId: true },
+  })
+  if (!lease) return null
+
   const credential = await prisma.accessCredential.findFirst({
-    where: { leaseId, state: 'active' },
+    where: {
+      state: 'active',
+      grant: { facilityId: lease.facilityId, tenantId: lease.tenantId },
+    },
     orderBy: { createdAt: 'desc' },
     select: { valueRef: true },
   })
