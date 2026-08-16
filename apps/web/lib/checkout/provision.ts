@@ -44,10 +44,30 @@ export async function provisionMoveIn(sessionId: string): Promise<ProvisionResul
     select: { tenantId: true, unitId: true, reservationId: true, abandonmentSequenceStep: true },
   })
   if (!row.tenantId) return { ok: false, reason: 'no_tenant' }
-  if (!row.unitId) return { ok: false, reason: 'no_unit' }
 
+  // B-106. Every line of the basket that actually holds a unit.
+  //
+  // A line without one cannot be provisioned — the same condition the single
+  // `unitId` guard expressed before — and a basket with NO claimed units at all
+  // is the old `no_unit` refusal.
+  const claimed = session.units.filter(
+    (line): line is typeof line & { unitId: string } => line.unitId !== null,
+  )
+  if (claimed.length === 0) return { ok: false, reason: 'no_unit' }
+
+  // Idempotency across the WHOLE basket, not the first unit.
+  //
+  // A webhook redelivery, a retry or a refreshed confirmation page must not
+  // create a second set of leases. Checked as "does this tenant already hold a
+  // live lease on ANY unit in this basket" — if provisioning ran, every line
+  // has one, and if it half-ran the transaction rolled it all back, so there is
+  // no partial state to reconcile.
   const existing = await prisma.lease.findFirst({
-    where: { unitId: row.unitId, tenantId: row.tenantId, status: { not: 'ended' } },
+    where: {
+      unitId: { in: claimed.map((line) => line.unitId) },
+      tenantId: row.tenantId,
+      status: { not: 'ended' },
+    },
     select: { id: true },
   })
   if (existing) return { ok: true, leaseId: existing.id, alreadyProvisioned: true }
@@ -120,25 +140,56 @@ export async function provisionMoveIn(sessionId: string): Promise<ProvisionResul
     : null
 
   const leaseId = await prisma.$transaction(async (tx) => {
-    const lease = await tx.lease.create({
-      data: {
-        facilityId: session.facilityId,
-        tenantId: row.tenantId!,
-        unitId: row.unitId!,
-        // `active` rather than `pending`: the money is in and the renter can
-        // open the gate. A pending lease here would leave the unit reading as
-        // occupied while nothing bills it.
-        status: 'active',
-        startDate,
-        monthlyRateCents: session.quotedRateCents,
-        billingDay: billingDayFor(facility.billingPolicy, localToday),
-        acquisitionSource: reservationSource ?? 'web',
-        autopayEnabled,
-        protectionPlanName: protectionTier === 'waiver' ? null : protectionTier,
-        protectionCents: premiumCents,
-        protectionWaivedAt: protectionTier === 'waiver' ? new Date() : null,
-      },
-    })
+    // B-106. One lease per basket line, in one transaction.
+    //
+    // All or nothing, deliberately: a renter who paid for two units and got one
+    // lease has been charged for something they do not hold, and reconciling
+    // that by hand means reading a payment against a basket nobody recorded.
+    // The transaction is what makes "paid for two, holds two" the only
+    // outcome besides "paid for nothing".
+    const leases: { id: string; unitId: string; monthlyRateCents: number }[] = []
+    for (const line of claimed) {
+      const created = await tx.lease.create({
+        data: {
+          facilityId: session.facilityId,
+          tenantId: row.tenantId!,
+          unitId: line.unitId,
+          // `active` rather than `pending`: the money is in and the renter can
+          // open the gate. A pending lease here would leave the unit reading as
+          // occupied while nothing bills it.
+          status: 'active',
+          startDate,
+          // The rate THIS line locked, not the session's — the whole reason the
+          // basket carries a rate per line.
+          monthlyRateCents: line.quotedRateCents,
+          billingDay: billingDayFor(facility.billingPolicy, localToday),
+          acquisitionSource: reservationSource ?? 'web',
+          autopayEnabled,
+          // Protection is chosen once for the checkout and applies to the
+          // first lease only. A tier priced per unit is a product decision
+          // nobody has made — charging one premium and recording it against
+          // every lease would misstate what each unit is covered for, and
+          // charging N premiums would bill for cover the renter never agreed
+          // to. Part 3's known gap, named in PROGRESS.
+          protectionPlanName:
+            leases.length === 0 && protectionTier !== 'waiver' ? protectionTier : null,
+          protectionCents: leases.length === 0 ? premiumCents : 0,
+          protectionWaivedAt:
+            leases.length === 0 && protectionTier === 'waiver' ? new Date() : null,
+        },
+      })
+      leases.push({
+        id: created.id,
+        unitId: line.unitId,
+        monthlyRateCents: line.quotedRateCents,
+      })
+    }
+    // The first lease is the one every downstream single-lease consumer reads —
+    // the confirmation page, the gate code, the welcome message. Naming it
+    // rather than threading a list through those is deliberate for now; part 3
+    // does not change what they mean for a one-unit checkout, which is still
+    // every checkout the UI can produce.
+    const lease = leases[0]
 
     // B-121 / D-49. The active-duty declaration from the lease step becomes the
     // hold that actually stops the pipeline, before this lease can be dunned by
@@ -161,15 +212,17 @@ export async function provisionMoveIn(sessionId: string): Promise<ProvisionResul
     // US-11's clock, started at the only moment it can be. See the model's own
     // comment: a lease created without this row is a tenant permanently
     // ineligible for a rules-based rate increase, and it cannot be backfilled.
-    await tx.leaseRateChange.create({
-      data: {
-        leaseId: lease.id,
-        previousRateCents: null,
-        newRateCents: session.quotedRateCents,
-        effectiveFrom: lease.startDate,
-        reason: 'move_in',
-      },
-    })
+    for (const created of leases) {
+      await tx.leaseRateChange.create({
+        data: {
+          leaseId: created.id,
+          previousRateCents: null,
+          newRateCents: created.monthlyRateCents,
+          effectiveFrom: startDate,
+          reason: 'move_in',
+        },
+      })
+    }
 
     // The waiver, if there was one, now belongs to the lease rather than to a
     // checkout session that is about to be completed.
@@ -185,10 +238,26 @@ export async function provisionMoveIn(sessionId: string): Promise<ProvisionResul
       data: { subjectType: 'Lease', subjectId: lease.id },
     })
 
+    // B-106. The move-in charge, apportioned so every lease's ledger reflects
+    // what that lease actually bought.
+    //
+    // Each lease carries its own rent; the shared costs of the checkout — the
+    // admin fee, the tax, the protection premium — go on the first, because
+    // they are charged once for the transaction rather than per door (see
+    // `amountDueToday`). The parts still sum to exactly what was paid, which
+    // `openingLedger` asserts rather than trusting the arithmetic here.
+    //
+    // The alternative — the whole total on lease one — leaves a second lease
+    // with no opening charge at all, so its ledger says it owes nothing for a
+    // period the renter has already paid for, and its first invoice arrives
+    // next month against a balance that never recorded the first.
     await openingLedger(tx, {
       facilityId: session.facilityId,
-      leaseId: lease.id,
-      dueTodayCents: due.totalDueTodayCents,
+      totalDueTodayCents: due.totalDueTodayCents,
+      leases: leases.map((created) => ({
+        leaseId: created.id,
+        rentCents: created.monthlyRateCents,
+      })),
     })
 
     // A reservation that led here converted rather than expiring — the
@@ -206,7 +275,9 @@ export async function provisionMoveIn(sessionId: string): Promise<ProvisionResul
     })
 
     // Derived, not set: the lease is what makes the unit occupied (B-010).
-    await recomputeUnitStatus(row.unitId!, tx)
+    // Every unit in the basket, not just the first — a unit whose status was
+    // never recomputed stays `available` and the public site keeps selling it.
+    for (const created of leases) await recomputeUnitStatus(created.unitId, tx)
 
     await emitEvent(
       {
@@ -334,18 +405,34 @@ export async function provisionMoveIn(sessionId: string): Promise<ProvisionResul
 /// statement and a dispute both read.
 async function openingLedger(
   tx: Prisma.TransactionClient,
-  input: { facilityId: string; leaseId: string; dueTodayCents: number },
+  input: {
+    facilityId: string
+    totalDueTodayCents: number
+    leases: { leaseId: string; rentCents: number }[]
+  },
 ): Promise<void> {
-  await tx.ledgerEntry.create({
-    data: {
-      facilityId: input.facilityId,
-      leaseId: input.leaseId,
-      type: 'charge',
-      // Signed: a charge increases what is owed.
-      amountCents: input.dueTodayCents,
-      description: 'Move-in charges',
-    },
-  })
+  const rentTotal = input.leases.reduce((sum, lease) => sum + lease.rentCents, 0)
+  // Everything that is not rent — admin fee, tax, protection — charged once for
+  // the checkout and carried by the first lease.
+  const shared = input.totalDueTodayCents - rentTotal
+
+  for (const [index, lease] of input.leases.entries()) {
+    const amountCents = lease.rentCents + (index === 0 ? shared : 0)
+    // A zero-rent line with no share of the fees would be a $0.00 entry in a
+    // tenant's history, which is the same thing `generateInvoiceForPeriod`
+    // refuses to write.
+    if (amountCents === 0) continue
+    await tx.ledgerEntry.create({
+      data: {
+        facilityId: input.facilityId,
+        leaseId: lease.leaseId,
+        type: 'charge',
+        // Signed: a charge increases what is owed.
+        amountCents,
+        description: 'Move-in charges',
+      },
+    })
+  }
 }
 
 /// FR-4.5's downstream work: the gate code, the emails.

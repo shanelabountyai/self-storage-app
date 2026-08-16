@@ -4129,3 +4129,23 @@ Three findings from the 2026-08-12 reviews, all in a shipped auth flow.
 **Left for part 3:** the UI and the rest of the money path — adding and removing units, one lock/warning/extension covering the basket, per-unit itemisation in the price summary with a change note naming **which** unit moved the total, per-unit `<fieldset>` grouping so N "Remove" controls do not share an accessible name, N leases at provisioning, and a lease document covering the basket.
 
 **Test verification:** unit suite green, **2,930 passing** (up 2 — the basket summing to more than one line, and the admin fee not multiplying). Typecheck, lint and the schema-drift check clean. Full e2e green: **871 passed, 5 skipped, 0 failed of 876** — identical to part 1, which is the assertion that matters for a refactor.
+
+## B-106 (part 3 of 4) — Provisioning N leases
+
+`XXXXXXX`
+
+**The money path can now complete a multi-unit checkout; the UI still cannot start one.** That ordering is deliberate and is the reason this is its own part: a UI that lets a renter build a two-unit basket against provisioning that creates one lease would charge for two units and hand over one, with no record of the second and no way back. Provisioning goes first, proven by tests that build a two-line basket directly.
+
+**Built:** `provisionMoveIn` creates **one lease per basket line**, in one transaction. All or nothing, deliberately — "paid for two, holds two" or "paid for nothing" are the only outcomes, because the alternative leaves somebody charged for something they do not hold and a reconciliation that means reading a payment against a basket nobody recorded. Each lease carries the rate **its own line** locked, which is the whole reason the basket holds a rate per line. Every unit's status is recomputed, not just the first — a unit that missed it stays `available` and the public site keeps selling a rented door.
+
+**Decided — idempotency is checked across the whole basket.** "Does this tenant already hold a live lease on ANY unit in this basket" rather than on the first: if provisioning ran, every line has one, and if it half-ran the transaction rolled it all back, so there is no partial state a redelivered webhook could find.
+
+**Decided — the move-in charge is apportioned, not dumped on the first lease.** Each lease's ledger carries its own rent; the costs charged once for the transaction — admin fee, tax, protection — sit on the first. The parts still sum to exactly what was paid, and a test asserts that against `amountDueToday` rather than trusting the arithmetic. The alternative leaves a second lease with **no opening charge at all**: its ledger says it owes nothing for a period the renter has already paid for, and its first invoice arrives next month against a balance that never recorded the first.
+
+**Named, not solved — protection on a multi-unit checkout.** The premium is chosen once and recorded against the first lease only. Charging one premium and recording it against every lease would misstate what each unit is covered for; charging N would bill for cover the renter never agreed to. Neither is right, and which one is depends on a product decision nobody has made — the protection step asks about "your things", not "each unit". It is harmless today because no UI can produce N > 1, and it is the first thing part 4 has to settle.
+
+**Also unresolved for N > 1, and named for the same reason:** the signed lease document, the `lease.moved_in` event and the gate code all attach to the first lease. For a one-unit checkout — still every checkout the UI can produce — that is exactly what they meant before. For a basket they need a decision each: one document listing every unit or one per lease, one welcome naming all the units or N of them.
+
+**Test verification:** unit suite green, **2,932 passing** (up 2 — a two-line basket producing two leases at their own rates with both units occupied and the ledger conserved, and idempotency holding across the basket). Typecheck and lint clean. Full e2e green: **870 passed, 6 skipped, 0 failed of 876**; the extra skip against part 2 is `admin-tasks`' documented once-per-day self-skip, not a regression.
+
+**Left for part 4:** the UI — add and remove units, one lock/warning/extension covering the basket, per-unit itemisation with a change note naming which unit moved the total, per-unit `<fieldset>` grouping so N "Remove" controls do not share an accessible name — plus the protection and lease-document decisions above.

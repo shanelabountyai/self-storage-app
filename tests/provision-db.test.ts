@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { prisma } from '../packages/db'
 import { provisionMoveIn } from '../apps/web/lib/checkout/provision'
+import { amountDueToday } from '../apps/web/lib/checkout/payment'
+import { sessionById } from '../apps/web/lib/checkout/session'
 import { startCheckout, advance } from '../apps/web/lib/checkout/session'
 import { createReservation } from '../apps/web/lib/reservations/reserve'
 import { publicInventoryForFacility } from '../apps/web/lib/inventory/public-inventory'
@@ -127,6 +129,81 @@ describeDb('move-in provisioning', () => {
     // And it is gone from what the public site can sell.
     const inventory = await publicInventoryForFacility(slug)
     expect(inventory?.unitTypes[0]?.availableCount ?? 0).toBe(0)
+  })
+
+  it('provisions one lease per basket line, and the ledger sums to what was paid (B-106)', async () => {
+    // The property that makes multi-unit safe to turn on: a renter who paid
+    // for two units holds two leases, or the transaction rolled back and they
+    // hold none. "Paid for two, got one" is the outcome with no way back.
+    const started = await paidSession()
+    const secondUnit = await prisma.unit.create({
+      data: { facilityId, unitTypeId, number: `MU-${suffix}` },
+    })
+    await prisma.checkoutSessionUnit.create({
+      data: {
+        checkoutSessionId: started.sessionId,
+        unitTypeId,
+        unitId: secondUnit.id,
+        quotedRateCents: 9_900,
+      },
+    })
+
+    const result = await provisionMoveIn(started.sessionId)
+    expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error('unreachable')
+
+    const leases = await prisma.lease.findMany({
+      where: { unitId: { in: [started.unitId, secondUnit.id] } },
+      orderBy: { monthlyRateCents: 'desc' },
+    })
+    expect(leases).toHaveLength(2)
+    // Each lease carries the rate ITS line locked, not the session's.
+    expect(leases.map((lease) => lease.monthlyRateCents)).toEqual([12_900, 9_900])
+
+    // Both units are occupied — a unit whose status was never recomputed stays
+    // available and the public site keeps selling it.
+    const units = await prisma.unit.findMany({
+      where: { id: { in: [started.unitId, secondUnit.id] } },
+      select: { status: true },
+    })
+    expect(units.every((unit) => unit.status === 'occupied')).toBe(true)
+
+    // The opening charges are apportioned but still total exactly what was
+    // charged — every lease's ledger reflects what that lease bought, and
+    // nothing is invented or lost in the split.
+    const entries = await prisma.ledgerEntry.findMany({
+      where: { leaseId: { in: leases.map((lease) => lease.id) }, description: 'Move-in charges' },
+    })
+    expect(entries.length).toBe(2)
+    const due = await amountDueToday((await sessionById(started.sessionId))!)
+    expect(entries.reduce((sum, entry) => sum + entry.amountCents, 0)).toBe(due.totalDueTodayCents)
+  })
+
+  it('is idempotent across the whole basket, not just the first unit (B-106)', async () => {
+    // A webhook redelivery must not create a second set of leases.
+    const started = await paidSession()
+    const secondUnit = await prisma.unit.create({
+      data: { facilityId, unitTypeId, number: `MU2-${suffix}` },
+    })
+    await prisma.checkoutSessionUnit.create({
+      data: {
+        checkoutSessionId: started.sessionId,
+        unitTypeId,
+        unitId: secondUnit.id,
+        quotedRateCents: 9_900,
+      },
+    })
+
+    const first = await provisionMoveIn(started.sessionId)
+    const again = await provisionMoveIn(started.sessionId)
+    expect(first.ok && again.ok).toBe(true)
+    if (!again.ok) throw new Error('unreachable')
+    expect(again.alreadyProvisioned).toBe(true)
+
+    const leases = await prisma.lease.count({
+      where: { unitId: { in: [started.unitId, secondUnit.id] } },
+    })
+    expect(leases).toBe(2)
   })
 
   it('starts the lease on the date the renter chose, and anchors billing to it (B-106)', async () => {
