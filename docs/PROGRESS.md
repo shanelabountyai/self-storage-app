@@ -4024,7 +4024,7 @@ Added `db:migrate:e2e`, migrating and seeding the `public` schema of the `storag
 
 ## B-101 — Referral visibility, and the comms B-100 deferred
 
-`XXXXXXX`
+`a2947ab`
 
 **Built — the four §6.3 templates, and a better answer than the one B-100 flagged.** B-100 left these deferred, saying the comms core needed per-**rule** recipient resolution. It does not. `processCommsEvent` resolves one recipient per **event**, so the fix is one event per recipient: `referral.qualified` to the referrer, `referral.reward_granted` to the referee, `referral.refused` to the referrer — each naming a `Tenant`, each reaching the existing resolver, each with exactly one rule. No change to the comms core at all, and it reads as a better model rather than a workaround, because they *are* three different facts. The clawback template has no trigger to fire it and is not seeded; clawback itself is still unbuilt (§4.1).
 
