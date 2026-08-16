@@ -4082,7 +4082,7 @@ Three findings from the 2026-08-12 reviews, all in a shipped auth flow.
 
 ## B-106 (part 1 of 2) — Future-dated move-ins
 
-`XXXXXXX`
+`c557926`
 
 **Half the row, and the backlog row stays unticked.** B-106 bundles future-dating with multi-unit checkout; the owner chose to take them separately because multi-unit restructures the basket, the lock and provisioning all at once and every intermediate state of that is on the path that takes money. Future-dating is genuinely separable — one nullable column, no basket changes — so the checkout stays coherent at every commit. Multi-unit is next and is the larger half.
 
