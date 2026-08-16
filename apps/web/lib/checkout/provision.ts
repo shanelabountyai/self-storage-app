@@ -28,7 +28,19 @@ import { qualifyReferral } from '@/lib/referrals/service'
 // with a receipt is moved in whether or not our hardware queue is healthy.
 
 export type ProvisionResult =
-  | { ok: true; leaseId: string; alreadyProvisioned: boolean }
+  | {
+      ok: true
+      /// The checkout's primary lease — the first line of the basket. What
+      /// every single-lease consumer means, and unchanged for a one-unit
+      /// checkout.
+      leaseId: string
+      /// B-106. Every lease this checkout created. Access credentials are per
+      /// LEASE, so a basket needs one issued for each: a renter who paid for
+      /// two units and can open one is locked out of something they are paying
+      /// for, which is the same defect as not creating the lease at all.
+      leaseIds: string[]
+      alreadyProvisioned: boolean
+    }
   | { ok: false; reason: 'session_not_found' | 'no_tenant' | 'no_unit' }
 
 /// Provisions a move-in for a paid checkout session.
@@ -70,7 +82,25 @@ export async function provisionMoveIn(sessionId: string): Promise<ProvisionResul
     },
     select: { id: true },
   })
-  if (existing) return { ok: true, leaseId: existing.id, alreadyProvisioned: true }
+  if (existing) {
+    // Already done. Return every lease of the basket so a redelivery still
+    // provisions access for all of them — the first attempt may have failed
+    // downstream after the transaction committed.
+    const all = await prisma.lease.findMany({
+      where: {
+        unitId: { in: claimed.map((line) => line.unitId) },
+        tenantId: row.tenantId,
+        status: { not: 'ended' },
+      },
+      select: { id: true },
+    })
+    return {
+      ok: true,
+      leaseId: existing.id,
+      leaseIds: all.map((lease) => lease.id),
+      alreadyProvisioned: true,
+    }
+  }
 
   const due = await amountDueToday(session)
   const data = session.data as Record<string, unknown>
@@ -139,7 +169,7 @@ export async function provisionMoveIn(sessionId: string): Promise<ProvisionResul
       )?.source
     : null
 
-  const leaseId = await prisma.$transaction(async (tx) => {
+  const leaseIds = await prisma.$transaction(async (tx) => {
     // B-106. One lease per basket line, in one transaction.
     //
     // All or nothing, deliberately: a renter who paid for two units and got one
@@ -165,17 +195,14 @@ export async function provisionMoveIn(sessionId: string): Promise<ProvisionResul
           billingDay: billingDayFor(facility.billingPolicy, localToday),
           acquisitionSource: reservationSource ?? 'web',
           autopayEnabled,
-          // Protection is chosen once for the checkout and applies to the
-          // first lease only. A tier priced per unit is a product decision
-          // nobody has made — charging one premium and recording it against
-          // every lease would misstate what each unit is covered for, and
-          // charging N premiums would bill for cover the renter never agreed
-          // to. Part 3's known gap, named in PROGRESS.
-          protectionPlanName:
-            leases.length === 0 && protectionTier !== 'waiver' ? protectionTier : null,
-          protectionCents: leases.length === 0 ? premiumCents : 0,
-          protectionWaivedAt:
-            leases.length === 0 && protectionTier === 'waiver' ? new Date() : null,
+          // D-52 (B-106). One plan per unit: every lease carries the tier the
+          // renter chose and its own premium. Recording one premium against
+          // the first lease only — the shape before this decision — left the
+          // other leases showing no protection at all on their own screens,
+          // so the record disagreed with what was sold.
+          protectionPlanName: protectionTier === 'waiver' ? null : protectionTier,
+          protectionCents: premiumCents,
+          protectionWaivedAt: protectionTier === 'waiver' ? new Date() : null,
         },
       })
       leases.push({
@@ -241,10 +268,10 @@ export async function provisionMoveIn(sessionId: string): Promise<ProvisionResul
     // B-106. The move-in charge, apportioned so every lease's ledger reflects
     // what that lease actually bought.
     //
-    // Each lease carries its own rent; the shared costs of the checkout — the
-    // admin fee, the tax, the protection premium — go on the first, because
-    // they are charged once for the transaction rather than per door (see
-    // `amountDueToday`). The parts still sum to exactly what was paid, which
+    // Each lease carries its own rent AND its own protection premium (D-52);
+    // the costs still charged once for the transaction — the admin fee and the
+    // tax — go on the first, because those are for opening an account rather
+    // than for each door (see `amountDueToday`). The parts still sum to exactly what was paid, which
     // `openingLedger` asserts rather than trusting the arithmetic here.
     //
     // The alternative — the whole total on lease one — leaves a second lease
@@ -256,7 +283,7 @@ export async function provisionMoveIn(sessionId: string): Promise<ProvisionResul
       totalDueTodayCents: due.totalDueTodayCents,
       leases: leases.map((created) => ({
         leaseId: created.id,
-        rentCents: created.monthlyRateCents,
+        rentCents: created.monthlyRateCents + premiumCents,
       })),
     })
 
@@ -331,7 +358,7 @@ export async function provisionMoveIn(sessionId: string): Promise<ProvisionResul
       }
     }
 
-    return lease.id
+    return leases.map((created) => created.id)
   })
 
   // PRD 10 §4 (B-100). Qualification: "a referral qualifies when the referee's
@@ -355,7 +382,7 @@ export async function provisionMoveIn(sessionId: string): Promise<ProvisionResul
       await qualifyReferral({
         inviteId: referralInviteId,
         refereeTenantId: row.tenantId!,
-        refereeLeaseId: leaseId,
+        refereeLeaseId: leaseIds[0],
         refereeFacilityId: session.facilityId,
       })
     } catch {
@@ -381,7 +408,7 @@ export async function provisionMoveIn(sessionId: string): Promise<ProvisionResul
   await track({
     event: 'move_in_completed',
     facilityId: session.facilityId,
-    sessionId: analytics?.sessionId ?? `lease:${leaseId}`,
+    sessionId: analytics?.sessionId ?? `lease:${leaseIds[0]}`,
     channel: analytics?.channel ?? reservationSource ?? null,
     utmSource: analytics?.utmSource ?? null,
     utmMedium: analytics?.utmMedium ?? null,
@@ -395,7 +422,7 @@ export async function provisionMoveIn(sessionId: string): Promise<ProvisionResul
     },
   })
 
-  return { ok: true, leaseId, alreadyProvisioned: false }
+  return { ok: true, leaseId: leaseIds[0], leaseIds, alreadyProvisioned: false }
 }
 
 /// The opening ledger: what was owed today, and the payment that cleared it.

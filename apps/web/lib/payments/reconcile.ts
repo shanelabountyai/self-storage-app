@@ -240,7 +240,10 @@ export async function applyStripeEvent(event: Stripe.Event): Promise<void> {
       // paid; if this throws, the webhook retries and the money stays received.
       if (checkoutSessionId) {
         const result = await provisionMoveIn(checkoutSessionId)
-        if (result.ok) await requestDownstream(result.leaseId)
+        // B-106. Every lease of the basket, not just the first: an access
+        // credential is per lease, and a renter who paid for two units and can
+        // open one is locked out of something they are paying for.
+        if (result.ok) for (const id of result.leaseIds) await requestDownstream(id)
       }
       return
     }
@@ -303,7 +306,10 @@ export async function applyStripeEvent(event: Stripe.Event): Promise<void> {
       // knows how to handle.
       if (checkoutSessionId) {
         const result = await provisionMoveIn(checkoutSessionId)
-        if (result.ok) await requestDownstream(result.leaseId)
+        // B-106. Every lease of the basket, not just the first: an access
+        // credential is per lease, and a renter who paid for two units and can
+        // open one is locked out of something they are paying for.
+        if (result.ok) for (const id of result.leaseIds) await requestDownstream(id)
       }
       return
     }

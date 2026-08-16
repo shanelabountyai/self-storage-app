@@ -179,6 +179,43 @@ describeDb('move-in provisioning', () => {
     expect(entries.reduce((sum, entry) => sum + entry.amountCents, 0)).toBe(due.totalDueTodayCents)
   })
 
+  it('gives every unit its own protection plan and its own lease id (D-52)', async () => {
+    // D-52: each plan covers "up to $X of your things", and a unit is the
+    // thing being covered — three units behind one limit is under-cover the
+    // renter finds out about at claim time.
+    const started = await paidSession()
+    const secondUnit = await prisma.unit.create({
+      data: { facilityId, unitTypeId, number: `MP-${suffix}` },
+    })
+    await prisma.checkoutSessionUnit.create({
+      data: {
+        checkoutSessionId: started.sessionId,
+        unitTypeId,
+        unitId: secondUnit.id,
+        quotedRateCents: 9_900,
+      },
+    })
+
+    const result = await provisionMoveIn(started.sessionId)
+    expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error('unreachable')
+
+    // Every lease is returned, because an access credential is per lease and a
+    // renter who can open one of two units is locked out of what they pay for.
+    expect(result.leaseIds).toHaveLength(2)
+    expect(result.leaseIds).toContain(result.leaseId)
+
+    const leases = await prisma.lease.findMany({
+      where: { id: { in: result.leaseIds } },
+      select: { protectionCents: true, protectionPlanName: true },
+    })
+    // Both carry the tier and the premium — not one plan recorded against the
+    // first lease with the others showing nothing, which is what the record
+    // said before D-52 and disagreed with what was sold.
+    expect(leases.every((lease) => lease.protectionCents === 1_400)).toBe(true)
+    expect(leases.every((lease) => lease.protectionPlanName === 'standard')).toBe(true)
+  })
+
   it('is idempotent across the whole basket, not just the first unit (B-106)', async () => {
     // A webhook redelivery must not create a second set of leases.
     const started = await paidSession()

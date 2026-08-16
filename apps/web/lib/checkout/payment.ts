@@ -29,8 +29,15 @@ export async function amountDueToday(session: CheckoutSessionView): Promise<Amou
     prisma.taxComponent.findMany({ where: { facilityId: session.facilityId } }),
   ])
 
-  const premiumCents =
+  // D-52 (B-106). One plan per UNIT, so the premium multiplies by the basket.
+  //
+  // Each plan covers "up to $X of your things", and a unit is the thing being
+  // covered — three units behind one limit is under-cover the renter would
+  // discover at claim time. One line today, so this is × 1 and the figure is
+  // unchanged.
+  const premiumPerUnitCents =
     typeof session.data.protectionPremiumCents === 'number' ? session.data.protectionPremiumCents : 0
+  const premiumCents = premiumPerUnitCents * session.units.length
 
   // The promotion this session was started under. Read from the session, never
   // re-evaluated here: the renter is charged the price they were shown.
@@ -63,7 +70,17 @@ export async function amountDueToday(session: CheckoutSessionView): Promise<Amou
     .map((line) => ({ key: line.key, label: line.label, amountCents: line.amountCents }))
 
   if (premiumCents > 0) {
-    lines.push({ key: 'protection', label: 'Protection plan', amountCents: premiumCents })
+    // D-52: the label states the multiplication rather than leaving a renter
+    // to divide the number themselves. §6.4 forbids a total that moves without
+    // a stated cause, and "three times $12" is the cause.
+    lines.push({
+      key: 'protection',
+      label:
+        session.units.length > 1
+          ? `Protection plan — ${session.units.length} units × ${(premiumPerUnitCents / 100).toFixed(2)}`
+          : 'Protection plan',
+      amountCents: premiumCents,
+    })
   }
 
   return {

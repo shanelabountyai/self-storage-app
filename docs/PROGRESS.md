@@ -4149,3 +4149,21 @@ Three findings from the 2026-08-12 reviews, all in a shipped auth flow.
 **Test verification:** unit suite green, **2,932 passing** (up 2 — a two-line basket producing two leases at their own rates with both units occupied and the ledger conserved, and idempotency holding across the basket). Typecheck and lint clean. Full e2e green: **870 passed, 6 skipped, 0 failed of 876**; the extra skip against part 2 is `admin-tasks`' documented once-per-day self-skip, not a regression.
 
 **Left for part 4:** the UI — add and remove units, one lock/warning/extension covering the basket, per-unit itemisation with a change note naming which unit moved the total, per-unit `<fieldset>` grouping so N "Remove" controls do not share an accessible name — plus the protection and lease-document decisions above.
+
+## B-106 (part 4 of 5) — One plan per unit, and access for every lease (D-52)
+
+`XXXXXXX`
+
+**The owner decision part 3 refused to guess at.** D-52: the protection tier a renter picks applies to **each** unit — N premiums, N coverage limits, one plan recorded against every lease. Each plan promises to cover "up to $X of your things" and a unit is the thing being covered; three units behind one $5,000 limit is under-cover the renter would discover at claim time, which is the worst possible moment. The alternative — one premium against the first lease — also left the other leases showing no protection at all on their own screens, so the record disagreed with what was sold.
+
+**The cost of that decision is a price that multiplies**, so §6.4 makes disclosure a requirement rather than a nicety: the protection line names the multiplication (`Protection plan — 3 units × 12.00`) instead of leaving a renter to divide the number themselves. Rejected for now, and recorded as re-openable: a tier chosen *per unit*, which is more accurate still but adds a decision to the step B-112 deliberately shortened, for a case no renter can reach until the basket UI ships.
+
+**Found — the renter could not have opened the second unit.** Access credentials are per **lease**, and `requestDownstream` was called with the first lease only. A renter who paid for two units would have had a gate code for one — the same defect as not creating the second lease at all, arriving later and harder to diagnose. `provisionMoveIn` now returns every lease it created and both reconciler call sites issue access for each. The redelivery path returns the full list too, so a first attempt that committed and then failed downstream still gets every credential on the retry.
+
+**Decided — `leaseId` stays alongside the new `leaseIds`.** The primary lease is what every single-lease consumer means — the confirmation page, the welcome message — and it is unchanged for a one-unit checkout, which is still every checkout the UI can produce. Adding the list rather than replacing the field keeps those honest instead of making each one pick an element.
+
+**Still left for part 5, and unchanged from part 3's list:** the signed lease document, the `lease.moved_in` event and the gate-code message all attach to the primary lease. Each needs its own decision for a basket — one document listing every unit or one per lease, one welcome naming all of them or N.
+
+**Test verification:** unit suite green, **2,933 passing** (up 1 — both leases carrying the tier and the premium, and every lease id returned). Typecheck and lint clean. Full e2e green: **870 passed, 6 skipped, 0 failed of 876** — unchanged.
+
+**Left for part 5:** the UI. Add and remove units, one lock/warning/extension covering the basket, per-unit itemisation with a change note naming which unit moved the total, and per-unit `<fieldset>` grouping so N "Remove" controls do not share an accessible name.
