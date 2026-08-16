@@ -34,6 +34,8 @@ const NO_FACILITY_ID: Record<string, string> = {
   TenantAddress:
     'where a person receives post, like the Tenant it belongs to — one address of record serves every lease they hold, at any facility',
   InvoiceLineItem: 'scoped through its invoice',
+  CheckoutSessionUnit:
+    'a line of a basket, scoped through the checkout session that owns it — the session carries the facilityId, and a copy on each line could disagree with it',
   PaymentAllocation: 'scoped through its payment and invoice',
   AuditLog: 'facilityId is nullable — org-level actions have no facility',
   AuthToken: 'an identity spans facilities; one account can hold leases at several',

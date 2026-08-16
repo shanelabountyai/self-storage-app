@@ -36,9 +36,19 @@ export async function amountDueToday(session: CheckoutSessionView): Promise<Amou
   // re-evaluated here: the renter is charged the price they were shown.
   const promo = promoDiscountOn(session)
 
+  // B-106. The basket's total, not the session's single rate.
+  //
+  // One line today, so this is arithmetic over a list of one and the figure is
+  // identical to before — which is the point of migrating the read before the
+  // UI can add a second line. The admin fee and the tax are charged ONCE for
+  // the checkout rather than per unit: the fee is for opening an account and
+  // the tax follows the rent it is levied on, which `calculateMoveInCost`
+  // already computes from the summed base.
+  const basketRateCents = session.units.reduce((sum, line) => sum + line.quotedRateCents, 0)
+
   const cost = calculateMoveInCost({
-    webRateCents: session.quotedRateCents,
-    streetRateCents: session.quotedRateCents,
+    webRateCents: basketRateCents,
+    streetRateCents: basketRateCents,
     adminFeeCents: feeRows[0]?.amountCents,
     promoDiscountCents: promo?.firstPeriodCents,
     promoTerms: promo?.terms,

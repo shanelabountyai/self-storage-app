@@ -4105,3 +4105,27 @@ Three findings from the 2026-08-12 reviews, all in a shipped auth flow.
 **Left for part 2:** multi-unit rental in one checkout — the basket, one lock/warning/extension covering it, per-unit itemisation and change notes naming which unit moved the total, per-unit `<fieldset>` grouping so N "Remove" controls do not share an accessible name, and N leases at provisioning.
 
 **Test verification:** unit suite green, **2,928 passing** (up 11 — nine for the window and its suggestions, two for the date reaching the lease and its anniversary). Typecheck and lint clean. Full e2e green: **871 passed, 5 skipped, 0 failed of 876**, both projects.
+
+## B-106 (part 2 of 3) — The checkout basket, with one line in it
+
+`XXXXXXX`
+
+**A refactor that changes no behaviour, and that is the whole point.** Multi-unit needs a basket, a lock covering it, per-unit pricing, per-unit UI and N leases at provisioning. Landing those together would put an untested multi-unit path on the route that takes money. So this part introduces the basket, migrates every read onto it, and keeps **exactly one line per session** — behaviour identical to before, provably, because the full sweep is unchanged. Part 3 makes N > 1 possible, which is then a UI change on a foundation the suite already exercises.
+
+**Built:** `CheckoutSessionUnit` — which type, which physical unit, what rate was locked, per line. A table rather than more columns because those three things have to vary *together*: a basket of two 10x10s at different rates is unrepresentable otherwise. `startCheckout` creates the line with the session; `amountDueToday` sums the basket instead of reading the session's single rate.
+
+**Decided — the migration backfills every session, not just live ones.** A completed session is the historical record of what somebody rented, and code reading the basket has to find the same answer there as the old columns gave, or a confirmation page for last month's checkout shows an empty basket. The backfill was written into the migration **before** applying it, per this repo's own rule about appending SQL to an already-applied migration.
+
+**Decided — the session keeps `unitId`/`unitTypeId`/`quotedRateCents` for now.** Redemption and reporting join on those columns. Keeping them in step with the single basket line is what makes this a no-behaviour-change refactor; retiring them belongs in the part that makes N > 1 possible, where every reader has to be revisited anyway.
+
+**Decided — `toView` falls back to a line built from the session's own columns.** Not defensive padding: `advance` and `goBack` update and return the row without re-selecting relations, so a basket that vanished on a step transition would empty the price summary mid-checkout. The fallback reconstructs the same single line the backfill wrote, so it can only ever agree with it.
+
+**Decided — the admin fee is charged once for the checkout, not per unit.** The fee is for opening an account, not for each door; a two-unit rental paying two account-opening fees is not what any facility means by it. Tax follows the summed rent, which `calculateMoveInCost` already handles. Both are pinned by tests that price a two-line basket.
+
+**Found — the repo-root typecheck blind spot cost something again.** `tests/checkout-payment-db.test.ts` builds a `CheckoutSessionView` by hand and was missing the new required field; `npm run typecheck` did not notice, because `apps/web/tsconfig.json`'s `include` covers only `apps/web/**` and the root `tests/` directory is outside it. Documented in B-119 as a known gap and still unfixed — it is now the second item to pay for it, and the fixture's basket derives from its own rate so a test overriding one cannot end up asserting against a figure no real session could produce.
+
+**Found — a schema invariant caught the new table.** Every facility-bound model must carry `facilityId`; `CheckoutSessionUnit` does not, and correctly so — it is scoped through the session that owns it, and a copy on each line could disagree with it. Added to the exemption list *with its reason*, which is the convention that list exists to enforce.
+
+**Left for part 3:** the UI and the rest of the money path — adding and removing units, one lock/warning/extension covering the basket, per-unit itemisation in the price summary with a change note naming **which** unit moved the total, per-unit `<fieldset>` grouping so N "Remove" controls do not share an accessible name, N leases at provisioning, and a lease document covering the basket.
+
+**Test verification:** unit suite green, **2,930 passing** (up 2 — the basket summing to more than one line, and the admin fee not multiplying). Typecheck, lint and the schema-drift check clean. Full e2e green: **871 passed, 5 skipped, 0 failed of 876** — identical to part 1, which is the assertion that matters for a refactor.

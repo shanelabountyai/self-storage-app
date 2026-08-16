@@ -169,6 +169,20 @@ export async function startCheckout(input: StartInput): Promise<StartResult> {
         } as Prisma.InputJsonValue,
         tokenHash: hashSessionToken(token),
         lockExpiresAt: lockUntil(),
+        // B-106. The basket, created with the session and holding exactly one
+        // line until the multi-unit UI lands. The session's own `unitId`,
+        // `unitTypeId` and `quotedRateCents` are still written and still the
+        // columns redemption and reporting join on — the basket is the thing
+        // the CHECKOUT reads, and the two are kept in step for one line each
+        // deliberately, so this refactor changes no behaviour and the old
+        // columns can be retired in the same item that makes N > 1 possible.
+        units: {
+          create: {
+            unitTypeId: input.unitTypeId,
+            unitId,
+            quotedRateCents: input.quotedRateCents,
+          },
+        },
       },
     })
 
@@ -196,6 +210,10 @@ export type CheckoutSessionView = {
   /// PRD 01 §9 Phase 2 (B-106). The move-in date the renter chose, or null for
   /// "today" — which is what every session before B-106 means.
   requestedStartDate: Date | null
+  /// B-106. The basket. Exactly one line today; the money path sums it rather
+  /// than reading the session's own rate, so N > 1 is a UI change and not a
+  /// second pricing implementation.
+  units: CheckoutBasketLine[]
   /// PRD 04 US-12 AC2 (B-070). The promotion carried from the facility page,
   /// so the total shown before payment is the one that gets redeemed.
   promotionId: string | null
@@ -222,9 +240,28 @@ function toView(session: {
   promoCodeId: string | null
   lockExpiresAt: Date
   data: unknown
+  units?: CheckoutBasketLine[]
 }): CheckoutSessionView {
   return {
     ...session,
+    // Falls back to a line built from the session's own columns.
+    //
+    // Not defensive padding: `toView` is called from `advance` and `goBack`,
+    // which update and return the row WITHOUT re-selecting its relations, and
+    // a basket that vanished on a step transition would empty the price
+    // summary mid-checkout. The fallback is the same one line the backfill
+    // wrote, so it can only ever agree with it.
+    units:
+      session.units && session.units.length > 0
+        ? session.units
+        : [
+            {
+              id: `${session.id}:legacy`,
+              unitTypeId: session.unitTypeId,
+              unitId: session.unitId,
+              quotedRateCents: session.quotedRateCents,
+            },
+          ],
     step: session.step as Step,
     data: (session.data ?? {}) as Record<string, unknown>,
     lockLapsed: session.lockExpiresAt.getTime() <= Date.now(),
@@ -257,6 +294,7 @@ export async function sessionByToken(token: string): Promise<CheckoutSessionView
   if (!token) return null
   const session = await prisma.checkoutSession.findUnique({
     where: { tokenHash: hashSessionToken(token) },
+    include: { units: { orderBy: { createdAt: 'asc' } } },
   })
   return session ? toView(session) : null
 }
@@ -265,8 +303,18 @@ export async function sessionByToken(token: string): Promise<CheckoutSessionView
 /// reconciler, which knows the session from a PaymentIntent's metadata and has
 /// no token to hand.
 export async function sessionById(sessionId: string): Promise<CheckoutSessionView | null> {
-  const session = await prisma.checkoutSession.findUnique({ where: { id: sessionId } })
+  const session = await prisma.checkoutSession.findUnique({
+    where: { id: sessionId },
+    include: { units: { orderBy: { createdAt: 'asc' } } },
+  })
   return session ? toView(session) : null
+}
+
+export type CheckoutBasketLine = {
+  id: string
+  unitTypeId: string
+  unitId: string | null
+  quotedRateCents: number
 }
 
 export type AdvanceResult =

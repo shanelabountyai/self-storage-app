@@ -863,6 +863,7 @@ model UnitType {
   units            Unit[]
   reservations     Reservation[]
   checkoutSessions CheckoutSession[]
+  checkoutSessionUnits CheckoutSessionUnit[]
   leads            Lead[]
   rates            UnitTypeRate[]
 
@@ -931,6 +932,7 @@ model Unit {
   leases           Lease[]
   reservations     Reservation[]
   checkoutSessions CheckoutSession[]
+  checkoutSessionUnits CheckoutSessionUnit[]
 
   @@unique([facilityId, number])
   @@index([facilityId, status])
@@ -1539,6 +1541,43 @@ model PaymentAllocation {
 /// like a reservation — which silently corrupts the reservation→move-in
 /// conversion report the whole funnel is judged on. A hold someone asked for
 /// and a lock the system took while they type are different events.
+/// PRD 01 §9 Phase 2 (B-106). One line of a checkout's basket.
+///
+/// A table rather than more columns on the session, because "how many units is
+/// this renter taking" is a cardinality the session cannot express — and the
+/// three things that vary per unit (which type, which physical unit, what rate
+/// was locked) all have to vary together or a basket of two 10x10s at
+/// different rates becomes unrepresentable.
+///
+/// Introduced with exactly ONE row per session and every read migrated onto it
+/// before any UI could add a second. That ordering is deliberate: the basket
+/// arriving and the checkout learning to use it are separable, and doing them
+/// together would put an untested multi-unit path on the route that takes
+/// money. With one row per session the behaviour is identical to before, which
+/// is what makes the refactor provable.
+model CheckoutSessionUnit {
+  id                String   @id @default(cuid())
+  checkoutSessionId String
+  unitTypeId        String
+  /// The specific unit held for this line. Claimed the same way a reservation
+  /// claims one (FOR UPDATE SKIP LOCKED) and released when the session's lock
+  /// lapses — one lock covers the whole basket (§2.2.1: N independent
+  /// countdowns cannot be satisfied in any usable way).
+  unitId            String?
+  /// Rate seen = rate charged, per line. A basket priced from one session-level
+  /// rate could not hold two sizes.
+  quotedRateCents   Int
+  createdAt         DateTime @default(now()) @db.Timestamptz(6)
+
+  session  CheckoutSession @relation(fields: [checkoutSessionId], references: [id], onDelete: Cascade)
+  unitType UnitType        @relation(fields: [unitTypeId], references: [id], onDelete: Restrict)
+  unit     Unit?           @relation(fields: [unitId], references: [id], onDelete: SetNull)
+
+  @@index([checkoutSessionId])
+  @@index([unitId])
+  @@map("checkout_session_unit")
+}
+
 model CheckoutSession {
   id              String         @id @default(cuid())
   facilityId      String
@@ -1586,6 +1625,8 @@ model CheckoutSession {
   /// Per-step captured data, merged as the renter advances. Typed at the edges
   /// by the step schemas in B-021..B-025 rather than here.
   data            Json           @default("{}")
+  /// B-106. The basket. Exactly one row until the multi-unit UI lands.
+  units           CheckoutSessionUnit[]
   /// PRD 04 US-9 AC1/AC2 (B-073). How far the abandonment follow-up has
   /// reached: 0 = never entered, 1–3 = that step has been raised. Same device
   /// as `Lead.dripStep` — the outbox only dedupes an event that already
