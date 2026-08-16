@@ -4152,7 +4152,7 @@ Three findings from the 2026-08-12 reviews, all in a shipped auth flow.
 
 ## B-106 (part 4 of 5) — One plan per unit, and access for every lease (D-52)
 
-`XXXXXXX`
+`e44c36a`
 
 **The owner decision part 3 refused to guess at.** D-52: the protection tier a renter picks applies to **each** unit — N premiums, N coverage limits, one plan recorded against every lease. Each plan promises to cover "up to $X of your things" and a unit is the thing being covered; three units behind one $5,000 limit is under-cover the renter would discover at claim time, which is the worst possible moment. The alternative — one premium against the first lease — also left the other leases showing no protection at all on their own screens, so the record disagreed with what was sold.
 
