@@ -4108,7 +4108,7 @@ Three findings from the 2026-08-12 reviews, all in a shipped auth flow.
 
 ## B-106 (part 2 of 3) — The checkout basket, with one line in it
 
-`XXXXXXX`
+`cf24da6`
 
 **A refactor that changes no behaviour, and that is the whole point.** Multi-unit needs a basket, a lock covering it, per-unit pricing, per-unit UI and N leases at provisioning. Landing those together would put an untested multi-unit path on the route that takes money. So this part introduces the basket, migrates every read onto it, and keeps **exactly one line per session** — behaviour identical to before, provably, because the full sweep is unchanged. Part 3 makes N > 1 possible, which is then a UI change on a foundation the suite already exercises.
 
