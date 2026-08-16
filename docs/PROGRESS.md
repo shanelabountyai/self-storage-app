@@ -4048,7 +4048,7 @@ Added `db:migrate:e2e`, migrating and seeding the `public` schema of the `storag
 
 ## B-108 — Staff MFA: a QR, a way to keep the recovery codes, and a sign-in that works from a bare /login
 
-`XXXXXXX`
+`f2a087f`
 
 Three findings from the 2026-08-12 reviews, all in a shipped auth flow.
 
