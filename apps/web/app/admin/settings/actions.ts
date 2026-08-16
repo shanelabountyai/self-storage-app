@@ -673,6 +673,18 @@ export async function updateOperationsPolicyAction(
     unit: 'days',
   })
 
+  // PRD 01 §9 Phase 2 (B-106). Zero is meaningful: it means same-day only,
+  // which is exactly today's behaviour and a real choice for a site that does
+  // not want to hold a rate for anybody. Capped at a year — past that the rate
+  // the renter locked is not a rate the facility would still recognise, which
+  // is the actual constraint rather than an arbitrary ceiling.
+  const maxStartAhead = parseScaled(formData.get('maxCheckoutStartDaysAhead'), {
+    scale: 1,
+    min: 0,
+    max: 365,
+    unit: 'days',
+  })
+
   // PRD 02 US-43. At least an hour — zero would make every inquiry overdue the
   // moment it was taken, which is a queue nobody reads. A week is the ceiling
   // because past that the lead has rented somewhere else.
@@ -758,6 +770,7 @@ export async function updateOperationsPolicyAction(
   if ('error' in writeOff) errors.writeOffThresholdDollars = writeOff.error
   if ('error' in noticeDays) errors.moveOutNoticeDays = noticeDays.error
   if ('error' in holdGraceDays) errors.reservationHoldGraceDays = holdGraceDays.error
+  if ('error' in maxStartAhead) errors.maxCheckoutStartDaysAhead = maxStartAhead.error
   if ('error' in leadHours) errors.leadFollowUpHours = leadHours.error
   if ('error' in rateNoticeDays) errors.rateIncreaseNoticeDays = rateNoticeDays.error
   if ('error' in drawerVariance) errors.drawerVarianceThresholdDollars = drawerVariance.error
@@ -787,6 +800,7 @@ export async function updateOperationsPolicyAction(
     'error' in writeOff ||
     'error' in noticeDays ||
     'error' in holdGraceDays ||
+    'error' in maxStartAhead ||
     'error' in leadHours ||
     'error' in rateNoticeDays ||
     'error' in drawerVariance ||
@@ -807,6 +821,7 @@ export async function updateOperationsPolicyAction(
       writeOffThresholdCents: writeOff.value,
       moveOutNoticeDays: noticeDays.value,
       reservationHoldGraceDays: holdGraceDays.value,
+      maxCheckoutStartDaysAhead: maxStartAhead.value,
       leadFollowUpHours: leadHours.value,
       abandonmentFollowUpHours: abandonmentHours,
       rateIncreaseNoticeDays: rateNoticeDays.value,

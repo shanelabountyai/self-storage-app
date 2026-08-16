@@ -4079,3 +4079,29 @@ Three findings from the 2026-08-12 reviews, all in a shipped auth flow.
 **Accessibility statement:** re-read. Nothing went stale — its staff-screens paragraph is still accurate, and its WCAG 2.1 AA claim already subsumes the 1.1.1 Level A obligation this item is held to.
 
 **Test verification:** unit suite green, **2,917 passing** (up 5 — the QR's security properties, its one-path collapse, and that the grouped key is not an adequate spoken equivalent). Typecheck and lint clean.
+
+## B-106 (part 1 of 2) — Future-dated move-ins
+
+`XXXXXXX`
+
+**Half the row, and the backlog row stays unticked.** B-106 bundles future-dating with multi-unit checkout; the owner chose to take them separately because multi-unit restructures the basket, the lock and provisioning all at once and every intermediate state of that is on the path that takes money. Future-dating is genuinely separable — one nullable column, no basket changes — so the checkout stays coherent at every commit. Multi-unit is next and is the larger half.
+
+**Built:** a checkout can now be scheduled for a future date. The unit step's move-in date was fixed text reading "today"; it is an `<input type="date">` bounded by the facility's own window, and `provisionMoveIn` and the signed lease both honour it.
+
+**Decided — a separate setting from the free-hold cap, not a shared number.** `Facility.maxCheckoutStartDaysAhead` (default 60) sits beside B-126's `reservationHoldGraceDays` and deliberately does not share it. The two limits exist for opposite reasons: a free hold ties up a rentable unit for nothing, so its horizon is short and bounds the exposure; a future-dated checkout is **paid**, so nothing is being held for free and the business carries no risk by scheduling further out. One number would force the cautious limit onto the case that does not need it. Its control ships in this item, per the repo's own rule.
+
+**Decided — D-27 is what makes this simple rather than a proration problem.** Under anniversary billing the move-in payment buys a full period *starting that day*, so a future start just moves which day that is: the renter pays now for a month beginning later, and every invoice after it anchors to the same anniversary. No proration branch was needed.
+
+**Found — a real off-by-one I would have shipped.** `requestedStartDate` is stored as UTC-midnight of the facility-local day, which is the same convention `businessDateFor` *returns*. Passing it through `businessDateFor` again is a second conversion, and for any facility west of UTC it lands on the previous day — a renter picking the 20th at a Chicago site got a lease billing on the **19th, every month, for the life of the lease**. Caught by the test asserting the billing anniversary, which is the only place the off-by-one is visible; the lease's own `startDate` looked right.
+
+**Found — the same class of bug in the signed lease.** `leaseValuesFor` hardcoded `new Date()`, so a future-dated checkout would have produced a **signed contract stating the wrong start date and the wrong first-payment period** — on the one artefact whose entire purpose is recording what the tenant agreed to. It now reads the chosen date, and renders it in UTC rather than the facility timezone, because a calendar day stored at UTC-midnight prints as the day before when projected into a western zone.
+
+**Decided — every refusal names the date to use (3.3.3).** The row states it as an acceptance criterion, and `judgeStartDate` returns a `suggested` date on every failing branch — too early, too late, and unparseable. A message saying only "that date is not allowed" leaves the renter bisecting their way to a boundary they cannot see, on the screen before payment. A test asserts the suggestion is always inside the window, so acting on the message always resolves the error rather than producing the other one.
+
+**Decided — manual text entry is judged, not assumed.** The row requires typing to work, so `min`/`max` on the picker are a convenience and never the enforcement; the server judges every submission, including something that is not a date at all.
+
+**Also found — adding any dependency breaks esbuild in this repo.** `npm install qrcode-svg` (B-108) left `npm test` dying inside vite's config bundler with a stack that names neither cause; the real line, several frames down, claims esbuild was installed for another platform, which is false. `allowScripts` gates the postinstall that puts the platform binary where the JS wrapper looks. `npm rebuild esbuild` fixes it in seconds — now recorded in CLAUDE.md, since it cost this item its first ten minutes and will recur for the next person adding a package.
+
+**Left for part 2:** multi-unit rental in one checkout — the basket, one lock/warning/extension covering it, per-unit itemisation and change notes naming which unit moved the total, per-unit `<fieldset>` grouping so N "Remove" controls do not share an accessible name, and N leases at provisioning.
+
+**Test verification:** unit suite green, **2,928 passing** (up 11 — nine for the window and its suggestions, two for the date reaching the lease and its anniversary). Typecheck and lint clean. Full e2e green: **871 passed, 5 skipped, 0 failed of 876**, both projects.

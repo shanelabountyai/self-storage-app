@@ -411,6 +411,10 @@ export type OperationsPolicyInput = {
   /// prospect about how long we will keep a unit off the market, not a
   /// decision about money.
   reservationHoldGraceDays: number
+  /// PRD 01 §9 Phase 2 (B-106). How far ahead a PAID checkout may schedule a
+  /// move-in. Deliberately separate from the free hold's 14-day cap — see the
+  /// column's own note for why the two limits do not share a number.
+  maxCheckoutStartDaysAhead: number
   /// PRD 02 US-43. How long a new inquiry may sit uncontacted before the
   /// morning sweep turns it into a task.
   leadFollowUpHours: number
@@ -458,6 +462,7 @@ export async function updateOperationsPolicy(
     writeOffThresholdCents: row.writeOffThresholdCents,
     moveOutNoticeDays: row.moveOutNoticeDays,
     reservationHoldGraceDays: row.reservationHoldGraceDays,
+    maxCheckoutStartDaysAhead: row.maxCheckoutStartDaysAhead,
     leadFollowUpHours: row.leadFollowUpHours,
     abandonmentFollowUpHours: row.abandonmentFollowUpHours,
     rateIncreaseNoticeDays: row.rateIncreaseNoticeDays,

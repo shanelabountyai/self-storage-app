@@ -8,6 +8,7 @@ import { labelForStep, stepAnnouncement, Stepper } from '@/components/checkout/s
 import { SITE } from '@/lib/site-config'
 import { prisma } from '@storage/db'
 import { billingDayFor } from '@storage/core/billing'
+import { isoDate, startDateWindow } from '@storage/core/checkout'
 import { businessDateFor } from '@storage/core/jobs'
 import { publicInventoryForFacility } from '@/lib/inventory/public-inventory'
 import {
@@ -141,7 +142,12 @@ export default async function CheckoutPage({
       : null
   const facilityPolicy = await prisma.facility.findUnique({
     where: { id: session.facilityId },
-    select: { protectionRequired: true, billingPolicy: true, timezone: true },
+    select: {
+      protectionRequired: true,
+      billingPolicy: true,
+      timezone: true,
+      maxCheckoutStartDaysAhead: true,
+    },
   })
 
   // The lease is built once and reused. Re-rendering on every page view would
@@ -187,6 +193,14 @@ export default async function CheckoutPage({
     confirmationCode = leaseId ? await codeForLease(leaseId) : null
     confirmationFacility = facility ? await publicFacilityBySlug(facility.slug) : null
   }
+
+  // B-106. The window the unit step's picker is bounded by, and the sentence
+  // beside it. Computed here rather than in the component so the page and the
+  // action judge the same window from the same facility setting.
+  const startWindow = startDateWindow(
+    isoDate(businessDateFor(new Date(), facilityPolicy?.timezone ?? 'America/Chicago')),
+    facilityPolicy?.maxCheckoutStartDaysAhead ?? 0,
+  )
 
   const remaining = minutesLeft(session.lockExpiresAt)
   const lockedPromo = promoDiscountOn(session)
@@ -305,10 +319,15 @@ export default async function CheckoutPage({
               unitLabel={`${unitType.widthFt} foot by ${unitType.lengthFt} foot ${unitType.name}`}
               facilityName={inventory!.facility.name}
               quotedRateCents={session.quotedRateCents}
-              moveInDate={new Intl.DateTimeFormat('en-US', {
-                dateStyle: 'full',
-                timeZone: inventory!.facility.timezone,
-              }).format(new Date())}
+              // B-106. The renter's own earlier answer survives a step back
+              // (§6.4), falling back to today when they have not chosen yet.
+              startDate={
+                session.requestedStartDate
+                  ? isoDate(session.requestedStartDate)
+                  : isoDate(startWindow.earliest)
+              }
+              earliest={isoDate(startWindow.earliest)}
+              latest={isoDate(startWindow.latest)}
             />
           )}
 

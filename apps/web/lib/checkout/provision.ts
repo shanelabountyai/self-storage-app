@@ -77,8 +77,31 @@ export async function provisionMoveIn(sessionId: string): Promise<ProvisionResul
     where: { id: session.facilityId },
     select: { billingPolicy: true, timezone: true },
   })
-  const startDate = new Date()
-  const localToday = businessDateFor(startDate, facility.timezone)
+  // B-106. The date the renter chose, or now.
+  //
+  // `requestedStartDate` is stored as UTC-midnight of the facility-local day
+  // the renter picked, so a future-dated lease starts at the beginning of that
+  // day rather than at whatever o'clock the payment cleared. A same-day
+  // move-in keeps `new Date()` — the renter is standing there, and the lease
+  // starting an hour ago would be odd in the other direction.
+  //
+  // D-27 is what makes this simple rather than a proration problem: under
+  // anniversary billing the move-in payment buys a full period STARTING that
+  // day, so a future start just moves which day that is. The renter pays now
+  // for a month beginning later, and `billingDayFor` anchors every invoice
+  // after it to the same date.
+  const startDate = session.requestedStartDate ?? new Date()
+  // NOT `businessDateFor(startDate, ...)` when the renter chose a date.
+  //
+  // `businessDateFor` converts an INSTANT to a facility-local calendar day.
+  // `requestedStartDate` is already such a day — stored as UTC-midnight, the
+  // same convention `businessDateFor` returns — so putting it through again is
+  // a second conversion. For any facility west of UTC that lands on the
+  // PREVIOUS day: a renter picking the 20th at a Chicago site got a lease
+  // billing on the 19th, every month, for the life of the lease. Caught by the
+  // test below asserting the anniversary, which is the only place the
+  // off-by-one is visible.
+  const localToday = session.requestedStartDate ?? businessDateFor(startDate, facility.timezone)
 
   // PRD 02 US-43's last AC: "source and channel carry through reservation →
   // move-in, so the move-in/move-out report can split walk-in vs phone vs web."

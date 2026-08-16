@@ -193,6 +193,9 @@ export type CheckoutSessionView = {
   tenantId: string | null
   email: string | null
   quotedRateCents: number
+  /// PRD 01 §9 Phase 2 (B-106). The move-in date the renter chose, or null for
+  /// "today" — which is what every session before B-106 means.
+  requestedStartDate: Date | null
   /// PRD 04 US-12 AC2 (B-070). The promotion carried from the facility page,
   /// so the total shown before payment is the one that gets redeemed.
   promotionId: string | null
@@ -214,6 +217,7 @@ function toView(session: {
   tenantId: string | null
   email: string | null
   quotedRateCents: number
+  requestedStartDate: Date | null
   promotionId: string | null
   promoCodeId: string | null
   lockExpiresAt: Date

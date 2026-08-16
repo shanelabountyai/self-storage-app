@@ -56,10 +56,18 @@ export async function leaseValuesFor(session: CheckoutSessionView): Promise<Reco
 
   // The day the tenant is moving in, as a calendar date — the same value the
   // lease will carry as `startDate` and the anchor for the billing day.
-  const moveInDate = new Date()
-  // The facility-local calendar day, which is what the billing anniversary is
-  // anchored to — see the note in checkout/provision.ts.
-  const localToday = businessDateFor(moveInDate, facility.timezone)
+  //
+  // B-106: the renter's chosen date when there is one, and this MATTERS more
+  // here than anywhere else it is read. This document is signed. A lease that
+  // hardcoded today would state a start date and a first-payment period the
+  // tenant is not agreeing to, on the one artefact whose whole purpose is to
+  // record what they agreed to.
+  const moveInDate = session.requestedStartDate ?? new Date()
+  // The facility-local calendar day the anniversary anchors to. A chosen date
+  // is ALREADY such a day (UTC-midnight), so it is not converted again — the
+  // same double-conversion that put a Chicago lease on the 19th when the
+  // renter picked the 20th. See checkout/provision.ts.
+  const localToday = session.requestedStartDate ?? businessDateFor(moveInDate, facility.timezone)
 
   // B-044. What the first payment actually bought, per the facility's billing
   // policy. Under `anniversary` the period starts today and the tenant pays a
@@ -67,7 +75,14 @@ export async function leaseValuesFor(session: CheckoutSessionView): Promise<Reco
   // term the operator had signed up to and does not do.
   const firstPaymentSummary =
     facility.billingPolicy === 'anniversary'
-      ? `Your first payment covers a full month from ${new Intl.DateTimeFormat('en-US', { dateStyle: 'long', timeZone: facility.timezone }).format(moveInDate)}, and every payment after it falls on the same day of the month.`
+      ? `Your first payment covers a full month from ${new Intl.DateTimeFormat('en-US', {
+          dateStyle: 'long',
+          // UTC when the renter chose the date, because a chosen date is a
+          // CALENDAR day already stored at UTC-midnight — rendering it in a
+          // western timezone would print the day before, in a signed document.
+          // A same-day move-in is a real instant and is rendered locally.
+          timeZone: session.requestedStartDate ? 'UTC' : facility.timezone,
+        }).format(moveInDate)}, and every payment after it falls on the same day of the month.`
       : facility.prorateOnMoveIn
         ? 'Your first payment covers the days between your move-in and the first of next month, charged pro rata; after that you pay a full month on the 1st.'
         : 'Your first payment covers a full month; after that you pay on the 1st of each month.'

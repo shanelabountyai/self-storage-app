@@ -31,6 +31,8 @@ import {
 } from '@/lib/protection/plans'
 import { sessionByToken } from '@/lib/checkout/session'
 import { offerFor } from '@/lib/promotions/service'
+import { isoDate, judgeStartDate, startDateWindow } from '@storage/core/checkout'
+import { businessDateFor } from '@storage/core/jobs'
 import { existingLeaseDocument } from '@/lib/lease/build'
 import { ELECTRONIC_RECORDS_CONSENT_VERSION, signDocument, validateSignature } from '@/lib/lease/sign'
 import { requestMetadata } from '@/lib/http/request-metadata'
@@ -441,6 +443,67 @@ export async function applyPromoCodeAction(
 
   revalidatePath('/checkout')
   return { status: 'success', message: lookup.problem ?? 'Code applied.' }
+}
+
+/// US-501 step 2, extended by B-106. Confirm the unit, and pick when.
+///
+/// Its own action rather than a branch of `advanceAction`, because this step
+/// now has a field to validate and `advanceAction` is the generic "no input,
+/// just move on" transition every other step uses.
+export async function confirmUnitAction(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const token = String(formData.get('token') ?? '')
+  const session = await sessionByToken(token)
+  if (!session) {
+    return { status: 'error', message: 'We could not find that checkout.', fieldErrors: {} }
+  }
+
+  const facility = await prisma.facility.findUniqueOrThrow({
+    where: { id: session.facilityId },
+    select: { timezone: true, maxCheckoutStartDaysAhead: true },
+  })
+  // The facility's own calendar day, not the server's — at 10pm in Texas the
+  // UTC date is already tomorrow, and a renter refused "today" would be
+  // reading a timezone bug rather than a rule.
+  // `businessDateFor` returns the local calendar day as a UTC-midnight Date,
+  // which is exactly what the window wants — converted at the boundary rather
+  // than making the pure module take a Date, so the string form stays the one
+  // thing the picker, the message and the tests all speak.
+  const window = startDateWindow(
+    isoDate(businessDateFor(new Date(), facility.timezone)),
+    facility.maxCheckoutStartDaysAhead,
+  )
+  const verdict = judgeStartDate(String(formData.get('startDate') ?? ''), window)
+
+  // 3.3.3: the message names the date to use, and the field keeps what was
+  // typed (B-124's `AdminForm` echo), so the correction is one edit rather
+  // than a retype.
+  if (!verdict.ok) return fieldError({ startDate: verdict.message })
+
+  await prisma.checkoutSession.update({
+    where: { id: session.id },
+    // Stored even when it IS today, so "the renter confirmed a date" and
+    // "nobody asked" stay distinguishable — the second is what every session
+    // before B-106 means, and provisioning still treats null as today.
+    data: { requestedStartDate: verdict.startDate },
+  })
+
+  const result = await advance(token, 'unit_assign', {})
+  if (!result.ok) {
+    return {
+      status: 'error',
+      message:
+        result.reason === 'lock_lapsed'
+          ? 'The 30 minutes we were holding your unit ran out. Nothing has been charged — see below for what we can do.'
+          : 'We could not continue from this step. Reload the page and try again.',
+      fieldErrors: {},
+    }
+  }
+
+  revalidatePath('/checkout')
+  return { status: 'success', message: 'Unit confirmed. Next: protection.' }
 }
 
 export async function advanceAction(_prev: FormState, formData: FormData): Promise<FormState> {

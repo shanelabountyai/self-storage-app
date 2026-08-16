@@ -942,6 +942,15 @@ export default async function AdminSettingsPage() {
             hint="1 is the default: the unit is held through the day after the date the renter picked. 0 releases it at the end of the move-in day itself."
           />
           <Field
+            name="maxCheckoutStartDaysAhead"
+            label="Let a paid checkout schedule a move-in up to (days ahead)"
+            type="number"
+            min={0}
+            max={365}
+            defaultValue={facility.maxCheckoutStartDaysAhead}
+            hint="0 means same-day only. Separate from the free-hold window above: a paid booking does not tie up a unit for nothing, so it does not need the same short limit."
+          />
+          <Field
             name="leadFollowUpHours"
             label="Call an inquiry back within"
             type="number"

@@ -129,6 +129,44 @@ describeDb('move-in provisioning', () => {
     expect(inventory?.unitTypes[0]?.availableCount ?? 0).toBe(0)
   })
 
+  it('starts the lease on the date the renter chose, and anchors billing to it (B-106)', async () => {
+    // D-27 is what makes a future-dated start simple: the move-in payment buys
+    // a full period STARTING that day, so the future date just moves which day
+    // that is. The renter pays now for a month beginning later, and every
+    // invoice after it anchors to the same anniversary.
+    const started = await paidSession()
+    const chosen = new Date('2026-09-20T00:00:00.000Z')
+    await prisma.checkoutSession.update({
+      where: { id: started.sessionId },
+      data: { requestedStartDate: chosen },
+    })
+
+    const result = await provisionMoveIn(started.sessionId)
+    expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error('unreachable')
+
+    const lease = await prisma.lease.findUniqueOrThrow({ where: { id: result.leaseId } })
+    expect(lease.startDate.toISOString()).toBe(chosen.toISOString())
+    // Anniversary billing (the default), so the billing day is the chosen
+    // day-of-month rather than today's.
+    expect(lease.billingDay).toBe(20)
+  })
+
+  it('still starts today when no date was chosen (B-106)', async () => {
+    // Null means "nobody asked", which is what every session before B-106
+    // means — the column is nullable for exactly this reason, and provisioning
+    // must not start treating those as some other date.
+    const started = await paidSession()
+    const before = Date.now()
+    const result = await provisionMoveIn(started.sessionId)
+    expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error('unreachable')
+
+    const lease = await prisma.lease.findUniqueOrThrow({ where: { id: result.leaseId } })
+    expect(lease.startDate.getTime()).toBeGreaterThanOrEqual(before)
+    expect(lease.startDate.getTime()).toBeLessThanOrEqual(Date.now())
+  })
+
   it('qualifies a referral the checkout arrived on (B-100)', async () => {
     // The trigger. `qualifyReferral` was imported and then never called for a
     // while — lint caught it, and this is the test that would have. §4's

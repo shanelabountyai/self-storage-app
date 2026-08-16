@@ -627,6 +627,21 @@ model Facility {
   /// never built: a renter picking the maximum 14-day-out move-in would have
   /// lost the unit a week before the day they reserved it for.
   reservationHoldGraceDays Int       @default(1)
+  /// PRD 01 §9 Phase 2 (B-106). How far ahead a PAID checkout may schedule its
+  /// move-in.
+  ///
+  /// Deliberately NOT the same number as a free reservation's 14-day cap, and
+  /// not the same setting either. The two limits exist for opposite reasons: a
+  /// free hold ties up a rentable unit for nothing, so its horizon is short and
+  /// bounds the exposure; a future-dated checkout is PAID, so the unit is not
+  /// being held for free at all and the business is carrying no risk by
+  /// scheduling it further out. Sharing one number would force the cautious
+  /// limit onto the case that does not need it.
+  ///
+  /// 60 days as the shipped default — long enough for the lease-end and
+  /// house-move planning that makes somebody book ahead, short enough that the
+  /// rate they locked is still a rate the facility recognises.
+  maxCheckoutStartDaysAhead Int      @default(60)
   // ── PRD 10 (B-100). Refer a friend. ──────────────────────────────────────
   //
   // Every one of these is a column that configures behaviour, so every one
@@ -1548,6 +1563,16 @@ model CheckoutSession {
   /// Rate seen = rate charged. Locked at the moment the session started, so a
   /// rate change mid-checkout cannot move the total under the renter.
   quotedRateCents Int
+  /// PRD 01 §9 Phase 2 (B-106). The move-in date the renter asked for, when it
+  /// is not today.
+  ///
+  /// Null means "today", which is what every checkout before this meant and
+  /// what most still will — so the column is nullable rather than defaulted to
+  /// `now()`, and "the renter chose a date" stays distinguishable from "nobody
+  /// asked". The lease's `startDate` and its billing anniversary both come from
+  /// this when it is set (D-27: the move-in payment buys a full period starting
+  /// that day, so a future start simply moves which day that is).
+  requestedStartDate DateTime?    @db.Timestamptz(6)
   /// PRD 04 US-12 AC2 (B-070). The promotion carried from the facility page
   /// through checkout, so the discounted first-invoice figure shown before
   /// payment is the one that gets redeemed. Held on the session rather than
