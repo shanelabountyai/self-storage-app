@@ -4170,7 +4170,7 @@ Three findings from the 2026-08-12 reviews, all in a shipped auth flow.
 
 ## Chore — `tests/` and `e2e/` were typechecked by nothing
 
-`PENDING`
+`1e64444`
 
 **Not a backlog row.** A gap that two items had already paid for, closed before it charged a third.
 
