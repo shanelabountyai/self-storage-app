@@ -10,6 +10,7 @@ import {
   useRef,
 } from 'react'
 import { IDLE_FORM_STATE, type FormState } from '@/lib/admin/form-state'
+import { RecoveryCodes } from '@/components/auth/recovery-codes'
 
 // PRD 02 FR-19/FR-20. The one place admin forms get their error and success
 // behaviour, so every later form (B-021, B-038, B-039, B-048) inherits it
@@ -23,9 +24,14 @@ type AdminFormProps = {
   className?: string
   /// Names the form for screen readers, and heads the error summary.
   label: string
+  /// B-108. How to render `state.details` on success. The default is a plain
+  /// list; `recovery-codes` is the one case where the list is a credential the
+  /// user has to keep, and it gets copy/download/print and an
+  /// acknowledgement gate instead.
+  detailsAs?: 'list' | 'recovery-codes'
 }
 
-export function AdminForm({ action, children, className, label }: AdminFormProps) {
+export function AdminForm({ action, children, className, label, detailsAs = 'list' }: AdminFormProps) {
   const summaryRef = useRef<HTMLDivElement>(null)
   const formRef = useRef<HTMLFormElement>(null)
   const submitted = useRef<FormData | null>(null)
@@ -119,13 +125,23 @@ export function AdminForm({ action, children, className, label }: AdminFormProps
         {/* Outside the live region on purpose. A list the user has to read,
             copy or print — recovery codes are the case this exists for — must
             be reachable and selectable at leisure, not announced once as a
-            single run-on utterance and then left behind by the focus. */}
+            single run-on utterance and then left behind by the focus.
+            
+            B-108 gave that case its own component: reading the codes was never
+            the hard part, KEEPING them was, and a bare <ul> offers no way to.
+            `detailsAs` opts a form in rather than changing every form that
+            returns details — most of them are showing a summary nobody needs
+            to save. */}
         {state.status === 'success' && state.details && state.details.length > 0 && (
-          <ul className="border-input col-span-full mt-2 grid gap-1 rounded-md border p-3 font-mono text-sm">
-            {state.details.map((line) => (
-              <li key={line}>{line}</li>
-            ))}
-          </ul>
+          detailsAs === 'recovery-codes' ? (
+            <RecoveryCodes codes={state.details} />
+          ) : (
+            <ul className="border-input col-span-full mt-2 grid gap-1 rounded-md border p-3 font-mono text-sm">
+              {state.details.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+          )
         )}
 
         {(state.status === 'error' || state.status === 'confirm') && (

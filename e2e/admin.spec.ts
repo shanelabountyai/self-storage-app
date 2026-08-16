@@ -15,6 +15,35 @@ test.describe('admin role gating', () => {
     await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible()
   })
 
+  test('the second-factor field is reachable at a bare /login (B-108)', async ({ page }) => {
+    // The bug: the field keyed off `audienceFor`, which defaults to TENANT
+    // when there is no `?from=`. An enrolled staff member reaching /login by
+    // bookmark, typed address or sign-out got no code field, submitted without
+    // one, and was refused — the "correct password rejected" symptom D-47
+    // exists to kill, arriving by a different route.
+    await page.goto('/login')
+    await expect(page.getByLabel('Authentication code')).toBeVisible()
+
+    // And it is byte-identical to the staff-hinted form: no branch here is
+    // observable, so nothing about it enumerates accounts.
+    await page.goto('/login?from=%2Fadmin')
+    await expect(page.getByLabel('Authentication code')).toBeVisible()
+  })
+
+  test('a bare /login says staff cannot use a sign-in link, as a general fact (B-108)', async ({
+    page,
+  }) => {
+    // D-40. The disclosure is offered at a bare /login, and a staff member who
+    // used it was told a link was on its way that flows.ts will never mint.
+    // The sentence is true of staff accounts as a class and says nothing about
+    // whether the address in the box is one.
+    await page.goto('/login')
+    await page.getByText('Email me a sign-in link instead').click()
+    await expect(
+      page.getByText(/Staff accounts always sign in with a password and an authentication code/),
+    ).toBeVisible()
+  })
+
   test('preserves the originally requested path for a post-login return', async ({ page }) => {
     await page.goto('/admin/units')
     await expect(page).toHaveURL(/\/login\?from=%2Fadmin%2Funits/)

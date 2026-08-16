@@ -4045,3 +4045,37 @@ Added `db:migrate:e2e`, migrating and seeding the `public` schema of the `storag
 **Left behind:** clawback (§4.1) — the refunded-payment reversal and the minimum-stay rule. `referralMinimumStayDays` is stored and has its control; nothing reads it. It is real money and belongs in its own row rather than smuggled into this one.
 
 **Test verification:** unit suite green, **2,912 passing**, run twice with identical results. Typecheck, lint and the schema-drift check clean. Full e2e green: **867 passed, 5 skipped, 0 failed of 872**, both projects.
+
+## B-108 — Staff MFA: a QR, a way to keep the recovery codes, and a sign-in that works from a bare /login
+
+`XXXXXXX`
+
+Three findings from the 2026-08-12 reviews, all in a shipped auth flow.
+
+**(1) The QR.** `/mfa` showed a 32-character base32 key to type by hand. The `otpauth://` URI already existed as a link, but that only helps when the enrolling device *is* the phone — the ordinary case is a key on a laptop and an authenticator in a pocket. The same URI now renders as a QR beside the key.
+
+**Decided — generated server-side and inlined, never fetchable.** The QR *encodes the shared secret*, and that one fact decides the shape: an endpoint that renders a QR for a pending enrolment hands out somebody's TOTP seed to whoever can guess the id, and puts it in access logs and CDN caches besides. It is computed during the render of the page that already holds the secret, never stored, never logged, and dies with the enrolment by construction. Inline SVG rather than a `data:` URI so it needs no `img-src data:` in the CSP.
+
+**Decided — `alt=""`, and the criterion is 1.1.1 Level A rather than the AA the row first claimed.** The QR carries nothing the adjacent key does not — it *is* the key, in a form a camera reads — so the key is the text equivalent and the image is decorative. `alt="QR code"` would announce information it does not carry; `alt={uri}` would put the shared secret into the accessibility tree, into AT logs and into extension dumps, which is the exact surface the rest of this keeps it off.
+
+**And the typed key was not yet an adequate equivalent.** `formatSecretForDisplay` groups base32 into pronounceable four-character blocks that VoiceOver reads as words, and `I`/`1`, `O`/`0`, `S`/`5` are indistinguishable by ear. It now pairs the grouped form (`aria-hidden`) with a character-separated `sr-only` reading, matching `gate-code-panel.tsx`. Without that the QR would have helped sighted staff and nobody else, inverting the reason for adding it.
+
+**Decided — `qrcode-svg` over `qrcode`.** Zero dependencies against yargs, pngjs and dijkstrajs. On a surface that renders a shared TOTP secret, a smaller supply chain is worth more than a package shipping its own types; the type declaration is fifteen lines and declares only the options actually passed.
+
+**Found, by writing the test rather than assuming:** two of my own claims were wrong. The "no fetchable URL" assertion tripped on the SVG's own `xmlns`, which is an identifier and not a request — narrowed to `href`/`src`/`xlink:href`, which is the property that actually matters. And the inlined SVG is ~41KB, not the ~12KB asserted: `join: true` does take it from 140KB to 41KB, and the rest is the honest price of not having a fetchable endpoint. Acceptable *here specifically* — `/mfa` is an admin-adjacent page a staff member sees once, not a public route with a performance budget — and the bound is now a regression guard against `join` being dropped rather than a target.
+
+**(2) Recovery codes now have a way to be kept.** The copy said "this is the only time they are shown" and the screen offered no copy-all, no download, no print and no acknowledgement gate, while the codes lived in a client component's `useActionState` — a refresh, a Back or a stray click lost them permanently, and the recovery path from there is an administrator reset on a product with one owner account. Copy-all, download and print, with "Copied" announced from a pre-mounted region, and an "I have saved these codes" checkbox that gates the way onward. Identical treatment on regenerate, which is the path somebody reaches having *already* lost a set.
+
+**Decided — the download is a Blob built in the page.** A "download" that round-tripped through the server would put ten working credentials in an access log, which is the failure the whole screen exists to prevent. Nothing here logs a code.
+
+**Decided — `detailsAs` opts a form in rather than changing every form returning `details`.** Most of them show a summary nobody needs to save; recovery codes are the one case where the list is a credential.
+
+**(3) The sign-in form inferred its audience from `?from=`.** The second-factor field keyed off `audienceFor`, which defaults to **tenant** when there is no hint — so an enrolled staff member reaching a bare `/login` (a bookmark, a typed address, a sign-out) got no code field, submitted without one, and was refused. That is the "correct password rejected" symptom D-47 exists to kill, arriving by a different route.
+
+**Decided — always render it, which is the shape the row offered and this is the one taken.** The field shows unless `?from=` positively says tenant. The alternative — a two-step "email, then code" — would turn every sign-in into two round trips, which B-079's own comment already rejects. It leaks nothing: the form is identical whether or not the address exists, is staff, or has MFA enrolled. *Reveal-on-demand* would have been the enumeration risk, which is why that is not what "always render" means here.
+
+**And the magic-link disclosure now states the rule as a general fact (D-40).** It is offered at a bare `/login`, so a staff member who used it was told a link was on its way that `flows.ts` will never mint. The sentence is true of staff accounts as a class and says nothing about whether the address in the box is one.
+
+**Accessibility statement:** re-read. Nothing went stale — its staff-screens paragraph is still accurate, and its WCAG 2.1 AA claim already subsumes the 1.1.1 Level A obligation this item is held to.
+
+**Test verification:** unit suite green, **2,917 passing** (up 5 — the QR's security properties, its one-path collapse, and that the grouped key is not an adequate spoken equivalent). Typecheck and lint clean.
