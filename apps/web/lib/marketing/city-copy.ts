@@ -10,9 +10,19 @@ import { formatRate } from '@/lib/format'
 //
 // What makes it unique per city is that every sentence is derived: the count,
 // the names, the price floor and the amenities differ because the facilities
-// do. There is deliberately no `City` record to type copy into — see D-58; an
-// editable city description is a model, an admin screen and a permission, not
-// a column added quietly here.
+// do.
+//
+// B-128 / D-62 added the other half. `cityIntro` now takes an optional
+// authored intro, which wins when it is there — but the generated one is still
+// what a city with nobody's writing gets, and that is every city until somebody
+// opens the editor. The reason for the change is a measurement rather than a
+// change of mind: the duplicate-content report scores these generated intros at
+// 0.82–0.85 against each other, above this codebase's own 0.8 threshold, so a
+// page built to rank had no way to stop being duplicate content. D-58's own
+// rule is honoured in what is NOT editable: the title, the meta description,
+// the facility list and the amenity set are still derived on every city page,
+// authored intro or not, because those are the ones that carry the count, the
+// names and the price floor — exactly the facts that go stale when typed.
 //
 // Pure, so the wording is testable without a database.
 
@@ -65,14 +75,36 @@ export function cityDescription(
     : `Self-storage in ${label}. ${places}, units from ${formatRate(from)}/mo online, month-to-month with no long-term contract.`
 }
 
-/// The intro paragraphs, in reading order. Every claim is derived from the
-/// facilities passed in, so there is nothing here that can go stale.
+/// Splits a textarea's contents into paragraphs on blank lines — the same rule
+/// the facility page's long description follows, because it is the same
+/// textarea habit and two different rules would be a surprise.
+function authoredParagraphs(text: string): string[] {
+  return text
+    .split(/\n\s*\n/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean)
+}
+
+/// The intro paragraphs, in reading order.
+///
+/// With no `authored` copy every claim is derived from the facilities passed
+/// in, so there is nothing that can go stale. With authored copy the words are
+/// whatever was written — a page nobody has written for is still complete, and
+/// a page somebody HAS written for is not silently half-templated.
+///
+/// Still returns nothing when the city has no facilities, authored or not: that
+/// city 404s (AC1's indexability rule), and rendering somebody's prose on a
+/// page about no locations would be the thin content this is here to prevent.
 export function cityIntro(
   city: string,
   state: string,
   facilities: readonly CityFacilitySummary[],
+  authored?: string | null,
 ): string[] {
   if (facilities.length === 0) return []
+
+  const written = authored?.trim() ? authoredParagraphs(authored) : []
+  if (written.length > 0) return written
 
   const label = cityLabel(city, state)
   const names = list.format(facilities.map((facility) => facility.name))

@@ -11,9 +11,11 @@ import { visibleRatingsByFacility } from '@/lib/reviews/public'
 // and rating; indexable only when ≥1 facility exists in the city."
 //
 // Reads the same facility registry the search page and the sitemap read
-// (FR-1.2) — there is no city record and no second copy of a name or an
-// address anywhere in here. `state` and `city` arrive as URL segments, so both
-// are treated as untrusted strings and matched rather than interpolated.
+// (FR-1.2) — no second copy of a name or an address anywhere in here. B-128's
+// `City` row is deliberately not part of that: it carries authored prose and
+// nothing else, so it can never disagree with the facilities about where a
+// city is or how it is spelled. `state` and `city` arrive as URL segments, so
+// both are treated as untrusted strings and matched rather than interpolated.
 
 export type CityFacility = {
   id: string
@@ -99,6 +101,28 @@ export const facilitiesInCity = cache(async function facilitiesInCity(
       }
       return a.name.localeCompare(b.name)
     })
+})
+
+/// The authored intro for a city, or null when nobody has written one — which
+/// is every city until somebody does, and is why the caller falls back to the
+/// generated intro rather than treating this as required (B-128, D-62).
+///
+/// Cached per request for the same reason `facilitiesInCity` is: the page body
+/// and `generateMetadata` are separate calls into the same render.
+export const authoredCityIntro = cache(async function authoredCityIntro(
+  state: string,
+  city: string,
+): Promise<string | null> {
+  const slug = citySlug(city)
+  if (!slug || !state.trim()) return null
+  const row = await prisma.city.findFirst({
+    // The state is matched case-insensitively because it reaches this function
+    // from a URL segment as well as from a facility record, and those two
+    // disagree about casing by construction.
+    where: { slug, state: { equals: state, mode: 'insensitive' } },
+    select: { intro: true },
+  })
+  return row?.intro?.trim() ? row.intro : null
 })
 
 /// Every city that has at least one active facility, as `{state, city}` pairs.

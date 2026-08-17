@@ -1,7 +1,11 @@
 import { prisma } from '@storage/db'
 import type { ContentItem } from '@storage/core/marketing'
 import { citySlugPath, facilityPagePath } from '@/lib/marketing/paths'
-import { citiesWithFacilities, facilitiesInCity } from '@/lib/facility/city-facilities'
+import {
+  authoredCityIntro,
+  citiesWithFacilities,
+  facilitiesInCity,
+} from '@/lib/facility/city-facilities'
 import { cityIntro } from '@/lib/marketing/city-copy'
 import { GUIDES, guidePath } from '@/lib/guides/catalog'
 
@@ -68,21 +72,26 @@ export async function contentCorpus(): Promise<ContentItem[]> {
     }
   }
 
-  // The city intros (B-082 part 2, D-58). Generated from the facilities in each
-  // city, so they are templated by construction — which was accepted with the
-  // note that it is thin-content protection at the floor. This is the check
-  // that says whether the floor is holding, and it is the reason this report
-  // covers generated copy at all.
+  // The city intros (B-082 part 2, D-58; B-128, D-62). Generated from the
+  // facilities in each city unless somebody has written copy for it — which is
+  // exactly the distinction the report's advice turns on, so `origin` is taken
+  // from which one actually rendered rather than assumed to be 'generated'.
+  //
+  // The consequence is the point of B-128: writing real copy for two cities
+  // moves both rows to 'authored', and if they are STILL alike the report says
+  // "somebody wrote both" — which is now a fixable finding rather than a note
+  // about a product gap.
   for (const city of await citiesWithFacilities()) {
     const inCity = await facilitiesInCity(city.state, city.city)
-    const text = cityIntro(city.city, city.state, inCity).join(' ')
+    const authored = await authoredCityIntro(city.state, city.city)
+    const text = cityIntro(city.city, city.state, inCity, authored).join(' ')
     if (!text.trim()) continue
     items.push({
       key: `city:${city.state}/${city.city}`,
       url: citySlugPath(city.state, city.city),
       label: `${city.city}, ${city.state.toUpperCase()}`,
       kind: KIND.cityIntro,
-      origin: 'generated',
+      origin: authored ? 'authored' : 'generated',
       text,
     })
   }

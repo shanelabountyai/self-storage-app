@@ -119,6 +119,8 @@ test.describe('signed in as the demo owner', () => {
     '/admin/settings',
     '/admin/settings/delinquency',
     '/admin/settings/marketing',
+    // B-128. A page not on this list is a page nobody scans.
+    '/admin/settings/marketing/cities',
     '/admin/settings/notices',
     '/admin/settings/org',
     '/admin/settings/promotions',

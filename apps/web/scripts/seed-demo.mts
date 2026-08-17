@@ -154,13 +154,28 @@ async function teardown() {
   // B-122. Promotions carry no facilityId column — `facilityIds` is an array —
   // so they cannot ride on `where` like everything above. Marked by the same
   // DEMO_PREFIX in their NAME instead, and the codes go first because
-  // PromoCode.promotionId is Restrict. Redemptions are left alone: a redeemed
-  // promo is evidence a move-in happened, and the leases are already gone.
+  // PromoCode.promotionId is Restrict.
+  //
+  // The redemptions go too (fixed 2026-08-17, found while building B-128).
+  // This block used to spare a promotion that had any — "a redeemed promo is
+  // evidence a move-in happened" — which is true of a real promotion and was
+  // never true of a demo one. B-082 part 4 then started seeding an ROI
+  // promotion WITH a redemption on every run, so that promotion outlived every
+  // reset and the next run created a second one with the same name. The tell
+  // was `admin-reports.spec.ts` failing on a strict-mode violation — two rows
+  // matching "Spring — half off two months" — which reads as a broken report
+  // and is a seed that stopped being idempotent. `db:migrate:e2e` is the
+  // documented fresh-machine step, so the FIRST person to run it twice hits it.
+  // Scoped to demo-prefixed promotions exactly like the codes above, so a real
+  // redemption is still untouchable.
   await prisma.promoCode.deleteMany({
     where: { promotion: { name: { startsWith: DEMO_PREFIX } } },
   })
+  await prisma.promoRedemption.deleteMany({
+    where: { promotion: { name: { startsWith: DEMO_PREFIX } } },
+  })
   await prisma.promotion.deleteMany({
-    where: { name: { startsWith: DEMO_PREFIX }, redemptions: { none: {} } },
+    where: { name: { startsWith: DEMO_PREFIX } },
   })
 
   // The demo staff user is deliberately NOT deleted. Once it has signed in and

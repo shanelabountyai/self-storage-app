@@ -106,6 +106,11 @@ export const AUDIT_ACTIONS = [
 
   // Administration
   { action: 'facility.settings_changed', label: 'Facility settings changed', requiresReason: false },
+  /// B-128. Separate from `facility.settings_changed` because it belongs to no
+  /// facility — a city page lists every site in the city, so the row it edits
+  /// has no `facilityId` to stamp and would otherwise be an unattributable
+  /// facility-settings entry.
+  { action: 'city.copy_changed', label: 'City page copy changed', requiresReason: false },
   /// CN-16. A published template changes what every future tenant is told, and
   /// the version it records is what makes an old `Message` reproducible.
   { action: 'template.published', label: 'Message template published', requiresReason: false },

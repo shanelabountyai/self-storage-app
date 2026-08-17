@@ -27,6 +27,8 @@ const models: Model[] = [...schema.matchAll(/^model\s+(\w+)\s*\{([\s\S]*?)^\}/gm
 // table representing physical or financial reality, "directly or via its parent".
 const NO_FACILITY_ID: Record<string, string> = {
   Facility: 'is the facility',
+  City:
+    'a city page lists EVERY facility in the city, so there is no one facility to scope it to — which is also why editing it is checked against `marketing:city_copy` with a null facilityId rather than against `facility:settings` at a site (PRD 04 US-4 AC1, B-128, D-62)',
   Tenant: 'a person, who may hold leases at several facilities',
   StaffUser: 'org-level identity; facility scoping is RoleAssignment in B-004',
   Promotion: 'targets facilities through facilityIds[]',

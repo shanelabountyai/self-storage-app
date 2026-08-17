@@ -122,6 +122,47 @@ describe('the intro copy', () => {
   })
 })
 
+// B-128 / D-62. The authored half.
+describe('authored city intro copy', () => {
+  it('replaces the generated copy entirely rather than being appended to it', () => {
+    // Half-generated, half-written would put a templated sentence somebody did
+    // not choose in the middle of a landing page they did — which is the
+    // duplicate content the field exists to remove, still on the page.
+    const paragraphs = cityIntro(
+      'Austin',
+      'TX',
+      [facility()],
+      'East Austin fills up first every August, which is when UT moves back in.',
+    )
+    expect(paragraphs).toEqual([
+      'East Austin fills up first every August, which is when UT moves back in.',
+    ])
+    expect(paragraphs.join(' ')).not.toContain('We have one storage facility')
+  })
+
+  it('makes a blank line a paragraph, the way the textarea implies', () => {
+    expect(
+      cityIntro('Austin', 'TX', [facility()], 'First thing.\n\n  \n\nSecond thing.\n'),
+    ).toEqual(['First thing.', 'Second thing.'])
+  })
+
+  it('falls back to the generated copy when the field is empty or whitespace', () => {
+    // "Clear the box to go back" is a claim the editor makes to the operator,
+    // so it is the behaviour worth pinning: a blank field must never publish a
+    // city page with no words on it.
+    for (const authored of [null, undefined, '', '   \n\n  ']) {
+      const text = cityIntro('Austin', 'TX', [facility()], authored).join(' ')
+      expect(text).toContain('We have one storage facility in Austin, TX')
+    }
+  })
+
+  it('still renders nothing for a city with no facilities, however much was written', () => {
+    // That city 404s. Prose about no locations is the thin content AC1's
+    // indexability rule is there to keep out of the index.
+    expect(cityIntro('Austin', 'TX', [], 'Anything at all.')).toEqual([])
+  })
+})
+
 describe('the amenity list', () => {
   it('de-duplicates across facilities, case-insensitively, keeping first spelling', () => {
     const amenities = cityAmenities([

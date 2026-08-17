@@ -694,6 +694,9 @@ export default async function AdminSettingsPage() {
           <Link href="/admin/settings/marketing" className="underline underline-offset-2">
             Marketing profile — copy, photos, FAQs, Google
           </Link>
+          <Link href="/admin/settings/marketing/cities" className="underline underline-offset-2">
+            City page copy — the intro on each city landing page
+          </Link>
           <Link href="/admin/settings/promotions" className="underline underline-offset-2">
             Promotions — discounts and codes
           </Link>

@@ -3,7 +3,11 @@ import { notFound, permanentRedirect } from 'next/navigation'
 import { SITE } from '@/lib/site-config'
 import { formatRate } from '@/lib/format'
 import { facilityPath } from '@/lib/facility/public-facility'
-import { facilitiesInCity, type CityFacility } from '@/lib/facility/city-facilities'
+import {
+  authoredCityIntro,
+  facilitiesInCity,
+  type CityFacility,
+} from '@/lib/facility/city-facilities'
 import { FacilitySearchForm } from '@/components/site/facility-search-form'
 import {
   absoluteUrl,
@@ -173,7 +177,17 @@ export default async function CityPage({
   if (`/storage/${state}/${city}` !== canonical) permanentRedirect(canonical)
 
   const label = cityLabel(first.city, first.state)
-  const intro = cityIntro(first.city, first.state, facilities)
+  // B-128 / D-62. Authored copy when somebody has written it, the generated
+  // intro when nobody has — which is every city until they do. Looked up with
+  // the STORED spelling rather than the URL segment so the two callers of
+  // `authoredCityIntro` (here and the duplicate-content corpus) cannot resolve
+  // to different rows for the same page.
+  const intro = cityIntro(
+    first.city,
+    first.state,
+    facilities,
+    await authoredCityIntro(first.state, first.city),
+  )
   const amenities = cityAmenities(facilities)
   const canonicalUrl = absoluteUrl(siteOrigin(), canonical)
 

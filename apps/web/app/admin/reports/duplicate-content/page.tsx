@@ -95,15 +95,29 @@ export default async function DuplicateContentPage() {
                           the kind. Two pasted descriptions and two templated
                           city pages are the same number and completely
                           different jobs. */}
-                      {/* Not "write better copy" for the generated case. There
-                          is no city description to edit — the intros are
-                          derived from the facility records on purpose — so
-                          telling somebody to rewrite one sends them hunting for
-                          a field that does not exist. Naming it as a product
-                          gap is the honest instruction. */}
-                      {pair.bothGenerated
-                        ? 'Generated from the facility records, and alike because the records are alike. There is no city description to edit today — if these pages need to read differently, that is a product change rather than a copy change.'
-                        : 'Somebody wrote both. Check whether one was pasted from the other and rewrite the weaker one.'}
+                      {/* Until B-128 the generated case had no fix to offer:
+                          the city intros were derived from the facility records
+                          with no field to edit, so telling somebody to rewrite
+                          one sent them hunting for something that did not
+                          exist, and naming it as a product gap was the honest
+                          instruction. There is now a box. The advice points at
+                          it rather than at "write better copy", because which
+                          screen is different from the facility one. */}
+                      {pair.bothGenerated ? (
+                        <>
+                          Generated from the facility records, and alike because the records are
+                          alike.{' '}
+                          <Link
+                            href="/admin/settings/marketing/cities"
+                            className="underline underline-offset-2"
+                          >
+                            Write copy for one of these cities
+                          </Link>{' '}
+                          and it stops being generated.
+                        </>
+                      ) : (
+                        'Somebody wrote both. Check whether one was pasted from the other and rewrite the weaker one.'
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -130,9 +144,10 @@ export default async function DuplicateContentPage() {
           rather than their content, and the pairs that surfaced would be noise.
         </p>
         <p>
-          Generated copy is included on purpose. The city page intros are derived from the
-          facilities in each city, so they are alike by construction — this report is what says
-          whether that is still acceptable or has become the thin content it was meant to hold off.
+          Generated copy is included on purpose. A city page intro is derived from the facilities
+          in that city until somebody writes one, so unwritten cities are alike by construction —
+          this report is what says whether that is still acceptable or has become the thin content
+          it was meant to hold off.
         </p>
       </div>
     </div>

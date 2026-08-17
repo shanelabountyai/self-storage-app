@@ -59,6 +59,13 @@ export const PERMISSIONS = [
   // regional manager can push a default down to their own sites and no others.
   { key: 'org:defaults', name: 'Edit org-level defaults', category: 'admin', description: 'Define the portfolio-wide fee schedule, late-fee ladder and delinquency timeline, and push them to facilities.' },
   { key: 'audit:view', name: 'View the audit log', category: 'admin', description: 'Read the append-only audit trail.' },
+  // B-128 / PRD 04 US-4. A city page spans every facility in the city, so
+  // there is no facility to scope the edit to — `can()` is asked for this with
+  // a null facilityId, which only an all-facilities assignment satisfies, the
+  // same shape as `org:defaults` above. Deliberately not `facility:settings`:
+  // that is held per-site, and a manager at one Austin location would
+  // otherwise be editing the page that lists their competitors' sites too.
+  { key: 'marketing:city_copy', name: 'Edit city page copy', category: 'admin', description: 'Write the intro paragraphs on a city landing page. Portfolio-wide — a city page lists every facility in it.' },
 
   // Reporting
   { key: 'reports:operational', name: 'View operational reports', category: 'reporting', description: 'Occupancy, move-ins, and daily activity.' },
@@ -190,6 +197,7 @@ export const ROLES: readonly RoleSeed[] = [
       'access:events',
       'facility:settings',
       'org:defaults',
+      'marketing:city_copy',
       'audit:view',
       'reports:operational',
       'reports:financial',

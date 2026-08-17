@@ -2279,6 +2279,50 @@ enum FacilityPhotoKind {
   other
 }
 
+/// PRD 04 §3.2 US-4 AC1 (B-128, D-62). A city page's own words, when somebody
+/// has written them.
+///
+/// D-58 chose to GENERATE the city intro from the facilities in the city and
+/// refused a `City` model, on the footing that derived copy cannot drift. That
+/// reasoning still holds and this row does not overturn it — the generated
+/// intro is still what renders when `intro` is null, which is every city on the
+/// day this ships. What changed is a measurement: B-082 part 6's own
+/// duplicate-content report scores the generated intros at 0.82–0.85 against
+/// each other, above this codebase's own 0.8 threshold, so by our own check the
+/// city pages are duplicate content. A landing page that exists to rank cannot
+/// be left with no way to fix that.
+///
+/// Keyed on the SLUG, not the stored spelling: the facility records own how a
+/// city is written and this table must never become a second opinion about it.
+/// A row here carries copy and nothing else — no name, no state name, no
+/// coordinates — because every one of those would be a fact that can disagree
+/// with the facilities the page lists.
+///
+/// A row may outlive the last facility in its city. That is deliberate: the
+/// page 404s in that case (AC1's indexability rule) and deleting the copy would
+/// throw away someone's writing because a location closed for a month.
+model City {
+  id               String    @id @default(cuid())
+  /// Two-letter code, stored upper-case. Matched case-insensitively on read,
+  /// because the URL segment arrives lower-case.
+  state            String
+  /// `citySlug(city)` — "fort-worth". The URL segment, which is the only
+  /// spelling both this table and the facility records agree on.
+  slug             String
+  /// The authored intro. Null or blank means the generated intro renders, so
+  /// clearing the box is a real way back rather than a way to publish an empty
+  /// page.
+  intro            String?
+  updatedByStaffId String?
+  createdAt        DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime  @updatedAt @db.Timestamptz(6)
+
+  updatedByStaff StaffUser? @relation(fields: [updatedByStaffId], references: [id], onDelete: SetNull)
+
+  @@unique([state, slug])
+  @@map("city")
+}
+
 /// PRD 02 §4.6 US-25 (B-056). A facility's delinquency timeline, versioned.
 ///
 /// Append-only, like message templates and tax components: activating a new
@@ -3718,6 +3762,7 @@ model StaffUser {
   leadsCreated       Lead[]
   delinquencyTimelines DelinquencyTimeline[]
   orgDefaultsUpdated OrgDefault[]
+  cityCopyUpdated    City[]
 }
 
 /// B-079. Single-use codes for the phone that got dropped in a puddle.
