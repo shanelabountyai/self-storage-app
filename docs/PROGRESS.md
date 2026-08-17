@@ -4368,7 +4368,7 @@ Full e2e against a production build: **953 passed, 5 skipped, 0 failed, 0 flaky 
 
 ## B-082 (part 5 of 6) — Search Console: what Google has actually indexed, and the deadlock that stopped being deferrable
 
-`PENDING`
+`40c8657`
 
 **Scoped to indexation, not ranking.** PRD 04's Phase-2 line is "Search Console integration for **indexation monitoring**", and that is the narrower and more useful question: a facility page that is in our sitemap, returns 200 and is not in Google's index earns nothing, and there is no way to notice that from inside our own logs. Impressions and clicks are a different report; IndexNow and sitemap-ping automation stay Phase 3 (B-087).
 
