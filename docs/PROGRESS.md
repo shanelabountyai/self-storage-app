@@ -4224,7 +4224,7 @@ Full e2e green against a production build: **870 passed, 6 skipped, 0 failed, 0 
 
 ## B-107 — The search results grow a map, and the list stays the product (D-56)
 
-`PENDING-SHA`
+`b4b40a2`
 
 **The map is decoration over a page that already worked.** PRD 01 §6.8 asks for "map views have list equivalents"; the row asks for the inverse emphasis, and that is what shipped — the list is the view, the map is a collapsed `<details>` underneath it, and a renter who never opens it is served a page identical to yesterday's.
 
