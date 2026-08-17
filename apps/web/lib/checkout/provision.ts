@@ -160,14 +160,48 @@ export async function provisionMoveIn(sessionId: string): Promise<ProvisionResul
   // lease. Without a reservation there is no channel to inherit and the renter
   // came through the public checkout, which IS `web` — the one case where
   // defaulting is a fact rather than a guess.
-  const reservationSource = row.reservationId
-    ? (
-        await prisma.reservation.findUnique({
-          where: { id: row.reservationId },
-          select: { source: true },
-        })
-      )?.source
+  const reservation = row.reservationId
+    ? await prisma.reservation.findUnique({
+        where: { id: row.reservationId },
+        select: {
+          source: true,
+          utmSource: true,
+          utmMedium: true,
+          utmCampaign: true,
+          // B-082 part 1. The lead is where the MARKETING channel lives — the
+          // reservation carries campaign tags but never a derived channel.
+          lead: { select: { channel: true } },
+        },
+      })
     : null
+  const reservationSource = reservation?.source ?? null
+
+  // Read before the transaction so the lease can be stamped with it, and reused
+  // by the analytics call after the commit rather than read twice. Cookies
+  // only — no database work — so this cannot lengthen the transaction below.
+  const analytics = await trackingContext().catch(() => null)
+
+  // B-082 part 1. The marketing channel credited with this move-in, which is a
+  // different question from `acquisitionSource` above and is why it needs its
+  // own column: every marketplace rental used to report as `web`, identical to
+  // an organic one, so the channel that charges per completed move-in was the
+  // one the report could not see.
+  //
+  // The LEAD's channel wins over the checkout's own cookie (D-57). A renter who
+  // arrived from SpareFoot, enquired, and came back a week later through a
+  // Google search would otherwise credit the move-in to organic — while the
+  // aggregator invoices for it regardless, because that is what their contracts
+  // charge on. Crediting last touch there would mean paying an aggregator out of
+  // a budget line that says the aggregator produced nothing.
+  //
+  // Null when neither exists rather than a default: `unknown` is a true answer
+  // and `organic` would be a fabricated one.
+  const acquisition = {
+    acquisitionChannel: reservation?.lead?.channel ?? analytics?.channel ?? null,
+    acquisitionUtmSource: reservation?.utmSource ?? analytics?.utmSource ?? null,
+    acquisitionUtmMedium: reservation?.utmMedium ?? analytics?.utmMedium ?? null,
+    acquisitionUtmCampaign: reservation?.utmCampaign ?? null,
+  }
 
   const leaseIds = await prisma.$transaction(async (tx) => {
     // B-106. One lease per basket line, in one transaction.
@@ -194,6 +228,7 @@ export async function provisionMoveIn(sessionId: string): Promise<ProvisionResul
           monthlyRateCents: line.quotedRateCents,
           billingDay: billingDayFor(facility.billingPolicy, localToday),
           acquisitionSource: reservationSource ?? 'web',
+          ...acquisition,
           autopayEnabled,
           // D-52 (B-106). One plan per unit: every lease carries the tier the
           // renter chose and its own premium. Recording one premium against
@@ -404,12 +439,17 @@ export async function provisionMoveIn(sessionId: string): Promise<ProvisionResul
   // The session id comes from the checkout's own cookie where one survives, so
   // the funnel can join this to the page view that started it. Without it the
   // move-in still counts — it just cannot be attributed to a session.
-  const analytics = await trackingContext().catch(() => null)
+  //
+  // `analytics` is the context read before the transaction — one read, so the
+  // channel on this event and the channel stamped on the lease cannot disagree.
   await track({
     event: 'move_in_completed',
     facilityId: session.facilityId,
     sessionId: analytics?.sessionId ?? `lease:${leaseIds[0]}`,
-    channel: analytics?.channel ?? reservationSource ?? null,
+    // The same precedence the lease got, for the same reason (D-57): a funnel
+    // that credits the aggregator and a move-in report that credits organic
+    // would be two answers to one question.
+    channel: acquisition.acquisitionChannel ?? reservationSource ?? null,
     utmSource: analytics?.utmSource ?? null,
     utmMedium: analytics?.utmMedium ?? null,
     // PRD 04 US-9 AC4 (B-073). "Recovered reservations are attributed to the

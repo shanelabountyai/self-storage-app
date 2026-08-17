@@ -441,6 +441,83 @@ describeDb('move-in provisioning', () => {
     expect(after.status).toBe('converted')
   })
 
+  // B-082 part 1. The bug this closes: `acquisitionSource` answers "how was the
+  // deal taken" and a marketplace rental is `web` on that axis, identical to an
+  // organic one. Every aggregator move-in was therefore invisible in the report
+  // an owner uses to decide where to spend — on the only channel in this
+  // industry that bills per completed move-in.
+  it('credits the marketplace that produced the lead, not the web form it arrived through', async () => {
+    const moveIn = new Date()
+    moveIn.setDate(moveIn.getDate() + 1)
+    const lead = await prisma.lead.create({
+      data: {
+        facilityId,
+        email: `agg-${suffix}@example.com`,
+        channel: 'aggregator',
+        firstTouchSource: 'sparefoot',
+        lastTouchSource: 'sparefoot',
+      },
+    })
+    const reservation = await createReservation({
+      facilityId,
+      unitTypeId,
+      firstName: 'Ada',
+      lastName: 'Renter',
+      email: `agg-res-${suffix}@example.com`,
+      moveInDate: moveIn,
+      quotedRateCents: 12_900,
+      utm: { source: 'sparefoot', medium: 'marketplace', campaign: 'austin-south' },
+    })
+    if (!reservation.ok) throw new Error('unreachable')
+    // `createReservation` takes no lead id — a staffer converting an inquiry is
+    // what links the two — so the link is made directly here. What is under
+    // test is what provisioning READS, not how the row got its lead.
+    await prisma.reservation.update({
+      where: { id: reservation.reservationId },
+      data: { leadId: lead.id },
+    })
+
+    const started = await paidSession(reservation.reservationId)
+    const result = await provisionMoveIn(started.sessionId)
+    if (!result.ok) throw new Error('unreachable')
+
+    const lease = await prisma.lease.findUniqueOrThrow({
+      where: { id: result.leaseId },
+      select: {
+        acquisitionSource: true,
+        acquisitionChannel: true,
+        acquisitionUtmSource: true,
+        acquisitionUtmMedium: true,
+        acquisitionUtmCampaign: true,
+      },
+    })
+
+    // Both axes, and the point is that they DISAGREE — that is the information
+    // a single column could not carry.
+    expect(lease.acquisitionSource, 'the deal was still taken on the web').toBe('web')
+    expect(lease.acquisitionChannel, 'but the marketplace produced it').toBe('aggregator')
+    expect(lease.acquisitionUtmSource).toBe('sparefoot')
+    expect(lease.acquisitionUtmMedium).toBe('marketplace')
+    expect(lease.acquisitionUtmCampaign).toBe('austin-south')
+  })
+
+  it('leaves the channel null rather than inventing one for a walk-up checkout', async () => {
+    // No reservation, no lead, and no attribution cookie in a server-side test.
+    // `unknown` is a true answer; defaulting to `organic` or `direct` here would
+    // manufacture credit for a channel that did nothing, which is the same
+    // failure in the opposite direction.
+    const started = await paidSession()
+    const result = await provisionMoveIn(started.sessionId)
+    if (!result.ok) throw new Error('unreachable')
+
+    const lease = await prisma.lease.findUniqueOrThrow({
+      where: { id: result.leaseId },
+      select: { acquisitionSource: true, acquisitionChannel: true },
+    })
+    expect(lease.acquisitionSource).toBe('web')
+    expect(lease.acquisitionChannel).toBeNull()
+  })
+
   it('moves the signed lease document onto the lease', async () => {
     const started = await paidSession()
     await prisma.document.create({

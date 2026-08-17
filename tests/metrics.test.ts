@@ -6,7 +6,10 @@ import {
   economicOccupancy,
   isOccupied,
   isRentable,
+  MOVE_CHANNELS,
+  MOVE_SOURCES,
   moveCounts,
+  normalizeChannel,
   normalizeSource,
   occupancy,
   rateVariance,
@@ -16,8 +19,10 @@ import {
   sumMoveCounts,
   sumOccupancy,
   wholeMonthsBetween,
+  type MoveEvent,
   type UnitForOccupancy,
 } from '../packages/core/metrics'
+import { MARKETING_CHANNELS } from '../packages/core/marketing'
 
 // B-042 / PRD 02 US-39, §8. The definitions themselves — pure, no database.
 
@@ -131,8 +136,8 @@ describe('roll-up equals the sum of the facilities', () => {
     expect(rolled.totalCents).toBe(3_000)
 
     const moves = sumMoveCounts([
-      moveCounts([{ source: 'web' }], 1),
-      moveCounts([{ source: 'phone' }, { source: 'web' }], 0),
+      moveCounts([{ source: 'web', channel: 'organic' }], 1),
+      moveCounts([{ source: 'phone', channel: 'phone' }, { source: 'web', channel: 'aggregator' }], 0),
     ])
     expect(moves.moveIns).toBe(3)
     expect(moves.moveOuts).toBe(1)
@@ -309,15 +314,72 @@ describe('arAging', () => {
 
 describe('move counts and conversion', () => {
   it('reports a negative net when more left than arrived', () => {
-    const counts = moveCounts([{ source: 'web' }], 4)
+    const counts = moveCounts([{ source: 'web', channel: 'organic' }], 4)
     expect(counts.net).toBe(-3)
   })
 
   it('attributes move-ins by source and leaves move-outs unattributed', () => {
-    const counts = moveCounts([{ source: 'web' }, { source: 'walk_in' }], 1)
+    const counts = moveCounts([{ source: 'web', channel: 'aggregator' }, { source: 'walk_in', channel: 'walk_in' }], 1)
     expect(counts.bySource.web).toBe(1)
     expect(counts.bySource.walk_in).toBe(1)
     expect(counts.moveOuts).toBe(1)
+  })
+
+  // B-082 part 1. THE bug: a marketplace rental and an organic one are both
+  // `web` on the source axis, so before `byChannel` existed the only channel
+  // that charges per completed move-in was invisible in the report an owner
+  // uses to decide what to keep paying for.
+  it('separates a marketplace move-in from an organic one that looks identical', () => {
+    const counts = moveCounts(
+      [
+        { source: 'web', channel: 'aggregator' },
+        { source: 'web', channel: 'organic' },
+      ],
+      0,
+    )
+    expect(counts.bySource.web).toBe(2)
+    expect(counts.byChannel.aggregator).toBe(1)
+    expect(counts.byChannel.organic).toBe(1)
+  })
+
+  it('splits the same move-ins both ways, so the two totals cannot disagree', () => {
+    const moves: MoveEvent[] = [
+      { source: 'web', channel: 'aggregator' },
+      { source: 'phone', channel: 'phone' },
+      { source: 'walk_in', channel: 'direct' },
+      { source: 'web', channel: 'unknown' },
+    ]
+    const counts = moveCounts(moves, 2)
+    const sourceTotal = MOVE_SOURCES.reduce((sum, key) => sum + counts.bySource[key], 0)
+    const channelTotal = MOVE_CHANNELS.reduce((sum, key) => sum + counts.byChannel[key], 0)
+    expect(sourceTotal).toBe(counts.moveIns)
+    expect(channelTotal).toBe(counts.moveIns)
+
+    // And through a roll-up, which is where a second accumulator usually drifts.
+    const rolled = sumMoveCounts([counts, moveCounts([{ source: 'web', channel: 'aggregator' }], 0)])
+    expect(MOVE_CHANNELS.reduce((sum, key) => sum + rolled.byChannel[key], 0)).toBe(rolled.moveIns)
+    expect(rolled.byChannel.aggregator).toBe(2)
+  })
+
+  it('files an unrecognised channel as unknown rather than inventing one', () => {
+    // A lease from before capture, and a channel from a vocabulary that has
+    // since changed, must both land in `unknown` — never in a real channel,
+    // which would credit history to whatever is being evaluated today.
+    expect(normalizeChannel(null)).toBe('unknown')
+    expect(normalizeChannel('')).toBe('unknown')
+    expect(normalizeChannel('some_future_channel')).toBe('unknown')
+    expect(normalizeChannel('aggregator')).toBe('aggregator')
+  })
+
+  it('covers every marketing channel the attribution layer can produce', () => {
+    // `moves.ts` restates the vocabulary rather than importing it, to keep
+    // metrics dependency-free. That is only safe if the two lists agree, so
+    // this is the assertion that makes the duplication legitimate: a channel
+    // added to MARKETING_CHANNELS and not here would silently report as
+    // `unknown` for every move-in it produced.
+    for (const channel of MARKETING_CHANNELS) {
+      expect(MOVE_CHANNELS as readonly string[]).toContain(channel)
+    }
   })
 
   it('folds an unrecognised or missing source into `unknown` rather than a real channel', () => {

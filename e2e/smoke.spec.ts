@@ -133,6 +133,51 @@ test('the opened map introduces no accessibility violations', async ({ page }) =
   expect(results.violations).toEqual([])
 })
 
+// B-082 part 1. The marketplace surface, asserted through real HTTP rather
+// than by calling the library — these are the two routes a partner integrates
+// against, and a handler that throws on a missing export is invisible to a
+// unit test that imports the function directly.
+test('the availability feed publishes what the website publishes', async ({ request }) => {
+  const response = await request.get('/api/public/marketplace/availability')
+  expect(response.status()).toBe(200)
+
+  const feed = (await response.json()) as {
+    generatedAt: string
+    facilities: { slug: string; url: string; unitTypes: { webRateCents: number }[] }[]
+  }
+  const demo = feed.facilities.find((facility) => facility.slug === 'demo-austin-south')
+  expect(demo, 'the demo facility is advertised').toBeDefined()
+  expect(demo!.url).toContain('/storage/tx/austin/demo-austin-south')
+  expect(demo!.unitTypes.length).toBeGreaterThan(0)
+  // Rate parity, end to end: the same number the public inventory API serves.
+  const site = await (
+    await request.get('/api/public/facilities/demo-austin-south/inventory')
+  ).json()
+  const feedRate = demo!.unitTypes[0].webRateCents
+  const siteRates = (site.unitTypes as { webRateCents: number }[]).map((u) => u.webRateCents)
+  expect(siteRates).toContain(feedRate)
+})
+
+test('the inbound lead endpoint refuses an unauthenticated caller', async ({ request }) => {
+  // No key is configured for the e2e build, so EVERY caller is unauthenticated
+  // — which is the closed default this asserts. A partner cannot name its own
+  // channel because it never gets as far as the body.
+  const response = await request.post('/api/public/marketplace/leads', {
+    data: { facilitySlug: 'demo-austin-south', name: 'Ada', email: 'ada@example.com' },
+  })
+  expect(response.status()).toBe(401)
+  expect(await response.json()).toEqual({ error: 'unauthorized' })
+
+  const withGuess = await request.post('/api/public/marketplace/leads', {
+    headers: { authorization: 'Bearer not-a-real-key' },
+    data: { facilitySlug: 'demo-austin-south', name: 'Ada', email: 'ada@example.com' },
+  })
+  // The same answer for "no key" and "wrong key": anything else tells an
+  // unauthenticated caller which of the two it is.
+  expect(withGuess.status()).toBe(401)
+  expect(await withGuess.json()).toEqual({ error: 'unauthorized' })
+})
+
 test('a search result links through to its facility page', async ({ page }) => {
   await page.goto('/storage/search?q=78704')
   await page.getByRole('link', { name: 'Demo — Austin South' }).click()

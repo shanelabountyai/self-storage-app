@@ -4,6 +4,7 @@ import {
   daysPastDue,
   economicOccupancy,
   moveCounts,
+  normalizeChannel,
   normalizeSource,
   occupancy,
   rateVariance,
@@ -269,7 +270,7 @@ export async function movesReport(
       const [moveIns, moveOutCount, reservations] = await Promise.all([
         prisma.lease.findMany({
           where: { facilityId: facility.id, startDate: { gte: periodStart, lt: periodEnd } },
-          select: { id: true, acquisitionSource: true },
+          select: { id: true, acquisitionSource: true, acquisitionChannel: true },
         }),
         prisma.lease.count({
           where: { facilityId: facility.id, moveOutDate: { gte: periodStart, lt: periodEnd }, status: 'ended' },
@@ -290,8 +291,18 @@ export async function movesReport(
         // `unknown`, which stays visible rather than being folded into `web` —
         // quietly crediting the channel this report exists to evaluate is the
         // failure the whole item was written to prevent.
+        //
+        // B-082 part 1 added the second axis. `acquisitionSource` says how the
+        // deal was taken; `acquisitionChannel` says where the renter came from,
+        // and until it existed every marketplace rental reported as `web` —
+        // identical to an organic one, in the report an owner uses to decide
+        // what to keep paying for. Both splits count the SAME move-ins, so the
+        // two totals agree by construction.
         moves: moveCounts(
-          moveIns.map((lease) => ({ source: normalizeSource(lease.acquisitionSource) })),
+          moveIns.map((lease) => ({
+            source: normalizeSource(lease.acquisitionSource),
+            channel: normalizeChannel(lease.acquisitionChannel),
+          })),
           moveOutCount,
         ),
         conversion: reservationConversion(

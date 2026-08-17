@@ -1110,6 +1110,32 @@ model Lease {
   /// capture, which `normalizeSource` reports as `unknown` rather than folding
   /// into `web`.
   acquisitionSource  String?
+  /// PRD 04 §3.2 US-4 (B-082 part 1). The MARKETING channel credited with this
+  /// move-in — `aggregator`, `paid_search`, `organic`, one of
+  /// `MARKETING_CHANNELS`.
+  ///
+  /// A second column beside `acquisitionSource` rather than more values in it,
+  /// because the two answer different questions and a single column cannot
+  /// hold both answers. `acquisitionSource` is how the DEAL WAS TAKEN — web,
+  /// phone, walk-in. This is where the RENTER CAME FROM. A SpareFoot move-in is
+  /// `web` on the first axis and `aggregator` on the second, and that is
+  /// precisely the case the old shape could not express: every marketplace
+  /// rental reported as `web`, indistinguishable from an organic one, so the
+  /// most expensive channel in the industry — these charge per completed
+  /// move-in — was invisible in the report an owner uses to decide where to
+  /// spend.
+  ///
+  /// Denormalised for the same reason as the column above: the chain that knows
+  /// the answer is three nullable joins long, so a report walking it silently
+  /// under-counts. Null means the lease predates capture, and reports as
+  /// `unknown` rather than being folded into any real channel.
+  acquisitionChannel String?
+  /// The campaign tags behind that channel, kept as sent. `acquisitionChannel`
+  /// is the answer; these are the evidence, and they are what anyone will want
+  /// when the answer looks wrong. Mirrors `Reservation.utm*` deliberately.
+  acquisitionUtmSource   String?
+  acquisitionUtmMedium   String?
+  acquisitionUtmCampaign String?
   /// PRD 04 US-7 AC1/AC2 (B-071). "Max 1 review request per tenant per
   /// tenancy." Stamped by the job that raises the request — same device as
   /// `Reservation.expiryReminderSentAt` (B-031): the outbox only dedupes an
@@ -1179,6 +1205,12 @@ model Lease {
   @@index([facilityId, status])
   @@index([tenantId])
   @@index([unitId])
+  /// B-082 part 1. The move-in report splits a date range of leases by channel
+  /// per facility, which is exactly this shape. Declared here as well as
+  /// created in the migration: `prisma migrate diff` compares the DATABASE
+  /// against this model, so an index in one and not the other is drift and CI
+  /// fails on it by design.
+  @@index([facilityId, startDate, acquisitionChannel])
   @@map("lease")
   delinquencyTimeline DelinquencyTimeline? @relation(fields: [delinquencyTimelineId], references: [id], onDelete: SetNull)
   delinquencyStepRuns DelinquencyStepRun[]

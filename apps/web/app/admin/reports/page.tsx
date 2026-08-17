@@ -26,6 +26,95 @@ function percent(ratio: number): string {
   return `${(ratio * 100).toFixed(1)}%`
 }
 
+// B-082 part 1. Operator-facing names for the two acquisition vocabularies.
+// Written out rather than title-cased from the key, because "Walk in" and
+// "Referral tenant" are what mechanical prettifying produces and neither is
+// what a manager calls the thing.
+const CHANNEL_LABELS: Record<string, string> = {
+  aggregator: 'Marketplace / aggregator',
+  paid_search: 'Paid search',
+  paid_social: 'Paid social',
+  organic: 'Organic search',
+  organic_social: 'Organic social',
+  email: 'Email',
+  referral: 'Referral site',
+  referral_tenant: 'Tenant referral',
+  direct: 'Direct',
+  phone: 'Phone',
+  walk_in: 'Walk-in',
+  unknown: 'Unknown',
+}
+
+const SOURCE_LABELS: Record<string, string> = {
+  web: 'Web',
+  phone: 'Phone',
+  walk_in: 'Walk-in',
+  referral: 'Referral',
+  drive_by: 'Drive-by',
+  unknown: 'Unknown',
+}
+
+/// One acquisition split. Rows with no move-ins are omitted — eleven channels
+/// of which nine read zero is a table nobody scans — except `unknown`, which
+/// is shown whenever it is non-zero and never quietly folded into a real
+/// channel, and which is the only honest answer for a lease that predates
+/// capture.
+function MoveSplit({
+  heading,
+  hint,
+  counts,
+  labels,
+  total,
+}: {
+  heading: string
+  hint: string
+  counts: Record<string, number>
+  labels: Record<string, string>
+  total: number
+}) {
+  const rows = Object.entries(counts).filter(([, count]) => count > 0)
+
+  return (
+    <div className="flex flex-col gap-2">
+      <h3 className="text-sm font-medium">{heading}</h3>
+      <p className="text-muted-foreground text-sm text-pretty">{hint}</p>
+      {rows.length === 0 ? (
+        <p className="text-muted-foreground text-sm">No move-ins in this period.</p>
+      ) : (
+        <table className="w-full text-sm">
+          <caption className="sr-only">{heading}</caption>
+          <thead>
+            <tr className="border-b text-left">
+              <th scope="col" className="py-2 font-medium">
+                {heading.replace('Move-ins by ', '').replace(/^./, (c) => c.toUpperCase())}
+              </th>
+              <th scope="col" className="py-2 text-right font-medium">
+                Move-ins
+              </th>
+              <th scope="col" className="py-2 text-right font-medium">
+                Share
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(([key, count]) => (
+              <tr key={key} className="border-b">
+                <th scope="row" className="py-2 font-normal">
+                  {labels[key] ?? key}
+                </th>
+                <td className="py-2 text-right tabular-nums">{count}</td>
+                <td className="py-2 text-right tabular-nums">
+                  {total === 0 ? '—' : percent(count / total)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  )
+}
+
 function monthBounds(month: string): { start: Date; end: Date; label: string } {
   const [year, monthIndex] = month.split('-').map(Number)
   const start = new Date(Date.UTC(year, monthIndex - 1, 1))
@@ -222,11 +311,29 @@ export default async function ReportsPage({
             </tr>
           </tbody>
         </table>
-        <p className="text-muted-foreground text-sm text-pretty">
-          Move-ins aren&apos;t broken down by source yet — nothing records how a rental was acquired,
-          so every one would read as &ldquo;unknown&rdquo;. Capturing it is part of the phone and
-          walk-in inquiry work.
-        </p>
+        {/* B-082 part 1. Two splits of the SAME move-ins, which is why they are
+            two tables and not one: they are different questions, and a reader
+            who takes them for one breakdown will double-count. `bySource` has
+            been computed since B-097 and rendered nowhere, and the paragraph
+            that used to sit here still told the operator that "nothing records
+            how a rental was acquired" — untrue for months, on the screen where
+            the operator decides what to keep paying for. */}
+        <div className="grid gap-6 sm:grid-cols-2">
+          <MoveSplit
+            heading="Move-ins by channel"
+            hint="Where the renter came from. An aggregator charges per completed move-in, so this is the column that has a bill attached."
+            counts={moves.total.moves.byChannel}
+            labels={CHANNEL_LABELS}
+            total={moves.total.moves.moveIns}
+          />
+          <MoveSplit
+            heading="Move-ins by source"
+            hint="How the deal was taken. A marketplace rental is “web” here and “aggregator” above — both are true."
+            counts={moves.total.moves.bySource}
+            labels={SOURCE_LABELS}
+            total={moves.total.moves.moveIns}
+          />
+        </div>
       </section>
 
       {/* Financial only. `delinquencyReport` scopes to the facilities the
