@@ -863,6 +863,55 @@ async function main() {
   // Indices continue from the first facility so tenant emails stay unique.
   await seedLifecycleStates(dallas, first.nextIndex, false)
 
+  // B-082 part 4. One redeemed promotion, so `/admin/reports/promotions` has a
+  // populated table rather than only its empty state — the two-column split
+  // between discount GIVEN and discount STILL TO GIVE is the entire point of
+  // that report, and a column nothing ever renders is a column nobody checks.
+  //
+  // `ended` and `code`-gated, deliberately, and both halves matter. An ACTIVE
+  // promotion would put a badge and a changed price on the Austin facility page
+  // that the smoke suite asserts totals against — the exact reason B-122's own
+  // seeded promo is code-gated, one block above. An ended past campaign is also
+  // the realistic thing to be reading an ROI report about. No `PromoCode` row is
+  // created, so there is no code any test could type to revive it.
+  const roiLease = await prisma.lease.findFirst({
+    where: { facility: { slug: `${DEMO_PREFIX}austin-south` }, status: 'active' },
+    select: { id: true, facilityId: true, monthlyRateCents: true },
+    orderBy: { startDate: 'asc' },
+  })
+  if (roiLease) {
+    const halfCents = Math.round(roiLease.monthlyRateCents / 2)
+    const roiPromotion = await prisma.promotion.create({
+      data: {
+        name: `${DEMO_PREFIX}Spring — half off two months`,
+        type: 'percent_off',
+        value: 50,
+        durationPeriods: 2,
+        status: 'ended',
+        displayMode: 'code',
+        facilityIds: [austin.facility.id],
+        redemptionCount: 1,
+        termsText: 'Half off your first two months. Ended campaign, kept for reporting.',
+      },
+    })
+    // One of the two periods applied: the redemption has given away half of
+    // what it committed, which is what makes "still to give" a non-zero number
+    // on the report instead of a column of noughts.
+    await prisma.promoRedemption.create({
+      data: {
+        promotionId: roiPromotion.id,
+        facilityId: roiLease.facilityId,
+        leaseId: roiLease.id,
+        schedule: [
+          { periodIndex: 0, amountCents: halfCents },
+          { periodIndex: 1, amountCents: halfCents },
+        ],
+        totalCents: halfCents * 2,
+        appliedPeriods: [0],
+      },
+    })
+  }
+
   const [facilityCount, unitCount, tenantCount, leaseCount] = await Promise.all([
     prisma.facility.count({ where: { slug: { startsWith: DEMO_PREFIX } } }),
     prisma.unit.count({ where: { facility: { slug: { startsWith: DEMO_PREFIX } } } }),

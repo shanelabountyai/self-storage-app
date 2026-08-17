@@ -170,7 +170,11 @@ export async function provisionMoveIn(sessionId: string): Promise<ProvisionResul
           utmCampaign: true,
           // B-082 part 1. The lead is where the MARKETING channel lives — the
           // reservation carries campaign tags but never a derived channel.
-          lead: { select: { channel: true } },
+          // B-082 part 4 adds `dripStep`: how far the lead follow-up sequence
+          // reached before this rental happened, which is the other half of
+          // US-9 AC4's "attributed to the sequence in funnel reporting". Read
+          // on the query that already runs, not a second one.
+          lead: { select: { channel: true, dripStep: true } },
         },
       })
     : null
@@ -459,6 +463,13 @@ export async function provisionMoveIn(sessionId: string): Promise<ProvisionResul
     properties: {
       fromReservation: Boolean(row.reservationId),
       recoveredByAbandonment: row.abandonmentSequenceStep > 0,
+      // B-082 part 4. True when the lead behind this rental had already been
+      // chased at least once. Not exclusive with the line above and the report
+      // says so: a renter can be drip-chased, abandon a checkout, and be
+      // brought back by the abandonment sequence — all three are true of them,
+      // and forcing one answer would mean inventing a precedence nobody asked
+      // for.
+      fromLeadDrip: (reservation?.lead?.dripStep ?? 0) > 0,
     },
   })
 

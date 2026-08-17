@@ -114,7 +114,106 @@ describeDb('the funnel', () => {
     })
 
     const report = await funnelReport(actor(), RANGE)
-    expect(report.abandonmentRecovery).toEqual({ moveIns: 2, recovered: 1 })
+    // B-082 part 4 widened this from one sequence to a catalog. The shape
+    // changed; the fact it asserts did not.
+    expect(report.sequenceMoveIns).toBe(2)
+    expect(report.sequences.find((sequence) => sequence.key === 'abandonment')?.moveIns).toBe(1)
+  })
+
+  // ── B-082 part 4 ───────────────────────────────────────────────────────
+
+  it('credits the lead drip separately from the abandonment sequence', async () => {
+    await event('move_in_completed', `s-${suffix}-both`, {
+      properties: { recoveredByAbandonment: true, fromLeadDrip: true },
+    })
+    await event('move_in_completed', `s-${suffix}-drip`, {
+      properties: { recoveredByAbandonment: false, fromLeadDrip: true },
+    })
+    await event('move_in_completed', `s-${suffix}-neither`, { properties: {} })
+
+    const report = await funnelReport(actor(), RANGE)
+    const by = new Map(report.sequences.map((sequence) => [sequence.key, sequence.moveIns]))
+    // Deliberately NOT exclusive: one renter is in both rows, so the rows sum
+    // to more than the move-in count and the report says so in words.
+    expect(by.get('abandonment')).toBe(1)
+    expect(by.get('lead_drip')).toBe(2)
+    expect(report.sequenceMoveIns).toBe(3)
+  })
+
+  it('names every sequence even when none of them brought anybody back', async () => {
+    // A missing row reads as "we do not measure that"; a zero reads as "it did
+    // not work", which is the true statement.
+    const report = await funnelReport(actor(), RANGE)
+    expect(report.sequences.map((sequence) => sequence.key)).toEqual(['abandonment', 'lead_drip'])
+  })
+
+  it('splits the funnel by source and medium, and the rows foot to the total', async () => {
+    await event('page_view', `s-${suffix}-cpc-1`, { utmSource: 'google', utmMedium: 'cpc' })
+    await event('page_view', `s-${suffix}-cpc-2`, { utmSource: 'google', utmMedium: 'cpc' })
+    await event('page_view', `s-${suffix}-social`, { utmSource: 'facebook', utmMedium: 'social' })
+    await event('page_view', `s-${suffix}-bare`)
+    await event('move_in_completed', `s-${suffix}-cpc-1`, { utmSource: 'google', utmMedium: 'cpc' })
+
+    const report = await funnelReport(actor(), RANGE)
+
+    // The property that makes a breakdown worth reading: every session is in
+    // exactly one row, so the columns add up to the funnel above them. A
+    // breakdown that does not foot is two sets of numbers to reconcile.
+    const sessions = report.bySourceMedium.reduce((sum, row) => sum + row.counts.sessions, 0)
+    expect(sessions).toBe(report.steps[0].count)
+    const moveIns = report.bySourceMedium.reduce((sum, row) => sum + row.counts.move_ins, 0)
+    expect(moveIns).toBe(report.steps[4].count)
+
+    const cpc = report.bySourceMedium.find(
+      (row) => row.source === 'google' && row.medium === 'cpc',
+    )
+    expect(cpc?.counts.sessions).toBe(2)
+    expect(cpc?.counts.move_ins).toBe(1)
+  })
+
+  it('keeps untagged traffic as its own row rather than dropping it', async () => {
+    await event('page_view', `s-${suffix}-untagged`)
+
+    const report = await funnelReport(actor(), RANGE)
+    const untagged = report.bySourceMedium.find((row) => row.source === null && row.medium === null)
+    // Normally the biggest row on the whole report. Dropping it would make
+    // every percentage in the table wrong and none of them obviously so.
+    expect(untagged?.counts.sessions).toBeGreaterThan(0)
+  })
+
+  it('attributes a session by its FIRST event in the range, not its last', async () => {
+    // D-61. A session that arrives on an ad and later fires an untagged event
+    // belongs to the ad — and, more importantly, belongs to exactly one row
+    // whichever way it is decided.
+    const session = `s-${suffix}-firsttouch`
+    await event('page_view', session, { utmSource: 'bing', utmMedium: 'cpc' }, new Date('2026-05-10T09:00:00Z'))
+    await event('quote_form_submit', session, {}, new Date('2026-05-11T09:00:00Z'))
+
+    const report = await funnelReport(actor(), RANGE)
+    const bing = report.bySourceMedium.find((row) => row.source === 'bing')
+    expect(bing?.counts.sessions).toBe(1)
+    expect(bing?.counts.leads).toBe(1)
+  })
+
+  it('offers only the sources and mediums that exist in the range', async () => {
+    await event('page_view', `s-${suffix}-listed`, { utmSource: 'yelp', utmMedium: 'referral' })
+
+    const report = await funnelReport(actor(), RANGE)
+    // Same rule the channel dropdown already follows: a control cannot offer a
+    // value that produces an empty report.
+    expect(report.sources).toContain('yelp')
+    expect(report.mediums).toContain('referral')
+    expect(report.sources).not.toContain('nextdoor')
+  })
+
+  it('filters by source and medium, which nothing could set until part 4', async () => {
+    await event('page_view', `s-${suffix}-f-a`, { utmSource: 'google', utmMedium: 'cpc' })
+    await event('page_view', `s-${suffix}-f-b`, { utmSource: 'google', utmMedium: 'organic' })
+
+    const cpcOnly = await funnelReport(actor(), { ...RANGE, utmSource: 'google', utmMedium: 'cpc' })
+    expect(cpcOnly.steps[0].count).toBe(1)
+    expect(cpcOnly.bySourceMedium).toHaveLength(1)
+    expect(cpcOnly.bySourceMedium[0].medium).toBe('cpc')
   })
 
   it('filters by channel and offers only channels that exist', async () => {

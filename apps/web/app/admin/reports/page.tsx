@@ -194,6 +194,12 @@ export default async function ReportsPage({
           Funnel — looking to moved in
         </Link>
         <Link
+          href="/admin/reports/promotions"
+          className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
+        >
+          Promotions — what each discount bought
+        </Link>
+        <Link
           href="/admin/reports/deliverability"
           className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
         >
