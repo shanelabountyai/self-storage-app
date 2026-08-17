@@ -4290,7 +4290,7 @@ Full e2e against a production build: **883 passed, 5 skipped, 0 failed, 0 flaky 
 
 ## B-082 (part 2 of 6) — City pages: a URL that has been a 301 target and a 404 at the same time since B-066
 
-`PENDING`
+`e77b611`
 
 **The gap, found in `paths.ts`.** `/storage/{state}/{city}` has existed in the codebase since B-066 and has never rendered anything. `recordFacilityRetirement` points every retired facility's page at it (US-3 AC4's "301 to the nearest city page"), the facility page's `BreadcrumbList` names it, and `paths.ts` carried a comment reading *"B-071 builds the page itself"* — B-071 shipped **reviews**. Nothing caught it because nothing a person browses links there: it is reachable only from a redirect that has never fired and from structured data no human reads. The sitemap had the same shape a level down — it computed the city list, held it in a `Map`, and returned `[...staticEntries, ...facilityEntries]`, throwing the cities away with a comment explaining that listing them "would be inviting a crawl of a 404". That comment was correct and it stayed correct for months.
 
