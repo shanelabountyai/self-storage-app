@@ -4396,7 +4396,7 @@ Full e2e against a production build: **966 passed, 6 skipped, 0 failed, 0 flaky 
 
 ## B-082 (part 6 of 6) — Duplicate content, and the report immediately flagged our own city pages
 
-`PENDING`
+`862993a`
 
 **B-082 is complete with this part.**
 
