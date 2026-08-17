@@ -4262,7 +4262,7 @@ Measured before the fix, four setup-only runs: `11:17:03` HAS_SESSION, `11:17:23
 
 ## B-082 (part 1 of 6) — Marketplace attribution: the channel that bills per move-in stops reporting as organic (D-57)
 
-`PENDING-SHA`
+`2a4a84d`
 
 **B-082 is six deliverables and size L, so it is split.** Part 1 is the marketplace integration plumbing, chosen first for one reason: it is the only part whose absence corrupts data retroactively. City pages and a content hub can be built any week; a move-in credited to the wrong channel cannot be reconstructed later, because the evidence was never written down.
 
