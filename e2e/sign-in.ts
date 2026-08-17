@@ -1,7 +1,8 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Page } from '@playwright/test'
-import { base32Decode, totpCode } from '../packages/core/auth/totp'
+import { SESSION_COOKIE } from '../apps/web/auth.config'
+import { base32Decode, TOTP_STEP_SECONDS, totpCode } from '../packages/core/auth/totp'
 import {
   DEMO_STAFF_EMAIL,
   DEMO_STAFF_PASSWORD,
@@ -49,12 +50,24 @@ async function signInWithPassword(
     maxRedirects: 0,
   })
 
-  // Auth.js answers a successful credentials callback with a redirect. A 200
-  // here means it re-rendered the sign-in page, i.e. the credentials were
-  // rejected — worth failing loudly on, because the alternative is a suite that
-  // silently scans the /login page and reports it as clean.
   if (response.status() >= 400) {
     throw new Error(`Demo sign-in failed: ${response.status()} ${await response.text()}`)
+  }
+
+  // And then assert the OUTCOME, not a proxy for it. The previous check was
+  // `>= 400` under a comment explaining that a 200 means the credentials were
+  // rejected — so a rejection sailed through as success, `storageState` saved a
+  // jar with no session in it, and every spec that replayed it landed on the
+  // sign-in page. It cost this suite 87 failures across 30 admin, portal and
+  // POS specs, none of which had anything wrong with them, all reported as
+  // 30-second timeouts on unrelated locators. Auth.js answers both outcomes
+  // with a 302 here, so the status line cannot tell them apart and the cookie
+  // jar can.
+  const cookies = await page.context().cookies()
+  if (!cookies.some((cookie) => cookie.name === SESSION_COOKIE)) {
+    throw new Error(
+      `Demo sign-in for ${credentials.email} returned ${response.status()} but set no ${SESSION_COOKIE} cookie — the credentials were rejected.`,
+    )
   }
 }
 
@@ -62,16 +75,37 @@ async function signInWithPassword(
 /// project. The code is generated from the published demo secret at this
 /// instant, exactly as an authenticator app would.
 export async function establishOwnerSession(page: Page): Promise<void> {
-  await signInWithPassword(
-    page,
-    {
-      email: DEMO_STAFF_EMAIL,
-      password: DEMO_STAFF_PASSWORD,
-      audience: 'staff',
-      code: totpCode(base32Decode(DEMO_STAFF_TOTP_SECRET), Date.now()),
-    },
-    '/admin',
-  )
+  const secret = base32Decode(DEMO_STAFF_TOTP_SECRET)
+  const attempt = () =>
+    signInWithPassword(
+      page,
+      {
+        email: DEMO_STAFF_EMAIL,
+        password: DEMO_STAFF_PASSWORD,
+        audience: 'staff',
+        code: totpCode(secret, Date.now()),
+      },
+      '/admin',
+    )
+
+  try {
+    await attempt()
+  } catch {
+    // A TOTP code is single-use and every code inside one 30-second window is
+    // the SAME code, so two runs started inside one window present a code the
+    // first run already spent — and the second is correctly rejected. That is
+    // the product working; it is the suite that has to cope, because running
+    // the sweep twice in quick succession is the normal local rhythm.
+    // Measured: four setup-only runs at 11:17:03, :23, :52 and 11:18:19 — only
+    // the second failed, and it was the only one inside a predecessor's window.
+    //
+    // So wait out the window and present the next code. One retry, not a loop:
+    // if a fresh code is also refused, the credentials or the account are
+    // genuinely wrong and the run should stop saying so.
+    const period = TOTP_STEP_SECONDS * 1_000
+    await page.waitForTimeout(period - (Date.now() % period) + 1_000)
+    await attempt()
+  }
 }
 
 export async function establishTenantSession(page: Page): Promise<void> {

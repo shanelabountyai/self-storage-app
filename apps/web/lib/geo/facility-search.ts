@@ -30,6 +30,12 @@ export type FacilityResult = {
   postalCode: string
   phone: string | null
   amenities: string[]
+  /// Kept on the result rather than dropped after ranking: B-107's map plots
+  /// the same rows the list renders, and re-reading coordinates for a second
+  /// consumer is how a map and a list start disagreeing about where a facility
+  /// is. `rankFacilities` already excludes facilities without them.
+  latitude: number
+  longitude: number
   distanceMiles: number
   /// Lowest current web rate among unit types with a unit available.
   /// Null when nothing is rentable — never 0, which would read as free.
@@ -75,6 +81,8 @@ async function rankFacilities(point: GeoPoint): Promise<FacilityResult[]> {
   return facilities
     .map(({ latitude, longitude, ...facility }) => ({
       ...facility,
+      latitude: latitude!,
+      longitude: longitude!,
       distanceMiles: distanceMiles(point, { latitude: latitude!, longitude: longitude! }),
       fromWebRateCents: fromRates.get(facility.id) ?? null,
     }))

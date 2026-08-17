@@ -53,6 +53,20 @@ export default defineConfig({
     // class this item exists to close. Refusing to bind is a loud failure; a
     // silently wrong server is not.
     reuseExistingServer: !!process.env.E2E_DEV && !process.env.CI,
+    // B-107. A deliberately invalid Maps key, set here rather than in an env
+    // file because `NEXT_PUBLIC_*` is inlined at BUILD time and `e2e:server`
+    // builds — so this has to be in the environment of the build, not only of
+    // the running server.
+    //
+    // The point is not to render a map. It is that the map's contract holds
+    // when the vendor does not: the toggle exists, it is collapsed, the results
+    // list is untouched, and a script that never loads produces a stated
+    // message instead of an empty box. That is the state D-46 requires and the
+    // one a real key would never let us test.
+    env: {
+      NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: 'e2e-not-a-real-key',
+      NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID: 'E2E_MAP_ID',
+    },
     // 120s was sized for a dev server, which is ready in under a second and
     // compiles on demand. A cold build takes longer than that on its own.
     timeout: 300_000,

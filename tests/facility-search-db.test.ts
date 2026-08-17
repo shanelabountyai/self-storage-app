@@ -135,6 +135,21 @@ describeDb('searchFacilities', () => {
     expect(mid.distanceMiles).toBeCloseTo(10, 0)
   })
 
+  // B-107. The map plots the ranked results and nothing else. If the
+  // coordinates stopped coming through, the map would silently plot nothing —
+  // a facility the list names and the map omits is the one failure mode that
+  // looks like a styling problem.
+  it('carries the coordinates it ranked by, so the map plots the same rows', async () => {
+    const outcome = await searchFacilities({ q: '78704' })
+    if (outcome.status !== 'ok') throw new Error('expected results')
+
+    const near = outcome.results.find((r) => r.id === ids.near)!
+    expect(near.latitude).toBeCloseTo(AUSTIN.latitude, 4)
+    expect(near.longitude).toBeCloseTo(AUSTIN.longitude, 4)
+    expect(outcome.results.every((r) => Number.isFinite(r.latitude))).toBe(true)
+    expect(outcome.results.every((r) => Number.isFinite(r.longitude))).toBe(true)
+  })
+
   it('excludes facilities beyond the radius from a normal result', async () => {
     const outcome = await searchFacilities({ q: '78704' })
     if (outcome.status !== 'ok') throw new Error('expected results')

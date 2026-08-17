@@ -9,8 +9,16 @@ import {
   type FacilityResult,
   type SearchOutcome,
 } from '@/lib/geo/facility-search'
+import { ResultsMap, type MapFacility } from '@/components/site/results-map'
 
 export const metadata = { title: 'Find storage' }
+
+// B-107. Both are public by necessity — they ship to the browser — so the key
+// must be referrer-restricted and scoped to the Maps JavaScript API alone
+// (D-46). With either unset the map is simply absent and this page is exactly
+// what it was before: the list is the product, not the fallback.
+const MAPS_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
+const MAPS_MAP_ID = process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID
 
 // US-101 results page. Reads its whole state from the URL (`?q=` or
 // `?lat=&lng=`) so every result view is shareable and bookmarkable, and the
@@ -20,6 +28,10 @@ function formatMiles(miles: number): string {
   // Below ten miles, one decimal; above it, whole miles — more precision than
   // that is more than a zip-centroid geocode can honestly claim.
   return `${miles < 10 ? miles.toFixed(1) : Math.round(miles)} mi`
+}
+
+function formatAddress(facility: FacilityResult): string {
+  return `${facility.addressLine1}${facility.addressLine2 ? `, ${facility.addressLine2}` : ''}, ${facility.city}, ${facility.state} ${facility.postalCode}`
 }
 
 function ResultCard({ facility, query }: { facility: FacilityResult; query: string }) {
@@ -43,9 +55,7 @@ function ResultCard({ facility, query }: { facility: FacilityResult; query: stri
       </div>
 
       <address className="text-muted-foreground mt-1 text-sm not-italic">
-        {facility.addressLine1}
-        {facility.addressLine2 ? `, ${facility.addressLine2}` : ''}, {facility.city},{' '}
-        {facility.state} {facility.postalCode}
+        {formatAddress(facility)}
       </address>
 
       {facility.amenities.length > 0 && (
@@ -196,6 +206,28 @@ export default async function SearchPage({
       : undefined
 
   const outcome = await searchFacilities({ q, point })
+
+  // The map plots whatever the list showed, including the out-of-radius
+  // suggestions — a renter told "nothing within 25 miles, here are three
+  // further out" is exactly the one who wants to see where they are.
+  const mapFacilities: MapFacility[] =
+    outcome.status === 'ok' || outcome.status === 'none_nearby'
+      ? outcome.results.map((facility) => ({
+          id: facility.id,
+          name: facility.name,
+          address: formatAddress(facility),
+          href: outcome.query
+            ? `${facilityPath(facility)}?from=${encodeURIComponent(outcome.query)}`
+            : facilityPath(facility),
+          // "Full" rather than a price for a facility with nothing rentable —
+          // the same refusal to print $0 the card makes one line above.
+          priceLabel:
+            facility.fromWebRateCents === null ? 'Full' : formatRate(facility.fromWebRateCents),
+          latitude: facility.latitude,
+          longitude: facility.longitude,
+        }))
+      : []
+
   const heading =
     outcome.status === 'ok' || outcome.status === 'none_nearby'
       ? `Storage near ${outcome.label}`
@@ -210,6 +242,17 @@ export default async function SearchPage({
       </div>
 
       <Results outcome={outcome} />
+
+      {/* After the list, never instead of it, and never before it — the text
+          equivalent has to precede the map the same way the facility page puts
+          its address and directions link above its embed. */}
+      {MAPS_API_KEY && MAPS_MAP_ID && mapFacilities.length > 0 && (
+        <ResultsMap
+          facilities={mapFacilities}
+          apiKey={MAPS_API_KEY}
+          mapId={MAPS_MAP_ID}
+        />
+      )}
 
       <p className="text-muted-foreground mt-10 text-sm text-pretty">
         Not sure what size you need? Read the{' '}

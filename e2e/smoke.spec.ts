@@ -75,6 +75,64 @@ test('search works with JavaScript disabled', async ({ browser }) => {
   await context.close()
 })
 
+// B-107. Every assertion here is about OUR half of the map. The Google script
+// is aborted at the network layer in the graceful-degradation test and never
+// needed in the other two, so nothing in this suite depends on a vendor being
+// reachable, on a key being valid, or on tiles rendering — a spec that did
+// would go red for a firewall and read as a broken page.
+test('the search map is behind a toggle and the list is the view', async ({ page }) => {
+  await page.goto('/storage/search?q=78704')
+
+  // The results come first and are complete without the map existing at all.
+  await expect(page.getByRole('listitem').filter({ hasText: 'Demo — Austin South' }).first()).toBeVisible()
+
+  // A `<summary>` is addressed by element, not by role: Playwright's role
+  // engine does not map it to `button`, so `getByRole('button')` finds nothing
+  // and the failure reads as a missing control rather than a wrong locator.
+  // Every other <details> in this suite is targeted the same way.
+  await expect(page.locator('summary', { hasText: 'Show map' })).toBeVisible()
+
+  // Collapsed at load, so the map is out of the tab order and out of the
+  // accessibility tree until it is asked for — nobody traverses a map they
+  // cannot use to reach the results.
+  const map = page.getByRole('group', { name: /^Map of the \d+ facilit/ })
+  await expect(map).toBeHidden()
+
+  // The map's own live region exists before there is anything to announce, and
+  // OUTSIDE the <details> — one that is display:none at load and revealed with
+  // its first message is announced about as reliably as one inserted later,
+  // which is the trap "Use my location" already documents. Addressed as the
+  // sibling of the disclosure because this page carries a second, unrelated
+  // status region (that same "Use my location" button).
+  await expect(
+    page.locator('details:has(summary:text("Show map")) + [role="status"]'),
+  ).toBeAttached()
+})
+
+test('the map degrades to the list when its script cannot load', async ({ page }) => {
+  // D-46: "a map that fails to load must leave the results intact".
+  await page.route('https://maps.googleapis.com/**', (route) => route.abort())
+  await page.goto('/storage/search?q=78704')
+
+  await page.locator('summary', { hasText: 'Show map' }).click()
+
+  await expect(page.getByText('The map could not be loaded')).toBeVisible()
+  // The point of the test: the results are still there and still complete.
+  await expect(page.getByRole('listitem').filter({ hasText: 'Demo — Austin South' }).first()).toBeVisible()
+})
+
+test('the opened map introduces no accessibility violations', async ({ page }) => {
+  await page.route('https://maps.googleapis.com/**', (route) => route.abort())
+  await page.goto('/storage/search?q=78704')
+  await page.locator('summary', { hasText: 'Show map' }).click()
+  await expect(page.getByText('The map could not be loaded')).toBeVisible()
+
+  const results = await new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+    .analyze()
+  expect(results.violations).toEqual([])
+})
+
 test('a search result links through to its facility page', async ({ page }) => {
   await page.goto('/storage/search?q=78704')
   await page.getByRole('link', { name: 'Demo — Austin South' }).click()

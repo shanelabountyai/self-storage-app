@@ -11,6 +11,11 @@ export function audienceOf(value: unknown): AuthAudience {
   return value === 'staff' ? 'staff' : 'tenant'
 }
 
+/// The session cookie's name. Exported so the e2e sign-in helper can assert it
+/// was actually set rather than trusting a status code — the two disagreed, and
+/// a rejected sign-in saved as a success cost one sweep 87 failures.
+export const SESSION_COOKIE = 'storage.session'
+
 /// Edge-safe subset of the Auth.js config: no providers, so nothing here pulls
 /// in @storage/db's Prisma client, which needs the Node runtime and breaks the
 /// Edge Middleware build. Middleware builds its own NextAuth instance from
@@ -27,7 +32,7 @@ export const authConfig = {
   // satisfy PRD 01 FR-5.2; they are spelled out here so a future edit is visible.
   cookies: {
     sessionToken: {
-      name: 'storage.session',
+      name: SESSION_COOKIE,
       options: {
         httpOnly: true,
         sameSite: 'lax',

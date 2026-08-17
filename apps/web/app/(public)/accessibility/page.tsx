@@ -10,7 +10,7 @@ export const metadata = metadataFor(
 /// credibility rests on the record, not the intention — an undated one is a
 /// claim about a codebase that has since moved. Update this when the claims are
 /// re-verified, not when the page is edited.
-const LAST_REVIEWED = '15 August 2026'
+const LAST_REVIEWED = '17 August 2026'
 
 // PRD 01 §6.8 requires a public accessibility statement. Unlike the legal pages
 // this describes our own conformance, so every sentence has to be true of the
@@ -81,6 +81,19 @@ const LAST_REVIEWED = '15 August 2026'
 // `<dd>` inside a `<dl>` — neither of which had been exercised by any test
 // before this pass, which is the whole reason coverage work like this earns
 // its place here rather than being assumed complete once written.
+//
+// Re-verified 2026-08-17, after B-107 added a second map — this time the risk
+// was OVERSTATING, and the first draft of this edit did it. It said the search
+// map's price markers are "ordinary links you can reach with the Tab key",
+// which is what the code intends and what nobody has watched happen: the map
+// needs a billed vendor key that is not configured, so it does not render in
+// production and the automated scan deliberately blocks the vendor script. A
+// keyboard claim nobody has tested is exactly the sentence a demand letter
+// quotes. It now says the map exists, says whose half is whose, and says the
+// assessment is outstanding. The rest of the page was checked against the
+// build and is unchanged: the confirmation screen is still unscanned, the
+// no-JavaScript hold countdown still does not tick, and the staff lists are
+// still unpaginated.
 export default function AccessibilityPage() {
   return (
     <ProsePage
@@ -119,8 +132,11 @@ export default function AccessibilityPage() {
           </li>
           <li>Animation respects your system&apos;s reduced-motion setting.</li>
           <li>
-            Where we embed a map, the address and a directions link are given as text
-            first, so you never need the map to find us.
+            Where we show a map, the information is given as text first and the map is
+            collapsed behind a button you have to press. On a facility page that text is
+            the address and a directions link; on search results it is the list of
+            facilities itself, with distances and prices. You never need the map, and if
+            one fails to load we say so rather than leaving an empty box.
           </li>
         </ul>
       </Section>
@@ -167,9 +183,14 @@ export default function AccessibilityPage() {
             going to describe them as done.
           </li>
           <li>
-            The map we embed comes from OpenStreetMap and is not fully accessible. We
-            cannot restyle someone else&apos;s map, so we keep it collapsed behind a
-            button and never make it the only way to get the information.
+            <strong>The maps we show are not fully accessible</strong>, and they are not
+            ours to fix. A facility page embeds OpenStreetMap, whose zoom controls are
+            named &ldquo;+&rdquo; and &ldquo;&minus;&rdquo; and whose marker has no text
+            alternative. Search results can show a second map from a different provider,
+            where we control the price markers but not the tiles or the vendor&apos;s own
+            controls beneath them; we have not yet assessed that one against a live map,
+            so nothing here rests on it. Both stay collapsed behind a button, and neither
+            is ever the only way to get the information.
           </li>
         </ul>
         <p className="text-muted-foreground text-sm">Last reviewed: {LAST_REVIEWED}.</p>

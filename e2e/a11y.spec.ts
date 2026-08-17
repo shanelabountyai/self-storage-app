@@ -187,7 +187,15 @@ test('the search page live region exists before it has anything to say', async (
   // what makes the later announcement a mutation rather than an insertion.
   await page.goto('/storage/search?q=78704')
 
-  const status = page.locator('[role="status"]')
-  await expect(status).toBeAttached()
-  await expect(status).toHaveText('')
+  // Every one of them, not the one that happened to be here when this was
+  // written. B-107 added a second region to this page (the map's result count)
+  // and turned a passing single-element assertion into a strict-mode violation
+  // — which is the good outcome: the alternative was scoping this to the first
+  // region and silently exempting every one added after it.
+  const regions = page.locator('[role="status"]')
+  expect(await regions.count()).toBeGreaterThan(0)
+  for (const region of await regions.all()) {
+    await expect(region).toBeAttached()
+    await expect(region).toHaveText('')
+  }
 })
