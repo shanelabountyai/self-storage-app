@@ -229,6 +229,77 @@ test('an unknown facility 404s rather than rendering an empty page', async ({ pa
   expect(response?.status()).toBe(404)
 })
 
+// B-082 part 2 / PRD 04 US-4 AC1. The city page.
+
+test('the city page lists the facilities in the city and routes to one', async ({ page }) => {
+  await page.goto('/storage/tx/austin')
+
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('Austin, TX')
+
+  const card = page.getByRole('listitem').filter({ hasText: 'Demo — Austin South' }).first()
+  await expect(card).toBeVisible()
+  // AC1's starting price, from the same inventory read the facility page uses.
+  await expect(card).toContainText(/Units from \$\d/)
+
+  await card.getByRole('link', { name: 'Demo — Austin South' }).click()
+  await expect(page).toHaveURL('/storage/tx/austin/demo-austin-south')
+})
+
+test('the city page carries ItemList structured data naming the same facilities', async ({
+  page,
+}) => {
+  await page.goto('/storage/tx/austin')
+
+  // FR-SEO-4. Read out of the DOM rather than trusted from the source, because
+  // the failure this guards is markup that describes a list the reader is not
+  // looking at — so it is checked against the links actually rendered.
+  const nodes = await page.locator('script[type="application/ld+json"]').allTextContents()
+  const itemList = nodes
+    .map((node) => JSON.parse(node) as { '@type': string; itemListElement?: { url: string }[] })
+    .find((node) => node['@type'] === 'ItemList')
+
+  expect(itemList).toBeDefined()
+  const listed = itemList?.itemListElement?.map((item) => new URL(item.url).pathname) ?? []
+  expect(listed).toContain('/storage/tx/austin/demo-austin-south')
+
+  for (const path of listed) {
+    await expect(page.locator(`main a[href="${path}"]`)).toBeVisible()
+  }
+})
+
+test('a city with no facilities 404s rather than serving a thin page', async ({ page }) => {
+  // AC1: "indexable only when ≥1 facility exists in the city." A 200 with
+  // nothing on it is the shape a crawler penalises the rest of the site for.
+  const response = await page.goto('/storage/tx/nowhereville')
+  expect(response?.status()).toBe(404)
+})
+
+test('a non-canonical city URL redirects to the canonical one', async ({ page }) => {
+  // There is no middleware in this app, so the page enforces its own canonical
+  // spelling exactly as the facility page below it does.
+  await page.goto('/storage/TX/AUSTIN')
+  await expect(page).toHaveURL('/storage/tx/austin')
+})
+
+test('every city the sitemap advertises actually renders', async ({ page, request }) => {
+  // The sitemap computed this list for months and threw it away, because the
+  // page was a 404 — so the pairing, not either half, is what is worth
+  // asserting: a URL good enough to invite a crawler to is good enough to serve.
+  const sitemap = await request.get('/sitemap.xml')
+  expect(sitemap.ok()).toBe(true)
+
+  const paths = [...(await sitemap.text()).matchAll(/<loc>([^<]+)<\/loc>/g)]
+    .map((match) => new URL(match[1]).pathname)
+    // Two segments under /storage is a city page; three is a facility.
+    .filter((path) => /^\/storage\/[a-z]{2}\/[a-z0-9-]+$/.test(path))
+
+  expect(paths).toContain('/storage/tx/austin')
+  for (const path of paths) {
+    const response = await page.goto(path)
+    expect(response?.status(), `${path} is in the sitemap and must not 404`).toBe(200)
+  }
+})
+
 test('every footer legal page resolves', async ({ page }) => {
   for (const legalPage of LEGAL_PAGES) {
     const response = await page.goto(legalPage.href)

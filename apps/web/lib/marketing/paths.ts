@@ -9,8 +9,10 @@ import { canonicalPath as canonicalise, citySlug as slugify } from '@storage/cor
 
 export { canonicalise as canonicalPath }
 
-/// `/storage/{state}/{city}` — the city page (B-071 builds the page itself;
-/// the path exists now because retired facilities redirect to it, US-3 AC4).
+/// `/storage/{state}/{city}` — the city page (B-082 part 2). The path existed
+/// before the page did, because retired facilities redirect to it (US-3 AC4)
+/// and the facility breadcrumb names it — which is how it stayed a 404 for
+/// months without anybody noticing.
 export function citySlugPath(state: string, city: string): string {
   return `/storage/${state.toLowerCase()}/${slugify(city)}`
 }

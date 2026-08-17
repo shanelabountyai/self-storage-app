@@ -77,7 +77,8 @@ Personas: **Prospect** (storage seeker), **Operator** (owner/regional manager), 
 ### 3.2 City pages & content hub (Phase 2)
 
 **US-4: As a prospect early in research, I land on a city page or guide and route to a facility.**
-- AC1: City pages at `/storage-units/{state}/{city}` list all facilities in that city with distance, starting price, and rating; unique intro copy per city; indexable only when ≥1 facility exists in the city.
+- AC1: City pages at `/storage/{state}/{city}` list all facilities in that city with starting price and rating; unique intro copy per city; indexable only when ≥1 facility exists in the city.
+  - *Built B-082 part 2, 2026-08-17.* The path is `/storage/…` per **D-32**, the same correction US-1 AC1 above already carries. **Distance is not shown (D-59)** — a city page is reached without anybody naming a location, so there is no origin to measure from; the list is ordered cheapest-first instead, and the page carries the search form, which is where a distance can be honest. **The intro copy is generated from the facilities in the city (D-58)**, not typed into a city record. "Indexable only when ≥1 facility exists" is enforced as a **404**, not a `noindex` on an empty page, and the sitemap builds its city list from the same function the page does — so it cannot advertise a URL the page refuses to render.
 - AC2: Content hub at `/guides/*` with launch set: unit size guide (with visual comparisons), "what fits in a 10x10," moving checklist, packing tips, climate-control explainer.
 - AC3: Every guide includes contextual CTAs (size guide → unit-type filter on nearest facility page) and `FAQPage`/`Article` schema where appropriate.
 

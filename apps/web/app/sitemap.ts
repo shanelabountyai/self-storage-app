@@ -1,8 +1,9 @@
 import type { MetadataRoute } from 'next'
 import { prisma } from '@storage/db'
-import { absoluteUrl, citySlug } from '@storage/core/marketing'
+import { absoluteUrl } from '@storage/core/marketing'
 import { siteOrigin } from '@/lib/marketing/origin'
 import { citySlugPath, facilityPagePath } from '@/lib/marketing/paths'
+import { citiesWithFacilities } from '@/lib/facility/city-facilities'
 
 // PRD 04 FR-SEO-5 / US-3 AC1 (B-066). The sitemap, generated from the records.
 //
@@ -58,18 +59,21 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   }))
 
   // One entry per city that actually has a facility — US-4 AC1: "indexable only
-  // when ≥1 facility exists in the city". Derived from the same rows rather
-  // than a second query, so the two lists cannot disagree about which cities
-  // exist. The page itself is B-071; listing it before it renders would be
-  // inviting a crawl of a 404, so this stays keyed to what exists.
-  const cities = new Map<string, { state: string; city: string; lastModified: Date }>()
-  for (const facility of facilities) {
-    const key = `${facility.state.toLowerCase()}/${citySlug(facility.city)}`
-    const existing = cities.get(key)
-    if (!existing || existing.lastModified < facility.updatedAt) {
-      cities.set(key, { state: facility.state, city: facility.city, lastModified: facility.updatedAt })
-    }
-  }
+  // when ≥1 facility exists in the city", which is the same rule the page
+  // enforces by 404ing. Both read `citiesWithFacilities`, so the sitemap
+  // cannot advertise a URL the page refuses to render.
+  //
+  // Listed from B-082 part 2, which built the page. Until then this block
+  // computed the list and threw it away, because the page was a 404 — and the
+  // comment deferred it to "B-071", which shipped reviews instead.
+  const cityEntries: MetadataRoute.Sitemap = (await citiesWithFacilities()).map((city) => ({
+    url: absoluteUrl(origin, citySlugPath(city.state, city.city)),
+    lastModified: city.lastModified,
+    // Below a facility page and above the static set: a city page is a route
+    // to a facility, not the thing being rented.
+    priority: 0.7,
+    changeFrequency: 'daily',
+  }))
 
   const staticEntries: MetadataRoute.Sitemap = STATIC_ROUTES.map((route) => ({
     url: absoluteUrl(origin, route.path),
@@ -78,21 +82,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: route.priority,
   }))
 
-  return [...staticEntries, ...facilityEntries]
+  return [...staticEntries, ...cityEntries, ...facilityEntries]
   // ponytail: one flat sitemap. FR-SEO-5 wants segmentation above 1,000 URLs;
-  // with one entry per facility that is 1,000 facilities away, and a sitemap
-  // index built now would be scaffolding for a scale this does not have. The
-  // upgrade is a `sitemap.ts` returning an index plus `sitemap/[id].ts`
-  // segments, and the trigger is `facilities.length + STATIC_ROUTES.length`
+  // with one entry per facility plus one per city that is hundreds of
+  // facilities away, and a sitemap index built now would be scaffolding for a
+  // scale this does not have. The upgrade is a `sitemap.ts` returning an index
+  // plus `sitemap/[id].ts` segments, and the trigger is the returned length
   // approaching 1,000.
-}
-
-/// Exported for the test: which city pages the sitemap would list once B-071
-/// ships them. Kept out of the returned entries deliberately — see above.
-export async function sitemapCityPaths(): Promise<string[]> {
-  const facilities = await prisma.facility.findMany({
-    where: { status: 'active' },
-    select: { city: true, state: true },
-  })
-  return [...new Set(facilities.map((facility) => citySlugPath(facility.state, facility.city)))].sort()
 }

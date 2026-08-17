@@ -12,6 +12,10 @@ const PUBLIC_ROUTES = [
   // facility near it, which is the "nothing nearby" state.
   '/storage/search?q=99501',
   '/storage/search?q=zzzzz',
+  // B-082 part 2. The city landing template — a list of facility cards, the
+  // generated intro, and a second copy of the search form, which is the part
+  // most likely to produce a duplicate-id or duplicate-landmark finding.
+  '/storage/tx/austin',
   // US-103's facility detail template: hours tables, live unit list, and the
   // map iframe, which is the part axe is most likely to have an opinion about.
   '/storage/tx/austin/demo-austin-south',
