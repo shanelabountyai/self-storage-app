@@ -4342,7 +4342,7 @@ Full e2e against a production build: **934 passed, 6 skipped, 0 failed, 0 flaky 
 
 ## B-082 (part 4 of 6) — Funnel v2: a breakdown that foots, two sequences, and what each discount actually bought
 
-`PENDING`
+`a48c41f`
 
 **Found first — the source/medium filters had no controls, and had not since B-069.** `funnelReport` has accepted `utmSource` and `utmMedium` for as long as it has existed; `/admin/reports/funnel` passed only `channel`. This is the repo's own "a field that changes behaviour ships with its control" rule broken in a report rather than a form, which is why nothing caught it: no migration, no column, nothing to notice.
 
