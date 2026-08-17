@@ -4426,7 +4426,7 @@ Full e2e against a production build: **982 passed, 6 skipped, 0 failed, 0 flaky 
 
 ## B-128 — City pages get copy somebody can write, and the seed that stopped being idempotent
 
-`PENDING`
+`16076f1`
 
 **Decided by the owner (D-62): build the editable copy, keep the generated intro as the fallback.** B-082 part 6 handed this over as a genuine choice, and the alternatives were rejected on the record: raising the 0.8 threshold silences the finding for authored copy too, which is the case the check exists for; excluding generated-vs-generated pairs concedes that city pages are permanently a thin-content floor; and widening what the generator varies on fixes the number without fixing the category, since two genuinely similar cities still collide.
 
