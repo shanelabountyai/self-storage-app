@@ -200,6 +200,12 @@ export default async function ReportsPage({
           Promotions — what each discount bought
         </Link>
         <Link
+          href="/admin/reports/indexation"
+          className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
+        >
+          Indexation — what Google has indexed
+        </Link>
+        <Link
           href="/admin/reports/deliverability"
           className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
         >

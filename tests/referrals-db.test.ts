@@ -457,36 +457,56 @@ describeDb('referral program core', () => {
       // the honest reason, and the invite is spent once.
       const minted = await mintInvite(referrerId)
       if (!minted.ok) throw new Error('unreachable')
-      const a = await refereeWithLease()
-      const b = await refereeWithLease()
 
-      const [first, second] = await Promise.all([
-        qualifyReferral({
-          inviteId: minted.inviteId,
-          refereeTenantId: a.referee.id,
-          refereeLeaseId: a.leaseId,
-          refereeFacilityId: facilityId,
-        }),
-        qualifyReferral({
-          inviteId: minted.inviteId,
-          refereeTenantId: b.referee.id,
-          refereeLeaseId: b.leaseId,
-          refereeFacilityId: facilityId,
-        }),
+      // B-127: FOUR racers, not two. With two, the deadlock this test exists
+      // to catch fired in roughly one full-suite run in three and never in an
+      // isolated one — a guard that passes two times in three is not a guard,
+      // and the fix (claim the invite before inserting the referral, so both
+      // transactions take the same locks in the same order) deserves one that
+      // fails loudly if it is ever reverted.
+      const friends = await Promise.all([
+        refereeWithLease(),
+        refereeWithLease(),
+        refereeWithLease(),
+        refereeWithLease(),
       ])
 
-      const earned = [first, second].filter((r) => r.ok)
+      const outcomes = await Promise.all(
+        friends.map((friend) =>
+          qualifyReferral({
+            inviteId: minted.inviteId,
+            refereeTenantId: friend.referee.id,
+            refereeLeaseId: friend.leaseId,
+            refereeFacilityId: facilityId,
+          }),
+        ),
+      )
+
+      const earned = outcomes.filter((r) => r.ok)
       expect(earned).toHaveLength(1)
+      // Every loser is refused for the honest reason rather than lost to a
+      // rolled-back transaction, which is what the deadlock produced.
+      expect(
+        outcomes.filter((r) => !r.ok && r.refusal === 'invite_already_used'),
+      ).toHaveLength(3)
 
       const invite = await prisma.referralInvite.findUniqueOrThrow({ where: { code: minted.code } })
       expect(invite.redeemedAt).not.toBeNull()
 
-      // The loser is RECORDED, not dropped — the tenant can be told why.
+      // Every loser is RECORDED, not dropped — each tenant can be told why.
+      // B-127's deadlock produced the opposite: both transactions rolled back,
+      // so there was no refusal row to tell anybody anything with.
       const refused = await prisma.referral.findMany({
         where: { inviteId: invite.id, state: 'refused' },
       })
-      expect(refused).toHaveLength(1)
-      expect(refused[0].refusedReason).toBe('invite_already_used')
+      expect(refused).toHaveLength(3)
+      expect(refused.every((row) => row.refusedReason === 'invite_already_used')).toBe(true)
+      // And exactly one earned row, so the invite paid out once.
+      const earnedRows = await prisma.referral.findMany({
+        where: { inviteId: invite.id, state: 'earned' },
+      })
+      expect(earnedRows).toHaveLength(1)
+      expect(invite.redeemedByReferralId).toBe(earnedRows[0].id)
     })
   })
 

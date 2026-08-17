@@ -30,6 +30,18 @@ export const metadata: Metadata = {
   },
   description:
     'Multi-facility self-storage: find a unit, rent online, and manage your account.',
+  // PRD 04 §7 Phase 2 (B-082 part 5). Google's site-verification token, which
+  // is the precondition for every other thing Search Console can tell us —
+  // nothing can be read about a property nobody has proved they own.
+  //
+  // Omitted entirely when unset rather than emitted empty: a
+  // `<meta name="google-site-verification" content="">` is a failed
+  // verification rather than an absent one, and it is the kind of thing
+  // somebody chases for an afternoon. Not a secret — it is public in the page
+  // source by design, which is how the check works.
+  verification: process.env.GOOGLE_SITE_VERIFICATION
+    ? { google: process.env.GOOGLE_SITE_VERIFICATION }
+    : undefined,
 }
 
 export default function RootLayout({

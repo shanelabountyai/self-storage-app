@@ -112,6 +112,7 @@ test.describe('signed in as the demo owner', () => {
     // B-082 part 4. Same contract as the public list: a page not here is a page
     // nobody checks.
     '/admin/reports/promotions',
+    '/admin/reports/indexation',
     '/admin/reports/rent-roll',
     '/admin/reports/revenue',
     '/admin/settings',

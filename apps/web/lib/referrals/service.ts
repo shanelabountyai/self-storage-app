@@ -308,13 +308,68 @@ export async function qualifyReferral(input: {
   // friends completing a move-in in the same minute, rather than a
   // check-then-write that both pass."
   return prisma.$transaction(async (tx) => {
+    // B-127. CLAIM FIRST, create second — and the order is the whole fix.
+    //
+    // This used to insert the `referral` and then claim the invite. Inserting a
+    // row whose FK points at the invite takes a SHARED lock on that invite; the
+    // update then wants an EXCLUSIVE one. Two friends qualifying in the same
+    // instant each held the shared lock and each waited for the other to drop
+    // it, so Postgres reported `40P01 deadlock detected` and rolled BOTH back —
+    // neither friend got the invite, and a $50 reward vanished with nothing
+    // recorded to explain it. Exactly the outcome §6.1's conditional update
+    // exists to prevent, arrived at from the other side.
+    //
+    // Taking the exclusive lock first means the loser simply waits, then finds
+    // `count === 0` and takes the refusal path below. Both transactions acquire
+    // the same locks in the same order, which is what makes a deadlock
+    // impossible rather than unlikely.
+    //
+    // It failed roughly one full-suite run in three and passed every run in
+    // isolation, which is the shape this codebase has learned to distrust: a
+    // race that "passes on the next run" is the production bug as well.
+    const claimed = await tx.referralInvite.updateMany({
+      where: { id: invite.id, redeemedAt: null },
+      data: { redeemedAt: new Date() },
+    })
+
+    const base = {
+      inviteId: invite.id,
+      referrerTenantId: invite.referrerTenantId,
+      refereeTenantId: input.refereeTenantId,
+      refereeLeaseId: input.refereeLeaseId,
+      facilityId: invite.facilityId,
+    }
+
+    // Somebody else got there first, in the same instant. The loser becomes a
+    // refusal with the honest reason rather than a second payout — and it is
+    // recorded, not dropped, so the tenant can be told.
+    if (claimed.count === 0) {
+      // Created refused rather than created-then-downgraded. The old shape
+      // wrote an `earned` row and corrected it a statement later, which was a
+      // moment of "this referral is worth $50" visible to anything reading
+      // inside the transaction.
+      const refused = await tx.referral.create({
+        data: {
+          ...base,
+          state: 'refused',
+          refusedReason: 'invite_already_used' satisfies ReferralRefusal,
+          qualifiedAt: null,
+          referrerRewardCents: 0,
+          refereeRewardCents: 0,
+        },
+        select: { id: true },
+      })
+      return {
+        ok: false as const,
+        refusal: 'invite_already_used' as ReferralRefusal,
+        message: REFERRAL_REFUSAL_MESSAGES.invite_already_used,
+        referralId: refused.id,
+      }
+    }
+
     const referral = await tx.referral.create({
       data: {
-        inviteId: invite.id,
-        referrerTenantId: invite.referrerTenantId,
-        refereeTenantId: input.refereeTenantId,
-        refereeLeaseId: input.refereeLeaseId,
-        facilityId: invite.facilityId,
+        ...base,
         state: 'earned',
         qualifiedAt: new Date(),
         referrerRewardCents: rewards.referralRewardCents,
@@ -323,32 +378,13 @@ export async function qualifyReferral(input: {
       select: { id: true },
     })
 
-    const claimed = await tx.referralInvite.updateMany({
-      where: { id: invite.id, redeemedAt: null },
-      data: { redeemedAt: new Date(), redeemedByReferralId: referral.id },
+    // The back-reference, which could not be set in the claim above because the
+    // referral did not exist yet. Still inside the transaction, so nothing ever
+    // observes a redeemed invite without the referral that redeemed it.
+    await tx.referralInvite.update({
+      where: { id: invite.id },
+      data: { redeemedByReferralId: referral.id },
     })
-
-    // Somebody else got there first, in the same instant. The loser becomes a
-    // refusal with the honest reason rather than a second payout — and it is
-    // recorded, not dropped, so the tenant can be told.
-    if (claimed.count === 0) {
-      await tx.referral.update({
-        where: { id: referral.id },
-        data: {
-          state: 'refused',
-          refusedReason: 'invite_already_used' satisfies ReferralRefusal,
-          qualifiedAt: null,
-          referrerRewardCents: 0,
-          refereeRewardCents: 0,
-        },
-      })
-      return {
-        ok: false as const,
-        refusal: 'invite_already_used' as ReferralRefusal,
-        message: REFERRAL_REFUSAL_MESSAGES.invite_already_used,
-        referralId: referral.id,
-      }
-    }
 
     // Inside the transaction, like every other event this codebase emits from
     // one: an event for a referral that rolled back would tell two people about

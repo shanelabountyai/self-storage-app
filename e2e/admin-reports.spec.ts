@@ -182,3 +182,50 @@ test.describe('funnel v2 and promo ROI', () => {
     await expect(page).toHaveURL('/admin/reports/promotions')
   })
 })
+
+// B-082 part 5 / PRD 04 §7 Phase 2. Search Console indexation monitoring.
+
+test.describe('indexation monitoring', () => {
+  test.beforeEach(async ({ page }) => {
+    await signInAsDemoOwner(page)
+  })
+
+  test('says which credentials are missing, and invents no verdicts', async ({ page }) => {
+    // This is the state that actually ships: no Search Console service account
+    // is configured anywhere, so the disconnected page is the one every real
+    // visit renders. It is asserted for the same reason B-107's map is — the
+    // degraded state is the shipped state until somebody sets a credential.
+    await page.goto('/admin/reports/indexation')
+    await expect(page.getByRole('heading', { level: 1 })).toContainText('Indexation')
+
+    const main = page.getByRole('main')
+    await expect(main).toContainText("Search Console isn't connected yet")
+
+    // Named variables, not "not configured". Somebody has to go and set these.
+    await expect(main).toContainText('GOOGLE_SEARCH_CONSOLE_CLIENT_EMAIL')
+    await expect(main).toContainText('GOOGLE_SEARCH_CONSOLE_PRIVATE_KEY')
+    await expect(main).toContainText('GOOGLE_SEARCH_CONSOLE_SITE_URL')
+
+    // And nothing that looks like an answer. A fabricated verdict on a screen
+    // an operator makes decisions from is the whole reason there is no
+    // simulator here.
+    await expect(main.getByRole('table')).toHaveCount(0)
+    await expect(main).not.toContainText('Indexed')
+  })
+
+  test('counts the same pages the sitemap advertises', async ({ page, request }) => {
+    // The report asks about exactly what the sitemap publishes. Asking about a
+    // different set would answer a question nobody has.
+    const sitemap = await request.get('/sitemap.xml')
+    const count = [...(await sitemap.text()).matchAll(/<loc>/g)].length
+
+    await page.goto('/admin/reports/indexation')
+    await expect(page.getByRole('main')).toContainText(`${count} pages our sitemap advertises`)
+  })
+
+  test('the reports index links to it', async ({ page }) => {
+    await page.goto('/admin/reports')
+    await page.getByRole('link', { name: /Indexation — what Google has indexed/ }).click()
+    await expect(page).toHaveURL('/admin/reports/indexation')
+  })
+})
