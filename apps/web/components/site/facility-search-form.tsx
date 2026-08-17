@@ -27,18 +27,32 @@ export async function FacilitySearchForm({
   defaultValue,
   label = 'Where do you need storage?',
   autoFocus = false,
+  carry = '',
 }: {
   defaultValue?: string
   label?: string
   autoFocus?: boolean
+  /// B-082 part 3. A query string of filters to preserve across this submit,
+  /// as hidden inputs.
+  ///
+  /// A GET form REPLACES the whole query string. Without this, a renter who
+  /// arrived from a guide's CTA holding `?features=climate` and then typed
+  /// their zip would silently lose it — and the line above the form has just
+  /// promised them it is being carried. The facility page's promo box carries
+  /// its filters the same way and for the same reason (`carriedQuery`).
+  carry?: string
 }) {
   const options = await suggestions()
+  const carried = [...new URLSearchParams(carry).entries()]
 
   return (
     <div className="max-w-xl">
       {/* GET so the result is a bookmarkable URL rather than a POST that can't
           be shared or refreshed (US-101). Works without JavaScript. */}
       <form action="/storage/search" method="GET" className="flex flex-col gap-3 sm:flex-row">
+        {carried.map(([name, value]) => (
+          <input key={`${name}:${value}`} type="hidden" name={name} value={value} />
+        ))}
         <div className="flex-1">
           <label htmlFor="q" className="block text-sm font-medium">
             {label}
@@ -85,7 +99,7 @@ export async function FacilitySearchForm({
         </button>
       </form>
 
-      <UseMyLocation />
+      <UseMyLocation carry={carry} />
     </div>
   )
 }

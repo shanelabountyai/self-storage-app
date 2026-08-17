@@ -3,6 +3,7 @@ import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from '@playwright/test'
 import { LEGAL_PAGES } from '../apps/web/lib/site-config'
 import { DEMO_PROMO_CODE } from '../apps/web/scripts/demo-credentials'
+import { GUIDES } from '../apps/web/lib/guides/catalog'
 
 test('home page renders its search hero', async ({ page }) => {
   await page.goto('/')
@@ -275,9 +276,18 @@ test('a city with no facilities 404s rather than serving a thin page', async ({ 
 })
 
 test('a non-canonical city URL redirects to the canonical one', async ({ page }) => {
-  // There is no middleware in this app, so the page enforces its own canonical
-  // spelling exactly as the facility page below it does.
+  // Two layers, and this asserts both — the first version of this test only
+  // exercised the proxy while claiming to test the page.
+  //
+  // Casing is the edge proxy's job (`apps/web/proxy.ts`, FR-SEO-2) and never
+  // reaches the page at all.
   await page.goto('/storage/TX/AUSTIN')
+  await expect(page).toHaveURL('/storage/tx/austin')
+
+  // This one the proxy passes through untouched — lower-case, no trailing
+  // slash, no repeated slash — and only the page can catch it, because only the
+  // page knows what `citySlug` makes of the city record.
+  await page.goto('/storage/tx/austin--')
   await expect(page).toHaveURL('/storage/tx/austin')
 })
 
@@ -294,6 +304,99 @@ test('every city the sitemap advertises actually renders', async ({ page, reques
     .filter((path) => /^\/storage\/[a-z]{2}\/[a-z0-9-]+$/.test(path))
 
   expect(paths).toContain('/storage/tx/austin')
+  for (const path of paths) {
+    const response = await page.goto(path)
+    expect(response?.status(), `${path} is in the sitemap and must not 404`).toBe(200)
+  }
+})
+
+// B-082 part 3 / PRD 04 US-4 AC2-AC3. The guides content hub.
+
+test('the guides hub lists the launch set and the size guide stays where it is', async ({
+  page,
+}) => {
+  await page.goto('/guides')
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('Storage guides')
+
+  // AC2's five: four MDX guides plus the size guide, linked at the URL it has
+  // had since B-016 rather than re-published under /guides (D-60). If somebody
+  // copies its text into the hub, this href is what fails.
+  const links = page.getByRole('main').getByRole('listitem').getByRole('link')
+  await expect(links).toHaveCount(5)
+  await expect(page.getByRole('link', { name: /What size storage unit/ })).toHaveAttribute(
+    'href',
+    '/storage/size-guide',
+  )
+})
+
+test('every guide renders with Article markup and reachable prose', async ({ page }) => {
+  for (const guide of GUIDES) {
+    const response = await page.goto(`/guides/${guide.slug}`)
+    expect(response?.status(), `/guides/${guide.slug}`).toBe(200)
+
+    // The slug→prose map in the route is written out by hand for the bundler,
+    // so a guide in the catalog with no import lands here as a 404 rather than
+    // as a silently missing page.
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText(guide.title)
+    // Exactly one h1: the MDX component mapping renders no `h1` at all, and a
+    // second one would break the outline of every guide at once.
+    await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1)
+    await expect(page.getByRole('heading', { level: 2 }).first()).toBeVisible()
+
+    const types = (
+      await page.locator('script[type="application/ld+json"]').allTextContents()
+    ).map((node) => (JSON.parse(node) as { '@type': string })['@type'])
+    expect(types, `/guides/${guide.slug}`).toContain('Article')
+    expect(types, `/guides/${guide.slug}`).toContain('BreadcrumbList')
+    // AC3's "where appropriate" — present only where the guide has two or more
+    // real questions.
+    expect(types.includes('FAQPage'), `/guides/${guide.slug} FAQPage`).toBe(guide.faqs.length >= 2)
+  }
+})
+
+test("a guide's CTA carries its filter through search onto a facility page", async ({ page }) => {
+  // AC3 end to end, which is the only way it is worth asserting: the guide, the
+  // search and the facility page each hold one third of it, and all three
+  // passing separately would still let the chain be broken in the middle.
+  await page.goto('/guides/climate-control')
+  await page.getByRole('main').getByRole('link', { name: /climate-controlled units near you/ }).click()
+
+  await expect(page).toHaveURL(/\/storage\/search\?.*features=climate/)
+
+  // The CTA cannot know where the reader is, so it lands on the search with no
+  // query — and the filter it brought must be visible rather than travelling
+  // invisibly to a facility page that opens with a box mysteriously ticked.
+  await expect(page.getByRole('main')).toContainText('Carrying your Climate controlled filter')
+
+  await page.getByLabel('Zip code or city').fill('78704')
+  await page.getByRole('button', { name: 'Find storage' }).click()
+  await expect(page).toHaveURL(/features=climate/)
+
+  await page.getByRole('link', { name: 'Demo — Austin South' }).click()
+  await expect(page).toHaveURL(/features=climate/)
+
+  // And the facility page actually applied it, rather than carrying a parameter
+  // it ignores — the failure mode a filter value the page does not know
+  // produces, and the reason `GuideFilter` is typed against `FEATURE_FILTERS`.
+  await expect(page.getByLabel('Climate controlled')).toBeChecked()
+})
+
+test('an unknown guide slug 404s', async ({ page }) => {
+  const response = await page.goto('/guides/no-such-guide')
+  expect(response?.status()).toBe(404)
+})
+
+test('every guide the sitemap advertises actually renders', async ({ page, request }) => {
+  const sitemap = await request.get('/sitemap.xml')
+  const paths = [...(await sitemap.text()).matchAll(/<loc>([^<]+)<\/loc>/g)]
+    .map((match) => new URL(match[1]).pathname)
+    .filter((path) => path.startsWith('/guides'))
+
+  // The hub plus one entry per guide, both generated from the same catalog the
+  // routes read — so a guide cannot be listed without existing.
+  expect(paths.sort()).toEqual(
+    ['/guides', ...GUIDES.map((guide) => `/guides/${guide.slug}`)].sort(),
+  )
   for (const path of paths) {
     const response = await page.goto(path)
     expect(response?.status(), `${path} is in the sitemap and must not 404`).toBe(200)

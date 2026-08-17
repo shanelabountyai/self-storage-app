@@ -27,6 +27,21 @@ export function SiteHeader() {
             Find storage
           </Link>
 
+          {/* B-082 part 3. The content hub, one click from every page. In the
+              header rather than the footer because the guides are a reason to
+              arrive, not a utility you go looking for — and a hub reachable
+              only from a footer is one a crawler reads as boilerplate.
+              Not hidden at narrow widths: the header is already `flex-wrap`
+              with `gap-y-2` for exactly this, so a fourth item wraps to a
+              second row. A `sm:`-only nav link is content that disappears on
+              reflow, which is the thing 1.4.10 is about. */}
+          <Link
+            href="/guides"
+            className="hover:bg-accent inline-flex min-h-11 items-center rounded-md px-3 text-sm font-medium"
+          >
+            Guides
+          </Link>
+
           {/* tel: on every phone number (§6.2). The icon is decorative — the
               number itself is the accessible name. */}
           <a

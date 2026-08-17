@@ -211,6 +211,49 @@ export function itemListJsonLd(
   }
 }
 
+export type ArticleSchemaInput = {
+  headline: string
+  description: string
+  /// Absolute, with scheme and host — same rule as every other `url` here.
+  url: string
+  /// ISO date (YYYY-MM-DD). The day the guide's text last changed, typed by
+  /// whoever changed it.
+  datePublished: string
+  dateModified?: string
+  /// The organisation. Guides are house content, not bylined by a person, and
+  /// inventing an author name to fill the field is a fabricated credential.
+  publisher: string
+}
+
+/// FR-SEO-4's `Article`, for a guide in the content hub (US-4 AC3).
+///
+/// `Article` and not `BlogPosting` or `NewsArticle`: both of those carry
+/// expectations about recency and editorial cadence that a set of evergreen
+/// how-to pages does not meet, and claiming a type whose conventions the page
+/// does not follow is the same mistake as marking up a rating we did not
+/// collect.
+///
+/// Deliberately no `image` and no `author`. An `Article` with an image URL that
+/// 404s is worse than one with no image, and there is no guide art in this
+/// product; `author` is left to `publisher` because nobody is bylined.
+export function articleJsonLd(input: ArticleSchemaInput): JsonLd {
+  return prune({
+    '@context': 'https://schema.org',
+    '@type': 'Article',
+    headline: input.headline,
+    description: input.description,
+    // `mainEntityOfPage` rather than a bare `url`: it is the property that says
+    // "this article IS this page" rather than "this article mentions it", which
+    // is what stops the same guide being read as content syndicated from
+    // somewhere else.
+    mainEntityOfPage: { '@type': 'WebPage', '@id': input.url },
+    url: input.url,
+    datePublished: input.datePublished,
+    dateModified: input.dateModified ?? input.datePublished,
+    publisher: { '@type': 'Organization', name: input.publisher },
+  })
+}
+
 /// `BreadcrumbList`, so a facility page shows its city path in results rather
 /// than a bare URL.
 export function breadcrumbJsonLd(crumbs: readonly { name: string; url: string }[]): JsonLd | null {

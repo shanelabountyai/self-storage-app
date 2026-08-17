@@ -149,6 +149,17 @@ export default function SizeGuidePage() {
             Find storage near you
           </Link>
         </p>
+        {/* B-082 part 3. This page is the fifth guide in the hub's launch set
+            and it stays at this URL — it has been indexable since B-016 and is
+            linked from the facility, search and city pages, so re-publishing
+            its text under /guides to make the set look uniform would create the
+            duplicate content this row's part 6 exists to warn about (D-60). The
+            hub links here; here links back. */}
+        <p className="mt-4">
+          <Link href="/guides" className="underline underline-offset-4">
+            Read the other storage guides
+          </Link>
+        </p>
       </section>
     </div>
   )

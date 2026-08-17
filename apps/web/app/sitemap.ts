@@ -4,6 +4,7 @@ import { absoluteUrl } from '@storage/core/marketing'
 import { siteOrigin } from '@/lib/marketing/origin'
 import { citySlugPath, facilityPagePath } from '@/lib/marketing/paths'
 import { citiesWithFacilities } from '@/lib/facility/city-facilities'
+import { GUIDES, guidePath } from '@/lib/guides/catalog'
 
 // PRD 04 FR-SEO-5 / US-3 AC1 (B-066). The sitemap, generated from the records.
 //
@@ -28,6 +29,10 @@ const STATIC_ROUTES: { path: string; priority: number; changeFrequency: Metadata
   { path: '/', priority: 1, changeFrequency: 'weekly' },
   { path: '/storage/search', priority: 0.8, changeFrequency: 'daily' },
   { path: '/storage/size-guide', priority: 0.6, changeFrequency: 'monthly' },
+  // B-082 part 3. The hub; the guides under it are appended below from the same
+  // catalog the routes are generated from, so a new guide reaches the sitemap
+  // by being written rather than by somebody remembering this file.
+  { path: '/guides', priority: 0.6, changeFrequency: 'monthly' },
   { path: '/about', priority: 0.4, changeFrequency: 'yearly' },
   { path: '/contact', priority: 0.5, changeFrequency: 'yearly' },
   { path: '/faq', priority: 0.5, changeFrequency: 'monthly' },
@@ -82,7 +87,19 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: route.priority,
   }))
 
-  return [...staticEntries, ...cityEntries, ...facilityEntries]
+  // B-082 part 3. One entry per guide, from the catalog the routes read — so a
+  // guide cannot exist without being listed, and cannot be listed without
+  // existing. `lastModified` is the guide's own `updated` date, typed by
+  // whoever changed the words: stamping `now` here would tell a crawler that
+  // every guide changed on every deploy, which is how the field gets ignored.
+  const guideEntries: MetadataRoute.Sitemap = GUIDES.map((guide) => ({
+    url: absoluteUrl(origin, guidePath(guide)),
+    lastModified: new Date(`${guide.updated}T00:00:00Z`),
+    changeFrequency: 'monthly',
+    priority: 0.5,
+  }))
+
+  return [...staticEntries, ...guideEntries, ...cityEntries, ...facilityEntries]
   // ponytail: one flat sitemap. FR-SEO-5 wants segmentation above 1,000 URLs;
   // with one entry per facility plus one per city that is hundreds of
   // facilities away, and a sitemap index built now would be scaffolding for a

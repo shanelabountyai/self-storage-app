@@ -10,6 +10,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@mdx-js/loader": "^3.1.1",
+    "@mdx-js/react": "^3.1.1",
+    "@next/mdx": "^16.3.1",
     "@storage/core": "*",
     "@storage/db": "*",
     "@stripe/react-stripe-js": "^6.8.0",
@@ -32,6 +35,7 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/google.maps": "^3.65.5",
+    "@types/mdx": "^2.0.14",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",

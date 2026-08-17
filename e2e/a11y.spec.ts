@@ -29,6 +29,13 @@ const PUBLIC_ROUTES = [
   // an error message that fails contrast is an error message nobody reads.
   '/storage/tx/austin/demo-austin-south?promo=NOT-A-REAL-CODE',
   '/storage/size-guide',
+  // B-082 part 3. The content hub's two templates. `climate-control` is the
+  // richest guide — MDX prose, a CTA with a filter label, and an FAQ block of
+  // <details> — and `packing-tips` is the same template with the FAQ and the
+  // label absent, which is where a heading is most likely to end up orphaned.
+  '/guides',
+  '/guides/climate-control',
+  '/guides/packing-tips',
   '/storage/tx/austin/demo-austin-south/reserve?unitType=INVALID',
   // The token-less and bad-token states of the reservation page are the ones a
   // crawler or a mistyped link reaches; the live states need a real hold.

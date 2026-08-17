@@ -160,8 +160,16 @@ export default async function CityPage({
 
   const { facilities, canonical, first } = resolved
   // One URL per city in the index rather than one per spelling anybody links.
-  // There is no middleware in this app, so this page enforces its own canonical
-  // form exactly as the facility page below it does.
+  //
+  // This is the SECOND of two layers, not the only one. The edge proxy
+  // (`apps/web/proxy.ts` — Next 16's name for what used to be middleware, which
+  // is why grepping for `middleware.ts` finds nothing) already lower-cases the
+  // path, strips a trailing slash and collapses repeated slashes, so casing
+  // never reaches this line. What does reach it is a spelling the proxy
+  // considers canonical and the city record does not: `/storage/tx/austin--`
+  // and `/storage/tx/fort--worth` are both lower-case with no trailing slash,
+  // both resolve through `citySlug`, and neither is the URL the sitemap lists.
+  // The facility page below carries the same guard for the same reason.
   if (`/storage/${state}/${city}` !== canonical) permanentRedirect(canonical)
 
   const label = cityLabel(first.city, first.state)

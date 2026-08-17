@@ -10,7 +10,15 @@ import { useRouter } from 'next/navigation'
 // plain GET form that works with JavaScript disabled, so this button is purely
 // additive — if it never runs, search still works.
 
-export function UseMyLocation() {
+export function UseMyLocation({
+  /// B-082 part 3. Filters carried from a guide's CTA, as a query string.
+  ///
+  /// This button builds its destination URL from scratch, so without this it
+  /// drops the filter exactly as the GET form beside it would — and the two
+  /// routes to the same results page behaving differently is worse than either
+  /// behaviour on its own.
+  carry = '',
+}: { carry?: string } = {}) {
   const router = useRouter()
   const [state, setState] = useState<'idle' | 'locating' | 'unavailable' | 'denied'>('idle')
 
@@ -28,7 +36,10 @@ export function UseMyLocation() {
         const { latitude, longitude } = position.coords
         // Same shareable-URL rule as the text search (US-101) — the result of
         // locating is a URL you can bookmark, not hidden client state.
-        router.push(`/storage/search?lat=${latitude.toFixed(5)}&lng=${longitude.toFixed(5)}`)
+        const params = new URLSearchParams(carry)
+        params.set('lat', latitude.toFixed(5))
+        params.set('lng', longitude.toFixed(5))
+        router.push(`/storage/search?${params.toString()}`)
       },
       // Covers an outright denial and a timeout alike: either way the answer to
       // the user is the same, and it must not be a dead end.

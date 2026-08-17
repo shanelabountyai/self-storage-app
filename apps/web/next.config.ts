@@ -1,4 +1,5 @@
 import path from 'node:path'
+import createMDX from '@next/mdx'
 import type { NextConfig } from 'next'
 
 const nextConfig: NextConfig = {
@@ -29,4 +30,18 @@ const nextConfig: NextConfig = {
   outputFileTracingRoot: path.join(import.meta.dirname, '../..'),
 }
 
-export default nextConfig
+// PRD 04 US-4 AC2 (B-082 part 3). The guides content hub.
+//
+// `pageExtensions` is deliberately NOT extended with `mdx`. A `.mdx` file under
+// `app/` would become a route on its own, and a guide is not just its prose:
+// it needs `Article` JSON-LD built from typed fields, a breadcrumb, and a CTA
+// that knows which size band it is recommending. So the prose is imported by
+// `guides/[slug]/page.tsx`, which owns all of that — content stays content and
+// routing stays in TypeScript.
+//
+// No remark or rehype plugins. Every guide is written in this repo by somebody
+// who can read the rendered page; a plugin chain is machinery for content
+// arriving from somewhere you cannot see.
+const withMDX = createMDX({})
+
+export default withMDX(nextConfig)
