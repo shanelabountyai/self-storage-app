@@ -113,6 +113,7 @@ test.describe('signed in as the demo owner', () => {
     // nobody checks.
     '/admin/reports/promotions',
     '/admin/reports/indexation',
+    '/admin/reports/duplicate-content',
     '/admin/reports/rent-roll',
     '/admin/reports/revenue',
     '/admin/settings',

@@ -290,6 +290,7 @@ Targets are directional for a learning project; the *instrumentation* is the req
 - SMS channel with TCPA consent flow (drip + abandonment steps optional per operator).
 - Funnel reporting v2: source/medium breakdowns, sequence attribution, promo ROI report.
 - Duplicate-content warnings, Search Console integration for indexation monitoring.
+  - *Duplicate-content warnings built B-082 part 6, 2026-08-17.* Site-wide at `/admin/reports/duplicate-content`, over every prose field rather than US-2 AC3's single meta-description warning at edit time — which stays, and is still the right warning in the right place. Compared within a field kind only. Generated copy is included on purpose, and the first run flagged the city page intros at 0.82–0.85 against each other (**B-128**).
   - *Search Console built B-082 part 5, 2026-08-17.* Scoped to indexation, not ranking: of the URLs our sitemap advertises, which has Google indexed. The site-verification token is in the root layout; a service-account client talks to `urlInspection.index.inspect` directly via `node:crypto`-signed JWTs rather than through `googleapis`; `/admin/reports/indexation` renders the result. **There is deliberately no simulator** — a fabricated index verdict is a claim about Google on a screen an operator decides from — so unconfigured shows no verdicts and names the missing variables. IndexNow and sitemap-ping automation stay Phase 3 (B-087).
 
 ### Phase 3 — Automation (APIs)

@@ -206,6 +206,12 @@ export default async function ReportsPage({
           Indexation — what Google has indexed
         </Link>
         <Link
+          href="/admin/reports/duplicate-content"
+          className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
+        >
+          Duplicate content — pages that say the same thing
+        </Link>
+        <Link
           href="/admin/reports/deliverability"
           className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
         >

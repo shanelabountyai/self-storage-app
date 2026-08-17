@@ -229,3 +229,55 @@ test.describe('indexation monitoring', () => {
     await expect(page).toHaveURL('/admin/reports/indexation')
   })
 })
+
+// B-082 part 6 / PRD 04 §7 Phase 2. Site-wide duplicate content.
+
+test.describe('duplicate content', () => {
+  test.beforeEach(async ({ page }) => {
+    await signInAsDemoOwner(page)
+  })
+
+  test('catches the generated city intros, and says they are not a copy problem', async ({
+    page,
+  }) => {
+    // The demo cities each hold one facility, so their generated intros differ
+    // only by city, facility name and price — and score 0.82–0.85 against each
+    // other, over this codebase's own 0.8 threshold. That is the check working
+    // on the copy B-082 part 2 generated, and it is the reason this report
+    // covers generated text at all rather than only what somebody typed.
+    await page.goto('/admin/reports/duplicate-content')
+    await expect(page.getByRole('heading', { level: 1 })).toContainText('Duplicate content')
+
+    const row = page.getByRole('row').filter({ hasText: 'Austin, TX' }).first()
+    await expect(row).toBeVisible()
+    await expect(row.getByRole('rowheader')).toHaveText('City page intros')
+
+    // And the guidance does NOT send somebody hunting for a field that does not
+    // exist. There is no city description to edit; saying "rewrite it" would be
+    // an instruction nobody can follow.
+    await expect(row).toContainText('no city description to edit today')
+    await expect(row).not.toContainText('rewrite the weaker one')
+  })
+
+  test('links both sides of a pair to the pages themselves', async ({ page }) => {
+    await page.goto('/admin/reports/duplicate-content')
+    const row = page.getByRole('row').filter({ hasText: 'Austin, TX' }).first()
+    // A report that names a problem without a route to it makes somebody go
+    // and find the page by hand.
+    await row.getByRole('link', { name: 'Austin, TX' }).click()
+    await expect(page).toHaveURL('/storage/tx/austin')
+  })
+
+  test('says how much it compared, so a clean result means something', async ({ page }) => {
+    await page.goto('/admin/reports/duplicate-content')
+    // "Nothing found" and "we checked N pieces of text and found nothing" are
+    // different claims, and only the second is reassuring.
+    await expect(page.getByRole('main')).toContainText('pieces of text')
+  })
+
+  test('the reports index links to it', async ({ page }) => {
+    await page.goto('/admin/reports')
+    await page.getByRole('link', { name: /Duplicate content — pages that say the same thing/ }).click()
+    await expect(page).toHaveURL('/admin/reports/duplicate-content')
+  })
+})
