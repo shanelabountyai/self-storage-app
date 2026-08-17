@@ -4316,7 +4316,7 @@ Full e2e against a production build: **900 passed, 6 skipped, 0 failed, 0 flaky 
 
 ## B-082 (part 3 of 6) — The guides content hub, and two ways a carried filter was about to disappear
 
-`PENDING`
+`af69ef6`
 
 **Owner decision taken before any code: MDX, as PRD 04 specifies.** PRD 04 names it twice — US-4 AC2 and the non-goals line, *"the Phase 2 content hub is a simple markdown/MDX-backed system, not a headless CMS integration"* — while this repo's convention runs the other way, since `size-guide`, `defaultFacilityFaqs` and `GBP_CHECKLIST` are all content-as-typed-data with no dependencies. Overriding written PRD text needs a D-number rather than a unilateral call, so it was asked. Three dependencies (`@next/mdx`, `@mdx-js/loader`, `@mdx-js/react`) and `npm rebuild esbuild` after, per the trap this file's own CLAUDE.md documents.
 
