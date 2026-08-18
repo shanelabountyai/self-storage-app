@@ -2,7 +2,12 @@ import { getSwitcherData } from '@/lib/admin/context'
 import { resolveSelectedFacility } from '@/lib/admin/facility-selection-logic'
 import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
 import { exampleNoticeTemplate, noticeTemplatesFor } from '@/lib/admin/notice-templates'
-import { NOTICE_DISCLAIMER, NOTICE_TYPES, REQUIRED_NOTICE_FIELDS } from '@storage/core/notices'
+import {
+  NOTICE_DISCLAIMER,
+  noticeTypeLabel,
+  NOTICE_TYPES,
+  REQUIRED_NOTICE_FIELDS,
+} from '@storage/core/notices'
 import { saveNoticeTemplateAction } from './actions'
 
 export const metadata = { title: 'Notice templates' }
@@ -13,10 +18,6 @@ export const metadata = { title: 'Notice templates' }
 // The disclaimer is persistent and not dismissible, the same as B-056's
 // timeline screen and for a stronger reason: this is the document itself.
 
-const TYPE_LABELS: Record<string, string> = {
-  pre_lien: 'Pre-lien notice',
-  lien: 'Lien notice',
-}
 
 function formatDate(date: Date): string {
   return new Intl.DateTimeFormat('en-US', { dateStyle: 'medium' }).format(date)
@@ -69,7 +70,7 @@ export default async function NoticeTemplatesPage() {
         return (
           <section key={type} aria-labelledby={`t-${type}`} className="flex flex-col gap-3">
             <h2 id={`t-${type}`} className="text-sm font-medium">
-              {TYPE_LABELS[type]}
+              {noticeTypeLabel(type)}
             </h2>
 
             <p className="text-muted-foreground text-sm">

@@ -20,6 +20,33 @@
 export const NOTICE_TYPES = ['pre_lien', 'lien'] as const
 export type LienNoticeType = (typeof NOTICE_TYPES)[number]
 
+/// What each notice type is called on screen and on the envelope.
+///
+/// Hoisted here in B-083 because two admin screens already held identical
+/// copies and the certified-mail letter description needed a third. A notice
+/// type's name is the same fact wherever it is printed, and three copies is how
+/// the pre-lien notice ends up called two different things in one lien file.
+///
+/// Covers the whole `NoticeType` enum, not only the two lien types this module
+/// generates. Both screens render `notice.type` straight from the database, and
+/// the two-entry maps they held printed the raw enum value — `late_notice` — for
+/// the other four.
+const TYPE_LABELS: Readonly<Record<string, string>> = {
+  late_notice: 'Late notice',
+  pre_lien: 'Pre-lien notice',
+  lien: 'Lien notice',
+  auction: 'Auction notice',
+  rate_change: 'Rate-change notice',
+  move_out: 'Move-out notice',
+}
+
+/// Total over any string, because the caller has a database enum rather than
+/// `LienNoticeType` and a lookup that can return `undefined` is how a blank
+/// lands on an envelope.
+export function noticeTypeLabel(type: string): string {
+  return TYPE_LABELS[type] ?? type
+}
+
 /// US-27's own list: "tenant, unit, itemized balance with accrual dates,
 /// deadline date, sale statement, facility contact info."
 ///

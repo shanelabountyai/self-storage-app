@@ -2,7 +2,8 @@
 
 import { revalidatePath } from 'next/cache'
 import { requireStaffActor } from '@/lib/rbac/session'
-import { generateNotice, recordNoticeDelivery } from '@/lib/notices/service'
+import { generateNotice, mailNoticeCertified, recordNoticeDelivery } from '@/lib/notices/service'
+import { success, type FormState } from '@/lib/admin/form-state'
 import type { LienNoticeType, NoticeDeliveryMethod } from '@storage/core/notices'
 import { DELIVERY_PROOF_FIELDS } from '@storage/core/notices'
 
@@ -50,4 +51,33 @@ export async function recordDeliveryAction(formData: FormData): Promise<void> {
   })
 
   revalidatePath(`/admin/tenants/${tenantId}/notices/${leaseId}`)
+}
+
+/// B-083. Posts the notice by certified mail and records the tracking number
+/// the provider returns.
+///
+/// The one action on this page that returns `FormState` rather than reading its
+/// outcome back off the re-rendered screen, and the reason is the failure mode
+/// the others do not have: if the provider accepts the letter and recording it
+/// here then fails, the tracking number exists in exactly one place — that
+/// refusal. Re-deriving the page state would show a notice that is still
+/// unserved and say nothing about the letter now in the post.
+export async function mailNoticeAction(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const actor = await requireStaffActor()
+  const tenantId = String(formData.get('tenantId') ?? '')
+  const leaseId = String(formData.get('leaseId') ?? '')
+  const noticeId = String(formData.get('noticeId') ?? '')
+
+  const result = await mailNoticeCertified(actor, noticeId)
+  revalidatePath(`/admin/tenants/${tenantId}/notices/${leaseId}`)
+
+  if (!result.ok) {
+    return { status: 'error', message: result.reason, fieldErrors: {} }
+  }
+  return success(
+    `Posted by certified mail. Tracking number ${result.trackingNumber}, recorded against this notice as proof of service.`,
+  )
 }

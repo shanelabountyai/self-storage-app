@@ -230,3 +230,67 @@ test.describe('the tenant list (B-114)', () => {
     await expect(page.getByRole('row').nth(1)).toBeVisible()
   })
 })
+
+// B-083 / PRD 02 §4.6 US-30. The lien-notices screen for one lease.
+//
+// This dynamic sub-route had NO axe scan anywhere, despite admin.spec.ts's list
+// comment claiming every per-entity route "already has its own axe scan in its
+// topic file". It does now, added by the item that put a new form on it.
+//
+// Read-only throughout: nothing here generates or serves a notice. Generating
+// one against shared demo data would leave a served lien notice on Dana's lease,
+// which is the scheduling precondition the auction specs and the delinquency
+// queue read — the unscoped-mutation trap B-120 documents.
+
+test.describe('lien notices for a lease', () => {
+  test.beforeEach(async ({ page }) => {
+    await signInAsDemoOwner(page)
+    await page.goto('/admin/tenants?q=dana@demo.example.com')
+    await page.getByRole('link', { name: 'Dana Delinquent' }).click()
+    await page.getByRole('link', { name: 'Notices' }).first().click()
+    await expect(page.getByRole('main')).toBeVisible()
+  })
+
+  test('has no WCAG 2.1 AA violations', async ({ page }) => {
+    const { violations } = await new AxeBuilder({ page })
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+      .analyze()
+
+    expect(
+      violations.map((v) => `${v.id}: ${v.help}`),
+      'axe found accessibility violations',
+    ).toEqual([])
+  })
+
+  test('names the variable to set rather than offering a button that would fail', async ({
+    page,
+  }) => {
+    // The shipped state: no mail provider is configured here, in CI, or in any
+    // preview deploy, and that is a supported state rather than a broken one.
+    // Asserted as a contract because the alternative — a disabled button, or one
+    // that errors when pressed — is what this posture exists to avoid.
+    const main = page.getByRole('main')
+    await expect(main).toContainText('CERTIFIED_MAIL_API_KEY')
+    await expect(main.getByRole('button', { name: 'Send by certified mail' })).toHaveCount(0)
+  })
+
+  test('puts a generation refusal on the screen instead of failing', async ({ page }) => {
+    // The reachable contract, and it is narrower than it looks — see B-130.
+    //
+    // NO demo lease can generate a lien notice: measured 2026-08-18 with the
+    // product's own `previewNotice`, 0 of 14. Twelve owe nothing and one is in
+    // credit, which are correct refusals; the fourteenth is the DELINQUENT
+    // lease this screen belongs to, and it refuses with
+    // `ledger_does_not_reconcile`. So B-061's generation path — and therefore
+    // B-083's send button, which only appears on a generated notice — cannot be
+    // reached from demo data at all. B-130 owns fixing the seed.
+    //
+    // What is assertable today is that the refusal REACHES the screen with its
+    // reason, rather than rendering an error boundary or a missing button with
+    // no explanation. That is worth pinning on its own: it is the state every
+    // operator opening this screen against a non-reconciling lease will see.
+    const main = page.getByRole('main')
+    await expect(main).toContainText('Nothing generated for this lease yet')
+    await expect(main.getByRole('alert').first()).toContainText('Cannot generate this notice')
+  })
+})

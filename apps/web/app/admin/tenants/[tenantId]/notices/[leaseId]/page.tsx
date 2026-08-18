@@ -1,16 +1,23 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { getAdminActor } from '@/lib/admin/context'
-import { noticesForLease, previewNotice, DEFAULT_DEADLINE_DAYS } from '@/lib/notices/service'
+import {
+  certifiedMailAvailability,
+  noticesForLease,
+  previewNotice,
+  DEFAULT_DEADLINE_DAYS,
+} from '@/lib/notices/service'
+import { AdminForm } from '@/components/admin/form'
 import {
   DELIVERY_METHOD_LABELS,
   DELIVERY_PROOF_FIELDS,
   NOTICE_DELIVERY_METHODS,
   NOTICE_DISCLAIMER,
+  noticeTypeLabel,
   NOTICE_TYPES,
 } from '@storage/core/notices'
 import { formatCents } from '@/lib/format'
-import { generateNoticeAction, recordDeliveryAction } from './actions'
+import { generateNoticeAction, mailNoticeAction, recordDeliveryAction } from './actions'
 
 export const metadata = { title: 'Notices' }
 
@@ -22,10 +29,6 @@ export const metadata = { title: 'Notices' }
 // notice cannot be generated, this page says why — a lease whose ledger and
 // invoices disagree is a refusal with a reason, not a missing button.
 
-const TYPE_LABELS: Record<string, string> = {
-  pre_lien: 'Pre-lien notice',
-  lien: 'Lien notice',
-}
 
 const PROOF_LABELS: Record<string, string> = {
   tracking_number: 'Tracking number',
@@ -53,6 +56,10 @@ export default async function LeaseNoticesPage({
   // One preview per type, each carrying its own refusal reason if it has one.
   const previews = await Promise.all(NOTICE_TYPES.map((type) => previewNotice(actor, leaseId, type)))
 
+  // B-083. Whether a mail provider is connected, and if not, why — read once
+  // rather than per notice, because it is an environment fact.
+  const mail = certifiedMailAvailability()
+
   return (
     <div className="flex max-w-3xl flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -76,7 +83,7 @@ export default async function LeaseNoticesPage({
           const preview = previews[index]
           return (
             <div key={type} className="border-input flex flex-col gap-3 rounded-lg border p-4">
-              <h3 className="font-medium">{TYPE_LABELS[type]}</h3>
+              <h3 className="font-medium">{noticeTypeLabel(type)}</h3>
 
               {!preview.ok ? (
                 // The refusal, with its reason. US-27's reconciliation gate is
@@ -154,6 +161,15 @@ export default async function LeaseNoticesPage({
           Generated notices ({notices.length})
         </h2>
 
+        {/* B-083. Stated ONCE, here, rather than repeated under every notice.
+            Whether a mail provider is connected is a fact about the install,
+            not about one notice — and an operator asking "can this post my
+            notices for me?" should not have to generate one to find out.
+            Rendered whether or not any notice exists yet, for the same reason. */}
+        {!mail.available && (
+          <p className="text-muted-foreground max-w-prose text-xs text-pretty">{mail.reason}</p>
+        )}
+
         {notices.length === 0 ? (
           <p className="text-muted-foreground text-sm">Nothing generated for this lease yet.</p>
         ) : (
@@ -163,7 +179,7 @@ export default async function LeaseNoticesPage({
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
                     <p className="font-medium">
-                      {TYPE_LABELS[notice.type] ?? notice.type} · {formatCents(notice.claimTotalCents ?? 0)}
+                      {noticeTypeLabel(notice.type)} · {formatCents(notice.claimTotalCents ?? 0)}
                     </p>
                     <p className="text-muted-foreground text-sm">
                       Generated {formatDate(notice.generatedAt)} · template v{notice.templateVersion} ·
@@ -211,6 +227,40 @@ export default async function LeaseNoticesPage({
                     </>
                   )}
                 </dl>
+
+                {/* B-083 / US-30. Posting it for you, where a mail provider is
+                    connected. Offered ABOVE the hand-recording form rather than
+                    instead of it: the manual path stays the whole flow for an
+                    unconfigured install, for hand delivery, and for a notice
+                    somebody walked to the post office themselves. */}
+                {mail.available && !notice.deliveredAt && !notice.supersededAt && notice.documentId && (
+                  <div className="mt-3 border-t pt-3">
+                    {mail.available ? (
+                      <AdminForm
+                        action={mailNoticeAction}
+                        label={`Post ${noticeTypeLabel(notice.type).toLowerCase()} by certified mail`}
+                        className="flex flex-col gap-2"
+                      >
+                        <input type="hidden" name="tenantId" value={tenantId} />
+                        <input type="hidden" name="leaseId" value={leaseId} />
+                        <input type="hidden" name="noticeId" value={notice.id} />
+                        <p className="text-sm font-medium">Post it for me</p>
+                        <p className="text-muted-foreground text-xs text-pretty">
+                          Sends the exact document above by USPS certified mail and records the
+                          tracking number as proof of service. Service is complete on mailing, so
+                          this marks the notice served today — a letter that is refused or never
+                          collected does not undo that.
+                        </p>
+                        <button
+                          type="submit"
+                          className="border-input hover:bg-accent min-h-11 self-start rounded-md border px-4 text-sm font-medium"
+                        >
+                          Send by certified mail
+                        </button>
+                      </AdminForm>
+                    ) : null}
+                  </div>
+                )}
 
                 {!notice.deliveredAt && !notice.supersededAt && (
                   <form action={recordDeliveryAction} className="mt-3 flex flex-col gap-2 border-t pt-3">

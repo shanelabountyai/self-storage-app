@@ -77,6 +77,11 @@ test.describe('signed in as the demo owner', () => {
   //     admin-tasks.spec.ts, admin-reports.spec.ts, admin-billing-runs.spec.ts,
   //     admin-move-out.spec.ts, portal-move-out.spec.ts, pay-link.spec.ts —
   //     which is real coverage, not a gap; it is just not THIS list.
+  //     (This claim was an overstatement until B-083: the per-lease notices
+  //     sub-route had no scan in any file. It is in admin-tenants.spec.ts now.
+  //     A comment asserting coverage is exactly as capable of going stale as
+  //     the accessibility statement is, and for the same reason — it describes
+  //     a codebase that keeps moving.)
   //   - `/mfa` and `/reauth`: PRD 01 US-701 routes that need a session and
   //     redirect to `/login` without one, so they belong in an
   //     authenticated list — this one — rather than a11y.spec.ts's public one.

@@ -12,11 +12,15 @@ import {
   canDeliver,
   claimForNotice,
   EXAMPLE_SALE_STATEMENTS,
+  letterRequest,
+  mailingAddress,
+  noticeTypeLabel,
   type ClaimProblem,
   type LienClaim,
   type LienNoticeType,
   type NoticeDeliveryMethod,
 } from '@storage/core/notices'
+import { certifiedMailConfig, sendCertifiedLetter } from '@/lib/notices/certified-mail'
 import { assertFacilityAccess, can, ForbiddenError, requirePermission } from '@/lib/rbac/authorize'
 import { toAuditActor } from '@/lib/rbac/audit-actor'
 import type { Actor } from '@/lib/rbac/actor'
@@ -572,6 +576,197 @@ export async function recordNoticeDelivery(
   })
 
   return { ok: true }
+}
+
+// ─────────────────────────────────────────────────── certified mail (B-083) ──
+
+export type CertifiedMailAvailability =
+  | { available: true }
+  /// Not configured, or configured with a key this environment refuses. Both
+  /// render as "the button is not offered, and here is why" — never as a button
+  /// that fails when pressed.
+  | { available: false; reason: string }
+
+/// Whether the send-by-post button should be offered at all.
+///
+/// Read by the screen so an unconfigured install shows the same hand-recording
+/// flow it has always had, with a line naming the variable to set — the posture
+/// B-082 part 5 took for Search Console, for a stronger reason.
+export function certifiedMailAvailability(): CertifiedMailAvailability {
+  const config = certifiedMailConfig()
+  if (config.configured) return { available: true }
+  if ('refused' in config) return { available: false, reason: config.refused }
+  return {
+    available: false,
+    reason: `Automated certified mail is not connected. Set ${config.missing.join(', ')} to enable it. Until then, post the notice yourself and record the tracking number below.`,
+  }
+}
+
+export type MailResult =
+  | { ok: true; trackingNumber: string }
+  | { ok: false; reason: string }
+
+/// Posts a generated notice by certified mail and records the proof.
+///
+/// Every refusal happens BEFORE the provider is called, because the one thing
+/// this function must never do is put paper in the post and fail to write down
+/// that it did. The single remaining window — the provider accepts the letter
+/// and the database write then fails — is handled by returning the tracking
+/// number in the refusal, so the number is on screen for a person to record by
+/// hand rather than lost. Pressing send again is also safe: the request carries
+/// the notice id as an idempotency key, so the provider returns the original
+/// letter instead of posting a second copy of a legal notice.
+///
+/// The same key also settles the concurrent case, which is otherwise the one
+/// this design would get wrong: two staff members pressing send at the same
+/// instant both pass the not-yet-served check, both call the provider, and the
+/// provider returns ONE letter to both. They then record identical proof. One
+/// letter, one tracking number — rather than two notices in the post and no way
+/// to say which was served.
+///
+/// Delivery is recorded through `recordNoticeDelivery`, never by writing the
+/// `Notice` row here, so the consent and proof gates in `canDeliver` still run
+/// on this path. A second way to mark a notice served is exactly how one of
+/// them gets skipped.
+export async function mailNoticeCertified(actor: Actor, noticeId: string): Promise<MailResult> {
+  const notice = await prisma.notice.findUniqueOrThrow({
+    where: { id: noticeId },
+    select: {
+      id: true,
+      facilityId: true,
+      type: true,
+      status: true,
+      supersededAt: true,
+      deliveredAt: true,
+      documentId: true,
+      renderedAddressLine1: true,
+      renderedAddressLine2: true,
+      renderedCity: true,
+      renderedState: true,
+      renderedPostalCode: true,
+      lease: { select: { tenant: { select: { firstName: true, lastName: true } } } },
+      facility: {
+        select: {
+          name: true,
+          addressLine1: true,
+          addressLine2: true,
+          city: true,
+          state: true,
+          postalCode: true,
+        },
+      },
+    },
+  })
+  requirePermission(actor, 'delinquency:execute_step', notice.facilityId)
+
+  if (notice.status === 'draft' || !notice.documentId) {
+    return { ok: false, reason: 'This notice has not been generated yet, so there is nothing to post.' }
+  }
+  if (notice.supersededAt) {
+    return {
+      ok: false,
+      reason: 'This notice has been superseded by a correction. Post the corrected notice instead.',
+    }
+  }
+  if (notice.deliveredAt) {
+    return {
+      ok: false,
+      reason: 'This notice has already been served. Posting it again would put a second tracking number against one service.',
+    }
+  }
+
+  const availability = certifiedMailAvailability()
+  const config = certifiedMailConfig()
+  // Re-checked here and not only on the screen. The screen decides whether to
+  // offer the button; this decides whether a letter goes out, and a form posted
+  // from a page rendered before the key was pulled must not slip through.
+  if (!availability.available || !config.configured) {
+    return { ok: false, reason: availability.available ? 'Certified mail is not available.' : availability.reason }
+  }
+
+  // The address the NOTICE says it was sent to (US-13's snapshot), not the
+  // tenant's current one. A tenant who moved between generation and posting
+  // must not silently redirect the envelope away from what the document says.
+  const to = mailingAddress({
+    name: `${notice.lease.tenant.firstName} ${notice.lease.tenant.lastName}`.trim(),
+    line1: notice.renderedAddressLine1,
+    line2: notice.renderedAddressLine2,
+    city: notice.renderedCity,
+    state: notice.renderedState,
+    postalCode: notice.renderedPostalCode,
+  })
+  if (!to.ok) {
+    return {
+      ok: false,
+      reason: `This notice cannot be posted because the address it was generated with is missing its ${to.missing.join(', ')}. Fix the tenant's address of record and generate a correction — a notice must not be posted to an address different from the one printed on it.`,
+    }
+  }
+
+  const from = mailingAddress({
+    name: notice.facility.name,
+    line1: notice.facility.addressLine1,
+    line2: notice.facility.addressLine2,
+    city: notice.facility.city,
+    state: notice.facility.state,
+    postalCode: notice.facility.postalCode,
+  })
+  if (!from.ok) {
+    return {
+      ok: false,
+      reason: `This facility has no complete return address (missing its ${from.missing.join(', ')}), and certified mail needs one. Fix it in facility settings.`,
+    }
+  }
+
+  // The stored bytes, so what goes in the envelope is what `documentHash`
+  // covers. Rendering again here would let the mailed letter and the hashed one
+  // drift the moment a template changed.
+  const document = await prisma.document.findUnique({
+    where: { id: notice.documentId },
+    select: { content: true },
+  })
+  if (!document?.content) {
+    return {
+      ok: false,
+      reason: 'The stored notice document has no content to post. This is a defect — record it and do not send by hand until somebody has looked.',
+    }
+  }
+
+  const sent = await sendCertifiedLetter(
+    config.config,
+    // The notice id, so a retry after a timeout returns the original letter
+    // rather than posting a second copy.
+    notice.id,
+    letterRequest({
+      noticeId: notice.id,
+      noticeLabel: noticeTypeLabel(notice.type),
+      to: to.address,
+      from: from.address,
+      html: document.content,
+    }),
+  )
+  if (!sent.ok) return { ok: false, reason: sent.reason }
+
+  const recorded = await recordNoticeDelivery(actor, noticeId, {
+    method: 'certified_mail',
+    // Service by certified mail is complete on MAILING, not on receipt — a
+    // refused or unclaimed letter does not invalidate it. So the date recorded
+    // is today, which is when it was handed over, and the expected delivery
+    // date rides along in the proof as information rather than as the date of
+    // service.
+    deliveredAt: new Date(),
+    proof: { ...sent.proof, provider: 'lob' },
+  })
+  if (!recorded.ok) {
+    // Posted, not recorded. The tracking number goes on screen rather than into
+    // a log nobody reads, because it is now the only evidence that this letter
+    // exists.
+    return {
+      ok: false,
+      reason: `The letter was accepted by the mail provider with tracking number ${sent.proof.tracking_number}, but recording it here failed: ${recorded.reason} Record this delivery by hand using that tracking number.`,
+    }
+  }
+
+  return { ok: true, trackingNumber: sent.proof.tracking_number }
 }
 
 export type NoticeRow = {
