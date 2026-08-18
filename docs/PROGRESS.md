@@ -4637,7 +4637,7 @@ Full e2e against a production build: **1,059 passed, 5 skipped, 0 failed, 0 flak
 
 ## B-130 — The lien-notice path had no e2e, because of one missing foreign key
 
-`PENDING`
+`f8c05b2`
 
 **Taken ahead of B-085, which has no buildable content.** B-085's gate driver needs a partner agreement and PRD 03 OQ-5 says the vendor choice "requires sales conversations; not answerable from public docs"; its kiosk half is settled by **D-3** — Phase 3, default no, "an evaluation item only". B-129 is blocked the same way. So the queue was three blocked rows deep, and the owner chose this finding instead.
 
