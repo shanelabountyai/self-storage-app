@@ -4562,7 +4562,7 @@ Full e2e against a production build: **1,023 passed, 5 skipped, 0 failed, 0 flak
 
 ## B-084 part 3 of 4 — Scheduled report emails, and the first email that had to be accessible
 
-`PENDING`
+`325603a`
 
 **Built.** `ReportSubscription` per facility — a report, a cadence and a recipient list — sent by a `reports.email` job at **6am facility-local**. The hour is not arbitrary and the screen says why: it lands after the overnight billing and delinquency sweeps, so an operator reading it at 8am is reading figures that already include last night's invoices and late fees. One job for every cadence rather than three, because `runJob` already dedupes per facility per business date and each subscription decides for itself whether today is its day — so a weekly and a monthly on one site cannot race, and there is one place to look when an email did not arrive.
 
