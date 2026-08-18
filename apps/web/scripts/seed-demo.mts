@@ -4,6 +4,7 @@ import zipcodes from 'zipcodes'
 import { prisma } from '@storage/db'
 import { CLOSED_ALL_WEEK, type WeeklySchedule } from '@storage/core/facility-settings'
 import { recomputeUnitStatus } from '@/lib/admin/units'
+import { exampleNoticeTemplate } from '@/lib/admin/notice-templates'
 import { setPassword } from '@/lib/auth/accounts'
 import { encryptTotpSecret } from '@/lib/auth/totp-secret'
 import {
@@ -140,6 +141,11 @@ async function teardown() {
   await prisma.checkoutSession.deleteMany({ where })
   await prisma.reservation.deleteMany({ where })
   await prisma.notice.deleteMany({ where })
+  // B-130. Cascades with the facility anyway, but deleted explicitly and BEFORE
+  // it so a re-run cannot leave version 2 of a template behind version 1 — the
+  // seed's contract is that re-running reproduces a known state, not an
+  // accumulating one.
+  await prisma.noticeTemplate.deleteMany({ where })
   await prisma.lease.deleteMany({ where })
   await prisma.unit.deleteMany({ where })
   await prisma.unitTypeRate.deleteMany({ where })
@@ -687,18 +693,7 @@ async function seedLifecycleStates(seeded: SeededFacility, startIndex: number, i
     // The only ledger write in this whole seed — a real unpaid charge so the
     // portal dashboard's past-due banner and suspended gate-code panel
     // (B-034) have a genuine signal to render instead of an empty $0.
-    const owedCents = delinquentSlot.rate + delinquentLease.protectionCents
-    await prisma.ledgerEntry.create({
-      data: {
-        facilityId: facility.id,
-        leaseId: delinquentLease.id,
-        type: 'charge',
-        amountCents: owedCents,
-        description: 'Monthly rent + protection plan',
-        occurredAt: daysAgo(35),
-      },
-    })
-
+    //
     // B-114. The INVOICE behind that charge, unpaid and overdue.
     //
     // Without it the seed had a tenant who owed money and was not late: every
@@ -709,8 +704,20 @@ async function seedLifecycleStates(seeded: SeededFacility, startIndex: number, i
     // and the one lifecycle state the seed calls `delinquent` demonstrated
     // owing rather than delinquency.
     //
-    // Dated to match the ledger charge, so the two tell the same story.
-    await prisma.invoice.create({
+    // **B-130: the invoice is created FIRST and the ledger charge carries its
+    // `invoiceId`, which it did not until 2026-08-18.** B-114 added the invoice
+    // beside an existing ledger write and never linked the two, so `reconcile`
+    // counted the same 16,100 twice — once as an invoice outstanding and once
+    // as an uninvoiced charge — and reported the lease as not reconciling by
+    // exactly the amount owed. That is the check working: `generateInvoices`
+    // links every charge it raises, and an unlinked one genuinely is a charge
+    // no invoice accounts for. The consequence was that **no demo lease could
+    // generate a lien notice at all** (0 of 14, measured), because US-27
+    // refuses to state a claim from sources that disagree — so B-061's notice
+    // generation, its service, and B-083's certified-mail send had no e2e path
+    // between them. Dated to match, so the two tell the same story.
+    const owedCents = delinquentSlot.rate + delinquentLease.protectionCents
+    const delinquentInvoice = await prisma.invoice.create({
       data: {
         facilityId: facility.id,
         leaseId: delinquentLease.id,
@@ -724,6 +731,45 @@ async function seedLifecycleStates(seeded: SeededFacility, startIndex: number, i
         status: 'open',
       },
     })
+    await prisma.ledgerEntry.create({
+      data: {
+        facilityId: facility.id,
+        leaseId: delinquentLease.id,
+        type: 'charge',
+        amountCents: owedCents,
+        description: 'Monthly rent + protection plan',
+        occurredAt: daysAgo(35),
+        invoiceId: delinquentInvoice.id,
+      },
+    })
+
+    // B-130. Notice templates, so the delinquent lease can actually generate
+    // one.
+    //
+    // Written directly rather than through `saveNoticeTemplate`, which records
+    // an audit entry — this script's own contract is that it writes none.
+    //
+    // Seeded for the DEMO facility only, and that distinction is B-061's: a
+    // real facility with no template generates nothing, deliberately, so that
+    // nobody mails the unedited example text to a tenant. Demo data exists to
+    // demonstrate the flow, and the example body carries the draft-only
+    // disclaimer in its own text.
+    // BOTH types, not just the lien one. The pre-lien notice is the FIRST step
+    // of the arc this demo exists to show, and a facility that can only produce
+    // the second one demonstrates the end of a process without its beginning.
+    for (const type of ['pre_lien', 'lien'] as const) {
+      const example = exampleNoticeTemplate(type)
+      await prisma.noticeTemplate.create({
+        data: {
+          facilityId: facility.id,
+          type,
+          version: 1,
+          active: true,
+          title: example.title,
+          body: example.body,
+        },
+      })
+    }
   }
   note('delinquent')
 

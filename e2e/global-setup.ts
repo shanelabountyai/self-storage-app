@@ -53,6 +53,34 @@ export default async function globalSetup(): Promise<void> {
         console.info(`[e2e setup] released ${holds} stale reservation hold(s) from a previous run`)
       }
     }
+    // B-130. Lien notices any previous run generated, on demo facilities only.
+    //
+    // The third genuinely-disposable state this setup resets, and it qualifies
+    // on the same footing as the two above: **nothing in the suite reads a
+    // pre-existing notice**, and the seed itself deletes them on every re-run,
+    // so a notice in the database when SETUP runs is by definition one a
+    // previous run generated.
+    //
+    // It is needed because generating a notice is NOT idempotent — each one is
+    // a new row, deliberately, since a notice is a served document and the
+    // product must never rewrite one. Without this the notices spec would find
+    // three notices on the third run and assert against a list it did not
+    // build. Documents go first: `Notice.document` is `onDelete: Restrict`, so
+    // the notice has to release its hash before the document can go.
+    const demoFacilities = await prisma.facility.findMany({
+      where: { slug: { startsWith: 'demo-' } },
+      select: { id: true },
+    })
+    const demoIds = demoFacilities.map((facility) => facility.id)
+    if (demoIds.length > 0) {
+      const { count } = await prisma.notice.deleteMany({ where: { facilityId: { in: demoIds } } })
+      await prisma.document.deleteMany({
+        where: { facilityId: { in: demoIds }, subjectType: 'Notice' },
+      })
+      if (count > 0) {
+        console.info(`[e2e setup] cleared ${count} lien notice(s) from a previous run`)
+      }
+    }
   } finally {
     await prisma.$disconnect()
   }

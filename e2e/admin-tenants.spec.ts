@@ -274,23 +274,48 @@ test.describe('lien notices for a lease', () => {
     await expect(main.getByRole('button', { name: 'Send by certified mail' })).toHaveCount(0)
   })
 
-  test('puts a generation refusal on the screen instead of failing', async ({ page }) => {
-    // The reachable contract, and it is narrower than it looks — see B-130.
+  test('offers generation, now that a demo lease can actually reconcile (B-130)', async ({
+    page,
+  }) => {
+    // This assertion is the inverse of the one it replaces, and the change IS
+    // B-130. Until 2026-08-18 no demo lease could generate a lien notice — 0 of
+    // 14, measured with the product's own `previewNotice` — because the seed
+    // posted the delinquent lease's ledger charge with no `invoiceId`, so
+    // `reconcile` counted the same amount twice and US-27 correctly refused to
+    // state a claim from sources that disagreed. B-061's generation, its
+    // service, and B-083's certified-mail send therefore had no e2e path at all.
+    await expect(page.getByRole('button', { name: 'Generate and store' }).first()).toBeVisible()
+    await expect(page.getByRole('main')).not.toContainText('Cannot generate this notice')
+  })
+
+  test('generates a lien notice, stores its hash, and records service (B-130)', async ({ page }) => {
+    // The path that had never been exercised in a browser, on the most
+    // legally-loaded screen in the product.
     //
-    // NO demo lease can generate a lien notice: measured 2026-08-18 with the
-    // product's own `previewNotice`, 0 of 14. Twelve owe nothing and one is in
-    // credit, which are correct refusals; the fourteenth is the DELINQUENT
-    // lease this screen belongs to, and it refuses with
-    // `ledger_does_not_reconcile`. So B-061's generation path — and therefore
-    // B-083's send button, which only appears on a generated notice — cannot be
-    // reached from demo data at all. B-130 owns fixing the seed.
-    //
-    // What is assertable today is that the refusal REACHES the screen with its
-    // reason, rather than rendering an error boundary or a missing button with
-    // no explanation. That is worth pinning on its own: it is the state every
-    // operator opening this screen against a non-reconciling lease will see.
+    // Safe against shared demo data by B-120's third discipline: `global-setup`
+    // deletes demo notices at the start of every run, which qualifies because
+    // nothing in the suite reads a pre-existing notice and the seed itself
+    // deletes them on re-run. It has to, because generating is deliberately NOT
+    // idempotent — a notice is a served document, so the product creates a new
+    // row rather than rewriting one.
     const main = page.getByRole('main')
-    await expect(main).toContainText('Nothing generated for this lease yet')
-    await expect(main.getByRole('alert').first()).toContainText('Cannot generate this notice')
+
+    await main.getByRole('button', { name: 'Generate and store' }).first().click()
+
+    // Stored and hashed, per US-16's evidence chain — not merely displayed.
+    const notice = main.getByRole('listitem').filter({ hasText: /Lien notice|Pre-lien notice/ }).first()
+    await expect(notice).toBeVisible()
+    await expect(notice).toContainText('Not yet served')
+    await expect(notice.getByText(/^[0-9a-f]{64}$/)).toBeVisible()
+
+    // Serve it by certified mail, by hand — the flow an unconfigured install
+    // uses, and the one B-083's send button sits beside.
+    await notice.getByRole('combobox', { name: 'Method' }).selectOption('certified_mail')
+    await notice.getByRole('textbox', { name: 'Tracking number' }).fill('9407-B130-TEST')
+    await notice.getByRole('button', { name: 'Record delivery' }).click()
+
+    const served = main.getByRole('listitem').filter({ hasText: /Lien notice|Pre-lien notice/ }).first()
+    await expect(served).toContainText('9407-B130-TEST')
+    await expect(served).not.toContainText('Not yet served')
   })
 })
