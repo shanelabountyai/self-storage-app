@@ -370,6 +370,7 @@ Design informed by the commonly described US lien-sale process: default → deni
 - **AC (rate variance is a report, not a column):** in-place rate vs current street rate per occupied unit, sorted by gap, with months since the last change (US-11). That report is the worklist the Phase-2 rate-increase workflow runs from.
 
 **US-40 [P2]** Scheduled report emails; management summary pack (monthly PDF); accounting export (QuickBooks-compatible journal CSV).
+  - *Split into four parts, 2026-08-18; **part 1 (monthly close + frozen snapshots) built**.* `AccountingPeriod` per facility per month, filed at `/admin/reports/close` under a new `accounting:close` permission held at regional and above. **D-65 settles what "frozen" means and it is the whole of §8's close process:** unit occupancy reads `Unit.status`, of which this system keeps no history, and `delinquencyReport` takes no date parameter — both answer "as of now" whatever range they are given, so those figures are observable only at the time and the filed copy is the only record there will ever be. They are frozen and never drift-checked. Billed, collected, discounts, write-offs, refunds, unapplied, economic occupancy and move counts come from dated rows, so they are frozen **and** re-run on view with any difference reported as drift — a voided invoice, a backdated adjustment, a corrected move-out. Month bounds use the same `monthBounds` a tenant statement uses and the resolved window is stored, so a later timezone correction cannot re-slice a filed month; a month cannot be closed before it has ended in facility-local time; reopening needs a reason and moves the withdrawn figures to the audit log. **D-64: the management pack is semantic HTML, not the monthly PDF named above** — B-023 found that no JavaScript PDF library in this runtime emits *tagged* PDFs, and an untagged one is a screen-reader dead end. Parts 2–4 outstanding: QuickBooks journal export (reads the frozen period), scheduled report emails (the first to have to meet PRD 05 FR-9a), management summary pack. **Also found and filed as B-131:** the occupancy report's date range does not apply to its own occupancy figure — the close freezes around that rather than fixing it.
 
 ---
 
@@ -468,6 +469,8 @@ Contract details (schemas, event names) live in the master PRD's shared architec
 
 ## 8. Reporting (summary)
 See US-39/40. Principles: one shared metrics-definition layer; every report exportable to CSV; roll-up = sum of facility reports with no double counting; frozen month-end snapshots (P2 close process). Occupancy and economic occupancy are the two headline KPIs on every dashboard.
+
+**On "frozen" (B-084 part 1, D-65):** a snapshot freezes two different kinds of figure and they need opposite treatment. Some are **only knowable at the time** — unit occupancy and AR aging, because nothing records what a unit's status was and the aging report takes no date — so the filed copy is the sole record and comparing it to a later run is meaningless. The rest are **derived from dated rows** and can be reproduced, so the filed copy is what was reported and a later disagreement means the past was edited. The close reports drift over the second kind only.
 
 ---
 

@@ -332,3 +332,41 @@ test.describe('city page copy', () => {
     await expect(page).toHaveURL('/admin/settings/marketing/cities')
   })
 })
+
+// B-084 part 1 / PRD 02 §8, US-40. The monthly close.
+//
+// Read-only. Closing a demo month would freeze figures the revenue, occupancy
+// and delinquency specs read live, and a closed month is not something a
+// re-seed clears — `accounting_period` survives `seed-demo.mts`, so a sweep
+// would leave the next one testing a different screen. The close, reopen,
+// re-close and drift paths are covered against disposable fixtures in
+// tests/accounting-close-db.test.ts.
+
+test.describe('monthly close', () => {
+  test.beforeEach(async ({ page }) => {
+    await signInAsDemoOwner(page)
+    await page.goto('/admin/reports/close')
+  })
+
+  test('lists months newest first and will not offer to close the current one', async ({ page }) => {
+    const main = page.getByRole('main')
+    await expect(page.getByRole('heading', { level: 1 })).toContainText('Monthly close')
+    // The month in progress is present but explicitly not closable — freezing
+    // a part-month under a name claiming all of it is the mistake the guard
+    // exists to prevent, and the screen says so rather than hiding the row.
+    await expect(main).toContainText('this month has not finished yet')
+  })
+
+  test('explains why two of the figures can never be recovered', async ({ page }) => {
+    // The justification for the whole feature, on the screen rather than only
+    // in a commit message: nothing records what a unit's status was, and the
+    // aging report takes no date.
+    await expect(page.getByRole('main')).toContainText('cannot be recovered')
+  })
+
+  test('the reports index links to it', async ({ page }) => {
+    await page.goto('/admin/reports')
+    await page.getByRole('link', { name: /Monthly close — file a month/ }).click()
+    await expect(page).toHaveURL('/admin/reports/close')
+  })
+})

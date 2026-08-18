@@ -206,6 +206,12 @@ export default async function ReportsPage({
           Indexation — what Google has indexed
         </Link>
         <Link
+          href="/admin/reports/close"
+          className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
+        >
+          Monthly close — file a month so its figures stop moving
+        </Link>
+        <Link
           href="/admin/reports/duplicate-content"
           className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
         >

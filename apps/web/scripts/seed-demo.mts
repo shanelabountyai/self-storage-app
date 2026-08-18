@@ -150,6 +150,11 @@ async function teardown() {
   await prisma.staffFacilityAssignment.deleteMany({ where: { facilityId: { in: facilityIds } } })
   await prisma.domainEvent.deleteMany({ where })
   await prisma.jobRun.deleteMany({ where })
+  // B-084 part 1. `AccountingPeriod.facility` is onDelete: Restrict, so a demo
+  // month that somebody closed would make the NEXT re-seed fail on a foreign
+  // key rather than reset — the same footgun the promotion cleanup had until
+  // B-128, found this time before it fired rather than after.
+  await prisma.accountingPeriod.deleteMany({ where })
 
   // B-122. Promotions carry no facilityId column — `facilityIds` is an array —
   // so they cannot ride on `where` like everything above. Marked by the same

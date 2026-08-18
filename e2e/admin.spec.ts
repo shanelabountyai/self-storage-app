@@ -116,6 +116,8 @@ test.describe('signed in as the demo owner', () => {
     '/admin/reports/funnel',
     // B-082 part 4. Same contract as the public list: a page not here is a page
     // nobody checks.
+    // B-084 part 1. A page not on this list is a page nobody scans.
+    '/admin/reports/close',
     '/admin/reports/promotions',
     '/admin/reports/indexation',
     '/admin/reports/duplicate-content',

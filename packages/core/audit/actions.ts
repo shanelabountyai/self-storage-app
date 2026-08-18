@@ -111,6 +111,16 @@ export const AUDIT_ACTIONS = [
   /// has no `facilityId` to stamp and would otherwise be an unattributable
   /// facility-settings entry.
   { action: 'city.copy_changed', label: 'City page copy changed', requiresReason: false },
+  /// B-084 part 1. Filing a month's figures. The `after` payload carries the
+  /// whole snapshot, which makes the audit log — not the period row — the
+  /// permanent record of every set of figures ever filed for a month.
+  { action: 'period.closed', label: 'Accounting period closed', requiresReason: false },
+  /// Withdrawing figures that were filed. `requiresReason` is true and that is
+  /// the point: a reopened month means somebody is going to restate numbers
+  /// that have already been reported, and "why" is the first question asked
+  /// about it afterwards. The `before` payload carries the snapshot being
+  /// withdrawn, which is the only place it survives.
+  { action: 'period.reopened', label: 'Accounting period reopened', requiresReason: true },
   /// CN-16. A published template changes what every future tenant is told, and
   /// the version it records is what makes an old `Message` reproducible.
   { action: 'template.published', label: 'Message template published', requiresReason: false },

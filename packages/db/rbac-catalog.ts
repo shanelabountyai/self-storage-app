@@ -59,6 +59,11 @@ export const PERMISSIONS = [
   // regional manager can push a default down to their own sites and no others.
   { key: 'org:defaults', name: 'Edit org-level defaults', category: 'admin', description: 'Define the portfolio-wide fee schedule, late-fee ladder and delinquency timeline, and push them to facilities.' },
   { key: 'audit:view', name: 'View the audit log', category: 'admin', description: 'Read the append-only audit trail.' },
+  // B-084 part 1 / PRD 02 §8. Filing a month's books. Scoped per facility —
+  // each site keeps its own books on its own timezone — but deliberately NOT
+  // granted to `manager`: closing a period fixes the figures the site is
+  // measured on, which is the same reason `auctions:approve` stops at regional.
+  { key: 'accounting:close', name: 'Close and reopen accounting periods', category: 'admin', description: 'File a month\u2019s figures so they stop moving, and reopen a filed month.' },
   // B-128 / PRD 04 US-4. A city page spans every facility in the city, so
   // there is no facility to scope the edit to — `can()` is asked for this with
   // a null facilityId, which only an all-facilities assignment satisfies, the
@@ -198,6 +203,7 @@ export const ROLES: readonly RoleSeed[] = [
       'facility:settings',
       'org:defaults',
       'marketing:city_copy',
+      'accounting:close',
       'audit:view',
       'reports:operational',
       'reports:financial',
