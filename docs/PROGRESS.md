@@ -4600,3 +4600,37 @@ Full e2e against a production build: **1,038 passed, 6 skipped, 0 failed, 0 flak
 **The accessibility statement needs no change and was checked:** this part touched no customer-facing page. It is worth noting that the statement's claims are about *pages*, and this item shipped the first accessible *email* — if the product later makes a claim about email accessibility, FR-9a and this renderer are what would back it.
 
 **Left behind:** the recipient list is free text with no link to `StaffUser`, so a person who leaves keeps getting reports until somebody edits the subscription — the fix is picking from staff accounts, and the trigger is the first time that happens. **There is no unsubscribe link in the email itself**, only a link to the settings screen, which is correct for an operational message to staff but would not be for anything a tenant received. **No preview** — an operator cannot see what a report will look like before scheduling it, which is the obvious next convenience. And the four reports are a hardcoded catalog: adding one is a code change, which is honest at four and would not be at twenty.
+
+## B-084 part 4 of 4 — The management pack, and what a number is worth
+
+`PENDING`
+
+**B-084 is complete with this part.**
+
+**Built.** `/admin/reports/pack` — the whole month on one page, organised as the five questions an owner actually asks rather than as the four reports the system happens to have: how full it was, what it earned, what it gave away or lost, what was owed, who came and went. **HTML, not the monthly PDF US-40 names** (D-64).
+
+**Built as an `EmailDocument`, and that is reuse with a reason rather than convenience.** A management pack is a thing an owner both *opens* and is *sent*. Building it as one document means the page and the email cannot say different things about the same month — and part 3's FR-9a renderer then makes the emailed version accessible for free. It is subscribable through part 3's catalog, **monthly only**: a weekly pack would have nothing filed to read and would quietly fall back to live figures, which is the exact confusion the close exists to remove, so that combination is refused with a sentence saying why.
+
+**It reads the FILED figures when the month is closed**, which is the payoff of the four-part ordering the owner chose at the start. A pack cut live changes between the day it is read and the day it is quoted. This one keeps saying what was filed, and a database test proves it: void a May invoice after May is closed, and the pack still quotes the filed $1,000 while telling the reader what no longer matches.
+
+**The provenance sentence leads the page, never trails it**, and has three genuinely different forms — asserted as three, because collapsing them is how a live number gets read as a final one:
+
+- *not closed* — "every figure here was read live and can still change. Close the month to fix them."
+- *closed, clean* — "these are the filed figures, and nothing dated inside the month has changed since."
+- *closed, drifted* — names the figures that no longer match and calls the difference **"a restatement to explain, not an error in this pack"**.
+
+These numbers get quoted in a board meeting. "Can this still change?" is the question that decides whether they should be, so it is answered before the first figure rather than in a footnote.
+
+**Details that are judgement rather than layout.** Promotional discounts are separated from referral rewards — the same reasoning as D-66 and the revenue report, one being a price decision and the other acquisition cost. Tax is labelled *"held for the state, not income"*, because a summary that folds it into revenue overstates what the business earned. Refunds are labelled *"already deducted from collected"*, because the one thing a reader will do with that number otherwise is subtract it again. Discounts and write-offs sit in one section, because a discount figure read without the write-offs beside it is half the story about why collected is below billed. The over-90 bucket carries the words **"needs attention"** rather than a colour (FR-9a, and it is the row somebody has to act on). Occupancy says it was measured at a moment and not averaged over the month (D-65), which is what an owner comparing two months needs to know.
+
+**Finished the conversion part 1 admitted to.** `figuresFor` is now facility-explicit and takes no actor, so the close, the drift check and the pack all read one facility instead of computing every facility the actor can see and throwing the rest away. Part 1's own comment recorded that waste; part 3 built the per-facility variants; this is where the comment stops being true. The pack itself follows D-67's split — an actor-checked entry point for the screen, a facility-explicit builder for the job that was authorized at subscribe time.
+
+**Reading a pack is gated on `reports:financial`, not `accounting:close`.** Reading a summary is not the same authority as filing one, and a bookkeeper who may see revenue should be able to read the pack without being able to close the books. Asserted both ways in one test.
+
+**Test verification:** unit suite **3,223 passing, 8 skipped of 3,231** — reconciled as +21 on part 3's 3,210: 13 pure pack tests, 4 database tests on the close suite, 2 on the subscription suite, and 2 the tree generates for the new admin page. One test bug of my own: I asserted `$700.00` for a figure that is `$70.00`, which passed nothing and failed loudly — corrected to a figure the pack actually contains. Typecheck clean, lint 0 errors, `prisma migrate diff` reports no drift (this part adds no column).
+
+Full e2e against a production build: **1,059 passed, 5 skipped, 0 failed, 0 flaky of 1,064** — reconciled as +20 on part 3's 1,044: six new pack specs across two device projects (12), and one new admin route which the `ADMIN_ROUTES` loop turns into four checks each (8). The unit suite was run twice, identical both times.
+
+**The accessibility statement needs no change and was checked:** this part touched no customer-facing page.
+
+**Left behind, and worth naming now that B-084 is done:** the pack is **per facility** — there is no portfolio roll-up, because a month is closed per facility on its own timezone and a combined pack would have to explain which sites had filed and which had not; that is a real feature and it is not this one. **Nothing reconciles the filed figures against the ledger** — the journal balances internally (part 2) and the pack quotes what was filed, but whether the receivable movement agrees with the sum of `LedgerEntry` rows for the period is still a check nobody runs; it was noted as part 4's job in part 2 and is honestly deferred rather than quietly dropped. **No printing stylesheet**, so "print this page" produces the screen with its navigation. And the month picker shows twelve months with no year selector, the same fixed window the close screen carries.

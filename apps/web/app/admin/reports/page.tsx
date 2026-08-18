@@ -206,6 +206,12 @@ export default async function ReportsPage({
           Indexation — what Google has indexed
         </Link>
         <Link
+          href="/admin/reports/pack"
+          className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
+        >
+          Management pack — the whole month on one page
+        </Link>
+        <Link
           href="/admin/reports/subscriptions"
           className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
         >

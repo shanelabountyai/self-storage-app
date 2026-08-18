@@ -17,6 +17,7 @@ import type { Actor } from '@/lib/rbac/actor'
 import { agingForFacility, movesForFacility, occupancyForFacility } from '@/lib/admin/reports'
 import { billedTotal, collectedTotal, facilityRevenue } from '@/lib/admin/revenue-report'
 import { periodLabel } from '@/lib/admin/accounting-close'
+import { buildManagementPack } from '@/lib/admin/management-pack'
 import { formatCents } from '@/lib/format'
 import { sendDirectEmail } from '@/lib/comms/service'
 import { siteOrigin } from '@/lib/marketing/origin'
@@ -53,7 +54,22 @@ export const REPORT_CATALOG = [
     blurb: 'Counts and the net for the period.',
     path: '/admin/reports',
   },
+  {
+    // B-084 part 4. Monthly only — see `MONTHLY_ONLY` below.
+    key: 'pack',
+    label: 'Management pack',
+    blurb: 'The whole month on one page: how full, what it earned, what it gave away, what was owed.',
+    path: '/admin/reports/pack',
+  },
 ] as const
+
+/// Reports that only make sense for a whole calendar month.
+///
+/// The management pack reads a CLOSED month's filed figures, and a period is
+/// closed per calendar month — a weekly pack would have nothing filed to read
+/// and would silently fall back to live numbers, which is the exact confusion
+/// the close exists to remove.
+const MONTHLY_ONLY: readonly string[] = ['pack']
 
 export type ReportKey = (typeof REPORT_CATALOG)[number]['key']
 
@@ -156,6 +172,15 @@ async function sectionsFor(
         },
       },
     ]
+  }
+
+  if (key === 'pack') {
+    // Built by the pack module, which reads the FILED figures when the month is
+    // closed — so the emailed pack and the pack on screen are the same document
+    // rather than two renderings that can drift apart.
+    const [year, month] = period.key.split('-').map(Number)
+    const pack = await buildManagementPack(facilityId, year, month)
+    return pack.document.sections
   }
 
   const row = await movesForFacility(facilityId, facilityName, period.start, period.end)
@@ -365,6 +390,14 @@ export async function addSubscription(
   }
   if (!['daily', 'weekly', 'monthly'].includes(input.cadence)) {
     return { ok: false, field: 'cadence', problem: 'Pick how often it should go out.' }
+  }
+  if (MONTHLY_ONLY.includes(input.reportKey) && input.cadence !== 'monthly') {
+    return {
+      ok: false,
+      field: 'cadence',
+      problem:
+        'The management pack reads a closed month, and a month is closed per calendar month — so it can only go out monthly. A weekly one would have nothing filed to read and would quietly send live figures instead.',
+    }
   }
   const recipients = parseRecipients(input.recipients)
   if (!recipients.ok) return { ok: false, field: 'recipients', problem: recipients.problem }

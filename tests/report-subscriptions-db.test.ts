@@ -224,6 +224,40 @@ describeDb('scheduled report emails', () => {
     })
   })
 
+  describe('the management pack as a subscription', () => {
+    it('refuses a weekly pack, because a month is what gets closed', async () => {
+      // A weekly pack would have nothing filed to read and would quietly send
+      // live figures instead — the exact confusion the close exists to remove.
+      const result = await addSubscription(actor(), facilityId, {
+        reportKey: 'pack',
+        cadence: 'weekly',
+        recipients: 'owner@example.com',
+      })
+      expect(result.ok).toBe(false)
+      expect(result.ok === false && result.field).toBe('cadence')
+      expect(result.ok === false && result.problem).toContain('closed month')
+    })
+
+    it('accepts a monthly pack and emails the same document the page shows', async () => {
+      expect(
+        (await addSubscription(actor(), facilityId, {
+          reportKey: 'pack',
+          cadence: 'monthly',
+          recipients: 'owner@example.com',
+        })).ok,
+      ).toBe(true)
+
+      const summary = await sendDueReports(facility(), new Date('2026-09-01T12:00:00Z'))
+      expect(summary.sent).toBe(1)
+
+      const message = await prisma.message.findFirstOrThrow({ where: { facilityId } })
+      expect(message.subjectSnapshot).toContain('Management pack')
+      // The provenance line rides into the email, so a live figure is not
+      // quoted from an inbox as though it were filed.
+      expect(message.bodySnapshot).toContain('has not been closed')
+    })
+  })
+
   describe('the job that actually sends them', () => {
     it('is registered in SCHEDULED_JOBS, at the hour the screen promises', async () => {
       // This test exists because the registration was MISSED once. Every other

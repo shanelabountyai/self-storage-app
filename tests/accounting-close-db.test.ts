@@ -14,6 +14,7 @@ import {
   saveChartOfAccounts,
   PERIOD_WINDOW_MONTHS,
 } from '../apps/web/lib/admin/accounting-close'
+import { managementPack } from '../apps/web/lib/admin/management-pack'
 
 // PRD 02 §8, US-40 (B-084 part 1). The close, against real rows.
 
@@ -428,6 +429,64 @@ describeDb('the monthly close', () => {
       // zero as a value, and a line carrying both reads as an import error.
       expect(debit === '' || credit === '').toBe(true)
     }
+  })
+
+  // ── The management pack (part 4) ──────────────────────────────────────
+
+  it('reads LIVE figures for an open month, and says so', async () => {
+    await postMayActivity(100_000, 90_000)
+    const pack = await managementPack(actor(), facilityId, YEAR, MONTH)
+    expect(pack.filed).toBe(false)
+    expect(pack.document.intro).toContain('has not been closed')
+    expect(pack.rendered.text).toContain('$1,000.00')
+  })
+
+  it('reads the FILED figures once the month is closed', async () => {
+    await postMayActivity(100_000, 90_000)
+    await closePeriod(actor(), facilityId, YEAR, MONTH)
+
+    const pack = await managementPack(actor(), facilityId, YEAR, MONTH)
+    expect(pack.filed).toBe(true)
+    expect(pack.driftCount).toBe(0)
+    expect(pack.document.intro).toContain('nothing dated inside the month has changed')
+  })
+
+  it('keeps quoting the filed figures after the past is edited, and flags the difference', async () => {
+    // The payoff of the whole four-part ordering: a pack cut live would change
+    // between the day it is read and the day it is quoted. This one does not —
+    // it keeps saying what was filed and names what no longer matches.
+    await postMayActivity(100_000, 90_000)
+    await closePeriod(actor(), facilityId, YEAR, MONTH)
+    await prisma.invoice.updateMany({ where: { leaseId }, data: { status: 'void' } })
+
+    const pack = await managementPack(actor(), facilityId, YEAR, MONTH)
+    expect(pack.filed).toBe(true)
+    expect(pack.driftCount).toBeGreaterThan(0)
+    expect(pack.document.intro).toContain('restatement to explain')
+    // Still the filed number, not today's.
+    expect(pack.rendered.text).toContain('$1,000.00')
+  })
+
+  it('is readable by somebody who may see money but may not close the books', async () => {
+    // Reading a summary is not the same authority as filing one.
+    const bookkeeper: Actor = {
+      kind: 'staff',
+      staffUserId: staffId,
+      assignments: [
+        {
+          facilityId,
+          roleKey: 'bookkeeper',
+          rank: 10,
+          permissions: new Set<PermissionKey>(['reports:financial']),
+          limits: { maxFeeWaiverCents: 0, maxRefundCents: 0, maxCreditCents: 0 },
+        },
+      ],
+    }
+    const pack = await managementPack(bookkeeper, facilityId, YEAR, MONTH)
+    expect(pack.document.title).toContain('Management pack')
+    await expect(closePeriod(bookkeeper, facilityId, YEAR, MONTH)).rejects.toBeInstanceOf(
+      ForbiddenError,
+    )
   })
 
   it('refuses a manager — closing is held above facility settings', async () => {

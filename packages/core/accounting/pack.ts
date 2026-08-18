@@ -1,0 +1,155 @@
+import type { EmailDocument, EmailSection } from '../comms/report-email.ts'
+import type { PeriodDerivedFigures, PointInTimeFigures } from './close.ts'
+
+// PRD 02 US-40 (B-084 part 4). The monthly management pack.
+//
+// **HTML, not the PDF US-40 names** — D-64. No JavaScript PDF library in this
+// runtime emits *tagged* PDFs, and an untagged one is a screen-reader dead end.
+//
+// Built as an `EmailDocument`, the structure part 3 defined, for a reason that
+// is not laziness: a management pack is a thing an owner both OPENS and is
+// SENT, and building it as one document means the page and the email cannot
+// say different things about the same month. The FR-9a renderer then makes the
+// emailed version accessible for free.
+//
+// Pure. What varies — whether the figures are filed or live — arrives as a
+// flag, so both cases are testable without a database.
+
+export type PackInput = {
+  facilityName: string
+  periodLabel: string
+  pointInTime: PointInTimeFigures
+  periodDerived: PeriodDerivedFigures
+  /// Whether these came from a filed close (part 1) or were read live.
+  filed: boolean
+  /// When a filed month's figures no longer match what the same query returns
+  /// today. Empty is not the same as absent — see `provenance`.
+  driftLabels: string[]
+  links: { label: string; url: string }[]
+}
+
+/// The sentence that says how much the numbers below can be trusted.
+///
+/// First, not last, and never omitted. A management pack's figures get quoted
+/// in a board meeting, and "can this change?" is the question that determines
+/// whether they should be. Three genuinely different states, three different
+/// sentences — collapsing them into "monthly figures" is what makes a live
+/// number get read as a final one.
+export function provenance(input: Pick<PackInput, 'filed' | 'driftLabels' | 'periodLabel'>): string {
+  if (!input.filed) {
+    return `${input.periodLabel} has not been closed, so every figure here was read live and can still change. Close the month to fix them.`
+  }
+  if (input.driftLabels.length === 0) {
+    return `${input.periodLabel} is closed. These are the filed figures, and nothing dated inside the month has changed since.`
+  }
+  return (
+    `${input.periodLabel} is closed and these are the filed figures — but ${input.driftLabels.length} of them ` +
+    `(${input.driftLabels.join(', ')}) no longer match what the same query returns today. ` +
+    'Something dated inside the month has changed since it was filed. Treat the difference as a restatement to explain, not as an error in this pack.'
+  )
+}
+
+function percent(ratio: number): string {
+  return `${(ratio * 100).toFixed(1)}%`
+}
+
+/// Assembles the pack.
+///
+/// `money` is injected rather than imported so this module stays free of the
+/// app's formatting layer and the tests can read plain numbers.
+export function buildPack(input: PackInput, money: (cents: number) => string): EmailDocument {
+  const point = input.pointInTime
+  const derived = input.periodDerived
+
+  const sections: EmailSection[] = [
+    {
+      heading: 'How full it was',
+      // Labelled as at-the-time rather than for-the-period, because that is
+      // what it is (D-65) and a reader comparing two months needs to know.
+      paragraphs: ['Measured at the moment the month was filed, not averaged over it.'],
+      table: {
+        caption: `Occupancy at the end of ${input.periodLabel}`,
+        columns: ['Measure', 'Value'],
+        rows: [
+          ['Unit occupancy', percent(point.unitOccupancyRatio)],
+          ['Occupied of rentable', `${point.occupiedUnits} of ${point.rentableUnits}`],
+          ['Square-foot occupancy', percent(point.squareFootRatio)],
+          ['Economic occupancy', percent(derived.economicOccupancyRatio)],
+          ['Gross potential at street', money(derived.grossPotentialCents)],
+        ],
+      },
+    },
+    {
+      heading: 'What it earned',
+      table: {
+        caption: `Billed and collected in ${input.periodLabel}`,
+        columns: ['Measure', 'Amount'],
+        rows: [
+          ['Billed', money(derived.billedCents)],
+          ['Collected', money(derived.collectedCents)],
+          ['Rent billed', money(derived.billedByCategory.rent)],
+          ['Fees billed', money(derived.billedByCategory.fee)],
+          ['Protection billed', money(derived.billedByCategory.protection)],
+          ['Tax billed — held for the state, not income', money(derived.billedByCategory.tax)],
+        ],
+      },
+    },
+    {
+      heading: 'What it gave away or lost',
+      // Together in one section on purpose: an owner reading a discount figure
+      // without the write-offs beside it is reading half the story about why
+      // collected is below billed.
+      table: {
+        caption: `Reductions in ${input.periodLabel}`,
+        columns: ['Measure', 'Amount'],
+        rows: [
+          ['Promotional discounts', money(derived.discountsCents - derived.referralRewardsCents)],
+          ['Referral rewards', money(derived.referralRewardsCents)],
+          ['Written off', money(derived.writeOffsCents)],
+          ['Refunded — already deducted from collected', money(derived.refundsCents)],
+          ['Received but not yet applied', money(derived.unappliedCents)],
+        ],
+      },
+    },
+    {
+      heading: 'What was owed',
+      paragraphs: ['Measured at the moment the month was filed. There is no way to recompute it later.'],
+      table: {
+        caption: 'Outstanding balances by age',
+        columns: ['Age', 'Amount'],
+        rows: [
+          ['Not yet 11 days', money(point.arD0to10Cents)],
+          ['11 to 30 days', money(point.arD11to30Cents)],
+          ['31 to 60 days', money(point.arD31to60Cents)],
+          ['61 to 90 days', money(point.arD61to90Cents)],
+          // The words, never a colour (FR-9a) — and this is the row somebody
+          // has to act on.
+          ['Over 90 days — needs attention', money(point.arOver90Cents)],
+          ['Total owed', money(point.arTotalCents)],
+        ],
+      },
+    },
+    {
+      heading: 'Who came and went',
+      table: {
+        caption: `Moves in ${input.periodLabel}`,
+        columns: ['Measure', 'Count'],
+        rows: [
+          ['Move-ins', String(derived.moveIns)],
+          ['Move-outs', String(derived.moveOuts)],
+          ['Net', String(derived.netMoves)],
+        ],
+      },
+    },
+  ]
+
+  return {
+    title: `Management pack — ${input.facilityName}, ${input.periodLabel}`,
+    intro: provenance(input),
+    sections,
+    links: input.links,
+    footer:
+      'Figures come from the same reporting layer the dashboard reads, so this pack and the screens cannot disagree. ' +
+      'Occupancy and the aging above are taken at a moment and cannot be recomputed for a past month; everything else is derived from dated rows.',
+  }
+}

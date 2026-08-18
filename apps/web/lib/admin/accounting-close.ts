@@ -21,8 +21,8 @@ import { csvCents, toCsv } from '@/lib/admin/csv'
 import { requirePermission, assertFacilityAccess } from '@/lib/rbac/authorize'
 import { toAuditActor } from '@/lib/rbac/audit-actor'
 import type { Actor } from '@/lib/rbac/actor'
-import { delinquencyReport, movesReport, occupancyReport } from '@/lib/admin/reports'
-import { revenueReport, billedTotal, collectedTotal } from '@/lib/admin/revenue-report'
+import { agingForFacility, movesForFacility, occupancyForFacility } from '@/lib/admin/reports'
+import { facilityRevenue, billedTotal, collectedTotal } from '@/lib/admin/revenue-report'
 
 // PRD 02 §8, US-40 (B-084 part 1). Filing a month's books.
 //
@@ -67,26 +67,33 @@ async function facilityFor(actor: Actor, facilityId: string) {
 /// Split into the two halves `packages/core/accounting/close.ts` describes,
 /// because the split decides what drift-checking may compare — not because it
 /// is a tidy way to group fields.
-async function figuresFor(
-  actor: Actor,
+/// Exported for B-084 part 4's management pack, which needs the SAME shape
+/// whether a month has been filed or is still open — a closed month reads its
+/// stored snapshot, an open one computes this. One document builder then serves
+/// both, instead of two that can drift apart.
+///
+/// **Facility-explicit, with no actor** (D-67). Every caller has already
+/// checked permission for this facility, and the alternative was the actor-
+/// scoped reports — which compute every facility the actor can see and throw
+/// all but one away. Part 1 shipped that waste with a comment admitting it;
+/// part 3 built the per-facility variants; this is where the comment stops
+/// being true.
+export async function figuresFor(
   facilityId: string,
+  facilityName: string,
   start: Date,
   end: Date,
 ): Promise<{ pointInTime: PointInTimeFigures; periodDerived: PeriodDerivedFigures }> {
-  const [occupancy, revenue, moves, delinquency] = await Promise.all([
-    occupancyReport(actor, start, end),
-    revenueReport(actor, start, end),
-    movesReport(actor, start, end),
+  const [occ, rev, mov, aging] = await Promise.all([
+    occupancyForFacility(facilityId, facilityName, start, end),
+    facilityRevenue(facilityId, facilityName, start, end),
+    movesForFacility(facilityId, facilityName, start, end),
     // No date parameter, deliberately — it does not take one. This is the
     // figure that can only ever be observed now, which is the whole reason the
     // close exists.
-    delinquencyReport(actor),
+    agingForFacility(facilityId, facilityName),
   ])
-
-  const occ = occupancy.rows.find((row) => row.facilityId === facilityId)
-  const rev = revenue.rows.find((row) => row.facilityId === facilityId)
-  const mov = moves.rows.find((row) => row.facilityId === facilityId)
-  const ar = delinquency.rows.find((row) => row.facilityId === facilityId)?.aging
+  const ar = aging.aging
 
   return {
     pointInTime: {
@@ -151,7 +158,7 @@ export async function closePeriod(
   })
   if (!verdict.allowed) return { ok: false, reason: verdict.reason }
 
-  const figures = await figuresFor(actor, facilityId, bounds.start, bounds.end)
+  const figures = await figuresFor(facilityId, facility.name, bounds.start, bounds.end)
   const snapshot: PeriodSnapshot = {
     version: CLOSE_SNAPSHOT_VERSION,
     takenAt: now.toISOString(),
@@ -331,10 +338,9 @@ export async function driftFor(
   month: number,
 ): Promise<DriftRow[] | null> {
   requirePermission(actor, 'accounting:close', facilityId)
-  // Called for its access assertion, not its value — the stored window below is
-  // what this function reads, deliberately, rather than the facility's current
-  // timezone.
-  await facilityFor(actor, facilityId)
+  // The name is used for the report reads below; the stored WINDOW is what the
+  // recompute uses, deliberately, rather than the facility's current timezone.
+  const facility = await facilityFor(actor, facilityId)
 
   const stored = await prisma.accountingPeriod.findUnique({
     where: { facilityId_year_month: { facilityId, year, month } },
@@ -346,7 +352,7 @@ export async function driftFor(
   // The window as FILED, not as `monthBounds` would resolve it today — the
   // whole point of storing it. Recomputing the boundaries would mean a
   // timezone correction showed up as revenue drift.
-  const current = await figuresFor(actor, facilityId, stored.startsAt, stored.endsAt)
+  const current = await figuresFor(facilityId, facility.name, stored.startsAt, stored.endsAt)
   return periodDrift(filed.periodDerived, current.periodDerived)
 }
 

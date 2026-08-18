@@ -118,6 +118,7 @@ test.describe('signed in as the demo owner', () => {
     // nobody checks.
     // B-084 parts 1 and 3. A page not on this list is a page nobody scans.
     '/admin/reports/close',
+    '/admin/reports/pack',
     '/admin/reports/subscriptions',
     '/admin/reports/promotions',
     '/admin/reports/indexation',

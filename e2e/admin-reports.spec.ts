@@ -452,3 +452,56 @@ test.describe('scheduled reports', () => {
     await expect(page).toHaveURL('/admin/reports/subscriptions')
   })
 })
+
+// B-084 part 4 / PRD 02 US-40. The management pack.
+
+test.describe('management pack', () => {
+  test.beforeEach(async ({ page }) => {
+    await signInAsDemoOwner(page)
+    await page.goto('/admin/reports/pack')
+  })
+
+  test('leads with whether the figures can still change', async ({ page }) => {
+    // The most important sentence on the page, and it is FIRST. No demo month
+    // is closed, so the reachable state is the live one — which is exactly the
+    // case where a reader needs telling.
+    const main = page.getByRole('main')
+    await expect(page.getByRole('heading', { level: 1 })).toContainText('Management pack')
+    await expect(main).toContainText('has not been closed')
+    await expect(main).toContainText('can still change')
+  })
+
+  test('answers the five questions an owner asks, each as its own heading', async ({ page }) => {
+    for (const heading of [
+      'How full it was',
+      'What it earned',
+      'What it gave away or lost',
+      'What was owed',
+      'Who came and went',
+    ]) {
+      await expect(page.getByRole('heading', { name: heading, level: 2 })).toBeVisible()
+    }
+  })
+
+  test('marks the row that needs acting on with a word, not a colour', async ({ page }) => {
+    await expect(page.getByRole('rowheader', { name: /Over 90 days — needs attention/ })).toBeVisible()
+  })
+
+  test('names the month being shown rather than only highlighting it', async ({ page }) => {
+    // `aria-current="page"` on the selected month, so the choice is not carried
+    // by the background colour alone.
+    const nav = page.getByRole('navigation', { name: 'Other months' })
+    await expect(nav.locator('[aria-current="page"]')).toHaveCount(1)
+  })
+
+  test('offers to have it emailed every month', async ({ page }) => {
+    await page.getByRole('link', { name: 'Have this emailed every month' }).click()
+    await expect(page).toHaveURL('/admin/reports/subscriptions')
+  })
+
+  test('the reports index links to it', async ({ page }) => {
+    await page.goto('/admin/reports')
+    await page.getByRole('link', { name: /Management pack — the whole month/ }).click()
+    await expect(page).toHaveURL('/admin/reports/pack')
+  })
+})
