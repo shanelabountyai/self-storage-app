@@ -77,7 +77,12 @@ export type FacilityOccupancy = {
 /// `collectedCents` is rent actually collected in the window — read from the
 /// ledger, which is the tenant-facing source of truth (§7.3) and the only
 /// place payments exist until invoicing lands (B-044).
-async function occupancyForFacility(
+/// Exported for B-084 part 3's scheduled emails, which report on ONE facility
+/// that a permitted staff member already subscribed. Authorization happened at
+/// subscribe time; re-deriving it from an actor the job does not have would
+/// mean either inventing a staff identity or making the system actor a
+/// superuser, and both are worse than a facility-explicit function.
+export async function occupancyForFacility(
   facilityId: string,
   facilityName: string,
   periodStart: Date,
@@ -266,63 +271,19 @@ export async function movesReport(
   for (const facility of facilities) assertCanReport(actor, facility.id)
 
   const rows = await Promise.all(
-    facilities.map(async (facility) => {
-      const [moveIns, moveOutCount, reservations] = await Promise.all([
-        prisma.lease.findMany({
-          where: { facilityId: facility.id, startDate: { gte: periodStart, lt: periodEnd } },
-          select: { id: true, acquisitionSource: true, acquisitionChannel: true },
-        }),
-        prisma.lease.count({
-          where: { facilityId: facility.id, moveOutDate: { gte: periodStart, lt: periodEnd }, status: 'ended' },
-        }),
-        prisma.reservation.findMany({
-          where: { facilityId: facility.id, createdAt: { gte: periodStart, lt: periodEnd } },
-          select: { createdAt: true, status: true, updatedAt: true },
-        }),
-      ])
-
-      return {
-        facilityId: facility.id,
-        facilityName: facility.name,
-// B-097 filled the gap this comment used to describe. `acquisitionSource`
-        // is stamped at move-in from the reservation that produced it, so a
-        // phone lead that became a rental reports as `phone` rather than as
-        // `web`. A lease from before capture has a null column and reports as
-        // `unknown`, which stays visible rather than being folded into `web` —
-        // quietly crediting the channel this report exists to evaluate is the
-        // failure the whole item was written to prevent.
-        //
-        // B-082 part 1 added the second axis. `acquisitionSource` says how the
-        // deal was taken; `acquisitionChannel` says where the renter came from,
-        // and until it existed every marketplace rental reported as `web` —
-        // identical to an organic one, in the report an owner uses to decide
-        // what to keep paying for. Both splits count the SAME move-ins, so the
-        // two totals agree by construction.
-        moves: moveCounts(
-          moveIns.map((lease) => ({
-            source: normalizeSource(lease.acquisitionSource),
-            channel: normalizeChannel(lease.acquisitionChannel),
-          })),
-          moveOutCount,
-        ),
-        conversion: reservationConversion(
-          reservations.map((reservation) => ({
-            createdAt: reservation.createdAt,
-            // `updatedAt` is when the status last moved; for a converted
-            // reservation that is the conversion itself. Approximate, and
-            // noted as such — a dedicated `convertedAt` column belongs with
-            // whichever item next touches the reservation lifecycle.
-            convertedAt: reservation.status === 'converted' ? reservation.updatedAt : null,
-          })),
-        ),
-      }
-    }),
+    facilities.map((facility) =>
+      movesForFacility(facility.id, facility.name, periodStart, periodEnd),
+    ),
   )
 
   return {
     rows,
     total: {
       moves: sumMoveCounts(rows.map((row) => row.moves)),
+      // Reconstructed rather than summed: `reservationConversion` also
+      // computes an average time-to-convert, which cannot be averaged from
+      // per-facility averages without weighting. The synthetic dates are
+      // deliberate — only the COUNTS feed the portfolio figure.
       conversion: reservationConversion(
         rows.flatMap((row) =>
           Array.from({ length: row.conversion.reservations }, (_, index) => ({
@@ -332,6 +293,65 @@ export async function movesReport(
         ),
       ),
     },
+  }
+}
+
+/// One facility's moves. Same reasoning as `occupancyForFacility` above: a
+/// scheduled report knows its facility explicitly and has no actor to scope by.
+export async function movesForFacility(
+  facilityId: string,
+  facilityName: string,
+  periodStart: Date,
+  periodEnd: Date,
+): Promise<FacilityMoves> {
+  const [moveIns, moveOutCount, reservations] = await Promise.all([
+    prisma.lease.findMany({
+      where: { facilityId, startDate: { gte: periodStart, lt: periodEnd } },
+      select: { id: true, acquisitionSource: true, acquisitionChannel: true },
+    }),
+    prisma.lease.count({
+      where: { facilityId, moveOutDate: { gte: periodStart, lt: periodEnd }, status: 'ended' },
+    }),
+    prisma.reservation.findMany({
+      where: { facilityId, createdAt: { gte: periodStart, lt: periodEnd } },
+      select: { createdAt: true, status: true, updatedAt: true },
+    }),
+  ])
+
+  // B-097 filled the gap this comment used to describe. `acquisitionSource`
+  // is stamped at move-in from the reservation that produced it, so a phone
+  // lead that became a rental reports as `phone` rather than as `web`. A lease
+  // from before capture has a null column and reports as `unknown`, which stays
+  // visible rather than being folded into `web` — quietly crediting the channel
+  // this report exists to evaluate is the failure the whole item was written to
+  // prevent.
+  //
+  // B-082 part 1 added the second axis. `acquisitionSource` says how the deal
+  // was taken; `acquisitionChannel` says where the renter came from, and until
+  // it existed every marketplace rental reported as `web` — identical to an
+  // organic one, in the report an owner uses to decide what to keep paying for.
+  // Both splits count the SAME move-ins, so the two totals agree by
+  // construction.
+  return {
+    facilityId,
+    facilityName,
+    moves: moveCounts(
+      moveIns.map((lease) => ({
+        source: normalizeSource(lease.acquisitionSource),
+        channel: normalizeChannel(lease.acquisitionChannel),
+      })),
+      moveOutCount,
+    ),
+    conversion: reservationConversion(
+      reservations.map((reservation) => ({
+        createdAt: reservation.createdAt,
+        // `updatedAt` is when the status last moved; for a converted
+        // reservation that is the conversion itself. Approximate, and noted as
+        // such — a dedicated `convertedAt` column belongs with whichever item
+        // next touches the reservation lifecycle.
+        convertedAt: reservation.status === 'converted' ? reservation.updatedAt : null,
+      })),
+    ),
   }
 }
 
@@ -360,38 +380,46 @@ export async function delinquencyReport(actor: Actor): Promise<DelinquencyReport
   const facilities = await financialFacilities(actor)
 
   const rows = await Promise.all(
-    facilities.map(async (facility) => {
-      const leases = await prisma.lease.findMany({
-        where: { facilityId: facility.id },
-        select: {
-          id: true,
-          invoices: { select: { dueDate: true, totalCents: true, amountPaidCents: true } },
-        },
-      })
-      if (leases.length === 0) {
-        return { facilityId: facility.id, facilityName: facility.name, aging: arAging([]) }
-      }
-
-      const balances = await prisma.ledgerEntry.groupBy({
-        by: ['leaseId'],
-        where: { leaseId: { in: leases.map((lease) => lease.id) } },
-        _sum: { amountCents: true },
-      })
-      const balanceByLease = new Map(balances.map((row) => [row.leaseId, row._sum.amountCents ?? 0]))
-
-      const now = new Date()
-      return {
-        facilityId: facility.id,
-        facilityName: facility.name,
-        aging: arAging(
-          leases.map((lease) => ({
-            daysPastDue: daysPastDue(lease.invoices, now),
-            outstandingCents: balanceByLease.get(lease.id) ?? 0,
-          })),
-        ),
-      }
-    }),
+    facilities.map((facility) => agingForFacility(facility.id, facility.name)),
   )
 
   return { rows, total: sumArAging(rows.map((row) => row.aging)) }
+}
+
+/// One facility's aging, as of now.
+///
+/// Takes no date and cannot be given one — see D-65. Exported for the same
+/// reason as `occupancyForFacility`: a scheduled report knows its facility and
+/// has no actor to scope by.
+export async function agingForFacility(
+  facilityId: string,
+  facilityName: string,
+): Promise<{ facilityId: string; facilityName: string; aging: ArAging }> {
+  const leases = await prisma.lease.findMany({
+    where: { facilityId },
+    select: {
+      id: true,
+      invoices: { select: { dueDate: true, totalCents: true, amountPaidCents: true } },
+    },
+  })
+  if (leases.length === 0) return { facilityId, facilityName, aging: arAging([]) }
+
+  const balances = await prisma.ledgerEntry.groupBy({
+    by: ['leaseId'],
+    where: { leaseId: { in: leases.map((lease) => lease.id) } },
+    _sum: { amountCents: true },
+  })
+  const balanceByLease = new Map(balances.map((row) => [row.leaseId, row._sum.amountCents ?? 0]))
+
+  const now = new Date()
+  return {
+    facilityId,
+    facilityName,
+    aging: arAging(
+      leases.map((lease) => ({
+        daysPastDue: daysPastDue(lease.invoices, now),
+        outstandingCents: balanceByLease.get(lease.id) ?? 0,
+      })),
+    ),
+  }
 }

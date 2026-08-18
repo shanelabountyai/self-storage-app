@@ -22,6 +22,7 @@ import { raiseLeadDripSteps } from '@/lib/leads/drip-job'
 import { detectDailyFailureRate, detectSilentDunning } from '@/lib/comms/detectors'
 import { applyDueRateIncreases, sendDueRateIncreaseNotices } from '@/lib/pricing/tenant-rate-increases'
 import { applyDueProtectionChanges } from '@/lib/protection/changes'
+import { sendDueReports } from '@/lib/admin/report-subscriptions'
 
 // Consumer and job registration. The machinery is B-006's; the things that use
 // it arrive with their own backlog items: reservation expiry (B-018, below),
@@ -447,6 +448,38 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
     scope: 'per_facility',
     handler: async ({ facilityId, businessDate, recordItem }) => {
       await raiseLeadDripSteps(facilityId!, businessDate, recordItem)
+    },
+  },
+  {
+    // B-084 part 3 / PRD 02 US-40. Scheduled report emails.
+    //
+    // 6am local: before the working day, and AFTER the overnight billing and
+    // delinquency sweeps at 2am and 3am — so an operator opening the email at
+    // 8am is reading figures that already include last night's invoices and
+    // late fees. Running it earlier would email a picture those jobs were about
+    // to change.
+    //
+    // One job for every cadence rather than three. `runJob` already dedupes per
+    // facility per business date, and each subscription decides for itself
+    // whether today is its day (`sendsOn`) — so a weekly and a monthly on the
+    // same facility cannot race, and there is one place to look when an email
+    // did not arrive.
+    name: 'reports.email',
+    localHour: 6,
+    scope: 'per_facility',
+    handler: async ({ facilityId, recordItem }) => {
+      if (!facilityId) return
+      const facility = await prisma.facility.findUnique({
+        where: { id: facilityId },
+        select: { id: true, name: true, timezone: true },
+      })
+      if (!facility) return
+      const summary = await sendDueReports(facility, new Date())
+      recordItem({
+        itemId: facilityId,
+        ok: true,
+        message: `sent ${summary.sent}, skipped ${summary.skipped}`,
+      })
     },
   },
   {

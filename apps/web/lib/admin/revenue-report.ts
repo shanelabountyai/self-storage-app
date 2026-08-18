@@ -100,7 +100,11 @@ export async function revenueReport(
   return { rows, total: sumRevenueRows(rows) }
 }
 
-async function facilityRevenue(
+/// One facility's revenue. Exported for B-084 part 3's scheduled emails, which
+/// report on a facility a permitted staff member already subscribed — the job
+/// itself has no actor to scope by, and inventing one would mean either a fake
+/// staff identity or a superuser system actor.
+export async function facilityRevenue(
   facilityId: string,
   facilityName: string,
   start: Date,

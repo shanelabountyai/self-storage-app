@@ -206,6 +206,12 @@ export default async function ReportsPage({
           Indexation — what Google has indexed
         </Link>
         <Link
+          href="/admin/reports/subscriptions"
+          className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
+        >
+          Scheduled reports — send a report by email without opening this
+        </Link>
+        <Link
           href="/admin/reports/close"
           className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
         >

@@ -408,3 +408,47 @@ test.describe('monthly close', () => {
     expect(response.status()).toBe(400)
   })
 })
+
+// B-084 part 3 / PRD 02 US-40. Scheduled report emails.
+//
+// Read-only. Subscribing against demo data would schedule a real send from the
+// 6am job, and the e2e database is the one the demo seed rebuilds — a
+// subscription surviving into another run is a mail nobody asked for. The
+// add/remove/send paths are covered against disposable fixtures in
+// tests/report-subscriptions-db.test.ts.
+
+test.describe('scheduled reports', () => {
+  test.beforeEach(async ({ page }) => {
+    await signInAsDemoOwner(page)
+    await page.goto('/admin/reports/subscriptions')
+  })
+
+  test('says when reports go out and why that hour', async ({ page }) => {
+    const main = page.getByRole('main')
+    await expect(page.getByRole('heading', { level: 1 })).toContainText('Scheduled reports')
+    // The hour is not arbitrary and the screen says so: after the overnight
+    // billing and delinquency jobs, before the working day.
+    await expect(main).toContainText('6am')
+    await expect(main).toContainText('overnight billing')
+  })
+
+  test('offers every report in the catalog and every cadence', async ({ page }) => {
+    const main = page.getByRole('main')
+    await expect(main.getByRole('combobox', { name: 'Report' })).toBeVisible()
+    await expect(main.getByRole('combobox', { name: 'How often' })).toBeVisible()
+    await expect(main.getByRole('textbox', { name: 'Send to' })).toBeVisible()
+  })
+
+  test('links a monthly report to the close, so a live figure is not mistaken for a filed one', async ({
+    page,
+  }) => {
+    await page.getByRole('link', { name: 'closed' }).click()
+    await expect(page).toHaveURL('/admin/reports/close')
+  })
+
+  test('the reports index links to it', async ({ page }) => {
+    await page.goto('/admin/reports')
+    await page.getByRole('link', { name: /Scheduled reports — send a report by email/ }).click()
+    await expect(page).toHaveURL('/admin/reports/subscriptions')
+  })
+})
