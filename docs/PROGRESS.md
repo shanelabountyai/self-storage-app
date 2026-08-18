@@ -4603,7 +4603,7 @@ Full e2e against a production build: **1,038 passed, 6 skipped, 0 failed, 0 flak
 
 ## B-084 part 4 of 4 — The management pack, and what a number is worth
 
-`PENDING`
+`44d7cae`
 
 **B-084 is complete with this part.**
 
