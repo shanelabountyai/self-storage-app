@@ -4525,7 +4525,7 @@ Full e2e against a production build: **1,017 passed, 5 skipped, 0 failed, 0 flak
 
 ## B-084 part 2 of 4 — The QuickBooks journal, and two omissions that look like bugs
 
-`PENDING`
+`c26b29f`
 
 **Built.** `/admin/reports/journal.csv` cuts a balanced general-journal entry for one facility and one **closed** month, from that month's frozen figures. It refuses an open month — which is what turns the ordering argument behind the four-part split from advice into something enforced: an export re-derived at click time disagrees with the one taken yesterday, and an accountant who has already posted the first has no way to tell which is right.
 
