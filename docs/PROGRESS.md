@@ -4490,7 +4490,7 @@ Full e2e against a production build: **1,003 passed, 5 skipped, 0 failed, 0 flak
 
 ## B-084 part 1 of 4 — The monthly close, and what "frozen" actually means
 
-`PENDING`
+`17a7694`
 
 **Split into four parts by owner decision, 2026-08-18.** The row is four deliverables and two of them are correctness-critical. The ordering is not cosmetic: a management pack or an accounting export cut from **live** data silently disagrees with itself between runs, so the frozen close lands first and the other two read from it. Parts 2–4 are the QuickBooks journal export, the scheduled report emails (the first item that has to meet PRD 05 FR-9a) and the management summary pack.
 
