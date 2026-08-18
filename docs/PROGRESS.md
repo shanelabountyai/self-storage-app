@@ -4452,7 +4452,7 @@ Full e2e against a production build: **997 passed, 5 skipped, 0 failed, 0 flaky 
 
 ## B-083 — Certified mail for lien notices, and the auction half split out
 
-`PENDING`
+`c9b953b`
 
 **Scope narrowed by owner decision (D-63), and the reason is older than this row.** US-30 asks for two integrations. The auction-platform half is blocked on **master PRD §11 open question 9** — live on-site auctions versus online — which has never been answered, and on a partner agreement with no publicly published API. Writing a marketplace driver would have answered OQ-9 by building for it. It is now **B-129**, with the block and the no-simulator rule recorded in advance so the next session does not re-derive them. OQ-9 itself is marked as blocking in the master PRD rather than left as a bullet nobody reads.
 
