@@ -3,7 +3,12 @@
 import { revalidatePath } from 'next/cache'
 import { requireStaffActor } from '@/lib/rbac/session'
 import { fieldError, success, type FormState } from '@/lib/admin/form-state'
-import { closePeriod, periodLabel, reopenPeriod } from '@/lib/admin/accounting-close'
+import {
+  closePeriod,
+  periodLabel,
+  reopenPeriod,
+  saveChartOfAccounts,
+} from '@/lib/admin/accounting-close'
 
 // PRD 02 §8, US-40 (B-084 part 1). Both gates live in
 // lib/admin/accounting-close.ts; these turn a refusal into a sentence.
@@ -53,4 +58,21 @@ export async function reopenPeriodAction(
   return success(
     `${periodLabel(year, month)} is open again. The figures that were filed are in the audit log; nothing else has them.`,
   )
+}
+
+/// B-084 part 2. The account names the journal export posts to.
+export async function saveChartAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const actor = await requireStaffActor()
+  const facilityId = String(formData.get('facilityId') ?? '')
+
+  const input: Record<string, string> = {}
+  for (const [key, value] of formData.entries()) {
+    if (key !== 'facilityId') input[key] = String(value)
+  }
+
+  const result = await saveChartOfAccounts(actor, facilityId, input)
+  revalidatePath('/admin/reports/close')
+  if (!result.ok) return fieldError({ [result.field]: result.problem })
+
+  return success('Saved. The next journal export posts to these accounts.')
 }

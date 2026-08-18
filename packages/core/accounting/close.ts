@@ -23,7 +23,12 @@
 // computed over the period-derived figures and nothing else, and the screen
 // says which is which rather than presenting one undifferentiated table.
 
-export const CLOSE_SNAPSHOT_VERSION = 1
+/// Bumped to 2 by B-084 part 2, which needed billed and collected split by
+/// category — a journal credits rental income, fee income and sales tax payable
+/// to different accounts, and a single total cannot be taken apart afterwards.
+/// A version-1 snapshot is refused by the journal export with an instruction to
+/// reopen and re-close, rather than exported with guessed categories.
+export const CLOSE_SNAPSHOT_VERSION = 2
 
 /// Figures that can only be taken at the time. Frozen because there is no
 /// second chance to observe them.
@@ -50,9 +55,27 @@ export type PointInTimeFigures = {
 
 /// Figures derived from dated rows, which a later run can reproduce — and
 /// which therefore have a meaningful "has this changed since we filed it?".
+/// The four revenue categories, in the metrics layer's own names.
+export type CategorySplit = {
+  rent: number
+  fee: number
+  protection: number
+  tax: number
+}
+
 export type PeriodDerivedFigures = {
   billedCents: number
   collectedCents: number
+  /// Billed split by category, GROSS of discounts — the same convention
+  /// `billedByCategory` uses, where a discount line is not one of the four
+  /// categories and is reported separately. The journal relies on that: it
+  /// credits each income account with the gross and debits the discount as
+  /// contra-revenue, which is what makes the entry balance.
+  billedByCategory: CategorySplit
+  /// Collected split by category, settled in the facility's own allocation
+  /// order rather than proportionally — because that is what `allocatePayment`
+  /// actually did with the money.
+  collectedByCategory: CategorySplit
   discountsCents: number
   referralRewardsCents: number
   writeOffsCents: number
@@ -112,7 +135,7 @@ export function canClosePeriod(input: {
 // --------------------------------------------------------------- drift ----
 
 export type DriftRow = {
-  key: keyof PeriodDerivedFigures
+  key: string
   label: string
   filedValue: number
   currentValue: number
@@ -124,23 +147,38 @@ export type DriftRow = {
   kind: 'cents' | 'count' | 'ratio'
 }
 
+/// Every period-derived figure, as a flat list with a reader.
+///
+/// A reader rather than a bare key because two of the figures are category
+/// splits, and a rent-to-fee reclassification that leaves the total unchanged is
+/// precisely the restatement worth flagging — a shape that compared only
+/// top-level numeric fields would report nothing at all.
 const DERIVED_FIELDS: readonly {
-  key: keyof PeriodDerivedFigures
+  key: string
   label: string
   kind: DriftRow['kind']
+  read: (figures: PeriodDerivedFigures) => number
 }[] = [
-  { key: 'billedCents', label: 'Billed', kind: 'cents' },
-  { key: 'collectedCents', label: 'Collected', kind: 'cents' },
-  { key: 'discountsCents', label: 'Discounts given', kind: 'cents' },
-  { key: 'referralRewardsCents', label: 'Referral rewards', kind: 'cents' },
-  { key: 'writeOffsCents', label: 'Written off', kind: 'cents' },
-  { key: 'refundsCents', label: 'Refunded', kind: 'cents' },
-  { key: 'unappliedCents', label: 'Unapplied money', kind: 'cents' },
-  { key: 'grossPotentialCents', label: 'Gross potential', kind: 'cents' },
-  { key: 'economicOccupancyRatio', label: 'Economic occupancy', kind: 'ratio' },
-  { key: 'moveIns', label: 'Move-ins', kind: 'count' },
-  { key: 'moveOuts', label: 'Move-outs', kind: 'count' },
-  { key: 'netMoves', label: 'Net moves', kind: 'count' },
+  { key: 'billedCents', label: 'Billed', kind: 'cents', read: (f) => f.billedCents },
+  { key: 'collectedCents', label: 'Collected', kind: 'cents', read: (f) => f.collectedCents },
+  { key: 'billed.rent', label: 'Billed — rent', kind: 'cents', read: (f) => f.billedByCategory.rent },
+  { key: 'billed.fee', label: 'Billed — fees', kind: 'cents', read: (f) => f.billedByCategory.fee },
+  { key: 'billed.protection', label: 'Billed — protection', kind: 'cents', read: (f) => f.billedByCategory.protection },
+  { key: 'billed.tax', label: 'Billed — tax', kind: 'cents', read: (f) => f.billedByCategory.tax },
+  { key: 'collected.rent', label: 'Collected — rent', kind: 'cents', read: (f) => f.collectedByCategory.rent },
+  { key: 'collected.fee', label: 'Collected — fees', kind: 'cents', read: (f) => f.collectedByCategory.fee },
+  { key: 'collected.protection', label: 'Collected — protection', kind: 'cents', read: (f) => f.collectedByCategory.protection },
+  { key: 'collected.tax', label: 'Collected — tax', kind: 'cents', read: (f) => f.collectedByCategory.tax },
+  { key: 'discountsCents', label: 'Discounts given', kind: 'cents', read: (f) => f.discountsCents },
+  { key: 'referralRewardsCents', label: 'Referral rewards', kind: 'cents', read: (f) => f.referralRewardsCents },
+  { key: 'writeOffsCents', label: 'Written off', kind: 'cents', read: (f) => f.writeOffsCents },
+  { key: 'refundsCents', label: 'Refunded', kind: 'cents', read: (f) => f.refundsCents },
+  { key: 'unappliedCents', label: 'Unapplied money', kind: 'cents', read: (f) => f.unappliedCents },
+  { key: 'grossPotentialCents', label: 'Gross potential', kind: 'cents', read: (f) => f.grossPotentialCents },
+  { key: 'economicOccupancyRatio', label: 'Economic occupancy', kind: 'ratio', read: (f) => f.economicOccupancyRatio },
+  { key: 'moveIns', label: 'Move-ins', kind: 'count', read: (f) => f.moveIns },
+  { key: 'moveOuts', label: 'Move-outs', kind: 'count', read: (f) => f.moveOuts },
+  { key: 'netMoves', label: 'Net moves', kind: 'count', read: (f) => f.netMoves },
 ]
 
 /// Every period-derived figure that no longer matches what was filed.
@@ -155,8 +193,8 @@ export function periodDrift(
 ): DriftRow[] {
   const rows: DriftRow[] = []
   for (const field of DERIVED_FIELDS) {
-    const filedValue = filed[field.key]
-    const currentValue = current[field.key]
+    const filedValue = field.read(filed)
+    const currentValue = field.read(current)
     const changed =
       field.kind === 'ratio'
         ? Math.abs(currentValue - filedValue) > 1e-9

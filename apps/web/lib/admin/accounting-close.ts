@@ -2,14 +2,22 @@ import { prisma, Prisma } from '@storage/db'
 import { recordAudit } from '@storage/core/audit'
 import { monthBounds, MONTH_NAMES } from '@storage/core/billing'
 import {
+  buildJournal,
   canClosePeriod,
+  chartOrDefault,
+  CHART_OF_ACCOUNTS_FIELDS,
   CLOSE_SNAPSHOT_VERSION,
   periodDrift,
+  type ChartOfAccounts,
+  type Journal,
   type DriftRow,
   type PeriodDerivedFigures,
   type PeriodSnapshot,
   type PointInTimeFigures,
 } from '@storage/core/accounting'
+const EMPTY_SPLIT = { rent: 0, fee: 0, protection: 0, tax: 0 } as const
+
+import { csvCents, toCsv } from '@/lib/admin/csv'
 import { requirePermission, assertFacilityAccess } from '@/lib/rbac/authorize'
 import { toAuditActor } from '@/lib/rbac/audit-actor'
 import type { Actor } from '@/lib/rbac/actor'
@@ -96,6 +104,11 @@ async function figuresFor(
     periodDerived: {
       billedCents: rev ? billedTotal(rev) : 0,
       collectedCents: rev ? collectedTotal(rev) : 0,
+      // Split as well as totalled (snapshot v2): a journal credits rental
+      // income, fee income and sales tax payable to different accounts, and a
+      // single total cannot be taken apart after the fact.
+      billedByCategory: { ...(rev?.billed ?? EMPTY_SPLIT) },
+      collectedByCategory: { ...(rev?.collected ?? EMPTY_SPLIT) },
       discountsCents: rev?.discountsCents ?? 0,
       referralRewardsCents: rev?.referralRewardsCents ?? 0,
       writeOffsCents: rev?.writeOffsCents ?? 0,
@@ -335,4 +348,150 @@ export async function driftFor(
   // timezone correction showed up as revenue drift.
   const current = await figuresFor(actor, facilityId, stored.startsAt, stored.endsAt)
   return periodDrift(filed.periodDerived, current.periodDerived)
+}
+
+// ───────────────────────────────────────────── journal export (part 2) ──
+
+export type JournalExport = { ok: true; journal: Journal } | { ok: false; reason: string }
+
+/// The month-end journal for a CLOSED period, cut from its frozen figures.
+///
+/// Refuses an open month rather than exporting live numbers. That is the whole
+/// ordering argument behind part 1: an export re-derived at click time
+/// disagrees with the one taken yesterday, and an accountant who has already
+/// posted the first has no way to tell which is right.
+export async function journalFor(
+  actor: Actor,
+  facilityId: string,
+  year: number,
+  month: number,
+): Promise<JournalExport> {
+  requirePermission(actor, 'accounting:close', facilityId)
+  const facility = await prisma.facility.findUniqueOrThrow({
+    where: { id: facilityId },
+    select: { id: true, name: true, slug: true, timezone: true, chartOfAccounts: true },
+  })
+  assertFacilityAccess(actor, facilityId)
+
+  const stored = await prisma.accountingPeriod.findUnique({
+    where: { facilityId_year_month: { facilityId, year, month } },
+    select: { closedAt: true, snapshot: true },
+  })
+  if (!stored?.closedAt || !stored.snapshot) {
+    return {
+      ok: false,
+      reason: `${periodLabel(year, month)} is not closed. A journal is cut from filed figures, not from live ones — close the month first, so what is exported cannot change after it has been posted.`,
+    }
+  }
+
+  return buildJournal(
+    stored.snapshot as unknown as PeriodSnapshot,
+    chartOrDefault(facility.chartOfAccounts),
+    {
+      year,
+      month,
+      // Stable and readable in a QuickBooks register: the site, then the month.
+      reference: `${facility.slug}-${year}-${String(month).padStart(2, '0')}`,
+    },
+  )
+}
+
+/// QuickBooks Online's journal-entry import shape.
+///
+/// Column names are QuickBooks' own, including the asterisks it puts on the
+/// required ones — an import matches on the header text, so "Journal Date"
+/// without the asterisk is a file it will not read.
+export function journalCsv(journal: Journal): string {
+  return toCsv(
+    ['*JournalNo', '*JournalDate', '*AccountName', 'Debits', 'Credits', 'Description'],
+    journal.lines.map((entry) => [
+      journal.reference,
+      journal.date,
+      entry.account,
+      // Blank rather than 0.00 on the side a line is not on: QuickBooks treats
+      // a zero as a value and a blank as "not this side", and a line carrying
+      // both reads as an error in the import preview.
+      entry.debitCents === 0 ? '' : csvCents(entry.debitCents),
+      entry.creditCents === 0 ? '' : csvCents(entry.creditCents),
+      entry.description,
+    ]),
+  )
+}
+
+export type ChartResult = { ok: true } | { ok: false; field: string; problem: string }
+
+/// Saves the account names this facility posts to.
+export async function saveChartOfAccounts(
+  actor: Actor,
+  facilityId: string,
+  input: Record<string, string>,
+): Promise<ChartResult> {
+  requirePermission(actor, 'accounting:close', facilityId)
+  await facilityFor(actor, facilityId)
+
+  const chart: Record<string, string> = {}
+  for (const field of CHART_OF_ACCOUNTS_FIELDS) {
+    const value = (input[field.key] ?? '').trim()
+    // An account name with a comma or a newline in it breaks the import in a
+    // way that surfaces as a mangled row rather than an error, so it is refused
+    // here where the message can name the field.
+    if (/[\r\n,]/.test(value)) {
+      return {
+        ok: false,
+        field: field.key,
+        problem: 'An account name cannot contain a comma or a line break — both break the import file. Use the name exactly as it appears in your chart of accounts.',
+      }
+    }
+    // Empty means "use the conventional name", never "post to an account with
+    // no name" — the same fallback rule the marketing copy fields follow.
+    if (value) chart[field.key] = value
+  }
+
+  const before = await prisma.facility.findUniqueOrThrow({
+    where: { id: facilityId },
+    select: { chartOfAccounts: true },
+  })
+
+  await prisma.$transaction(async (tx) => {
+    await tx.facility.update({
+      where: { id: facilityId },
+      data: { chartOfAccounts: Object.keys(chart).length > 0 ? chart : Prisma.DbNull },
+    })
+    await recordAudit(
+      {
+        actor: toAuditActor(actor),
+        facilityId,
+        action: 'facility.settings_changed',
+        entityType: 'Facility',
+        entityId: facilityId,
+        before: { chartOfAccounts: before.chartOfAccounts } as Record<string, unknown>,
+        after: { chartOfAccounts: chart } as Record<string, unknown>,
+      },
+      tx,
+    )
+  })
+
+  return { ok: true }
+}
+
+/// What the form shows: the stored name where there is one, the conventional
+/// name where there is not.
+export async function chartOfAccountsFor(
+  actor: Actor,
+  facilityId: string,
+): Promise<{ effective: ChartOfAccounts; stored: Record<string, string> }> {
+  requirePermission(actor, 'accounting:close', facilityId)
+  const facility = await prisma.facility.findUniqueOrThrow({
+    where: { id: facilityId },
+    select: { chartOfAccounts: true },
+  })
+  assertFacilityAccess(actor, facilityId)
+
+  const raw = (facility.chartOfAccounts ?? {}) as Record<string, unknown>
+  const storedChart: Record<string, string> = {}
+  for (const field of CHART_OF_ACCOUNTS_FIELDS) {
+    const value = raw[field.key]
+    if (typeof value === 'string' && value.trim()) storedChart[field.key] = value.trim()
+  }
+  return { effective: chartOrDefault(facility.chartOfAccounts), stored: storedChart }
 }

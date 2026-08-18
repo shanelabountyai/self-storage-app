@@ -18,6 +18,8 @@ function derived(overrides: Partial<PeriodDerivedFigures> = {}): PeriodDerivedFi
     writeOffsCents: 0,
     refundsCents: 0,
     unappliedCents: 0,
+    billedByCategory: { rent: 80_000, fee: 10_000, protection: 5_000, tax: 5_000 },
+    collectedByCategory: { rent: 72_000, fee: 9_000, protection: 4_500, tax: 4_500 },
     economicOccupancyRatio: 0.82,
     grossPotentialCents: 110_000,
     moveIns: 4,
@@ -108,6 +110,18 @@ describe('drift against what was filed', () => {
     const rows = periodDrift(derived(), derived({ economicOccupancyRatio: 0.79 }))
     expect(rows).toHaveLength(1)
     expect(rows[0].kind).toBe('ratio')
+  })
+
+  it('catches a reclassification that leaves the total unchanged', () => {
+    // Rent moved to fees, same total billed. A shape that compared only the
+    // top-level numbers would report nothing at all, and this is exactly the
+    // restatement somebody would want told about.
+    const rows = periodDrift(
+      derived(),
+      derived({ billedByCategory: { rent: 70_000, fee: 20_000, protection: 5_000, tax: 5_000 } }),
+    )
+    expect(rows.map((row) => row.key).sort()).toEqual(['billed.fee', 'billed.rent'])
+    expect(rows.find((row) => row.key === 'billed.rent')!.deltaValue).toBe(-10_000)
   })
 
   it('compares ONLY period-derived figures — occupancy and AR are not in it', () => {

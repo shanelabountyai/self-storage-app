@@ -369,4 +369,42 @@ test.describe('monthly close', () => {
     await page.getByRole('link', { name: /Monthly close — file a month/ }).click()
     await expect(page).toHaveURL('/admin/reports/close')
   })
+
+  // B-084 part 2. The journal export.
+
+  test('offers a form field for every account the journal can post to', async ({ page }) => {
+    // The repo's own rule, asserted rather than trusted: an account with no
+    // form field is one only a database client can set.
+    const main = page.getByRole('main')
+    for (const label of ['Accounts Receivable', 'Sales tax payable', 'Bad debt expense']) {
+      await expect(main.getByRole('textbox', { name: label })).toBeVisible()
+    }
+    await expect(main).toContainText('matches on the account NAME')
+  })
+
+  test('refuses to export a journal for a month that is not closed', async ({ page }) => {
+    // No demo month is closed — closing one would freeze figures the revenue
+    // and occupancy specs read live. So the reachable contract is the refusal,
+    // and it is worth pinning: it is what stops a journal being cut from
+    // numbers that can still move.
+    const facilityId = await page.evaluate(() =>
+      document.querySelector<HTMLInputElement>('input[name="facilityId"]')?.value ?? '',
+    )
+    expect(facilityId).not.toBe('')
+
+    // `page.request`, not the bare `request` fixture — the latter carries no
+    // session, and the route then refuses on authentication rather than on the
+    // thing this test is about. Every other CSV spec here uses `page.request`
+    // for the same reason.
+    const response = await page.request.get(
+      `/admin/reports/journal.csv?facilityId=${facilityId}&year=2026&month=1`,
+    )
+    expect(response.status()).toBe(409)
+    expect(await response.text()).toContain('not closed')
+  })
+
+  test('rejects a journal request with no month', async ({ page }) => {
+    const response = await page.request.get('/admin/reports/journal.csv')
+    expect(response.status()).toBe(400)
+  })
 })

@@ -4522,3 +4522,40 @@ Full e2e against a production build: **1,017 passed, 5 skipped, 0 failed, 0 flak
 **The accessibility statement needs no change and was checked:** this part touched no customer-facing page. The close screen's status is carried by the word "Closed"/"Open", never by colour alone, and the drift table has `<th scope>` on both axes with a caption.
 
 **Left behind:** the period list is a fixed 24-month window with no paging, marked `ponytail:` — the upgrade is a year selector and the trigger is somebody needing to look back further, which is roughly when a period stops being restatable in practice. Drift is computed for the three most recent closed months only, because each one re-runs the whole report layer. **There is no portfolio-level close** — a month is filed per facility, since each keeps its own books on its own timezone; the roll-up view of "which sites have filed August" is worth building when there are enough facilities for it to be a question. And nothing yet *reads* a filed period: parts 2 and 4 are what make the freeze pay for itself.
+
+## B-084 part 2 of 4 — The QuickBooks journal, and two omissions that look like bugs
+
+`PENDING`
+
+**Built.** `/admin/reports/journal.csv` cuts a balanced general-journal entry for one facility and one **closed** month, from that month's frozen figures. It refuses an open month — which is what turns the ordering argument behind the four-part split from advice into something enforced: an export re-derived at click time disagrees with the one taken yesterday, and an accountant who has already posted the first has no way to tell which is right.
+
+**PRD 02 §2 says we are not the accounting system of record**, and that makes exactly one property non-negotiable: **the entry balances.** `buildJournal` asserts its own balance before returning and throws `UnbalancedJournalError` otherwise — unreachable by construction, since each of the three sub-entries balances on its own, and checked anyway for the same reason B-062's proceeds waterfall asserts it accounted for every cent: the failure would land in somebody else's general ledger, where nothing points back here. A swept test covers **100+ combinations** of discounts, referral rewards, write-offs and unapplied money.
+
+**Two omissions that read as bugs and are the whole point.** Both were found by reading what the revenue report already documents about itself rather than by writing code and testing it afterwards:
+
+- **Refunds are not journaled at all.** `refundsCents` is informational — a refund unwinds its original payment's allocation rows, so `collectedCents` is *already* net of it. A refund entry would take the money out twice **and balance while doing it**, which is precisely the error a trial balance cannot catch.
+- **Referral rewards are taken OUT of the discount figure, not posted beside it.** They are a subset of `discountsCents`, not a sibling — the same invoice line type, split by description. Posting both in full would double the reduction and also balance.
+
+Both are asserted by name in the tests, because in each case the correct behaviour looks like something missing, and a later reader would reasonably try to "fix" it.
+
+**The snapshot gained a category split, and version 1 is refused rather than guessed.** A journal credits rental income, fee income, protection income and sales tax payable to four different accounts, and part 1 stored only totals — a total cannot be taken apart afterwards. `CLOSE_SNAPSHOT_VERSION` is now 2, and a month filed under version 1 is **refused with an instruction to reopen and re-close**, which says explicitly that the figures themselves will not change. Exporting it would mean inventing which part of a total was rent and which was tax, and posting that invention to a real ledger.
+
+**Drift now covers the category leaves too**, which came out of the same change: a rent-to-fee reclassification that leaves the total unchanged is exactly the restatement worth flagging, and the shape part 1 shipped — comparing top-level numbers only — would have reported nothing at all.
+
+**The chart of accounts is per facility, and ships with its form** (D-66). Ten named accounts, matched by NAME because that is what QuickBooks Online's journal import matches on; any field left blank falls back to a conventional name, so an operator who has never opened the form still gets a file that imports and one who has renamed two accounts only says so twice. Per facility rather than org-wide because separate books per site is ordinary in this industry. An account name containing a comma or a line break is refused at the field, since both break the import in a way that surfaces as a mangled row rather than an error. A test asserts there is a form field for **every** account the journal can post to — the repo's own rule, checked rather than trusted.
+
+**The CSV is QuickBooks' own shape**, asterisks included, because the import matches on header text. A line carries a value on exactly one side and a blank on the other, never `0.00`: QuickBooks treats a zero as a value, and a row with both reads as an error in the import preview.
+
+**A negative amount flips sides rather than being written as a minus.** Not defensive tidying — discounts can genuinely exceed the gross billed in a credit-heavy month, which makes the receivable movement negative, and a negative debit is not something a journal may contain.
+
+**Test verification:** unit suite **3,160 passing, 8 skipped of 3,168** — reconciled as +21 on part 1's 3,147: 14 pure journal tests, 6 database tests, and 1 more drift test for the reclassification case. Typecheck clean, lint 0 errors, `prisma migrate diff` reports no drift.
+
+Full e2e against a production build: **1,023 passed, 5 skipped, 0 failed, 0 flaky of 1,028** — reconciled as +6 on part 1's 1,022, being three new specs across two device projects. No new `ADMIN_ROUTES` entry this time: `journal.csv` is a route handler rather than a page, so it has no rendering to scan. The unit suite was run twice, identical both times.
+
+**The first sweep went red on two of my own new specs, and the cause was a test bug worth naming.** Both used Playwright's bare `request` fixture, which carries no session, so the route refused on authentication rather than on the thing the test was about — the server log said `ForbiddenError: Authentication required` while the assertion complained about a status code. Every other CSV spec in this file uses `page.request`, which shares the browser context's cookies; these now do too, with a comment saying why.
+
+**Observed while fixing it, not fixed:** an unauthenticated request to any CSV route returns **500** rather than a redirect or a 401 — `requireStaffActor()` throws and nothing catches it. That is repo-wide and pre-existing (every `.csv` route is built this way), and it refuses correctly, so it is a poor response rather than a hole. Worth a row if somebody ever links a CSV export from an email.
+
+**The accessibility statement needs no change and was checked:** this part touched no customer-facing page.
+
+**Left behind:** the journal is **per facility per month, one file at a time** — no portfolio export and no multi-month range, because an operator posting to QuickBooks does it monthly per set of books and a combined file would need a Location or Class column this does not populate. **Nothing reconciles the journal against the ledger**: the entry balances internally, and whether its receivable movement agrees with the sum of `LedgerEntry` rows for the period is a check nobody runs — worth building, and it belongs with part 4's management pack rather than here. **No IIF export** for QuickBooks Desktop; the CSV is the Online shape. And the export is untested against a real QuickBooks import — the column names come from Intuit's documented template, not from a file anybody has successfully imported, which is the same debt B-083's certified-mail driver carries and should be paid the same way.

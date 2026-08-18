@@ -476,6 +476,14 @@ model Facility {
   /// to. Null means the request cannot go out at all — a review ask with
   /// nowhere to leave the review is worse than not asking, so the job that
   /// raises requests refuses to for a facility that has not set this.
+  /// PRD 02 US-40 (B-084 part 2). Which general-ledger accounts the monthly
+  /// journal export posts to, in the shape packages/core/accounting/journal.ts
+  /// defines. Null, or any field left blank, falls back to a conventional
+  /// chart — so an operator who has never opened the form still gets an export
+  /// that imports, and one who has renamed two accounts only has to say so
+  /// twice. Per facility rather than org-wide because separate books per site
+  /// is ordinary in this industry.
+  chartOfAccounts     Json?
   googleReviewUrl     String?
   /// US-7 AC1: "N days after move-in completion (default 7, configurable per
   /// facility)." Its own control ships in this item, per this repo's own rule

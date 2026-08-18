@@ -4,7 +4,14 @@ import { Button } from '@/components/ui/button'
 import { getSwitcherData } from '@/lib/admin/context'
 import { resolveSelectedFacility } from '@/lib/admin/facility-selection-logic'
 import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
-import { driftFor, periodsFor, type PeriodRow } from '@/lib/admin/accounting-close'
+import {
+  chartOfAccountsFor,
+  driftFor,
+  periodsFor,
+  type PeriodRow,
+} from '@/lib/admin/accounting-close'
+import { CHART_OF_ACCOUNTS_FIELDS } from '@storage/core/accounting'
+import { saveChartAction } from './actions'
 import { driftSummary, type DriftRow } from '@storage/core/accounting'
 import { formatCents } from '@/lib/format'
 import { closePeriodAction, reopenPeriodAction } from './actions'
@@ -123,6 +130,7 @@ export default async function MonthlyClosePage() {
 
   const facilityId = selected.facility.id
   const periods = await periodsFor(actor, facilityId)
+  const chart = await chartOfAccountsFor(actor, facilityId)
   // Drift only for closed months, and only the most recent handful — each one
   // re-runs the report layer, and an operator opening this screen is looking at
   // the months they might still restate.
@@ -258,6 +266,26 @@ export default async function MonthlyClosePage() {
               )}
 
               {isClosed && (
+                <p className="mt-4 border-t pt-3 text-sm">
+                  {/* B-084 part 2. Offered only on a closed month, because a
+                      journal is cut from filed figures — the route refuses an
+                      open one rather than exporting live numbers. */}
+                  <a
+                    href={`/admin/reports/journal.csv?facilityId=${facilityId}&year=${period.year}&month=${period.month}`}
+                    className="underline underline-offset-2"
+                  >
+                    Download the {period.label} journal (CSV)
+                  </a>
+                  <span className="text-muted-foreground block text-xs text-pretty">
+                    A balanced general-journal entry for QuickBooks, posting to the accounts set
+                    below. Refunds are not a line: a refund unwinds its original payment, so the
+                    collected figure is already net of it and a second entry would take the money
+                    out twice.
+                  </span>
+                </p>
+              )}
+
+              {isClosed && (
                 <AdminForm
                   action={reopenPeriodAction}
                   label={`Reopen ${period.label}`}
@@ -280,6 +308,34 @@ export default async function MonthlyClosePage() {
           )
         })}
       </ul>
+
+      <section aria-labelledby="chart-heading" className="flex flex-col gap-3">
+        <h2 id="chart-heading" className="font-medium">
+          Which accounts the journal posts to
+        </h2>
+        <p className="text-muted-foreground max-w-prose text-sm text-pretty">
+          QuickBooks matches on the account NAME, so these have to read exactly as they do in your
+          chart of accounts. Leave one empty and the export uses the conventional name shown as the
+          hint — an operator who has never opened this form still gets a file that imports.
+        </p>
+
+        <AdminForm action={saveChartAction} label="Chart of accounts" className="flex flex-col gap-3">
+          <input type="hidden" name="facilityId" value={facilityId} />
+          {CHART_OF_ACCOUNTS_FIELDS.map((field) => (
+            <Field
+              key={field.key}
+              name={field.key}
+              label={field.label}
+              defaultValue={chart.stored[field.key] ?? ''}
+              placeholder={chart.effective[field.key]}
+              hint={field.hint}
+            />
+          ))}
+          <Button type="submit" className="self-start">
+            Save account names
+          </Button>
+        </AdminForm>
+      </section>
     </div>
   )
 }

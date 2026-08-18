@@ -7,8 +7,11 @@ import { ForbiddenError } from '../apps/web/lib/rbac/authorize'
 import {
   closePeriod,
   driftFor,
+  journalCsv,
+  journalFor,
   periodsFor,
   reopenPeriod,
+  saveChartOfAccounts,
   PERIOD_WINDOW_MONTHS,
 } from '../apps/web/lib/admin/accounting-close'
 
@@ -342,6 +345,89 @@ describeDb('the monthly close', () => {
     // Newest first, and the current month is present but not closable.
     expect(periods[0]).toMatchObject({ year: 2026, month: 8, ended: false, closedAt: null })
     expect(periods[1]).toMatchObject({ year: 2026, month: 7, ended: true })
+  })
+
+  // ── Journal export (part 2) ───────────────────────────────────────────
+
+  it('refuses to export a journal for a month that is not closed', async () => {
+    // The whole ordering argument behind part 1: an export re-derived at click
+    // time disagrees with the one taken yesterday, and an accountant who has
+    // already posted the first has no way to tell which is right.
+    const result = await journalFor(actor(), facilityId, YEAR, MONTH)
+    expect(result.ok).toBe(false)
+    expect(result.ok === false && result.reason).toContain('not closed')
+  })
+
+  it('cuts a balanced journal from the filed figures', async () => {
+    await postMayActivity(100_000, 90_000)
+    await closePeriod(actor(), facilityId, YEAR, MONTH)
+
+    const result = await journalFor(actor(), facilityId, YEAR, MONTH)
+    expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error('unreachable')
+    expect(result.journal.totalDebitCents).toBe(result.journal.totalCreditCents)
+    expect(result.journal.totalDebitCents).toBeGreaterThan(0)
+    expect(result.journal.date).toBe('2026-05-31')
+  })
+
+  it('exports the FILED figures, not what the query returns today', async () => {
+    // The property that makes freezing worth anything. Void the invoice after
+    // the close and the journal must still say what was filed — otherwise a
+    // month already posted to QuickBooks quietly changes shape underneath it.
+    await postMayActivity(100_000, 90_000)
+    await closePeriod(actor(), facilityId, YEAR, MONTH)
+    await prisma.invoice.updateMany({ where: { leaseId }, data: { status: 'void' } })
+
+    const result = await journalFor(actor(), facilityId, YEAR, MONTH)
+    if (!result.ok) throw new Error('unreachable')
+    const rentLine = result.journal.lines.find((line) => line.description === 'Rent billed')
+    expect(rentLine!.creditCents).toBe(100_000)
+    // And the drift check is what tells somebody the two now disagree.
+    expect(await driftFor(actor(), facilityId, YEAR, MONTH)).not.toEqual([])
+  })
+
+  it('posts to the operator’s own account names once they are set', async () => {
+    await postMayActivity(100_000, 90_000)
+    await closePeriod(actor(), facilityId, YEAR, MONTH)
+
+    expect(
+      (await saveChartOfAccounts(actor(), facilityId, { rentalIncome: '4000 · Storage Revenue' })).ok,
+    ).toBe(true)
+
+    const result = await journalFor(actor(), facilityId, YEAR, MONTH)
+    if (!result.ok) throw new Error('unreachable')
+    expect(result.journal.lines.some((line) => line.account === '4000 · Storage Revenue')).toBe(true)
+    // Everything left blank still uses the conventional name.
+    expect(result.journal.lines.some((line) => line.account === 'Undeposited Funds')).toBe(true)
+  })
+
+  it('refuses an account name that would break the import file', async () => {
+    const result = await saveChartOfAccounts(actor(), facilityId, {
+      rentalIncome: 'Rent, Storage',
+    })
+    expect(result.ok).toBe(false)
+    expect(result.ok === false && result.field).toBe('rentalIncome')
+  })
+
+  it('writes a CSV with QuickBooks’ own headers and one side per line', async () => {
+    await postMayActivity(100_000, 90_000)
+    await closePeriod(actor(), facilityId, YEAR, MONTH)
+    const result = await journalFor(actor(), facilityId, YEAR, MONTH)
+    if (!result.ok) throw new Error('unreachable')
+
+    const csv = journalCsv(result.journal)
+    const [header, ...rows] = csv.trim().split(/\r?\n/)
+    // The asterisks are QuickBooks' own — an import matches on the header text.
+    expect(header).toContain('*JournalNo')
+    expect(header).toContain('*JournalDate')
+    expect(header).toContain('*AccountName')
+
+    for (const row of rows) {
+      const [, , , debit, credit] = row.split(',')
+      // Blank on the side a line is not on, never 0.00: QuickBooks treats a
+      // zero as a value, and a line carrying both reads as an import error.
+      expect(debit === '' || credit === '').toBe(true)
+    }
   })
 
   it('refuses a manager — closing is held above facility settings', async () => {
