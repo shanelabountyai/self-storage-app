@@ -5,6 +5,7 @@ import { prisma } from '@storage/db'
 import { CLOSED_ALL_WEEK, type WeeklySchedule } from '@storage/core/facility-settings'
 import { recomputeUnitStatus } from '@/lib/admin/units'
 import { exampleNoticeTemplate } from '@/lib/admin/notice-templates'
+import { openAuctionCase } from '@/lib/auctions/service'
 import { setPassword } from '@/lib/auth/accounts'
 import { encryptTotpSecret } from '@/lib/auth/totp-secret'
 import {
@@ -146,6 +147,11 @@ async function teardown() {
   // seed's contract is that re-running reproduces a known state, not an
   // accumulating one.
   await prisma.noticeTemplate.deleteMany({ where })
+  // B-132. `AuctionCase.lease` and `.unit` are both onDelete: Restrict, so a
+  // case opened for the pending_auction leases below would make the NEXT
+  // re-seed fail on a foreign key rather than reset. Advertisements cascade
+  // with it.
+  await prisma.auctionCase.deleteMany({ where })
   await prisma.lease.deleteMany({ where })
   await prisma.unit.deleteMany({ where })
   await prisma.unitTypeRate.deleteMany({ where })
@@ -562,12 +568,86 @@ async function makeLease(
   return lease
 }
 
+/// Unpaid rent for a lease that is supposed to owe money: one INVOICE per
+/// month, each with the ledger charge that accounts for it.
+///
+/// B-132. Every one of these pairs used to exist for exactly one lease — the
+/// primary facility's delinquent one — so Dallas's "delinquent" tenant and BOTH
+/// `pending_auction` leases were a lifecycle label with no money behind them.
+/// A `pending_auction` lease that owes nothing can never have a served lien
+/// notice behind it, and a served notice is the auction pipeline's own
+/// scheduling precondition (B-062), so the auction arc could not be walked end
+/// to end any more than the notice arc could before B-130.
+///
+/// B-114 is why there is an INVOICE at all and not just a ledger charge. Before
+/// it, the seed had a tenant who owed money and was not late: every aging figure
+/// in the product reads `daysPastDue` from the oldest unpaid INVOICE's original
+/// due date (D-25), and there were no invoices anywhere in the demo data — so
+/// the delinquency report bucketed the whole portfolio at 0–10 days, the tenant
+/// list could never show a past-due row, and the one lifecycle state the seed
+/// called `delinquent` demonstrated owing rather than delinquency.
+///
+/// Invoice FIRST and the charge carries its `invoiceId`, which is the whole
+/// lesson of B-130: `reconcile` counts invoices-outstanding PLUS charges no
+/// invoice accounts for, so an unlinked charge is counted twice and the lease
+/// reports as short by exactly what it owes — which US-27 then refuses to state
+/// a claim from, correctly.
+///
+/// Oldest month first, one month apart, because every aging figure in the
+/// product reads `daysPastDue` from the OLDEST unpaid invoice's original due
+/// date (D-25). Three months on a `pending_auction` lease is what puts it past
+/// a lien timeline rather than merely late.
+///
+/// Returns the next free invoice number, so one facility's demo invoices stay a
+/// single sequence — they are written directly rather than through B-044's
+/// gapless counter, since this script writes no audit entries either.
+async function seedUnpaidRent(
+  facility: { id: string; slug: string },
+  lease: { id: string; monthlyRateCents: number; protectionCents: number },
+  months: number,
+  firstNumber: number,
+): Promise<number> {
+  const owedCents = lease.monthlyRateCents + lease.protectionCents
+  for (let i = 0; i < months; i++) {
+    const age = 35 + (months - 1 - i) * 30
+    const invoice = await prisma.invoice.create({
+      data: {
+        facilityId: facility.id,
+        leaseId: lease.id,
+        number: `DEMO-${facility.slug.slice(-6).toUpperCase()}-${String(firstNumber + i).padStart(4, '0')}`,
+        issueDate: daysAgo(age),
+        dueDate: daysAgo(age),
+        periodStart: daysAgo(age),
+        periodEnd: daysAgo(age - 30),
+        totalCents: owedCents,
+        amountPaidCents: 0,
+        status: 'open',
+      },
+    })
+    await prisma.ledgerEntry.create({
+      data: {
+        facilityId: facility.id,
+        leaseId: lease.id,
+        type: 'charge',
+        amountCents: owedCents,
+        description: 'Monthly rent + protection plan',
+        occurredAt: daysAgo(age),
+        invoiceId: invoice.id,
+      },
+    })
+  }
+  return firstNumber + months
+}
+
 async function seedLifecycleStates(seeded: SeededFacility, startIndex: number, isPrimaryFacility: boolean) {
   const { facility, unitTypes } = seeded
   const pool = unitTypes.flatMap((t) => t.units.map((u) => ({ unit: u, rate: t.spec.street })))
   let cursor = 0
   const next = () => pool[cursor++]
   let index = startIndex
+
+  // One demo invoice sequence per facility, advanced by `seedUnpaidRent`.
+  let invoiceNumber = 1
 
   const summary: Record<string, number> = {}
   const note = (state: string) => {
@@ -680,6 +760,13 @@ async function seedLifecycleStates(seeded: SeededFacility, startIndex: number, i
     delinquentSlot.rate,
     200,
   )
+  // A real unpaid charge, so the portal dashboard's past-due banner and
+  // suspended gate-code panel (B-034) have a genuine signal to render instead
+  // of an empty $0, and so the delinquency report has a past-due row at all
+  // (B-114). At EVERY facility since B-132 — Dallas's "delinquent" tenant owed
+  // nothing until then, which made every multi-facility aging figure one lease
+  // at one site wearing three hats.
+  invoiceNumber = await seedUnpaidRent(facility, delinquentLease, 1, invoiceNumber)
   if (isPrimaryFacility) {
     // Cleared, not skipped — same reasoning as the staff account above.
     if (NO_LOGINS) {
@@ -690,59 +777,6 @@ async function seedLifecycleStates(seeded: SeededFacility, startIndex: number, i
     } else {
       await setPassword(delinquentTenant.id, 'tenant', DEMO_TENANT_PASSWORD)
     }
-    // The only ledger write in this whole seed — a real unpaid charge so the
-    // portal dashboard's past-due banner and suspended gate-code panel
-    // (B-034) have a genuine signal to render instead of an empty $0.
-    //
-    // B-114. The INVOICE behind that charge, unpaid and overdue.
-    //
-    // Without it the seed had a tenant who owed money and was not late: every
-    // aging figure in the product reads `daysPastDue` from the oldest unpaid
-    // INVOICE's original due date (D-25), and there were no invoices anywhere
-    // in the demo data at all. So the delinquency report bucketed the whole
-    // portfolio at 0–10 days, the tenant list could never show a past-due row,
-    // and the one lifecycle state the seed calls `delinquent` demonstrated
-    // owing rather than delinquency.
-    //
-    // **B-130: the invoice is created FIRST and the ledger charge carries its
-    // `invoiceId`, which it did not until 2026-08-18.** B-114 added the invoice
-    // beside an existing ledger write and never linked the two, so `reconcile`
-    // counted the same 16,100 twice — once as an invoice outstanding and once
-    // as an uninvoiced charge — and reported the lease as not reconciling by
-    // exactly the amount owed. That is the check working: `generateInvoices`
-    // links every charge it raises, and an unlinked one genuinely is a charge
-    // no invoice accounts for. The consequence was that **no demo lease could
-    // generate a lien notice at all** (0 of 14, measured), because US-27
-    // refuses to state a claim from sources that disagree — so B-061's notice
-    // generation, its service, and B-083's certified-mail send had no e2e path
-    // between them. Dated to match, so the two tell the same story.
-    const owedCents = delinquentSlot.rate + delinquentLease.protectionCents
-    const delinquentInvoice = await prisma.invoice.create({
-      data: {
-        facilityId: facility.id,
-        leaseId: delinquentLease.id,
-        number: `DEMO-${facility.slug.slice(-6).toUpperCase()}-0001`,
-        issueDate: daysAgo(35),
-        dueDate: daysAgo(35),
-        periodStart: daysAgo(35),
-        periodEnd: daysAgo(5),
-        totalCents: owedCents,
-        amountPaidCents: 0,
-        status: 'open',
-      },
-    })
-    await prisma.ledgerEntry.create({
-      data: {
-        facilityId: facility.id,
-        leaseId: delinquentLease.id,
-        type: 'charge',
-        amountCents: owedCents,
-        description: 'Monthly rent + protection plan',
-        occurredAt: daysAgo(35),
-        invoiceId: delinquentInvoice.id,
-      },
-    })
-
     // B-130. Notice templates, so the delinquent lease can actually generate
     // one.
     //
@@ -774,9 +808,32 @@ async function seedLifecycleStates(seeded: SeededFacility, startIndex: number, i
   note('delinquent')
 
   // --- pending_auction: far enough along to demo the lien arc -------------
+  //
+  // B-132. "Far enough along" was a comment and nothing else until then: this
+  // lease had no invoices and no ledger entries at all, so it owed nothing, so
+  // no notice could ever state a claim against it and the auction pipeline's
+  // scheduling precondition could never be met. Three unpaid months, and the
+  // auction CASE the delinquency timeline's `flag_auction_eligible` step would
+  // have opened on the way here (B-062) — a lease sitting in this status with
+  // no case behind it is a state the product itself cannot reach.
+  //
+  // What is deliberately NOT seeded: a generated or served lien notice, and any
+  // advertising record. Both are claims about documents that were served and
+  // advertisements that ran, and fabricating either is what D-63 refused for
+  // exactly this arc. The demo leaves them walkable through the product, the
+  // same way B-130 left notice generation to the e2e rather than to the seed.
   const auctionTenant = await makeTenant('Avery', 'Auction', index++)
   const auctionSlot = next()
-  await makeLease(facility.id, auctionSlot.unit.id, auctionTenant.id, 'pending_auction', auctionSlot.rate, 300)
+  const auctionLease = await makeLease(
+    facility.id,
+    auctionSlot.unit.id,
+    auctionTenant.id,
+    'pending_auction',
+    auctionSlot.rate,
+    300,
+  )
+  invoiceNumber = await seedUnpaidRent(facility, auctionLease, 3, invoiceNumber)
+  await openAuctionCase({ leaseId: auctionLease.id, facilityId: facility.id })
   note('pending_auction')
 
   // --- ended: moved out, unit back in service -----------------------------
