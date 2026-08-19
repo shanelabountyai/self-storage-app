@@ -1,6 +1,11 @@
 import Link from 'next/link'
 import { getAdminActor } from '@/lib/admin/context'
-import { delinquencyReport, movesReport, occupancyReport } from '@/lib/admin/reports'
+import {
+  delinquencyReport,
+  movesReport,
+  occupancyReport,
+  unitOccupancyNote,
+} from '@/lib/admin/reports'
 import { formatCents } from '@/lib/format'
 
 export const metadata = { title: 'Reports' }
@@ -255,7 +260,18 @@ export default async function ReportsPage({
             Export CSV
           </Link>
         </div>
-        <table className="w-full text-sm">
+        {/* B-131. The date picker above implies the range applies to every
+            figure in this table, and for unit and square-foot occupancy it
+            only does once there is recorded status history covering it. The
+            sentence is the TOTAL's, which is the weakest claim any row makes —
+            when one facility can answer as-at and another cannot, this
+            under-claims for the one that can, which is the safe direction.
+            `aria-describedby` rather than a bare paragraph so a reader who
+            jumps straight to the table by table navigation still gets it. */}
+        <p id="occupancy-as-at" className="text-sm text-muted-foreground">
+          {unitOccupancyNote(occupancy.total.unitOccupancy, label)}
+        </p>
+        <table className="w-full text-sm" aria-describedby="occupancy-as-at">
           <caption className="sr-only">
             Unit occupancy, square-foot occupancy and economic occupancy per facility for {label}
           </caption>

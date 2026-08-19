@@ -70,6 +70,81 @@ export type FacilityOccupancy = {
   facilityName: string
   occupancy: OccupancyResult
   economic: EconomicOccupancyResult
+  /// B-131. Unit and square-foot occupancy describe ONE INSTANT, not a range,
+  /// so the report has to say which instant — a screen with a date picker on it
+  /// implies an answer for the range it shows, and for most of this product's
+  /// life it quietly returned today's unit statuses under a past month's
+  /// heading. Economic occupancy is unaffected: it comes from dated ledger
+  /// rows and genuinely covers the period.
+  unitOccupancy: UnitOccupancyProvenance
+}
+
+export type UnitOccupancyProvenance = {
+  /// The instant the unit and square-foot figures describe.
+  asAt: Date
+  /// True when `asAt` is the end of the period asked for — i.e. the date range
+  /// actually applied. False means the figures are current statuses shown
+  /// because the period predates `historyBegins` (or has not ended yet), and
+  /// every surface that renders them must say so.
+  followsPeriod: boolean
+  /// Why. Carried rather than re-derived at each surface, because "the month is
+  /// older than the history" and "the month has not finished" are different
+  /// sentences to a reader and both were reachable by the same false flag.
+  reason: 'as-at-period-end' | 'period-not-ended' | 'before-history' | 'no-units'
+  /// When this facility's status history starts. Null for a facility with no
+  /// units. Nothing before it is answerable and nothing pretends otherwise.
+  historyBegins: Date | null
+}
+
+function formatDay(at: Date): string {
+  return at.toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    timeZone: 'UTC',
+  })
+}
+
+/// The one sentence every surface prints under a unit-occupancy figure.
+///
+/// Written once because the screen, the CSV and the scheduled email each show
+/// the same number and a reader who sees two different explanations of it
+/// trusts neither — the same argument `@storage/core/metrics` makes about the
+/// figure itself, applied to the caveat.
+export function unitOccupancyNote(
+  provenance: UnitOccupancyProvenance,
+  periodLabel: string,
+): string {
+  const { reason, historyBegins } = provenance
+  switch (reason) {
+    case 'as-at-period-end':
+      return `Unit and square-foot occupancy are as at the end of ${periodLabel}.`
+    case 'period-not-ended':
+      return `Unit and square-foot occupancy are as of today — ${periodLabel} has not ended yet. Economic occupancy covers the days so far.`
+    case 'before-history':
+      return `Unit and square-foot occupancy are as of today, not ${periodLabel}: unit status was not recorded before ${formatDay(historyBegins!)}. Economic occupancy does cover ${periodLabel}.`
+    case 'no-units':
+      return `No units at this facility, so there is no occupancy to report for ${periodLabel}.`
+  }
+}
+
+/// The as-at status of every unit at a facility that existed at `asAt`.
+///
+/// `DISTINCT ON` rather than a fetch-and-dedupe in JS because the history grows
+/// without bound while the unit count does not — the row this needs is the last
+/// one per unit, and Postgres can find it from the `(facilityId, effectiveFrom)`
+/// index instead of shipping five years of changes to Node.
+///
+/// A unit with no row at or before `asAt` did not exist yet, and is absent from
+/// the result rather than counted at its founding status — a building opened in
+/// August is correctly not part of July's denominator.
+async function unitStatusesAsAt(facilityId: string, asAt: Date) {
+  return prisma.$queryRaw<{ unitId: string; status: string }[]>`
+    SELECT DISTINCT ON (h."unitId") h."unitId" AS "unitId", h."status"::text AS "status"
+    FROM "unit_status_history" h
+    WHERE h."facilityId" = ${facilityId} AND h."effectiveFrom" < ${asAt}
+    ORDER BY h."unitId", h."effectiveFrom" DESC, h."id" DESC
+  `
 }
 
 /// US-39.1 + US-39.2 for one facility.
@@ -88,10 +163,11 @@ export async function occupancyForFacility(
   periodStart: Date,
   periodEnd: Date,
 ): Promise<FacilityOccupancy> {
-  const [units, rates, collected] = await Promise.all([
+  const [units, rates, collected, history] = await Promise.all([
     prisma.unit.findMany({
       where: { facilityId },
       select: {
+        id: true,
         status: true,
         unitTypeId: true,
         unitType: { select: { widthFt: true, lengthFt: true } },
@@ -106,7 +182,43 @@ export async function occupancyForFacility(
       where: { facilityId, type: 'payment', occurredAt: { gte: periodStart, lt: periodEnd } },
       _sum: { amountCents: true },
     }),
+    // B-131. The earliest thing this facility can answer for. Null means no
+    // units at all, which is the one case where the question is trivial.
+    prisma.unitStatusHistory.aggregate({
+      where: { facilityId },
+      _min: { effectiveFrom: true },
+    }),
   ])
+
+  const historyBegins = history._min.effectiveFrom
+  const now = new Date()
+  // Three ways the range cannot apply, and they are different sentences to a
+  // reader: no units at all, the month is older than the history, or the month
+  // has not finished. All three land on the same figures — today's — so the
+  // reason is carried, not re-derived from a bare false.
+  const reason: UnitOccupancyProvenance['reason'] =
+    historyBegins === null
+      ? 'no-units'
+      : periodEnd.getTime() > now.getTime()
+        ? 'period-not-ended'
+        : historyBegins >= periodEnd
+          ? 'before-history'
+          : 'as-at-period-end'
+  const followsPeriod = reason === 'as-at-period-end'
+  const asAt = followsPeriod ? periodEnd : now
+
+  // Absent from the as-at map = the unit did not exist yet, so it drops out of
+  // BOTH the numerator and the denominator rather than being counted at some
+  // status it did not have.
+  const asAtStatus = followsPeriod
+    ? new Map((await unitStatusesAsAt(facilityId, asAt)).map((row) => [row.unitId, row.status]))
+    : null
+  const effectiveUnits = asAtStatus
+    ? units.flatMap((unit) => {
+        const status = asAtStatus.get(unit.id)
+        return status ? [{ ...unit, status: status as (typeof unit)['status'] }] : []
+      })
+    : units
 
   // The rate in force at period end, per unit type — first row wins because
   // the query is already ordered newest-effective-first.
@@ -115,7 +227,11 @@ export async function occupancyForFacility(
     if (!streetRateByType.has(rate.unitTypeId)) streetRateByType.set(rate.unitTypeId, rate.streetRateCents)
   }
 
-  const forOccupancy = units.map((unit) => ({
+  // Unit TYPE is read as it stands today, not as at the period: nothing
+  // historises a retype, so square footage is current even when the status is
+  // not. In practice a retype is rare and a resize rarer still; when that stops
+  // being true this is the second table, not a patch to this one.
+  const forOccupancy = effectiveUnits.map((unit) => ({
     status: unit.status,
     squareFeet: unit.unitType.widthFt * unit.unitType.lengthFt,
   }))
@@ -130,17 +246,27 @@ export async function occupancyForFacility(
     occupancy: occupancy(forOccupancy),
     economic: economicOccupancy(
       collectedCents,
-      units.map((unit) => ({
+      // Same unit set as the occupancy above, on purpose — this module exists
+      // to stop two figures on one page disagreeing about which units count.
+      effectiveUnits.map((unit) => ({
         rentable: unit.status !== 'unrentable',
         streetRateCents: streetRateByType.get(unit.unitTypeId) ?? 0,
       })),
     ),
+    unitOccupancy: { asAt, followsPeriod, reason, historyBegins },
   }
 }
 
 export type OccupancyReport = {
   rows: FacilityOccupancy[]
-  total: { occupancy: OccupancyResult; economic: EconomicOccupancyResult }
+  total: {
+    occupancy: OccupancyResult
+    economic: EconomicOccupancyResult
+    /// B-131. The portfolio total follows the period only if EVERY facility in
+    /// it does. A total assembled from one historical row and one current one
+    /// is a number with no instant, and it is the number that gets quoted.
+    unitOccupancy: UnitOccupancyProvenance
+  }
 }
 
 export async function occupancyReport(
@@ -162,7 +288,35 @@ export async function occupancyReport(
     total: {
       occupancy: sumOccupancy(rows.map((row) => row.occupancy)),
       economic: sumEconomicOccupancy(rows.map((row) => row.economic)),
+      unitOccupancy: combineProvenance(rows.map((row) => row.unitOccupancy)),
     },
+  }
+}
+
+/// The weakest claim any row makes, which is the only claim the total can make.
+/// `historyBegins` is the LATEST of the facilities' starts for the same reason:
+/// the portfolio can answer as-at only from the moment its newest site could.
+export function combineProvenance(
+  parts: readonly UnitOccupancyProvenance[],
+): UnitOccupancyProvenance {
+  const now = new Date()
+  // A facility with no units has no history and no units to count. It cannot
+  // make the portfolio less answerable, so it is dropped rather than allowed
+  // to drag `followsPeriod` false for sites that DO have a recorded past.
+  const speaking = parts.filter((part) => part.historyBegins !== null)
+  if (speaking.length === 0) {
+    return { asAt: now, followsPeriod: false, reason: 'no-units', historyBegins: null }
+  }
+
+  const followsPeriod = speaking.every((part) => part.followsPeriod)
+  const failing = speaking.find((part) => !part.followsPeriod)
+  return {
+    // Rows that follow the period share its end; rows that do not are each
+    // "now", and a mixed total is only honest as now.
+    asAt: followsPeriod ? speaking[0]!.asAt : now,
+    followsPeriod,
+    reason: failing?.reason ?? 'as-at-period-end',
+    historyBegins: new Date(Math.max(...speaking.map((part) => part.historyBegins!.getTime()))),
   }
 }
 

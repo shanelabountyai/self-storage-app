@@ -30,6 +30,10 @@ export async function GET(request: Request): Promise<Response> {
     csvCents(row.economic.collectedCents),
     csvCents(row.economic.grossPotentialCents),
     csvPercent(row.economic.ratio),
+    // B-131. A date, not the screen's prose — a spreadsheet column that says
+    // which instant the unit figures describe is the same fact in the form the
+    // reader of a CSV can filter on. Per row, because facilities can differ.
+    row.unitOccupancy.asAt.toISOString().slice(0, 10),
   ])
 
   rows.push([
@@ -43,6 +47,7 @@ export async function GET(request: Request): Promise<Response> {
     csvCents(report.total.economic.collectedCents),
     csvCents(report.total.economic.grossPotentialCents),
     csvPercent(report.total.economic.ratio),
+    report.total.unitOccupancy.asAt.toISOString().slice(0, 10),
   ])
 
   const csv = toCsv(
@@ -57,6 +62,7 @@ export async function GET(request: Request): Promise<Response> {
       'Collected',
       'Gross potential',
       'Economic occupancy %',
+      'Unit occupancy as at',
     ],
     rows,
   )

@@ -14,7 +14,12 @@ import { localParts } from '@storage/core/jobs'
 import { requirePermission, assertFacilityAccess } from '@/lib/rbac/authorize'
 import { toAuditActor } from '@/lib/rbac/audit-actor'
 import type { Actor } from '@/lib/rbac/actor'
-import { agingForFacility, movesForFacility, occupancyForFacility } from '@/lib/admin/reports'
+import {
+  agingForFacility,
+  movesForFacility,
+  occupancyForFacility,
+  unitOccupancyNote,
+} from '@/lib/admin/reports'
 import { billedTotal, collectedTotal, facilityRevenue } from '@/lib/admin/revenue-report'
 import { periodLabel } from '@/lib/admin/accounting-close'
 import { buildManagementPack } from '@/lib/admin/management-pack'
@@ -105,6 +110,11 @@ async function sectionsFor(
     return [
       {
         heading: 'Occupancy',
+        // B-131. The same sentence the screen prints, from the same function.
+        // An email is read away from the report it came from, so the figure has
+        // to carry its own instant — and it must not be a second wording of the
+        // caveat, or a reader who checks one against the other trusts neither.
+        paragraphs: [unitOccupancyNote(row.unitOccupancy, period.label)],
         table: {
           caption: `Occupancy for ${period.label}`,
           columns: ['Measure', 'Value'],

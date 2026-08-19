@@ -427,51 +427,51 @@ enum AddressSource {
 // ------------------------------------------------------------ inventory ----
 
 model Facility {
-  id                  String         @id @default(cuid())
-  name                String
+  id                       String         @id @default(cuid())
+  name                     String
   /// URL segment for location pages; SEO-sensitive, see PRD 04 OQ-7.
-  slug                String         @unique
-  status              FacilityStatus @default(active)
-  addressLine1        String
-  addressLine2        String?
-  city                String
+  slug                     String         @unique
+  status                   FacilityStatus @default(active)
+  addressLine1             String
+  addressLine2             String?
+  city                     String
   /// Two-letter code. Drives compliance config; Texas is the seeded default (D-10).
-  state               String
-  postalCode          String
-  country             String         @default("US")
-  latitude            Float?
-  longitude           Float?
+  state                    String
+  postalCode               String
+  country                  String         @default("US")
+  latitude                 Float?
+  longitude                Float?
   /// IANA name, e.g. "America/Chicago". All display time is derived from this.
-  timezone            String
-  phone               String?
-  email               String?
+  timezone                 String
+  phone                    String?
+  email                    String?
   // ── PRD 04 US-2 (B-067). The marketing profile: the unique content blocks
   // a marketer edits without a deploy. Nullable throughout, and every one of
   // them falls back to the generated default from B-066 — a facility nobody
   // has written copy for still has a title, a description and five true FAQs.
   /// Overrides FR-SEO-3's generated title. ~60 characters is what a result
   /// renders; the editor counts, it does not truncate.
-  seoTitle            String?
+  seoTitle                 String?
   /// Overrides the generated meta description. ~155 characters.
-  metaDescription     String?
+  metaDescription          String?
   /// One or two sentences under the facility name. The first thing a renter
   /// reads after the price.
-  heroCopy            String?
+  heroCopy                 String?
   /// The long-form unique description. The single biggest lever on whether a
   /// facility page reads as its own page rather than a template with the city
   /// swapped, which is what a thin-content penalty is.
-  longDescription     String?
+  longDescription          String?
   /// PRD 04 US-5 AC2. When staff last confirmed the Google Business Profile
   /// matches this record. The system flags anything unverified for >90 days.
   /// PRD 02 US-43. How long a new lead may sit uncontacted before it becomes
   /// a task. Business hours are overkill here — a lead is a person waiting for
   /// a call back, and four hours on a Sunday still feels like four hours.
-  leadFollowUpHours   Int            @default(4)
-  gbpVerifiedAt       DateTime?      @db.Timestamptz(6)
+  leadFollowUpHours        Int            @default(4)
+  gbpVerifiedAt            DateTime?      @db.Timestamptz(6)
   /// Which checklist items were ticked at that verification. A string array
   /// rather than six booleans: the checklist is US-5 AC1's list today and will
   /// grow, and each addition would otherwise be a migration.
-  gbpCheckedItems     String[]       @default([])
+  gbpCheckedItems          String[]       @default([])
   /// PRD 04 US-7 AC1 (B-071). The link the review-request email sends people
   /// to. Null means the request cannot go out at all — a review ask with
   /// nowhere to leave the review is worse than not asking, so the job that
@@ -483,19 +483,19 @@ model Facility {
   /// that imports, and one who has renamed two accounts only has to say so
   /// twice. Per facility rather than org-wide because separate books per site
   /// is ordinary in this industry.
-  chartOfAccounts     Json?
-  googleReviewUrl     String?
+  chartOfAccounts          Json?
+  googleReviewUrl          String?
   /// US-7 AC1: "N days after move-in completion (default 7, configurable per
   /// facility)." Its own control ships in this item, per this repo's own rule
   /// — a column that changes behaviour with no form field is how five of them
   /// end up reachable only from a database client.
-  reviewRequestDelayDays Int         @default(7)
+  reviewRequestDelayDays   Int            @default(7)
   /// PRD 04 US-9 AC2 (B-073). "Follow-up sequence: +1h, +24h, +72h
   /// (configurable)." The STRUCTURE (three steps) is fixed
   /// (packages/core/checkout/abandonment.ts); this is only the timing, with
   /// its own control shipped in this item per the same repo rule as the
   /// review-request delay above.
-  abandonmentFollowUpHours Int[]     @default([1, 24, 72])
+  abandonmentFollowUpHours Int[]          @default([1, 24, 72])
 
   /// PRD 03 FR-3 / US-6. Which gate controller this facility talks to.
   ///
@@ -509,7 +509,7 @@ model Facility {
   /// It is a real driver against a fake vendor, which is what makes it prove
   /// anything about the port; it is not a real integration and must never be
   /// pointed at a live site.
-  gateAdapter         String         @default("simulated")
+  gateAdapter                  String        @default("simulated")
   /// B-103 / PRD 01 §3. Whether a renter may pay by bank debit at CHECKOUT.
   ///
   /// Off by default, and per facility because it is a risk appetite rather than
@@ -518,47 +518,47 @@ model Facility {
   /// to "portal payments and autopay; optional at checkout" — this is that
   /// option, and an operator who does not want it never has to think about it.
   /// Portal ACH is not gated: there the tenant already has the unit.
-  achAtCheckoutEnabled Boolean       @default(false)
+  achAtCheckoutEnabled         Boolean       @default(false)
   /// PRD 03 US-6 AC2: "Overdue manual tasks (configurable, default 4 business
   /// hours) escalate in the dashboard." Business hours, counted against this
   /// facility's own `officeHours` — a task raised at 6pm on Friday is not four
   /// hours overdue on Saturday morning, because nobody was there.
-  manualTaskSlaHours  Int            @default(4)
+  manualTaskSlaHours           Int           @default(4)
   /// Weekly schedules land in B-008; held as JSON until that item defines them.
-  officeHours         Json?
-  gateHours           Json?
-  amenities           String[]       @default([])
+  officeHours                  Json?
+  gateHours                    Json?
+  amenities                    String[]      @default([])
   /// US-44: protection **required** (a proof-of-insurance waiver is still
   /// permitted) vs optional. Texas practice is generally "required, or show
   /// proof", so that is the shipped default — configuration, not law (D-10).
-  protectionRequired  Boolean        @default(true)
+  protectionRequired           Boolean       @default(true)
   /// US-9 AC1: default cap of 3 named people per lease, configurable.
-  authorizedAccessCap Int            @default(3)
+  authorizedAccessCap          Int           @default(3)
   /// US-32: a cash payment at or above this needs manager-or-above to take it.
   /// Configuration, not policy — $500 is a starting value, not a rule.
-  cashApprovalThresholdCents Int      @default(50000)
+  cashApprovalThresholdCents   Int           @default(50000)
   /// PRD 02 US-33 (B-078). "Over/short beyond a configurable threshold
   /// requires a manager note." A drawer is never exactly right — a few cents
   /// of miscount is noise, and demanding a written explanation for every one
   /// of them teaches people to write "count" and move on. $5 is a starting
   /// value, not a rule.
-  drawerVarianceThresholdCents Int    @default(500)
+  drawerVarianceThresholdCents Int           @default(500)
   /// US-14 move-out. Whether the final month is prorated to the move-out day,
   /// or the tenant pays through the period they are in. Texas has no statute
   /// either way and "no proration on move-out" is the common lease term, so
   /// that is the shipped default — configuration, not law (D-10).
-  prorateOnMoveOut    Boolean        @default(false)
+  prorateOnMoveOut             Boolean       @default(false)
   /// US-17. Whether every lease bills on the 1st, or each on its own move-in
   /// anniversary. **Anniversary is the default (D-27)** — the move-in payment
   /// buys a full period starting that day, so nothing is prorated on the way
   /// in, and the tenant's due date never moves.
-  billingPolicy       BillingPolicy  @default(anniversary)
+  billingPolicy                BillingPolicy @default(anniversary)
   /// US-17: "invoices generate N days before due (configurable, default 5)".
-  invoiceLeadDays     Int            @default(5)
+  invoiceLeadDays              Int           @default(5)
   /// US-18's other half. Only ever reachable under `first_of_month`: under
   /// anniversary billing there is no partial first period to prorate, because
   /// the period starts on the day the tenant moved in.
-  prorateOnMoveIn     Boolean        @default(true)
+  prorateOnMoveIn              Boolean       @default(true)
   /// US-20's retry schedule: days AFTER the invoice's original due date on
   /// which a failed autopay is tried again. The default is US-20's own
   /// +1/+3/+5, which with the attempt on the due date itself is four tries.
@@ -568,18 +568,18 @@ model Facility {
   /// same anchoring rule `daysPastDue` uses (D-25), and for the same reason:
   /// measuring from the previous try stretches the schedule further on every
   /// decline instead of converging.
-  paymentRetryDays    Int[]          @default([1, 3, 5])
+  paymentRetryDays             Int[]         @default([1, 3, 5])
   /// D-16 / US-45. Days past due at which the tenant's gate access is
   /// suspended. Texas practice is around 6; configuration, not law (D-10).
   /// Zero or less disables the rule entirely, which is a real operator choice.
-  accessSuspendDaysPastDue Int       @default(6)
+  accessSuspendDaysPastDue     Int           @default(6)
   /// US-28 (B-062). How long an auction surplus is held before it must be
   /// dispositioned — paid to the former tenant, or remitted to the state.
   ///
   /// Configuration, emphatically not law: US-28's own note says the Texas
   /// duration needs an attorney pass under D-10. The default is a placeholder
   /// of the right order of magnitude, and the settings screen says so.
-  surplusHoldDays     Int            @default(365)
+  surplusHoldDays              Int           @default(365)
   /// What counts as a qualifying payment for automatic restore.
   ///
   /// Zero — the default and D-16's decision — means the balance must reach
@@ -589,38 +589,38 @@ model Facility {
   /// any partial-payment rule teaches a tenant to pay the minimum that reopens
   /// the gate, every month, which converts a collections tool into a
   /// subscription for the delinquent.
-  accessRestoreAtOrBelowCents Int    @default(0)
+  accessRestoreAtOrBelowCents  Int           @default(0)
   /// US-22's configurable allocation order. Categories from
   /// `packages/core/billing`; a category left out is paid last rather than
   /// never, so a misconfigured order degrades to a worse sequence rather than
   /// making money uncollectable.
-  paymentAllocationOrder String[]  @default(["tax", "fee", "protection", "rent"])
+  paymentAllocationOrder       String[]      @default(["tax", "fee", "protection", "rent"])
   /// PRD 05 CN-3's dunning ladder: days past due at which the tenant is
   /// chased. Empty means no automated chasing, which is a real operator
   /// choice for a site that phones instead.
-  dunningDays            Int[]     @default([1, 5, 10, 30])
+  dunningDays                  Int[]         @default([1, 5, 10, 30])
   /// PRD 05 CN-17. The name a tenant sees in their inbox. Null falls back to
   /// the facility name, which is the sensible default and what shipped before
   /// this was configurable.
-  emailFromName          String?
+  emailFromName                String?
   /// Where a reply goes. The From address stays on the shared authenticated
   /// sending domain — moving it to a facility's own mailbox would break SPF
   /// and DKIM for every send — so the facility's real inbox is reached by
   /// reply-to instead. That split is CN-17's own design.
-  emailReplyTo           String?
+  emailReplyTo                 String?
   /// PRD 05 FR-5 (B-074). The Twilio Messaging Service this facility's SMS
   /// sends through — one number pool per facility, per §6.3's A2P 10DLC
   /// campaign attachment. Null means SMS is not configured for this facility
   /// yet: every `sms_preferred_email_fallback` rule degrades to email-only,
   /// the same honest-degradation posture `selectSmsProvider` uses when no
   /// Twilio credentials are set at all.
-  smsMessagingServiceSid  String?
+  smsMessagingServiceSid       String?
   /// PRD 05 FR-8 / §6.4. TCPA's 8am-9pm recipient-local window, adopted for
   /// ALL SMS regardless of classification — not just marketing. Defaults are
   /// the PRD's own conservative default; a per-org stricter override (e.g.
   /// 8am-8pm to clear Florida's mini-TCPA window) is this pair of fields.
-  smsQuietHoursStartHour  Int       @default(8)
-  smsQuietHoursEndHour    Int       @default(21)
+  smsQuietHoursStartHour       Int           @default(8)
+  smsQuietHoursEndHour         Int           @default(21)
   /// PRD 01 US-401 (B-018), made configurable by B-126 / D-50.
   ///
   /// Days AFTER the renter's own chosen move-in date that a free reservation
@@ -634,7 +634,7 @@ model Facility {
   /// which is US-401's rule and the reason D-7's "7 days from booking" was
   /// never built: a renter picking the maximum 14-day-out move-in would have
   /// lost the unit a week before the day they reserved it for.
-  reservationHoldGraceDays Int       @default(1)
+  reservationHoldGraceDays     Int           @default(1)
   /// PRD 01 §9 Phase 2 (B-106). How far ahead a PAID checkout may schedule its
   /// move-in.
   ///
@@ -649,7 +649,7 @@ model Facility {
   /// 60 days as the shipped default — long enough for the lease-end and
   /// house-move planning that makes somebody book ahead, short enough that the
   /// rate they locked is still a rate the facility recognises.
-  maxCheckoutStartDaysAhead Int      @default(60)
+  maxCheckoutStartDaysAhead    Int           @default(60)
   // ── PRD 10 (B-100). Refer a friend. ──────────────────────────────────────
   //
   // Every one of these is a column that configures behaviour, so every one
@@ -659,28 +659,28 @@ model Facility {
   /// OFF by default, deliberately. The program pays real money on a rule set
   /// an attorney has not reviewed (§9), so an operator turns it on knowingly
   /// rather than discovering it is already running.
-  referralEnabled          Boolean   @default(false)
+  referralEnabled              Boolean       @default(false)
   /// §3. Both sides separately configurable, because "give the new customer
   /// $75 and the referrer $25" is a real campaign and a single shared field
   /// would need a migration to allow it. Both default to $50.
-  referralRewardCents      Int       @default(5000)
-  refereeRewardCents       Int       @default(5000)
+  referralRewardCents          Int           @default(5000)
+  refereeRewardCents           Int           @default(5000)
   /// §4.1. Move out inside this and an unapplied reward is cancelled; an
   /// already-applied one is NOT clawed back.
-  referralMinimumStayDays  Int       @default(30)
+  referralMinimumStayDays      Int           @default(30)
   /// §5.4. Qualifying referrals one referrer may earn per rolling 12 months.
-  referralAnnualCap        Int       @default(10)
+  referralAnnualCap            Int           @default(10)
   /// §5.1. An unused invite dies after this, so outstanding exposure has a
   /// horizon rather than accumulating for the life of the tenancy.
-  referralInviteExpiryDays Int       @default(60)
+  referralInviteExpiryDays     Int           @default(60)
   /// §5.1/§5.4. Unredeemed invites one tenant may hold at once. Minting a
   /// hundred and posting them all is the same attack as a permanent code.
-  referralOpenInviteCap    Int       @default(5)
+  referralOpenInviteCap        Int           @default(5)
   /// §5.4. Referrals are local by default; cross-facility is a different
   /// economic bet an operator opts into.
-  referralCrossFacility    Boolean   @default(false)
+  referralCrossFacility        Boolean       @default(false)
   /// Days of notice the lease requires before a move-out. 0 means none.
-  moveOutNoticeDays   Int            @default(10)
+  moveOutNoticeDays            Int           @default(10)
   /// PRD 02 US-11 (B-076). Minimum advance notice before a tenant rate
   /// increase may take effect. "Default 30 days; configurable, since required
   /// notice varies by state/lease" — the AC's own words. Zero is refused
@@ -688,10 +688,10 @@ model Facility {
   /// the one configuration that is never a deliberate operator choice, and
   /// D-10's attorney pass has not settled the Texas figure (PROGRESS.md
   /// still lists it open), so the default is the conservative common term.
-  rateIncreaseNoticeDays Int         @default(30)
+  rateIncreaseNoticeDays       Int           @default(30)
   /// A residual balance at or below this can be written off to close the
   /// lease; anything above needs a manager (US-14's own AC).
-  writeOffThresholdCents Int         @default(1000)
+  writeOffThresholdCents       Int           @default(1000)
   /// D-17. What happens when a tenant's proof of insurance lapses: enrol the
   /// lease into `defaultProtectionTier`, or only raise a staff task.
   ///
@@ -701,13 +701,13 @@ model Facility {
   /// attorney pass before it runs against a real tenant". A default of true
   /// would start charging the moment a facility is seeded; false means the
   /// switch is thrown deliberately, per facility, once that pass is done.
-  autoEnrolProtectionOnLapse Boolean @default(false)
+  autoEnrolProtectionOnLapse   Boolean       @default(false)
   /// The `ProtectionPlan.tier` a lapsed waiver enrols into. Null means no tier
   /// has been chosen, and the lapse raises a task rather than a charge even
   /// when the switch above is on.
-  defaultProtectionTier String?
-  createdAt           DateTime       @default(now()) @db.Timestamptz(6)
-  updatedAt           DateTime       @updatedAt @db.Timestamptz(6)
+  defaultProtectionTier        String?
+  createdAt                    DateTime      @default(now()) @db.Timestamptz(6)
+  updatedAt                    DateTime      @updatedAt @db.Timestamptz(6)
 
   unitTypes              UnitType[]
   units                  Unit[]
@@ -768,6 +768,7 @@ model Facility {
   referrals              Referral[]
   accountingPeriods      AccountingPeriod[]
   reportSubscriptions    ReportSubscription[]
+  unitStatusHistory      UnitStatusHistory[]
 
   @@index([state])
   @@map("facility")
@@ -869,13 +870,13 @@ model UnitType {
   createdAt         DateTime @default(now()) @db.Timestamptz(6)
   updatedAt         DateTime @updatedAt @db.Timestamptz(6)
 
-  facility         Facility          @relation(fields: [facilityId], references: [id], onDelete: Cascade)
-  units            Unit[]
-  reservations     Reservation[]
-  checkoutSessions CheckoutSession[]
+  facility             Facility              @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  units                Unit[]
+  reservations         Reservation[]
+  checkoutSessions     CheckoutSession[]
   checkoutSessionUnits CheckoutSessionUnit[]
-  leads            Lead[]
-  rates            UnitTypeRate[]
+  leads                Lead[]
+  rates                UnitTypeRate[]
 
   @@unique([facilityId, name])
   @@index([facilityId])
@@ -937,12 +938,16 @@ model Unit {
   createdAt         DateTime              @default(now()) @db.Timestamptz(6)
   updatedAt         DateTime              @updatedAt @db.Timestamptz(6)
 
-  facility         Facility          @relation(fields: [facilityId], references: [id], onDelete: Cascade)
-  unitType         UnitType          @relation(fields: [unitTypeId], references: [id], onDelete: Restrict)
-  leases           Lease[]
-  reservations     Reservation[]
-  checkoutSessions CheckoutSession[]
+  facility             Facility              @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  unitType             UnitType              @relation(fields: [unitTypeId], references: [id], onDelete: Restrict)
+  leases               Lease[]
+  reservations         Reservation[]
+  checkoutSessions     CheckoutSession[]
   checkoutSessionUnits CheckoutSessionUnit[]
+  overlocks            UnitOverlock[]
+  maintenanceTickets   MaintenanceTicket[]
+  auctionCases         AuctionCase[]
+  statusHistory        UnitStatusHistory[]
 
   @@unique([facilityId, number])
   @@index([facilityId, status])
@@ -951,9 +956,39 @@ model Unit {
   /// name to the one the migration created, so schema and database agree.
   @@index([facilityId, building, floor], map: "unit_facility_building_floor")
   @@map("unit")
-  overlocks UnitOverlock[]
-  maintenanceTickets MaintenanceTicket[]
-  auctionCases AuctionCase[]
+}
+
+/// B-131. What a unit's status USED to be, so an occupancy figure for a past
+/// month is the month's figure and not today's wearing its heading.
+///
+/// **Written by a database trigger, never by application code** — see
+/// `20260819..._unit_status_history/migration.sql`. `Unit.status` is derived
+/// and has two writers today (`recomputeUnitStatus` and the bulk status
+/// operation), plus the seed, plus whatever the next item adds; a history that
+/// depends on every one of them remembering is a history with holes in it, and
+/// a hole here is indistinguishable from "the status did not change".
+///
+/// Rows begin at the migration, which backfilled one per existing unit. There
+/// is deliberately no attempt to reconstruct anything earlier: the audit log
+/// carries only the HUMAN status changes, so a backfill from it would be
+/// confidently partial, which is worse than an honest gap. Readers compare
+/// against the earliest row and say so — see `occupancyForFacility`.
+model UnitStatusHistory {
+  id            String     @id @default(cuid())
+  unitId        String
+  facilityId    String
+  status        UnitStatus
+  /// The instant this status took effect. Set by the trigger from `now()`, so
+  /// every row in one transaction shares a timestamp.
+  effectiveFrom DateTime   @default(now()) @db.Timestamptz(6)
+
+  unit     Unit     @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  facility Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+
+  /// The as-at read is "latest row per unit at or before T, for one facility".
+  @@index([facilityId, effectiveFrom])
+  @@index([unitId, effectiveFrom])
+  @@map("unit_status_history")
 }
 
 // --------------------------------------------------------- people/leases ----
@@ -1011,23 +1046,23 @@ model Tenant {
   /// Optimistic locking (PRD 02 FR-11).
   version                      Int       @default(0)
 
-  leases           Lease[]
-  payLinks         PayLink[]
-  addresses        TenantAddress[]
-  notes            TenantNote[]
-  payments         Payment[]
-  accessGrants     AccessGrant[]
-  reservations     Reservation[]
-  checkoutSessions CheckoutSession[]
+  leases                  Lease[]
+  payLinks                PayLink[]
+  addresses               TenantAddress[]
+  notes                   TenantNote[]
+  payments                Payment[]
+  accessGrants            AccessGrant[]
+  reservations            Reservation[]
+  checkoutSessions        CheckoutSession[]
   // PRD 10 (B-100). Three relations because a tenant plays three roles: the
   // one who mints invites, the one credited for a referral, and the one who
   // was referred.
-  referralInvites   ReferralInvite[] @relation("ReferralInvitesMinted")
-  referralsMade     Referral[]       @relation("ReferralsMade")
-  referralsReceived Referral[]       @relation("ReferralsReceived")
-  leads            Lead[]
-  consents         Consent[]
-  messages         Message[]
+  referralInvites         ReferralInvite[]         @relation("ReferralInvitesMinted")
+  referralsMade           Referral[]               @relation("ReferralsMade")
+  referralsReceived       Referral[]               @relation("ReferralsReceived")
+  leads                   Lead[]
+  consents                Consent[]
+  messages                Message[]
   notificationPreferences NotificationPreference[]
   merchandiseSales        MerchandiseSale[]
 
@@ -1050,23 +1085,23 @@ model Tenant {
 /// are a cache of the newest row, kept in the same transaction — this table is
 /// what a dispute reads (D-21).
 model TenantAddress {
-  id           String        @id @default(cuid())
-  tenantId     String
-  addressLine1 String
-  addressLine2 String?
-  city         String
-  state        String
-  postalCode   String
-  country      String        @default("US")
-  source       AddressSource
+  id             String        @id @default(cuid())
+  tenantId       String
+  addressLine1   String
+  addressLine2   String?
+  city           String
+  state          String
+  postalCode     String
+  country        String        @default("US")
+  source         AddressSource
   /// Who made the change. Exactly one is set for a human actor; both null
   /// means a system path (an import), which the source already names.
-  actorTenantId String?
-  actorStaffId  String?
+  actorTenantId  String?
+  actorStaffId   String?
   /// Set when post to this address came back. Makes the tenant's contact
   /// details visibly stale everywhere they render, and B-095 raises the task.
-  returnedMailAt DateTime?   @db.Timestamptz(6)
-  createdAt    DateTime      @default(now()) @db.Timestamptz(6)
+  returnedMailAt DateTime?     @db.Timestamptz(6)
+  createdAt      DateTime      @default(now()) @db.Timestamptz(6)
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
@@ -1100,16 +1135,16 @@ model TenantNote {
 }
 
 model Lease {
-  id                 String      @id @default(cuid())
-  facilityId         String
-  tenantId           String
-  unitId             String
-  status             LeaseStatus @default(pending)
-  startDate          DateTime    @db.Timestamptz(6)
-  endDate            DateTime?   @db.Timestamptz(6)
-  monthlyRateCents   Int
+  id                     String           @id @default(cuid())
+  facilityId             String
+  tenantId               String
+  unitId                 String
+  status                 LeaseStatus      @default(pending)
+  startDate              DateTime         @db.Timestamptz(6)
+  endDate                DateTime?        @db.Timestamptz(6)
+  monthlyRateCents       Int
   /// Day of month rent is billed, 1–28 to stay valid in every month.
-  billingDay         Int
+  billingDay             Int
   /// PRD 02 US-43 / US-39.3 (B-097). Where this rental came from, stamped at
   /// move-in from the reservation that produced it.
   ///
@@ -1119,7 +1154,7 @@ model Lease {
   /// exactly the channels this exists to measure. Null means the lease predates
   /// capture, which `normalizeSource` reports as `unknown` rather than folding
   /// into `web`.
-  acquisitionSource  String?
+  acquisitionSource      String?
   /// PRD 04 §3.2 US-4 (B-082 part 1). The MARKETING channel credited with this
   /// move-in — `aggregator`, `paid_search`, `organic`, one of
   /// `MARKETING_CHANNELS`.
@@ -1139,7 +1174,7 @@ model Lease {
   /// the answer is three nullable joins long, so a report walking it silently
   /// under-counts. Null means the lease predates capture, and reports as
   /// `unknown` rather than being folded into any real channel.
-  acquisitionChannel String?
+  acquisitionChannel     String?
   /// The campaign tags behind that channel, kept as sent. `acquisitionChannel`
   /// is the answer; these are the evidence, and they are what anyone will want
   /// when the answer looks wrong. Mirrors `Reservation.utm*` deliberately.
@@ -1151,17 +1186,17 @@ model Lease {
   /// `Reservation.expiryReminderSentAt` (B-031): the outbox only dedupes an
   /// event once it exists, so the PRODUCER needs its own marker to guarantee
   /// "once" across a catch-up run that walks several missed nights at once.
-  reviewRequestSentAt DateTime? @db.Timestamptz(6)
+  reviewRequestSentAt    DateTime?        @db.Timestamptz(6)
   /// PRD 02 US-25's AC: "the lease records which timeline version governed it."
   ///
   /// Pinned by B-057 when the lease first becomes delinquent, not at move-in —
   /// a lease that never goes past due is governed by nothing, and pinning at
   /// move-in would freeze a timeline a tenant may never encounter and would
   /// make a later configuration change apply to nobody.
-  delinquencyTimelineId String?
+  delinquencyTimelineId  String?
   /// PRD 04 US-12 AC2's structured discount instruction, as a relation. Billing
   /// reads the redemption's snapshotted schedule when generating invoices.
-  promoRedemption    PromoRedemption?
+  promoRedemption        PromoRedemption?
   /// Whether this unit charges itself each month (PRD 01 US-704).
   ///
   /// Per lease, not per tenant: billing runs per lease (B-045), the portal
@@ -1175,27 +1210,27 @@ model Lease {
   /// autopay does not silently enrol anyone; move-in sets it explicitly from
   /// the renter's own choice at checkout step 5 (§4.6/D-11a: default-on there,
   /// with the disclosure and a one-activation opt-out beside it).
-  autopayEnabled     Boolean     @default(false)
+  autopayEnabled         Boolean          @default(false)
   /// US-14 move-out, recorded as three separate facts because they answer
   /// three different questions and routinely disagree: when the tenant said
   /// they were leaving, the last day they had paid for, and the day they
   /// actually vacated. Collapsing them into `endDate` alone loses the ability
   /// to tell a proper notice from an abandonment.
-  noticeGivenAt      DateTime?   @db.Timestamptz(6)
-  paidThroughDate    DateTime?   @db.Date
-  moveOutDate        DateTime?   @db.Date
-  moveOutReason      MoveOutReason?
-  protectionPlanName String?
-  protectionCents    Int         @default(0)
+  noticeGivenAt          DateTime?        @db.Timestamptz(6)
+  paidThroughDate        DateTime?        @db.Date
+  moveOutDate            DateTime?        @db.Date
+  moveOutReason          MoveOutReason?
+  protectionPlanName     String?
+  protectionCents        Int              @default(0)
   /// Set when the tenant waives protection, with the attestation text shown.
-  protectionWaivedAt DateTime?   @db.Timestamptz(6)
-  signedDocumentUrl  String?
-  signedDocumentHash String?
-  signedAt           DateTime?   @db.Timestamptz(6)
-  createdAt          DateTime    @default(now()) @db.Timestamptz(6)
-  updatedAt          DateTime    @updatedAt @db.Timestamptz(6)
-  deletedAt          DateTime?   @db.Timestamptz(6)
-  version            Int         @default(0)
+  protectionWaivedAt     DateTime?        @db.Timestamptz(6)
+  signedDocumentUrl      String?
+  signedDocumentHash     String?
+  signedAt               DateTime?        @db.Timestamptz(6)
+  createdAt              DateTime         @default(now()) @db.Timestamptz(6)
+  updatedAt              DateTime         @updatedAt @db.Timestamptz(6)
+  deletedAt              DateTime?        @db.Timestamptz(6)
+  version                Int              @default(0)
 
   facility               Facility                 @relation(fields: [facilityId], references: [id], onDelete: Restrict)
   tenant                 Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
@@ -1211,6 +1246,10 @@ model Lease {
   authorizedAccessPeople AuthorizedAccessPerson[]
   payLinks               PayLink[]
   holds                  LeaseHold[]
+  delinquencyTimeline    DelinquencyTimeline?     @relation(fields: [delinquencyTimelineId], references: [id], onDelete: SetNull)
+  delinquencyStepRuns    DelinquencyStepRun[]
+  overlocks              UnitOverlock[]
+  auctionCases           AuctionCase[]
 
   @@index([facilityId, status])
   @@index([tenantId])
@@ -1222,10 +1261,6 @@ model Lease {
   /// fails on it by design.
   @@index([facilityId, startDate, acquisitionChannel])
   @@map("lease")
-  delinquencyTimeline DelinquencyTimeline? @relation(fields: [delinquencyTimelineId], references: [id], onDelete: SetNull)
-  delinquencyStepRuns DelinquencyStepRun[]
-  overlocks UnitOverlock[]
-  auctionCases AuctionCase[]
 }
 
 // -------------------------------------------------------------- billing ----
@@ -1358,15 +1393,15 @@ model Payment {
   createdAt             DateTime      @default(now()) @db.Timestamptz(6)
   updatedAt             DateTime      @updatedAt @db.Timestamptz(6)
 
-  facility       Facility            @relation(fields: [facilityId], references: [id], onDelete: Restrict)
-  tenant         Tenant              @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  drawerSession  DrawerSession?      @relation(fields: [drawerSessionId], references: [id], onDelete: SetNull)
-  receivedByStaff StaffUser?         @relation(fields: [receivedByStaffId], references: [id], onDelete: Restrict)
-  refundOf       Payment?            @relation("PaymentRefund", fields: [refundOfPaymentId], references: [id], onDelete: Restrict)
-  refunds        Payment[]           @relation("PaymentRefund")
-  allocations    PaymentAllocation[]
-  ledgerEntries  LedgerEntry[]
-  payLink        PayLink?
+  facility        Facility            @relation(fields: [facilityId], references: [id], onDelete: Restrict)
+  tenant          Tenant              @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  drawerSession   DrawerSession?      @relation(fields: [drawerSessionId], references: [id], onDelete: SetNull)
+  receivedByStaff StaffUser?          @relation(fields: [receivedByStaffId], references: [id], onDelete: Restrict)
+  refundOf        Payment?            @relation("PaymentRefund", fields: [refundOfPaymentId], references: [id], onDelete: Restrict)
+  refunds         Payment[]           @relation("PaymentRefund")
+  allocations     PaymentAllocation[]
+  ledgerEntries   LedgerEntry[]
+  payLink         PayLink?
   merchandiseSale MerchandiseSale?
 
   @@unique([facilityId, receiptNumber])
@@ -1420,27 +1455,27 @@ model DrawerSession {
   openedByStaffId   String
   openedAt          DateTime            @default(now()) @db.Timestamptz(6)
 
-  closedByStaffId   String?
-  closedAt          DateTime?           @db.Timestamptz(6)
+  closedByStaffId     String?
+  closedAt            DateTime? @db.Timestamptz(6)
   /// What the person counted at close-out. Null until closed.
-  countedCashCents  Int?
+  countedCashCents    Int?
   /// The cheques and money orders counted into the deposit bag. Kept apart
   /// from cash because they are deposited as a list, not a total, and a
   /// variance in one says nothing about the other.
-  countedChecksCents Int?
+  countedChecksCents  Int?
   /// What the system says should have been there: float + cash taken −
   /// change given − cash refunds paid out. Snapshotted at close so a later
   /// backdated payment cannot silently rewrite a signed-off count.
-  expectedCashCents Int?
+  expectedCashCents   Int?
   expectedChecksCents Int?
   /// counted − expected, on the cash side. Positive is over, negative short.
-  varianceCents     Int?
+  varianceCents       Int?
   /// US-33: "over/short beyond a configurable threshold requires a manager
   /// note." Required by the service when the variance exceeds the facility's
   /// threshold, and the audit entry carries it as the reason code.
-  note              String?
-  createdAt         DateTime            @default(now()) @db.Timestamptz(6)
-  updatedAt         DateTime            @updatedAt @db.Timestamptz(6)
+  note                String?
+  createdAt           DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime  @updatedAt @db.Timestamptz(6)
 
   facility Facility  @relation(fields: [facilityId], references: [id], onDelete: Cascade)
   payments Payment[]
@@ -1487,7 +1522,7 @@ model Product {
   createdAt     DateTime @default(now()) @db.Timestamptz(6)
   updatedAt     DateTime @updatedAt @db.Timestamptz(6)
 
-  facility  Facility            @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  facility  Facility              @relation(fields: [facilityId], references: [id], onDelete: Cascade)
   saleLines MerchandiseSaleLine[]
 
   @@unique([facilityId, sku])
@@ -1506,22 +1541,22 @@ model Product {
 /// money is reported by its own report instead, which is what US-34's "simple
 /// COGS report" asks for.
 model MerchandiseSale {
-  id              String   @id @default(cuid())
-  facilityId      String
+  id            String   @id @default(cuid())
+  facilityId    String
   /// The counter payment that paid for it. Every sale is paid at the point
   /// of sale, so this is required — there is no such thing as an unpaid
   /// merchandise sale in this model.
-  paymentId       String   @unique
+  paymentId     String   @unique
   /// Set when the buyer is a known tenant; null for a walk-in buying a lock.
-  tenantId        String?
-  soldByStaffId   String
+  tenantId      String?
+  soldByStaffId String
   /// Snapshotted totals. Each is the sum of the lines at the moment of sale.
-  subtotalCents   Int
-  taxCents        Int
-  totalCents      Int
+  subtotalCents Int
+  taxCents      Int
+  totalCents    Int
   /// The COGS snapshot: what these goods cost us, summed at sale time.
-  costCents       Int
-  occurredAt      DateTime @default(now()) @db.Timestamptz(6)
+  costCents     Int
+  occurredAt    DateTime @default(now()) @db.Timestamptz(6)
 
   facility Facility              @relation(fields: [facilityId], references: [id], onDelete: Cascade)
   tenant   Tenant?               @relation(fields: [tenantId], references: [id], onDelete: SetNull)
@@ -1621,29 +1656,29 @@ model CheckoutSessionUnit {
 }
 
 model CheckoutSession {
-  id              String         @id @default(cuid())
-  facilityId      String
-  unitTypeId      String
+  id                      String                @id @default(cuid())
+  facilityId              String
+  unitTypeId              String
   /// The specific unit this session is holding. Claimed the same way a
   /// reservation claims one (FOR UPDATE SKIP LOCKED), and released when the
   /// lock lapses.
-  unitId          String?
+  unitId                  String?
   /// Set when the renter came from a free hold, so completing does not leave a
   /// stale reservation behind and abandoning does not release a unit they had
   /// already been promised.
-  reservationId   String?
-  tenantId        String?
-  step            CheckoutStep   @default(details)
-  status          CheckoutStatus @default(active)
+  reservationId           String?
+  tenantId                String?
+  step                    CheckoutStep          @default(details)
+  status                  CheckoutStatus        @default(active)
   /// FR-4.1: the resume link is the session's signed token, emailed once the
   /// address is captured at step 1. Only the hash is stored.
-  tokenHash       String         @unique
+  tokenHash               String                @unique
   /// Captured at step 1 and held here so the resume email can be sent before a
   /// Tenant row exists.
-  email           String?
+  email                   String?
   /// Rate seen = rate charged. Locked at the moment the session started, so a
   /// rate change mid-checkout cannot move the total under the renter.
-  quotedRateCents Int
+  quotedRateCents         Int
   /// PRD 01 §9 Phase 2 (B-106). The move-in date the renter asked for, when it
   /// is not today.
   ///
@@ -1653,22 +1688,22 @@ model CheckoutSession {
   /// asked". The lease's `startDate` and its billing anniversary both come from
   /// this when it is set (D-27: the move-in payment buys a full period starting
   /// that day, so a future start simply moves which day that is).
-  requestedStartDate DateTime?    @db.Timestamptz(6)
+  requestedStartDate      DateTime?             @db.Timestamptz(6)
   /// PRD 04 US-12 AC2 (B-070). The promotion carried from the facility page
   /// through checkout, so the discounted first-invoice figure shown before
   /// payment is the one that gets redeemed. Held on the session rather than
   /// re-evaluated at each step: a promo that ended mid-checkout must not
   /// silently change the total somebody already read.
-  promotionId     String?
-  promoCodeId     String?
+  promotionId             String?
+  promoCodeId             String?
   /// The 30-minute unit lock. Extended by the heartbeat and by an explicit
   /// "keep it" from the renter (2.2.1).
-  lockExpiresAt   DateTime       @db.Timestamptz(6)
+  lockExpiresAt           DateTime              @db.Timestamptz(6)
   /// Per-step captured data, merged as the renter advances. Typed at the edges
   /// by the step schemas in B-021..B-025 rather than here.
-  data            Json           @default("{}")
+  data                    Json                  @default("{}")
   /// B-106. The basket. Exactly one row until the multi-unit UI lands.
-  units           CheckoutSessionUnit[]
+  units                   CheckoutSessionUnit[]
   /// PRD 04 US-9 AC1/AC2 (B-073). How far the abandonment follow-up has
   /// reached: 0 = never entered, 1–3 = that step has been raised. Same device
   /// as `Lead.dripStep` — the outbox only dedupes an event that already
@@ -1676,9 +1711,9 @@ model CheckoutSession {
   /// Deliberately NOT tracked via `CheckoutStatus`'s own `abandoned` value:
   /// that would risk a slow-but-still-`active` renter's live session being
   /// mutated out from under them the moment the first follow-up fires.
-  abandonmentSequenceStep Int    @default(0)
-  createdAt       DateTime       @default(now()) @db.Timestamptz(6)
-  updatedAt       DateTime       @updatedAt @db.Timestamptz(6)
+  abandonmentSequenceStep Int                   @default(0)
+  createdAt               DateTime              @default(now()) @db.Timestamptz(6)
+  updatedAt               DateTime              @updatedAt @db.Timestamptz(6)
 
   facility    Facility     @relation(fields: [facilityId], references: [id], onDelete: Cascade)
   unitType    UnitType     @relation(fields: [unitTypeId], references: [id], onDelete: Restrict)
@@ -1770,29 +1805,29 @@ model ProtectionWaiver {
 /// deleted, because "the tenant asked to drop cover and then changed their
 /// mind" is exactly the sort of thing a coverage dispute asks about.
 model ProtectionChange {
-  id         String   @id @default(cuid())
-  facilityId String
-  leaseId    String
+  id                  String    @id @default(cuid())
+  facilityId          String
+  leaseId             String
   /// What the lease bills today, captured when the change was requested — so
   /// the row still describes the change even after it has been applied and the
   /// lease has moved on.
-  fromPlanName    String?
-  fromPremiumCents Int
+  fromPlanName        String?
+  fromPremiumCents    Int
   /// Null when switching to the tenant's own cover.
-  toPlanName      String?
-  toTier          String?
-  toPremiumCents  Int
+  toPlanName          String?
+  toTier              String?
+  toPremiumCents      Int
   /// Facility-local calendar day the change takes effect: the start of the next
   /// billing period, never today.
-  effectiveFrom   DateTime @db.Date
+  effectiveFrom       DateTime  @db.Date
   /// Who asked. A tenant from the portal, or staff at the counter — both are
   /// legitimate and the difference matters in a dispute.
   requestedByTenantId String?
   requestedByStaffId  String?
-  appliedAt   DateTime? @db.Timestamptz(6)
-  cancelledAt DateTime? @db.Timestamptz(6)
-  cancelledReason String?
-  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  appliedAt           DateTime? @db.Timestamptz(6)
+  cancelledAt         DateTime? @db.Timestamptz(6)
+  cancelledReason     String?
+  createdAt           DateTime  @default(now()) @db.Timestamptz(6)
 
   facility Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
   lease    Lease    @relation(fields: [leaseId], references: [id], onDelete: Cascade)
@@ -1836,9 +1871,9 @@ model Document {
   /// something a mis-click removes.
   deletedAt   DateTime?    @db.Timestamptz(6)
 
-  facility  Facility           @relation(fields: [facilityId], references: [id], onDelete: Restrict)
-  signature DocumentSignature?
-  notices   Notice[]
+  facility           Facility           @relation(fields: [facilityId], references: [id], onDelete: Restrict)
+  signature          DocumentSignature?
+  notices            Notice[]
   auctionInventories AuctionCase[]
 
   @@index([facilityId, type])
@@ -1916,7 +1951,7 @@ model LeaseRateChange {
   rateIncreaseId    String?
   createdAt         DateTime        @default(now()) @db.Timestamptz(6)
 
-  lease Lease @relation(fields: [leaseId], references: [id], onDelete: Restrict)
+  lease        Lease               @relation(fields: [leaseId], references: [id], onDelete: Restrict)
   rateIncrease TenantRateIncrease? @relation(fields: [rateIncreaseId], references: [id], onDelete: SetNull)
 
   @@index([leaseId, effectiveFrom])
@@ -1935,45 +1970,45 @@ model LeaseRateChange {
 /// `rateIncreaseId`; a cancelled one never writes history at all, because
 /// nothing happened.
 model TenantRateIncrease {
-  id                String             @id @default(cuid())
-  facilityId        String
-  leaseId           String
+  id                 String             @id @default(cuid())
+  facilityId         String
+  leaseId            String
   /// Snapshotted at scheduling, not read live at apply time. The approval
   /// screen showed a projected delta against THIS figure, and an increase
   /// approved against $129 must not silently become a different increase
   /// because something else moved the rate in between — `applyDue` refuses
   /// the row instead (see the service).
-  currentRateCents  Int
-  newRateCents      Int
+  currentRateCents   Int
+  newRateCents       Int
   /// Calendar dates, not instants: "effective on the 1st" is a facility-local
   /// day, and a timestamp would imply a precision the fact does not have —
   /// the same reasoning `Lease.moveOutDate` and `JobRun.businessDate` use.
-  effectiveDate     DateTime           @db.Date
+  effectiveDate      DateTime           @db.Date
   /// When the tenant must be told by. Derived from `effectiveDate` minus the
   /// facility's `rateIncreaseNoticeDays` at scheduling time, and stored
   /// rather than recomputed so a later settings change cannot retroactively
   /// make an already-served notice look late.
-  noticeDate        DateTime           @db.Date
+  noticeDate         DateTime           @db.Date
   /// The figure the notice quotes, snapshotted for the same reason.
-  noticeDays        Int
-  status            RateIncreaseStatus @default(pending_approval)
+  noticeDays         Int
+  status             RateIncreaseStatus @default(pending_approval)
   /// US-11: "one-off (selected tenants) or rule-based". Groups a rule-based
   /// batch so the approval screen can approve one worklist rather than
   /// forty rows, and so a batch is cancellable as a unit.
-  batchId           String?
-  createdByStaffId  String?
+  batchId            String?
+  createdByStaffId   String?
   /// US-11 AC: "regional/owner approval is required before notices go out."
-  approvedByStaffId String?
-  approvedAt        DateTime?          @db.Timestamptz(6)
+  approvedByStaffId  String?
+  approvedAt         DateTime?          @db.Timestamptz(6)
   /// Set by the notice job on the notice date. The presence of this is what
   /// `applyDue` requires before it will move a rate — an increase whose
   /// notice never went out is never applied.
-  noticeSentAt      DateTime?          @db.Timestamptz(6)
-  appliedAt         DateTime?          @db.Timestamptz(6)
-  cancelledAt       DateTime?          @db.Timestamptz(6)
+  noticeSentAt       DateTime?          @db.Timestamptz(6)
+  appliedAt          DateTime?          @db.Timestamptz(6)
+  cancelledAt        DateTime?          @db.Timestamptz(6)
   cancelledByStaffId String?
-  createdAt         DateTime           @default(now()) @db.Timestamptz(6)
-  updatedAt         DateTime           @updatedAt @db.Timestamptz(6)
+  createdAt          DateTime           @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime           @updatedAt @db.Timestamptz(6)
 
   facility    Facility          @relation(fields: [facilityId], references: [id], onDelete: Cascade)
   lease       Lease             @relation(fields: [leaseId], references: [id], onDelete: Cascade)
@@ -2298,7 +2333,7 @@ enum FacilityPhotoKind {
 /// a second thing that can disagree with it — and the one that disagrees
 /// silently is always the one nobody checks.
 model ReportSubscription {
-  id         String         @id @default(cuid())
+  id         String        @id @default(cuid())
   facilityId String
   /// Which report, from the catalog in apps/web/lib/admin/report-subscriptions.ts.
   /// A string rather than an enum: adding a report is a code change either way,
@@ -2310,9 +2345,9 @@ model ReportSubscription {
   /// though a hard-bounced address is still suppressed like any other.
   recipients String[]
   /// Off rather than deleted, so a seasonal report keeps its recipient list.
-  active     Boolean        @default(true)
-  createdAt  DateTime       @default(now()) @db.Timestamptz(6)
-  updatedAt  DateTime       @updatedAt @db.Timestamptz(6)
+  active     Boolean       @default(true)
+  createdAt  DateTime      @default(now()) @db.Timestamptz(6)
+  updatedAt  DateTime      @updatedAt @db.Timestamptz(6)
 
   facility Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
 
@@ -2337,11 +2372,11 @@ enum ReportCadence {
 /// record there will ever be. See packages/core/accounting/close.ts for why
 /// that distinction also decides which figures drift-checking applies to.
 model AccountingPeriod {
-  id              String    @id @default(cuid())
-  facilityId      String
-  year            Int
+  id         String @id @default(cuid())
+  facilityId String
+  year       Int
   /// 1–12.
-  month           Int
+  month      Int
 
   /// The UTC half-open window this period actually covered, resolved from the
   /// facility's timezone through the same `monthBounds` a tenant statement
@@ -2349,8 +2384,8 @@ model AccountingPeriod {
   /// same days. Stored rather than re-derived on read, because a later
   /// timezone correction on the facility must not silently re-slice a month
   /// that has already been filed.
-  startsAt        DateTime  @db.Timestamptz(6)
-  endsAt          DateTime  @db.Timestamptz(6)
+  startsAt DateTime @db.Timestamptz(6)
+  endsAt   DateTime @db.Timestamptz(6)
 
   /// Null means open. There is no status enum, because "closed" is exactly
   /// "somebody closed it, at this instant, and here is who".
@@ -2364,10 +2399,10 @@ model AccountingPeriod {
   /// on displaying withdrawn figures as though they were still authoritative;
   /// the withdrawn set is written to the audit log, which is append-only and is
   /// the right home for "what we filed and then took back".
-  snapshot        Json?
+  snapshot Json?
 
-  createdAt       DateTime  @default(now()) @db.Timestamptz(6)
-  updatedAt       DateTime  @updatedAt @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
   facility      Facility   @relation(fields: [facilityId], references: [id], onDelete: Restrict)
   closedByStaff StaffUser? @relation(fields: [closedByStaffId], references: [id], onDelete: SetNull)
@@ -2399,7 +2434,7 @@ model AccountingPeriod {
 /// page 404s in that case (AC1's indexability rule) and deleting the copy would
 /// throw away someone's writing because a location closed for a month.
 model City {
-  id               String    @id @default(cuid())
+  id               String   @id @default(cuid())
   /// Two-letter code, stored upper-case. Matched case-insensitively on read,
   /// because the URL segment arrives lower-case.
   state            String
@@ -2411,8 +2446,8 @@ model City {
   /// page.
   intro            String?
   updatedByStaffId String?
-  createdAt        DateTime  @default(now()) @db.Timestamptz(6)
-  updatedAt        DateTime  @updatedAt @db.Timestamptz(6)
+  createdAt        DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime @updatedAt @db.Timestamptz(6)
 
   updatedByStaff StaffUser? @relation(fields: [updatedByStaffId], references: [id], onDelete: SetNull)
 
@@ -2428,31 +2463,31 @@ model City {
 /// it** (US-25's own AC) — and a lien file whose timeline has been rewritten
 /// since is a lien file that cannot be defended.
 model DelinquencyTimeline {
-  id         String   @id @default(cuid())
-  facilityId String
-  version    Int
-  active     Boolean  @default(false)
+  id               String   @id @default(cuid())
+  facilityId       String
+  version          Int
+  active           Boolean  @default(false)
   /// What the operator called this revision: "after the 2026 attorney review".
-  label      String
+  label            String
   /// US-25's AC: paying this halts the pipeline.
-  qualifyingAmount String @default("full_balance")
+  qualifyingAmount String   @default("full_balance")
   /// The steps, as an ordered array of the shape in
   /// packages/core/delinquency. JSON rather than a table: a version is
   /// immutable once activated, so there is nothing to update in place and
   /// nothing joins to an individual step.
-  steps      Json
+  steps            Json
   createdByStaffId String?
-  createdAt  DateTime @default(now()) @db.Timestamptz(6)
+  createdAt        DateTime @default(now()) @db.Timestamptz(6)
 
-  facility       Facility   @relation(fields: [facilityId], references: [id], onDelete: Cascade)
-  createdByStaff StaffUser? @relation(fields: [createdByStaffId], references: [id], onDelete: SetNull)
+  facility       Facility             @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  createdByStaff StaffUser?           @relation(fields: [createdByStaffId], references: [id], onDelete: SetNull)
   leases         Lease[]
+  stepRuns       DelinquencyStepRun[]
+  auctionCases   AuctionCase[]
 
   @@unique([facilityId, version])
   @@index([facilityId, active])
   @@map("delinquency_timeline")
-  stepRuns DelinquencyStepRun[]
-  auctionCases AuctionCase[]
 }
 
 /// PRD 02 FR-5 / US-28 (B-057). One row per timeline step executed against one
@@ -2464,25 +2499,25 @@ model DelinquencyTimeline {
 /// constraint below is the reason a catch-up over a missed week cannot send the
 /// day-15 notice seven times.
 model DelinquencyStepRun {
-  id         String   @id @default(cuid())
-  leaseId    String
-  facilityId String
+  id           String   @id @default(cuid())
+  leaseId      String
+  facilityId   String
   /// The version that governed this step. Denormalised from the lease because
   /// the lease's pin can be cleared on cure, and the history must not lose
   /// which configuration was in force when the notice went out.
-  timelineId String
+  timelineId   String
   /// The step's `dayOffset`, which is its identity within a timeline.
-  dayOffset  Int
-  label      String
+  dayOffset    Int
+  label        String
   /// The facility-local day it ran, for "what happened on the 3rd".
   businessDate DateTime @db.Date
   /// The staff task raised, when the step asked for one.
-  taskId     String?
+  taskId       String?
   /// What ran, and what did not: `{ actions: [...], skipped: [...] }`. A step
   /// whose notice could not be sent is evidence too, and losing it would make
   /// the history read as if everything worked.
-  outcome    Json?
-  createdAt  DateTime @default(now()) @db.Timestamptz(6)
+  outcome      Json?
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
 
   lease    Lease               @relation(fields: [leaseId], references: [id], onDelete: Cascade)
   facility Facility            @relation(fields: [facilityId], references: [id], onDelete: Cascade)
@@ -2516,22 +2551,22 @@ model DelinquencyStepRun {
 /// the same reason the step history is superseded rather than dropped. "Was
 /// this unit locked on the day of the sale" is a question an auction turns on.
 model UnitOverlock {
-  id         String   @id @default(cuid())
-  unitId     String
-  leaseId    String
-  facilityId String
+  id               String    @id @default(cuid())
+  unitId           String
+  leaseId          String
+  facilityId       String
   /// The task that asked for it, so the photo and the note are reachable from
   /// the lock rather than only from the queue.
-  appliedTaskId String?
-  appliedAt     DateTime? @db.Timestamptz(6)
+  appliedTaskId    String?
+  appliedAt        DateTime? @db.Timestamptz(6)
   appliedByStaffId String?
-  removedTaskId String?
-  removedAt     DateTime? @db.Timestamptz(6)
+  removedTaskId    String?
+  removedAt        DateTime? @db.Timestamptz(6)
   removedByStaffId String?
   /// Why it was fitted: the timeline step's label, so the record reads without
   /// a join.
-  reason     String
-  createdAt  DateTime @default(now()) @db.Timestamptz(6)
+  reason           String
+  createdAt        DateTime  @default(now()) @db.Timestamptz(6)
 
   unit     Unit     @relation(fields: [unitId], references: [id], onDelete: Cascade)
   lease    Lease    @relation(fields: [leaseId], references: [id], onDelete: Cascade)
@@ -2561,25 +2596,25 @@ enum MaintenanceTicketStatus {
 /// contractor. Enforced in `canSetManualStatus` (packages/core/inventory),
 /// the one place a unit's status may be hand-set (US-8).
 model MaintenanceTicket {
-  id            String                  @id @default(cuid())
-  facilityId    String
-  unitId        String
-  title         String
-  notes         String?
-  status        MaintenanceTicketStatus @default(open)
-  priority      TaskPriority            @default(normal)
-  blocksAvailability Boolean            @default(true)
+  id                 String                  @id @default(cuid())
+  facilityId         String
+  unitId             String
+  title              String
+  notes              String?
+  status             MaintenanceTicketStatus @default(open)
+  priority           TaskPriority            @default(normal)
+  blocksAvailability Boolean                 @default(true)
   /// 'walkthrough' or 'manual' — the AC's "create from walkthrough, unit page,
   /// or manually" made queryable. Not itself functional.
-  source        String
+  source             String
   /// Historical only, same as `UnitOverlock.appliedByStaffId` — not a relation,
   /// so nothing about a closed ticket changes if the reporting staffer's
   /// record ever does.
-  createdByStaffId String?
-  assigneeStaffId  String?
-  createdAt     DateTime  @default(now()) @db.Timestamptz(6)
-  updatedAt     DateTime  @updatedAt @db.Timestamptz(6)
-  resolvedAt    DateTime? @db.Timestamptz(6)
+  createdByStaffId   String?
+  assigneeStaffId    String?
+  createdAt          DateTime                @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime                @updatedAt @db.Timestamptz(6)
+  resolvedAt         DateTime?               @db.Timestamptz(6)
 
   facility Facility   @relation(fields: [facilityId], references: [id], onDelete: Cascade)
   unit     Unit       @relation(fields: [unitId], references: [id], onDelete: Cascade)
@@ -2602,17 +2637,17 @@ model MaintenanceTicket {
 /// which is the single most expensive SEO mistake available, because it is
 /// invisible until traffic has already gone.
 model UrlRedirect {
-  id String @id @default(cuid())
+  id        String   @id @default(cuid())
   /// The path that no longer resolves, lower-cased, no trailing slash, no
   /// query. Canonical form per `canonicalPath`, so a lookup is one indexed
   /// equality check on the edge rather than a scan with normalisation.
-  fromPath String @unique
+  fromPath  String   @unique
   /// Where to send them. Relative, so the map survives a domain change.
-  toPath   String
+  toPath    String
   /// 301 by default. 302 exists for a genuinely temporary move; a permanent
   /// redirect is cached by browsers effectively forever and is very hard to
   /// take back, so choosing it is a decision rather than a default nobody saw.
-  permanent Boolean @default(true)
+  permanent Boolean  @default(true)
   /// Why, for whoever finds this in two years. "facility slug changed",
   /// "facility retired — nearest city page".
   reason    String
@@ -2623,11 +2658,11 @@ model UrlRedirect {
 }
 
 model SimulatedGateCode {
-  id           String   @id @default(cuid())
-  facilityId   String
-  credentialId String   @unique
-  code         String
-  active       Boolean  @default(true)
+  id             String   @id @default(cuid())
+  facilityId     String
+  credentialId   String   @unique
+  code           String
+  active         Boolean  @default(true)
   /// The vendor's copy of the time window (PRD 03 US-4 AC2). Held HERE, on the
   /// simulated controller's own row, rather than read from `Facility` at
   /// keypad time — because a real vendor enforces the window from what it was
@@ -2636,9 +2671,9 @@ model SimulatedGateCode {
   /// propagated. Null means no window was ever pushed: unrestricted.
   windowSchedule Json?
   /// Mirrors `AccessGrant.extendedHours`, for the same reason.
-  windowExempt   Boolean @default(false)
-  createdAt    DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt    DateTime @updatedAt @db.Timestamptz(6)
+  windowExempt   Boolean  @default(false)
+  createdAt      DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @db.Timestamptz(6)
 
   facility Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
 
@@ -2672,27 +2707,27 @@ model SimulatedVendorEvent {
 /// because the answer to "was this code live on the 3rd" has to be what the
 /// controller said on the 3rd, not what it says today.
 model GateReconciliationRun {
-  id           String   @id @default(cuid())
-  facilityId   String
+  id                 String    @id @default(cuid())
+  facilityId         String
   /// The facility-local day this checked, not an instant.
-  businessDate DateTime @db.Date
+  businessDate       DateTime  @db.Date
   /// Which adapter answered. A run against the manual adapter can only ever
   /// say "not verifiable", and a chart that mixed the two would flatter a site
   /// nobody is actually checking.
-  adapter      String
+  adapter            String
   /// False when the adapter cannot enumerate what the controller holds. NOT
   /// the same as zero drift, and the screens must never render it as such.
-  verifiable   Boolean  @default(true)
-  credentialsChecked Int @default(0)
-  driftCount   Int      @default(0)
+  verifiable         Boolean   @default(true)
+  credentialsChecked Int       @default(0)
+  driftCount         Int       @default(0)
   /// How many findings had the gate MORE permissive than we intend. The
   /// number that decides whether somebody drives to the site tonight.
-  permissiveCount Int   @default(0)
+  permissiveCount    Int       @default(0)
   /// The findings themselves, in the shape packages/core/access/reconciliation.ts
   /// defines. Never contains a gate code — the diff compares hashes.
-  drifts       Json
-  startedAt    DateTime @default(now()) @db.Timestamptz(6)
-  finishedAt   DateTime? @db.Timestamptz(6)
+  drifts             Json
+  startedAt          DateTime  @default(now()) @db.Timestamptz(6)
+  finishedAt         DateTime? @db.Timestamptz(6)
 
   facility Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
 
@@ -2711,19 +2746,19 @@ model GateReconciliationRun {
 /// the previous one accepted until `retiresAt`. Verification tries every
 /// currently-acceptable secret; signing only ever uses the active one.
 model GateWebhookSecret {
-  id         String   @id @default(cuid())
-  facilityId String
+  id               String    @id @default(cuid())
+  facilityId       String
   /// Encrypted at rest (SR-1), never the raw value. `unrevealable:` when no
   /// encryption key is configured, which makes rotation unavailable rather
   /// than silently insecure.
-  secretRef  String
+  secretRef        String
   /// Exactly one active row per facility, enforced by a partial unique index
   /// (hand-written — Prisma cannot express one).
-  active     Boolean  @default(true)
+  active           Boolean   @default(true)
   /// Null while active. Set when superseded: the moment this stops being
   /// accepted.
-  retiresAt  DateTime? @db.Timestamptz(6)
-  createdAt  DateTime @default(now()) @db.Timestamptz(6)
+  retiresAt        DateTime? @db.Timestamptz(6)
+  createdAt        DateTime  @default(now()) @db.Timestamptz(6)
   createdByStaffId String?
 
   facility Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
@@ -2916,29 +2951,29 @@ model AccessCredential {
 /// yet); this item ships the model and the service underneath it, the same
 /// split B-096 used for lease holds.
 model AuthorizedAccessPerson {
-  id               String    @id @default(cuid())
-  facilityId       String
-  leaseId          String
-  name             String
-  phone            String
-  relationship     String
+  id                String    @id @default(cuid())
+  facilityId        String
+  leaseId           String
+  name              String
+  phone             String
+  relationship      String
   /// Optional per AC1. A `WeeklySchedule`-shaped JSON when set, reusing the
   /// validated shape facility hours already use (`parseWeeklySchedule`) rather
   /// than inventing a second one. Nothing enforces it yet — gate-hours
   /// enforcement including per-grant overrides is FR-5 / B-064's — so this is
   /// captured and unread until that item exists.
-  accessHours      Json?
-  active           Boolean   @default(true)
+  accessHours       Json?
+  active            Boolean   @default(true)
   /// AC1 wants "the actor who changed it", and from B-105 that actor may be the
   /// TENANT rather than a staff member — self-service from the portal is
   /// AC4's Phase 2. Exactly one of each pair is set; which one is not
   /// cosmetic, because "the tenant added their own brother" and "a manager
   /// added somebody at the counter" are different answers when the gate log is
   /// read after a theft claim.
-  createdByStaffId String?
+  createdByStaffId  String?
   createdByTenantId String?
-  revokedAt        DateTime? @db.Timestamptz(6)
-  revokedByStaffId String?
+  revokedAt         DateTime? @db.Timestamptz(6)
+  revokedByStaffId  String?
   revokedByTenantId String?
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
@@ -3078,10 +3113,10 @@ model Lead {
   createdAt             DateTime   @default(now()) @db.Timestamptz(6)
   updatedAt             DateTime   @updatedAt @db.Timestamptz(6)
 
-  facility       Facility?     @relation(fields: [facilityId], references: [id], onDelete: SetNull)
-  unitType       UnitType?     @relation(fields: [unitTypeId], references: [id], onDelete: SetNull)
-  tenant         Tenant?       @relation(fields: [tenantId], references: [id], onDelete: SetNull)
-  createdByStaff StaffUser?    @relation(fields: [createdByStaffId], references: [id], onDelete: SetNull)
+  facility       Facility?      @relation(fields: [facilityId], references: [id], onDelete: SetNull)
+  unitType       UnitType?      @relation(fields: [unitTypeId], references: [id], onDelete: SetNull)
+  tenant         Tenant?        @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  createdByStaff StaffUser?     @relation(fields: [createdByStaffId], references: [id], onDelete: SetNull)
   reservations   Reservation[]
   consents       Consent[]
   activities     LeadActivity[]
@@ -3168,23 +3203,23 @@ model PromoCode {
 /// must not rewrite what somebody already agreed to. Billing reads this row,
 /// never the `Promotion` it came from.
 model PromoRedemption {
-  id            String  @id @default(cuid())
-  promotionId   String
-  promoCodeId   String?
-  facilityId    String
-  reservationId String?
-  leaseId       String? @unique
+  id             String   @id @default(cuid())
+  promotionId    String
+  promoCodeId    String?
+  facilityId     String
+  reservationId  String?
+  leaseId        String?  @unique
   /// The computed schedule: `[{ periodIndex, amountCents }]`. Whole cents,
   /// resolved against the rate quoted at the time.
-  schedule      Json
+  schedule       Json
   /// Sum of the schedule, denormalised so ROI reporting does not have to walk
   /// the JSON of every redemption.
-  totalCents    Int
+  totalCents     Int
   /// Which periods have actually been discounted on an invoice. Append-only:
   /// billing adds an index when it writes the line, so a re-run of the nightly
   /// job cannot discount the same period twice.
-  appliedPeriods Int[]  @default([])
-  createdAt     DateTime @default(now()) @db.Timestamptz(6)
+  appliedPeriods Int[]    @default([])
+  createdAt      DateTime @default(now()) @db.Timestamptz(6)
 
   promotion   Promotion    @relation(fields: [promotionId], references: [id], onDelete: Restrict)
   promoCode   PromoCode?   @relation(fields: [promoCodeId], references: [id], onDelete: SetNull)
@@ -3409,19 +3444,19 @@ enum NoticeDeliveryMethod {
 /// Versioned like `MessageTemplate`: new version = new row, never edited in
 /// place, and the generated `Notice` records which version rendered it.
 model NoticeTemplate {
-  id         String     @id @default(cuid())
-  type       NoticeType
+  id               String     @id @default(cuid())
+  type             NoticeType
   /// null = org-level default; set = per-facility override. Same precedence
   /// `effectiveTemplate` applies to messages.
-  facilityId String?
-  version    Int        @default(1)
-  active     Boolean    @default(true)
-  title      String
+  facilityId       String?
+  version          Int        @default(1)
+  active           Boolean    @default(true)
+  title            String
   /// The merge template. Required fields are enforced at save AND at render —
   /// see packages/core/notices/templates.ts.
-  body       String
+  body             String
   createdByStaffId String?
-  createdAt  DateTime   @default(now()) @db.Timestamptz(6)
+  createdAt        DateTime   @default(now()) @db.Timestamptz(6)
 
   facility Facility? @relation(fields: [facilityId], references: [id], onDelete: Cascade)
   notices  Notice[]
@@ -3440,21 +3475,21 @@ model NoticeTemplate {
 /// specific failure the backlog names — it destroys the ability to say what was
 /// actually sent on the day it was sent.
 model Notice {
-  id            String       @id @default(cuid())
-  facilityId    String
-  leaseId       String
-  type          NoticeType
-  status        NoticeStatus @default(draft)
-  generatedAt   DateTime?    @db.Timestamptz(6)
+  id                 String       @id @default(cuid())
+  facilityId         String
+  leaseId            String
+  type               NoticeType
+  status             NoticeStatus @default(draft)
+  generatedAt        DateTime?    @db.Timestamptz(6)
   generatedByStaffId String?
 
   /// The stored, hashed document (US-16's store). `documentHash` is
   /// denormalised alongside it because US-13's AC asks for the rendered
   /// address and the hash to sit together on THIS row — a lien file should not
   /// need a join to answer "what did you send, and where."
-  documentId    String?
-  documentUrl   String?
-  documentHash  String?
+  documentId       String?
+  documentUrl      String?
+  documentHash     String?
   /// Which template version rendered it (US-27 AC). Kept as an integer as well
   /// as the FK: the row survives a template being deleted, and "version 3" is
   /// what a person asks about.
@@ -3485,22 +3520,22 @@ model Notice {
   deliveryMethod NoticeDeliveryMethod?
   deliveredAt    DateTime?             @db.Timestamptz(6)
   /// Tracking numbers, photos, mail receipts — the lien evidence chain.
-  deliveryProof Json?
+  deliveryProof  Json?
 
   /// Set on the OLD notice when a correction replaces it.
-  supersededAt   DateTime? @db.Timestamptz(6)
+  supersededAt     DateTime? @db.Timestamptz(6)
   /// Set on the NEW notice, pointing at what it corrects.
   correctsNoticeId String?
 
-  createdAt     DateTime     @default(now()) @db.Timestamptz(6)
-  updatedAt     DateTime     @updatedAt @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
-  facility Facility        @relation(fields: [facilityId], references: [id], onDelete: Restrict)
-  lease    Lease           @relation(fields: [leaseId], references: [id], onDelete: Restrict)
-  template NoticeTemplate? @relation(fields: [noticeTemplateId], references: [id], onDelete: Restrict)
-  document Document?       @relation(fields: [documentId], references: [id], onDelete: Restrict)
-  corrects Notice?         @relation("NoticeCorrection", fields: [correctsNoticeId], references: [id], onDelete: Restrict)
-  correctedBy Notice[]     @relation("NoticeCorrection")
+  facility    Facility        @relation(fields: [facilityId], references: [id], onDelete: Restrict)
+  lease       Lease           @relation(fields: [leaseId], references: [id], onDelete: Restrict)
+  template    NoticeTemplate? @relation(fields: [noticeTemplateId], references: [id], onDelete: Restrict)
+  document    Document?       @relation(fields: [documentId], references: [id], onDelete: Restrict)
+  corrects    Notice?         @relation("NoticeCorrection", fields: [correctsNoticeId], references: [id], onDelete: Restrict)
+  correctedBy Notice[]        @relation("NoticeCorrection")
 
   @@index([facilityId, type])
   @@index([leaseId])
@@ -3764,38 +3799,38 @@ model PayLink {
 /// configuration change rather than six code changes. This row records the
 /// fact and the evidence; the catalog says what it does.
 model LeaseHold {
-  id            String    @id @default(cuid())
-  leaseId       String
+  id                 String    @id @default(cuid())
+  leaseId            String
   /// One of `packages/core/holds`' types. A string rather than an enum so a new
   /// type is a catalog entry and a seed, not a migration.
-  type          String
-  effectiveFrom DateTime  @db.Timestamptz(6)
+  type               String
+  effectiveFrom      DateTime  @db.Timestamptz(6)
   /// Null means open-ended, which is the common case — a bankruptcy ends when
   /// someone learns it has, not on a date known in advance.
-  effectiveTo   DateTime? @db.Timestamptz(6)
-  reason        String
+  effectiveTo        DateTime? @db.Timestamptz(6)
+  reason             String
   /// US-16's document store: the deployment order, the bankruptcy notice.
-  documentId    String?
+  documentId         String?
   /// Null means the system raised it, not a person — B-121's SCRA hold, placed
   /// off the tenant's own active-duty declaration at move-in. Nullable rather
   /// than attributed to whoever happened to be nearby: a hold that protects a
   /// servicemember across every facility they rent at cannot honestly carry the
   /// name of one site's counter staffer, and inventing a "system" StaffUser row
   /// would put a fake person in the staff list and the audit log.
-  placedByStaffId String?
-  liftedAt      DateTime? @db.Timestamptz(6)
-  liftedByStaffId String?
-  liftReason    String?
+  placedByStaffId    String?
+  liftedAt           DateTime? @db.Timestamptz(6)
+  liftedByStaffId    String?
+  liftReason         String?
   /// US-42: "the `deceased` type records an estate contact". Held on the hold
   /// rather than the tenant because it is true for as long as the hold is, and
   /// a dead tenant's record should not acquire a second live contact.
   estateContactName  String?
   estateContactPhone String?
   estateContactEmail String?
-  createdAt     DateTime  @default(now()) @db.Timestamptz(6)
+  createdAt          DateTime  @default(now()) @db.Timestamptz(6)
 
   lease         Lease      @relation(fields: [leaseId], references: [id], onDelete: Restrict)
-  placedByStaff StaffUser?  @relation("HoldPlacedBy", fields: [placedByStaffId], references: [id], onDelete: Restrict)
+  placedByStaff StaffUser? @relation("HoldPlacedBy", fields: [placedByStaffId], references: [id], onDelete: Restrict)
   liftedByStaff StaffUser? @relation("HoldLiftedBy", fields: [liftedByStaffId], references: [id], onDelete: Restrict)
 
   @@index([leaseId, liftedAt])
@@ -3833,34 +3868,34 @@ model StaffUser {
   /// Set only once a code generated by the authenticator has been verified.
   /// Enrolment is not complete when the secret is issued — it is complete when
   /// the person proves they can read codes from it, or they lock themselves out.
-  totpConfirmedAt DateTime?       @db.Timestamptz(6)
+  totpConfirmedAt DateTime? @db.Timestamptz(6)
   /// The last 30-second step a code was accepted from. The replay guard: a code
   /// overlooked on a screen stays valid for ~90 seconds across the drift window
   /// without this, which is long enough for somebody standing behind you.
   totpLastStep    Int?
 
-  createdAt       DateTime        @default(now()) @db.Timestamptz(6)
-  updatedAt       DateTime        @updatedAt @db.Timestamptz(6)
-  deletedAt       DateTime?       @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt DateTime? @db.Timestamptz(6)
 
-  recoveryCodes  StaffRecoveryCode[]
-  auditLogs      AuditLog[]
-  assignments    StaffFacilityAssignment[]
-  suppressions   Suppression[]
-  tenantNotes    TenantNote[]
-  paymentsTaken  Payment[]
-  holdsPlaced    LeaseHold[] @relation("HoldPlacedBy")
-  holdsLifted    LeaseHold[] @relation("HoldLiftedBy")
-  tasksAssigned  Task[]                    @relation("TaskAssignee")
-  tasksCompleted Task[]                    @relation("TaskCompletedBy")
-  maintenanceTicketsAssigned MaintenanceTicket[] @relation("MaintenanceTicketAssignee")
+  recoveryCodes              StaffRecoveryCode[]
+  auditLogs                  AuditLog[]
+  assignments                StaffFacilityAssignment[]
+  suppressions               Suppression[]
+  tenantNotes                TenantNote[]
+  paymentsTaken              Payment[]
+  holdsPlaced                LeaseHold[]               @relation("HoldPlacedBy")
+  holdsLifted                LeaseHold[]               @relation("HoldLiftedBy")
+  tasksAssigned              Task[]                    @relation("TaskAssignee")
+  tasksCompleted             Task[]                    @relation("TaskCompletedBy")
+  maintenanceTicketsAssigned MaintenanceTicket[]       @relation("MaintenanceTicketAssignee")
+  leadsCreated               Lead[]
+  delinquencyTimelines       DelinquencyTimeline[]
+  orgDefaultsUpdated         OrgDefault[]
+  cityCopyUpdated            City[]
+  periodsClosed              AccountingPeriod[]
 
   @@map("staff_user")
-  leadsCreated       Lead[]
-  delinquencyTimelines DelinquencyTimeline[]
-  orgDefaultsUpdated OrgDefault[]
-  cityCopyUpdated    City[]
-  periodsClosed      AccountingPeriod[]
 }
 
 /// B-079. Single-use codes for the phone that got dropped in a puddle.
@@ -3937,40 +3972,40 @@ enum TaskPriority {
 /// `packages/core/tasks`'s catalog is what tells a generic row what it means
 /// and what evidence completing it requires.
 model Task {
-  id         String   @id @default(cuid())
-  facilityId String
+  id                 String       @id @default(cuid())
+  facilityId         String
   /// Looked up in the catalog (packages/core/tasks) for its label, required
   /// proof fields, and whether completing it needs an audit entry. A loose
   /// string rather than an enum for the same reason `Document.type` is: new
   /// task types are a catalog entry, not a migration.
-  type       String
+  type               String
   /// What this task is about, mirroring `Document.subjectType`/`subjectId` —
   /// one pair rather than a nullable FK per possible subject, so the entity
   /// stays one table as new task types add new kinds of subject.
-  entityType String
-  entityId   String
+  entityType         String
+  entityId           String
   /// The facility-local calendar day this task belongs to — when it was
   /// created, not a due date. Half of "idempotent creation" (below) and of
   /// "today's list": a redelivered event on the same business day must not
   /// duplicate the task, and "my day" is exactly the rows whose businessDate
   /// is today.
-  businessDate DateTime      @db.Date
-  priority     TaskPriority  @default(normal)
+  businessDate       DateTime     @db.Date
+  priority           TaskPriority @default(normal)
   /// Null means anyone at the facility can pick it up.
-  assigneeStaffId String?
-  status           TaskStatus @default(open)
+  assigneeStaffId    String?
+  status             TaskStatus   @default(open)
   /// Free-form per `type`'s required keys (packages/core/tasks). A note field
   /// is universal; a tracking number or a photo reference (once there is a
   /// blob store) are type-specific. Validated against the catalog at
   /// completion time, not by the column.
-  proof Json?
+  proof              Json?
   /// The domain event that created this task, if any — lets a redelivered
   /// event find (rather than duplicate) the row it already made, alongside
   /// the (type, entityId, businessDate) uniqueness below.
   sourceEventId      String?
   completedByStaffId String?
-  completedAt        DateTime? @db.Timestamptz(6)
-  createdAt          DateTime  @default(now()) @db.Timestamptz(6)
+  completedAt        DateTime?    @db.Timestamptz(6)
+  createdAt          DateTime     @default(now()) @db.Timestamptz(6)
 
   facility    Facility   @relation(fields: [facilityId], references: [id], onDelete: Restrict)
   assignee    StaffUser? @relation("TaskAssignee", fields: [assigneeStaffId], references: [id], onDelete: Restrict)
@@ -4076,9 +4111,9 @@ model AuctionCase {
   /// Lock cut and inventory. "The primary evidence that you sold what you said
   /// you sold" — so the itemised inventory and its photographs are rendered
   /// into a hashed `Document` (US-27's mechanism), not free text on this row.
-  lockCutAt          DateTime? @db.Timestamptz(6)
-  lockCutByStaffId   String?
-  oldLockDisposition String?
+  lockCutAt           DateTime? @db.Timestamptz(6)
+  lockCutByStaffId    String?
+  oldLockDisposition  String?
   inventoryDocumentId String?
 
   /// Sale outcome. Every figure below is computed by the waterfall
@@ -4095,28 +4130,28 @@ model AuctionCase {
   /// Buyer record (US-28). A sales-tax return on auction proceeds cannot be
   /// filed without it, so it is required at the moment the sale is recorded
   /// rather than chased afterwards.
-  buyerName             String?
-  buyerAddressLine1     String?
-  buyerAddressLine2     String?
-  buyerCity             String?
-  buyerState            String?
-  buyerPostalCode       String?
+  buyerName                       String?
+  buyerAddressLine1               String?
+  buyerAddressLine2               String?
+  buyerCity                       String?
+  buyerState                      String?
+  buyerPostalCode                 String?
   /// A REFERENCE, never the number itself — see the note on redaction in
   /// packages/core/audit. Storing a driving licence number would create a
   /// breach-notification liability for a field nobody needs to read back.
-  buyerGovernmentIdReference String?
-  buyerTaxExempt             Boolean @default(false)
+  buyerGovernmentIdReference      String?
+  buyerTaxExempt                  Boolean   @default(false)
   buyerResaleCertificateReference String?
-  buyerPaymentMethod         String?
-  buyerCleanoutDeadline      DateTime? @db.Date
-  buyerForfeitTerms          String?
+  buyerPaymentMethod              String?
+  buyerCleanoutDeadline           DateTime? @db.Date
+  buyerForfeitTerms               String?
 
   /// Surplus: a liability with a statutory life, not revenue.
-  surplusDisposition     SurplusDisposition @default(no_surplus)
-  surplusHoldUntil       DateTime?          @db.Date
-  surplusTenantNotifiedAt DateTime?         @db.Timestamptz(6)
-  surplusDispositionNote String?
-  surplusDispositionedAt DateTime?          @db.Timestamptz(6)
+  surplusDisposition      SurplusDisposition @default(no_surplus)
+  surplusHoldUntil        DateTime?          @db.Date
+  surplusTenantNotifiedAt DateTime?          @db.Timestamptz(6)
+  surplusDispositionNote  String?
+  surplusDispositionedAt  DateTime?          @db.Timestamptz(6)
 
   /// "Cancelling a sale (tenant paid) at any point restores the normal
   /// lifecycle and logs the reason."
@@ -4126,11 +4161,11 @@ model AuctionCase {
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
-  facility  Facility             @relation(fields: [facilityId], references: [id], onDelete: Restrict)
-  lease     Lease                @relation(fields: [leaseId], references: [id], onDelete: Restrict)
-  unit      Unit                 @relation(fields: [unitId], references: [id], onDelete: Restrict)
-  timeline  DelinquencyTimeline? @relation(fields: [timelineId], references: [id], onDelete: Restrict)
-  inventory Document?            @relation(fields: [inventoryDocumentId], references: [id], onDelete: Restrict)
+  facility       Facility               @relation(fields: [facilityId], references: [id], onDelete: Restrict)
+  lease          Lease                  @relation(fields: [leaseId], references: [id], onDelete: Restrict)
+  unit           Unit                   @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  timeline       DelinquencyTimeline?   @relation(fields: [timelineId], references: [id], onDelete: Restrict)
+  inventory      Document?              @relation(fields: [inventoryDocumentId], references: [id], onDelete: Restrict)
   advertisements AuctionAdvertisement[]
 
   /// One LIVE case per lease. A partial unique index in raw SQL (Prisma cannot
@@ -4196,19 +4231,19 @@ enum ReferralState {
 /// a posted code is worth exactly one rental to whoever finds it first, and the
 /// tenant's other invites are untouched.
 model ReferralInvite {
-  id               String    @id @default(cuid())
+  id                   String    @id @default(cuid())
   /// 8 characters, no 0/O/1/I/l/U — it gets read aloud over a phone.
-  code             String    @unique
-  referrerTenantId String
-  facilityId       String
-  createdAt        DateTime  @default(now()) @db.Timestamptz(6)
-  expiresAt        DateTime  @db.Timestamptz(6)
+  code                 String    @unique
+  referrerTenantId     String
+  facilityId           String
+  createdAt            DateTime  @default(now()) @db.Timestamptz(6)
+  expiresAt            DateTime  @db.Timestamptz(6)
   /// Set by the ATOMIC conditional update that makes "one use" true against
   /// two friends completing a move-in in the same minute (§6.1). Consumed when
   /// a referral QUALIFIES, not when the link is clicked — a friend who clicks
   /// and does not rent has used nothing up.
-  redeemedAt       DateTime? @db.Timestamptz(6)
-  redeemedByReferralId String? @unique
+  redeemedAt           DateTime? @db.Timestamptz(6)
+  redeemedByReferralId String?   @unique
 
   referrerTenant Tenant     @relation("ReferralInvitesMinted", fields: [referrerTenantId], references: [id], onDelete: Cascade)
   facility       Facility   @relation(fields: [facilityId], references: [id], onDelete: Restrict)
@@ -4220,32 +4255,32 @@ model ReferralInvite {
 }
 
 model Referral {
-  id               String        @id @default(cuid())
-  inviteId         String
-  referrerTenantId String
+  id                      String        @id @default(cuid())
+  inviteId                String
+  referrerTenantId        String
   /// Set as soon as the link produces a lead, before anybody rents.
-  refereeLeadId    String?
-  refereeTenantId  String?
-  refereeLeaseId   String?
-  facilityId       String
-  state            ReferralState @default(shared)
+  refereeLeadId           String?
+  refereeTenantId         String?
+  refereeLeaseId          String?
+  facilityId              String
+  state                   ReferralState @default(shared)
   /// One of `packages/core/referrals`' refusal keys. Never free text: §5.7
   /// requires staff to answer "why didn't I get my $50" from this record, and
   /// a reason somebody typed once cannot be reported on or counted.
-  refusedReason    String?
-  qualifiedAt      DateTime?     @db.Timestamptz(6)
+  refusedReason           String?
+  qualifiedAt             DateTime?     @db.Timestamptz(6)
   /// SNAPSHOTTED at qualification, both of them, for the same reason a promo
   /// schedule is (FR-PROMO-4): changing the program next quarter must not
   /// silently rewrite what somebody was already promised.
-  referrerRewardCents Int        @default(0)
-  refereeRewardCents  Int        @default(0)
+  referrerRewardCents     Int           @default(0)
+  refereeRewardCents      Int           @default(0)
   /// Where each reward actually landed. Null until the invoice exists — the
   /// referrer's may be up to a month out, which is why the portal states the
   /// date rather than saying "eventually".
   referrerRewardInvoiceId String?
   refereeRewardInvoiceId  String?
-  createdAt        DateTime      @default(now()) @db.Timestamptz(6)
-  updatedAt        DateTime      @updatedAt @db.Timestamptz(6)
+  createdAt               DateTime      @default(now()) @db.Timestamptz(6)
+  updatedAt               DateTime      @updatedAt @db.Timestamptz(6)
 
   invite         ReferralInvite @relation(fields: [inviteId], references: [id], onDelete: Restrict)
   referrerTenant Tenant         @relation("ReferralsMade", fields: [referrerTenantId], references: [id], onDelete: Cascade)
