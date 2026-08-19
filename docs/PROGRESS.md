@@ -4751,7 +4751,7 @@ Full e2e against a production build: **1,061 passed, 5 skipped, 0 failed, 0 flak
 
 ## B-091 part 2 — Enforcement, banner and UI: the support session becomes possible and blocked in the same commit
 
-`PENDING_SHA`
+`22c53c5`
 
 **The constraint the split existed to honour, honoured.** Part 1's rule was that no commit may ship "a session can start" before "writes are blocked and the banner shows". Part 1 therefore built no actor swap and nothing reachable. This commit lands the swap, the write block, the banner and the start controls together, so impersonation becomes possible and constrained in the same change.
 
