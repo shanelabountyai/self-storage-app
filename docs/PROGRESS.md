@@ -4691,7 +4691,7 @@ So a period older than the history returns today's figures flagged `followsPerio
 
 ## B-132 — The demo leases that were delinquent in name only now owe real money
 
-`SHA_PENDING`
+`b81aa8f`
 
 **What was wrong.** Three of the four demo leases carrying a delinquency label had **no invoices and no ledger entries whatsoever**. Only the primary facility's `delinquent` lease — the one B-114 and B-130 had already worked on — had any financial state at all. Dallas's "delinquent" tenant owed nothing, and BOTH `pending_auction` leases owed nothing, which made the status a word on a row rather than a state the product could have reached.
 
