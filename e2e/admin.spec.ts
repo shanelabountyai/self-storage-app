@@ -91,6 +91,9 @@ test.describe('signed in as the demo owner', () => {
     '/admin/units/types',
     '/admin/units/ready',
     '/admin/units/setup',
+    // B-088 part 1. A price-change surface nobody scans is a price-change
+    // surface nobody has checked.
+    '/admin/units/rates',
     '/admin/tenants',
     '/admin/tenants/former',
     '/admin/leads',
