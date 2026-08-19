@@ -4717,7 +4717,7 @@ Full e2e against a production build: **1,061 passed, 5 skipped, 0 failed, 0 flak
 
 ## B-091 part 1 — The escalation guard and the record, with nothing yet able to render as somebody else
 
-`SHA_PENDING`
+`f82223c`
 
 **Taken because it is the only Phase 2 row left.** B-129 and B-085 are blocked on partner agreements, B-086–B-090 are Phase 3, and the internal-tooling block says in as many words that it is *not* in top-to-bottom build order and is buildable at any point with the Phase column as a recommendation.
 
