@@ -2,7 +2,9 @@ import Link from 'next/link'
 import { AdminForm, Field } from '@/components/admin/form'
 import { Button } from '@/components/ui/button'
 import { getAdminActor } from '@/lib/admin/context'
-import { can } from '@/lib/rbac/authorize'
+import { can, hasPermissionAnywhere } from '@/lib/rbac/authorize'
+import { startStaffImpersonationAction } from '@/app/admin/impersonation/actions'
+import { IMPERSONATION_TTL_MINUTES } from '@/lib/impersonation/service'
 import { staffSecurityRows } from '@/lib/admin/staff-security'
 import { resetStaffMfaAction } from './actions'
 
@@ -99,6 +101,56 @@ export default async function StaffSecurityPage() {
           </tbody>
         </table>
       </div>
+
+      {hasPermissionAnywhere(actor, ['impersonation:staff']) && (
+        // PRD 09 FR-1 (B-091 part 2). This screen is the only staff-user list
+        // in the app, so it is where a session as another staff member starts.
+        //
+        // The list is deliberately NOT pre-filtered to who the escalation guard
+        // would permit. Filtering would answer "does this person outrank me" for
+        // every colleague at a glance, and a refusal that says so in words is
+        // both the honest answer and the one that stays correct — FR-9
+        // re-evaluates the same rule on every request afterwards.
+        <section aria-labelledby="impersonate-heading" className="flex flex-col gap-3">
+          <h2 id="impersonate-heading" className="text-base font-medium">
+            View the dashboard as another staff member
+          </h2>
+          <p className="text-muted-foreground max-w-prose text-sm text-pretty">
+            For &quot;it works for me&quot; — opens the admin exactly as they see it, for{' '}
+            {IMPERSONATION_TTL_MINUTES} minutes and read-only. You can only reach an account whose
+            roles are at or below your own and inside your own facilities; anyone else is refused
+            and told why. Nothing can be changed, sent, or paid while the session is running, and
+            every screen you open is logged against your name as well as theirs.
+          </p>
+
+          <AdminForm
+            action={startStaffImpersonationAction}
+            label="Start a support session as another staff member"
+            className="grid max-w-2xl gap-3 sm:grid-cols-2"
+          >
+            <Field name="subjectId" label="Staff member" as="select" required>
+              {rows
+                .filter((row) => row.status === 'active' && row.staffUserId !== actor.staffUserId)
+                .map((row) => (
+                  <option key={row.staffUserId} value={row.staffUserId}>
+                    {row.name} ({row.email})
+                  </option>
+                ))}
+            </Field>
+            <Field
+              name="reason"
+              label="Reason"
+              type="text"
+              required
+              hint="What you are trying to see, in a sentence."
+            />
+            <Field name="ticketRef" label="Ticket reference (optional)" type="text" />
+            <div className="sm:col-span-2">
+              <Button type="submit">Start support session</Button>
+            </div>
+          </AdminForm>
+        </section>
+      )}
 
       <section aria-labelledby="reset-heading" className="flex flex-col gap-3">
         <h2 id="reset-heading" className="text-base font-medium">

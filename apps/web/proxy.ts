@@ -11,6 +11,11 @@ import {
 } from '@storage/core/marketing'
 import { authConfig } from '@/auth.config'
 import { demoGate } from '@/lib/demo-gate'
+import {
+  IMPERSONATION_BLOCKED_MESSAGE,
+  IMPERSONATION_COOKIE,
+  isImpersonationWriteBlocked,
+} from '@/lib/impersonation/request'
 
 // Kept here rather than imported from lib/analytics/track: that module pulls in
 // Prisma, and the proxy runs on the Edge runtime where the Prisma client will
@@ -164,7 +169,21 @@ const gated = auth((request) => {
   const audience = request.auth?.user?.audience
   const requiredAudience = request.nextUrl.pathname.startsWith('/admin') ? 'staff' : 'tenant'
 
-  if (audience !== requiredAudience) {
+  // PRD 09 FR-22/D-13d (B-091 part 2): an impersonated tenant session renders
+  // the REAL portal at its real URLs, so a staff-audience JWT has to be allowed
+  // past the tenant gate while one is running. FR-23 is explicit that URL
+  // segregation is not a security control here, and this is the line that makes
+  // that literally true.
+  //
+  // The cookie is not verified at this layer and does not need to be. It only
+  // buys a redirect the visitor would otherwise get; `/portal`'s own layout
+  // still calls `requireTenantActor()`, which resolves through
+  // `currentImpersonation()` and refuses a session the database does not
+  // confirm. A forged cookie reaches the portal shell and is bounced by it.
+  const impersonating = Boolean(request.cookies.get(IMPERSONATION_COOKIE))
+  const audienceOk = audience === requiredAudience || (impersonating && audience === 'staff')
+
+  if (!audienceOk) {
     const url = new URL('/login', request.nextUrl.origin)
     url.searchParams.set('from', request.nextUrl.pathname)
     return NextResponse.redirect(url)
@@ -181,6 +200,27 @@ export default function proxy(request: NextRequest, event: unknown) {
   // differently for each one.
   const locked = demoGate(request)
   if (locked) return locked
+
+  // PRD 09 FR-11/FR-13 (B-091 part 2). The read-only enforcement, at the one
+  // layer no route can be written around.
+  //
+  // Placed before the auth gate rather than inside it because the block is not
+  // about who you are — it is about a session that is running, and it must
+  // cover route handlers under `/api` as well as the 53 files of server actions
+  // under `/admin` and `/portal`. Refusing by METHOD is what makes it hold for
+  // screens nobody has written yet: SR-2 asks that a page which forgets to hide
+  // a button still be safe, and nothing here knows or cares which buttons exist.
+  //
+  // A 403 rather than a redirect: a server-action POST answered with HTML
+  // fails in the client as an unexplained parse error, whereas the body below
+  // is the message FR-11 asks for. It is a backstop, not the normal path — the
+  // banner replaces the controls it would otherwise refuse.
+  if (isImpersonationWriteBlocked(request.method, pathname, request.cookies.has(IMPERSONATION_COOKIE))) {
+    return new NextResponse(IMPERSONATION_BLOCKED_MESSAGE, {
+      status: 403,
+      headers: { 'content-type': 'text/plain; charset=utf-8' },
+    })
+  }
 
   // Signed-in areas go through the auth gate first — being redirected to the
   // login page matters more than URL tidiness, and the gate ends by calling

@@ -17,6 +17,9 @@ import {
   updateContactAction,
   waiveFeeAction,
 } from './actions'
+import { startTenantImpersonationAction } from '@/app/admin/impersonation/actions'
+import { IMPERSONATION_TTL_MINUTES } from '@/lib/impersonation/service'
+import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
 import { HOLD_TYPES, type HoldEffect } from '@storage/core/holds'
 import { leaseStatusLabel } from '@storage/core/labels'
 import { referralsForStaff, REFERRAL_STATE_LABELS } from '@/lib/referrals/portal'
@@ -197,6 +200,57 @@ export default async function TenantProfilePage({
               </AdminForm>
             </div>
           ))}
+        </section>
+      )}
+
+      {hasPermissionAnywhere(actor, ['impersonation:tenant']) && (
+        // PRD 09 FR-1/FR-2 (B-091 part 2). Started from the profile of somebody
+        // you are already looking at, with a reason, and never from a box you
+        // type an email into.
+        //
+        // Whether this actor may impersonate THIS tenant is decided by the
+        // escalation guard on submit, not here: `hasPermissionAnywhere` only
+        // asks whether the control is worth rendering at all, which is the
+        // distinction lib/rbac/authorize.ts draws between it and `can()`.
+        <section aria-labelledby="impersonate-heading" className="flex flex-col gap-3">
+          <h2 id="impersonate-heading" className="font-medium">
+            View the portal as this tenant
+          </h2>
+          <p className="text-muted-foreground max-w-prose text-sm text-pretty">
+            Opens their portal, exactly as they see it, for {IMPERSONATION_TTL_MINUTES} minutes and
+            read-only — nothing can be changed, sent, or paid, and gate codes stay hidden. The
+            tenant is not notified, and the reason you give is written to the audit log with your
+            name against every screen you open.
+          </p>
+          <AdminForm
+            action={startTenantImpersonationAction}
+            label="Start a support session as this tenant"
+            className="grid max-w-2xl gap-3 sm:grid-cols-2"
+          >
+            <input type="hidden" name="subjectId" value={tenantId} />
+            <Field
+              name="reason"
+              label="Reason"
+              type="text"
+              required
+              hint="What you are trying to see, in a sentence."
+              className={FIELD_CLASS}
+            />
+            <Field
+              name="ticketRef"
+              label="Ticket reference (optional)"
+              type="text"
+              className={FIELD_CLASS}
+            />
+            <div className="sm:col-span-2">
+              <button
+                type="submit"
+                className="border-input hover:bg-accent inline-flex min-h-11 items-center justify-center rounded-md border px-4 text-sm font-medium"
+              >
+                Start support session
+              </button>
+            </div>
+          </AdminForm>
         </section>
       )}
 

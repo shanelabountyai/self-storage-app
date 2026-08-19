@@ -81,6 +81,35 @@ export default async function globalSetup(): Promise<void> {
         console.info(`[e2e setup] cleared ${count} lien notice(s) from a previous run`)
       }
     }
+
+    // B-091 part 2. Support sessions a previous run started — the fourth
+    // disposable state, and the one that reset itself least gracefully.
+    //
+    // It qualifies on the same footing as the three above: nothing in the suite
+    // reads a pre-existing `ImpersonationSession`, and the only thing that
+    // creates one is impersonation.spec.ts. What makes it NECESSARY is
+    // different, though, and it is SR-7 rather than a lock: session starts are
+    // throttled to ten per impersonator per hour, the demo owner is the only
+    // impersonator the suite has, and one sweep across two Playwright projects
+    // spends two of them. Three consecutive sweeps inside an hour hit the
+    // ceiling exactly — measured at 10 rows in a 60-minute window — and the
+    // desktop project then failed on a URL assertion, which reads like a broken
+    // feature and was the throttle correctly refusing.
+    //
+    // **Scoped by `auditLogs: { none: {} }`, which is not defensive padding.**
+    // `AuditLog.session` is `onDelete: Restrict`, so a session an audit entry
+    // points at cannot be deleted. Today none do — `impersonation.started` and
+    // `.ended` record the session as their ENTITY, not through the FR-24
+    // attribution columns — but the day `impersonation:write` ships, entries
+    // written during a session will carry it, and an unscoped `deleteMany` here
+    // would start failing every run. This leaves those rows alone by
+    // construction rather than by the FK shouting.
+    const { count: sessions } = await prisma.impersonationSession.deleteMany({
+      where: { auditLogs: { none: {} } },
+    })
+    if (sessions > 0) {
+      console.info(`[e2e setup] cleared ${sessions} support session(s) from a previous run`)
+    }
   } finally {
     await prisma.$disconnect()
   }

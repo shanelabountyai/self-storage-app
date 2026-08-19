@@ -3,6 +3,8 @@ import { redirect } from 'next/navigation'
 import { auth, signOut } from '@/auth'
 import { requireTenantActor } from '@/lib/rbac/session'
 import { ForbiddenError } from '@/lib/rbac/authorize'
+import { currentImpersonation, hasStaleImpersonationCookie } from '@/lib/impersonation/context'
+import { ImpersonationBanner } from '@/components/impersonation/banner'
 
 // PRD 01 §4.7 US-701. The portal shell: every route under here requires a
 // signed-in tenant. proxy.ts already redirects a signed-out visit before this
@@ -13,18 +15,29 @@ import { ForbiddenError } from '@/lib/rbac/authorize'
 // this item ships the login that gets someone here and the gate that keeps
 // anyone else out, not the dashboard itself.
 export default async function PortalLayout({ children }: { children: React.ReactNode }) {
+  // PRD 09 FR-22 (B-091 part 2). A staff member impersonating a tenant lands
+  // here, and `requireTenantActor()` succeeds for them because
+  // `currentActor()` has already swapped in the subject.
+  const impersonation = await currentImpersonation()
+
   try {
     await requireTenantActor()
   } catch (error) {
-    if (error instanceof ForbiddenError) redirect('/login')
+    if (error instanceof ForbiddenError) {
+      // Sending a staff member to /login would be a lie and a dead end — they
+      // are signed in. This is the session having ended under them mid-browse,
+      // so clear the inert cookie on the way back to the admin.
+      redirect((await hasStaleImpersonationCookie()) ? '/api/impersonation/end' : '/login')
+    }
     throw error
   }
 
   const session = await auth()
-  const userName = session?.user?.name ?? 'your account'
+  const userName = impersonation?.subjectName ?? session?.user?.name ?? 'your account'
 
   return (
     <div className="flex min-h-screen flex-col">
+      <ImpersonationBanner />
       <a
         href="#main"
         className="bg-background focus:ring-ring sr-only rounded-md px-4 py-2 text-sm font-medium focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:ring-2"
@@ -82,16 +95,24 @@ export default async function PortalLayout({ children }: { children: React.React
               Move out
             </Link>
           </nav>
-          <form
-            action={async () => {
-              'use server'
-              await signOut({ redirectTo: '/login' })
-            }}
-          >
-            <button type="submit" className="text-sm underline underline-offset-2">
-              Sign out
-            </button>
-          </form>
+          {/* FR-13's courtesy half. Hiding is not the control — the write
+              block in proxy.ts refuses the POST either way — but "Sign out"
+              during a support session would sign the STAFF member out of their
+              own account from inside somebody else's portal, which is not what
+              it appears to offer. The banner's "Return to my account" is the
+              exit that belongs here. */}
+          {!impersonation && (
+            <form
+              action={async () => {
+                'use server'
+                await signOut({ redirectTo: '/login' })
+              }}
+            >
+              <button type="submit" className="text-sm underline underline-offset-2">
+                Sign out
+              </button>
+            </form>
+          )}
         </div>
       </header>
 

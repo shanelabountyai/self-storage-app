@@ -4,6 +4,7 @@ import { requireTenantActor } from '@/lib/rbac/session'
 import { portalDashboardForTenant, type PortalLeaseSummary } from '@/lib/portal/dashboard'
 import { formatRate } from '@/lib/format'
 import { GateCodePanel } from '@/components/portal/gate-code-panel'
+import { currentImpersonation } from '@/lib/impersonation/context'
 
 export const metadata: Metadata = { title: 'My account' }
 
@@ -32,7 +33,7 @@ function PayNowButton({ lease }: { lease: PortalLeaseSummary }) {
   )
 }
 
-function LeaseCard({ lease }: { lease: PortalLeaseSummary }) {
+function LeaseCard({ lease, impersonated }: { lease: PortalLeaseSummary; impersonated: boolean }) {
   const owesMoney = lease.balanceCents > 0
   const nextPaymentCents = lease.monthlyRateCents + lease.protectionCents
   const dueDate = formatDueDate(lease.nextDueDate, lease.facilityTimezone)
@@ -148,6 +149,20 @@ function LeaseCard({ lease }: { lease: PortalLeaseSummary }) {
             </a>{' '}
             with questions.
           </p>
+        ) : impersonated ? (
+          // PRD 09 FR-12 + SR-2 (B-091 part 2). "Revealing an unmasked gate
+          // code" is on the permanent hard-block list because PRD 03 SR-2 makes
+          // it a SEPARATE audited permission for staff — an impersonated portal
+          // that rendered it would launder exactly that permission, and SR-4's
+          // view-parity rule is a floor ("never more than the subject sees"),
+          // not a licence to show anything the subject can.
+          //
+          // The code is withheld here rather than hidden in CSS: `GateCodePanel`
+          // is a client component, so a `hidden` code would still be serialised
+          // into the page and readable in the HTML source.
+          <p className="mt-1 text-sm text-pretty">
+            The gate code is hidden during a support session. The tenant sees it here.
+          </p>
         ) : lease.gateCode ? (
           <GateCodePanel code={lease.gateCode} />
         ) : (
@@ -166,7 +181,11 @@ function LeaseCard({ lease }: { lease: PortalLeaseSummary }) {
 
 export default async function PortalHomePage() {
   const actor = await requireTenantActor()
-  const leases = await portalDashboardForTenant(actor.tenantId)
+  const [leases, impersonation] = await Promise.all([
+    portalDashboardForTenant(actor.tenantId),
+    currentImpersonation(),
+  ])
+  const impersonated = Boolean(impersonation)
 
   return (
     <div className="flex flex-col gap-6">
@@ -177,7 +196,9 @@ export default async function PortalHomePage() {
           We don&apos;t see an active unit on this account yet.
         </p>
       ) : (
-        leases.map((lease) => <LeaseCard key={lease.leaseId} lease={lease} />)
+        leases.map((lease) => (
+          <LeaseCard key={lease.leaseId} lease={lease} impersonated={impersonated} />
+        ))
       )}
     </div>
   )

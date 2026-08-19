@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { AdminForm, Field } from '@/components/admin/form'
 import { requireTenantActor } from '@/lib/rbac/session'
 import { authorizedAccessForTenant } from '@/lib/portal/authorized-access'
+import { currentImpersonation } from '@/lib/impersonation/context'
 import { addPersonAction, revokePersonAction } from './actions'
 
 export const metadata: Metadata = { title: 'Who can get in' }
@@ -16,7 +17,18 @@ export const metadata: Metadata = { title: 'Who can get in' }
 
 export default async function AccessPage() {
   const actor = await requireTenantActor()
-  const units = await authorizedAccessForTenant(actor.tenantId)
+  const [loaded, impersonation] = await Promise.all([
+    authorizedAccessForTenant(actor.tenantId),
+    currentImpersonation(),
+  ])
+
+  // PRD 09 FR-12 (B-091 part 2). Same rule as the tenant's own code on
+  // /portal: an impersonated session never renders a gate code, and the code is
+  // dropped from the data rather than hidden in the markup so it is not
+  // serialised into the page at all.
+  const units = impersonation
+    ? loaded.map((unit) => ({ ...unit, people: unit.people.map((p) => ({ ...p, code: null })) }))
+    : loaded
 
   return (
     <div className="flex flex-col gap-8">
@@ -74,6 +86,10 @@ export default async function AccessPage() {
                     {person.code ? (
                       <p className="mt-1">
                         Their code: <span className="font-mono font-medium">{person.code}</span>
+                      </p>
+                    ) : impersonation ? (
+                      <p className="text-muted-foreground mt-1">
+                        Codes are hidden during a support session.
                       </p>
                     ) : (
                       <p className="text-muted-foreground mt-1">

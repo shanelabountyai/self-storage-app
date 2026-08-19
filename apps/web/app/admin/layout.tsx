@@ -5,8 +5,15 @@ import { groupedNavItems } from '@/lib/admin/nav'
 import { getSwitcherData } from '@/lib/admin/context'
 import { Header } from '@/components/admin/header'
 import { SideNav } from '@/components/admin/side-nav'
+import { currentImpersonation, hasStaleImpersonationCookie } from '@/lib/impersonation/context'
+import { ImpersonationBanner } from '@/components/impersonation/banner'
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
+  // PRD 09 (B-091 part 2). A cookie that resolves to nothing still trips the
+  // write block, so it is cleared here rather than left to time out — see
+  // hasStaleImpersonationCookie().
+  if (await hasStaleImpersonationCookie()) redirect('/api/impersonation/end')
+
   let switcherData: Awaited<ReturnType<typeof getSwitcherData>>
   try {
     switcherData = await getSwitcherData()
@@ -14,7 +21,13 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     // requireStaffActor() throws for "no session" and "wrong audience" alike —
     // middleware.ts already redirects those, but this is the fail-closed
     // backstop if a request ever reaches here without it (PRD 02 RBAC-1).
-    if (error instanceof ForbiddenError) redirect('/login')
+    if (error instanceof ForbiddenError) {
+      // While impersonating a TENANT the actor is a tenant, so every admin
+      // route correctly refuses. The destination is the portal they were on
+      // their way to, not the login page they are already past.
+      const impersonation = await currentImpersonation()
+      redirect(impersonation?.subjectType === 'tenant' ? '/portal' : '/login')
+    }
     throw error
   }
 
@@ -44,6 +57,10 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     // down, so nothing between this layout and an <input> has to know, and so a
     // new admin screen inherits it without opting in.
     <div className="flex min-h-screen flex-col" style={{ '--control-h': '2.25rem' } as React.CSSProperties}>
+      {/* First in the document, ahead of the skip link — FR-15: a screen-reader
+          user must not work a dashboard for several seconds before finding out
+          whose dashboard it is. */}
+      <ImpersonationBanner />
       {/* WCAG 2.4.1 Bypass Blocks. Without this a keyboard or switch user tabs
           the facility switcher, the search, the bell, the user menu, sign-out
           and every nav item — on EVERY page load — before reaching content.
