@@ -4829,7 +4829,7 @@ Full e2e against a production build, **run twice back to back with no reseed bet
 
 ## B-088 part 1 — Revenue-management aids: a price change made a decision rather than a reflex
 
-`PENDING_SHA`
+`5f54871`
 
 **Taken after the owner chose it from a Phase 3 fork.** Phase 2 finished with B-092, and everything left is Phase 3 or blocked: B-129 needs master PRD OQ-9 answered and a marketplace partner, B-085 needs a gate-vendor agreement. Of the buildable rows this was the only fully unblocked M — no credentials, no partner — and it extends the metrics work B-084 and B-131 had just finished.
 
