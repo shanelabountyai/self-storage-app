@@ -4793,7 +4793,7 @@ Full e2e against a production build, **run twice back to back with no reseed bet
 
 ## B-092 — Impersonation oversight: the only channel through which misuse becomes visible
 
-`PENDING_SHA`
+`2e8cf30`
 
 **Why this is not a nice-to-have, in the PRD's own words.** D-13a removed tenant notification, so nothing in the product tells anybody their account was opened. FR-21 draws the conclusion explicitly: oversight is therefore "load-bearing rather than nice-to-have", and §8 calls "Phase A only, indefinitely" the one unsafe resting state. B-091 shipped Phase A on 2026-08-19; this ends that state the same day.
 
