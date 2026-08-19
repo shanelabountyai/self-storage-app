@@ -4663,7 +4663,7 @@ Full e2e against a production build: **1,061 passed, 5 skipped, 0 failed, 0 flak
 
 ## B-131 — Unit occupancy is historical, and the report stops answering a different question from the one its date picker implies
 
-`PENDING`
+`b08176e`
 
 **What the bug was, exactly.** `occupancyForFacility` took `periodStart` and `periodEnd`, used them for the collected figure and for the street rate in force, and then read `unit.status` with **no date filter at all**. Ask it for July's occupancy in December and it returned December's unit statuses under July's heading — on a screen with a date picker on it, beside an economic-occupancy figure that genuinely did cover July. B-084 part 1 found this and froze around it (D-65); the close was a workaround, not a fix.
 
