@@ -140,7 +140,15 @@ describeDb('mock gate controller', () => {
       await setSimulatorConfig(facilityId, { offline: true, latencyMs: 0, webhookFailing: false })
 
       const outcome = await evaluateKeypadEntry(facilityId, code)
-      expect(outcome).toMatchObject({ result: 'granted', delivered: false })
+      // `reason` is asserted alongside `result` because without it a failure
+      // here says only "denied" and cannot say why. This test failed once
+      // during a full parallel sweep on 2026-08-19 and passed in isolation and
+      // on the next full run with identical code, so the cause is still
+      // unknown — and `evaluateKeypadEntry` has three ways to deny
+      // (`outside_hours` against the real wall clock, `inactive`,
+      // `unknown_code`) that a bare `result` assertion cannot tell apart.
+      // Naming the reason turns the next occurrence into a diagnosis.
+      expect(outcome).toMatchObject({ result: 'granted', reason: 'ok', delivered: false })
       expect(await prisma.accessEvent.count({ where: { facilityId } })).toBe(0)
       expect(
         await prisma.simulatedVendorEvent.count({ where: { facilityId, delivered: false } }),

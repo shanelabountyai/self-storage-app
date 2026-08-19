@@ -10,7 +10,7 @@ export const metadata = metadataFor(
 /// credibility rests on the record, not the intention — an undated one is a
 /// claim about a codebase that has since moved. Update this when the claims are
 /// re-verified, not when the page is edited.
-const LAST_REVIEWED = '17 August 2026'
+const LAST_REVIEWED = '19 August 2026'
 
 // PRD 01 §6.8 requires a public accessibility statement. Unlike the legal pages
 // this describes our own conformance, so every sentence has to be true of the
@@ -94,6 +94,20 @@ const LAST_REVIEWED = '17 August 2026'
 // build and is unchanged: the confirmation screen is still unscanned, the
 // no-JavaScript hold countdown still does not tick, and the staff lists are
 // still unpaginated.
+// Re-verified 2026-08-19, at B-091 part 2 and B-092. B-091 part 2 needed no
+// change, and the reason is worth recording so the next reader does not
+// re-derive it: the impersonation banner renders inside the tenant portal, but
+// only during a support session, which no tenant can ever be in — so nothing a
+// CUSTOMER sees moved. B-092 did need one, in the understating direction: it
+// adds a FOURTH unpaginated staff-facing list (Support sessions), and a
+// sentence naming three specific screens implies the fourth is fine. Named
+// rather than paginated, because the list is small by construction — owner-only
+// at seed, ten sessions an hour — and claiming less is this page's rule when in
+// doubt.
+//
+// The public PRIVACY notice changed in the same pair of items and is a
+// different page: B-091 part 2 drafted PRD 09 OQ-1's disclosure there,
+// including that tenants are not notified when staff open their account.
 export default function AccessibilityPage() {
   return (
     <ProsePage
@@ -179,8 +193,8 @@ export default function AccessibilityPage() {
           </li>
           <li>
             <strong>Our staff-facing screens</strong> have known problems. Long lists on Tasks,
-            Leads and Delinquency are not paginated. No customer uses them, but we are not
-            going to describe them as done.
+            Leads, Delinquency and Support sessions are not paginated. No customer uses them,
+            but we are not going to describe them as done.
           </li>
           <li>
             <strong>The maps we show are not fully accessible</strong>, and they are not

@@ -68,7 +68,7 @@ Four new permissions, seeded as data like every other (master §7.1, `packages/d
 |---|---|---|
 | `impersonation:tenant` | Start a **read-only** session as a tenant | `owner` |
 | `impersonation:staff` | Start a **read-only** session as another staff user | `owner` |
-| `impersonation:write` | Upgrade a session to read-write (still subject to §5.3 hard blocks) | `owner` |
+| ~~`impersonation:write`~~ | **Retired, never shipped — D-71 (B-092, 2026-08-19).** OQ-2 below asked whether the write path should ship at all; it does not, and the permission is deleted from the catalog rather than carried unused. A permission an owner can grant which changes nothing is a promise the product does not keep. | — |
 | `impersonation:oversee` | See all active sessions, force-end someone else's, run the report | `owner` |
 
 **All four are owner-only at seed (D-13b).** This is deliberately tighter than the obvious "regionals field escalations, give it to them too" — because D-13a removed tenant notification, oversight reporting is now the *only* channel through which misuse becomes visible. Start with the smallest surface, get B-092's reporting running, then widen against observed usage.
@@ -76,7 +76,7 @@ Four new permissions, seeded as data like every other (master §7.1, `packages/d
 Because roles are data, widening is a seed change and not a code change: granting `impersonation:tenant` to `regional` or `manager` later requires no migration. Treat that as the expected path once support volume justifies it, not as a redesign.
 
 - **RBAC-I1:** Every permission is enforced server-side on session start **and re-checked on every request during the session**, consistent with the existing rule that a revoked role takes effect immediately rather than at token expiry.
-- **RBAC-I2:** `impersonation:write` is meaningless alone — it only upgrades a session the actor could already start.
+- **RBAC-I2:** ~~`impersonation:write` is meaningless alone — it only upgrades a session the actor could already start.~~ Moot since D-71: the permission does not exist. Kept here because it is the reasoning that led to deleting it.
 
 ---
 
@@ -103,7 +103,7 @@ This is G2 made concrete. Without it, impersonation is a privilege-escalation ex
 ### 5.3 Read-only default and the permanent hard-block list
 
 - **FR-11:** Sessions are **read-only by default**. Every mutating server action and route handler refuses, with a message naming impersonation as the reason.
-- **FR-12:** With `impersonation:write`, most mutations become available — **except** the following, which are refused for **everyone, always, in any mode**:
+- **FR-12:** With `impersonation:write`, most mutations become available — **except** the following, which are refused for **everyone, always, in any mode**. **As built, every mutation is refused** (D-70: enforced by HTTP method at the edge, not by this list), and since D-71 there is no write mode to narrow it. This list is therefore the specification whoever builds write mode must implement *before* relaxing anything — not a description of what is enforced today:
 
 | Blocked while impersonating | Why |
 |---|---|
@@ -193,7 +193,7 @@ The real identity is **never replaced** — replacing it is precisely how attrib
 |---|---|
 | **Phase A (core)** | Session model, four permissions, escalation guard, read-only enforcement + hard-block list, banner, dual-attribution audit, start/end/expiry |
 | **Phase B (oversight)** | Active-session list with force-end, impersonation report + CSV, frequency flags |
-| **Later / optional** | `impersonation:write` mode, tenant-initiated support invitations (D-13e) |
+| **Later / optional** | ~~`impersonation:write` mode~~ (**retired, D-71** — re-introducing it is a seed change plus FR-12's list, never a schema change), tenant-initiated support invitations (D-13e) |
 
 Phase A's dependencies (B-003 auth, B-004 RBAC, B-005 audit) are all built, so it is buildable now. It is nonetheless **internal tooling, not MVP golden-path work** — recommended placement is Phase 2, after the money loop works, unless support pain arrives sooner.
 
@@ -215,9 +215,9 @@ Resolved by the owner 2026-07-30 and recorded as **D-13a–D-13e** in `07-decisi
 
 ## 10. Open Questions
 
-1. **Lease/privacy-policy disclosure.** This feature implies language stating staff may access an account for support. Drafting it is in scope for whoever builds Phase A; **attorney review is required** before real staff view real tenant accounts (D-10, Texas default). This is a task with a legal dependency, not a design choice.
-2. **Should `impersonation:write` ship at all?** §8 lists it as "later / optional." Every troubleshooting case identified so far is satisfied by read-only. If no concrete need appears by the time Phase B lands, the honest move is to delete the permission rather than carry an unused write path through the codebase.
-3. **Frequency-flag threshold (FR-20).** "More than N distinct subjects per day" needs a real N, which needs observed usage. Ship Phase B with a conservative default and tune.
+1. **Lease/privacy-policy disclosure.** ~~This feature implies language stating staff may access an account for support.~~ **Drafted at B-091 part 2** into the public privacy notice, including the explicit statement that tenants are not notified (D-13a/FR-16) — the half that makes that decision disclosed rather than merely undisclosed. **Still open:** it is draft-only, and **attorney review remains required** before real staff view real tenant accounts (D-10, Texas default). A legal dependency, not a design choice.
+2. ~~**Should `impersonation:write` ship at all?**~~ **Answered — no. D-71 (owner, 2026-08-19), deleted at B-092.** Phase B landed and no concrete need had appeared; the permission is removed from the catalog and pruned from every seeded database. The `ImpersonationMode` enum keeps `read_write` so the record of the decision survives and a session row still states its mode.
+3. **Frequency-flag threshold (FR-20).** ~~"More than N distinct subjects per day" needs a real N, which needs observed usage.~~ **Shipped at B-092 as a named constant of 5, not a column — D-73.** There is still no observed usage to tune against (owner-only at seed, ten starts an hour), and this repo's rule is that a field configuring behaviour ships with its control or does not ship. Reopen when there is usage, at which point it earns a column and a control together.
 
 ---
 

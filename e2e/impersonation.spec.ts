@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
-import { signInAsDemoOwner } from './sign-in'
+import { OWNER_STATE, signInAsDemoOwner } from './sign-in'
 
 // PRD 09 §5 (B-091 part 2). The arc the feature is judged on: an owner answers
 // "what does this tenant actually see?" without a screen-share, cannot change
@@ -57,8 +57,13 @@ test.describe('support impersonation', () => {
 
   test('an owner starts a read-only session, cannot change anything, and gets back in one click', async ({
     page,
-  }) => {
-    const refusal = await startSession(page, 'E2E — what does this tenant actually see')
+  }, testInfo) => {
+    // The reason carries the project name because BOTH Playwright projects run
+    // this spec against the same database: a fixed string put two identical
+    // rows on the record and the assertion below failed on a strict-mode
+    // violation rather than on anything being wrong.
+    const reason = `E2E ${testInfo.project.name} — what does this tenant actually see`
+    const refusal = await startSession(page, reason)
     test.skip(
       refusal !== null && /support sessions in the last hour/.test(refusal),
       'SR-7 throttle reached — see the note at the top of this file',
@@ -134,5 +139,64 @@ test.describe('support impersonation', () => {
     // And the block lifted with the session rather than merely stopping being
     // displayed — the owner's own authority is intact.
     expect((await page.request.post('/admin/tenants')).status()).not.toBe(403)
+
+    // FR-19 (B-092). The session that just finished is on the oversight record,
+    // with the reason that was typed to start it. Asserted here rather than in
+    // its own test because it costs no extra session against SR-7's throttle,
+    // and because a record that only holds sessions nobody walked would be
+    // asserting the wrong thing.
+    await page.goto('/admin/impersonation')
+    await expect(page.getByRole('cell', { name: reason })).toBeVisible()
+  })
+
+  test('an owner can force-end somebody else’s running session (FR-18)', async ({
+    page,
+    browser,
+  }, testInfo) => {
+    // Two contexts, because the requirement genuinely needs two people: while a
+    // session is running, /admin renders as the SUBJECT, so the impersonator
+    // cannot reach the oversight screen to end their own. `page` is the
+    // overseer; `driver` is the one being overseen.
+    const driverContext = await browser.newContext({ storageState: OWNER_STATE })
+    const driver = await driverContext.newPage()
+
+    try {
+      // Project-unique, and here it is not cosmetic: both projects run in
+      // parallel against one database, so "Running right now" legitimately
+      // contains the OTHER project's session as well. Ending the first card on
+      // the page would reach across and kill it — the tests would then fail
+      // each other in a way that reads like a broken force-end.
+      const reason = `E2E ${testInfo.project.name} — force end`
+      const refusal = await startSession(driver, reason)
+      test.skip(
+        refusal !== null && /support sessions in the last hour/.test(refusal),
+        'SR-7 throttle reached — see the note at the top of this file',
+      )
+      expect(refusal, 'the session was refused for a reason other than the throttle').toBeNull()
+      await expect(driver.getByTestId('impersonation-banner')).toBeVisible()
+
+      await page.goto('/admin/impersonation')
+      // Located by the reason, which is the only field that distinguishes two
+      // sessions the same owner started against the same tenant.
+      const card = page.locator('li').filter({ hasText: reason })
+      await expect(card).toHaveCount(1)
+      await card.getByRole('button', { name: 'End this session' }).click()
+
+      // Wait for the end to actually land before asking the other context to
+      // prove it. Clicking and immediately navigating `driver` is a race the
+      // first draft lost: the assertion ran against a session that was still
+      // running, and reported the force-end as broken.
+      await expect(card).toHaveCount(0)
+
+      // FR-18 says "immediately", and §6.1's argument for keeping the state in a
+      // row rather than in the token is exactly this: there is nothing to wait
+      // out. The driver's very next request re-reads the row, finds it ended,
+      // and drops them back to their own account.
+      await driver.goto('/portal')
+      await expect(driver).toHaveURL(/\/admin$/)
+      await expect(driver.getByTestId('impersonation-banner')).toHaveCount(0)
+    } finally {
+      await driverContext.close()
+    }
   })
 })

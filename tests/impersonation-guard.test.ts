@@ -69,12 +69,30 @@ const ownerEverywhere = staff('owner-1', assignmentFor('owner', null))
 const ownerAtA = staff('owner-a', assignmentFor('owner', A))
 const managerAtA = staff('manager-a', assignmentFor('manager', A))
 
-describe('the catalog carries the four permissions, owner-only (D-13b)', () => {
-  const keys = ['impersonation:tenant', 'impersonation:staff', 'impersonation:write', 'impersonation:oversee']
+describe('the catalog carries the impersonation permissions, owner-only (D-13b)', () => {
+  // Three, not the four B-091 seeded: `impersonation:write` was DELETED by
+  // D-71 (B-092, owner decision) rather than deferred, because PRD 09 OQ-2 said
+  // the honest move — if no concrete need had appeared by the time Phase B
+  // landed — was to remove it instead of carrying a grantable permission that
+  // does nothing.
+  const keys = ['impersonation:tenant', 'impersonation:staff', 'impersonation:oversee']
 
-  it('defines all four', () => {
+  it('defines each one', () => {
     const known = new Set(PERMISSIONS.map((p) => p.key))
     for (const key of keys) expect(known.has(key as PermissionKey)).toBe(true)
+  })
+
+  it('no longer defines the retired write permission (D-71)', () => {
+    // Asserted rather than merely absent from the list above: a later session
+    // re-adding it would otherwise land silently, and the whole point of D-71
+    // is that a grantable permission with no enforcement behind it is a
+    // promise the product does not keep.
+    expect(PERMISSIONS.map((p) => p.key)).not.toContain('impersonation:write')
+    for (const role of ROLES) {
+      expect(role.permissions as readonly string[], `role ${role.key}`).not.toContain(
+        'impersonation:write',
+      )
+    }
   })
 
   it('grants them to owner and to nobody else', () => {

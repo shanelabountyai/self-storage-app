@@ -59,6 +59,11 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { key: 'rate-increases', label: 'Rate Increases', href: '/admin/rate-increases', group: 'money', anyOf: ['rates:tenant_increase'] },
   { key: 'auctions', label: 'Auctions', href: '/admin/auctions', group: 'money', anyOf: ['auctions:approve'] },
   { key: 'reports', label: 'Reports', href: '/admin/reports', group: 'money', anyOf: ['reports:operational', 'reports:financial', 'reports:rollup'] },
+  // PRD 09 FR-21 (B-092). In the Admin group beside Settings rather than in
+  // Reports: it is an oversight surface for the person who owns the business,
+  // not a figure anybody works from daily, and D-13a makes it the only channel
+  // through which misuse of impersonation becomes visible at all.
+  { key: 'support-sessions', label: 'Support Sessions', href: '/admin/impersonation', group: 'admin', anyOf: ['impersonation:oversee'] },
   { key: 'settings', label: 'Settings', href: '/admin/settings', group: 'admin', anyOf: ['facility:settings'] },
   // 'leases' and 'audit-log' are DELETED, not hidden — both resolved only to
   // the "built in a later backlog item" placeholder, and a nav promising two

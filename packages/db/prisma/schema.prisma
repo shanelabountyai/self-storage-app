@@ -4146,10 +4146,16 @@ model ImpersonationSession {
   /// re-evaluates against live assignments on every request.
   facilityScopeSnapshot Json
 
-  /// FR-11. `read_only` is the only value B-091 can produce — `impersonation:write`
-  /// is PRD 09 §8 "later / optional", and OQ-2 asks whether it should ship at
-  /// all. The enum carries both so that decision is a service change rather than
-  /// a migration, and so the mode is stated on the record either way.
+  /// FR-11. `read_only` is the only value anything can produce, and since D-71
+  /// (B-092, owner decision) there is no `impersonation:write` permission
+  /// either — OQ-2 asked whether the write path should ship at all and the
+  /// answer was no.
+  ///
+  /// The enum keeps `read_write` deliberately. Dropping the value would be a
+  /// migration that erases the record of a decision, and every session row
+  /// still has to STATE its mode rather than leave a reader to infer it from
+  /// the absence of an alternative. Re-introducing write mode is then a service
+  /// change plus FR-12's hard-block list (D-70), not a schema change.
   mode ImpersonationMode @default(read_only)
 
   /// FR-2. Free text, required — `impersonation.started` is a requiresReason

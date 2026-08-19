@@ -89,11 +89,15 @@ export const PERMISSIONS = [
   // explicit grant anywhere.
   { key: 'impersonation:tenant', name: 'View the portal as a tenant', category: 'impersonation', description: 'Start a read-only support session as a tenant. Audited, time-boxed, and never able to move money or change credentials.' },
   { key: 'impersonation:staff', name: 'View the dashboard as another staff user', category: 'impersonation', description: 'Start a read-only support session as another staff user of equal or lower rank, within your own facility scope.' },
-  /// RBAC-I2: meaningless alone — it only upgrades a session the actor could
-  /// already start. B-091 ships no code that sets `read_write`; the permission
-  /// is seeded so D-13b's "owner only, all four" is true of the catalog, and
-  /// PRD 09 OQ-2 asks whether the write path should ship at all.
-  { key: 'impersonation:write', name: 'Act during a support session', category: 'impersonation', description: 'Upgrade a support session from read-only to read-write. The permanent hard-block list still applies in every mode.' },
+  //
+  // `impersonation:write` was here and is deliberately GONE (D-71, owner
+  // decision 2026-08-19). PRD 09 OQ-2 asked whether the write path should ship
+  // at all and said the honest move, if no concrete need had appeared by the
+  // time Phase B landed, was to delete the permission rather than carry an
+  // unused write path. Phase B is B-092; no need appeared. A permission an
+  // owner can see and GRANT, which then does nothing, is worse than no
+  // permission — it is a promise the product does not keep. Re-adding it is a
+  // seed change plus FR-12's hard-block list, which D-70 already scoped.
   { key: 'impersonation:oversee', name: 'Oversee support sessions', category: 'impersonation', description: 'See every active support session, force-end anyone’s, and run the impersonation report.' },
 
   // Reporting

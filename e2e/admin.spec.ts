@@ -125,6 +125,10 @@ test.describe('signed in as the demo owner', () => {
     '/admin/reports/duplicate-content',
     '/admin/reports/rent-roll',
     '/admin/reports/revenue',
+    // B-092. A page not on this list is a page nobody scans — and this one is
+    // reached by an owner reviewing whether staff misused a tenant's account,
+    // which is not a screen to leave unchecked.
+    '/admin/impersonation',
     '/admin/settings',
     '/admin/settings/delinquency',
     '/admin/settings/marketing',

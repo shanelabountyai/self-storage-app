@@ -2,11 +2,18 @@
 
 import { cookies, headers } from 'next/headers'
 import { redirect } from 'next/navigation'
+import { revalidatePath } from 'next/cache'
 import { requireStaffActor } from '@/lib/rbac/session'
-import { fieldError, type FormState } from '@/lib/admin/form-state'
+import { ForbiddenError, hasPermissionAnywhere } from '@/lib/rbac/authorize'
+import { fieldError, success, type FormState } from '@/lib/admin/form-state'
 import { currentImpersonation } from '@/lib/impersonation/context'
 import { IMPERSONATION_COOKIE } from '@/lib/impersonation/request'
-import { IMPERSONATION_TTL_MINUTES, startImpersonation } from '@/lib/impersonation/service'
+import {
+  endImpersonation,
+  IMPERSONATION_TTL_MINUTES,
+  startImpersonation,
+} from '@/lib/impersonation/service'
+import { activeSessions } from '@/lib/impersonation/oversight'
 
 /// PRD 09 FR-1/FR-2 (B-091 part 2). Starting a session, from a profile the
 /// actor is already looking at — never from a box you type an email into.
@@ -100,4 +107,46 @@ export async function startStaffImpersonationAction(
   formData: FormData,
 ): Promise<FormState> {
   return start('staff', formData, '/admin')
+}
+
+/// FR-18 (B-092). An owner ends somebody else's session immediately.
+///
+/// Authorization is "you can only end a session you can SEE": the id must be in
+/// `activeSessions(actor)`, which already applies both the permission-independent
+/// active filter (`endedAt IS NULL` **and** `expiresAt > now`) and the facility
+/// scoping. That is one rule rather than two that can drift, and it means the
+/// day `impersonation:oversee` is widened to a regional (D-13b's expected path,
+/// a seed change) they can force-end at their own sites and nowhere else,
+/// without this function changing.
+///
+/// No typed reason. FR-2 requires one to START a session because a session with
+/// no stated why is what SR-6 exists to prevent; ending one is the safe
+/// direction, and `endedBy: 'forced'` plus `endedByStaffId` on the row and in
+/// the audit entry already answers who stopped it and that a person did.
+export async function forceEndImpersonationAction(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const actor = await requireStaffActor()
+  if (!hasPermissionAnywhere(actor, ['impersonation:oversee'])) {
+    throw new ForbiddenError('Missing permission impersonation:oversee', 'impersonation:oversee')
+  }
+
+  const sessionId = String(formData.get('sessionId') ?? '').trim()
+  const visible = await activeSessions(actor)
+  const session = visible.find((row) => row.id === sessionId)
+  if (!session) {
+    // Covers "no such session", "outside your facilities" and "it already
+    // ended" with one message on purpose — the first two must not be
+    // distinguishable, and the third is what a second click produces.
+    return {
+      status: 'error',
+      message: 'That support session is not running any more, or is not one you oversee.',
+      fieldErrors: {},
+    }
+  }
+
+  await endImpersonation(sessionId, 'forced', { endedByStaffId: actor.staffUserId })
+  revalidatePath('/admin/impersonation')
+  return success(`Ended ${session.impersonatorName}’s session as ${session.subjectName}.`)
 }

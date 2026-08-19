@@ -38,6 +38,22 @@ async function main() {
     }
   }
 
+  // A permission REMOVED from the catalog has to leave the database too, or
+  // `rbac-db.test.ts`'s catalog comparison fails against every environment
+  // seeded before the removal — and, worse, the row stays grantable to any role
+  // outside the catalog. The role-grant prune above already takes this
+  // position for the same reason; this is the other half of it, and it was
+  // missing until D-71 deleted the first permission this repo has ever
+  // retired.
+  //
+  // Runs AFTER the role loop so the grants are gone first. `RolePermission`
+  // cascades from `Permission`, so this would succeed regardless — but relying
+  // on a cascade to revoke authority is not a thing to leave implicit.
+  const retired = await prisma.permission.deleteMany({
+    where: { key: { notIn: PERMISSIONS.map((permission) => permission.key) } },
+  })
+  if (retired.count > 0) console.info(`Removed ${retired.count} retired permission(s).`)
+
   const [roles, permissions, grants] = await Promise.all([
     prisma.role.count(),
     prisma.permission.count(),
