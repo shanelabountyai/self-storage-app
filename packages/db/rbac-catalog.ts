@@ -72,6 +72,30 @@ export const PERMISSIONS = [
   // otherwise be editing the page that lists their competitors' sites too.
   { key: 'marketing:city_copy', name: 'Edit city page copy', category: 'admin', description: 'Write the intro paragraphs on a city landing page. Portfolio-wide — a city page lists every facility in it.' },
 
+  // Support impersonation (PRD 09 §4, B-091)
+  //
+  // All four are OWNER-ONLY at seed (D-13b) — deliberately tighter than the
+  // obvious "regionals field escalations, give it to them too". D-13a removed
+  // tenant notification, so B-092's oversight reporting is the ONLY channel
+  // through which misuse becomes visible; start with the smallest surface and
+  // widen against observed usage once that reporting is running.
+  //
+  // Widening is a seed change and not a code change, which is the point of the
+  // escalation guard: granting `impersonation:tenant` to `regional` or
+  // `manager` later needs no migration, because the rank and scope rules
+  // already confine them to subjects they can reach.
+  //
+  // Owner holds every permission by construction below, so these need no
+  // explicit grant anywhere.
+  { key: 'impersonation:tenant', name: 'View the portal as a tenant', category: 'impersonation', description: 'Start a read-only support session as a tenant. Audited, time-boxed, and never able to move money or change credentials.' },
+  { key: 'impersonation:staff', name: 'View the dashboard as another staff user', category: 'impersonation', description: 'Start a read-only support session as another staff user of equal or lower rank, within your own facility scope.' },
+  /// RBAC-I2: meaningless alone — it only upgrades a session the actor could
+  /// already start. B-091 ships no code that sets `read_write`; the permission
+  /// is seeded so D-13b's "owner only, all four" is true of the catalog, and
+  /// PRD 09 OQ-2 asks whether the write path should ship at all.
+  { key: 'impersonation:write', name: 'Act during a support session', category: 'impersonation', description: 'Upgrade a support session from read-only to read-write. The permanent hard-block list still applies in every mode.' },
+  { key: 'impersonation:oversee', name: 'Oversee support sessions', category: 'impersonation', description: 'See every active support session, force-end anyone’s, and run the impersonation report.' },
+
   // Reporting
   { key: 'reports:operational', name: 'View operational reports', category: 'reporting', description: 'Occupancy, move-ins, and daily activity.' },
   { key: 'reports:financial', name: 'View financial reports', category: 'reporting', description: 'Revenue, AR, and delinquency aging.' },

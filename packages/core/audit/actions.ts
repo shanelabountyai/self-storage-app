@@ -230,6 +230,21 @@ export const AUDIT_ACTIONS = [
   /// facility and who did it" is the question the log gets asked, and a single
   /// org-level row listing twelve facility ids does not answer it.
   { action: 'org_default.pushed', label: 'Org default pushed to a facility', requiresReason: false },
+
+  // Support impersonation (PRD 09 FR-25, B-091). Both require a reason.
+  //
+  // On the STARTED entry the reason is the human's stated why, captured before
+  // the session exists (FR-2). On the ENDED entry it is the `endedBy` value —
+  // `self`, `expiry`, `forced` or `authority_changed` — which is what FR-25's
+  // "(recording `endedBy`)" asks for and the only honest answer for the three
+  // that no person triggered.
+  //
+  // Note who the ACTOR is on each: the started/ended entries are recorded
+  // against the impersonator, because starting and ending are things the staff
+  // member did as themselves. Only the entries written DURING the session carry
+  // the subject as actor with the impersonator alongside (FR-24).
+  { action: 'impersonation.started', label: 'Support session started', requiresReason: true },
+  { action: 'impersonation.ended', label: 'Support session ended', requiresReason: true },
 ] as const satisfies readonly AuditActionSpec[]
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number]['action']

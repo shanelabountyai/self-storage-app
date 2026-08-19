@@ -28,6 +28,14 @@ export type RecordAuditInput = {
   /// Extra context merged into `after`, e.g. { amountCents, invoiceId }.
   context?: Record<string, unknown> | null
   occurredAt?: Date
+  /// PRD 09 FR-24 (B-091). Set on every entry written DURING an impersonated
+  /// session.
+  ///
+  /// The `actor` above stays the SUBJECT — they are who appeared to act — and
+  /// this names the real human alongside. Passing the impersonator as the actor
+  /// instead would make a log filtered to a tenant stop showing what happened
+  /// to their account, which is half of what the log is for.
+  impersonation?: { impersonatorStaffId: string; sessionId: string } | null
 }
 
 export class MissingReasonCodeError extends Error {
@@ -90,6 +98,8 @@ export async function recordAudit(
       after: hasAfter ? { ...after, ...(context ?? {}) } : undefined,
       reasonCode: input.reasonCode?.trim() || null,
       correlationId: input.correlationId ?? null,
+      impersonatorStaffId: input.impersonation?.impersonatorStaffId ?? null,
+      impersonationSessionId: input.impersonation?.sessionId ?? null,
       ...(input.occurredAt ? { occurredAt: input.occurredAt } : {}),
     },
   })
@@ -102,6 +112,11 @@ export type AuditQuery = {
   /// this function does not resolve permissions itself.
   facilityIds?: string[] | null
   actorStaffId?: string
+  /// FR-24's second question: everything one staff member did while wearing
+  /// someone else's identity. Distinct from `actorStaffId`, which would return
+  /// only what they did as themselves.
+  impersonatorStaffId?: string
+  impersonationSessionId?: string
   entityType?: string
   entityId?: string
   action?: string | string[]
@@ -117,6 +132,8 @@ export async function findAuditEntries(query: AuditQuery = {}): Promise<AuditLog
 
   if (query.facilityIds) where.facilityId = { in: query.facilityIds }
   if (query.actorStaffId) where.actorStaffId = query.actorStaffId
+  if (query.impersonatorStaffId) where.impersonatorStaffId = query.impersonatorStaffId
+  if (query.impersonationSessionId) where.impersonationSessionId = query.impersonationSessionId
   if (query.entityType) where.entityType = query.entityType
   if (query.entityId) where.entityId = query.entityId
   if (query.action) {

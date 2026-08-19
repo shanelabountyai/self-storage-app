@@ -3879,7 +3879,10 @@ model StaffUser {
   deletedAt DateTime? @db.Timestamptz(6)
 
   recoveryCodes              StaffRecoveryCode[]
-  auditLogs                  AuditLog[]
+  auditLogs                  AuditLog[]                @relation("AuditLogActor")
+  auditLogsAsImpersonator    AuditLog[]                @relation("AuditLogImpersonator")
+  impersonationsStarted      ImpersonationSession[]    @relation("ImpersonationImpersonator")
+  impersonationsEnded        ImpersonationSession[]    @relation("ImpersonationEndedBy")
   assignments                StaffFacilityAssignment[]
   suppressions               Suppression[]
   tenantNotes                TenantNote[]
@@ -4038,12 +4041,31 @@ model AuditLog {
   correlationId String?
   occurredAt    DateTime  @default(now()) @db.Timestamptz(6)
 
+  /// PRD 09 FR-24 (B-091). The two responsible parties for an action taken
+  /// during impersonation.
+  ///
+  /// **The actor stays the SUBJECT** — they are who appeared to act — and the
+  /// impersonator is recorded alongside. That is what makes both questions
+  /// answerable from one table: a log filtered to a tenant still shows what
+  /// happened to their account, and a log filtered by impersonator shows
+  /// everything a staff member did while wearing someone else's identity.
+  /// Overwriting the actor with the impersonator would answer the second
+  /// question by destroying the first.
+  ///
+  /// Nullable and purely additive, which is what makes the change compatible
+  /// with the append-only triggers below: no backfill, no row rewrites
+  /// (FR-26).
+  impersonatorStaffId    String?
+  impersonationSessionId String?
+
   // Restrict, not SetNull: nulling the column on a parent delete is an UPDATE,
   // and the append-only triggers reject those. A facility or staff user with
   // audit history therefore cannot be hard-deleted — which is the intended
   // outcome, since both are soft-deleted in normal operation (PRD 02 FR-10).
-  facility   Facility?  @relation(fields: [facilityId], references: [id], onDelete: Restrict)
-  actorStaff StaffUser? @relation(fields: [actorStaffId], references: [id], onDelete: Restrict)
+  facility     Facility?             @relation(fields: [facilityId], references: [id], onDelete: Restrict)
+  actorStaff   StaffUser?            @relation("AuditLogActor", fields: [actorStaffId], references: [id], onDelete: Restrict)
+  impersonator StaffUser?            @relation("AuditLogImpersonator", fields: [impersonatorStaffId], references: [id], onDelete: Restrict)
+  session      ImpersonationSession? @relation(fields: [impersonationSessionId], references: [id], onDelete: Restrict)
 
   @@index([entityType, entityId])
   @@index([facilityId, occurredAt])
@@ -4052,7 +4074,112 @@ model AuditLog {
   @@index([actorStaffId, occurredAt])
   @@index([action, occurredAt])
   @@index([occurredAt])
+  /// FR-24's second question — "everything this staff member did while wearing
+  /// someone else's identity" — which the actor index cannot answer.
+  @@index([impersonatorStaffId, occurredAt])
+  @@index([impersonationSessionId])
   @@map("audit_log")
+}
+
+// ------------------------------------------------- support impersonation ----
+
+enum ImpersonationSubjectType {
+  tenant
+  staff
+}
+
+enum ImpersonationMode {
+  read_only
+  read_write
+}
+
+/// Why a session stopped. `authority_changed` is FR-9: the subject was promoted
+/// or the impersonator demoted mid-session, so the guard stopped agreeing and
+/// the session ended rather than silently conferring the new authority.
+enum ImpersonationEndReason {
+  self
+  expiry
+  forced
+  authority_changed
+}
+
+/// PRD 09 §6.1 (B-091). One staff member looking at the product as somebody
+/// else, for support.
+///
+/// **The authoritative state is this row, not the token.** The session JWT
+/// gains an `impersonationSessionId` claim and nothing else — a JWT cannot be
+/// revoked, and FR-9 (end on authority change) and FR-18 (an owner force-ends
+/// someone else's session) both require server-side termination mid-session.
+/// Every request re-reads this row, which is the same posture the rest of the
+/// codebase already takes: authority is re-read per request rather than trusted
+/// from a claim.
+///
+/// **The real identity is never replaced**, here or in the token. Replacing it
+/// is precisely how attribution gets lost, which is why `AuditLog` gained two
+/// columns rather than having its actor overwritten.
+///
+/// Retention is >= 7 years, matching the audit log (D-13c). Because tenants are
+/// never notified (D-13a), these rows carry the accountability trail on their
+/// own: a shorter window would strand the audit entries that reference them —
+/// you would still know an impersonation happened, but not its stated reason,
+/// its duration, or who ended it, which is most of what an investigation asks.
+/// They are therefore NOT covered by any shorter former-tenant PII purge, and
+/// they hold no tenant PII beyond an id reference.
+model ImpersonationSession {
+  id                  String                   @id @default(cuid())
+  impersonatorStaffId String
+  subjectType         ImpersonationSubjectType
+  /// A `Tenant.id` or a `StaffUser.id` depending on `subjectType`. Deliberately
+  /// not a foreign key, the same way `Document.subjectId` and `Task.entityId`
+  /// are not: the column is polymorphic, and two nullable FK columns to say one
+  /// thing is a worse record than one honest id.
+  subjectId           String
+
+  /// The impersonator's facility scope at the instant the session started —
+  /// `{ all: true }` or `{ facilityIds: [...] }`, the shape `facilityAccess()`
+  /// returns.
+  ///
+  /// Stored because the scope rule (FR-7) is evaluated against it and because
+  /// an investigation a year later asks what the impersonator could reach AT
+  /// THE TIME, which their current assignments no longer answer. It is evidence
+  /// of the check, not a cache the guard reads instead of re-checking: FR-9
+  /// re-evaluates against live assignments on every request.
+  facilityScopeSnapshot Json
+
+  /// FR-11. `read_only` is the only value B-091 can produce — `impersonation:write`
+  /// is PRD 09 §8 "later / optional", and OQ-2 asks whether it should ship at
+  /// all. The enum carries both so that decision is a service change rather than
+  /// a migration, and so the mode is stated on the record either way.
+  mode ImpersonationMode @default(read_only)
+
+  /// FR-2. Free text, required — `impersonation.started` is a requiresReason
+  /// audit action and the session cannot start without one.
+  reason    String
+  ticketRef String?
+
+  startedAt DateTime  @default(now()) @db.Timestamptz(6)
+  /// FR-3. Server-enforced; a client timer is a display, not a control.
+  expiresAt DateTime  @db.Timestamptz(6)
+  endedAt   DateTime? @db.Timestamptz(6)
+  endedBy   ImpersonationEndReason?
+  /// Who forced it, when `endedBy` is `forced` (FR-18). The audit entry records
+  /// this too; it is on the row because §6.1's argument for 7-year retention is
+  /// that the row answers "who ended it" on its own.
+  endedByStaffId String?
+
+  ipAddress String?
+
+  impersonator StaffUser  @relation("ImpersonationImpersonator", fields: [impersonatorStaffId], references: [id], onDelete: Restrict)
+  endedByStaff StaffUser? @relation("ImpersonationEndedBy", fields: [endedByStaffId], references: [id], onDelete: Restrict)
+  auditLogs    AuditLog[]
+
+  /// B-092's report filters: by impersonator, by subject, by date.
+  @@index([impersonatorStaffId, startedAt])
+  @@index([subjectType, subjectId, startedAt])
+  /// The active-session list (FR-18) and the per-request lookup both ask for
+  /// unended sessions.
+  @@index([endedAt, expiresAt])
+  @@map("impersonation_session")
 }
 
 // ------------------------------------------------------------ auctions ----
