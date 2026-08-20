@@ -61,6 +61,11 @@ export const EVENT_MERGE_FIELDS: Record<string, readonly MergeFieldSpec[]> = {
     { field: 'unit.number', description: 'Unit number', sample: 'A-12' },
     { field: 'lease.move_out_date', description: 'The move-out date requested', sample: 'September 30, 2026' },
   ],
+  'lease.transfer_requested': [
+    { field: 'unit.number', description: 'The unit they are in now', sample: 'A-12' },
+    { field: 'transfer.to_unit_number', description: 'The unit they asked to move into', sample: 'B-04' },
+    { field: 'transfer.date', description: 'The date they asked to move', sample: 'September 30, 2026' },
+  ],
   // PRD 10 §6.3 (B-101). One entry per RECIPIENT event — the split exists so
   // each message can address one person; see the event catalog's own note.
   'referral.qualified': [

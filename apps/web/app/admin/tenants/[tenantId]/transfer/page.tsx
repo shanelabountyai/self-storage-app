@@ -1,6 +1,11 @@
 import Link from 'next/link'
 import { getAdminActor } from '@/lib/admin/context'
-import { previewTransfer, transferTargets, TRANSFER_PROBLEM_COPY } from '@/lib/admin/transfer'
+import {
+  pendingTransferRequest,
+  previewTransfer,
+  transferTargets,
+  TRANSFER_PROBLEM_COPY,
+} from '@/lib/admin/transfer'
 import { formatCents } from '@/lib/format'
 import { AdminForm } from '@/components/admin/form'
 import { Button } from '@/components/ui/button'
@@ -46,10 +51,15 @@ export default async function TransferPage({
     )
   }
 
-  const transferDate = date ?? todayIso()
+  // B-090 part 2. If the tenant asked for this from the portal, their choice
+  // is the default — staff arriving from the task see the unit and date that
+  // were requested, already priced, rather than re-picking them from memory.
+  const requested = await pendingTransferRequest(actor, leaseId)
+  const transferDate = date ?? (requested ? requested.transferDate.toISOString().slice(0, 10) : todayIso())
+  const selectedUnitId = toUnitId ?? requested?.toUnitId
   const targets = await transferTargets(actor, leaseId)
-  const preview = toUnitId
-    ? await previewTransfer(actor, leaseId, toUnitId, new Date(`${transferDate}T00:00:00.000Z`))
+  const preview = selectedUnitId
+    ? await previewTransfer(actor, leaseId, selectedUnitId, new Date(`${transferDate}T00:00:00.000Z`))
     : null
 
   return (
@@ -67,6 +77,20 @@ export default async function TransferPage({
         </p>
       </div>
 
+      {requested && (
+        <p
+          className="border-input rounded-lg border p-4 text-sm text-pretty"
+          role="note"
+        >
+          <strong>The tenant asked for this.</strong> They chose Unit {requested.toUnitNumber} for{' '}
+          {new Intl.DateTimeFormat('en-US', { month: 'long', day: 'numeric', year: 'numeric' }).format(
+            requested.transferDate,
+          )}
+          , and that unit is held for them until you complete or cancel it. Nothing has moved yet —
+          check the old unit is actually empty before you confirm.
+        </p>
+      )}
+
       {targets.length === 0 ? (
         <p className="text-sm">
           There is no available unit at this facility to transfer into.
@@ -79,7 +103,7 @@ export default async function TransferPage({
             <select
               id="unit"
               name="unit"
-              defaultValue={toUnitId ?? ''}
+              defaultValue={selectedUnitId ?? ''}
               className="border-input bg-background min-h-11 rounded-md border px-3 text-sm"
             >
               <option value="">Choose a unit…</option>

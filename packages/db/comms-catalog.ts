@@ -133,6 +133,40 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
     ],
   },
   {
+    // B-090 part 2. The written half of "we're holding that unit for you".
+    //
+    // No dollar figure, for the same reason `lease_move_out_requested` quotes
+    // none: the prorated total depends on the day the transfer actually
+    // happens, and staff arrange that day with the tenant afterwards. A figure
+    // here would be a number the tenant reasonably treats as agreed and the
+    // ledger then contradicts. It names the unit, the date asked for, and that
+    // nothing has moved yet — which is the part a tenant most needs in writing.
+    key: 'lease_transfer_requested',
+    classification: 'transactional',
+    subject: 'We\u2019re holding unit {{transfer.to_unit_number}} at {{facility.name}} for you',
+    bodyText: [
+      'Hi {{tenant.first_name}},',
+      '',
+      "We've received your request to move from unit {{unit.number}} to unit {{transfer.to_unit_number}} at {{facility.name}}, on {{transfer.date}}.",
+      '',
+      "We're holding unit {{transfer.to_unit_number}} for you. Nothing has changed yet — unit {{unit.number}} is still yours, your gate code still works, and your rent is unchanged until the move actually happens.",
+      '',
+      "Our team will call to arrange a time and confirm what the change costs before anything is charged.",
+      '',
+      'Changed your mind? You can cancel this request from your account at any time.',
+      '',
+      'Questions? Call {{facility.phone}}.',
+    ].join('\n'),
+    requiredMergeFields: [
+      'tenant.first_name',
+      'unit.number',
+      'transfer.to_unit_number',
+      'transfer.date',
+      'facility.name',
+      'facility.phone',
+    ],
+  },
+  {
     // PRD 05 CN-11 / US-45 (B-098). The tenant is told on both transitions.
     //
     // The hardest copy in the catalog: this tells someone they cannot reach
@@ -991,6 +1025,11 @@ export const COMMS_RULES: readonly CommsRuleSeed[] = [
   {
     event: 'lease.move_out_requested',
     templateKey: 'lease_move_out_requested',
+    classification: 'transactional',
+  },
+  {
+    event: 'lease.transfer_requested',
+    templateKey: 'lease_transfer_requested',
     classification: 'transactional',
   },
 

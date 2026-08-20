@@ -686,6 +686,22 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
     }
   },
 
+  // B-090 part 2. Both unit numbers and the date come from the event, not from
+  // a re-read: by the time this renders, staff may already have completed the
+  // transfer — at which point the lease points at the NEW unit and a re-read
+  // would tell the tenant they asked to move from B-04 to B-04.
+  'lease.transfer_requested': async (event, recipient) => {
+    const payload = (event.payload ?? {}) as { toUnitNumber?: string; transferDate?: string }
+    const timezone = recipient.facility?.timezone ?? 'America/Chicago'
+    const date = payload.transferDate ? new Date(`${payload.transferDate}T00:00:00.000Z`) : null
+    return {
+      'transfer.to_unit_number': payload.toUnitNumber ?? 'the unit you chose',
+      'transfer.date': date
+        ? new Intl.DateTimeFormat('en-US', { timeZone: timezone, month: 'long', day: 'numeric', year: 'numeric' }).format(date)
+        : 'the date you requested',
+    }
+  },
+
   // ── B-050: the payment lifecycle ────────────────────────────────────────────
   //
   // Every figure below is read at SEND time (FR-18), not carried from the

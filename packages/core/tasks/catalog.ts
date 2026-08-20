@@ -50,6 +50,25 @@ export const TASK_TYPES = [
     sensitive: false,
   },
   {
+    // PRD 01 §9 (B-090 part 2). A tenant has asked, from the portal, to move
+    // into a different unit at the same site.
+    //
+    // The same shape as `move_out_request_review` and for the same reason: the
+    // tenant is asking, not doing. A transfer moves physical goods between two
+    // units — nobody but a person on site can say the old one is empty — and
+    // committing one posts money, closes a lease and issues a gate credential.
+    // So the portal records the ask and holds the target unit; B-077's wizard,
+    // unchanged, is still the only thing that completes it.
+    //
+    // Not sensitive: the transfer itself writes `lease.transferred` to the
+    // audit log when it commits, which is the record anyone would ask about.
+    // This row only says somebody asked.
+    type: 'transfer_request_review',
+    label: 'Tenant asked to transfer to another unit',
+    requiredProofFields: ['note'],
+    sensitive: false,
+  },
+  {
     // PRD 02 US-44 / D-17. A tenant's own cover ran out and no replacement
     // declaration page arrived. Raised whether or not the facility auto-enrols
     // — with the switch off this task IS the whole mechanism, and with it on
@@ -121,17 +140,6 @@ export const TASK_TYPES = [
     sensitive: true,
   },
   {
-    // PRD 03 FR-9 (B-080). The nightly reconciliation found the controller and
-    // our records disagreeing.
-    //
-    // One task per facility per day rather than one per finding: a controller
-    // restored from a backup produces dozens of findings at once, and dozens of
-    // tasks is a queue nobody opens. The task points at the run; the run lists
-    // what diverged.
-    //
-    // Sensitive: the findings include which codes the gate honours that we have
-    // no record of, and "who could get in on the 3rd" is asked after something
-    // goes missing — the same reason `gate_manual_action` is marked sensitive.
     // B-103 / PRD 01 §3. A bank debit that was accepted and then bounced,
     // typically four business days later.
     //
@@ -146,6 +154,17 @@ export const TASK_TYPES = [
     sensitive: false,
   },
   {
+    // PRD 03 FR-9 (B-080). The nightly reconciliation found the controller and
+    // our records disagreeing.
+    //
+    // One task per facility per day rather than one per finding: a controller
+    // restored from a backup produces dozens of findings at once, and dozens of
+    // tasks is a queue nobody opens. The task points at the run; the run lists
+    // what diverged.
+    //
+    // Sensitive: the findings include which codes the gate honours that we have
+    // no record of, and "who could get in on the 3rd" is asked after something
+    // goes missing — the same reason `gate_manual_action` is marked sensitive.
     type: 'gate_drift_review',
     label: 'Reconcile the gate controller against our records',
     requiredProofFields: ['note'],

@@ -108,6 +108,18 @@ const LAST_REVIEWED = '19 August 2026'
 // The public PRIVACY notice changed in the same pair of items and is a
 // different page: B-091 part 2 drafted PRD 09 OQ-1's disclosure there,
 // including that tenants are not notified when staff open their account.
+//
+// Re-verified 2026-08-20, at B-090b (tenant self-service transfer). It needed
+// no change to the PROSE, and the reason is the part worth recording: the item
+// ships a new customer-facing page, `/portal/transfer`, and this page's
+// coverage claim names exactly one exception — the checkout confirmation
+// screen. Shipping a second unscanned customer page would have made that
+// sentence false in the OVERSTATING direction, silently, by merging rather
+// than by editing. So the scan was extended instead of the sentence weakened:
+// `e2e/portal-transfer.spec.ts` runs axe over the picker and the priced
+// preview, plus a 200%-zoom reflow check. `LAST_REVIEWED` is deliberately NOT
+// bumped — the coverage claim was re-checked against the build, the rest of
+// the page was not, and a date is a claim about the whole page.
 export default function AccessibilityPage() {
   return (
     <ProsePage

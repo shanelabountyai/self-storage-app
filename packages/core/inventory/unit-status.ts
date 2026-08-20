@@ -147,3 +147,14 @@ export function canSetManualStatus(
 export function isRentable(status: EffectiveUnitStatus): boolean {
   return status === 'available'
 }
+
+/// B-090 part 2. `Reservation.source` for the hold a portal transfer request
+/// places on its target unit.
+///
+/// It lives here, beside the rules that say a held reservation makes a unit
+/// `reserved`, because that is the only thing the value changes: a transfer
+/// hold occupies a unit exactly like any other hold, and the source is what
+/// tells the two apart afterwards — the public reserve flow must not fold a
+/// transfer hold into a prospect's duplicate reservation, and the transfer
+/// wizard must not read a prospect's hold as the tenant's own.
+export const TRANSFER_HOLD_SOURCE = 'transfer'

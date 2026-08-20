@@ -64,7 +64,14 @@ async function rent(dueDate: Date, options: { paid?: boolean; kind?: 'rent' | 'f
 async function daysEmitted(): Promise<number[]> {
   const events = await prisma.domainEvent.findMany({
     where: { facilityId, name: 'delinquency.day_reached' },
-    orderBy: { occurredAt: 'asc' },
+    // `id` breaks the tie, and without it this assertion is a coin toss.
+    // The catch-up case emits every missed rung in one tight loop, so all
+    // four rows land in the same millisecond and `occurredAt` alone leaves
+    // Postgres free to return them in any order — which it does, but only
+    // under the parallel load of a full sweep, so the file passes alone and
+    // fails in CI. cuid is timestamp-then-counter and monotonic within a
+    // process, so it recovers exactly the insertion order this asserts.
+    orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }],
   })
   return events.map((event) => Number((event.payload as { day: number }).day))
 }

@@ -20,6 +20,14 @@ export const EVENT_NAMES = [
   /// synchronous call from the same action that clears the lease fields, not
   /// something anything else needs to react to asynchronously.
   'lease.move_out_requested',
+  /// B-090 part 2: a tenant asked, from the portal, to transfer into another
+  /// unit at the same site. Distinct from `lease.transferred` in exactly the
+  /// way the move-out pair is distinct — the lease is untouched, both units
+  /// keep their occupants, and nothing has moved. It drives the request
+  /// confirmation; the transfer itself, when staff commit it, still emits
+  /// `lease.transferred`. Cancelling has no event, for the same reason
+  /// cancelling a move-out request does not.
+  'lease.transfer_requested',
 
   // Reservations (PRD 01 FR-3.3)
   'reservation.created',

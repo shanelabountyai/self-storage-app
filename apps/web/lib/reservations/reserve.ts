@@ -1,7 +1,9 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { Prisma, prisma } from '@storage/db'
 import { emitEvent } from '@storage/core/events'
+import { OCCUPYING_LEASE_STATUSES, TRANSFER_HOLD_SOURCE } from '@storage/core/inventory'
 import { recomputeUnitStatus } from '@/lib/admin/units'
+import { cancelOpenTask } from '@/lib/admin/tasks'
 import { sendDirectEmail } from '@/lib/comms/service'
 import { track } from '@/lib/analytics/track'
 import { trackingContext } from '@/lib/analytics/request'
@@ -99,7 +101,7 @@ export function holdWindowSentence(graceDays: number): string {
   return `Free to hold for ${graceDays} days after your move-in date`
 }
 
-function newToken(): string {
+export function newToken(): string {
   return randomBytes(32).toString('base64url')
 }
 
@@ -201,6 +203,12 @@ export async function createReservation(input: ReserveInput): Promise<ReserveRes
         unitTypeId: input.unitTypeId,
         status: 'held',
         expiresAt: { gt: new Date() },
+        // Never a transfer hold (B-090 part 2). An existing tenant asking the
+        // public site for the same size they have already asked to transfer
+        // into is not "one person changing their mind about a date" — folding
+        // the two together would quietly repoint their transfer request at a
+        // move-in checkout and hand them the unit twice.
+        source: { not: TRANSFER_HOLD_SOURCE },
       },
     })
 
@@ -457,7 +465,7 @@ export async function expireReservations(
 ): Promise<{ expired: number }> {
   const due = await prisma.reservation.findMany({
     where: { status: 'held', expiresAt: { lte: now }, ...(facilityId ? { facilityId } : {}) },
-    select: { id: true, unitId: true, facilityId: true },
+    select: { id: true, unitId: true, facilityId: true, source: true, tenantId: true },
   })
 
   let expired = 0
@@ -475,6 +483,23 @@ export async function expireReservations(
 
       await tx.reservation.update({ where: { id: reservation.id }, data: { status: 'expired' } })
       if (reservation.unitId) await recomputeUnitStatus(reservation.unitId, tx)
+
+      // B-090 part 2. A lapsed transfer hold takes its task with it. The
+      // tenant's screen is derived from the hold and so is already correct the
+      // moment it expires; the task is the one thing that is not, and a queue
+      // holding items about requests that no longer exist is how staff learn
+      // to stop trusting it (US-41's own argument).
+      if (reservation.source === TRANSFER_HOLD_SOURCE && reservation.tenantId) {
+        const leases = await tx.lease.findMany({
+          where: {
+            tenantId: reservation.tenantId,
+            facilityId: reservation.facilityId,
+            status: { in: [...OCCUPYING_LEASE_STATUSES] },
+          },
+          select: { id: true },
+        })
+        for (const lease of leases) await cancelOpenTask('transfer_request_review', lease.id, tx)
+      }
       await emitEvent(
         {
           name: 'reservation.expired',

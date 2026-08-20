@@ -51,8 +51,8 @@ export default async function PortalLayout({ children }: { children: React.React
           {/* B-117 (UX review 2026-08-12, finding 16). Nine links in one flat
               row wrapped to four lines above the balance at 360px. Ordered by
               how often somebody actually comes here — the four a tenant
-              checks routinely stay one tap away; the four that are a once-a-
-              while errand sit behind Manage; Move out is separated on its
+              checks routinely stay one tap away; the once-a-while errands
+              sit behind Manage (five since B-090 part 2); Move out is on its
               own, because it is the one irreversible destination in the
               list and does not belong beside "check my statement." */}
           <nav aria-label="Your account" className="flex flex-wrap items-center gap-4 text-sm">
@@ -73,6 +73,9 @@ export default async function PortalLayout({ children }: { children: React.React
                 Manage
               </summary>
               <div className="flex flex-col gap-2 pt-2">
+                <Link href="/portal/transfer" className="underline underline-offset-2">
+                  Move to another unit
+                </Link>
                 <Link href="/portal/access" className="underline underline-offset-2">
                   Who can get in
                 </Link>

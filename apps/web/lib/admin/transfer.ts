@@ -1,9 +1,9 @@
-import { prisma } from '@storage/db'
+import { prisma, type Prisma } from '@storage/db'
 import { recordAudit } from '@storage/core/audit'
 import { emitEvent } from '@storage/core/events'
 import { billingPeriodFor, describeDayRange, prorate, unusedRemainder } from '@storage/core/billing'
 import { businessDateFor } from '@storage/core/jobs'
-import { OCCUPYING_LEASE_STATUSES } from '@storage/core/inventory'
+import { OCCUPYING_LEASE_STATUSES, TRANSFER_HOLD_SOURCE } from '@storage/core/inventory'
 import { effectiveAsOf } from '@storage/core/facility-settings'
 import { assertFacilityAccess, can, ForbiddenError } from '@/lib/rbac/authorize'
 import { toAuditActor } from '@/lib/rbac/audit-actor'
@@ -86,29 +86,59 @@ export const TRANSFER_PROBLEM_COPY: Record<TransferProblem, string> = {
   no_rate_for_unit_type: 'That unit type has no published rate, so there is no rate to move the tenant on to.',
 }
 
-async function loadForTransfer(actor: Actor, leaseId: string) {
+/// The unit this tenant has asked, from the portal, to transfer into.
+///
+/// The hold makes the unit's derived status `reserved`, which to everybody
+/// else is exactly right and to the tenant it is held FOR would otherwise read
+/// as "someone got there first" — blocking the very transfer it exists to set
+/// up. Both the availability check and the target list consult this, so the
+/// two cannot disagree about which unit is theirs.
+export async function transferHoldFor(
+  tenantId: string,
+  facilityId: string,
+): Promise<{ id: string; unitId: string | null; moveInDate: Date | null } | null> {
+  return prisma.reservation.findFirst({
+    where: {
+      tenantId,
+      facilityId,
+      source: TRANSFER_HOLD_SOURCE,
+      status: 'held',
+      expiresAt: { gt: new Date() },
+    },
+    select: { id: true, unitId: true, moveInDate: true },
+  })
+}
+
+/// The lease facts a transfer preview needs. Exported so the tenant's own
+/// portal request (B-090 part 2) selects exactly the same columns rather than
+/// keeping a second list that can drift from this one.
+export const TRANSFER_LEASE_SELECT = {
+    id: true,
+    facilityId: true,
+    unitId: true,
+    tenantId: true,
+    status: true,
+    startDate: true,
+    billingDay: true,
+    monthlyRateCents: true,
+    protectionCents: true,
+    protectionPlanName: true,
+    acquisitionSource: true,
+    autopayEnabled: true,
+    paidThroughDate: true,
+    facility: {
+      select: { name: true, billingPolicy: true, timezone: true, prorateOnMoveOut: true },
+    },
+    unit: { select: { number: true } },
+    tenant: { select: { firstName: true, lastName: true } },
+} as const satisfies Prisma.LeaseSelect
+
+export type TransferLease = Prisma.LeaseGetPayload<{ select: typeof TRANSFER_LEASE_SELECT }>
+
+async function loadForTransfer(actor: Actor, leaseId: string): Promise<TransferLease> {
   const lease = await prisma.lease.findUniqueOrThrow({
     where: { id: leaseId },
-    select: {
-      id: true,
-      facilityId: true,
-      unitId: true,
-      tenantId: true,
-      status: true,
-      startDate: true,
-      billingDay: true,
-      monthlyRateCents: true,
-      protectionCents: true,
-      protectionPlanName: true,
-      acquisitionSource: true,
-      autopayEnabled: true,
-      paidThroughDate: true,
-      facility: {
-        select: { name: true, billingPolicy: true, timezone: true, prorateOnMoveOut: true },
-      },
-      unit: { select: { number: true } },
-      tenant: { select: { firstName: true, lastName: true } },
-    },
+    select: TRANSFER_LEASE_SELECT,
   })
   assertFacilityAccess(actor, lease.facilityId)
   if (!can(actor, 'leases:transfer', lease.facilityId)) {
@@ -148,7 +178,22 @@ export async function previewTransfer(
   toUnitId: string,
   transferDate: Date,
 ): Promise<TransferPreviewResult> {
-  const lease = await loadForTransfer(actor, leaseId)
+  return previewTransferFor(await loadForTransfer(actor, leaseId), toUnitId, transferDate)
+}
+
+/// The same preview against an already-loaded lease, with no authorization of
+/// its own — the caller has already established who may see this.
+///
+/// Split out for B-090 part 2: a tenant previewing their own transfer from the
+/// portal is scoped by `tenantId` on the query rather than by `leases:transfer`
+/// on an actor, but must be shown the identical arithmetic. Two copies of a
+/// proration is two answers to "what will this cost me", and the tenant's copy
+/// would be the one nobody reconciled.
+export async function previewTransferFor(
+  lease: TransferLease,
+  toUnitId: string,
+  transferDate: Date,
+): Promise<TransferPreviewResult> {
   if (!OCCUPYING_LEASE_STATUSES.includes(lease.status as never)) {
     return { ok: false, problem: 'lease_not_occupying' }
   }
@@ -162,7 +207,18 @@ export async function previewTransfer(
   // The derived status is the authority on whether a unit can be let (B-010),
   // so this asks the same question the public availability read asks rather
   // than re-deriving "is anything on it".
-  if (target.status !== 'available') return { ok: false, problem: 'unit_not_available' }
+  //
+  // One exception, and only one: the unit this tenant's own portal request is
+  // holding (B-090 part 2). `reserved` is required explicitly rather than
+  // "anything but available" — a stale hold on a unit that has since been
+  // leased or taken out of service must still fail, which is what it would do
+  // if this trusted the hold instead of the status.
+  if (target.status !== 'available') {
+    const held = await transferHoldFor(lease.tenantId, lease.facilityId)
+    if (!(target.status === 'reserved' && held?.unitId === target.id)) {
+      return { ok: false, problem: 'unit_not_available' }
+    }
+  }
 
   const newRateCents = await currentRateFor(lease.facilityId, target.unitTypeId, transferDate)
   if (newRateCents === null) return { ok: false, problem: 'no_rate_for_unit_type' }
@@ -358,6 +414,20 @@ export async function completeTransfer(
     // tenant is still on site and the unit is being handed back in the same
     // visit, so holding it for a cleaning inspection would be theatre. Staff
     // can mark it for maintenance from the unit screen if it needs it.
+    // The portal request that set this up, if there was one. Converted rather
+    // than left held: the partial unique index allows one held reservation per
+    // unit, so a stale one blocks the next tenant who wants it, and the unit's
+    // derived status should now be decided by the new lease alone.
+    await tx.reservation.updateMany({
+      where: {
+        unitId: input.toUnitId,
+        tenantId: lease.tenantId,
+        source: TRANSFER_HOLD_SOURCE,
+        status: 'held',
+      },
+      data: { status: 'converted' },
+    })
+
     await recomputeUnitStatus(input.toUnitId, tx)
     if (fromUnitId) await recomputeUnitStatus(fromUnitId, tx)
 
@@ -435,8 +505,19 @@ export async function transferTargets(
 ): Promise<TransferTargetUnit[]> {
   const lease = await loadForTransfer(actor, leaseId)
 
+  // Same exception as the availability check above, for the same reason: a
+  // tenant who asked for unit 214 must still find 214 in the list staff
+  // complete the transfer from.
+  const held = await transferHoldFor(lease.tenantId, lease.facilityId)
   const units = await prisma.unit.findMany({
-    where: { facilityId: lease.facilityId, status: 'available', id: { not: lease.unitId ?? undefined } },
+    where: {
+      facilityId: lease.facilityId,
+      id: { not: lease.unitId ?? undefined },
+      OR: [
+        { status: 'available' as const },
+        ...(held?.unitId ? [{ id: held.unitId, status: 'reserved' as const }] : []),
+      ],
+    },
     orderBy: { number: 'asc' },
     select: { id: true, number: true, unitTypeId: true, unitType: { select: { name: true } } },
   })
@@ -458,4 +539,27 @@ export async function transferTargets(
     unitTypeName: unit.unitType.name,
     rateCents: rateByType.get(unit.unitTypeId) ?? null,
   }))
+}
+
+export type PendingTransferRequest = { toUnitId: string; toUnitNumber: string; transferDate: Date }
+
+/// What the tenant asked for from the portal, if anything (B-090 part 2).
+///
+/// The wizard reads this so staff land on the unit and date the tenant chose
+/// rather than hunting for them: the task that brought them here says a
+/// transfer was requested, and a queue item that does not carry what was
+/// requested is the exact failure B-115 fixed for every other task type.
+export async function pendingTransferRequest(
+  actor: Actor,
+  leaseId: string,
+): Promise<PendingTransferRequest | null> {
+  const lease = await loadForTransfer(actor, leaseId)
+  const held = await transferHoldFor(lease.tenantId, lease.facilityId)
+  if (!held?.unitId || !held.moveInDate) return null
+
+  const unit = await prisma.unit.findUniqueOrThrow({
+    where: { id: held.unitId },
+    select: { number: true },
+  })
+  return { toUnitId: held.unitId, toUnitNumber: unit.number, transferDate: held.moveInDate }
 }
