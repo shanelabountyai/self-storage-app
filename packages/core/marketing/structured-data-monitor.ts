@@ -43,6 +43,11 @@ export type SchemaFinding = {
 const REQUIRED_TYPES: Record<PageKind, readonly string[]> = {
   facility: ['SelfStorage', 'BreadcrumbList'],
   city: ['ItemList', 'BreadcrumbList'],
+  // B-089. Same contract as a city page: it lists the facilities that have
+  // this size, so an empty `itemListElement` means the page is advertising
+  // nothing — which for a page that only exists because inventory exists is a
+  // real defect rather than a cosmetic one.
+  city_size: ['ItemList', 'BreadcrumbList'],
   guide: ['Article', 'BreadcrumbList'],
   static: [],
 }

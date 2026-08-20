@@ -16,6 +16,11 @@ const PUBLIC_ROUTES = [
   // generated intro, and a second copy of the search form, which is the part
   // most likely to produce a duplicate-id or duplicate-landmark finding.
   '/storage/tx/austin',
+  // B-089. The per-city/size landing page. Austin's 10×10 is the one that
+  // renders every section this template has that no other page does — the
+  // "what fits" list from the guide catalogue and the sibling-size links to
+  // 5×5 and 10×20 — so a heading orphaned by any of them shows up here.
+  '/storage/tx/austin/size/10x10',
   // US-103's facility detail template: hours tables, live unit list, and the
   // map iframe, which is the part axe is most likely to have an opinion about.
   '/storage/tx/austin/demo-austin-south',

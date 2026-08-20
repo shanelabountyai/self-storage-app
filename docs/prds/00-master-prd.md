@@ -197,7 +197,7 @@ Chosen to be mainstream (best Claude Code training coverage, best docs), boring 
 | Customer website | PWA layer (installable portal, push for payment reminders) **if metrics justify**; multilingual pages |
 | Admin dashboard | Revenue-management aids (occupancy-based street-rate suggestions), owner KPI dashboard, exports/accounting integration (QuickBooks), auction listing integrations |
 | Hardware | Smart-entry integration (Janus Nokē-class) via vendor API + vendor tenant app; camera feed embedding & event bookmarks; second gate-vendor driver |
-| Marketing/SEO | Per-city/size landing-page generation, A/B testing of offers, marketplace channel evaluation (SpareFoot-style), referral program |
+| Marketing/SEO | Per-city/size landing-page generation *(built B-089, 2026-08-20 — `/storage/{state}/{city}/size/{dimension}`, generated from priced inventory and **indexed only when the page clears the duplicate-content gate, D-77**)*, A/B testing of offers *(do not build — see B-089's backlog row; at 2–10 facilities no offer test reaches significance inside a quarter)*, marketplace channel evaluation (SpareFoot-style) *(not a backlog item; owner, 2026-07-31 — the integration surface is B-082)*, referral program *(built B-100/B-101 under PRD 10)* |
 
 ---
 

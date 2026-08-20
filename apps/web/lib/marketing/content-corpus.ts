@@ -1,12 +1,14 @@
 import { prisma } from '@storage/db'
 import type { ContentItem } from '@storage/core/marketing'
-import { citySlugPath, facilityPagePath } from '@/lib/marketing/paths'
+import { citySizePath, citySlugPath, facilityPagePath } from '@/lib/marketing/paths'
 import {
   authoredCityIntro,
   citiesWithFacilities,
   facilitiesInCity,
 } from '@/lib/facility/city-facilities'
 import { cityIntro } from '@/lib/marketing/city-copy'
+import { citySizeIntro, dimensionLabel } from '@storage/core/marketing'
+import { sizesInCity } from '@/lib/facility/city-size-pages'
 import { GUIDES, guidePath } from '@/lib/guides/catalog'
 
 // PRD 04 §7 Phase 2 (B-082 part 6). Everything the site publishes as prose,
@@ -28,6 +30,7 @@ const KIND = {
   hero: 'Facility page opening lines',
   long: 'Facility page long descriptions',
   cityIntro: 'City page intros',
+  sizeIntro: 'City/size page intros',
   guide: 'Guide descriptions',
 } as const
 
@@ -94,6 +97,36 @@ export async function contentCorpus(): Promise<ContentItem[]> {
       origin: authored ? 'authored' : 'generated',
       text,
     })
+  }
+
+  // B-089's per-city/size intros. These are the pages D-77 gates BEFORE they
+  // are published, so a row here is not a warning that something got indexed —
+  // it is the record of a page that did not, and of which sibling stopped it.
+  // Listed anyway, and deliberately: the gate is silent to a visitor by design,
+  // so this report is the only place an operator can see that a page they
+  // expected to rank is not being offered to an index at all.
+  for (const city of await citiesWithFacilities()) {
+    for (const size of (await sizesInCity(city.state, city.city)).values()) {
+      const text = citySizeIntro(
+        size.widthFt,
+        size.lengthFt,
+        city.city,
+        city.state,
+        size.facilities,
+      ).join(' ')
+      if (!text.trim()) continue
+      items.push({
+        key: `size:${city.state}/${city.city}/${size.dimension}`,
+        url: citySizePath(city.state, city.city, size.dimension),
+        label: `${dimensionLabel(size.widthFt, size.lengthFt)} — ${city.city}, ${city.state.toUpperCase()}`,
+        kind: KIND.sizeIntro,
+        // Generated, always. Unlike a city intro there is no authored override
+        // to fall back from — see B-134, which is where one goes if a real
+        // portfolio trips this gate.
+        origin: 'generated',
+        text,
+      })
+    }
   }
 
   for (const guide of GUIDES) {

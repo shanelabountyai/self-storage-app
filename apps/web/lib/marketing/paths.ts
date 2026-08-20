@@ -25,3 +25,14 @@ export function facilityPagePath(facility: {
 }): string {
   return `${citySlugPath(facility.state, facility.city)}/${facility.slug}`
 }
+
+/// `/storage/{state}/{city}/size/{dimension}` — the per-city/size landing page
+/// (B-089).
+///
+/// The literal `size` segment is load-bearing rather than decorative. Without
+/// it the dimension would sit in the facility page's `{slug}` position, sharing
+/// a namespace with every slug an operator can type — and Next.js would resolve
+/// the collision silently, in favour of whichever route matched first.
+export function citySizePath(state: string, city: string, dimension: string): string {
+  return `${citySlugPath(state, city)}/size/${dimension}`
+}

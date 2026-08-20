@@ -1422,3 +1422,79 @@ test('a renter can rent two units in one checkout, and the summary itemises them
   await expect(page.getByRole('button', { name: /^Remove / })).toHaveCount(0)
   await expect(summary).toContainText(/taken out of your rental/)
 })
+
+// B-089 / PRD 00 §6 Phase 3, D-77. The per-city/size landing pages.
+//
+// Read-only against the shared demo database (B-120). Austin has one facility
+// with 5×5, 10×10 and 10×20 unit types, so it exercises the single-location
+// list, the guide-catalogue block and the sibling-size links at once.
+
+test('a size page lists only the locations that have that size, at that size’s price', async ({
+  page,
+}) => {
+  await page.goto('/storage/tx/austin/size/10x10')
+  // The heading carries BOTH forms — the compact one `aria-hidden` for sighted
+  // readers and the spoken one visually hidden — so its accessible name is the
+  // sentence, not "10 times 10".
+  await expect(page.getByRole('heading', { level: 1 })).toHaveAccessibleName(
+    '10 foot by 10 foot storage units in Austin, TX',
+  )
+
+  const main = page.getByRole('main')
+  // The price is the 10×10's own web rate ($129), NOT the city's cheapest —
+  // that is the 5×5 at $59, and printing it here would advertise a price this
+  // page cannot sell.
+  await expect(main).toContainText('$129')
+  await expect(main).not.toContainText('$59')
+
+  await main.getByRole('link', { name: 'Demo — Austin South' }).click()
+  await expect(page).toHaveURL('/storage/tx/austin/demo-austin-south')
+})
+
+test('a size page carries what fits and routes to the other sizes in the city', async ({ page }) => {
+  await page.goto('/storage/tx/austin/size/10x10')
+  const main = page.getByRole('main')
+
+  // Two sentences from the shared catalogue — the content that makes this page
+  // different from the 10×20 beside it, and therefore the reason D-77's gate
+  // lets it be indexed at all.
+  await expect(main).toContainText('About half a standard garage')
+  await expect(main).toContainText('100 square feet')
+
+  // The sibling links are what makes the pages a set rather than orphans, and
+  // they are how a visitor who guessed the wrong size stays on the site.
+  await main.getByRole('link', { name: '10 foot by 20 foot units', exact: true }).click()
+  await expect(page).toHaveURL('/storage/tx/austin/size/10x20')
+})
+
+test('every spelling of a size is one page, not four', async ({ page }) => {
+  // `10X10`, `10 x 10` and `10×10` are the same page. Redirected rather than
+  // rendered — with no middleware in this app, the page is the only place that
+  // can enforce it.
+  await page.goto('/storage/tx/austin/size/10X10')
+  await expect(page).toHaveURL('/storage/tx/austin/size/10x10')
+})
+
+test('a size nobody stocks in that city 404s rather than rendering an empty page', async ({
+  page,
+}) => {
+  // The rule US-4 AC1 puts on a city page, applied per size: the page exists
+  // because inventory does. Austin has no 10×30.
+  expect((await page.goto('/storage/tx/austin/size/10x30'))?.status()).toBe(404)
+  expect((await page.goto('/storage/tx/austin/size/not-a-size'))?.status()).toBe(404)
+})
+
+test('the sitemap advertises the size pages, and never one it would 404', async ({ request }) => {
+  const urls = [...(await (await request.get('/sitemap.xml')).text()).matchAll(/<loc>([^<]+)<\/loc>/g)].map(
+    (match) => match[1]!,
+  )
+  const sizeUrls = urls.filter((url) => url.includes('/size/'))
+  expect(sizeUrls.length).toBeGreaterThan(0)
+
+  // Every advertised size page must resolve. A sitemap that lists a URL the
+  // page 404s is the failure B-082 part 2 built `citiesWithFacilities` to
+  // prevent, and D-77's gate adds a second way to get it wrong.
+  for (const url of sizeUrls) {
+    expect((await request.get(new URL(url).pathname)).status(), url).toBe(200)
+  }
+})

@@ -2,8 +2,9 @@ import type { MetadataRoute } from 'next'
 import { prisma } from '@storage/db'
 import { absoluteUrl } from '@storage/core/marketing'
 import { siteOrigin } from '@/lib/marketing/origin'
-import { citySlugPath, facilityPagePath } from '@/lib/marketing/paths'
+import { citySizePath, citySlugPath, facilityPagePath } from '@/lib/marketing/paths'
 import { citiesWithFacilities } from '@/lib/facility/city-facilities'
+import { citySizePages } from '@/lib/facility/city-size-pages'
 import { GUIDES, guidePath } from '@/lib/guides/catalog'
 
 // PRD 04 FR-SEO-5 / US-3 AC1 (B-066). The sitemap, generated from the records.
@@ -99,7 +100,22 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.5,
   }))
 
-  return [...staticEntries, ...guideEntries, ...cityEntries, ...facilityEntries]
+  // B-089's per-city/size pages, and ONLY the ones that cleared D-77's
+  // duplicate gate. A sitemap entry for a `noindex` page asks a crawler to
+  // fetch something and then tells it the fetch was pointless; advertising only
+  // what passed is what makes the gate mean anything.
+  const sizeEntries: MetadataRoute.Sitemap = (await citySizePages())
+    .filter((page) => page.indexable)
+    .map((page) => ({
+      url: absoluteUrl(origin, citySizePath(page.state, page.city, page.dimension)),
+      lastModified: page.lastModified,
+      changeFrequency: 'daily',
+      // Below a city page: a size page is a route INTO a facility for one
+      // specific need, and the city page is the broader entry point.
+      priority: 0.6,
+    }))
+
+  return [...staticEntries, ...guideEntries, ...cityEntries, ...sizeEntries, ...facilityEntries]
   // ponytail: one flat sitemap. FR-SEO-5 wants segmentation above 1,000 URLs;
   // with one entry per facility plus one per city that is hundreds of
   // facilities away, and a sitemap index built now would be scaffolding for a

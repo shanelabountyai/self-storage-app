@@ -152,7 +152,7 @@ export function citySlug(city: string): string {
 /// `static` means "no structured-data contract", not "unimportant" — the
 /// homepage and `/faq` are static here. It is also the default, so a route
 /// added later is un-monitored rather than falsely reported broken.
-export type PageKind = 'facility' | 'city' | 'guide' | 'static'
+export type PageKind = 'facility' | 'city' | 'city_size' | 'guide' | 'static'
 
 export function pageKind(pathname: string): PageKind {
   const segments = pathname.split('/').filter(Boolean)
@@ -170,6 +170,13 @@ export function pageKind(pathname: string): PageKind {
     // `/storage/size-guide` — are one segment shorter than a city page and so
     // fall through, which is the reason this is a length check and not a list
     // of names to keep in sync.
+    //
+    // B-089's per-size page sits a level deeper behind a literal `size`
+    // segment: `/storage/{state}/{city}/size/{dimension}`. It is NOT the
+    // facility page's `{slug}` position, which is exactly why that segment
+    // exists — a size page at four segments would share a namespace with
+    // every facility slug an operator can type.
+    if (segments.length === 5 && segments[3] === 'size') return 'city_size'
     if (segments.length === 4) return 'facility'
     if (segments.length === 3) return 'city'
   }

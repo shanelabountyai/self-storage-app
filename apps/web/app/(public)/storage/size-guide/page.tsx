@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { SITE } from '@/lib/site-config'
+import { dimensionSpoken, parseDimension, UNIT_SIZES, UNIT_SIZE_ORDER } from '@storage/core/marketing'
 
 export const metadata = {
   title: 'What size storage unit do I need?',
@@ -20,65 +21,20 @@ export const metadata = {
 // part that actually answers the question, and they are what a screen-reader
 // user would get from a good alt attribute anyway.
 
-type Size = {
-  label: string
-  sqFt: number
-  comparison: string
-  fits: string[]
-  typical: string
-}
-
-const SIZES: Size[] = [
-  {
-    label: '5 × 5',
-    sqFt: 25,
-    comparison: 'A large closet.',
-    fits: ['Boxes and files', 'Seasonal decorations', 'A bike', 'A few small pieces of furniture'],
-    typical: 'Students between terms, or clearing one room.',
-  },
-  {
-    label: '5 × 10',
-    sqFt: 50,
-    comparison: 'A walk-in wardrobe, or half a single garage.',
-    fits: ['A mattress set', 'A chest of drawers', 'Boxes', 'A small sofa'],
-    typical: 'A studio flat, or one bedroom of furniture.',
-  },
-  {
-    label: '5 × 15',
-    sqFt: 75,
-    comparison: 'A large walk-in wardrobe.',
-    fits: ['The contents of a large bedroom', 'A sofa and armchair', 'Twenty or so boxes'],
-    typical: 'A one-bedroom flat without appliances.',
-  },
-  {
-    label: '10 × 10',
-    sqFt: 100,
-    comparison: 'About half a standard garage.',
-    fits: ['A full one-bedroom apartment', 'A sofa, mattress set and dining set', 'A washer and dryer'],
-    typical: 'The most-rented size. A one-bedroom home, or a serious declutter.',
-  },
-  {
-    label: '10 × 15',
-    sqFt: 150,
-    comparison: 'A large single garage.',
-    fits: ['A two-bedroom home', 'Major appliances', 'Boxed contents of a loft'],
-    typical: 'Moving out of a two-bedroom home.',
-  },
-  {
-    label: '10 × 20',
-    sqFt: 200,
-    comparison: 'A standard single garage.',
-    fits: ['A three-bedroom house', 'A car, with room around it', 'Appliances and garden equipment'],
-    typical: 'A whole-house move, or storing a vehicle.',
-  },
-  {
-    label: '10 × 30',
-    sqFt: 300,
-    comparison: 'A two-car garage.',
-    fits: ['A four- or five-bedroom house', 'Commercial stock or equipment', 'A vehicle plus contents'],
-    typical: 'Large family moves, and small businesses.',
-  },
-]
+// B-089 moved this catalogue to `@storage/core/marketing`. It did not move for
+// tidiness: the per-city/size landing pages need the same comparison and
+// "typical" sentences, and those sentences are precisely what makes a
+// "10×10 storage units in Austin" page different from the 10×15 page beside it.
+// Two copies would drift, and the copy that drifted would be the one nobody
+// opens.
+//
+// D-60 still holds. That decision is about not RE-PUBLISHING the guide, and a
+// landing page takes two sentences about its own size and links here for the
+// rest — it does not reproduce this page's seven entries.
+const SIZES = UNIT_SIZE_ORDER.map((key) => {
+  const { widthFt, lengthFt } = parseDimension(key)!
+  return { ...UNIT_SIZES[key]!, spoken: dimensionSpoken(widthFt, lengthFt) }
+})
 
 export default function SizeGuidePage() {
   return (
@@ -105,9 +61,7 @@ export default function SizeGuidePage() {
                     readers get the compact form; everyone else gets the
                     sentence. Same treatment as the facility page. */}
                 <span aria-hidden="true">{size.label}</span>
-                <span className="sr-only">
-                  {size.label.replace(' × ', ' foot by ')} foot
-                </span>
+                <span className="sr-only">{size.spoken}</span>
               </h2>
               <p className="text-muted-foreground text-sm">{size.sqFt} sq ft</p>
             </div>
