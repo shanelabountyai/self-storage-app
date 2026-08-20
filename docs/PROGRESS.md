@@ -4883,7 +4883,7 @@ Full e2e against a production build, **run twice back to back with no reseed**: 
 
 ## B-087 part 1 — IndexNow, structured-data monitoring, and half a PRD line that no longer exists
 
-`SHA_PLACEHOLDER`
+`317b522`
 
 **The row was split along its blocker, not along a screen (owner, 2026-08-20).** B-087 bundled four features and two of them need Google API access this build does not have: the GBP write API is only open to an approved application, the same partner gate B-085 carries, and reviews ingestion silently answers PRD 04 Q3 — the moment one review carries `source = google_api`, `qualifiesForSchemaMarkup` starts emitting `aggregateRating`, which is a claim to Google that this site collected the ratings itself, and the cost of getting it wrong is a manual action against the whole domain rather than one page. Those two are now **B-133**. The other two need no credential at all and are this part.
 
