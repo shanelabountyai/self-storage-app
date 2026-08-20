@@ -4859,7 +4859,7 @@ Full e2e against a production build, **run twice back to back with no reseed**: 
 
 ## B-088 part 2 — The owner KPI dashboard, built from what was filed rather than what can be re-derived
 
-`PENDING_SHA`
+`8ec230a`
 
 **The scoping question part 1 left open, answered.** `/admin` already ships B-042's portfolio dashboard and B-084 ships the close, the management pack and the revenue/occupancy reports, so the risk was building a second dashboard that says the same things. What none of them answers is **time**: the dashboard says "how are we doing now", every report says "how did we do in that period", and neither says "is it getting better" — which is the only question an owner who is not running the counter actually asks. So this is a trend and nothing else.
 
