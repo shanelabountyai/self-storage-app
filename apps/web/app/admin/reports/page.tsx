@@ -237,6 +237,14 @@ export default async function ReportsPage({
         >
           Monthly close — file a month so its figures stop moving
         </Link>
+        {/* B-090 part 1. Demand for inventory that does not exist — the one
+            thing no other report here can show. */}
+        <Link
+          href="/admin/reports/waitlist"
+          className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
+        >
+          Waitlist — who is waiting for a size you are full on
+        </Link>
         {/* B-087 part 1. Next to indexation and duplicate content: all three
             are about whether what we publish is reaching search engines
             intact. */}

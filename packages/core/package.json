@@ -36,7 +36,8 @@
     "./auth/totp": "./auth/totp.ts",
     "./org": "./org/index.ts",
     "./documents": "./documents/index.ts",
-    "./labels": "./labels/index.ts"
+    "./labels": "./labels/index.ts",
+    "./waitlist": "./waitlist/index.ts"
   },
   "dependencies": {
     "@storage/db": "*"

@@ -211,7 +211,11 @@ test('the facility page offers click-to-call without scrolling', async ({ page }
   test.skip(testInfo.project.name !== 'mobile-chrome', 'US-103 is a mobile requirement, not a desktop one')
   await page.goto('/storage/tx/austin/demo-austin-south')
 
-  const call = page.getByRole('main').getByRole('link', { name: /^Call/ })
+  // `.first()` since B-090 part 1: a fully-rented size renders its own "Call
+  // us about this size" link inside the units list, so `main` alone is no
+  // longer unique. First in DOM order IS the contact block, which is the one
+  // this requirement is about — the link nearest the top of the page.
+  const call = page.getByRole('main').getByRole('link', { name: /^Call/ }).first()
   await expect(call).toBeVisible()
   const box = await call.boundingBox()
   const viewport = page.viewportSize()!
@@ -483,7 +487,10 @@ test('the hero photo sits above the fold, LCP-primed, and never repeats in the g
   await expect(heroImg).toHaveAttribute('height', '600')
   // Scoped to `main`: the header carries its own "Call us at..." link on
   // every page, and an unscoped query hits both (strict-mode violation).
-  const contactBlock = page.getByRole('main').getByRole('link', { name: /^Call/ })
+  // `.first()` since B-090 part 1, for a second reason: a fully-rented size
+  // carries its own call link inside the units list below, so `main` narrows
+  // to two. The contact block is the first in DOM order.
+  const contactBlock = page.getByRole('main').getByRole('link', { name: /^Call/ }).first()
   const heroBox = await heroImg.boundingBox()
   const contactBox = await contactBlock.boundingBox()
   expect(heroBox!.y).toBeLessThan(contactBox!.y)
@@ -1497,4 +1504,50 @@ test('the sitemap advertises the size pages, and never one it would 404', async 
   for (const url of sizeUrls) {
     expect((await request.get(new URL(url).pathname)).status(), url).toBe(200)
   }
+})
+
+// B-090 part 1 / PRD 01 §9 Phase 3. Waitlists for sold-out sizes.
+//
+// The demo seed's Austin 5×15 has no units, so it is the one size that renders
+// the "Also here, currently full" section — a fixture added for this item that
+// nothing else asserts a fixed value against (B-120's first discipline).
+//
+// The JOIN is scoped to an address unique per run, so repeated sweeps never
+// build up state another spec reads, and the partial unique index means a
+// re-run of this spec with the same address is an "already on the list" answer
+// rather than a failure.
+
+test('a sold-out size offers to email you instead of dead-ending in a phone number', async ({
+  page,
+}) => {
+  await page.goto('/storage/tx/austin/demo-austin-south')
+
+  const card = page.getByRole('listitem').filter({ hasText: '5 foot by 15 foot' }).first()
+  await expect(card).toContainText('All rented right now')
+
+  // Collapsed by default: a facility with several full sizes must not bury the
+  // sizes that CAN be rented under a wall of email inputs.
+  //
+  // `locator('summary')` rather than a role: Chromium exposes a <details>
+  // disclosure inconsistently (group, button, or a disclosure-triangle role
+  // depending on version), and a role query that resolves to nothing fails as
+  // a 30-second timeout rather than as "wrong locator". The element is
+  // unambiguous inside this card.
+  await expect(card.getByLabel('Your email')).toBeHidden()
+  await card.locator('summary').click()
+  const email = card.getByLabel('Your email')
+  await expect(email).toBeVisible()
+
+  await email.fill(`e2e-waitlist-${Date.now()}@example.com`)
+  await card.getByRole('button', { name: 'Add me to the list' }).click()
+
+  // Announced in a status region rather than only rendered — a screen-reader
+  // user who submits a form and hears nothing does not know it worked.
+  await expect(card.getByRole('status')).toContainText("You're on the list")
+})
+
+test('a waitlist cancel link that is not ours says so without failing', async ({ page }) => {
+  await page.goto('/waitlist/cancel/not-a-real-token')
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('Waitlist')
+  await expect(page.getByRole('main')).toContainText('could not find that waitlist link')
 })

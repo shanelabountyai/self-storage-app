@@ -44,6 +44,10 @@ const PUBLIC_ROUTES = [
   '/storage/tx/austin/demo-austin-south/reserve?unitType=INVALID',
   // The token-less and bad-token states of the reservation page are the ones a
   // crawler or a mistyped link reaches; the live states need a real hold.
+  // B-090 part 1. The waitlist cancel link's not-found state — what a
+  // truncated or already-used link from an email actually lands on, and the
+  // only state of that page a scan can reach without a live entry.
+  '/waitlist/cancel/not-a-real-token',
   '/reservations?token=not-a-real-token',
   '/checkout?token=not-a-real-session',
   '/faq',
@@ -214,4 +218,36 @@ test('the search page live region exists before it has anything to say', async (
     await expect(region).toBeAttached()
     await expect(region).toHaveText('')
   }
+})
+
+// B-090 part 1. The waitlist form, EXPANDED.
+//
+// The route loop above cannot reach it. The form lives inside a collapsed
+// `<details>` on each fully-rented size, and a collapsed disclosure's contents
+// are hidden from the accessibility tree — so axe scanning
+// `/storage/tx/austin/demo-austin-south` walks straight past every field in it.
+// A scan that silently covers none of a form is exactly the "we did not test
+// that reads as that passed" problem the incomplete assertions above exist to
+// stop, and the accessibility statement makes a public claim about which pages
+// are scanned. So it gets opened first.
+test('the waitlist form has no WCAG 2.1 AA violations once opened', async ({ page }) => {
+  await page.goto('/storage/tx/austin/demo-austin-south')
+  await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible()
+
+  // Every sold-out size on the page, not just the first: they render from one
+  // component, but an `id` collision between two instances is precisely the
+  // defect that only appears with more than one on screen.
+  const disclosures = page.locator('details')
+  const count = await disclosures.count()
+  expect(count, 'no sold-out size on the demo facility page to scan').toBeGreaterThan(0)
+  for (let i = 0; i < count; i += 1) await disclosures.nth(i).locator('summary').click()
+
+  const { violations } = await new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+    .analyze()
+
+  expect(
+    violations.map((v) => `${v.id}: ${v.help}`),
+    'axe found accessibility violations in the opened waitlist form',
+  ).toEqual([])
 })

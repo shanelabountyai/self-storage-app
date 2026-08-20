@@ -895,6 +895,22 @@ async function main() {
       { name: '10x10 Climate', widthFt: 10, lengthFt: 10, climate: true, driveUp: false, street: 14_900, web: 12_900, count: 10 },
       { name: '10x20 Drive-Up', widthFt: 10, lengthFt: 20, climate: false, driveUp: true, street: 24_900, web: 22_900, count: 8 },
       { name: '5x5 Locker', widthFt: 5, lengthFt: 5, climate: true, driveUp: false, street: 6_900, web: 5_900, count: 6 },
+      // B-090 part 1. A permanently sold-out size, and the only one in the demo
+      // data — every other type here has units available, so the facility
+      // page's "Also here, currently full" section and the waitlist form on it
+      // had nothing to render against.
+      //
+      // `count: 0` rather than occupied units: a unit marked occupied with no
+      // lease behind it is a fiction the rent roll and the occupancy report
+      // would both have to explain. A size with no units is an ordinary thing
+      // for a site that has converted them, and it produces the same zero
+      // availability.
+      //
+      // 5x15 deliberately, NOT 10x30 — B-089's e2e asserts that
+      // /storage/tx/austin/size/10x30 is a 404, which is the "a size nobody
+      // stocks in that city" case, and pricing a 10x30 here would turn that
+      // assertion red.
+      { name: '5x15 Climate', widthFt: 5, lengthFt: 15, climate: true, driveUp: false, street: 12_900, web: 10_900, count: 0 },
     ],
     // B-118's hero strip (the first 3) and the lazy gallery further down (the
     // rest) both read from this set — the primary demo facility, so the

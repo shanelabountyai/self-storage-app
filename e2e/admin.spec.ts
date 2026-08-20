@@ -130,6 +130,8 @@ test.describe('signed in as the demo owner', () => {
     '/admin/reports/duplicate-content',
     // B-087 part 1.
     '/admin/reports/structured-data',
+    // B-090 part 1.
+    '/admin/reports/waitlist',
     '/admin/reports/rent-roll',
     '/admin/reports/revenue',
     // B-092. A page not on this list is a page nobody scans — and this one is

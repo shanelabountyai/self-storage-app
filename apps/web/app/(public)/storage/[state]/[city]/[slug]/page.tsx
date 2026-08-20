@@ -33,6 +33,8 @@ import { siteOrigin } from '@/lib/marketing/origin'
 import { redirectFor } from '@/lib/marketing/redirects'
 import { LeadForm } from '@/components/marketing/lead-form'
 import { submitLeadAction, trackPageView } from './lead-actions'
+import { joinWaitlistAction } from './waitlist-actions'
+import { WaitlistForm } from '@/components/marketing/waitlist-form'
 import { citySlugPath } from '@/lib/marketing/paths'
 import { offerFor } from '@/lib/promotions/service'
 import { PromoCodeEntry } from '@/components/promo-code-entry'
@@ -236,17 +238,27 @@ function CostBreakdown({
         What you&apos;d pay today
       </summary>
 
+      {/* Grid rather than nested flex rows, and that is a correctness fix
+          rather than a styling preference (found by B-090 part 1's scan of the
+          opened disclosures). A `<dl>` may contain `<div>` groups, but each
+          group has to hold its `<dt>`/`<dd>` DIRECTLY — the previous shape put
+          them inside a second `<div>` with the note as their sibling, which
+          axe reports as both `definition-list` and `dlitem`, and which means a
+          screen reader does not read this as a term/value list at all. The
+          note becomes a second `<dd>`, which is what it always was: more
+          description of the same term. Two columns give the same
+          label-left/amount-right layout, and the note spans both. */}
       <dl className="mt-3 flex flex-col gap-2 text-sm">
         {cost.lines.map((line) => (
-          <div key={line.key} className="flex flex-col">
-            <div className="flex justify-between gap-4">
-              <dt>{line.label}</dt>
-              <dd className="tabular-nums">
-                {line.key === 'protection' ? 'chosen at checkout' : formatRate(line.amountCents)}
-              </dd>
-            </div>
+          <div key={line.key} className="grid grid-cols-[1fr_auto] gap-x-4">
+            <dt>{line.label}</dt>
+            <dd className="tabular-nums">
+              {line.key === 'protection' ? 'chosen at checkout' : formatRate(line.amountCents)}
+            </dd>
             {line.note && (
-              <p className="text-muted-foreground mt-0.5 text-xs text-pretty">{line.note}</p>
+              <dd className="text-muted-foreground col-span-2 mt-0.5 text-xs text-pretty">
+                {line.note}
+              </dd>
             )}
           </div>
         ))}
@@ -462,6 +474,20 @@ function UnitTypeCard({
           </>
         )}
       </p>
+
+      {/* B-090 part 1. Until now a sold-out size dead-ended in a phone number:
+          somebody who wants a 10×20 and cannot have one today leaves, and we
+          never learn they came. The call link stays above — it is the faster
+          route for anybody willing to use it — and this is for everybody who
+          is not. */}
+      {available === 0 && (
+        <WaitlistForm
+          facilityId={facility.id}
+          unitTypeId={unitType.unitTypeId}
+          sizeLabel={`${unitType.widthFt} foot by ${unitType.lengthFt} foot`}
+          action={joinWaitlistAction}
+        />
+      )}
     </li>
   )
 }

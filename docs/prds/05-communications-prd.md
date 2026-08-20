@@ -349,6 +349,7 @@ Aligned to the master PRD roadmap (comms email lands with MVP billing; SMS lands
 - Operational notices bundle (CN-10); manual/broadcast sends (CN-21)
 - Promise-to-pay dunning pause; tenant-level timezone; reminder-timing experiments
 - Two-way SMS inbox (evaluate); PWA push channel (per master PRD option)
+  - ***Both answered 2026-08-20 by D-78, neither built.*** **PWA push: no** — PRD 00 gates it on "if metrics justify" and nothing in this product counts portal engagement, so the condition cannot be evaluated. **Two-way inbox: no**, on the evaluation that at 2–10 facilities inbound volume does not warrant a second queue beside `Task`. The evaluation did find a real defect: `sms-webhook/route.ts` handles STOP/HELP/START/YES and **silently drops every other inbound message**, so a tenant who replies is answered by nothing. That is **B-135** — route an unrecognised inbound SMS to the existing `Task` queue. If its task volume proves an inbox is warranted, that is the number to reopen D-78 with.
 - Per-facility sequence analytics (cure curves by step)
 
 **Dependencies:** Phase 1 requires PRD 02's billing events and PRD 01's pay screen. Phase 2 SMS is gated on completed 10DLC registration — treat as an external-approval dependency with unknown latency.

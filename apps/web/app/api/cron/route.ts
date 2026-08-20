@@ -7,6 +7,7 @@ import { raiseAbandonmentFollowUps } from '@/lib/checkout/abandonment-job'
 import { retryDeferredSmsMessages } from '@/lib/comms/service'
 import { detectConsumerLag } from '@/lib/comms/detectors'
 import { CONSUMERS, SCHEDULED_JOBS } from '@/lib/jobs/registry'
+import { sweepWaitlists } from '@/lib/waitlist/service'
 
 // Vercel Cron hits this hourly (see vercel.json). Master PRD §5 lists Vercel
 // Cron as the MVP option; there is no Inngest/Trigger.dev account to manage and
@@ -58,6 +59,13 @@ export async function GET(request: Request) {
   // deferred one's facility has now opened, same shape as the two checks
   // just above.
   const smsRetry = await retryDeferredSmsMessages(now)
+
+  // PRD 01 §9 Phase 3 (B-090 part 1). A unit becomes free when somebody moves
+  // out or a hold lapses, which happens at an arbitrary hour — so this runs
+  // every tick against real elapsed time, the same shape as the three checks
+  // above. A once-per-business-date job would leave a free unit unadvertised
+  // overnight, which is the revenue this feature exists to stop losing.
+  const waitlist = await sweepWaitlists(now)
 
   // PRD 05 FR-19 (B-075). "Alert if the event consumer lags >15 minutes" —
   // elapsed time again, not a business date, so this runs every tick like
@@ -125,6 +133,7 @@ export async function GET(request: Request) {
     reminders,
     abandonment,
     smsRetry,
+    waitlist,
     consumerLag,
     jobs: jobResults,
   })

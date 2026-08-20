@@ -746,6 +746,7 @@ model Facility {
   protectionChanges      ProtectionChange[]
   authorizedAccessPeople AuthorizedAccessPerson[]
   leads                  Lead[]
+  waitlistEntries        WaitlistEntry[]
   notices                Notice[]
   auditLogs              AuditLog[]
   staffAssignments       StaffFacilityAssignment[]
@@ -873,6 +874,7 @@ model UnitType {
   facility             Facility              @relation(fields: [facilityId], references: [id], onDelete: Cascade)
   units                Unit[]
   reservations         Reservation[]
+  waitlistEntries      WaitlistEntry[]
   checkoutSessions     CheckoutSession[]
   checkoutSessionUnits CheckoutSessionUnit[]
   leads                Lead[]
@@ -4163,11 +4165,11 @@ model ImpersonationSession {
   reason    String
   ticketRef String?
 
-  startedAt DateTime  @default(now()) @db.Timestamptz(6)
+  startedAt      DateTime                @default(now()) @db.Timestamptz(6)
   /// FR-3. Server-enforced; a client timer is a display, not a control.
-  expiresAt DateTime  @db.Timestamptz(6)
-  endedAt   DateTime? @db.Timestamptz(6)
-  endedBy   ImpersonationEndReason?
+  expiresAt      DateTime                @db.Timestamptz(6)
+  endedAt        DateTime?               @db.Timestamptz(6)
+  endedBy        ImpersonationEndReason?
   /// Who forced it, when `endedBy` is `forced` (FR-18). The audit entry records
   /// this too; it is on the row because §6.1's argument for 7-year retention is
   /// that the row answers "who ended it" on its own.
@@ -4431,4 +4433,79 @@ model Referral {
   @@index([referrerTenantId, state])
   @@index([facilityId, qualifiedAt])
   @@map("referral")
+}
+
+/// PRD 01 §9 Phase 3 (B-090 part 1). "Waitlists for sold-out unit types with
+/// notify-me."
+///
+/// **Its own model rather than a `Lead`, and that was a correctness decision
+/// rather than a modelling preference (D-79).** A waitlist entry looks like a
+/// lead — a prospect, an email, a unit type they want — but putting it in
+/// `Lead` breaks two things that already work. `raiseLeadFollowUps` raises a
+/// task for every `new` lead nobody has called within the facility's window,
+/// and a waitlist entry is precisely the case where there is nothing to call
+/// about until a unit frees up; and B-082 part 4's funnel counts leads as its
+/// denominator, so every entry would silently dilute the conversion rate the
+/// operator prices against. That is the same class of defect B-131 fixed — a
+/// report answering a different question under the same name.
+///
+/// No tenant, ever. This is a stranger who left an email address, which is why
+/// the notification goes out through `sendDirectEmail` (the path B-073's
+/// abandonment mail and B-020's resume links already use) rather than through
+/// the rule engine, which resolves recipients from `Tenant`.
+model WaitlistEntry {
+  id          String         @id @default(cuid())
+  facilityId  String
+  unitTypeId  String
+  /// Required — it is the whole point of the record, and the only channel this
+  /// item ships. SMS would need a TCPA consent record of its own; see the note
+  /// in PROGRESS.
+  email       String
+  /// Optional, and captured only so staff can call somebody who is waiting.
+  /// Never messaged: there is no consent for that.
+  phone       String?
+  firstName   String?
+  status      WaitlistStatus @default(waiting)
+  /// When the "one is free" mail went out. Null while waiting. Load-bearing
+  /// rather than decorative: the sweep counts entries notified inside the
+  /// claim window against the available units, which is what stops twelve
+  /// people being told about one unit.
+  notifiedAt  DateTime?      @db.Timestamptz(6)
+  /// Single-use, URL-safe. The cancel link in the mail, and the only way a
+  /// prospect who is not a tenant can act on their own record — they have no
+  /// account to sign in to.
+  cancelToken String         @unique
+  createdAt   DateTime       @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime       @updatedAt @db.Timestamptz(6)
+
+  facility Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  unitType UnitType @relation(fields: [unitTypeId], references: [id], onDelete: Cascade)
+
+  /// Database invariants this model carries that Prisma cannot express, same
+  /// device as `Reservation`'s:
+  ///
+  ///   waitlist_one_live_entry_per_email_per_type
+  ///     — unique(unitTypeId, lower(email)) where status in ('waiting','notified')
+  ///
+  /// Enforced in the database rather than only in the service, because the
+  /// service reads before it writes and a double-submitted form passes that
+  /// read twice. Partial over the live states, so a prospect who cancelled or
+  /// whose window expired may join again.
+  @@index([unitTypeId, status, createdAt])
+  @@index([facilityId, status])
+  @@index([email])
+  @@map("waitlist_entry")
+}
+
+enum WaitlistStatus {
+  /// Waiting for a unit. The only state the sweep considers.
+  waiting
+  /// Told a unit is free, inside the claim window. Counts against availability
+  /// so the next person is not told about the same unit.
+  notified
+  /// The claim window elapsed. Does not count against availability any more,
+  /// so the next person in line gets their turn.
+  expired
+  /// The prospect used the cancel link, or moved in.
+  cancelled
 }

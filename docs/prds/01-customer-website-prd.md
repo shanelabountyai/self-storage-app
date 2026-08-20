@@ -483,10 +483,11 @@ Instrumentation: full checkout-funnel events (per §7.5) from day one — the fu
 - Spanish-language support (highest-impact i18n).
 
 ### Phase 3 — Later
-- Live chat / AI assistant; kiosk-mode variant of checkout for in-office self-service.
+- Live chat / AI assistant *(do not build yet — see B-090's row; B-097 phone lead capture is the fix)*; kiosk-mode variant of checkout for in-office self-service *(PRD 03 §8 defers with a default answer of no; B-085)*.
 - Business accounts (multi-unit consolidated billing, additional authorized users).
 - Referral program surface; tenant reviews on facility pages (with marketing module).
 - Waitlists for sold-out unit types with notify-me.
+  - *Built B-090 part 1, 2026-08-20 (**D-79**, **D-80**).* A `<details>` form on each fully-rented size on the facility page — until then a sold-out size dead-ended in a phone number and captured nothing. **Its own `WaitlistEntry` model rather than a `Lead` (D-79):** reusing `Lead` would have raised an uncallable follow-up task per entry and diluted the funnel's conversion denominator. A cron-tick sweep notifies **as many people as there are free units, oldest first**, and holds each claim 72 hours before giving the next person a turn — availability minus outstanding claims, which is what stops twelve people being told about one unit. Mail is transactional and email-only (**D-80**): a phone number typed into a notify-me box is not TCPA consent to text it, so the column exists for staff to call and nothing sends to it. `/admin/reports/waitlist` shows the queue as demand for inventory that does not exist, which is a number no other report here can produce.
 - Transfer-unit flow (upsize/downsize online).
 - Delinquency self-cure UX beyond banner (payment plans), coordinated with admin policy.
 
