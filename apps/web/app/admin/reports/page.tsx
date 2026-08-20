@@ -210,6 +210,15 @@ export default async function ReportsPage({
         >
           Indexation — what Google has indexed
         </Link>
+        {/* B-088 part 2. First of the month-level links, because it is the
+            only one that answers "is this getting better" rather than "what
+            happened". */}
+        <Link
+          href="/admin/reports/kpi"
+          className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
+        >
+          KPI trend — the direction, not just this month
+        </Link>
         <Link
           href="/admin/reports/pack"
           className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
