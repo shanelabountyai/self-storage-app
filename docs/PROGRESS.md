@@ -4941,7 +4941,7 @@ Full e2e against a production build, **run twice back to back with no reseed**: 
 
 ## B-090 part 1 — Waitlists, and the demand signal this product never had
 
-`SHA_PLACEHOLDER`
+`4821522`
 
 **The split first, because three quarters of the row needed deciding rather than building.** B-090 listed seven things and an audit found **none of them built** — the only shipped slice was a staff-placed `payment_plan` hold, which is a forbearance switch, not a plan. The row was not stale in the "someone quietly built it" direction either: B-074, B-077 and B-102 had each deferred their half here explicitly and said so in-line. Six parts remain; **two of the seven were answered instead of built (D-78)**.
 
