@@ -4913,7 +4913,7 @@ Full e2e against a production build, **run twice back to back with no reseed**: 
 
 ## B-089 — Per-city/size landing pages, and a duplicate detector promoted from report to gate
 
-`SHA_PLACEHOLDER`
+`2073e91`
 
 **Three quarters of the row was already settled when it was reached.** B-089 listed four things. A/B testing of offers and marketplace channel evaluation were both already marked do-not-build by the owner on 2026-07-31, and the **referral program shipped as B-100/B-101** under PRD 10 — the row was written before PRD 10 existed and nobody went back to it. What was actually left was per-city/size landing pages, which makes this an M, not the L it was sized as. Recorded rather than quietly built, because a row that looks like an L is a row that gets deferred.
 
