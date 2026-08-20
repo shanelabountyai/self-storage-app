@@ -4978,7 +4978,7 @@ Full e2e against a production build, **run twice back to back with no reseed**: 
 
 ## B-090 part 2 — Tenant self-service transfer, built as a request rather than a commit
 
-`PENDING_SHA`
+`09548c8`
 
 **What it built.** `/portal/transfer`: a tenant picks any available unit at their own site — each row carrying its rate and the **monthly difference** against what they pay now — picks a date, sees the swap priced, and asks. Staff finish it in B-077's wizard, which is unchanged apart from knowing what was requested. Also shipped: `lease.transfer_requested` and a confirmation email, a `transfer_request_review` task type, and a cancel path.
 
