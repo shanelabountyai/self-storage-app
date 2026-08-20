@@ -23,6 +23,12 @@ import { detectDailyFailureRate, detectSilentDunning } from '@/lib/comms/detecto
 import { applyDueRateIncreases, sendDueRateIncreaseNotices } from '@/lib/pricing/tenant-rate-increases'
 import { applyDueProtectionChanges } from '@/lib/protection/changes'
 import { sendDueReports } from '@/lib/admin/report-subscriptions'
+import { submitUrls, SUBMIT_LIMIT } from '@/lib/marketing/indexnow'
+import { siteOrigin, hasCanonicalDomain } from '@/lib/marketing/origin'
+import { pageKind, absoluteUrl } from '@storage/core/marketing'
+import { runStructuredDataMonitor } from '@/lib/marketing/structured-data-monitor'
+import { alertOwner } from '@/lib/comms/alerts'
+import sitemap from '@/app/sitemap'
 
 // Consumer and job registration. The machinery is B-006's; the things that use
 // it arrive with their own backlog items: reservation expiry (B-018, below),
@@ -535,6 +541,122 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
         itemId: facilityId!,
         ok: !result.alerted,
         message: result.alerted ? 'failure rate exceeded 2% — owner alerted' : 'within threshold',
+      })
+    },
+  },
+  {
+    // PRD 04 §7 Phase 3 (B-087 part 1). "IndexNow/sitemap ping automation."
+    //
+    // Global and at 05 UTC, after every per-facility job that can change what a
+    // page says has run for the day: `pricing.apply-rate-increases` at hour 0
+    // and the billing chain behind it all move facility state, and submitting
+    // before them would announce yesterday's page.
+    //
+    // **Which URLs.** Those the sitemap advertises whose `lastModified` falls
+    // on or after this business date — IndexNow is explicitly for URLs that
+    // CHANGED, and a daily resubmission of everything is the shape that gets a
+    // host throttled. `static` pages are excluded because their `lastModified`
+    // is the request time (see `sitemap.ts`), so they would qualify every
+    // single day while never having changed.
+    //
+    // ponytail: `lastModified` for a facility is `Facility.updatedAt`, which
+    // does NOT move when a rate on one of its unit types changes — so a
+    // price-only change is not submitted. That is the sitemap's existing
+    // limitation rather than one introduced here, and the fix belongs with the
+    // sitemap; the upgrade is a derived last-changed date per facility that
+    // takes the newest of the facility row and its rate records.
+    name: 'marketing.indexnow-submit',
+    localHour: 5,
+    scope: 'global',
+    handler: async ({ businessDate, recordItem }) => {
+      // A preview or a not-yet-domained production deployment must never
+      // announce its URLs — the same reasoning `hasCanonicalDomain` already
+      // carries for the canonical tag, and here the consequence is asking four
+      // search engines to index the twin of the real site.
+      if (!hasCanonicalDomain()) {
+        recordItem({ itemId: 'global', ok: true, message: 'skipped: no canonical domain configured' })
+        return
+      }
+
+      const entries = await sitemap()
+      const changed = entries
+        .filter((entry) => pageKind(new URL(entry.url).pathname) !== 'static')
+        .filter((entry) => {
+          const modified = entry.lastModified ? new Date(entry.lastModified) : null
+          return modified !== null && modified.getTime() >= businessDate.getTime()
+        })
+        .map((entry) => entry.url)
+
+      const result = await submitUrls(siteOrigin(), changed)
+      recordItem({
+        itemId: 'global',
+        // A search engine being unreachable is not this job failing at what it
+        // was asked to do, but it IS the only signal that submissions have
+        // stopped — an unconfigured key would otherwise be silent forever.
+        ok: result.ok,
+        message: result.ok
+          ? `submitted ${result.submitted} changed URL${result.submitted === 1 ? '' : 's'}${result.truncated ? ` (capped at ${SUBMIT_LIMIT})` : ''}`
+          : (result.problem ?? 'submission failed'),
+      })
+    },
+  },
+  {
+    // PRD 04 §7 Phase 3 (B-087 part 1). "Structured-data monitoring alerts."
+    //
+    // Global and at 06 UTC, an hour after the submission above: the pages this
+    // fetches are the pages that were just announced, and finding out that the
+    // markup on one of them is broken is more useful straight after telling
+    // four crawlers to come and look at it.
+    //
+    // The alert is `alertOwner` rather than a `Task`, and that is forced rather
+    // than chosen: `Task` requires a `facilityId`, and a guide page and a city
+    // page belong to no facility. Splitting the findings so the facility ones
+    // become tasks and the rest become an email would mean two channels for one
+    // problem, and the half nobody watches is always the one that matters.
+    name: 'marketing.structured-data-monitor',
+    localHour: 6,
+    scope: 'global',
+    handler: async ({ businessDate, recordItem }) => {
+      if (!hasCanonicalDomain()) {
+        recordItem({ itemId: 'global', ok: true, message: 'skipped: no canonical domain configured' })
+        return
+      }
+
+      const run = await runStructuredDataMonitor()
+      const failing = run.broken.length + run.unreachable.length
+
+      if (failing > 0) {
+        const lines = [...run.unreachable, ...run.broken].slice(0, 10).map((check) =>
+          check.fetchProblem
+            ? `${check.url} — ${check.fetchProblem}`
+            : `${check.url} — ${check.findings.map((finding) => finding.problem).join(' ')}`,
+        )
+        await alertOwner(
+          // Keyed on the business date, so a break that persists alerts once a
+          // day rather than once per catch-up run, and a NEW day's identical
+          // break still gets through. Same contract as the comms detectors.
+          `structured_data:${businessDate.toISOString().slice(0, 10)}`,
+          `Structured data: ${failing} page${failing === 1 ? '' : 's'} need attention`,
+          [
+            `${failing} of ${run.checked} monitored pages have a structured-data problem.`,
+            '',
+            ...lines,
+            failing > lines.length ? `…and ${failing - lines.length} more.` : '',
+            '',
+            `Full report: ${absoluteUrl(run.origin, '/admin/reports/structured-data')}`,
+          ]
+            .filter(Boolean)
+            .join('\n'),
+        )
+      }
+
+      recordItem({
+        itemId: 'global',
+        // A broken page is a finding, not a failed job — the same reasoning
+        // `access.reconcile` uses for gate drift. A runner that is red every
+        // night at a site with one known problem is a runner nobody reads.
+        ok: true,
+        message: `checked ${run.checked}, ${run.intact} intact, ${failing} needing attention`,
       })
     },
   },

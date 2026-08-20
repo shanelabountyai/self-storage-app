@@ -237,6 +237,15 @@ export default async function ReportsPage({
         >
           Monthly close — file a month so its figures stop moving
         </Link>
+        {/* B-087 part 1. Next to indexation and duplicate content: all three
+            are about whether what we publish is reaching search engines
+            intact. */}
+        <Link
+          href="/admin/reports/structured-data"
+          className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
+        >
+          Structured data — markup a page has stopped emitting
+        </Link>
         <Link
           href="/admin/reports/duplicate-content"
           className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"

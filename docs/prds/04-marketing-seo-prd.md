@@ -180,7 +180,7 @@ Personas: **Prospect** (storage seeker), **Operator** (owner/regional manager), 
 - **FR-REV-1:** `review` entity: facility ID, rating (1–5), text, reviewer display name, review date, source (`manual_google`, `manual_other`, `google_api` later), visibility flag, created-by.
 - **FR-REV-2:** Facility page renders aggregate + latest N (default 5) visible reviews; admin can hide (not edit) any review's display — text is never altered.
 - **FR-REV-3:** Review-request automation per US-7, driven by the `move_in_completed` event from the admin dashboard.
-- **FR-REV-4 (Phase 3):** Google review ingestion job (Places/GBP API), deduplication against manual entries, manual entry disabled once API source is live for a facility.
+- **FR-REV-4 (Phase 3):** Google review ingestion job (Places/GBP API), deduplication against manual entries, manual entry disabled once API source is live for a facility. *(B-133 — blocked on API access and on Q3's policy read; see §7 Phase 3.)*
 
 ### 4.4 Leads & attribution (FR-LEAD)
 
@@ -296,7 +296,9 @@ Targets are directional for a learning project; the *instrumentation* is the req
 ### Phase 3 — Automation (APIs)
 - Google reviews ingestion via API; retire manual entry.
 - GBP API sync (hours/NAP push, discrepancy alerts) replacing manual checklist items.
+  - *Both of the above are **B-133**, split out of B-087 on 2026-08-20 and blocked.* GBP write access needs an approved application (no spec exists without it), and ingestion silently answers Q3 below — the moment a review carries `source = google_api`, `qualifiesForSchemaMarkup` starts emitting `aggregateRating`. The manual checklist and manual review entry stay until the API replaces them.
 - IndexNow/sitemap ping automation; structured-data monitoring alerts.
+  - *Built B-087 part 1, 2026-08-20 (**D-76**).* **The sitemap-ping half of that line no longer exists** — Google retired `/ping?sitemap=` in 2023 and Bing retired its own in favour of IndexNow — so this is one nightly POST reaching Bing, Yandex, Seznam and Naver, carrying only the URLs whose `lastModified` falls on or after that business date. Google is unaffected; the sitemap plus the indexation report above remain the whole story there. The key file is served from `/indexnow/{key}.txt`, and nothing is submitted at all without `NEXT_PUBLIC_SITE_URL` — a preview deployment must never announce the twin of the real site. **Structured-data monitoring** fetches the pages a crawler gets rather than asking the builders what they would render, and checks that each generated page kind still emits its contracted nodes (`SelfStorage`/`ItemList`/`Article` + `BreadcrumbList`) with the fields that make them eligible. Findings render at `/admin/reports/structured-data` and a nightly job emails the owner. There is **no Rich Results verdict** — Google publishes no API for it, and a verdict scraped from a testing UI would be the same fabricated claim B-082 part 5 refused for the index status.
 - Aggregator attribution improvements (still no listing-sync integration — future consideration beyond this PRD).
 
 ---
@@ -305,7 +307,7 @@ Targets are directional for a learning project; the *instrumentation* is the req
 
 1. **Analytics vendor:** GA4 (free, ad-ecosystem integration, consent-mode complexity) vs privacy-friendly alternative (e.g., Plausible-class: simpler consent posture, cost, weaker ad attribution)? Recommendation: privacy-friendly + server-side log for MVP simplicity; revisit if paid ads enter scope. **Decide before analytics implementation.**
 2. **Pricing display policy:** Show true live web rates on indexable pages (better conversion/schema `Offer` accuracy) vs "starting at" floors (pricing-strategy flexibility)? Interacts with revenue-management features in the Admin Dashboard PRD.
-3. **`aggregateRating` schema:** Include only when review sourcing meets Google's self-serving review policies — confirm whether manually transcribed Google reviews qualify or whether we hold `aggregateRating` until API ingestion (Phase 3). Needs a policy read before launch.
+3. **`aggregateRating` schema:** Include only when review sourcing meets Google's self-serving review policies — confirm whether manually transcribed Google reviews qualify or whether we hold `aggregateRating` until API ingestion (Phase 3). Needs a policy read before launch. **Still open, and now owned by B-133 (2026-08-20):** `qualifiesForSchemaMarkup` returns false by construction because nothing produces `source = google_api`, so the question stays theoretical until ingestion is built — which is precisely why the policy read has to happen *before* that item, not during it.
 4. **Abandonment email consent posture:** We've classified cart-abandonment as requiring marketing consent (conservative). Is the operator comfortable with the conversion cost, or do we treat it as transactional follow-up where law permits? Legal review required.
 5. **TCPA disclosure copy & quiet-hours edge cases** (tenant vs facility timezone) — legal review before SMS ships (Phase 2).
 6. **Lead dedup contract:** Confirm with Admin Dashboard PRD whether dedup lives here (FR-LEAD-1) or in the dashboard's lead workflow, to avoid double implementation.

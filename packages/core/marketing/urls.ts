@@ -140,3 +140,39 @@ export function toSlug(value: string): string {
 export function citySlug(city: string): string {
   return toSlug(city)
 }
+
+/// What kind of published page a path is, derived from the path alone.
+///
+/// B-087 part 1. Two consumers need this and neither has the record that
+/// produced the URL to hand: the IndexNow submitter reads `sitemap()`, which
+/// returns strings, and the structured-data monitor reads the served HTML.
+/// Deriving it from the URL is what lets both work off the sitemap instead of
+/// re-querying the four sources it was built from.
+///
+/// `static` means "no structured-data contract", not "unimportant" — the
+/// homepage and `/faq` are static here. It is also the default, so a route
+/// added later is un-monitored rather than falsely reported broken.
+export type PageKind = 'facility' | 'city' | 'guide' | 'static'
+
+export function pageKind(pathname: string): PageKind {
+  const segments = pathname.split('/').filter(Boolean)
+
+  if (segments[0] === 'guides') {
+    // `/guides` is the hub and `/guides/{slug}` is an article. The hub emits an
+    // ItemList, but it is not asserted: it is one hand-maintained page, and the
+    // monitor's value is in the generated ones.
+    return segments.length === 2 ? 'guide' : 'static'
+  }
+
+  if (segments[0] === 'storage') {
+    // `/storage/{state}/{city}/{slug}` and `/storage/{state}/{city}`. The two
+    // static pages under this prefix — `/storage/search` and
+    // `/storage/size-guide` — are one segment shorter than a city page and so
+    // fall through, which is the reason this is a length check and not a list
+    // of names to keep in sync.
+    if (segments.length === 4) return 'facility'
+    if (segments.length === 3) return 'city'
+  }
+
+  return 'static'
+}
