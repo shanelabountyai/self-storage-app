@@ -5195,6 +5195,8 @@ Full e2e against a production build, **run twice back to back with no reseed**: 
 
 ## B-156 — The scan contract II: post-interaction states, parameterised routes, and a control that does nothing
 
+`9a6d580`
+
 **What it built.** The three structural gaps PRD 02 §5.5 FR-25 named, all reasons `/admin/tasks` shipped a dead button green even after B-119/B-139 made the scans cover the routes they claimed to:
 
 1. **Post-interaction states.** `smoke.spec.ts`'s checkout walk now opens the promo box's `<details>`, submits an invalid code, and scans the refused state — B-122's promo box had never been scanned open at all, only its resting state riding along on the routes around it. Used the existing mechanism (`assertNoAxeViolations`, already called after every wizard-step `advance`) rather than inventing a second one — the gap was that it was never called on THIS interaction, not that the mechanism didn't exist.
