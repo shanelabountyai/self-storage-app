@@ -466,6 +466,9 @@ export async function movesForFacility(
     prisma.lease.count({
       where: { facilityId, moveOutDate: { gte: periodStart, lt: periodEnd }, status: 'ended' },
     }),
+    // Serves every source (B-140): an aggregate count of holds created in the
+    // period, not a per-tenant message — a transfer hold belongs in this
+    // total the same as a web one.
     prisma.reservation.findMany({
       where: { facilityId, createdAt: { gte: periodStart, lt: periodEnd } },
       select: { createdAt: true, status: true, updatedAt: true },

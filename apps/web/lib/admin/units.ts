@@ -64,6 +64,9 @@ export async function occupancyFactsForMany(
       },
       select: { id: true, status: true, unitId: true },
     }),
+    // Serves every source (B-140): a unit is genuinely reserved whether the
+    // hold is a prospect's own or a transfer's — this only decides what the
+    // unit-status board shows, not what email goes out.
     client.reservation.findMany({
       where: { unitId: { in: [...unitIds] }, status: 'held', expiresAt: { gt: new Date() } },
       select: { id: true, unitId: true },

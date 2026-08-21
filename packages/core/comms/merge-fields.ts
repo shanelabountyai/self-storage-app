@@ -93,6 +93,12 @@ export const EVENT_MERGE_FIELDS: Record<string, readonly MergeFieldSpec[]> = {
     { field: 'unit.size', description: 'Unit size held', sample: '10x10' },
     { field: 'reservation.expires_at', description: 'When the hold ends', sample: 'Friday, September 12 at 5:00 PM' },
   ],
+  // B-140. Same shape as the reservation-hold reminder above — this is the
+  // transfer-hold's own event, not a variant read of the other one.
+  'reservation.transfer_hold_expiring_soon': [
+    { field: 'unit.size', description: 'Unit size held for the transfer', sample: '10x10' },
+    { field: 'reservation.expires_at', description: 'When the transfer hold ends', sample: 'Friday, September 12 at 5:00 PM' },
+  ],
   'invoice.due_soon': [
     { field: 'unit.number', description: 'Unit number', sample: 'A-12' },
     { field: 'invoice.number', description: 'Invoice number', sample: '000142' },

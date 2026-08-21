@@ -37,7 +37,15 @@ export const EVENT_NAMES = [
   /// reservation (B-031's sweep stamps `expiryReminderSentAt`), never re-fired
   /// on a later tick — the event outbox's own idempotency only dedupes per
   /// event id, not per reservation, so the producer has to guarantee "once".
+  /// Only for `source: 'web'` (a prospect's own hold) — a transfer hold
+  /// (D-82) fires `reservation.transfer_hold_expiring_soon` instead (B-140),
+  /// because this event's copy sends the tenant to a move-in link that D-82
+  /// deliberately ensures never exists for a transfer.
   'reservation.expiring_soon',
+  /// CN-23 / B-140. The transfer-hold twin of the event above — same sweep,
+  /// same `expiryReminderSentAt` guard, different copy: no move-in link,
+  /// names the absolute expiry time, and sends the tenant to the office.
+  'reservation.transfer_hold_expiring_soon',
 
   // Billing (PRD 02 US-17/US-18, drives the comms ladder in PRD 05)
   'invoice.created',

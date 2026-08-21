@@ -54,6 +54,27 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
     requiredMergeFields: ['tenant.first_name', 'facility.name', 'unit.size', 'reservation.expires_at', 'facility.phone'],
   },
   {
+    // CN-23 / B-140. The transfer-hold twin of `reservation_expiring_soon`
+    // above. No move-in link (D-82 ensures none exists for a transfer) and
+    // no "nothing has been charged" line (nothing was ever quoted online) —
+    // it names the unit, the absolute expiry time (PRD 01 §6.8.1: never a
+    // countdown), and sends the tenant to the office, the only place D-82's
+    // transfer flow is actually finished.
+    key: 'transfer_hold_expiring_soon',
+    classification: 'transactional',
+    subject: 'Your transfer hold at {{facility.name}} ends soon',
+    bodyText: [
+      'Hi {{tenant.first_name}},',
+      '',
+      "We're holding the {{unit.size}} unit for your transfer at {{facility.name}} until {{reservation.expires_at}}.",
+      '',
+      'To finish the move, call the office at {{facility.phone}} before then.',
+      '',
+      'Questions? Call {{facility.phone}}.',
+    ].join('\n'),
+    requiredMergeFields: ['tenant.first_name', 'facility.name', 'unit.size', 'reservation.expires_at', 'facility.phone'],
+  },
+  {
     key: 'lease_moved_in_welcome',
     classification: 'transactional',
     subject: "Welcome to {{facility.name}} — you're moved in",
@@ -990,6 +1011,11 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
 
 export const COMMS_RULES: readonly CommsRuleSeed[] = [
   { event: 'reservation.expiring_soon', templateKey: 'reservation_expiring_soon', classification: 'transactional' },
+  {
+    event: 'reservation.transfer_hold_expiring_soon',
+    templateKey: 'transfer_hold_expiring_soon',
+    classification: 'transactional',
+  },
   {
     event: 'lease.moved_in',
     templateKey: 'lease_moved_in_welcome',

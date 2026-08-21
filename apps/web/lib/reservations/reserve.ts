@@ -463,6 +463,10 @@ export async function expireReservations(
   now: Date = new Date(),
   facilityId?: string,
 ): Promise<{ expired: number }> {
+  // Serves every source (B-140): expiry itself — the unit coming back to
+  // inventory — is the same fact regardless of what made the hold, and
+  // `reservation.expired` carries no source-specific copy. Only the side
+  // effects below branch on `source`.
   const due = await prisma.reservation.findMany({
     where: { status: 'held', expiresAt: { lte: now }, ...(facilityId ? { facilityId } : {}) },
     select: { id: true, unitId: true, facilityId: true, source: true, tenantId: true },
@@ -522,6 +526,14 @@ export async function expireReservations(
 /// while a hold sits in that window would re-send it — `expiryReminderSentAt`
 /// is the actual guard, stamped in the same transaction as the emit so a
 /// crash between the two cannot either skip the reminder or double-send it.
+///
+/// One sweep, two events (CN-23 / B-140): a transfer hold (D-82,
+/// `source: TRANSFER_HOLD_SOURCE`) gets `reservation.transfer_hold_expiring_soon`
+/// instead of `reservation.expiring_soon` — the latter's copy sends the
+/// tenant to a move-in link D-82 deliberately ensures never exists for a
+/// transfer. Same guard, same window, only the emitted event's name (and so
+/// its template) branches on `source` — mirroring how `expireReservations`
+/// below already branches on it for its own side effect.
 export async function sendExpiringSoonReminders(
   now: Date = new Date(),
   windowMs: number = 24 * 60 * 60 * 1000,
@@ -534,7 +546,7 @@ export async function sendExpiringSoonReminders(
       expiryReminderSentAt: null,
       ...(facilityId ? { facilityId } : {}),
     },
-    select: { id: true, facilityId: true, unitId: true },
+    select: { id: true, facilityId: true, unitId: true, source: true },
   })
 
   let reminded = 0
@@ -554,7 +566,10 @@ export async function sendExpiringSoonReminders(
       })
       await emitEvent(
         {
-          name: 'reservation.expiring_soon',
+          name:
+            reservation.source === TRANSFER_HOLD_SOURCE
+              ? 'reservation.transfer_hold_expiring_soon'
+              : 'reservation.expiring_soon',
           facilityId: reservation.facilityId,
           entityType: 'Reservation',
           entityId: reservation.id,

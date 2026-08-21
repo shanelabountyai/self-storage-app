@@ -13,6 +13,7 @@ import {
   MAX_MOVE_IN_DAYS_AHEAD,
 } from '../apps/web/lib/reservations/reserve'
 import { publicInventoryForFacility } from '../apps/web/lib/inventory/public-inventory'
+import { TRANSFER_HOLD_SOURCE } from '../packages/core/inventory'
 
 // B-018 / PRD 01 US-401, FR-3.
 
@@ -429,7 +430,7 @@ describeDb('reservation service', () => {
   })
 
   describe('sendExpiringSoonReminders (B-031 / PRD 01 US-801)', () => {
-    async function heldReservation(expiresAt: Date, email: string) {
+    async function heldReservation(expiresAt: Date, email: string, source?: string) {
       const unit = await prisma.unit.create({ data: { facilityId, unitTypeId, number: `R-${randomUUID().slice(0, 6)}` } })
       return prisma.reservation.create({
         data: {
@@ -443,6 +444,7 @@ describeDb('reservation service', () => {
           quotedRateCents: 12_900,
           expiresAt,
           tokenHash: `reminder-${randomUUID()}`,
+          ...(source ? { source } : {}),
         },
       })
     }
@@ -495,6 +497,32 @@ describeDb('reservation service', () => {
       await prisma.reservation.update({ where: { id: reservation.id }, data: { status: 'cancelled' } })
 
       expect(await sendExpiringSoonReminders(now, 24 * 60 * 60_000, facilityId)).toEqual({ reminded: 0 })
+    })
+
+    // CN-23 / B-140. Before the fix this reservation got `reservation.expiring_soon`
+    // — copy pointing at a move-in link D-82 ensures never exists for a transfer.
+    it('sends a transfer hold the transfer-specific event, never the web one', async () => {
+      const now = new Date()
+      const reservation = await heldReservation(
+        new Date(now.getTime() + 12 * 60 * 60_000),
+        `transfer-${suffix}@example.com`,
+        TRANSFER_HOLD_SOURCE,
+      )
+
+      expect(await sendExpiringSoonReminders(now, 24 * 60 * 60_000, facilityId)).toEqual({ reminded: 1 })
+
+      const events = await prisma.domainEvent.findMany({ where: { entityId: reservation.id } })
+      expect(events.map((e) => e.name)).toEqual(['reservation.transfer_hold_expiring_soon'])
+    })
+
+    it('still sends a web hold only the web event', async () => {
+      const now = new Date()
+      const reservation = await heldReservation(new Date(now.getTime() + 12 * 60 * 60_000), `web-${suffix}@example.com`)
+
+      expect(await sendExpiringSoonReminders(now, 24 * 60 * 60_000, facilityId)).toEqual({ reminded: 1 })
+
+      const events = await prisma.domainEvent.findMany({ where: { entityId: reservation.id } })
+      expect(events.map((e) => e.name)).toEqual(['reservation.expiring_soon'])
     })
   })
 })

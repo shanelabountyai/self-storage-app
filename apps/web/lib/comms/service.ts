@@ -456,6 +456,15 @@ function baseUrl(): string {
   return (process.env.AUTH_URL ?? 'http://localhost:3000').replace(/\/$/, '')
 }
 
+/// Shared by `reservation.expiring_soon` and its transfer-hold twin (B-140) —
+/// both read the same reservation/facility shape, only the template differs.
+async function reservationExpiresAtContext(_event: DomainEvent, recipient: Recipient): Promise<MergeContext> {
+  if (!recipient.reservation || !recipient.facility) return {} as MergeContext
+  return {
+    'reservation.expires_at': formatAbsoluteLocal(recipient.reservation.expiresAt, recipient.facility.timezone),
+  }
+}
+
 /// FR-10 standard merge fields, built from current state — read here, at send
 /// time, not frozen at event time (FR-18). Fields that need billing
 /// (`balance.total`, `invoice.due_date`, `links.pay_now`) are intentionally
@@ -647,12 +656,10 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
     return { 'referral.refusal_reason': message }
   },
 
-  'reservation.expiring_soon': async (_event, recipient) => {
-    if (!recipient.reservation || !recipient.facility) return {} as MergeContext
-    return {
-      'reservation.expires_at': formatAbsoluteLocal(recipient.reservation.expiresAt, recipient.facility.timezone),
-    }
-  },
+  // B-140: the transfer-hold event reuses this — same recipient shape
+  // (entityType 'Reservation' either way), only the template differs.
+  'reservation.expiring_soon': reservationExpiresAtContext,
+  'reservation.transfer_hold_expiring_soon': reservationExpiresAtContext,
 
   // CN-8: how the account actually settled. Read from the event payload,
   // which the move-out transaction wrote — not re-derived from the ledger
