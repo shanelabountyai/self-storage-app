@@ -5060,7 +5060,7 @@ Full e2e against a production build, **run twice back to back with no reseed**: 
 
 ## B-137 — A transfer must carry the tenant's protective state, not just their rate
 
-`PENDING`
+`b33454b`
 
 **What it built.** `completeTransfer` copied rate, autopay, protection, billing day and `paidThroughDate` onto the new lease and stopped there, so every `LeaseHold` was left behind on the lease the transfer had just ended. An active-duty tenant who changed units came out with `activeDutyMilitary = true` and no `military_scra` hold, the delinquency engine's `onHold` check passed, and the ladder ran on a servicemember whose own file records that we were told. The same for `bankruptcy`, `deceased` and `litigation`. Separately, `OCCUPYING_LEASE_STATUSES` includes `pending_auction` and the tenant-facing transfer scoped on it, so a tenant whose goods were being prepared for sale could move them into another unit by clicking twice. Both are closed.
 
