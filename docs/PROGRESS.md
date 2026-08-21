@@ -5162,6 +5162,8 @@ Full e2e against a production build, **run twice back to back with no reseed**: 
 
 ## B-141 — "Complete" on `/admin/tasks` silently did nothing when the note was empty
 
+`8f009f8`
+
 **What it built.** `completeTaskAction` discarded `completeTask`'s `{ ok: false, missingFields }` refusal — its own signature was `Promise<void>`. The note input on `/admin/tasks` had no `required` while all three sibling queues (delinquency, access queue, walkthrough) did, so a blank submit hit the service's refusal branch every time, and nothing told anyone: the button was pressed, the page re-rendered identically, and the task stayed open. `completeTaskAction` now returns `FormState` (the FR-19/FR-20 apparatus B-094 built) instead of `void`, mapping `missingFields` to field-level messages. A new shared client component, `TaskCompleteForm` (`components/admin/task-complete-form.tsx`), wraps `AdminForm`/`Field` — one instance per task card, since each card's completion is its own independent submission — and replaced the four near-identical hand-rolled `<form>` blocks across `/admin/tasks`, `/admin/delinquency`, `/admin/access/queue` and `/admin/walkthrough`, all four of which share this one action. Every card's submit button now carries an `aria-label` naming its subject (e.g. "Complete: Returned mail — contact info may be stale, Dana Delinquent") instead of the bare, identical "Complete"/"Done at the keypad"/"Walked" a rotor would otherwise read once per row with no way to tell them apart (2.4.6, 4.1.3).
 
 **What it decided.** One shared component across all four queues rather than fixing `/admin/tasks` alone — the backlog row scoped the *bug* to one screen (the missing `required`), but the PRD's own AC text ("every queue view over this list...") and the fact all four already shared the one broken action meant the accessible-name and live-region fix reaches every queue for the same diff.
@@ -5173,6 +5175,8 @@ Full e2e against a production build, **run twice back to back with no reseed**: 
 ---
 
 ## B-142 — The portal transfer screen swallowed failures, stated no expiry, and had no date ceiling
+
+`8f009f8`
 
 **What it built.** Four merged findings, all in the tenant-facing transfer flow:
 
