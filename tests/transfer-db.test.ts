@@ -154,6 +154,10 @@ describeDb('unit transfer (US-14)', () => {
     await prisma.accessGrant.deleteMany({ where: { facilityId } })
     await prisma.leaseRateChange.deleteMany({ where: { lease: { facilityId } } })
     await prisma.leaseHold.deleteMany({ where: { lease: { facilityId } } })
+    await prisma.invoice.deleteMany({ where: { facilityId } })
+    // A transferred lease REFERENCES the one it came from, so the ancestors
+    // cannot go first (B-138's `onDelete: Restrict`).
+    await prisma.lease.deleteMany({ where: { facilityId, transferredFromLeaseId: { not: null } } })
     await prisma.lease.deleteMany({ where: { facilityId } })
     await prisma.unit.deleteMany({ where: { facilityId } })
     await prisma.feeSchedule.deleteMany({ where: { facilityId } })
@@ -171,6 +175,10 @@ describeDb('unit transfer (US-14)', () => {
     await prisma.accessGrant.deleteMany({ where: { facilityId } })
     await prisma.leaseRateChange.deleteMany({ where: { lease: { facilityId } } })
     await prisma.leaseHold.deleteMany({ where: { lease: { facilityId } } })
+    await prisma.invoice.deleteMany({ where: { facilityId } })
+    // A transferred lease REFERENCES the one it came from, so the ancestors
+    // cannot go first (B-138's `onDelete: Restrict`).
+    await prisma.lease.deleteMany({ where: { facilityId, transferredFromLeaseId: { not: null } } })
     await prisma.lease.deleteMany({ where: { facilityId } })
     await prisma.unit.deleteMany({ where: { facilityId } })
     await prisma.unitTypeRate.deleteMany({ where: { facilityId } })
@@ -529,6 +537,235 @@ describeDb('unit transfer (US-14)', () => {
       } finally {
         await prisma.tenant.update({ where: { id: tenantId }, data: { activeDutyMilitary: false } })
       }
+    })
+  })
+
+  // B-138 / D-86. Before this the arrears stayed on the lease the transfer
+  // ended, the engine halted it as `moved_out`, and the new lease had no
+  // invoices and 0 days past due — so asking for a swap stopped collections on
+  // a tenant who owed money and had never left.
+  describe('collections (B-138)', () => {
+    let invoiceCounter = 0
+    async function rentInvoice(
+      leaseId: string,
+      dueDate: Date,
+      options: { totalCents?: number; paidCents?: number } = {},
+    ) {
+      invoiceCounter += 1
+      const total = options.totalCents ?? 10_000
+      const paid = options.paidCents ?? 0
+      const invoice = await prisma.invoice.create({
+        data: {
+          facilityId,
+          leaseId,
+          number: `TR${suffix.slice(0, 4)}${String(invoiceCounter).padStart(4, '0')}`,
+          kind: 'rent',
+          status: paid >= total ? 'paid' : paid > 0 ? 'partially_paid' : 'open',
+          issueDate: dueDate,
+          dueDate,
+          periodStart: dueDate,
+          periodEnd: new Date(dueDate.getTime() + 30 * 86_400_000),
+          subtotalCents: total,
+          totalCents: total,
+          amountPaidCents: paid,
+        },
+      })
+      await prisma.ledgerEntry.create({
+        data: {
+          facilityId,
+          leaseId,
+          invoiceId: invoice.id,
+          type: 'charge',
+          amountCents: total,
+          description: `Invoice ${invoice.number}`,
+          occurredAt: dueDate,
+        },
+      })
+      if (paid > 0) {
+        await prisma.ledgerEntry.create({
+          data: {
+            facilityId,
+            leaseId,
+            type: 'payment',
+            amountCents: -paid,
+            description: 'Card payment',
+            occurredAt: dueDate,
+          },
+        })
+      }
+      return invoice
+    }
+
+    async function balanceOf(leaseId: string): Promise<number> {
+      const sum = await prisma.ledgerEntry.aggregate({
+        where: { leaseId },
+        _sum: { amountCents: true },
+      })
+      return sum._sum.amountCents ?? 0
+    }
+
+    /// Two months behind, the older one part-paid — which is what allocation
+    /// oldest-first actually produces, and which is the `daysPastDue` anchor.
+    async function behindTenant() {
+      const from = await makeUnit(smallTypeId)
+      const to = await makeUnit(largeTypeId)
+      const lease = await makeLease(from.id)
+      await prisma.lease.update({ where: { id: lease.id }, data: { status: 'delinquent' } })
+      const june = await rentInvoice(lease.id, d('2026-06-01'), { paidCents: 4_000 })
+      const july = await rentInvoice(lease.id, d('2026-07-01'))
+      return { lease, to, june, july }
+    }
+
+    it('moves the unpaid invoices onto the new lease, part-paid one included', async () => {
+      const { lease, to, june, july } = await behindTenant()
+
+      const result = await completeTransfer(manager(), {
+        leaseId: lease.id,
+        toUnitId: to.id,
+        transferDate: d('2026-08-16'),
+      })
+      if (!result.ok) throw new Error('unreachable')
+
+      expect((await prisma.invoice.findUniqueOrThrow({ where: { id: june.id } })).leaseId).toBe(
+        result.newLeaseId,
+      )
+      expect((await prisma.invoice.findUniqueOrThrow({ where: { id: july.id } })).leaseId).toBe(
+        result.newLeaseId,
+      )
+      // The anchor survived: the oldest ORIGINAL due date, not the transfer
+      // date and not July's (D-25).
+      const moved = await prisma.invoice.findMany({
+        where: { leaseId: result.newLeaseId },
+        orderBy: { dueDate: 'asc' },
+      })
+      expect(moved[0].dueDate).toEqual(d('2026-06-01'))
+    })
+
+    it('leaves a settled invoice where it was raised', async () => {
+      const from = await makeUnit(smallTypeId)
+      const to = await makeUnit(largeTypeId)
+      const lease = await makeLease(from.id)
+      const paid = await rentInvoice(lease.id, d('2026-05-01'), { paidCents: 10_000 })
+
+      const result = await completeTransfer(manager(), {
+        leaseId: lease.id,
+        toUnitId: to.id,
+        transferDate: d('2026-08-16'),
+      })
+      if (!result.ok) throw new Error('unreachable')
+
+      expect((await prisma.invoice.findUniqueOrThrow({ where: { id: paid.id } })).leaseId).toBe(
+        lease.id,
+      )
+    })
+
+    it('moves the BALANCE with them — the old lease keeps none of the arrears', async () => {
+      const { lease, to } = await behindTenant()
+      // 10000 − 4000 owed on June, 10000 on July.
+      const owed = 16_000
+      const before = await balanceOf(lease.id)
+      expect(before).toBe(owed)
+
+      const result = await completeTransfer(manager(), {
+        leaseId: lease.id,
+        toUnitId: to.id,
+        transferDate: d('2026-08-16'),
+      })
+      if (!result.ok) throw new Error('unreachable')
+
+      // The old lease's arrears are exactly cancelled. What remains is its own
+      // transfer settlement, which belongs to the unit being handed back.
+      expect(await balanceOf(lease.id)).toBe(before - owed - result.preview.refundCents)
+
+      // And the new lease carries them, on top of its own transfer charges.
+      const expectedNew =
+        owed + result.preview.chargeCents + result.preview.transferFeeCents
+      expect(await balanceOf(result.newLeaseId)).toBe(expectedNew)
+    })
+
+    it('posts the carry against the invoice, so the ledger still reconciles', async () => {
+      const { lease, to, june } = await behindTenant()
+
+      const result = await completeTransfer(manager(), {
+        leaseId: lease.id,
+        toUnitId: to.id,
+        transferDate: d('2026-08-16'),
+      })
+      if (!result.ok) throw new Error('unreachable')
+
+      // Both halves name the invoice. A lump sum with no invoice behind it
+      // would make `leaseLedger` report a discrepancy equal to the arrears.
+      const entries = await prisma.ledgerEntry.findMany({
+        where: { invoiceId: june.id, type: 'adjustment' },
+        orderBy: { amountCents: 'asc' },
+      })
+      expect(entries).toHaveLength(2)
+      expect(entries[0]).toMatchObject({ leaseId: lease.id, amountCents: -6_000 })
+      expect(entries[1]).toMatchObject({ leaseId: result.newLeaseId, amountCents: 6_000 })
+      expect(entries.every((entry) => entry.invoiceId === june.id)).toBe(true)
+    })
+
+    it('records the move per invoice, so “which lease was this raised against” stays answerable', async () => {
+      const { lease, to, june } = await behindTenant()
+
+      const result = await completeTransfer(manager(), {
+        leaseId: lease.id,
+        toUnitId: to.id,
+        transferDate: d('2026-08-16'),
+      })
+      if (!result.ok) throw new Error('unreachable')
+
+      const entry = await prisma.auditLog.findFirstOrThrow({
+        where: { action: 'invoice.lease_reassigned', entityId: june.id },
+        orderBy: { occurredAt: 'desc' },
+      })
+      // `context` is merged into `after` by `recordAudit`.
+      expect(entry.after).toMatchObject({ fromLeaseId: lease.id, toLeaseId: result.newLeaseId })
+    })
+
+    it('carries the standing, the timeline pin and the link the ladder reads', async () => {
+      const { lease, to } = await behindTenant()
+      const timeline = await prisma.delinquencyTimeline.findFirst({ where: { facilityId } })
+      if (timeline) {
+        await prisma.lease.update({
+          where: { id: lease.id },
+          data: { delinquencyTimelineId: timeline.id },
+        })
+      }
+
+      const result = await completeTransfer(manager(), {
+        leaseId: lease.id,
+        toUnitId: to.id,
+        transferDate: d('2026-08-16'),
+      })
+      if (!result.ok) throw new Error('unreachable')
+
+      const created = await prisma.lease.findUniqueOrThrow({ where: { id: result.newLeaseId } })
+      // Not `active`: three unpaid invoices came with them, and a lease that
+      // read current beside its own arrears is the defect this row closes.
+      expect(created.status).toBe('delinquent')
+      expect(created.transferredFromLeaseId).toBe(lease.id)
+      if (timeline) expect(created.delinquencyTimelineId).toBe(timeline.id)
+    })
+
+    it('leaves a lease that owes nothing exactly as it was', async () => {
+      const from = await makeUnit(smallTypeId)
+      const to = await makeUnit(largeTypeId)
+      const lease = await makeLease(from.id)
+
+      const result = await completeTransfer(manager(), {
+        leaseId: lease.id,
+        toUnitId: to.id,
+        transferDate: d('2026-08-16'),
+      })
+      if (!result.ok) throw new Error('unreachable')
+
+      expect(
+        await prisma.ledgerEntry.count({ where: { leaseId: result.newLeaseId, type: 'adjustment' } }),
+      ).toBe(0)
+      expect((await prisma.lease.findUniqueOrThrow({ where: { id: result.newLeaseId } })).status).toBe(
+        'active',
+      )
     })
   })
 

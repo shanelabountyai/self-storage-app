@@ -6,6 +6,7 @@ import { daysPastDue, outstandingCents } from '@storage/core/metrics'
 import { formatInvoiceNumber, lateFeeAmount, stepsDue, type LateFeeStep } from '@storage/core/billing'
 import { recordAudit } from '@storage/core/audit'
 import { effectsByLease } from '@/lib/admin/holds'
+import { allChainIds, leaseChainIds } from '@/lib/billing/transfer-chain'
 import { leasesWithSettlingPayment } from './allocation'
 import { nextInvoiceNumber } from '@/lib/billing/numbering'
 import { checkMonetaryAuthority } from '@/lib/rbac/authorize'
@@ -94,6 +95,29 @@ export async function assessLateFees(
   // B-103. A bank debit that has been accepted but has not settled yet.
   const settling = await leasesWithSettlingPayment(facilityId)
 
+  // B-138. Which ladder steps have already been charged is read back from the
+  // lease's own fee invoices — and a PAID one does not move through a transfer,
+  // because it is settled history belonging where it was raised. D-86 moves the
+  // arrears, so a transferred tenant arrives with the full `age` and, without
+  // this, no record of the steps already charged: the ladder would charge step
+  // 1 through N a second time, on the new lease, for the same delinquency.
+  const chains = await leaseChainIds(leases.map((lease) => lease.id))
+  const ownIds = new Set(leases.map((lease) => lease.id))
+  const ancestorIds = allChainIds(chains).filter((id) => !ownIds.has(id))
+  const ancestorFeeLines = ancestorIds.length
+    ? await prisma.invoice.findMany({
+        where: { leaseId: { in: ancestorIds }, kind: 'fee' },
+        select: { leaseId: true, kind: true, lineItems: { select: { description: true } } },
+      })
+    : []
+  const ancestorFeesByLease = new Map<string, typeof ancestorFeeLines>()
+  for (const invoice of ancestorFeeLines) {
+    ancestorFeesByLease.set(invoice.leaseId, [
+      ...(ancestorFeesByLease.get(invoice.leaseId) ?? []),
+      invoice,
+    ])
+  }
+
   for (const lease of leases) {
     // A hold declaring `halt_late_fees` stops assessment outright — a tenant on
     // a payment plan, in a billing dispute, or under an automatic stay does not
@@ -125,7 +149,10 @@ export async function assessLateFees(
     if (overdue <= 0) continue
 
     const age = daysPastDue(rentInvoices, businessDate)
-    const alreadyCharged = chargedSteps(lease.invoices)
+    const alreadyCharged = chargedSteps([
+      ...lease.invoices,
+      ...(chains.get(lease.id) ?? []).flatMap((id) => ancestorFeesByLease.get(id) ?? []),
+    ])
     const due = stepsDue(age, steps, alreadyCharged)
     if (due.length === 0) continue
 

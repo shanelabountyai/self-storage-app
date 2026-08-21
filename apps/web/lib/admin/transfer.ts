@@ -148,6 +148,7 @@ export const TRANSFER_LEASE_SELECT = {
     acquisitionSource: true,
     autopayEnabled: true,
     paidThroughDate: true,
+    delinquencyTimelineId: true,
     facility: {
       select: { name: true, billingPolicy: true, timezone: true, prorateOnMoveOut: true },
     },
@@ -334,7 +335,7 @@ export async function completeTransfer(
   const localToday = businessDateFor(input.transferDate, lease.facility.timezone)
   const fromUnitId = lease.unitId
 
-  const newLeaseId = await prisma.$transaction(async (tx) => {
+  const committed = await prisma.$transaction(async (tx) => {
     // ── Close the old lease ──────────────────────────────────────────────
     //
     // `status: 'ended'` with `moveOutReason: 'transfer'`, which is what keeps
@@ -381,7 +382,19 @@ export async function completeTransfer(
         facilityId: lease.facilityId,
         tenantId: lease.tenantId,
         unitId: input.toUnitId,
-        status: 'active',
+        // B-138. Not hardcoded `active`: the tenant's standing is a fact about
+        // THEM, and the arrears move with them below. A lease that opened
+        // `active` beside three unpaid invoices would read as current on the
+        // tenant list, the dashboard tile and the AR screen while the ladder
+        // ran on it. `pending` is the one status that does not carry — a
+        // transfer completes a move, so the new lease is occupied.
+        status: lease.status === 'pending' ? 'active' : lease.status,
+        // US-25's pin. Carried for the same reason the step history is read
+        // through the chain: an episode that started under timeline v3 stays
+        // governed by v3, and re-pinning at whatever is current today would
+        // change the rules mid-pipeline.
+        transferredFromLeaseId: lease.id,
+        delinquencyTimelineId: lease.delinquencyTimelineId,
         startDate: input.transferDate,
         billingDay: lease.billingDay,
         monthlyRateCents: lease.monthlyRateCents,
@@ -491,6 +504,96 @@ export async function completeTransfer(
       })
     }
 
+    // ── Carry the arrears (B-138, D-86) ──────────────────────────────────
+    //
+    // The transfer ends the old lease, so before this the delinquency engine
+    // halted it as `moved_out` while the new lease had no invoices and 0 days
+    // past due. **Collections stopped entirely on a live tenant who owed money
+    // and had never left the property**, and asking for a swap was a way to age
+    // out of the ladder.
+    //
+    // D-86 (owner, Option A): the unpaid invoices are re-pointed at the new
+    // lease. That is what makes `daysPastDue` keep anchoring to the OLDEST
+    // unpaid invoice's original due date across the boundary (D-25) with every
+    // existing reader — ledger, aging, ladder, statements, notices — unchanged.
+    // A partially paid invoice moves too, and has to: allocation is oldest
+    // first, so the part-paid one IS the anchor, and leaving it behind would
+    // reset the clock to the next invoice's due date.
+    //
+    // `open` and `partially_paid` are the same two statuses `leaseLedger` calls
+    // outstanding, so the ledger screen and this cannot disagree about what
+    // moves. `uncollectible` and `void` deliberately stay: one has been written
+    // off and the other never existed, and carrying either would resurrect a
+    // claim somebody already closed.
+    const outstanding = (
+      await tx.invoice.findMany({
+        where: { leaseId: lease.id, status: { in: ['open', 'partially_paid'] } },
+        select: { id: true, number: true, totalCents: true, amountPaidCents: true, dueDate: true },
+        orderBy: { dueDate: 'asc' },
+      })
+    ).filter((invoice) => invoice.totalCents > invoice.amountPaidCents)
+
+    let carriedArrearsCents = 0
+    for (const invoice of outstanding) {
+      const owed = invoice.totalCents - invoice.amountPaidCents
+      carriedArrearsCents += owed
+
+      await tx.invoice.update({ where: { id: invoice.id }, data: { leaseId: created.id } })
+
+      // The append-only record D-86 asked for, and the reason it is a PAIR of
+      // ledger entries per invoice rather than one lump sum: both carry the
+      // invoice id, so `leaseLedger`'s reconciliation counts them against that
+      // invoice instead of as an uninvoiced charge — a lump sum with no invoice
+      // behind it would make every transferred lease report a discrepancy equal
+      // to the arrears. Nothing already written is edited: the original charge
+      // stays on the old lease, where it was raised.
+      await tx.ledgerEntry.create({
+        data: {
+          facilityId: lease.facilityId,
+          leaseId: lease.id,
+          type: 'adjustment',
+          amountCents: -owed,
+          description: `Balance moved to unit ${preview.toUnitNumber} — invoice ${invoice.number}`,
+          occurredAt: input.transferDate,
+          invoiceId: invoice.id,
+        },
+      })
+      await tx.ledgerEntry.create({
+        data: {
+          facilityId: lease.facilityId,
+          leaseId: created.id,
+          type: 'adjustment',
+          amountCents: owed,
+          description: `Balance carried from unit ${preview.fromUnitNumber} — invoice ${invoice.number}`,
+          occurredAt: input.transferDate,
+          invoiceId: invoice.id,
+        },
+      })
+
+      // Per invoice, not once for the move: "which lease was this raised
+      // against" has to be answerable from the invoice, and an entry whose
+      // `entityId` is the invoice is the only shape that answers it without a
+      // JSON scan.
+      await recordAudit(
+        {
+          actor: toAuditActor(actor),
+          facilityId: lease.facilityId,
+          action: 'invoice.lease_reassigned',
+          entityType: 'Invoice',
+          entityId: invoice.id,
+          context: {
+            fromLeaseId: lease.id,
+            toLeaseId: created.id,
+            fromUnitNumber: preview.fromUnitNumber,
+            toUnitNumber: preview.toUnitNumber,
+            outstandingCents: owed,
+            dueDate: invoice.dueDate.toISOString().slice(0, 10),
+          },
+        },
+        tx,
+      )
+    }
+
     // ── Both units, atomically ───────────────────────────────────────────
     //
     // Derived, never set: the leases above are what make one unit free and
@@ -534,13 +637,16 @@ export async function completeTransfer(
           transferFeeCents: preview.transferFeeCents,
           transferDate: localToday.toISOString().slice(0, 10),
           carriedHoldTypes: carried.map((hold) => hold.type),
+          carriedArrearsCents,
+          carriedInvoiceNumbers: outstanding.map((invoice) => invoice.number),
         },
       },
       tx,
     )
 
-    return created.id
+    return { newLeaseId: created.id, carriedArrearsCents }
   })
+  const { newLeaseId, carriedArrearsCents } = committed
 
   // Outside the transaction, and for the same reason move-out revokes access
   // outside its own: the gate adapter is a box on a domestic broadband line,
@@ -568,6 +674,10 @@ export async function completeTransfer(
       newRateCents: preview.newRateCents,
       transferDate: input.transferDate.toISOString().slice(0, 10),
       totalDueTodayCents: preview.totalDueTodayCents,
+      // B-138. The tenant's arrears came with them, and anything reading this
+      // event to build a statement or a report needs to know that rather than
+      // inferring it from two leases whose totals moved.
+      carriedArrearsCents,
     },
   })
 

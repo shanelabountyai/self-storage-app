@@ -1196,6 +1196,19 @@ model Lease {
   /// move-in would freeze a timeline a tenant may never encounter and would
   /// make a later configuration change apply to nobody.
   delinquencyTimelineId  String?
+  /// The lease this one was transferred out of (B-138, US-14 transfer).
+  ///
+  /// D-86 moved the unpaid INVOICES onto the new lease so that the balance, the
+  /// aging buckets and `daysPastDue` all keep working with no reader changed.
+  /// What deliberately does NOT move is the ladder's own evidence: a
+  /// `DelinquencyStepRun` says "on 3 August the day-30 notice went out for the
+  /// lease on unit 214", and re-pointing that row at unit 220 would make a
+  /// record of a served notice name a unit it never named. So the rows stay and
+  /// the two readers that need the ladder's POSITION — the timeline engine and
+  /// the late-fee ladder — read it along this link instead. That is D-86's
+  /// "Option A with B's audit trail bolted on", applied to the one kind of state
+  /// where rewriting history is the wrong answer.
+  transferredFromLeaseId String?
   /// PRD 04 US-12 AC2's structured discount instruction, as a relation. Billing
   /// reads the redemption's snapshotted schedule when generating invoices.
   promoRedemption        PromoRedemption?
@@ -1249,6 +1262,8 @@ model Lease {
   payLinks               PayLink[]
   holds                  LeaseHold[]
   delinquencyTimeline    DelinquencyTimeline?     @relation(fields: [delinquencyTimelineId], references: [id], onDelete: SetNull)
+  transferredFrom        Lease?                   @relation("LeaseTransfer", fields: [transferredFromLeaseId], references: [id], onDelete: Restrict)
+  transferredTo          Lease[]                  @relation("LeaseTransfer")
   delinquencyStepRuns    DelinquencyStepRun[]
   overlocks              UnitOverlock[]
   auctionCases           AuctionCase[]
@@ -1262,6 +1277,7 @@ model Lease {
   /// against this model, so an index in one and not the other is drift and CI
   /// fails on it by design.
   @@index([facilityId, startDate, acquisitionChannel])
+  @@index([transferredFromLeaseId])
   @@map("lease")
 }
 

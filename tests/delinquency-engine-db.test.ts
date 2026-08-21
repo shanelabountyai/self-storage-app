@@ -132,8 +132,10 @@ describeDb('the delinquency engine', () => {
   beforeEach(async () => {
     await prisma.delinquencyStepRun.deleteMany({ where: { facilityId } })
     await prisma.task.deleteMany({ where: { facilityId } })
-    await prisma.ledgerEntry.deleteMany({ where: { leaseId } })
-    await prisma.invoice.deleteMany({ where: { leaseId } })
+    await prisma.ledgerEntry.deleteMany({ where: { facilityId } })
+    await prisma.invoice.deleteMany({ where: { facilityId } })
+    // B-138's cases open a second lease pointing at this one.
+    await prisma.lease.deleteMany({ where: { facilityId, transferredFromLeaseId: { not: null } } })
     await prisma.accessGrant.deleteMany({ where: { facilityId } })
     await prisma.lease.update({
       where: { id: leaseId },
@@ -264,6 +266,115 @@ describeDb('the delinquency engine', () => {
       orderBy: { occurredAt: 'desc' },
     })
     expect((event.payload as Record<string, unknown>).to).toBe('Pre-lien')
+  })
+
+  // B-138 / D-86. The arrears now move to the lease a transfer opens, so the
+  // tenant arrives here with the full `daysPastDue` and no step runs of their
+  // own. Without the chain read that restarts the whole notice sequence.
+  describe('across a transfer (B-138)', () => {
+    /// The shape `completeTransfer` leaves behind: the old lease ended, the new
+    /// one carrying the link, the standing and the invoices. Built by hand
+    /// rather than by calling the transfer so this suite tests the ENGINE.
+    let transferCounter = 0
+    async function transferredLease(invoiceId: string) {
+      transferCounter += 1
+      const unit = await prisma.unit.create({
+        data: {
+          facilityId,
+          unitTypeId: (await prisma.unit.findUniqueOrThrow({ where: { id: unitId } })).unitTypeId,
+          number: `E2-${suffix.slice(0, 4)}-${transferCounter}`,
+        },
+      })
+      const created = await prisma.lease.create({
+        data: {
+          facilityId,
+          tenantId,
+          unitId: unit.id,
+          status: 'delinquent',
+          startDate: d('2026-07-16'),
+          billingDay: 1,
+          monthlyRateCents: 12_900,
+          transferredFromLeaseId: leaseId,
+        },
+      })
+      await prisma.lease.update({
+        where: { id: leaseId },
+        data: { status: 'ended', endDate: d('2026-07-16'), moveOutReason: 'transfer' },
+      })
+      await prisma.invoice.update({ where: { id: invoiceId }, data: { leaseId: created.id } })
+      await prisma.ledgerEntry.updateMany({
+        where: { leaseId, invoiceId },
+        data: { leaseId: created.id },
+      })
+      return created
+    }
+
+    it('resumes at the step it was on rather than sending day 1 again', async () => {
+      await saveTimeline(actor(), facilityId, {
+        label: 'Test',
+        qualifyingAmount: 'full_balance',
+        steps: [step(1, 'First notice'), step(30, 'Second notice')],
+      })
+      const invoice = await makeOverdueLease()
+      await runDelinquencyTimeline(facilityId, d('2026-06-05'), noop)
+      expect(await prisma.delinquencyStepRun.count({ where: { leaseId, supersededAt: null } })).toBe(1)
+
+      const created = await transferredLease(invoice.id)
+
+      // Day 30 from a 1 June due date. Day 1 is behind us and already served.
+      const result = await runDelinquencyTimeline(facilityId, d('2026-07-01'), noop)
+      expect(result.stepsExecuted).toBe(1)
+
+      const runs = await prisma.delinquencyStepRun.findMany({
+        where: { leaseId: created.id, supersededAt: null },
+      })
+      expect(runs.map((run) => run.dayOffset)).toEqual([30])
+      // And the evidence stayed where the notice was actually served from.
+      expect(
+        await prisma.delinquencyStepRun.count({ where: { leaseId, dayOffset: 1 } }),
+      ).toBe(1)
+    })
+
+    it('closes the whole episode on cure, including the steps served before the move', async () => {
+      await saveTimeline(actor(), facilityId, {
+        label: 'Test',
+        qualifyingAmount: 'full_balance',
+        steps: [step(1, 'First notice')],
+      })
+      const invoice = await makeOverdueLease()
+      await runDelinquencyTimeline(facilityId, d('2026-06-05'), noop)
+      const created = await transferredLease(invoice.id)
+
+      await prisma.invoice.update({
+        where: { id: invoice.id },
+        data: { amountPaidCents: 12_900, status: 'paid' },
+      })
+      await prisma.ledgerEntry.create({
+        data: {
+          facilityId,
+          leaseId: created.id,
+          invoiceId: invoice.id,
+          type: 'payment',
+          amountCents: -12_900,
+          description: 'Paid',
+          occurredAt: d('2026-07-02'),
+        },
+      })
+
+      // Both leases in the chain are in the same facility scan, so the ended
+      // one also reaches `cured` on its own. This asserts the OUTCOME — no open
+      // step run survives anywhere in the chain — rather than which of the two
+      // closed it, because the new lease's cure must not depend on the old one
+      // happening to cure itself in the same run.
+      const result = await runDelinquencyTimeline(facilityId, d('2026-07-02'), noop)
+      expect(result.cured).toBeGreaterThanOrEqual(1)
+      // Superseded, not deleted, and on the lease it was served from — leaving
+      // it open would resume a cured tenant at day 1 if they fall behind again.
+      expect(
+        await prisma.delinquencyStepRun.count({ where: { facilityId, supersededAt: null } }),
+      ).toBe(0)
+      expect(await prisma.delinquencyStepRun.count({ where: { leaseId } })).toBe(1)
+    })
   })
 
   describe('cure — US-25’s AC', () => {

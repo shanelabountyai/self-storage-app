@@ -139,6 +139,15 @@ const LAST_REVIEWED = '19 August 2026'
 // nowhere — and that is the row that should close this, not a one-off here.
 // `LAST_REVIEWED` is again NOT bumped: the coverage claim was re-checked, the
 // rest of the page was not.
+//
+// Re-verified 2026-08-21, at B-138 (collections survive a transfer). No change,
+// and no page or control changed either: the item moves invoices and ledger
+// entries between two leases and teaches two nightly jobs where to read the
+// ladder's position. What a tenant SEES is different — a transferred lease now
+// shows the balance that came with them — but that is data rendered by screens
+// already in the scan, not a new surface. Recorded rather than skipped because
+// this page's rule is about merges making it stale, and "nothing customer-facing
+// changed" is a claim worth having checked rather than assumed.
 export default function AccessibilityPage() {
   return (
     <ProsePage

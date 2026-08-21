@@ -8,6 +8,7 @@ import { OCCUPYING_LEASE_STATUSES } from '@storage/core/inventory'
 import { effectsByLease } from '@/lib/admin/holds'
 import { activeTimeline } from '@/lib/admin/delinquency-timeline'
 import { createTask } from '@/lib/admin/tasks'
+import { allChainIds, leaseChainIds } from '@/lib/billing/transfer-chain'
 import { restoreAccessIfSettled } from '@/lib/access/delinquency-gate'
 import { transitionGrant } from '@/lib/access/service'
 import { releaseOverlock, requestOverlock } from '@/lib/delinquency/overlock'
@@ -98,13 +99,27 @@ export async function runDelinquencyTimeline(
   // Open episode only. Superseded rows are kept as evidence (US-28) but must
   // not count as executed, or a tenant who cured and fell behind again would
   // resume at day 30 instead of starting over.
+  //
+  // B-138: read along the transfer chain, not just this lease. D-86 moved the
+  // unpaid invoices onto the new lease, so a transferred tenant arrives here
+  // with the full `daysPastDue` — and with no step runs of their own, which
+  // would restart the ladder at day 1 and send the whole sequence of notices
+  // again. The runs stay on the lease they were served against (see
+  // `transfer-chain.ts` for why re-pointing them is the wrong answer); the
+  // ladder's POSITION is read across the chain.
+  const chains = await leaseChainIds(leaseIds)
   const runs = await prisma.delinquencyStepRun.findMany({
-    where: { leaseId: { in: leaseIds }, supersededAt: null },
+    where: { leaseId: { in: allChainIds(chains) }, supersededAt: null },
     select: { leaseId: true, dayOffset: true },
   })
-  const executedByLease = new Map<string, number[]>()
+  const daysByRunLease = new Map<string, number[]>()
   for (const run of runs) {
-    executedByLease.set(run.leaseId, [...(executedByLease.get(run.leaseId) ?? []), run.dayOffset])
+    daysByRunLease.set(run.leaseId, [...(daysByRunLease.get(run.leaseId) ?? []), run.dayOffset])
+  }
+  const executedByLease = new Map<string, number[]>()
+  for (const [leaseId, chain] of chains) {
+    const days = new Set(chain.flatMap((id) => daysByRunLease.get(id) ?? []))
+    if (days.size > 0) executedByLease.set(leaseId, [...days])
   }
 
   // The ledger balance per lease, in one query. `qualifyingAmount` decides what
@@ -141,7 +156,13 @@ export async function runDelinquencyTimeline(
 
     if (!decision.act) {
       if (decision.halt === 'cured' && executedDays.length > 0) {
-        await cure(lease, facilityId, steps, executedDays, recordItem)
+        await cure(
+          { ...lease, chainIds: chains.get(lease.id) ?? [lease.id] },
+          facilityId,
+          steps,
+          executedDays,
+          recordItem,
+        )
         result.cured += 1
       } else if (decision.halt && decision.halt !== 'cured') {
         result.halted += 1
@@ -370,7 +391,7 @@ async function executeStep(input: {
 /// US-25's AC: "Paying the qualifying amount automatically halts the pipeline,
 /// restores gate access, and queues overlock removal."
 async function cure(
-  lease: { id: string; tenantId: string },
+  lease: { id: string; tenantId: string; chainIds: readonly string[] },
   facilityId: string,
   steps: readonly TimelineStep[],
   executedDays: readonly number[],
@@ -385,8 +406,16 @@ async function cure(
   // Open staff tasks from steps that no longer apply. Cancelled rather than
   // completed: nobody did them, and marking them done would put a proof-less
   // "completed" in the history an auction is defended from.
+  // Across the chain (B-138): a step task raised before a transfer is a task
+  // about arrears the tenant has now settled, and leaving it open would have
+  // staff chasing somebody who has paid.
   await prisma.task.updateMany({
-    where: { facilityId, type: 'delinquency_step', entityId: lease.id, status: 'open' },
+    where: {
+      facilityId,
+      type: 'delinquency_step',
+      entityId: { in: [...lease.chainIds] },
+      status: 'open',
+    },
     data: { status: 'cancelled' },
   })
 
@@ -409,8 +438,11 @@ async function cure(
 
   // Superseded, never deleted. These rows are the evidence an auction is
   // defended from; a tenant curing must close the episode, not erase it.
+  // Chain-wide, for the same reason the engine reads it chain-wide: an episode
+  // that began on the lease this one was transferred out of is THIS episode,
+  // and leaving those rows open would resume a cured tenant at day 30.
   await prisma.delinquencyStepRun.updateMany({
-    where: { leaseId: lease.id, supersededAt: null },
+    where: { leaseId: { in: [...lease.chainIds] }, supersededAt: null },
     data: { supersededAt: new Date() },
   })
 

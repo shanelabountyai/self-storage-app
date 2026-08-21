@@ -126,6 +126,10 @@ describeDb('late fees', () => {
     await prisma.ledgerEntry.deleteMany({ where: { facilityId } })
     await prisma.invoiceLineItem.deleteMany({ where: { invoice: { facilityId } } })
     await prisma.invoice.deleteMany({ where: { facilityId } })
+    // B-138's case opens a second lease pointing at this one, under RESTRICT —
+    // after the invoices, which reference it under RESTRICT too.
+    await prisma.lease.deleteMany({ where: { facilityId, transferredFromLeaseId: { not: null } } })
+    await prisma.lease.updateMany({ where: { facilityId }, data: { status: 'active' } })
     await prisma.domainEvent.deleteMany({ where: { facilityId } })
     await prisma.lateFeeRule.deleteMany({ where: { facilityId } })
     await prisma.invoiceCounter.deleteMany({ where: { facilityId } })
@@ -190,6 +194,47 @@ describeDb('late fees', () => {
       await assessLateFees(facilityId, d('2026-09-08'), recordItem)
 
       expect(await prisma.invoice.count({ where: { leaseId, kind: 'fee' } })).toBe(1)
+    })
+
+    // B-138 / D-86. The arrears move onto the lease a transfer opens, so the
+    // tenant arrives with the full age. A PAID fee invoice does not move — it is
+    // settled history and belongs where it was raised — so without reading the
+    // ladder's position along the chain, step 1 is charged all over again.
+    it('does not re-charge a step already charged before a transfer', async () => {
+      await seedSteps()
+      const rent = await rentInvoice({ dueDate: d('2026-09-01') })
+      await assessLateFees(facilityId, d('2026-09-06'), recordItem)
+      const first = await prisma.invoice.findMany({ where: { leaseId, kind: 'fee' } })
+      expect(first).toHaveLength(1)
+      // Settled at the counter, so it stays on the old lease when the tenant
+      // moves — which is the whole trap.
+      await prisma.invoice.update({
+        where: { id: first[0].id },
+        data: { amountPaidCents: first[0].totalCents, status: 'paid' },
+      })
+
+      const unit = await prisma.unit.create({
+        data: { facilityId, unitTypeId, number: `LF2-${suffix.slice(0, 4)}` },
+      })
+      const moved = await prisma.lease.create({
+        data: {
+          facilityId,
+          tenantId,
+          unitId: unit.id,
+          status: 'delinquent',
+          startDate: d('2026-09-07'),
+          billingDay: 1,
+          monthlyRateCents: 12_900,
+          transferredFromLeaseId: leaseId,
+        },
+      })
+      await prisma.lease.update({ where: { id: leaseId }, data: { status: 'ended' } })
+      await prisma.invoice.update({ where: { id: rent.id }, data: { leaseId: moved.id } })
+
+      await assessLateFees(facilityId, d('2026-09-08'), recordItem)
+
+      // Nothing new: step 1 was already charged, on the lease they came from.
+      expect(await prisma.invoice.count({ where: { leaseId: moved.id, kind: 'fee' } })).toBe(0)
     })
 
     it('is idempotent on a re-run of the same night', async () => {
