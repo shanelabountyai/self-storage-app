@@ -1,4 +1,5 @@
 import AxeBuilder from '@axe-core/playwright'
+import { ADMIN_SCAN_ROUTES as ADMIN_ROUTES } from '../apps/web/lib/a11y/scan-coverage'
 import { expect, test } from '@playwright/test'
 import { signInAsDemoOwner } from './sign-in'
 
@@ -59,101 +60,7 @@ test.describe('signed in as the demo owner', () => {
     await signInAsDemoOwner(page)
   })
 
-  // B-119 (accessibility review 2026-08-12, test gap 2). "Coverage grew by
-  // accident rather than by contract" — B-115 added Tasks and Delinquency,
-  // B-116 fixed three routes' reflow, and nothing ever stepped back to name
-  // every route admin actually has. This is that list: every STATIC admin
-  // page — one with no `[param]` segment — belongs here, or nobody checks it.
-  //
-  // Left out on purpose, not by accident, and each covered elsewhere:
-  //   - `/admin/[section]` itself is the placeholder catch-all (nav.ts); its
-  //     two live slugs, `/admin/leads` and `/admin/units/ready`, are below.
-  //   - Per-entity dynamic routes — `/admin/tenants/{id}`, its ledger,
-  //     statements, notices and transfer sub-routes, `/admin/leads/{id}`,
-  //     `/admin/auctions/{id}` — need a real demo id, which this list (one
-  //     static string per route) cannot hold without breaking on every
-  //     reseed. Each already has its own axe scan against real demo data in
-  //     its topic file — admin-tenants.spec.ts, admin-pos.spec.ts,
-  //     admin-tasks.spec.ts, admin-reports.spec.ts, admin-billing-runs.spec.ts,
-  //     admin-move-out.spec.ts, portal-move-out.spec.ts, pay-link.spec.ts —
-  //     which is real coverage, not a gap; it is just not THIS list.
-  //     (This claim was an overstatement until B-083: the per-lease notices
-  //     sub-route had no scan in any file. It is in admin-tenants.spec.ts now.
-  //     A comment asserting coverage is exactly as capable of going stale as
-  //     the accessibility statement is, and for the same reason — it describes
-  //     a codebase that keeps moving.)
-  //   - `/mfa` and `/reauth`: PRD 01 US-701 routes that need a session and
-  //     redirect to `/login` without one, so they belong in an
-  //     authenticated list — this one — rather than a11y.spec.ts's public one.
-  const ADMIN_ROUTES = [
-    '/admin',
-    '/admin/units',
-    '/admin/units/types',
-    '/admin/units/ready',
-    '/admin/units/setup',
-    // B-088 part 1. A price-change surface nobody scans is a price-change
-    // surface nobody has checked.
-    '/admin/units/rates',
-    '/admin/tenants',
-    '/admin/tenants/former',
-    '/admin/leads',
-    '/admin/billing',
-    '/admin/delinquency',
-    '/admin/overlocks',
-    '/admin/walkthrough',
-    '/admin/maintenance',
-    '/admin/auctions',
-    '/admin/rate-increases',
-    '/admin/pos',
-    '/admin/pos/drawer',
-    '/admin/pos/merchandise',
-    '/admin/pos/summary',
-    '/admin/tasks',
-    '/admin/access',
-    '/admin/access/queue',
-    '/admin/access/health',
-    '/admin/reports',
-    '/admin/reports/delinquency',
-    '/admin/reports/deliverability',
-    '/admin/reports/deposits',
-    '/admin/reports/funnel',
-    // B-082 part 4. Same contract as the public list: a page not here is a page
-    // nobody checks.
-    // B-084 parts 1 and 3. A page not on this list is a page nobody scans.
-    '/admin/reports/close',
-    // B-088 part 2.
-    '/admin/reports/kpi',
-    '/admin/reports/pack',
-    '/admin/reports/subscriptions',
-    '/admin/reports/promotions',
-    '/admin/reports/indexation',
-    '/admin/reports/duplicate-content',
-    // B-087 part 1.
-    '/admin/reports/structured-data',
-    // B-090 part 1.
-    '/admin/reports/waitlist',
-    '/admin/reports/rent-roll',
-    '/admin/reports/revenue',
-    // B-092. A page not on this list is a page nobody scans — and this one is
-    // reached by an owner reviewing whether staff misused a tenant's account,
-    // which is not a screen to leave unchecked.
-    '/admin/impersonation',
-    '/admin/settings',
-    '/admin/settings/delinquency',
-    '/admin/settings/marketing',
-    // B-128. A page not on this list is a page nobody scans.
-    '/admin/settings/marketing/cities',
-    '/admin/settings/notices',
-    '/admin/settings/org',
-    '/admin/settings/promotions',
-    '/admin/settings/reviews',
-    '/admin/settings/staff',
-    '/admin/settings/suppressions',
-    '/admin/settings/templates',
-    '/admin/dev/keypad',
-    '/mfa',
-    '/reauth',
-  ]
+  // B-139. Moved to `apps/web/lib/a11y/scan-coverage.ts` — see the note there.
 
   for (const route of ADMIN_ROUTES) {
     test(`${route} has no WCAG 2.1 AA violations`, async ({ page }) => {

@@ -1,5 +1,6 @@
 import { ProsePage, Section, metadataFor } from '@/components/site/prose-page'
 import { SITE } from '@/lib/site-config'
+import { customerFacingExceptions } from '@/lib/a11y/scan-coverage'
 
 export const metadata = metadataFor(
   'Accessibility',
@@ -148,6 +149,26 @@ const LAST_REVIEWED = '19 August 2026'
 // already in the scan, not a new surface. Recorded rather than skipped because
 // this page's rule is about merges making it stale, and "nothing customer-facing
 // changed" is a claim worth having checked rather than assumed.
+//
+// Rewritten 2026-08-21 by B-139, which is the item this whole comment block has
+// been predicting. The coverage sentence below is no longer written here: it
+// renders `customerFacingExceptions()` from `lib/a11y/scan-coverage.ts`, where
+// the scan lists the e2e specs loop over also live, and
+// `tests/a11y-scan-coverage.test.ts` fails when a route under `app/` is in
+// neither. The failure this closes was live at the time: `/portal/refer` is
+// linked from the portal nav on every page, was in no scan, and was disclaimed
+// by nothing, so the "exactly one exception" sentence was FALSE in the
+// overstating direction while this comment block sat above it warning about
+// exactly that. Four routes were added to the scan set (`/portal/refer`,
+// `/portal/pay/done`, `/confirm-email`, `/checkout/resume/[token]`'s bad-token
+// state) and the rest are now stated exceptions.
+//
+// `LAST_REVIEWED` is STILL not bumped, and that is the harder call. The date is
+// a claim about the whole page, and the "where we fall short" list — the
+// JavaScript-less hold countdown, the unpaginated staff lists, the two maps —
+// was not re-verified here. The coverage claim is now continuously verified by
+// a test and no longer needs a date; those three still do, and pretending
+// otherwise would be the understating failure this page has also already made.
 export default function AccessibilityPage() {
   return (
     <ProsePage
@@ -203,10 +224,18 @@ export default function AccessibilityPage() {
           &ldquo;that passed&rdquo;.
         </p>
         <p>
-          They do not yet cover everything. As of {LAST_REVIEWED} the checkout&apos;s
-          confirmation screen is outside that run — it only exists after a real payment
-          redirect, and we cannot simulate that from outside the card processor&apos;s own
-          frame. We would rather name the gap than let a general claim cover it.
+          They do not yet cover everything. These are the pages outside that run, and the
+          reason each one is:
+        </p>
+        <ul className="list-disc space-y-1 pl-5">
+          {customerFacingExceptions().map((exception) => (
+            <li key={exception.route}>{exception.reason}</li>
+          ))}
+        </ul>
+        <p>
+          We would rather name each gap than let a general claim cover it. This list is
+          generated from the same file the tests read, so a page that stops being checked
+          appears here rather than quietly disappearing from both.
         </p>
         <p>
           Automated testing is a floor, not a ceiling — it catches roughly a third of real

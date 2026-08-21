@@ -1,4 +1,5 @@
 import AxeBuilder from '@axe-core/playwright'
+import { PORTAL_SCAN_ROUTES as PORTAL_ROUTES } from '../apps/web/lib/a11y/scan-coverage'
 import { expect, test } from '@playwright/test'
 import { signInAsDemoTenant } from './sign-in'
 
@@ -25,27 +26,7 @@ test.describe('signed in as the demo tenant', () => {
     await signInAsDemoTenant(page)
   })
 
-  // B-119 (accessibility review 2026-08-12, test gap 2). Every STATIC portal
-  // page — no `[param]` segment — belongs here, or nobody checks it, the same
-  // contract admin.spec.ts's ADMIN_ROUTES keeps.
-  //
-  // Left out on purpose: `/portal/documents/{id}` and
-  // `/portal/statements/{leaseId}/{period}` need a real document/statement id.
-  // `/portal/pay` needs a real lease id to render its actual content rather
-  // than an empty-state stand-in, and the axe scan a few lines below already
-  // reaches it that way — through a real "Pay now" click — rather than a bare
-  // `goto` with no lease in the URL at all.
-  const PORTAL_ROUTES = [
-    '/portal',
-    '/portal/access',
-    '/portal/contact',
-    '/portal/documents',
-    '/portal/methods',
-    '/portal/move-out',
-    '/portal/notifications',
-    '/portal/protection',
-    '/portal/statements',
-  ]
+  // B-139. Moved to `apps/web/lib/a11y/scan-coverage.ts` — see the note there.
 
   for (const route of PORTAL_ROUTES) {
     test(`${route} has no WCAG 2.1 AA violations`, async ({ page }) => {

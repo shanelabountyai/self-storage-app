@@ -1,75 +1,10 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from '@playwright/test'
+import { PUBLIC_SCAN_ROUTES as PUBLIC_ROUTES } from '../apps/web/lib/a11y/scan-coverage'
 
-// PRD 01 §6.8: "CI includes automated a11y checks (axe) on all key templates."
-// Every public route is listed here — a new page that isn't added is a page
-// nobody checks, so this list is the contract.
-const PUBLIC_ROUTES = [
-  '/',
-  '/storage/search?q=78704',
-  // The three search outcomes render different templates, so each is its own
-  // page as far as axe is concerned. 99501 is Anchorage — a real place with no
-  // facility near it, which is the "nothing nearby" state.
-  '/storage/search?q=99501',
-  '/storage/search?q=zzzzz',
-  // B-082 part 2. The city landing template — a list of facility cards, the
-  // generated intro, and a second copy of the search form, which is the part
-  // most likely to produce a duplicate-id or duplicate-landmark finding.
-  '/storage/tx/austin',
-  // B-089. The per-city/size landing page. Austin's 10×10 is the one that
-  // renders every section this template has that no other page does — the
-  // "what fits" list from the guide catalogue and the sibling-size links to
-  // 5×5 and 10×20 — so a heading orphaned by any of them shows up here.
-  '/storage/tx/austin/size/10x10',
-  // US-103's facility detail template: hours tables, live unit list, and the
-  // map iframe, which is the part axe is most likely to have an opinion about.
-  '/storage/tx/austin/demo-austin-south',
-  // The filtered view is a different template from the unfiltered one — it
-  // renders the "nothing matches those filters" state and the applied controls.
-  '/storage/tx/austin/demo-austin-south?size=small&features=climate&sort=size',
-  // B-122. The promo-code box in its REFUSED state, which is different markup
-  // from the resting one — `aria-invalid`, a described-by error, and red text
-  // on a background nothing else on this page puts it on. The resting state
-  // rides along on the two routes above; this is the one worth naming, because
-  // an error message that fails contrast is an error message nobody reads.
-  '/storage/tx/austin/demo-austin-south?promo=NOT-A-REAL-CODE',
-  '/storage/size-guide',
-  // B-082 part 3. The content hub's two templates. `climate-control` is the
-  // richest guide — MDX prose, a CTA with a filter label, and an FAQ block of
-  // <details> — and `packing-tips` is the same template with the FAQ and the
-  // label absent, which is where a heading is most likely to end up orphaned.
-  '/guides',
-  '/guides/climate-control',
-  '/guides/packing-tips',
-  '/storage/tx/austin/demo-austin-south/reserve?unitType=INVALID',
-  // The token-less and bad-token states of the reservation page are the ones a
-  // crawler or a mistyped link reaches; the live states need a real hold.
-  // B-090 part 1. The waitlist cancel link's not-found state — what a
-  // truncated or already-used link from an email actually lands on, and the
-  // only state of that page a scan can reach without a live entry.
-  '/waitlist/cancel/not-a-real-token',
-  '/reservations?token=not-a-real-token',
-  '/checkout?token=not-a-real-session',
-  '/faq',
-  '/about',
-  '/contact',
-  '/terms',
-  '/privacy',
-  '/accessibility',
-  '/messaging-policy',
-  // B-119 (accessibility review 2026-08-12, test gap 1). Reachable by anyone
-  // signed out — a bounced staff or tenant visit, a support email's link, a
-  // mistyped one — and none of the five had ever been scanned. `/mfa` and
-  // `/reauth` are NOT here: both require a session and just redirect to
-  // `/login` without one, so they are scanned signed in, in `admin.spec.ts`,
-  // alongside every other route that needs an actor.
-  '/login',
-  '/forgot-password',
-  // No token, same as the reservation/checkout bad-token states above — the
-  // state an expired or already-used email link actually lands on.
-  '/reset-password',
-  '/unsubscribe/not-a-real-token',
-]
+// B-139. The list itself lives in `apps/web/lib/a11y/scan-coverage.ts`, beside
+// the exception list the public accessibility page renders, so the two cannot
+// disagree. A route in neither is a failing unit test.
 
 // B-093. Everything below is a check axe structurally cannot make: it scans one
 // freshly-loaded page at one width and has no opinion on reflow, zoom, text
