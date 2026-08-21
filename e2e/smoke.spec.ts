@@ -1294,6 +1294,21 @@ test('the payment step itemises before it charges and discloses autopay', async 
     .click()
   await assertNoAxeViolations(page) // step 1: Your details
 
+  // B-156 / PRD 02 §5.5 FR-25(1). The promo box (B-122) lives in a collapsed
+  // <details> this walk never opened, so its refused state — aria-invalid,
+  // a described-by error, red text on a background nothing else on this page
+  // uses — had never been scanned at all. `PromoCodeStep` renders on every
+  // step except payment/provisioned, so step 1 already has it.
+  await page.locator('summary', { hasText: 'Have a promo code?' }).click()
+  // `exact`, for the same reason the Payment heading assertion below needs
+  // it: the form's own aria-label is "Add a promo code", which contains
+  // "Promo code" as a case-insensitive substring, so the unqualified name
+  // resolves to both the form and the input and violates strict mode.
+  await page.getByLabel('Promo code', { exact: true }).fill('NOT-A-REAL-CODE')
+  await page.getByRole('button', { name: 'Apply code' }).click()
+  await expect(page.getByRole('alert')).toBeVisible()
+  await assertNoAxeViolations(page) // step 1, promo box open and refused
+
   await page.getByLabel('First name').fill('Ada')
   await page.getByLabel('Last name').fill('Renter')
   await page.getByLabel('Email', { exact: true }).fill(`e2e-pay-${Date.now()}@demo.example.com`)

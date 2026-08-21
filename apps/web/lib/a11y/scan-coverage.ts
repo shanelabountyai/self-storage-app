@@ -222,6 +222,12 @@ export const SCANNED_BY_OWN_SPEC = [
   { route: '/admin/tenants/[tenantId]/ledger/[leaseId]', spec: 'e2e/admin-tenants.spec.ts' },
   { route: '/admin/tenants/[tenantId]/notices/[leaseId]', spec: 'e2e/admin-tenants.spec.ts' },
   { route: '/admin/tenants/[tenantId]/move-out', spec: 'e2e/admin-move-out.spec.ts' },
+  // B-156 / PRD 02 §5.5 FR-25(2). Was in `SCAN_EXCEPTIONS` claiming it "needs
+  // a live tenant and an available unit" — the same requirement the move-out
+  // row above has always met by reaching it through a real click-through
+  // rather than a bare `goto`. The reviewers named this one specifically as
+  // "in no scan at all"; it no longer is.
+  { route: '/admin/tenants/[tenantId]/transfer', spec: 'e2e/admin-transfer.spec.ts' },
 ] as const
 
 /// Who the page is for. The public statement lists the first two and not
@@ -291,11 +297,6 @@ export const SCAN_EXCEPTIONS: readonly ScanException[] = [
     route: '/admin/leads/[leadId]',
     audience: 'admin',
     reason: 'a staff-only lead record, which needs a live lead',
-  },
-  {
-    route: '/admin/tenants/[tenantId]/transfer',
-    audience: 'admin',
-    reason: 'the staff-only transfer wizard, which needs a live tenant and an available unit',
   },
   {
     route: '/admin/tenants/[tenantId]/ledger/[leaseId]/statements',

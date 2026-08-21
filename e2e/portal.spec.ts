@@ -2,6 +2,7 @@ import AxeBuilder from '@axe-core/playwright'
 import { PORTAL_SCAN_ROUTES as PORTAL_ROUTES } from '../apps/web/lib/a11y/scan-coverage'
 import { expect, test } from '@playwright/test'
 import { signInAsDemoTenant } from './sign-in'
+import { expectAnnounced, expectPreexisting } from './a11y-helpers'
 
 // PRD 01 §4.7 US-701/US-702, §6.8.1. Mirrors e2e/admin.spec.ts's split: an
 // unauthenticated gating check, then a real session against the demo tenant
@@ -198,6 +199,22 @@ test.describe('signed in as the demo tenant', () => {
     // PRD 02 US-13: the address of record is a history, because "which
     // address did the notice go to" has to be answerable from records.
     await page.goto('/portal/contact')
+
+    // B-156 / PRD 02 §5.5 FR-25(3). Captured and checked BEFORE the submit —
+    // the cheapest catch for "a control that does nothing silently": this
+    // region must already be attached and empty, not fetched fresh after the
+    // click, or an element unmounted-and-remounted-already-populated would
+    // pass just as wrongly as a truly silent control.
+    //
+    // Scoped to the form that saves, not to the first status region on the
+    // page. B-111 stopped `AdminForm` hiding its live region while empty
+    // (`display:none` had been taking it out of the accessibility tree until
+    // the moment it had text, which is the failure the region exists to
+    // avoid), so this screen now correctly exposes three of them and `.first()`
+    // is whichever comes first in the DOM rather than whichever just spoke.
+    const status = page.getByRole('form', { name: 'Mailing address' }).getByRole('status')
+    await expectPreexisting(status)
+
     // Unique per run: re-saving the same address is correctly a no-op, so a
     // fixed value passes once and then reports "already your address".
     await page.getByLabel('Street address').fill(`${Date.now() % 100000} Evidence Lane`)
@@ -206,15 +223,7 @@ test.describe('signed in as the demo tenant', () => {
     await page.getByLabel('ZIP code').fill('78704')
     await page.getByRole('button', { name: 'Save address' }).click()
 
-    // Scoped to the form that saved, not to the first status region on the
-    // page. B-111 stopped `AdminForm` hiding its live region while empty
-    // (`display:none` had been taking it out of the accessibility tree until
-    // the moment it had text, which is the failure the region exists to
-    // avoid), so this screen now correctly exposes three of them and `.first()`
-    // is whichever comes first in the DOM rather than whichever just spoke.
-    await expect(
-      page.getByRole('form', { name: 'Mailing address' }).getByRole('status'),
-    ).toContainText('address is updated')
+    await expectAnnounced(status, /address is updated/)
     await expect(page.getByText('Previous addresses')).toBeVisible()
   })
 
