@@ -5246,7 +5246,7 @@ The card's `href` has always pointed at `/admin/tenants/{tenantId}`, so the fix 
 
 ## B-144 — A promotion can carry a minimum stay, and say so
 
-`PENDING`
+`e3aadcb`
 
 **What it built.** `Promotion.minStayMonths` shipped with B-070 and had, at the start of this item, **zero references outside `schema.prisma`** — re-verified by repo-wide grep before anything was touched. Nothing could set it and nothing read it, so "first month free with a six-month minimum" could not be expressed at all: the operator gave the month away unconditionally or did not run the promotion. This is the row that gives it a control; the recapture is B-145.
 
