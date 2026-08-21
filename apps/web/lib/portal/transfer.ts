@@ -2,6 +2,7 @@ import { prisma } from '@storage/db'
 import { OCCUPYING_LEASE_STATUSES, TRANSFER_HOLD_SOURCE } from '@storage/core/inventory'
 import { emitEvent } from '@storage/core/events'
 import {
+  heldRateFor,
   previewTransferFor,
   transferHoldFor,
   TRANSFER_LEASE_SELECT,
@@ -44,7 +45,7 @@ export type PortalTransferLease = {
   unitTypeName: string
   monthlyRateCents: number
   /// Set when this lease already has a live, uncompleted request.
-  pending: { unitNumber: string; transferDate: Date } | null
+  pending: { unitNumber: string; transferDate: Date; quotedRateCents: number } | null
 }
 
 export type PortalTransferOption = {
@@ -88,7 +89,12 @@ export async function tenantTransferLeases(tenantId: string): Promise<PortalTran
       expiresAt: { gt: new Date() },
       facilityId: { in: leases.map((lease) => lease.facilityId) },
     },
-    select: { facilityId: true, moveInDate: true, unit: { select: { number: true } } },
+    select: {
+      facilityId: true,
+      moveInDate: true,
+      quotedRateCents: true,
+      unit: { select: { number: true } },
+    },
   })
   const holdByFacility = new Map(holds.map((hold) => [hold.facilityId, hold]))
 
@@ -104,7 +110,11 @@ export async function tenantTransferLeases(tenantId: string): Promise<PortalTran
       monthlyRateCents: lease.monthlyRateCents,
       pending:
         hold?.unit && hold.moveInDate
-          ? { unitNumber: hold.unit.number, transferDate: hold.moveInDate }
+          ? {
+              unitNumber: hold.unit.number,
+              transferDate: hold.moveInDate,
+              quotedRateCents: hold.quotedRateCents,
+            }
           : null,
     }
   })
@@ -154,7 +164,9 @@ export async function transferOptionsFor(
   }
 
   return units.flatMap((unit) => {
-    const rateCents = rateByType.get(unit.unitTypeId)
+    // Their own held unit keeps the rate they were quoted (D-84), so the list
+    // never shows a figure the settlement will not honour.
+    const rateCents = heldRateFor(held, unit.id) ?? rateByType.get(unit.unitTypeId)
     // A unit type with no published rate is not offered at all rather than
     // shown with a blank price: the staff screen can fall back to a phone
     // call, a self-service screen cannot.

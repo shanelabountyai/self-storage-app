@@ -5031,3 +5031,27 @@ Full e2e against a production build, **run twice back to back with no reseed**: 
 **No accessibility statement change, and this was checked rather than assumed.** B-135 ships nothing a customer opens in a browser — the only customer-facing surface is an SMS reply — so the page's coverage claim is untouched. Worth stating explicitly because the rule that page is under is about *merges* making it stale, not edits.
 
 **Left behind.** **The unmatched-number case raises no task** (above), which is a real gap and not a rounding error: a prospect texting "do you have a 10x20?" is a lead, and the event records it where nothing reads it. Giving it a home means either a per-facility SMS number or a facility-less lead queue, and both are bigger than this row. **No `To`-based routing** for the same reason. **Nothing marks the tenant's own record** — a staffer looking at a tenant profile does not see that they texted; the task is the only surface, which is D-78's point but is the first thing to revisit if volume argues for the inbox.
+
+---
+
+## B-136 — A transfer quote that nothing honoured
+
+`PENDING`
+
+**What it built.** B-090 part 2 shipped a portal transfer that quotes the tenant a rate, holds the unit, and writes the figure onto the hold as `quotedRateCents` — and then `completeTransfer` re-read the current street rate when staff committed. A rate rise between the ask and the completion charged the tenant something other than the number they agreed to, silently, while the number they agreed to sat on the row. `previewTransferFor` now honours the hold's quote when the hold is on the unit being previewed, and everything downstream inherits it: the staff preview, the tenant preview, the ledger charge, and the new lease's `monthlyRateCents`.
+
+**Fixed in the one place both callers route through.** `previewTransferFor` is the shared arithmetic B-090 part 2 deliberately split out so the tenant's figure and staff's figure could not diverge, and it is also what `completeTransfer` re-runs before posting. One `??` there covers the staff wizard, the portal, and the commit. Patching `completeTransfer` alone would have left the two previews disagreeing with what posts.
+
+**Flat, in both directions, and that is the decision (D-84).** A street rate that *falls* between the ask and the completion still settles at the quote. `min(quoted, street)` was considered and refused: a `CheckoutSession` and a prospect's `Reservation` have both always locked their quote flat, and giving a transfer a floor nothing else has would make it the one pricing rule in the codebase nobody could predict from the others.
+
+**The window is the hold's own expiry, not a second clock.** `transferHoldFor` already filters on `expiresAt`, so an expired hold is no hold and the rate re-quotes with no new state — which reuses D-7/B-126's answer (anchored to the move-in date, plus `reservationHoldGraceDays`) rather than competing with it. A tenant who wants a different date cancels and re-asks, and is re-quoted, because `requestTransfer` refuses a second live request.
+
+**A staff-initiated transfer is unchanged.** No hold, so no quote, so it re-reads the street rate — correct for it, because nobody was told a number. The second test exists only to fail if that ever stops being true.
+
+**Both screens say the figure is locked, rather than only applying it.** The staff wizard's "the tenant asked for this" note now names the quoted rate and says it is what the settlement uses while the hold lives; the tenant's pending-request page names it as "the rate we quoted you, held for this request". A settlement quietly below street rate reads to staff as a bug, and a rate the tenant was never shown again is a promise they cannot check. Both unit lists (`transferTargets`, `transferOptionsFor`) price the held unit at the quote for the same reason — a dropdown saying $260 above a settlement saying $200 is worse than either number alone.
+
+**Test verification.** Unit suite **3,427 passing, 8 skipped of 3,435** — +2 on B-135's 3,425. The lock test was verified to FAIL with the fix removed and the no-hold test to pass either way, so the pair actually separates the behaviours. Typecheck clean across app, `tests/` and `e2e/`; schema drift clean (no migration — `quotedRateCents` already existed).
+
+**No accessibility statement change.** The only customer-facing edit is one sentence of prose on `/portal/transfer`, a page B-090b already added to the axe sweep (`e2e/portal-transfer.spec.ts`). No new page, no new control, so the coverage claim naming exactly one exception stays true.
+
+**Left behind.** **The lock is invisible in the audit trail** — `lease.transferred` records `newRateCents` but not that it came from a quote rather than today's street rate, so a later reconciliation cannot tell a locked settlement from a coincidence. **Nothing alerts staff when the two diverge**: an operator who raises rates does not learn that three live holds are still settling at the old figure. Both are small and neither has bitten; the first is one audit context key when something needs it.

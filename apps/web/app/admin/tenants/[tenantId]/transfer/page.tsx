@@ -86,7 +86,9 @@ export default async function TransferPage({
           {new Intl.DateTimeFormat('en-US', { month: 'long', day: 'numeric', year: 'numeric' }).format(
             requested.transferDate,
           )}
-          , and that unit is held for them until you complete or cancel it. Nothing has moved yet —
+          , and that unit is held for them until you complete or cancel it. They were quoted{' '}
+          {formatCents(requested.quotedRateCents)}/mo, and that is the rate this settles at while the
+          hold lives — not today&apos;s street rate, if it has moved since. Nothing has moved yet —
           check the old unit is actually empty before you confirm.
         </p>
       )}

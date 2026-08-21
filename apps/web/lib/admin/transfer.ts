@@ -93,10 +93,17 @@ export const TRANSFER_PROBLEM_COPY: Record<TransferProblem, string> = {
 /// as "someone got there first" — blocking the very transfer it exists to set
 /// up. Both the availability check and the target list consult this, so the
 /// two cannot disagree about which unit is theirs.
+export type TransferHold = {
+  id: string
+  unitId: string | null
+  moveInDate: Date | null
+  quotedRateCents: number
+}
+
 export async function transferHoldFor(
   tenantId: string,
   facilityId: string,
-): Promise<{ id: string; unitId: string | null; moveInDate: Date | null } | null> {
+): Promise<TransferHold | null> {
   return prisma.reservation.findFirst({
     where: {
       tenantId,
@@ -105,8 +112,22 @@ export async function transferHoldFor(
       status: 'held',
       expiresAt: { gt: new Date() },
     },
-    select: { id: true, unitId: true, moveInDate: true },
+    select: { id: true, unitId: true, moveInDate: true, quotedRateCents: true },
   })
+}
+
+/// The rate a live hold locks in, if it is a hold on THIS unit.
+///
+/// B-136 / D-84. `quotedRateCents` is the figure the tenant was shown and
+/// agreed to when they asked. Honouring it for as long as the hold lives is
+/// the same discipline a checkout session and a prospect's reservation both
+/// already keep — a street rate that moves between the ask and staff getting
+/// to the request must not silently change the number, in either direction.
+/// `transferHoldFor` filters on `expiresAt`, so an expired hold is no hold
+/// and the current rate applies again. A staff-initiated transfer has no hold
+/// and is unchanged: it re-reads the street rate, which is right for it.
+export function heldRateFor(hold: TransferHold | null, unitId: string): number | null {
+  return hold?.unitId === unitId ? hold.quotedRateCents : null
 }
 
 /// The lease facts a transfer preview needs. Exported so the tenant's own
@@ -213,14 +234,16 @@ export async function previewTransferFor(
   // "anything but available" — a stale hold on a unit that has since been
   // leased or taken out of service must still fail, which is what it would do
   // if this trusted the hold instead of the status.
+  const held = await transferHoldFor(lease.tenantId, lease.facilityId)
   if (target.status !== 'available') {
-    const held = await transferHoldFor(lease.tenantId, lease.facilityId)
     if (!(target.status === 'reserved' && held?.unitId === target.id)) {
       return { ok: false, problem: 'unit_not_available' }
     }
   }
 
-  const newRateCents = await currentRateFor(lease.facilityId, target.unitTypeId, transferDate)
+  const newRateCents =
+    heldRateFor(held, target.id) ??
+    (await currentRateFor(lease.facilityId, target.unitTypeId, transferDate))
   if (newRateCents === null) return { ok: false, problem: 'no_rate_for_unit_type' }
 
   const period = billingPeriodFor(lease.facility.billingPolicy, lease.billingDay, transferDate)
@@ -533,15 +556,23 @@ export async function transferTargets(
     if (!rateByType.has(rate.unitTypeId)) rateByType.set(rate.unitTypeId, rate.streetRateCents)
   }
 
+  // The held unit is priced at what the tenant was quoted, not at today's
+  // street rate — otherwise the dropdown and the settlement below it disagree
+  // about the same unit, and staff have no way to tell which one posts.
   return units.map((unit) => ({
     id: unit.id,
     number: unit.number,
     unitTypeName: unit.unitType.name,
-    rateCents: rateByType.get(unit.unitTypeId) ?? null,
+    rateCents: heldRateFor(held, unit.id) ?? rateByType.get(unit.unitTypeId) ?? null,
   }))
 }
 
-export type PendingTransferRequest = { toUnitId: string; toUnitNumber: string; transferDate: Date }
+export type PendingTransferRequest = {
+  toUnitId: string
+  toUnitNumber: string
+  transferDate: Date
+  quotedRateCents: number
+}
 
 /// What the tenant asked for from the portal, if anything (B-090 part 2).
 ///
@@ -561,5 +592,10 @@ export async function pendingTransferRequest(
     where: { id: held.unitId },
     select: { number: true },
   })
-  return { toUnitId: held.unitId, toUnitNumber: unit.number, transferDate: held.moveInDate }
+  return {
+    toUnitId: held.unitId,
+    toUnitNumber: unit.number,
+    transferDate: held.moveInDate,
+    quotedRateCents: held.quotedRateCents,
+  }
 }

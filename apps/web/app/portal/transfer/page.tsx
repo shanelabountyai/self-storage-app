@@ -93,9 +93,11 @@ export default async function PortalTransferPage({
         <h1 className="text-xl font-semibold">Transfer requested</h1>
         <p className="text-sm text-pretty">
           We&apos;re holding <strong>Unit {lease.pending.unitNumber}</strong> at {lease.facilityName} for
-          you, for a move on <strong>{formatDate(lease.pending.transferDate)}</strong>. Nothing has
-          changed yet — you still have Unit {lease.unitNumber}, your gate code still works, and your
-          rent is unchanged until the team completes the move with you.
+          you, for a move on <strong>{formatDate(lease.pending.transferDate)}</strong>, at{' '}
+          <strong>{formatRate(lease.pending.quotedRateCents)}/mo</strong> — the rate we quoted you,
+          held for this request. Nothing has changed yet — you still have Unit {lease.unitNumber},
+          your gate code still works, and your rent is unchanged until the team completes the move
+          with you.
         </p>
         <p className="text-sm text-pretty">
           They&apos;ll call to arrange a time. If you need it sooner, ring the office

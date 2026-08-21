@@ -366,6 +366,81 @@ describeDb('portal transfer request (B-090 part 2)', () => {
       expect(newLease.monthlyRateCents).toBe(20_000)
     })
 
+    it('honours the rate the tenant was quoted when the street rate rises (B-136)', async () => {
+      const from = await makeUnit(smallTypeId)
+      const to = await makeUnit(largeTypeId)
+      const lease = await makeLease(from.id)
+      const on = daysFromToday(1)
+
+      const asked = await requestTransfer(tenantId, lease.id, to.id, on)
+      expect(asked.ok).toBe(true)
+      if (!asked.ok) throw new Error('unreachable')
+      expect(asked.preview.newRateCents).toBe(20_000)
+
+      // The operator raises the street rate between the ask and staff getting
+      // to the task. Without the lock, `completeTransfer` re-reads this and
+      // charges a number the tenant never agreed to.
+      const raised = await prisma.unitTypeRate.create({
+        data: {
+          facilityId,
+          unitTypeId: largeTypeId,
+          streetRateCents: 26_000,
+          webRateCents: 26_000,
+          effectiveFrom: today(),
+        },
+      })
+
+      try {
+        // Every surface agrees on the held figure: the tenant's own list, the
+        // staff dropdown, both previews, and what actually posts.
+        const options = await transferOptionsFor(tenantId, lease.id)
+        expect(options.find((option) => option.unitId === to.id)?.rateCents).toBe(20_000)
+
+        const targets = await transferTargets(manager(), lease.id)
+        expect(targets.find((target) => target.id === to.id)?.rateCents).toBe(20_000)
+
+        const tenantSees = await previewTenantTransfer(tenantId, lease.id, to.id, on)
+        expect(tenantSees.ok && tenantSees.preview.newRateCents).toBe(20_000)
+
+        const staffSees = await previewTransfer(manager(), lease.id, to.id, on)
+        expect(staffSees.ok && staffSees.preview.newRateCents).toBe(20_000)
+
+        const done = await completeTransfer(manager(), { leaseId: lease.id, toUnitId: to.id, transferDate: on })
+        expect(done.ok).toBe(true)
+        if (!done.ok) throw new Error('unreachable')
+        const newLease = await prisma.lease.findUniqueOrThrow({ where: { id: done.newLeaseId } })
+        expect(newLease.monthlyRateCents).toBe(20_000)
+      } finally {
+        await prisma.unitTypeRate.delete({ where: { id: raised.id } })
+      }
+    })
+
+    it('re-quotes at the current street rate when there is no hold (B-136)', async () => {
+      const from = await makeUnit(smallTypeId)
+      const to = await makeUnit(largeTypeId)
+      const lease = await makeLease(from.id)
+      const on = daysFromToday(1)
+
+      // A staff-initiated transfer nobody asked for. Nothing was quoted, so
+      // the street rate is the right answer and the lock must not apply.
+      const raised = await prisma.unitTypeRate.create({
+        data: {
+          facilityId,
+          unitTypeId: largeTypeId,
+          streetRateCents: 26_000,
+          webRateCents: 26_000,
+          effectiveFrom: today(),
+        },
+      })
+
+      try {
+        const previewed = await previewTransfer(manager(), lease.id, to.id, on)
+        expect(previewed.ok && previewed.preview.newRateCents).toBe(26_000)
+      } finally {
+        await prisma.unitTypeRate.delete({ where: { id: raised.id } })
+      }
+    })
+
     it('refuses a stale hold on a unit that has since been let', async () => {
       const from = await makeUnit(smallTypeId)
       const to = await makeUnit(largeTypeId)
