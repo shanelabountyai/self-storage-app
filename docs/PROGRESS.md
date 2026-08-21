@@ -5118,7 +5118,7 @@ Full e2e against a production build, **run twice back to back with no reseed**: 
 
 ## B-139 — The accessibility statement was overstating, and its exception list was hand-written
 
-`PENDING`
+`942a4ad`
 
 **What it built.** The public accessibility page named exactly one coverage exception — the checkout confirmation screen — while `/portal/refer`, a static page linked from the portal nav on **every** portal page, was in no axe scan and disclaimed by nothing. That sentence was false in the overstating direction. Four more routes were unscanned and unstated. The exception list is no longer written on the page: it is rendered from `apps/web/lib/a11y/scan-coverage.ts`, where the scan lists the e2e specs loop over now also live, and `tests/a11y-scan-coverage.test.ts` fails when a route under `apps/web/app` appears in neither.
 
