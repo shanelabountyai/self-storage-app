@@ -5088,7 +5088,7 @@ Full e2e against a production build, **run twice back to back with no reseed**: 
 
 ## B-138 — Collections must survive a transfer
 
-`PENDING`
+`0063e42`
 
 **What it built.** The permissive half of B-137's split, second by B-091's rule. A transfer ends the old lease, so the delinquency engine halted it as `moved_out` while the new lease had no invoices and 0 days past due — **collections stopped entirely on a live tenant who owed money and had never left the property**, and asking for a unit swap was a way to age out of the ladder. Per D-86 the arrears now move with the tenant: the unpaid invoices are re-pointed at the new lease, the balance follows them, the ladder resumes at the step it was on, and the late-fee ladder does not charge its steps a second time.
 
