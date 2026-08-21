@@ -5010,7 +5010,7 @@ Full e2e against a production build, **run twice back to back with no reseed**: 
 
 ## B-135 — An inbound text nobody sees, routed to the queue somebody already works
 
-`PENDING_SHA`
+`2071c3e`
 
 **What it built.** `sms-webhook/route.ts` handled STOP, HELP, START and YES and answered everything else with `<Response/>`. A tenant writing *"I paid yesterday"* or *"the gate won't open"* got **no reply, no record, and nobody told** — from a number we had texted them from first. An unrecognised inbound now emits `sms.inbound_received` carrying the words, raises an `inbound_sms_review` task at the tenant's own facility, and answers the sender that a person has it.
 
