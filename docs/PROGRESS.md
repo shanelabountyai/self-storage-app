@@ -5217,7 +5217,7 @@ Full e2e against a production build, **run twice back to back with no reseed**: 
 
 ## B-143 — An inbound text is readable in full where its task links
 
-`PENDING`
+`3239353`
 
 **What it built.** B-135 routed an inbound SMS to the task queue and put its first 80 characters on the card. The rest of the message went nowhere: `sms.inbound_received` had an emit site (`apps/web/lib/comms/sms-inbound.ts`) and a catalog entry, and **no read site anywhere in the codebase** — verified by grep before touching anything. A tenant's third sentence, the one with the unit number in it, was in the database and reached no human.
 
