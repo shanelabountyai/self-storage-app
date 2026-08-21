@@ -11,6 +11,7 @@ import type { Actor } from '@/lib/rbac/actor'
 import { recomputeUnitStatus } from '@/lib/admin/units'
 import { applyRateChange } from '@/lib/pricing/tenant-rate-increases'
 import { provisionAccessForLease } from '@/lib/access/provision'
+import { syncActiveDutyHolds } from '@/lib/tenants/active-duty'
 
 // PRD 02 §4.3 US-14 (B-077). The unit transfer.
 //
@@ -392,6 +393,67 @@ export async function completeTransfer(
       },
     })
 
+    // ── Carry the tenant's protective state ──────────────────────────────
+    //
+    // B-137. A hold protects a PERSON, not a unit: the SCRA, an automatic stay
+    // and a probate are all facts about the tenant that a change of unit does
+    // not end. Before this, the new lease opened with none of them, the
+    // delinquency engine's `onHold` check passed, and the ladder ran on a
+    // servicemember whose file says we were told.
+    //
+    // Copied onto the new lease rather than re-pointed: the old lease keeps its
+    // own holds so the record of what was in force while it ran stays true, and
+    // `effectiveFrom` is carried unchanged because the protection started when
+    // it started, not today.
+    //
+    // "Still in force" is deliberately wider than `holdIsActive`: a hold whose
+    // `effectiveFrom` is in the future is a commitment already made, and
+    // dropping it would silently un-protect the tenant on a date somebody has
+    // already recorded. Only lifted and already-expired holds are left behind.
+    const carried = await tx.leaseHold.findMany({
+      where: {
+        leaseId: lease.id,
+        liftedAt: null,
+        OR: [{ effectiveTo: null }, { effectiveTo: { gt: input.transferDate } }],
+      },
+    })
+    for (const hold of carried) {
+      const copy = await tx.leaseHold.create({
+        data: {
+          leaseId: created.id,
+          type: hold.type,
+          reason: hold.reason,
+          effectiveFrom: hold.effectiveFrom,
+          effectiveTo: hold.effectiveTo,
+          documentId: hold.documentId,
+          placedByStaffId: hold.placedByStaffId,
+          estateContactName: hold.estateContactName,
+          estateContactPhone: hold.estateContactPhone,
+          estateContactEmail: hold.estateContactEmail,
+        },
+        select: { id: true },
+      })
+      await recordAudit(
+        {
+          actor: toAuditActor(actor),
+          facilityId: lease.facilityId,
+          action: 'hold.placed',
+          entityType: 'Lease',
+          entityId: created.id,
+          reasonCode: hold.type,
+          context: { holdId: copy.id, type: hold.type, carriedFromHoldId: hold.id, carriedFromLeaseId: lease.id },
+        },
+        tx,
+      )
+    }
+
+    // And the declaration itself, through the same path a move-in uses rather
+    // than a second reading of the flag. Idempotent, so the SCRA hold carried
+    // above satisfies it and nothing is placed twice; it earns its keep on the
+    // lease whose hold was lifted, or that predates B-121, where the tenant is
+    // still declared active-duty and the new lease would otherwise open bare.
+    await syncActiveDutyHolds(lease.tenantId, 'transfer', tx, input.transferDate)
+
     await applyRateChange(
       {
         leaseId: created.id,
@@ -471,6 +533,7 @@ export async function completeTransfer(
           chargeCents: preview.chargeCents,
           transferFeeCents: preview.transferFeeCents,
           transferDate: localToday.toISOString().slice(0, 10),
+          carriedHoldTypes: carried.map((hold) => hold.type),
         },
       },
       tx,

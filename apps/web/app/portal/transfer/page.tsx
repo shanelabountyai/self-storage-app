@@ -59,12 +59,20 @@ export default async function PortalTransferPage({
         <ul className="flex flex-col gap-2">
           {leases.map((lease) => (
             <li key={lease.leaseId}>
-              <Link
-                href={`/portal/transfer?lease=${lease.leaseId}`}
-                className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
-              >
-                {lease.facilityName} — Unit {lease.unitNumber} ({lease.unitTypeName})
-              </Link>
+              {lease.transferable ? (
+                <Link
+                  href={`/portal/transfer?lease=${lease.leaseId}`}
+                  className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
+                >
+                  {lease.facilityName} — Unit {lease.unitNumber} ({lease.unitTypeName})
+                </Link>
+              ) : (
+                <p className="text-muted-foreground text-sm text-pretty">
+                  {lease.facilityName} — Unit {lease.unitNumber} ({lease.unitTypeName}) is in the
+                  lien process. Ring the office
+                  {lease.facilityPhone ? ` on ${lease.facilityPhone}` : ''} to arrange a move.
+                </p>
+              )}
             </li>
           ))}
         </ul>
@@ -80,6 +88,25 @@ export default async function PortalTransferPage({
         <p className="text-sm text-pretty">We couldn&apos;t find that unit on your account.</p>
         <Link href="/portal/transfer" className="text-sm underline underline-offset-4">
           Choose a unit
+        </Link>
+      </Shell>
+    )
+  }
+
+  // In the lien pipeline (B-137, D-85): no picker, no options, no preview. The
+  // office is the only route, and saying so is the whole screen.
+  if (!lease.transferable) {
+    return (
+      <Shell>
+        <h1 className="text-xl font-semibold">Move to another unit</h1>
+        <p className="text-sm text-pretty">
+          Unit {lease.unitNumber} at {lease.facilityName} is in the lien process, so a move has to be
+          arranged with the office rather than online. Ring them
+          {lease.facilityPhone ? ` on ${lease.facilityPhone}` : ''} and they&apos;ll go through your
+          options with you.
+        </p>
+        <Link href="/portal" className="text-sm underline underline-offset-4">
+          Back to my account
         </Link>
       </Shell>
     )

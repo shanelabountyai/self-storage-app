@@ -120,6 +120,25 @@ const LAST_REVIEWED = '19 August 2026'
 // preview, plus a 200%-zoom reflow check. `LAST_REVIEWED` is deliberately NOT
 // bumped — the coverage claim was re-checked against the build, the rest of
 // the page was not, and a date is a claim about the whole page.
+//
+// Re-verified 2026-08-21, at B-137 (a transfer carries the tenant's protective
+// state). No prose change, and the reasoning is the part worth recording so the
+// next reader does not have to redo it. The item adds a customer-facing STATE
+// rather than a page: `/portal/transfer` renders a refusal panel — a heading, a
+// sentence and a back link, the same components as the "we don't see an active
+// unit" state beside it — when the lease is in the lien pipeline. The route is
+// already scanned by `e2e/portal-transfer.spec.ts`, so the coverage sentence
+// below, which names PAGES outside the run, does not become false in either
+// direction.
+//
+// Scanning that state specifically was considered and deliberately not done: it
+// only renders for a `pending_auction` lease, the demo seed's one such lease
+// belongs to a tenant with no portal credential, and minting one to scan a
+// paragraph and a link is a fixture nobody else needs. **B-156 already owns the
+// general gap** — post-interaction and data-dependent states are scanned almost
+// nowhere — and that is the row that should close this, not a one-off here.
+// `LAST_REVIEWED` is again NOT bumped: the coverage claim was re-checked, the
+// rest of the page was not.
 export default function AccessibilityPage() {
   return (
     <ProsePage

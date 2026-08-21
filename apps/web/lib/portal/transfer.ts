@@ -46,6 +46,10 @@ export type PortalTransferLease = {
   monthlyRateCents: number
   /// Set when this lease already has a live, uncompleted request.
   pending: { unitNumber: string; transferDate: Date; quotedRateCents: number } | null
+  /// False for a lien-pipeline lease (D-85). Listed rather than hidden: a
+  /// tenant with one unit would otherwise be told we see no unit on their
+  /// account, which is both false and a dead end.
+  transferable: boolean
 }
 
 export type PortalTransferOption = {
@@ -57,6 +61,27 @@ export type PortalTransferOption = {
   rateCents: number
   /// Signed: positive is more per month than they pay now, negative is less.
   monthlyDifferenceCents: number
+}
+
+/// The lease statuses a tenant may start a transfer from, which is every
+/// occupying one EXCEPT the lien pipeline (B-137, D-85).
+///
+/// `pending_auction` means a lien notice naming a unit has been served and the
+/// goods in it are being prepared for sale. Scoping this screen on
+/// `OCCUPYING_LEASE_STATUSES` let the tenant move those goods into a different
+/// unit, unattended, by clicking twice — self-serving out of the pipeline and
+/// leaving a served notice pointing at a unit they no longer occupied.
+///
+/// D-85 settled the staff side the other way: staff MAY transfer a lien-pipeline
+/// lease, with manager-and-above approval, a reason code and an unreset lien
+/// clock. That is why the refusal lives here and not in `previewTransferFor` —
+/// the admin wizard is meant to reach it, a self-service screen is not.
+export const PORTAL_TRANSFERABLE_STATUSES = OCCUPYING_LEASE_STATUSES.filter(
+  (status) => status !== 'pending_auction',
+)
+
+export function isPortalTransferable(status: string): boolean {
+  return PORTAL_TRANSFERABLE_STATUSES.includes(status as never)
 }
 
 function startOfDayUtc(date: Date): Date {
@@ -72,6 +97,7 @@ export async function tenantTransferLeases(tenantId: string): Promise<PortalTran
     select: {
       id: true,
       facilityId: true,
+      status: true,
       monthlyRateCents: true,
       facility: { select: { name: true, phone: true } },
       unit: { select: { number: true, unitType: { select: { name: true } } } },
@@ -108,6 +134,7 @@ export async function tenantTransferLeases(tenantId: string): Promise<PortalTran
       unitNumber: lease.unit.number,
       unitTypeName: lease.unit.unitType.name,
       monthlyRateCents: lease.monthlyRateCents,
+      transferable: isPortalTransferable(lease.status),
       pending:
         hold?.unit && hold.moveInDate
           ? {
@@ -128,7 +155,7 @@ export async function transferOptionsFor(
   leaseId: string,
 ): Promise<PortalTransferOption[]> {
   const lease = await prisma.lease.findFirst({
-    where: { id: leaseId, tenantId, status: { in: [...OCCUPYING_LEASE_STATUSES] } },
+    where: { id: leaseId, tenantId, status: { in: [...PORTAL_TRANSFERABLE_STATUSES] } },
     select: { facilityId: true, unitId: true, monthlyRateCents: true },
   })
   if (!lease) return []
@@ -200,7 +227,7 @@ export async function previewTenantTransfer(
   transferDate: Date,
 ): Promise<PortalTransferPreviewResult> {
   const lease = await prisma.lease.findFirst({
-    where: { id: leaseId, tenantId, status: { in: [...OCCUPYING_LEASE_STATUSES] } },
+    where: { id: leaseId, tenantId, status: { in: [...PORTAL_TRANSFERABLE_STATUSES] } },
     select: TRANSFER_LEASE_SELECT,
   })
   if (!lease) return { ok: false, problem: 'not_found' }
@@ -209,7 +236,10 @@ export async function previewTenantTransfer(
 
 export type RequestTransferResult =
   | { ok: true; preview: TransferPreview }
-  | { ok: false; problem: TransferProblem | 'not_found' | 'date_in_past' | 'already_requested' }
+  | {
+      ok: false
+      problem: TransferProblem | 'not_found' | 'date_in_past' | 'already_requested' | 'lien_pipeline'
+    }
 
 /// Records the ask and holds the unit.
 ///
@@ -227,6 +257,12 @@ export async function requestTransfer(
     select: TRANSFER_LEASE_SELECT,
   })
   if (!lease) return { ok: false, problem: 'not_found' }
+
+  // Found on the wider set on purpose, then refused by name: a lien-pipeline
+  // lease that returned `not_found` would tell a tenant we cannot see a unit
+  // they are standing in, and send them nowhere. This sends them to the office,
+  // which is the only place D-85 allows the move to be arranged.
+  if (!isPortalTransferable(lease.status)) return { ok: false, problem: 'lien_pipeline' }
 
   // A date before today would be asking staff to backdate money. The staff
   // screen allows it deliberately (they route around real-world timing); a

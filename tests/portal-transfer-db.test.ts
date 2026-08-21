@@ -178,6 +178,7 @@ describeDb('portal transfer request (B-090 part 2)', () => {
     await prisma.accessCredential.deleteMany({ where: { facilityId } })
     await prisma.accessGrant.deleteMany({ where: { facilityId } })
     await prisma.leaseRateChange.deleteMany({ where: { lease: { facilityId } } })
+    await prisma.leaseHold.deleteMany({ where: { lease: { facilityId } } })
     await prisma.lease.deleteMany({ where: { facilityId } })
     await prisma.unit.deleteMany({ where: { facilityId } })
   })
@@ -193,6 +194,7 @@ describeDb('portal transfer request (B-090 part 2)', () => {
     await prisma.accessCredential.deleteMany({ where: { facilityId } })
     await prisma.accessGrant.deleteMany({ where: { facilityId } })
     await prisma.leaseRateChange.deleteMany({ where: { lease: { facilityId } } })
+    await prisma.leaseHold.deleteMany({ where: { lease: { facilityId } } })
     await prisma.lease.deleteMany({ where: { facilityId } })
     await prisma.unit.deleteMany({ where: { facilityId } })
     await prisma.unitTypeRate.deleteMany({ where: { facilityId } })
@@ -328,6 +330,58 @@ describeDb('portal transfer request (B-090 part 2)', () => {
       expect(mine.ok && theirs.ok).toBe(true)
       if (!mine.ok || !theirs.ok) throw new Error('unreachable')
       expect(mine.preview).toEqual(theirs.preview)
+    })
+  })
+
+  // B-137 / D-85. `OCCUPYING_LEASE_STATUSES` includes `pending_auction`, so
+  // before this the tenant whose goods were being prepared for sale could move
+  // them into another unit by clicking twice.
+  describe('the lien pipeline (D-85)', () => {
+    async function pendingAuctionLease() {
+      const from = await makeUnit(smallTypeId)
+      const to = await makeUnit(largeTypeId)
+      const lease = await makeLease(from.id)
+      await prisma.lease.update({ where: { id: lease.id }, data: { status: 'pending_auction' } })
+      return { lease, to }
+    }
+
+    it('refuses the request by name rather than pretending the unit is not there', async () => {
+      const { lease, to } = await pendingAuctionLease()
+      const result = await requestTransfer(tenantId, lease.id, to.id, daysFromToday(1))
+      expect(result).toMatchObject({ ok: false, problem: 'lien_pipeline' })
+      expect(await prisma.reservation.count({ where: { unitId: to.id } })).toBe(0)
+    })
+
+    it('offers no units and no preview for it', async () => {
+      const { lease, to } = await pendingAuctionLease()
+      expect(await transferOptionsFor(tenantId, lease.id)).toEqual([])
+      expect(await previewTenantTransfer(tenantId, lease.id, to.id, daysFromToday(1))).toMatchObject({
+        ok: false,
+        problem: 'not_found',
+      })
+    })
+
+    it('still lists the lease, marked not transferable — the tenant has a unit', async () => {
+      const { lease } = await pendingAuctionLease()
+      const listed = await tenantTransferLeases(tenantId)
+      expect(listed.map((row) => row.leaseId)).toContain(lease.id)
+      expect(listed.find((row) => row.leaseId === lease.id)?.transferable).toBe(false)
+    })
+
+    it('leaves the staff wizard able to do it — D-85 settled that side the other way', async () => {
+      const { lease, to } = await pendingAuctionLease()
+      expect((await previewTransfer(manager(), lease.id, to.id, daysFromToday(1))).ok).toBe(true)
+    })
+
+    it('still lets a request placed before the pipeline started be cancelled', async () => {
+      const from = await makeUnit(smallTypeId)
+      const to = await makeUnit(largeTypeId)
+      const lease = await makeLease(from.id)
+      expect((await requestTransfer(tenantId, lease.id, to.id, daysFromToday(1))).ok).toBe(true)
+
+      await prisma.lease.update({ where: { id: lease.id }, data: { status: 'pending_auction' } })
+      // Refusing this would strand the hold on a unit nobody can now rent.
+      expect(await cancelTransferRequest(tenantId, lease.id)).toEqual({ ok: true })
     })
   })
 

@@ -153,6 +153,7 @@ describeDb('unit transfer (US-14)', () => {
     await prisma.accessCredential.deleteMany({ where: { facilityId } })
     await prisma.accessGrant.deleteMany({ where: { facilityId } })
     await prisma.leaseRateChange.deleteMany({ where: { lease: { facilityId } } })
+    await prisma.leaseHold.deleteMany({ where: { lease: { facilityId } } })
     await prisma.lease.deleteMany({ where: { facilityId } })
     await prisma.unit.deleteMany({ where: { facilityId } })
     await prisma.feeSchedule.deleteMany({ where: { facilityId } })
@@ -169,10 +170,12 @@ describeDb('unit transfer (US-14)', () => {
     await prisma.accessCredential.deleteMany({ where: { facilityId } })
     await prisma.accessGrant.deleteMany({ where: { facilityId } })
     await prisma.leaseRateChange.deleteMany({ where: { lease: { facilityId } } })
+    await prisma.leaseHold.deleteMany({ where: { lease: { facilityId } } })
     await prisma.lease.deleteMany({ where: { facilityId } })
     await prisma.unit.deleteMany({ where: { facilityId } })
     await prisma.unitTypeRate.deleteMany({ where: { facilityId } })
     await prisma.unitType.deleteMany({ where: { facilityId } })
+    await prisma.tenant.updateMany({ where: { id: tenantId }, data: { activeDutyMilitary: false } })
     await prisma.tenant.deleteMany({ where: { id: tenantId } })
     await prisma.$disconnect()
   })
@@ -441,6 +444,91 @@ describeDb('unit transfer (US-14)', () => {
       expect(result).toMatchObject({ ok: false, problem: 'lease_not_occupying' })
       // Nothing was opened.
       expect(await prisma.lease.count({ where: { unitId: to.id } })).toBe(0)
+    })
+  })
+
+  // B-137. The protection attaches to the person, and a change of unit does
+  // not end it — before this, the new lease opened bare and the delinquency
+  // engine's `onHold` check passed on a servicemember.
+  describe('protective state (B-137)', () => {
+    async function transferWithHold(data: {
+      type: string
+      effectiveFrom?: Date
+      effectiveTo?: Date | null
+      liftedAt?: Date | null
+    }) {
+      const from = await makeUnit(smallTypeId)
+      const to = await makeUnit(largeTypeId)
+      const lease = await makeLease(from.id)
+      await prisma.leaseHold.create({
+        data: {
+          leaseId: lease.id,
+          type: data.type,
+          reason: 'test',
+          effectiveFrom: data.effectiveFrom ?? d('2026-02-01'),
+          effectiveTo: data.effectiveTo ?? null,
+          liftedAt: data.liftedAt ?? null,
+        },
+      })
+      const result = await completeTransfer(manager(), {
+        leaseId: lease.id,
+        toUnitId: to.id,
+        transferDate: d('2026-08-16'),
+      })
+      if (!result.ok) throw new Error('unreachable')
+      return prisma.leaseHold.findMany({ where: { leaseId: result.newLeaseId } })
+    }
+
+    it('carries an open hold onto the new lease, keeping the date it started', async () => {
+      const holds = await transferWithHold({ type: 'bankruptcy' })
+      expect(holds).toHaveLength(1)
+      expect(holds[0].type).toBe('bankruptcy')
+      // Not the transfer date: the automatic stay started when it started.
+      expect(holds[0].effectiveFrom).toEqual(d('2026-02-01'))
+      expect(holds[0].liftedAt).toBeNull()
+    })
+
+    it('carries a future-dated hold — a commitment already made is not dropped', async () => {
+      const holds = await transferWithHold({ type: 'litigation', effectiveFrom: d('2026-12-01') })
+      expect(holds.map((h) => h.type)).toEqual(['litigation'])
+    })
+
+    it('leaves a lifted hold behind, and one that has already expired', async () => {
+      expect(await transferWithHold({ type: 'dispute', liftedAt: d('2026-03-01') })).toHaveLength(0)
+      expect(await transferWithHold({ type: 'dispute', effectiveTo: d('2026-04-01') })).toHaveLength(0)
+    })
+
+    it('places the SCRA hold on the new lease when the declaration stands and the old lease had none', async () => {
+      await prisma.tenant.update({ where: { id: tenantId }, data: { activeDutyMilitary: true } })
+      try {
+        const from = await makeUnit(smallTypeId)
+        const to = await makeUnit(largeTypeId)
+        const lease = await makeLease(from.id)
+
+        const result = await completeTransfer(manager(), {
+          leaseId: lease.id,
+          toUnitId: to.id,
+          transferDate: d('2026-08-16'),
+        })
+        if (!result.ok) throw new Error('unreachable')
+
+        const holds = await prisma.leaseHold.findMany({ where: { leaseId: result.newLeaseId } })
+        expect(holds.map((h) => h.type)).toEqual(['military_scra'])
+        expect(holds[0].reason).toContain('transferred')
+      } finally {
+        await prisma.tenant.update({ where: { id: tenantId }, data: { activeDutyMilitary: false } })
+      }
+    })
+
+    it('does not place the SCRA hold twice when the old lease already carried one', async () => {
+      await prisma.tenant.update({ where: { id: tenantId }, data: { activeDutyMilitary: true } })
+      try {
+        const holds = await transferWithHold({ type: 'military_scra' })
+        expect(holds).toHaveLength(1)
+        expect(holds[0].effectiveFrom).toEqual(d('2026-02-01'))
+      } finally {
+        await prisma.tenant.update({ where: { id: tenantId }, data: { activeDutyMilitary: false } })
+      }
     })
   })
 

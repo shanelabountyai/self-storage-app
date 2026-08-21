@@ -40,12 +40,20 @@ import { holdIsActive } from '@storage/core/holds'
 /// "somebody said so" and "the tenant told us themselves, on this date" are
 /// different facts to whoever has to act on it.
 function reasonFor(source: ActiveDutySource): string {
-  return source === 'checkout'
-    ? 'Raised automatically: the tenant declared active-duty military service when signing the lease.'
-    : 'Raised automatically: a staff member recorded the tenant as active-duty military.'
+  return REASONS[source]
 }
 
-export type ActiveDutySource = 'checkout' | 'staff'
+const REASONS: Record<ActiveDutySource, string> = {
+  checkout: 'Raised automatically: the tenant declared active-duty military service when signing the lease.',
+  staff: 'Raised automatically: a staff member recorded the tenant as active-duty military.',
+  /// B-137. A transfer opens a NEW lease, so the protection has to be re-placed
+  /// on it or the ladder runs on a servicemember who only changed units. Its own
+  /// line rather than reusing `checkout`: nobody signed anything today, and the
+  /// staffer reading the banner needs to know where the declaration came from.
+  transfer: 'Raised automatically: carried onto this lease when the tenant transferred units, from their active-duty declaration.',
+}
+
+export type ActiveDutySource = 'checkout' | 'staff' | 'transfer'
 
 /// Places the SCRA hold on every lease this tenant holds that does not already
 /// have one in force.

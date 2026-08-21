@@ -23,6 +23,11 @@ const REQUEST_PROBLEM_COPY: Record<string, string> = {
   not_found: 'We couldn’t find that unit on your account.',
   date_in_past: 'Pick today or a later date.',
   already_requested: 'You’ve already asked to move to another unit at this site. Cancel that first.',
+  // D-85: the portal never arranges a lien-pipeline move. Named plainly rather
+  // than dressed up — the tenant has had a notice about this unit, and copy
+  // that talks around it helps nobody.
+  lien_pipeline:
+    'This unit is in the lien process, so a move has to be arranged with the office rather than online. Please ring them.',
 }
 
 async function requireFresh(returnTo: string): Promise<void> {
