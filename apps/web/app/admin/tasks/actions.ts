@@ -3,31 +3,43 @@
 import { revalidatePath } from 'next/cache'
 import { requireStaffActor } from '@/lib/rbac/session'
 import { completeTask } from '@/lib/admin/tasks'
+import { fieldError, success, type FormState } from '@/lib/admin/form-state'
 
-// PRD 02 §4.9 US-41. A plain form action, not the FormState pattern: the
-// per-task inline form on the list has nowhere natural to render a field
-// error, and "missing proof" here just means the row stays open — which the
-// revalidated list already shows.
-export async function completeTaskAction(formData: FormData): Promise<void> {
+const PROOF_FIELD_ERRORS: Record<string, string> = {
+  note: 'A note is required to complete this.',
+  photo_reference: 'A photo reference is required to complete this.',
+}
+
+// PRD 02 §4.9 US-41, §5.5 FR-19/FR-20 (B-141). Used to be a plain
+// `Promise<void>` action that discarded `completeTask`'s `{ ok: false,
+// missingFields }` refusal — the button was pressed, the page re-rendered
+// identically, and the task stayed open, indistinguishable from a broken
+// control. All four task queues share this one action, so returning `FormState`
+// here (and rendering it through `TaskCompleteForm`/`AdminForm`) fixes the
+// refusal for every one of them at once.
+export async function completeTaskAction(_prev: FormState, formData: FormData): Promise<FormState> {
   const actor = await requireStaffActor()
   const taskId = String(formData.get('taskId') ?? '')
   const note = String(formData.get('note') ?? '')
   const photoReference = formData.get('photo_reference')
 
-  await completeTask(actor, taskId, {
+  const result = await completeTask(actor, taskId, {
     note,
-    // Only some types require this (B-058's `overlock_apply`); omitted rather
-    // than sent as an empty string so `missingProofFields` reports it as
-    // missing, not as present-but-blank, when a form has no such field at all.
     ...(photoReference ? { photo_reference: String(photoReference) } : {}),
   })
+
+  if (!result.ok) {
+    return fieldError(
+      Object.fromEntries(
+        result.missingFields.map((field) => [field, PROOF_FIELD_ERRORS[field] ?? `${field} is required.`]),
+      ),
+    )
+  }
+
   revalidatePath('/admin/tasks')
-  // B-065's keypad queue, B-059's delinquency queue and B-060's walkthrough all
-  // render the same tasks; completing one anywhere has to clear it everywhere.
   revalidatePath('/admin/access/queue')
   revalidatePath('/admin/delinquency')
   revalidatePath('/admin/walkthrough')
-  // Completing an overlock_apply/overlock_remove task is what moves the
-  // reconciliation view's rows between states.
   revalidatePath('/admin/overlocks')
+  return success('Task completed.')
 }

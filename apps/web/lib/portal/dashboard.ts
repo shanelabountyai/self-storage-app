@@ -1,5 +1,5 @@
 import { prisma } from '@storage/db'
-import { OCCUPYING_LEASE_STATUSES } from '@storage/core/inventory'
+import { OCCUPYING_LEASE_STATUSES, TRANSFER_HOLD_SOURCE } from '@storage/core/inventory'
 import { codeForLease } from '@/lib/access/provision'
 import { SITE } from '@/lib/site-config'
 
@@ -54,6 +54,14 @@ export type PortalLeaseSummary = {
   /// sees the full balance on the 3rd rings the office, which is the support
   /// call this whole state exists to prevent.
   settlingCents: number
+  /// B-142 / PRD 01 §4.7 US-709, US-702. A pending move-out or transfer used
+  /// to be invisible here — two taps deep behind the "Manage" disclosure —
+  /// when "did that go through" is the question a tenant returns to answer.
+  /// `status` is still `active` either way; `moveOutDate` already on the row
+  /// distinguishes "pending" from "finalized" (`lib/portal/move-out.ts`'s own
+  /// comment makes the same point).
+  pendingMoveOutDate: Date | null
+  pendingTransfer: { toUnitNumber: string; transferDate: Date; expiresAt: Date } | null
 }
 
 export async function portalDashboardForTenant(
@@ -72,6 +80,7 @@ export async function portalDashboardForTenant(
         autopayEnabled: true,
         monthlyRateCents: true,
         protectionCents: true,
+        moveOutDate: true,
         facility: { select: { name: true, phone: true, timezone: true } },
         unit: { select: { number: true, unitType: { select: { widthFt: true, lengthFt: true } } } },
       },
@@ -80,7 +89,7 @@ export async function portalDashboardForTenant(
 
   return Promise.all(
     leases.map(async (lease) => {
-      const [balance, grant, gateCode, settling] = await Promise.all([
+      const [balance, grant, gateCode, settling, transferHold] = await Promise.all([
         prisma.ledgerEntry.aggregate({ where: { leaseId: lease.id }, _sum: { amountCents: true } }),
         prisma.accessGrant.findUnique({
           where: { facilityId_tenantId: { facilityId: lease.facilityId, tenantId } },
@@ -94,6 +103,18 @@ export async function portalDashboardForTenant(
         prisma.payment.aggregate({
           where: { tenantId, facilityId: lease.facilityId, status: 'processing' },
           _sum: { amountCents: true },
+        }),
+        // B-142. Same hold `lib/portal/transfer.ts` reads — one per tenant per
+        // facility, so this is the fact "did my transfer request go through".
+        prisma.reservation.findFirst({
+          where: {
+            tenantId,
+            facilityId: lease.facilityId,
+            source: TRANSFER_HOLD_SOURCE,
+            status: 'held',
+            expiresAt: { gt: now },
+          },
+          select: { moveInDate: true, expiresAt: true, unit: { select: { number: true } } },
         }),
       ])
 
@@ -114,6 +135,15 @@ export async function portalDashboardForTenant(
         accessSuspended: grant?.state === 'suspended',
         gateCode,
         settlingCents: settling._sum.amountCents ?? 0,
+        pendingMoveOutDate: lease.moveOutDate,
+        pendingTransfer:
+          transferHold?.unit && transferHold.moveInDate
+            ? {
+                toUnitNumber: transferHold.unit.number,
+                transferDate: transferHold.moveInDate,
+                expiresAt: transferHold.expiresAt,
+              }
+            : null,
       }
     }),
   )

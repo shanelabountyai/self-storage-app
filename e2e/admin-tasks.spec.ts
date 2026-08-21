@@ -103,4 +103,36 @@ test.describe('signed in as the demo owner', () => {
 
     await expect(page.getByText('Returned mail — contact info may be stale')).toHaveCount(0)
   })
+
+  // B-141. Before this, `completeTaskAction` discarded the service's
+  // `{ ok: false, missingFields }` refusal: the button was pressed, the page
+  // re-rendered identically, and the task stayed open with no explanation —
+  // indistinguishable from a broken control. This is safe to run against any
+  // open task and any number of times: a refused submission changes nothing.
+  test('a refused completion says why, rather than re-rendering identically', async ({ page }) => {
+    await page.goto('/admin/tasks')
+    const cards = page.locator('li').filter({ has: page.getByRole('button', { name: /^Complete/ }) })
+    const count = await cards.count()
+    test.skip(count === 0, 'nothing open today to exercise this against')
+
+    const card = cards.first()
+    const subject = await card.locator('p').first().innerText()
+
+    // A whitespace-only note passes the input's `required` attribute (which
+    // only checks non-empty) but fails the server's `missingProofFields`
+    // (which trims) — the way to reach the server round trip without
+    // fighting native HTML5 validation in a real browser.
+    await card.getByPlaceholder('What did you do?').fill('   ')
+    await card.getByRole('button', { name: /^Complete/ }).click()
+
+    const alert = page.getByRole('alert')
+    await expect(alert).toBeVisible()
+    await expect(alert).toContainText('note is required')
+    // The summary receives focus (PRD 02 FR-19) rather than leaving the user
+    // at the button with no idea anything happened.
+    await expect(alert).toBeFocused()
+
+    // The task is still open — nothing was silently completed.
+    await expect(page.getByText(subject)).toBeVisible()
+  })
 })

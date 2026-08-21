@@ -160,4 +160,63 @@ describeDb('portalDashboardForTenant', () => {
     await prisma.accessGrant.delete({ where: { id: grant.id } })
     await prisma.tenant.update({ where: { id: tenantId }, data: { stripeDefaultPaymentMethodId: null } })
   })
+
+  // B-142. Used to be invisible on this screen — two taps deep behind the
+  // portal's "Manage" disclosure.
+  it('surfaces a pending move-out and a pending transfer hold, and nulls both otherwise', async () => {
+    const lease = await prisma.lease.create({
+      data: {
+        facilityId,
+        tenantId,
+        unitId,
+        status: 'active',
+        startDate: new Date(),
+        monthlyRateCents: 12_900,
+        billingDay: 10,
+      },
+    })
+
+    const [bare] = await portalDashboardForTenant(tenantId)
+    expect(bare.pendingMoveOutDate).toBeNull()
+    expect(bare.pendingTransfer).toBeNull()
+
+    const moveOutDate = new Date(Date.UTC(2026, 8, 30))
+    await prisma.lease.update({ where: { id: lease.id }, data: { moveOutDate } })
+
+    const toUnitType = await prisma.unitType.create({
+      data: { facilityId, name: `10x15 ${suffix}`, widthFt: 10, lengthFt: 15 },
+    })
+    const toUnit = await prisma.unit.create({ data: { facilityId, unitTypeId: toUnitType.id, number: 'A-2' } })
+    const expiresAt = new Date(Date.UTC(2026, 8, 1, 17, 0))
+    const hold = await prisma.reservation.create({
+      data: {
+        facilityId,
+        unitTypeId: toUnitType.id,
+        unitId: toUnit.id,
+        tenantId,
+        status: 'held',
+        firstName: 'Ada',
+        lastName: 'Renter',
+        email: `portal-dash-${suffix}@example.com`,
+        quotedRateCents: 15_900,
+        moveInDate: new Date(Date.UTC(2026, 8, 15)),
+        expiresAt,
+        tokenHash: `dash-${suffix}`,
+        source: 'transfer',
+      },
+    })
+
+    const [withPending] = await portalDashboardForTenant(tenantId, new Date(Date.UTC(2026, 7, 1)))
+    expect(withPending.pendingMoveOutDate).toEqual(moveOutDate)
+    expect(withPending.pendingTransfer).toEqual({
+      toUnitNumber: 'A-2',
+      transferDate: new Date(Date.UTC(2026, 8, 15)),
+      expiresAt,
+    })
+
+    await prisma.reservation.delete({ where: { id: hold.id } })
+    await prisma.unit.delete({ where: { id: toUnit.id } })
+    await prisma.unitType.delete({ where: { id: toUnitType.id } })
+    await prisma.lease.delete({ where: { id: lease.id } })
+  })
 })

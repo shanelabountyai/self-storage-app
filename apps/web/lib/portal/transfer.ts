@@ -6,12 +6,18 @@ import {
   previewTransferFor,
   transferHoldFor,
   TRANSFER_LEASE_SELECT,
+  TRANSFER_PROBLEM_COPY,
   type TransferPreview,
   type TransferProblem,
 } from '@/lib/admin/transfer'
 import { createTask, cancelOpenTask } from '@/lib/admin/tasks'
 import { recomputeUnitStatus } from '@/lib/admin/units'
-import { holdExpiryFor, hashReservationToken, newToken } from '@/lib/reservations/reserve'
+import {
+  holdExpiryFor,
+  hashReservationToken,
+  newToken,
+  MAX_MOVE_IN_DAYS_AHEAD,
+} from '@/lib/reservations/reserve'
 
 // PRD 01 §9 / PRD 02 §4.3 US-14 (B-090 part 2). The tenant's own transfer
 // request: pick a unit at the same site, see what the swap settles to, ask.
@@ -36,16 +42,37 @@ import { holdExpiryFor, hashReservationToken, newToken } from '@/lib/reservation
 // `Reservation` hold the public site places — no new table, no new sweep, and
 // the existing expiry job releases it if nobody ever acts.
 
+// B-142. One copy dict for every problem a portal transfer screen can show —
+// the preview's (`TransferProblem | 'not_found'`) plus the request's own four
+// — used by both the page (preview failures) and `actions.ts` (request
+// failures). Lives here rather than in `actions.ts` because a `'use server'`
+// file may only export async functions; a plain lib module has no such limit.
+export const PORTAL_TRANSFER_PROBLEM_COPY: Record<string, string> = {
+  ...TRANSFER_PROBLEM_COPY,
+  not_found: 'We couldn’t find that unit on your account.',
+  date_in_past: 'Pick today or a later date.',
+  date_too_far_out: `Pick a date within ${MAX_MOVE_IN_DAYS_AHEAD} days — the same window the public site holds a unit for.`,
+  already_requested: 'You’ve already asked to move to another unit at this site. Cancel that first.',
+  // D-85: the portal never arranges a lien-pipeline move. Named plainly rather
+  // than dressed up — the tenant has had a notice about this unit, and copy
+  // that talks around it helps nobody.
+  lien_pipeline:
+    'This unit is in the lien process, so a move has to be arranged with the office rather than online. Please ring them.',
+}
+
 export type PortalTransferLease = {
   leaseId: string
   facilityId: string
   facilityName: string
   facilityPhone: string
+  /// B-142. For rendering the hold's absolute expiry on `pending` requests —
+  /// PRD 01 §6.8.1: an absolute local date and time, never a countdown.
+  facilityTimezone: string
   unitNumber: string
   unitTypeName: string
   monthlyRateCents: number
   /// Set when this lease already has a live, uncompleted request.
-  pending: { unitNumber: string; transferDate: Date; quotedRateCents: number } | null
+  pending: { unitNumber: string; transferDate: Date; quotedRateCents: number; expiresAt: Date } | null
   /// False for a lien-pipeline lease (D-85). Listed rather than hidden: a
   /// tenant with one unit would otherwise be told we see no unit on their
   /// account, which is both false and a dead end.
@@ -99,7 +126,7 @@ export async function tenantTransferLeases(tenantId: string): Promise<PortalTran
       facilityId: true,
       status: true,
       monthlyRateCents: true,
-      facility: { select: { name: true, phone: true } },
+      facility: { select: { name: true, phone: true, timezone: true } },
       unit: { select: { number: true, unitType: { select: { name: true } } } },
     },
   })
@@ -119,6 +146,7 @@ export async function tenantTransferLeases(tenantId: string): Promise<PortalTran
       facilityId: true,
       moveInDate: true,
       quotedRateCents: true,
+      expiresAt: true,
       unit: { select: { number: true } },
     },
   })
@@ -131,6 +159,7 @@ export async function tenantTransferLeases(tenantId: string): Promise<PortalTran
       facilityId: lease.facilityId,
       facilityName: lease.facility.name,
       facilityPhone: lease.facility.phone ?? '',
+      facilityTimezone: lease.facility.timezone,
       unitNumber: lease.unit.number,
       unitTypeName: lease.unit.unitType.name,
       monthlyRateCents: lease.monthlyRateCents,
@@ -141,6 +170,7 @@ export async function tenantTransferLeases(tenantId: string): Promise<PortalTran
               unitNumber: hold.unit.number,
               transferDate: hold.moveInDate,
               quotedRateCents: hold.quotedRateCents,
+              expiresAt: hold.expiresAt,
             }
           : null,
     }
@@ -238,7 +268,13 @@ export type RequestTransferResult =
   | { ok: true; preview: TransferPreview }
   | {
       ok: false
-      problem: TransferProblem | 'not_found' | 'date_in_past' | 'already_requested' | 'lien_pipeline'
+      problem:
+        | TransferProblem
+        | 'not_found'
+        | 'date_in_past'
+        | 'date_too_far_out'
+        | 'already_requested'
+        | 'lien_pipeline'
     }
 
 /// Records the ask and holds the unit.
@@ -269,6 +305,21 @@ export async function requestTransfer(
   // tenant has no reason to need it.
   if (transferDate.getTime() < startOfDayUtc(new Date()).getTime()) {
     return { ok: false, problem: 'date_in_past' }
+  }
+
+  // B-142. No ceiling existed here at all — the public reserve page has
+  // enforced one since it shipped (`createReservation`). Same constant, same
+  // reasoning: a date far enough out is not a real plan, and an unenforced
+  // one is a unit staff cannot actually promise stays free that long. UTC
+  // day math, matching `date_in_past` just above and `transferDate` itself
+  // (always minted as UTC midnight, from `${date}T00:00:00.000Z` in the
+  // action) — not `createReservation`'s local-time version, which drifts a
+  // few hours from a UTC day boundary off the server's own timezone.
+  const maxTransferDate = new Date(
+    startOfDayUtc(new Date()).getTime() + MAX_MOVE_IN_DAYS_AHEAD * 24 * 60 * 60 * 1000,
+  )
+  if (transferDate.getTime() > maxTransferDate.getTime()) {
+    return { ok: false, problem: 'date_too_far_out' }
   }
 
   // One live request per tenant per facility. Not a schema constraint but the

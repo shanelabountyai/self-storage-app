@@ -5,7 +5,7 @@ import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
 import { delinquencyQueue } from '@/lib/admin/delinquency-queue'
 import { moneyOwedRollup } from '@/lib/admin/rollups'
 import { FacilityRollup } from '@/components/admin/facility-rollup'
-import { completeTaskAction } from '@/app/admin/tasks/actions'
+import { TaskCompleteForm } from '@/components/admin/task-complete-form'
 import { formatCents } from '@/lib/format'
 
 export const metadata = { title: 'Delinquency queue' }
@@ -133,39 +133,13 @@ export default async function DelinquencyQueuePage({
                     {task.assigneeName ? `Assigned to ${task.assigneeName}` : 'Unassigned'}
                   </p>
 
-                  <form action={completeTaskAction} className="mt-3 flex flex-wrap items-end gap-2">
-                    <input type="hidden" name="taskId" value={task.id} />
-                    <label htmlFor={`note-${task.id}`} className="sr-only">
-                      What did you do?
-                    </label>
-                    <input
-                      id={`note-${task.id}`}
-                      name="note"
-                      required
-                      placeholder="What did you do?"
-                      className="border-input bg-background min-h-11 min-w-0 flex-1 rounded-md border px-3 text-sm"
-                    />
-                    {task.requiredProofFields.includes('photo_reference') && (
-                      <>
-                        <label htmlFor={`photo-${task.id}`} className="sr-only">
-                          Photo reference
-                        </label>
-                        <input
-                          id={`photo-${task.id}`}
-                          name="photo_reference"
-                          required
-                          placeholder="Photo reference"
-                          className="border-input bg-background min-h-11 min-w-0 flex-1 rounded-md border px-3 text-sm"
-                        />
-                      </>
-                    )}
-                    <button
-                      type="submit"
-                      className="border-input hover:bg-accent min-h-11 inline-flex items-center rounded-md border px-4 text-sm font-medium"
-                    >
-                      Complete
-                    </button>
-                  </form>
+                  <TaskCompleteForm
+                    taskId={task.id}
+                    subjectLabel={`${task.label}, ${task.subject.label}`}
+                    notePlaceholder="What did you do?"
+                    buttonLabel="Complete"
+                    requiresPhoto={task.requiredProofFields.includes('photo_reference')}
+                  />
                 </li>
               ))}
             </ul>

@@ -4,8 +4,7 @@ import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { requireTenantActor } from '@/lib/rbac/session'
 import { checkFreshAuth } from '@/lib/auth/reauth'
-import { cancelTransferRequest, requestTransfer } from '@/lib/portal/transfer'
-import { TRANSFER_PROBLEM_COPY } from '@/lib/admin/transfer'
+import { cancelTransferRequest, requestTransfer, PORTAL_TRANSFER_PROBLEM_COPY } from '@/lib/portal/transfer'
 import { fieldError, success, type FormState } from '@/lib/admin/form-state'
 
 // PRD 01 §9 (B-090 part 2), gated by US-701's re-auth rule. A transfer request
@@ -17,18 +16,6 @@ import { fieldError, success, type FormState } from '@/lib/admin/form-state'
 // touching `@/auth` (as `checkFreshAuth`/`requireTenantActor` both do) cannot
 // be imported under Vitest, so the decision logic stays in the lib file and
 // only this session-shaped wrapper is untestable there.
-
-const REQUEST_PROBLEM_COPY: Record<string, string> = {
-  ...TRANSFER_PROBLEM_COPY,
-  not_found: 'We couldn’t find that unit on your account.',
-  date_in_past: 'Pick today or a later date.',
-  already_requested: 'You’ve already asked to move to another unit at this site. Cancel that first.',
-  // D-85: the portal never arranges a lien-pipeline move. Named plainly rather
-  // than dressed up — the tenant has had a notice about this unit, and copy
-  // that talks around it helps nobody.
-  lien_pipeline:
-    'This unit is in the lien process, so a move has to be arranged with the office rather than online. Please ring them.',
-}
 
 async function requireFresh(returnTo: string): Promise<void> {
   const fresh = await checkFreshAuth()
@@ -52,7 +39,7 @@ export async function requestTransferAction(_prev: FormState, formData: FormData
   )
   if (!result.ok) {
     return fieldError({
-      toUnitId: REQUEST_PROBLEM_COPY[result.problem] ?? 'That request could not be completed.',
+      toUnitId: PORTAL_TRANSFER_PROBLEM_COPY[result.problem] ?? 'That request could not be completed.',
     })
   }
 

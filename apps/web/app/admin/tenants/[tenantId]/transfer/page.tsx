@@ -28,6 +28,17 @@ function todayIso(): string {
   return new Date().toISOString().slice(0, 10)
 }
 
+// B-142 / PRD 02 §4.4 US-14. Absolute facility-local date and time, never a
+// countdown — matches the density other admin datetimes use (e.g.
+// `admin/settings/page.tsx`'s own `formatDateTime`).
+function formatExpiry(date: Date, timezone: string): string {
+  return new Intl.DateTimeFormat('en-US', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+    timeZone: timezone,
+  }).format(date)
+}
+
 export default async function TransferPage({
   params,
   searchParams,
@@ -86,7 +97,9 @@ export default async function TransferPage({
           {new Intl.DateTimeFormat('en-US', { month: 'long', day: 'numeric', year: 'numeric' }).format(
             requested.transferDate,
           )}
-          , and that unit is held for them until you complete or cancel it. They were quoted{' '}
+          , and that unit is held for them until{' '}
+          <strong>{formatExpiry(requested.expiresAt, requested.facilityTimezone)}</strong> — the hold
+          lapses on its own if nobody completes or cancels it before then. They were quoted{' '}
           {formatCents(requested.quotedRateCents)}/mo, and that is the rate this settles at while the
           hold lives — not today&apos;s street rate, if it has moved since. Nothing has moved yet —
           check the old unit is actually empty before you confirm.

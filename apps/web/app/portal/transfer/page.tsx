@@ -4,7 +4,9 @@ import {
   previewTenantTransfer,
   tenantTransferLeases,
   transferOptionsFor,
+  PORTAL_TRANSFER_PROBLEM_COPY,
 } from '@/lib/portal/transfer'
+import { MAX_MOVE_IN_DAYS_AHEAD } from '@/lib/reservations/reserve'
 import { formatRate } from '@/lib/format'
 import { AdminForm } from '@/components/admin/form'
 import { cancelTransferAction, requestTransferAction } from './actions'
@@ -22,6 +24,25 @@ function isoDate(date: Date): string {
 
 function formatDate(date: Date): string {
   return new Intl.DateTimeFormat('en-US', { month: 'long', day: 'numeric', year: 'numeric' }).format(date)
+}
+
+// B-142 / PRD 02 §4.4 US-14: the hold's absolute facility-local expiry, never
+// a countdown.
+function formatExpiry(date: Date, timezone: string): string {
+  return new Intl.DateTimeFormat('en-US', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+    timeZone: timezone,
+  }).format(date)
+}
+
+// UTC day math, matching the server-side ceiling in `requestTransfer` — not
+// local-time `setDate`, which can drift a day off a UTC boundary depending on
+// the server's own timezone.
+function maxDateIso(): string {
+  const today = new Date()
+  const startOfTodayUtc = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate())
+  return isoDate(new Date(startOfTodayUtc + MAX_MOVE_IN_DAYS_AHEAD * 24 * 60 * 60 * 1000))
 }
 
 function Shell({ children }: { children: React.ReactNode }) {
@@ -127,6 +148,12 @@ export default async function PortalTransferPage({
           with you.
         </p>
         <p className="text-sm text-pretty">
+          The hold lasts until{' '}
+          <strong>{formatExpiry(lease.pending.expiresAt, lease.facilityTimezone)}</strong>. If the team
+          hasn&apos;t reached you by then, ring the office
+          {lease.facilityPhone ? ` on ${lease.facilityPhone}` : ''} to keep it.
+        </p>
+        <p className="text-sm text-pretty">
           They&apos;ll call to arrange a time. If you need it sooner, ring the office
           {lease.facilityPhone ? ` on ${lease.facilityPhone}` : ''}.
         </p>
@@ -153,6 +180,10 @@ export default async function PortalTransferPage({
     ? await previewTenantTransfer(actor.tenantId, lease.leaseId, selectedUnit.unitId, transferDate)
     : null
   const preview = previewResult?.ok ? previewResult.preview : null
+  // B-142. Used to be dropped entirely — a failed preview re-rendered the
+  // page byte-identical to before the request, with no price and no message
+  // (3.3.1), indistinguishable from a broken picker.
+  const previewProblem = previewResult && !previewResult.ok ? previewResult.problem : null
 
   return (
     <Shell>
@@ -198,7 +229,13 @@ export default async function PortalTransferPage({
                   <span className="flex flex-wrap items-baseline gap-x-2">
                     <span className="font-medium">Unit {option.unitNumber}</span>
                     <span className="text-muted-foreground">
-                      {option.unitTypeName} · {option.widthFt}×{option.lengthFt}
+                      {option.unitTypeName} ·{' '}
+                      <span aria-hidden="true">
+                        {option.widthFt}×{option.lengthFt}
+                      </span>
+                      <span className="sr-only">
+                        {option.widthFt} foot by {option.lengthFt} foot
+                      </span>
                     </span>
                     <span className="tabular-nums">{formatRate(option.rateCents)}/mo</span>
                     <span className="text-muted-foreground tabular-nums">
@@ -220,6 +257,7 @@ export default async function PortalTransferPage({
                 name="date"
                 type="date"
                 min={isoDate(new Date())}
+                max={maxDateIso()}
                 defaultValue={isoDate(transferDate)}
                 className="border-input bg-background h-11 max-w-xs rounded-md border px-2"
               />
@@ -232,6 +270,12 @@ export default async function PortalTransferPage({
               Show me what it costs
             </button>
           </form>
+
+          {previewProblem && (
+            <p role="alert" className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-900">
+              {PORTAL_TRANSFER_PROBLEM_COPY[previewProblem] ?? 'That preview could not be completed.'}
+            </p>
+          )}
 
           {preview && (
             <>

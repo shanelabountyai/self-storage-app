@@ -4,7 +4,7 @@ import { getSwitcherData } from '@/lib/admin/context'
 import { resolveSelectedFacility } from '@/lib/admin/facility-selection-logic'
 import { facilityTasks } from '@/lib/admin/tasks'
 import { delinquencyQueue } from '@/lib/admin/delinquency-queue'
-import { completeTaskAction } from '@/app/admin/tasks/actions'
+import { TaskCompleteForm } from '@/components/admin/task-complete-form'
 import { reportFindingAction } from './actions'
 
 export const metadata = { title: 'Walkthrough' }
@@ -76,25 +76,12 @@ export default async function WalkthroughPage() {
                     </span>
                   )}
                 </div>
-                <form action={completeTaskAction} className="mt-3 flex flex-wrap items-end gap-2">
-                  <input type="hidden" name="taskId" value={task.id} />
-                  <label htmlFor={`note-${task.id}`} className="sr-only">
-                    What did you check?
-                  </label>
-                  <input
-                    id={`note-${task.id}`}
-                    name="note"
-                    required
-                    placeholder="Walked the property, all clear"
-                    className="border-input bg-background min-h-11 min-w-0 flex-1 rounded-md border px-3 text-sm"
-                  />
-                  <button
-                    type="submit"
-                    className="border-input hover:bg-accent min-h-11 inline-flex items-center rounded-md border px-4 text-sm font-medium"
-                  >
-                    Walked
-                  </button>
-                </form>
+                <TaskCompleteForm
+                  taskId={task.id}
+                  subjectLabel={`Walkthrough for ${formatDate(task.businessDate)}`}
+                  notePlaceholder="Walked the property, all clear"
+                  buttonLabel="Walked"
+                />
               </li>
             ))}
           </ul>

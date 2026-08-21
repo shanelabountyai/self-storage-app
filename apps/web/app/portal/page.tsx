@@ -22,6 +22,16 @@ function formatDueDate(date: Date, timezone: string): string {
   return new Intl.DateTimeFormat('en-US', { timeZone: timezone, month: 'long', day: 'numeric' }).format(date)
 }
 
+// B-142. Absolute facility-local date and time — the hold expiry is never a
+// countdown (PRD 01 §6.8.1).
+function formatExpiry(date: Date, timezone: string): string {
+  return new Intl.DateTimeFormat('en-US', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+    timeZone: timezone,
+  }).format(date)
+}
+
 function PayNowButton({ lease }: { lease: PortalLeaseSummary }) {
   return (
     <Link
@@ -85,6 +95,36 @@ function LeaseCard({ lease, impersonated }: { lease: PortalLeaseSummary; imperso
               {lease.facilityPhone}
             </a>{' '}
             to pay by phone.
+          </p>
+        </div>
+      )}
+
+      {/* B-142 / PRD 01 §4.7 US-709, US-702. "Did that go through" is the one
+          question a tenant returns to answer — used to be two taps deep
+          behind the "Manage" disclosure. */}
+      {lease.pendingTransfer && (
+        <div role="status" className="border-input rounded-md border p-3 text-sm text-pretty">
+          <p>
+            You asked to move to <strong>Unit {lease.pendingTransfer.toUnitNumber}</strong> on{' '}
+            {formatDueDate(lease.pendingTransfer.transferDate, lease.facilityTimezone)}. We&apos;re
+            holding it until{' '}
+            {formatExpiry(lease.pendingTransfer.expiresAt, lease.facilityTimezone)}.{' '}
+            <Link href="/portal/transfer" className="underline underline-offset-4">
+              Manage this request
+            </Link>
+            .
+          </p>
+        </div>
+      )}
+      {lease.pendingMoveOutDate && (
+        <div role="status" className="border-input rounded-md border p-3 text-sm text-pretty">
+          <p>
+            You asked to move out on{' '}
+            <strong>{formatDueDate(lease.pendingMoveOutDate, lease.facilityTimezone)}</strong>.{' '}
+            <Link href="/portal/move-out" className="underline underline-offset-4">
+              Manage this request
+            </Link>
+            .
           </p>
         </div>
       )}

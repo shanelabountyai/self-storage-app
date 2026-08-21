@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { getSwitcherData } from '@/lib/admin/context'
 import { resolveSelectedFacility } from '@/lib/admin/facility-selection-logic'
 import { manualQueue } from '@/lib/access/manual-queue'
-import { completeTaskAction } from '@/app/admin/tasks/actions'
+import { TaskCompleteForm } from '@/components/admin/task-complete-form'
 
 export const metadata = { title: 'Keypad queue' }
 
@@ -99,24 +99,12 @@ export default async function KeypadQueuePage() {
               {item.assigneeName && ` · ${item.assigneeName}`}
             </p>
 
-            <form action={completeTaskAction} className="mt-3 flex flex-wrap items-end gap-2">
-              <input type="hidden" name="taskId" value={item.taskId} />
-              <label className="flex flex-1 flex-col gap-1 text-sm">
-                What you did
-                <input
-                  name="note"
-                  required
-                  placeholder="Keyed in at the north gate panel"
-                  className="border-input bg-background min-h-11 rounded-md border px-3 text-sm"
-                />
-              </label>
-              <button
-                type="submit"
-                className="border-input hover:bg-accent min-h-11 rounded-md border px-4 text-sm font-medium"
-              >
-                Done at the keypad
-              </button>
-            </form>
+            <TaskCompleteForm
+              taskId={item.taskId}
+              subjectLabel={item.instruction.action}
+              notePlaceholder="Keyed in at the north gate panel"
+              buttonLabel="Done at the keypad"
+            />
           </li>
         ))}
 

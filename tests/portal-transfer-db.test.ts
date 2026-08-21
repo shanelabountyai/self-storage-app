@@ -10,7 +10,7 @@ import {
   transferOptionsFor,
 } from '../apps/web/lib/portal/transfer'
 import { recomputeUnitStatus } from '../apps/web/lib/admin/units'
-import { expireReservations } from '../apps/web/lib/reservations/reserve'
+import { expireReservations, MAX_MOVE_IN_DAYS_AHEAD } from '../apps/web/lib/reservations/reserve'
 import { processCommsEvent } from '../apps/web/lib/comms/service'
 import * as provider from '../apps/web/lib/comms/provider'
 import type { Actor } from '../apps/web/lib/rbac/actor'
@@ -260,6 +260,22 @@ describeDb('portal transfer request (B-090 part 2)', () => {
       const result = await requestTransfer(tenantId, lease.id, to.id, daysFromToday(-1))
       expect(result).toEqual({ ok: false, problem: 'date_in_past' })
       expect(await prisma.reservation.count({ where: { unitId: to.id } })).toBe(0)
+    })
+
+    // B-142. No ceiling existed here at all before this — same window the
+    // public reserve page has always enforced.
+    it('refuses a date past the ceiling, and accepts the boundary day itself', async () => {
+      const from = await makeUnit(smallTypeId)
+      const tooFar = await makeUnit(largeTypeId)
+      const lease = await makeLease(from.id)
+
+      const refused = await requestTransfer(tenantId, lease.id, tooFar.id, daysFromToday(MAX_MOVE_IN_DAYS_AHEAD + 1))
+      expect(refused).toEqual({ ok: false, problem: 'date_too_far_out' })
+      expect(await prisma.reservation.count({ where: { unitId: tooFar.id } })).toBe(0)
+
+      const onBoundary = await makeUnit(largeTypeId)
+      const accepted = await requestTransfer(tenantId, lease.id, onBoundary.id, daysFromToday(MAX_MOVE_IN_DAYS_AHEAD))
+      expect(accepted.ok).toBe(true)
     })
 
     it('refuses a lease that is not this tenant’s', async () => {

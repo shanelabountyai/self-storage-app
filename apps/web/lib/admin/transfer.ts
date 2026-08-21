@@ -99,6 +99,10 @@ export type TransferHold = {
   unitId: string | null
   moveInDate: Date | null
   quotedRateCents: number
+  /// B-142. When this hold lapses — needed everywhere a screen states it,
+  /// because "held for them until you complete or cancel it" was false: the
+  /// hold also expires on its own, the same as any other `Reservation`.
+  expiresAt: Date
 }
 
 export async function transferHoldFor(
@@ -113,7 +117,7 @@ export async function transferHoldFor(
       status: 'held',
       expiresAt: { gt: new Date() },
     },
-    select: { id: true, unitId: true, moveInDate: true, quotedRateCents: true },
+    select: { id: true, unitId: true, moveInDate: true, quotedRateCents: true, expiresAt: true },
   })
 }
 
@@ -745,6 +749,10 @@ export type PendingTransferRequest = {
   toUnitNumber: string
   transferDate: Date
   quotedRateCents: number
+  /// B-142. The hold's real expiry, and the facility's own timezone to render
+  /// it in — every screen showing this request states it (PRD 02 §4.4 US-14).
+  expiresAt: Date
+  facilityTimezone: string
 }
 
 /// What the tenant asked for from the portal, if anything (B-090 part 2).
@@ -770,5 +778,7 @@ export async function pendingTransferRequest(
     toUnitNumber: unit.number,
     transferDate: held.moveInDate,
     quotedRateCents: held.quotedRateCents,
+    expiresAt: held.expiresAt,
+    facilityTimezone: lease.facility.timezone,
   }
 }
