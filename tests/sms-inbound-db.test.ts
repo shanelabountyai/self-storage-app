@@ -3,6 +3,9 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { prisma } from '../packages/db'
 import { routeInboundSms } from '../apps/web/lib/comms/sms-inbound'
 import { resolveTaskSubjects } from '../apps/web/lib/admin/task-subjects'
+import { tenantProfile } from '../apps/web/lib/admin/tenants'
+import type { Actor } from '../apps/web/lib/rbac/actor'
+import type { PermissionKey } from '@storage/core/rbac'
 
 // PRD 05 §8 Phase 3 / PRD 02 US-41 (B-135, D-78), against real rows.
 //
@@ -31,6 +34,24 @@ const STRANGER_PHONE = '+19995550000'
 
 let facilityId = ''
 let tenantId = ''
+
+/// Enough to read a profile and nothing more — B-143 only follows the card's
+/// own href, it does not mutate anything.
+function viewerAt(id: string): Actor {
+  return {
+    kind: 'staff',
+    staffUserId: 'staff-inbound-test',
+    assignments: [
+      {
+        facilityId: id,
+        roleKey: 'manager',
+        rank: 20,
+        permissions: new Set<PermissionKey>(['tenants:view']),
+        limits: { maxFeeWaiverCents: 0, maxRefundCents: 0, maxCreditCents: 0 },
+      },
+    ],
+  }
+}
 
 describeDb('inbound SMS routing (B-135)', () => {
   beforeAll(async () => {
@@ -196,6 +217,34 @@ describeDb('inbound SMS routing (B-135)', () => {
     const subject = subjects.get(`DomainEvent:${task.entityId}`)
     expect(subject?.label).toBe('Ada Texter — “my unit has water in it”')
     expect(subject?.href).toBe(`/admin/tenants/${tenantId}`)
+  })
+
+  it('renders the whole message where the card links (B-143)', async () => {
+    // The defect: the card truncates at 80 characters and `sms.inbound_received`
+    // had NO read site anywhere, so the rest of a long text — here the third
+    // sentence, the one carrying the unit number — reached no human at all.
+    // This follows the href the test above pins and asserts the words survive
+    // the trip, untruncated.
+    const body =
+      'Hi, I came by this morning and the office was shut. I have been trying to reach ' +
+      'someone since Friday about the leak. It is unit B-114 and the box at the back is ' +
+      'already soaked through.'
+    expect(body.length).toBeGreaterThan(80)
+
+    const result = await routeInboundSms({ rawPhone: TENANT_PHONE, body })
+    if (!result.ok) throw new Error('unreachable')
+
+    const profile = await tenantProfile(viewerAt(facilityId), tenantId)
+    const [received] = profile.inboundSms
+    expect(received?.body).toBe(body)
+    // The part the card could never show, and the reason this row existed.
+    expect(received?.body).toContain('unit B-114')
+    // Same row the task names, so a staffer arriving from the queue is looking
+    // at the message they clicked rather than the tenant's most recent one.
+    const task = await prisma.task.findUniqueOrThrow({ where: { id: result.taskId } })
+    expect(received?.id).toBe(task.entityId)
+    // CN-18 masking, on the same terms as an outbound `toAddress`.
+    expect(received?.phoneMasked).toBe(`••••${TENANT_PHONE.slice(-4)}`)
   })
 
   it('truncates a rambling message rather than letting it push the queue off screen', async () => {
