@@ -1,5 +1,6 @@
 import { classifySmsKeyword, SMS_CONFIRM_KEYWORD, SMS_OPT_IN_KEYWORD } from '@storage/core/comms'
 import { verifyTwilioSignature } from '@/lib/comms/twilio-signature'
+import { routeInboundSms } from '@/lib/comms/sms-inbound'
 import { SITE } from '@/lib/site-config'
 import {
   applySmsStart,
@@ -134,10 +135,31 @@ export async function POST(request: Request): Promise<Response> {
     return twiml(`${identification} Reply STOP to opt out.`)
   }
 
-  // Not a recognised keyword: acknowledged with no reply. Nothing in this
-  // item's scope reads or routes an ordinary inbound text (a tenant replying
-  // to a reminder with a question) — that is a real gap, left for the
-  // delivery-dashboard item that already owns "what happens to an inbound
-  // message we cannot act on automatically" (PROGRESS.md).
-  return twiml(null)
+  // Not a recognised keyword — an ordinary message, which until B-135 was
+  // answered with `<Response/>`: no reply, no record, nobody told. D-78
+  // declined the two-way inbox; this routes to the queue staff already work
+  // (US-41) and tells the sender a person has it.
+  const routed = await routeInboundSms({ rawPhone: from, body })
+
+  if (routed.ok) {
+    // Their OWN site's number, not the shared SMS line: the person who can
+    // actually open a gate or look at a unit is at that counter. Falls back to
+    // the SMS line only when the facility has no phone on file.
+    const callNumber = routed.facilityPhone ?? SITE.smsNumber.display
+    return twiml(
+      `${SITE.name}: thanks — we have passed this to the team at ${routed.facilityName} and someone will get back to you. For anything urgent call ${callNumber}.`,
+    )
+  }
+
+  // An empty body is a carrier artefact, not a person. Saying "we have passed
+  // it on" would be a lie about a message with no content.
+  if (routed.reason === 'empty') return twiml(null)
+
+  // A number we cannot place. The message is recorded either way (the event is
+  // written before this branch), but there is no honest facility to raise a
+  // task at — this SMS number is site-wide, so `To` cannot supply one. Give
+  // them a number to call rather than a receipt nobody can act on.
+  return twiml(
+    `${SITE.name}: we cannot match this number to an account, so we may not be able to reply. Please call ${SITE.smsNumber.display}.`,
+  )
 }

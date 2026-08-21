@@ -118,6 +118,43 @@ export async function resolveTaskSubjects(
     }
   }
 
+  // B-135. `inbound_sms_review` points at the domain event rather than at the
+  // tenant, because the tenant's own words live in its payload and one task
+  // per message is the whole point (a second question the same afternoon must
+  // not be swallowed by the first task's idempotency key). Same shape as
+  // `GateCommand` above: the task names an entity, this reads the detail off
+  // it and puts it on the card, so a staffer knows what they are opening.
+  const eventIds = byType.get('DomainEvent')
+  if (eventIds) {
+    const events = await prisma.domainEvent.findMany({
+      where: { id: { in: [...eventIds] } },
+      select: { id: true, payload: true },
+    })
+    const tenantIds = events
+      .map((event) => (event.payload as { tenantId?: string | null })?.tenantId)
+      .filter((id): id is string => typeof id === 'string')
+    const tenants = tenantIds.length
+      ? await prisma.tenant.findMany({
+          where: { id: { in: tenantIds } },
+          select: { id: true, firstName: true, lastName: true },
+        })
+      : []
+    const byId = new Map(tenants.map((tenant) => [tenant.id, tenant]))
+
+    for (const event of events) {
+      const payload = (event.payload ?? {}) as { tenantId?: string | null; body?: string }
+      const tenant = payload.tenantId ? byId.get(payload.tenantId) : undefined
+      const name = tenant ? `${tenant.firstName} ${tenant.lastName}` : 'Unknown number'
+      result.set(key('DomainEvent', event.id), {
+        // The message itself, on the card. A queue item that says only "a
+        // tenant texted back" makes a staffer open it to find out whether it
+        // is urgent — which is the click B-115 removed everywhere else.
+        label: payload.body ? `${name} — “${truncate(payload.body, 80)}”` : name,
+        href: payload.tenantId ? `/admin/tenants/${payload.tenantId}` : null,
+      })
+    }
+  }
+
   const facilityIds = byType.get('Facility')
   if (facilityIds) {
     // `gate_drift_review` and `daily_walkthrough` are the whole facility's
@@ -130,6 +167,14 @@ export async function resolveTaskSubjects(
   }
 
   return result
+}
+
+/// Long enough to tell a gate fault from a billing question at a glance, short
+/// enough that one rambling text does not push every other card off the
+/// screen. The full message is on the tenant's own record.
+function truncate(text: string, max: number): string {
+  const clean = text.replace(/\s+/g, ' ').trim()
+  return clean.length <= max ? clean : `${clean.slice(0, max - 1)}…`
 }
 
 function leaseSubject(

@@ -112,6 +112,17 @@ export const EVENT_NAMES = [
   'delinquency.day_reached',
   'delinquency.stage_changed',
 
+  // Inbound messages (PRD 05 CN-14, §8 Phase 3)
+  /// B-135 / D-78. A text arrived that is not STOP, HELP, START or YES — a
+  /// tenant asking a question rather than working a keyword.
+  ///
+  /// The event IS the record: `Message` is outbound by construction, and D-78
+  /// declined the two-way inbox that would have given inbound its own table.
+  /// The payload carries the words, so the task that points here (via
+  /// `entityId`, and `sourceEventId`) has something to show. Nothing consumes
+  /// it as a comms rule — replying is a person's job, which is the point.
+  'sms.inbound_received',
+
   // Access control (PRD 03 FR-1)
   'access.granted',
   'access.suspended',

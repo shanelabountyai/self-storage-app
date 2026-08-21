@@ -115,6 +115,23 @@ export const TASK_TYPES = [
     sensitive: false,
   },
   {
+    // PRD 05 §8 Phase 3 / PRD 02 US-41 (B-135, D-78). Somebody texted us back
+    // and it was not a keyword.
+    //
+    // `high` at creation and not by accident: everything else in this queue is
+    // work the business found for itself, and this is the only type where a
+    // person is standing somewhere waiting on an answer they have no way of
+    // knowing we received.
+    //
+    // Not sensitive. The tenant's own words are already permanent in the
+    // domain event this task points at, so an audit row would record only that
+    // a staffer marked a message read — which the task row already says.
+    type: 'inbound_sms_review',
+    label: 'A tenant texted back — read it and reply',
+    requiredProofFields: ['note'],
+    sensitive: false,
+  },
+  {
     // PRD 05 CN-19 / FR-15. A hard bounce means we can no longer reach this
     // tenant by email, and every notice this system sends is email-only until
     // B-074. Somebody has to get a working address by another route.
