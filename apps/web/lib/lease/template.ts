@@ -23,26 +23,31 @@
 // operator had signed up to, which is the failure mode worth avoiding here.
 
 export const LEASE_MERGE_FIELDS = [
-  'tenantName',
-  'tenantAddress',
-  'facilityName',
-  'facilityAddress',
-  'unitNumber',
-  'unitSize',
-  'monthlyRate',
-  'protectionSummary',
-  'moveInDate',
-  'billingDay',
+  "tenantName",
+  "tenantAddress",
+  "facilityName",
+  "facilityAddress",
+  "unitNumber",
+  "unitSize",
+  "monthlyRate",
+  "protectionSummary",
+  "moveInDate",
+  "billingDay",
   /// B-044. What the first payment bought, in the facility's actual billing
   /// policy. This was a fixed sentence promising proration until the billing
   /// engine existed to contradict it — under the default `anniversary` policy
   /// nothing is prorated on the way in, because the tenant's period starts on
   /// the day they moved in. A signed agreement saying otherwise is a term the
   /// operator would have to honour.
-  'firstPaymentSummary',
-  'lateFeeSummary',
-  'gateHoursSummary',
-] as const
+  "firstPaymentSummary",
+  /// B-144. How long the agreement holds them for. A fixed sentence promising
+  /// "no penalty for leaving" until a promotion could carry a minimum stay —
+  /// at which point the signed document would have flatly contradicted the
+  /// condition the discount was given under, in the tenant's favour.
+  "termSummary",
+  "lateFeeSummary",
+  "gateHoursSummary",
+] as const;
 
 /// The plain-language summary US-501 step 4 requires *above* the full text.
 ///
@@ -62,7 +67,7 @@ export const LEASE_SUMMARY_TEMPLATE = `
   <dd>{{monthlyRate}} per month, due on day {{billingDay}} of each month. {{protectionSummary}}</dd>
 
   <dt>How long for</dt>
-  <dd>Month to month. There is no fixed term and no early-termination penalty.</dd>
+  <dd>Month to month. {{termSummary}}</dd>
 
   <dt>If you pay late</dt>
   <dd>{{lateFeeSummary}} If you fall far enough behind, we can deny access to your unit and eventually sell the contents to recover what you owe. We will write to you first.</dd>
@@ -73,7 +78,7 @@ export const LEASE_SUMMARY_TEMPLATE = `
   <dt>What we do not cover</dt>
   <dd>We are not responsible for your belongings. That is what the protection plan or your own insurance is for.</dd>
 </dl>
-`.trim()
+`.trim();
 
 export const LEASE_TEMPLATE = `
 <h2>Storage rental agreement</h2>
@@ -86,7 +91,7 @@ export const LEASE_TEMPLATE = `
 <p>Rent is {{monthlyRate}} per month, payable in advance on day {{billingDay}} of each month. {{firstPaymentSummary}}</p>
 
 <h3>3. Term</h3>
-<p>This agreement runs month to month. Either of us may end it by giving notice as described in section 8. There is no fixed term and no penalty for leaving.</p>
+<p>This agreement runs month to month. Either of us may end it by giving notice as described in section 8. {{termSummary}}</p>
 
 <h3>4. Late payment</h3>
 <p>{{lateFeeSummary}} If your account stays unpaid, we may deny you access to the unit, and we may exercise a lien on the contents and sell them to recover what you owe. Before that happens we will send you written notice at the address in this agreement, and we will follow the process the law requires.</p>
@@ -109,7 +114,7 @@ export const LEASE_TEMPLATE = `
 
 <h3>10. Changes</h3>
 <p>We may change the rent or the terms of this agreement by giving you written notice in advance. If you keep the unit after a change takes effect, you have accepted it.</p>
-`.trim()
+`.trim();
 
 /// The sentence a renter agrees to when they tick the consent box.
 ///
@@ -117,35 +122,38 @@ export const LEASE_TEMPLATE = `
 /// act — not something a signature implies — so this is deliberately separate
 /// from the signature field and unticked by default.
 export const ELECTRONIC_RECORDS_CONSENT =
-  'I agree to sign this agreement electronically and to receive my lease, receipts and notices by email rather than on paper. I can ask for a paper copy at any time.'
+  "I agree to sign this agreement electronically and to receive my lease, receipts and notices by email rather than on paper. I can ask for a paper copy at any time.";
 
 /// PRD 02 US-13 / B-032: this same sentence is what the `notice_email` consent
 /// record captures ("consent to receive notices by email is its own consent
 /// type... captured with the disclosure version at lease signing"). Bumped
 /// when the sentence above changes.
-export const ELECTRONIC_RECORDS_CONSENT_VERSION = 'v1'
+export const ELECTRONIC_RECORDS_CONSENT_VERSION = "v1";
 
 /// A typed name is a signature under E-SIGN when it is the signer's own act and
 /// is attributable to them. Comparing it to the name on the lease is the
 /// cheapest attribution check there is, and catches the common real error —
 /// someone typing "yes" or their initials — without rejecting genuine variants.
-export function signatureMatchesName(typed: string, legalName: string): boolean {
+export function signatureMatchesName(
+  typed: string,
+  legalName: string,
+): boolean {
   const normalise = (value: string) =>
     value
       .toLowerCase()
-      .replace(/[^a-z\s]/g, '')
-      .replace(/\s+/g, ' ')
-      .trim()
+      .replace(/[^a-z\s]/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
 
-  const typedNormal = normalise(typed)
-  const nameNormal = normalise(legalName)
-  if (typedNormal === '' || nameNormal === '') return false
-  if (typedNormal === nameNormal) return true
+  const typedNormal = normalise(typed);
+  const nameNormal = normalise(legalName);
+  if (typedNormal === "" || nameNormal === "") return false;
+  if (typedNormal === nameNormal) return true;
 
   // Accept a signer who includes a middle name, or omits one that is on file.
-  const typedParts = typedNormal.split(' ')
-  const nameParts = nameNormal.split(' ')
-  const first = nameParts[0]
-  const last = nameParts[nameParts.length - 1]
-  return typedParts[0] === first && typedParts[typedParts.length - 1] === last
+  const typedParts = typedNormal.split(" ");
+  const nameParts = nameNormal.split(" ");
+  const first = nameParts[0];
+  const last = nameParts[nameParts.length - 1];
+  return typedParts[0] === first && typedParts[typedParts.length - 1] === last;
 }
