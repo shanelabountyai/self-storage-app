@@ -5036,7 +5036,7 @@ Full e2e against a production build, **run twice back to back with no reseed**: 
 
 ## B-136 — A transfer quote that nothing honoured
 
-`PENDING`
+`d7bd8a6`
 
 **What it built.** B-090 part 2 shipped a portal transfer that quotes the tenant a rate, holds the unit, and writes the figure onto the hold as `quotedRateCents` — and then `completeTransfer` re-read the current street rate when staff committed. A rate rise between the ask and the completion charged the tenant something other than the number they agreed to, silently, while the number they agreed to sat on the row. `previewTransferFor` now honours the hold's quote when the hold is on the unit being previewed, and everything downstream inherits it: the staff preview, the tenant preview, the ledger charge, and the new lease's `monthlyRateCents`.
 
