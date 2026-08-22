@@ -169,6 +169,23 @@ const LAST_REVIEWED = '19 August 2026'
 // was not re-verified here. The coverage claim is now continuously verified by
 // a test and no longer needs a date; those three still do, and pretending
 // otherwise would be the understating failure this page has also already made.
+//
+// Re-verified 2026-08-22, at B-148. No prose change, and this one is the
+// OVERSTATING case caught rather than shipped. "A successful save is announced
+// too" has sat in the list below since B-094 and was made honest for
+// `AdminForm` by B-111 — but the two PUBLIC marketing forms, the waitlist
+// notify-me and the quote/callback, are not built on `AdminForm` and were
+// still rendering their `role="status"` only in the success branch. A region
+// inserted already carrying its message is the exact failure B-111's own entry
+// above describes, so the sentence was false on the two forms a prospect is
+// most likely to be the first to use. B-148 moves both onto a shared
+// `FormResult` that mounts the region empty at load and writes into it, and
+// moves focus there because both replace themselves on success and were
+// dropping it to `<body>` (2.4.3). The sentence stays as written and is now
+// true of them too; `e2e/smoke.spec.ts` asserts the region pre-exists the
+// submit for both, using B-156's `expectPreexisting`, so this cannot silently
+// regress the way it did between B-094 and B-111. `LAST_REVIEWED` is not
+// bumped, for the reason two entries above give.
 export default function AccessibilityPage() {
   return (
     <ProsePage

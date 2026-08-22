@@ -4,6 +4,7 @@ import { expect, test } from '@playwright/test'
 import { LEGAL_PAGES } from '../apps/web/lib/site-config'
 import { DEMO_PROMO_CODE } from '../apps/web/scripts/demo-credentials'
 import { GUIDES } from '../apps/web/lib/guides/catalog'
+import { expectAnnounced, expectPreexisting } from './a11y-helpers'
 
 test('home page renders its search hero', async ({ page }) => {
   await page.goto('/')
@@ -1549,6 +1550,17 @@ test('a sold-out size offers to email you instead of dead-ending in a phone numb
   // a 30-second timeout rather than as "wrong locator". The element is
   // unambiguous inside this card.
   await expect(card.getByLabel('Your email')).toBeHidden()
+
+  // B-148. Captured BEFORE the submit and asserted empty, which is the whole
+  // contract: until this item the region was rendered only in the success
+  // branch, so it arrived already carrying its message — an insertion, which
+  // VoiceOver announces unreliably and NVDA routinely misses. A locator fetched
+  // fresh afterwards would pass either way. It also has to pre-exist the
+  // disclosure being opened, not just the submit, because it lives outside the
+  // <details> and a region inside a collapsed one is not in the tree at all.
+  const status = card.getByRole('status')
+  await expectPreexisting(status)
+
   await card.locator('summary').click()
   const email = card.getByLabel('Your email')
   await expect(email).toBeVisible()
@@ -1558,7 +1570,37 @@ test('a sold-out size offers to email you instead of dead-ending in a phone numb
 
   // Announced in a status region rather than only rendered — a screen-reader
   // user who submits a form and hears nothing does not know it worked.
-  await expect(card.getByRole('status')).toContainText("You're on the list")
+  await expectAnnounced(status, /You're on the list/)
+
+  // 2.4.3. The disclosure and its button unmount on success, so without this
+  // focus lands on <body>: a keyboard user is silently returned to the top of
+  // the document and their next Tab starts from the site header.
+  await expect(status).toBeFocused()
+})
+
+test('the lead form announces and keeps focus when it succeeds', async ({ page }) => {
+  // The other half of B-148 — same defect, same fix, different surface. The
+  // waitlist form is the low-intent capture and this is the "not ready to
+  // reserve" one; both were inserting their live region on submit.
+  await page.goto('/storage/tx/austin/demo-austin-south')
+
+  const form = page.getByRole('main').locator('section:has(h2:text("Not ready yet"))')
+  const status = form.getByRole('status')
+  await expectPreexisting(status)
+
+  // A FIXED address on purpose. `captureLead` dedupes inside its window and
+  // returns the same success without writing a second `Lead`, so a repeated
+  // sweep against the un-reseeded demo database neither grows the table nor
+  // walks toward US-8 AC4's five-per-ten-minutes limit — which counts `Lead`
+  // rows per submitter and would eventually refuse from this one IP.
+  await form.getByLabel('Your name').fill('E2E Prospect')
+  // `exact` because `getByLabel` substring-matches, and the marketing-consent
+  // checkbox's own label starts "Send me occasional emails".
+  await form.getByLabel('Email', { exact: true }).fill('e2e-lead@example.com')
+  await form.getByRole('button', { name: 'Send' }).click()
+
+  await expectAnnounced(status, /somebody from this facility will be in touch/)
+  await expect(status).toBeFocused()
 })
 
 test('a waitlist cancel link that is not ours says so without failing', async ({ page }) => {
