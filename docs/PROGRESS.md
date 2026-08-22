@@ -5430,7 +5430,7 @@ The card's `href` has always pointed at `/admin/tenants/{tenantId}`, so the fix 
 
 ## B-150 — AR aging sat under a month picker and always answered "as of today"
 
-`PENDING`
+`8aa64cc`
 
 **What it built.** `/admin/reports` has a month picker at the top. Two sections down, B-131/D-68 had made unit occupancy either answer for the month or say which instant it does answer for. One section below **that**, the AR aging table computed from `new Date()` and said nothing — so a month-end AR figure and the aging table beneath it disagreed with nothing on screen explaining why, and the fix for one had not generalised to the other. Confirmed as reported: `agingForFacility` did `const now = new Date()` and its own comment said it "takes no date and cannot be given one".
 
