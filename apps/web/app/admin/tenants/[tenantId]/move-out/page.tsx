@@ -1,66 +1,86 @@
-import Link from 'next/link'
-import { getAdminActor } from '@/lib/admin/context'
-import { previewMoveOut } from '@/lib/admin/move-out'
-import { formatCents } from '@/lib/format'
-import { AdminForm, Field } from '@/components/admin/form'
-import { REASON_CODES } from '@storage/core/audit'
-import { completeMoveOutAction } from './actions'
+import Link from "next/link";
+import { getAdminActor } from "@/lib/admin/context";
+import { previewMoveOut } from "@/lib/admin/move-out";
+import { formatCents } from "@/lib/format";
+import { AdminForm, Field } from "@/components/admin/form";
+import { REASON_CODES } from "@storage/core/audit";
+import { completeMoveOutAction } from "./actions";
 
-export const metadata = { title: 'Move out' }
+export const metadata = { title: "Move out" };
 
 // PRD 02 US-14 (move-out). The figure staff confirm is the figure that posts:
 // the settlement is previewed from the same function the action re-runs, so
 // there is no second calculation to drift.
 
-const FIELD_CLASS = 'flex flex-col gap-1 text-sm'
+const FIELD_CLASS = "flex flex-col gap-1 text-sm";
 
 function todayIso(): string {
-  return new Date().toISOString().slice(0, 10)
+  return new Date().toISOString().slice(0, 10);
 }
 
 function isoDate(date: Date): string {
-  return date.toISOString().slice(0, 10)
+  return date.toISOString().slice(0, 10);
 }
 
 export default async function MoveOutPage({
   params,
   searchParams,
 }: {
-  params: Promise<{ tenantId: string }>
-  searchParams: Promise<{ lease?: string; date?: string }>
+  params: Promise<{ tenantId: string }>;
+  searchParams: Promise<{ lease?: string; date?: string }>;
 }) {
-  const { tenantId } = await params
-  const { lease: leaseId, date } = await searchParams
-  const actor = await getAdminActor()
+  const { tenantId } = await params;
+  const { lease: leaseId, date } = await searchParams;
+  const actor = await getAdminActor();
 
   if (!leaseId) {
     return (
       <div className="flex flex-col gap-4">
         <h1 className="text-lg font-semibold">Move out</h1>
-        <p className="text-sm">Choose a unit from the tenant&apos;s profile to move out.</p>
-        <Link href={`/admin/tenants/${tenantId}`} className="text-sm underline underline-offset-2">
+        <p className="text-sm">
+          Choose a unit from the tenant&apos;s profile to move out.
+        </p>
+        <Link
+          href={`/admin/tenants/${tenantId}`}
+          className="text-sm underline underline-offset-2"
+        >
           ← Back to the profile
         </Link>
       </div>
-    )
+    );
   }
 
-  let preview = await previewMoveOut(actor, leaseId, new Date(`${date ?? todayIso()}T00:00:00.000Z`))
+  let preview = await previewMoveOut(
+    actor,
+    leaseId,
+    new Date(`${date ?? todayIso()}T00:00:00.000Z`),
+  );
 
   // No explicit date in the URL yet: default to what the tenant already
   // requested (B-041), if anything, rather than today — the whole point of a
   // portal request is that staff see it pre-filled, not a blank form that
   // happens to ignore what the tenant already told them.
   if (!date && preview.requestedMoveOutDate) {
-    preview = await previewMoveOut(actor, leaseId, preview.requestedMoveOutDate)
+    preview = await previewMoveOut(
+      actor,
+      leaseId,
+      preview.requestedMoveOutDate,
+    );
   }
-  const moveOutDate = date ?? (preview.requestedMoveOutDate ? isoDate(preview.requestedMoveOutDate) : todayIso())
-  const { settlement } = preview
+  const moveOutDate =
+    date ??
+    (preview.requestedMoveOutDate
+      ? isoDate(preview.requestedMoveOutDate)
+      : todayIso());
+  const { settlement } = preview;
 
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <Link href={`/admin/tenants/${tenantId}`} className="text-sm underline underline-offset-2">
+        <Link
+          href={`/admin/tenants/${tenantId}`}
+          className="text-sm underline underline-offset-2"
+        >
           ← Back to the profile
         </Link>
         <h1 className="mt-1 text-lg font-semibold">
@@ -69,9 +89,12 @@ export default async function MoveOutPage({
       </div>
 
       {preview.requestedMoveOutDate && (
-        <p role="status" className="border-input rounded-md border p-3 text-sm text-pretty">
-          The tenant requested this move-out from their account. Verify the unit is empty and clean,
-          then finalize below.
+        <p
+          role="status"
+          className="border-input rounded-md border p-3 text-sm text-pretty"
+        >
+          The tenant requested this move-out from their account. Verify the unit
+          is empty and clean, then finalize below.
         </p>
       )}
 
@@ -99,9 +122,13 @@ export default async function MoveOutPage({
       </form>
 
       {preview.noticeShortfallDays > 0 && (
-        <p role="status" className="border-input rounded-md border p-3 text-sm text-pretty">
-          This is {preview.noticeShortfallDays} day{preview.noticeShortfallDays === 1 ? '' : 's'} short
-          of the notice the lease asks for. Recorded, not blocked — the lease&apos;s remedy is a
+        <p
+          role="status"
+          className="border-input rounded-md border p-3 text-sm text-pretty"
+        >
+          This is {preview.noticeShortfallDays} day
+          {preview.noticeShortfallDays === 1 ? "" : "s"} short of the notice the
+          lease asks for. Recorded, not blocked — the lease&apos;s remedy is a
           charge, not a refusal.
         </p>
       )}
@@ -115,54 +142,101 @@ export default async function MoveOutPage({
           <dt>
             Proration credit
             {!preview.prorateOnMoveOut && (
-              <span className="text-muted-foreground"> — this facility does not prorate</span>
+              <span className="text-muted-foreground">
+                {" "}
+                — this facility does not prorate
+              </span>
             )}
           </dt>
-          <dd className="tabular-nums">−{formatCents(settlement.prorationCreditCents)}</dd>
+          <dd className="tabular-nums">
+            −{formatCents(settlement.prorationCreditCents)}
+          </dd>
         </div>
+        {settlement.recaptureCents > 0 && (
+          <div className="flex justify-between gap-4">
+            <dt>
+              Promotional discount recovered
+              <span className="text-muted-foreground block text-pretty">
+                {preview.recapture.reason}
+              </span>
+            </dt>
+            <dd className="tabular-nums">
+              {formatCents(settlement.recaptureCents)}
+            </dd>
+          </div>
+        )}
         <div className="flex justify-between gap-4 border-t pt-2 font-medium">
           <dt>
             {settlement.refundDueCents > 0
-              ? 'Refund due to tenant'
+              ? "Refund due to tenant"
               : settlement.amountDueCents > 0
-                ? 'Still owed by tenant'
-                : 'Settled in full'}
+                ? "Still owed by tenant"
+                : "Settled in full"}
           </dt>
           <dd className="tabular-nums">
-            {formatCents(settlement.refundDueCents || settlement.amountDueCents)}
+            {formatCents(
+              settlement.refundDueCents || settlement.amountDueCents,
+            )}
           </dd>
         </div>
       </dl>
 
       {settlement.needsManagerOverride && (
-        <p role="alert" className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-pretty text-red-900">
-          This lease owes more than the {formatCents(preview.writeOffThresholdCents)} write-off
-          threshold. A manager has to close it.
+        <p
+          role="alert"
+          className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-pretty text-red-900"
+        >
+          This lease owes more than the{" "}
+          {formatCents(preview.writeOffThresholdCents)} write-off threshold. A
+          manager has to close it.
         </p>
       )}
 
-      <AdminForm action={completeMoveOutAction} label="Complete move-out" className="flex max-w-lg flex-col gap-3">
+      <AdminForm
+        action={completeMoveOutAction}
+        label="Complete move-out"
+        className="flex max-w-lg flex-col gap-3"
+      >
         <input type="hidden" name="tenantId" value={tenantId} />
         <input type="hidden" name="leaseId" value={leaseId} />
         <input type="hidden" name="moveOutDate" value={moveOutDate} />
 
-        <Field name="reason" label="Reason" as="select" defaultValue="tenant_request" className={FIELD_CLASS}>
+        <Field
+          name="reason"
+          label="Reason"
+          as="select"
+          defaultValue="tenant_request"
+          className={FIELD_CLASS}
+        >
           <option value="tenant_request">Tenant moved out</option>
-          <option value="abandonment">Abandoned — dated to last occupancy evidence</option>
+          <option value="abandonment">
+            Abandoned — dated to last occupancy evidence
+          </option>
         </Field>
 
         {settlement.canWriteOff && (
           <>
             <label className="flex items-start gap-2 text-sm">
-              <input type="checkbox" name="writeOff" value="yes" className="mt-1" />
+              <input
+                type="checkbox"
+                name="writeOff"
+                value="yes"
+                className="mt-1"
+              />
               <span>
-                Write off the remaining {formatCents(settlement.amountDueCents)} and close the account
+                Write off the remaining {formatCents(settlement.amountDueCents)}{" "}
+                and close the account
               </span>
             </label>
-            <Field name="reasonCode" label="Write-off reason" as="select" className={FIELD_CLASS}>
+            <Field
+              name="reasonCode"
+              label="Write-off reason"
+              as="select"
+              className={FIELD_CLASS}
+            >
               {REASON_CODES.map((code) => (
                 <option key={code} value={code}>
-                  {code.replace(/_/g, ' ')}
+                  {code.replace(/_/g, " ")}
                 </option>
               ))}
             </Field>
@@ -170,8 +244,8 @@ export default async function MoveOutPage({
         )}
 
         <p className="text-muted-foreground text-sm text-pretty">
-          The unit goes to maintenance, not straight back on sale. Someone has to confirm it is empty
-          and clean before it can be rented again.
+          The unit goes to maintenance, not straight back on sale. Someone has
+          to confirm it is empty and clean before it can be rented again.
         </p>
 
         <button
@@ -182,5 +256,5 @@ export default async function MoveOutPage({
         </button>
       </AdminForm>
     </div>
-  )
+  );
 }

@@ -109,6 +109,20 @@ enum BillingPolicy {
   first_of_month
 }
 
+/// PRD 02 US-10 (B-145). What happens to a promotional discount already given
+/// when the lease ends before the minimum stay it was given under.
+///
+/// `none` is the default and is deliberate: US-10 says the minimum is "implied
+/// by recapture rules", and a facility that has not chosen one must not start
+/// charging former tenants because a column appeared. Configuration, not law
+/// (D-10) — no statute governs it and the lease term is what makes it
+/// collectable at all.
+enum PromoRecapturePolicy {
+  none
+  full
+  prorated
+}
+
 enum InvoiceKind {
   rent
   fee
@@ -548,6 +562,11 @@ model Facility {
   /// either way and "no proration on move-out" is the common lease term, so
   /// that is the shipped default — configuration, not law (D-10).
   prorateOnMoveOut             Boolean       @default(false)
+  /// US-10 (B-145). Whether a promotional discount already given is charged
+  /// back when the lease ends inside its minimum stay, and how much of it.
+  /// `prorated` recovers the share of the discount matching the months of the
+  /// minimum the tenant did not serve. Default `none` — see the enum.
+  promoRecapturePolicy         PromoRecapturePolicy @default(none)
   /// US-17. Whether every lease bills on the 1st, or each on its own move-in
   /// anniversary. **Anniversary is the default (D-27)** — the move-in payment
   /// buys a full period starting that day, so nothing is prorated on the way

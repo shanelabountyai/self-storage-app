@@ -1,4 +1,4 @@
-import { unusedRemainder, type BillingPeriod } from '../billing/index.ts'
+import { unusedRemainder, type BillingPeriod } from "../billing/index.ts";
 
 // PRD 02 US-14 (move-out). What a lease is worth on the day it ends.
 //
@@ -27,8 +27,8 @@ import { unusedRemainder, type BillingPeriod } from '../billing/index.ts'
 /// Whole days from `from` to `to`, exclusive of `to`. Both are calendar dates
 /// (UTC midnight), which is how move-out and paid-through are stored.
 function daysBetween(from: Date, to: Date): number {
-  const MS_PER_DAY = 24 * 60 * 60 * 1000
-  return Math.round((to.getTime() - from.getTime()) / MS_PER_DAY)
+  const MS_PER_DAY = 24 * 60 * 60 * 1000;
+  return Math.round((to.getTime() - from.getTime()) / MS_PER_DAY);
 }
 
 /// The unused portion of an already-paid billing period, as a credit.
@@ -44,80 +44,104 @@ export function proratedCredit(
 ): number {
   // Nothing to refund once the period is already over, or when the move-out
   // is at or after its end.
-  if (moveOutDate.getTime() >= period.end.getTime()) return 0
+  if (moveOutDate.getTime() >= period.end.getTime()) return 0;
   return unusedRemainder({
     monthlyCents: monthlyRateCents,
     period,
     from: period.start,
     to: moveOutDate,
-  }).amountCents
+  }).amountCents;
 }
 
 export type MoveOutSettlementInput = {
   /// The lease's current ledger balance. Positive means the tenant owes.
-  balanceCents: number
-  monthlyRateCents: number
+  balanceCents: number;
+  monthlyRateCents: number;
   /// The last day covered by what has been paid. Null when nothing is paid
   /// ahead, in which case there is nothing to prorate back.
-  paidThroughDate: Date | null
-  moveOutDate: Date
-  prorateOnMoveOut: boolean
-  writeOffThresholdCents: number
+  paidThroughDate: Date | null;
+  moveOutDate: Date;
+  prorateOnMoveOut: boolean;
+  writeOffThresholdCents: number;
+  /// B-145. A promotional discount charged back because the lease ended inside
+  /// its minimum stay. Zero under the default policy and for every lease that
+  /// carried no promotion.
+  ///
+  /// An INPUT rather than something computed here, for the same reason
+  /// `period` is: this file is pure and the amount depends on a redemption's
+  /// applied periods, a promotion's term and a facility's policy — three rows
+  /// only the caller can read. What this file owns is that the figure lands in
+  /// the settlement rather than beside it.
+  recaptureCents?: number;
   /// The billing period the move-out falls in — the denominator US-18's AC
   /// specifies. Supplied by the caller because only it knows the facility's
   /// billing policy and the lease's billing day.
-  period: BillingPeriod
-}
+  period: BillingPeriod;
+};
 
 export type MoveOutSettlement = {
   /// Credit posted for the unused part of a paid period. Zero when the
   /// facility does not prorate, or when the tenant leaves owing.
-  prorationCreditCents: number
+  prorationCreditCents: number;
+  /// B-145. Promotional discount charged back on the way out, as a debit.
+  recaptureCents: number;
   /// What is left after any proration credit. Positive = owed by the tenant,
   /// negative = owed back to them.
-  netBalanceCents: number
+  netBalanceCents: number;
   /// True when the residual is a debt small enough to write off under policy.
-  canWriteOff: boolean
+  canWriteOff: boolean;
   /// True when the lease cannot be closed without a manager: a debt above the
   /// write-off threshold.
-  needsManagerOverride: boolean
+  needsManagerOverride: boolean;
   /// What the tenant is owed back, if anything.
-  refundDueCents: number
+  refundDueCents: number;
   /// What the tenant still owes, if anything.
-  amountDueCents: number
-}
+  amountDueCents: number;
+};
 
-export function settleMoveOut(input: MoveOutSettlementInput): MoveOutSettlement {
+export function settleMoveOut(
+  input: MoveOutSettlementInput,
+): MoveOutSettlement {
   // `paidThroughDate` remains the gate rather than the arithmetic: it answers
   // "is any of this period actually paid for", which is what makes a refund
   // owed at all. The period answers "how much of it is unused", which is the
   // part US-18 specifies.
   const paidBeyondMoveOut =
     input.paidThroughDate !== null &&
-    input.paidThroughDate.getTime() > input.moveOutDate.getTime()
+    input.paidThroughDate.getTime() > input.moveOutDate.getTime();
 
   const prorationCreditCents =
     input.prorateOnMoveOut && paidBeyondMoveOut
       ? proratedCredit(input.monthlyRateCents, input.period, input.moveOutDate)
-      : 0
+      : 0;
 
-  const netBalanceCents = input.balanceCents - prorationCreditCents
+  // Added to what is owed, not netted against the credit separately: a
+  // recapture is a charge on this lease like any other, so it moves the write-
+  // off and manager-override decisions below exactly as a rent arrear would.
+  // A recapture that showed on the preview but not in `amountDueCents` would be
+  // a figure staff read out and nobody collected.
+  const recaptureCents = Math.max(0, Math.round(input.recaptureCents ?? 0));
 
-  const refundDueCents = netBalanceCents < 0 ? -netBalanceCents : 0
-  const amountDueCents = netBalanceCents > 0 ? netBalanceCents : 0
+  const netBalanceCents =
+    input.balanceCents - prorationCreditCents + recaptureCents;
+
+  const refundDueCents = netBalanceCents < 0 ? -netBalanceCents : 0;
+  const amountDueCents = netBalanceCents > 0 ? netBalanceCents : 0;
 
   // A write-off only ever forgives a debt. A credit balance is money we hold
   // and owe back — "writing off" a refund would be keeping it.
-  const canWriteOff = amountDueCents > 0 && amountDueCents <= input.writeOffThresholdCents
+  const canWriteOff =
+    amountDueCents > 0 && amountDueCents <= input.writeOffThresholdCents;
 
   return {
     prorationCreditCents,
+    recaptureCents,
     netBalanceCents,
     canWriteOff,
     needsManagerOverride: amountDueCents > input.writeOffThresholdCents,
     refundDueCents,
     amountDueCents,
-  }
+  };
 }
 
 /// Whether the notice a lease requires was actually given.
@@ -131,13 +155,13 @@ export function noticeShortfallDays(
   moveOutDate: Date,
   requiredNoticeDays: number,
 ): number {
-  if (requiredNoticeDays <= 0) return 0
-  if (!noticeGivenAt) return requiredNoticeDays
+  if (requiredNoticeDays <= 0) return 0;
+  if (!noticeGivenAt) return requiredNoticeDays;
   const given = Date.UTC(
     noticeGivenAt.getUTCFullYear(),
     noticeGivenAt.getUTCMonth(),
     noticeGivenAt.getUTCDate(),
-  )
-  const days = daysBetween(new Date(given), moveOutDate)
-  return Math.max(0, requiredNoticeDays - days)
+  );
+  const days = daysBetween(new Date(given), moveOutDate);
+  return Math.max(0, requiredNoticeDays - days);
 }
