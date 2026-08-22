@@ -5402,7 +5402,7 @@ The card's `href` has always pointed at `/admin/tenants/{tenantId}`, so the fix 
 
 ## B-149 — Checkout's unit-lost branch was a dead end
 
-`PENDING`
+`06db806`
 
 **What it built.** When a checkout's 30-minute hold lapsed, `/checkout` offered one control — "Find me another unit the same size" — and if that failed, `relockAction` returned the words *"call us and we will find you something"* **with no phone number on the page**, no alternatives and no waitlist. That is the highest-intent moment in the funnel ending in an instruction the renter cannot follow. B-090a had shipped `WaitlistForm` only on the public facility page, the lower-intent surface.
 
