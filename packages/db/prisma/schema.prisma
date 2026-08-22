@@ -175,6 +175,21 @@ enum PaymentStatus {
   failed
   refunded
   partially_refunded
+  /// B-146. Money we RECEIVED and recorded, that the bank later took back — a
+  /// bounced cheque, an ACH return, a lost dispute.
+  ///
+  /// Its own state and not `failed`, which means the attempt never succeeded
+  /// and nobody was ever told otherwise. A returned payment has a receipt
+  /// number a tenant is holding, may have been counted into a drawer that has
+  /// since been reconciled, and settled invoices that now have to re-open.
+  ///
+  /// **Excluded from `SETTLING_STATUSES`** so nothing reads as paid on money
+  /// that went back, and **included in the DRAWER and DEPOSIT queries** so a
+  /// cheque that was physically in Monday's till stays on Monday's deposit
+  /// slip — dropping it would make a reconciled session short by money that
+  /// really was there, which is the exact failure `refundPayment` would have
+  /// caused and the reason it is the wrong tool for this.
+  returned
 }
 
 /// Signed amounts: charge/refund are positive, payment/credit/write_off negative.

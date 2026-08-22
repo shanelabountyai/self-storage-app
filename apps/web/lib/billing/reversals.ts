@@ -1,0 +1,382 @@
+import { prisma } from "@storage/db";
+import { recordAudit } from "@storage/core/audit";
+import { emitEvent } from "@storage/core/events";
+import { formatInvoiceNumber } from "@storage/core/billing";
+import { can, ForbiddenError } from "@/lib/rbac/authorize";
+import { toAuditActor } from "@/lib/rbac/audit-actor";
+import type { Actor } from "@/lib/rbac/actor";
+import { recomputeInvoices } from "@/lib/billing/allocation";
+import { nextInvoiceNumber } from "@/lib/billing/numbering";
+import { createTask } from "@/lib/admin/tasks";
+
+// PRD 02 §4.5 US-46, US-21, US-23; §5.3 FR-8 (B-146). A payment that came back.
+//
+// ── What was missing, exactly ───────────────────────────────────────────────
+//
+// `LedgerEntry.reversalOfId` has existed since B-002 carrying a schema comment
+// citing FR-8, and was written by NO code. `FeeType.nsf` has been configurable
+// per facility since B-047 and was read by NO code. So a bounced cheque or an
+// ACH return left the money recorded as collected, the invoices reading `paid`,
+// and the arrears invisible to `daysPastDue` — forever.
+//
+// ── Why not `refundPayment` ─────────────────────────────────────────────────
+//
+// It is the wrong tool and reaching for it is worse than doing nothing. A
+// refund is money we HAND BACK: for cash and cheque it comes out of the open
+// drawer (B-078), so recording a bounce that way makes the till short by money
+// that never left it, and it writes a second `Payment` row the deposits report
+// then counts as an outgoing. Nothing left the building here. The bank simply
+// took back what it had provisionally given us.
+//
+// ── What B-103 already covered, and why this is still a gap ─────────────────
+//
+// `reconcile.ts` handles an ACH that is accepted and then fails BEFORE
+// settling: the payment sits at `processing`, which is deliberately outside
+// `SETTLING_STATUSES`, so no invoice was ever marked paid and — as its comment
+// says — "the balance is already correct". Nothing needs reversing.
+//
+// This file is the other case: a payment that reached `succeeded`. The ledger
+// entry was posted, the invoices were settled, a receipt number was issued, and
+// for a counter cheque a drawer was counted with it inside. All of that has to
+// be undone WITHOUT rewriting any of it, which is what FR-8's append-only rule
+// means and what `reversalOfId` was put there for.
+
+export type ReturnPaymentResult =
+  | {
+      ok: true;
+      reversalEntryId: string;
+      /// The NSF fee invoice, when the facility has one configured.
+      feeInvoiceNumber: string | null;
+      feeCents: number;
+      /// Invoices that went back to `open` or `partially_paid`.
+      reopenedInvoiceIds: string[];
+    }
+  | {
+      ok: false;
+      reason:
+        | "not_found"
+        | "missing_reason"
+        | "not_settled"
+        | "already_returned"
+        | "nothing_posted";
+    };
+
+export type ReturnPaymentInput = {
+  /// Why it came back, in the bank's terms — "insufficient funds", "account
+  /// closed", "stop payment". Required, and audited: `payment.returned` is a
+  /// money-moving correction and FR-8's whole point is that a correction is
+  /// itself a record.
+  reasonCode: string;
+  note?: string;
+  /// Skip the configured NSF fee. The ordinary case for a bank error or a
+  /// facility's own mistake, and audited as a deliberate choice rather than
+  /// achieved by deleting the fee afterwards.
+  waiveFee?: boolean;
+};
+
+/// Records that a settled payment was returned by the bank.
+///
+/// One transaction for everything that must agree: the reversing ledger entry,
+/// the unwound allocations, the re-opened invoices, the payment's own state and
+/// the NSF fee. A reversal that posted without re-opening its invoices would
+/// move the balance and leave AR ageing lying, which is the same split B-048
+/// was raised to fix on the way in.
+export async function returnPayment(
+  actor: Actor,
+  paymentId: string,
+  input: ReturnPaymentInput,
+): Promise<ReturnPaymentResult> {
+  if (!input.reasonCode?.trim()) return { ok: false, reason: "missing_reason" };
+
+  const payment = await prisma.payment.findUnique({
+    where: { id: paymentId },
+    select: {
+      id: true,
+      facilityId: true,
+      tenantId: true,
+      amountCents: true,
+      method: true,
+      status: true,
+      receiptNumber: true,
+      ledgerEntries: {
+        where: { type: "payment" },
+        select: { id: true, leaseId: true },
+      },
+      allocations: { select: { id: true, invoiceId: true } },
+    },
+  });
+  if (!payment) return { ok: false, reason: "not_found" };
+
+  // `refunds:approve` rather than a new permission key: this is the existing
+  // "move money backwards" gate, and it is manager-and-above, which is the
+  // right level for something that re-opens invoices and charges a fee.
+  //
+  // Deliberately NOT `checkMonetaryAuthority`. A refund limit exists because a
+  // staffer CHOOSES the amount; here the bank chose it, and refusing to record
+  // a $2,000 returned cheque because it exceeds somebody's refund limit would
+  // leave the money recorded as collected — which is the defect, not a control.
+  if (!can(actor, "refunds:approve", payment.facilityId)) {
+    throw new ForbiddenError(
+      "Missing permission refunds:approve",
+      "refunds:approve",
+      payment.facilityId,
+    );
+  }
+
+  if (payment.status === "returned")
+    return { ok: false, reason: "already_returned" };
+  // Only money that actually settled can come back. `processing` is B-103's
+  // case and needs no reversal; `failed` and `pending` never posted anything.
+  if (payment.status !== "succeeded")
+    return { ok: false, reason: "not_settled" };
+
+  const posted = payment.ledgerEntries[0];
+  // A `succeeded` payment with no ledger entry is a merchandise sale or a
+  // payment against no lease. There is nothing to reverse on a lease ledger,
+  // and inventing an entry would attach the money to a lease it never touched.
+  if (!posted) return { ok: false, reason: "nothing_posted" };
+
+  const invoiceIds = payment.allocations.map(
+    (allocation) => allocation.invoiceId,
+  );
+
+  const result = await prisma.$transaction(async (tx) => {
+    // FR-8: append-only. The original entry is untouched — money DID arrive on
+    // that date against a receipt the tenant is holding — and the correction is
+    // a new entry pointing back at it through the column that has been waiting
+    // since B-002.
+    const reversal = await tx.ledgerEntry.create({
+      data: {
+        facilityId: payment.facilityId,
+        leaseId: posted.leaseId,
+        // `adjustment`, not `refund`: a refund is money we handed back, and
+        // nothing left the building. The sign is positive because the tenant
+        // owes it again.
+        type: "adjustment",
+        amountCents: payment.amountCents,
+        description: `Returned ${payment.method.replace("_", " ")} payment${
+          payment.receiptNumber !== null
+            ? `, receipt #${payment.receiptNumber}`
+            : ""
+        } — ${input.reasonCode}`,
+        paymentId: payment.id,
+        reversalOfId: posted.id,
+      },
+    });
+
+    // The money settled nothing. Deleting the allocations and recomputing is
+    // what re-opens the invoices — and `daysPastDue` anchors to the OLDEST
+    // unpaid invoice's ORIGINAL due date (D-25), so the arrears reappear with
+    // the age they always had rather than starting the clock again today.
+    await tx.paymentAllocation.deleteMany({ where: { paymentId: payment.id } });
+    await recomputeInvoices(tx, invoiceIds);
+
+    await tx.payment.update({
+      where: { id: payment.id },
+      data: { status: "returned", failureReason: input.reasonCode.trim() },
+    });
+
+    const fee = input.waiveFee
+      ? null
+      : await assessNsfFee(tx, payment, input.reasonCode);
+
+    await recordAudit(
+      {
+        actor: toAuditActor(actor),
+        action: "payment.returned",
+        entityType: "Payment",
+        entityId: payment.id,
+        facilityId: payment.facilityId,
+        reasonCode: input.reasonCode,
+        context: {
+          amountCents: payment.amountCents,
+          method: payment.method,
+          receiptNumber: payment.receiptNumber,
+          reversalEntryId: reversal.id,
+          reopenedInvoiceIds: invoiceIds,
+          feeInvoiceNumber: fee?.number ?? null,
+          feeCents: fee?.amountCents ?? 0,
+          // Recorded as a choice rather than inferred from the absence of a
+          // fee, which would read identically to a facility that configured none.
+          feeWaived: Boolean(input.waiveFee),
+          note: input.note ?? null,
+        },
+      },
+      tx,
+    );
+
+    await emitEvent(
+      {
+        name: "payment.returned",
+        facilityId: payment.facilityId,
+        entityType: "Payment",
+        entityId: payment.id,
+        payload: {
+          amountCents: payment.amountCents,
+          method: payment.method,
+          feeCents: fee?.amountCents ?? 0,
+        },
+      },
+      tx,
+    );
+
+    return { reversalEntryId: reversal.id, fee };
+  });
+
+  // Outside the transaction, on the same reasoning `reconcile.ts` gives for the
+  // ACH bounce it already raises: a task-store failure must not roll back the
+  // record of the return itself.
+  //
+  // `settling_payment_failed`, which already exists for exactly this
+  // conversation — B-103's own comment describes it as "a tenant who has a
+  // receipt, may have been let through a gate on it, and will now start getting
+  // dunning letters". US-41's rule is one queue, not a new one per source.
+  await createTask({
+    facilityId: payment.facilityId,
+    type: "settling_payment_failed",
+    entityType: "Payment",
+    entityId: payment.id,
+    priority: "high",
+  });
+
+  return {
+    ok: true,
+    reversalEntryId: result.reversalEntryId,
+    feeInvoiceNumber: result.fee?.number ?? null,
+    feeCents: result.fee?.amountCents ?? 0,
+    reopenedInvoiceIds: invoiceIds,
+  };
+}
+
+/// US-21's NSF fee, raised as its own `kind: 'fee'` invoice.
+///
+/// The same shape `raiseFeeInvoice` uses for late fees, and deliberately so:
+/// a fee invoice is what `waivableFees` lists and what `waiveFee` voids, so
+/// "waivable like any other fee" comes for free rather than needing a second
+/// waiver path. Posting it only to the ledger would also make it invisible to
+/// autopay, which collects invoices.
+///
+/// Returns null when the facility has configured no NSF amount — which is the
+/// shipped state, since `FeeType.nsf` has never had a reader.
+async function assessNsfFee(
+  tx: Parameters<typeof recomputeInvoices>[0],
+  payment: { facilityId: string; id: string },
+  reasonCode: string,
+): Promise<{ number: string; amountCents: number; invoiceId: string } | null> {
+  const posted = await tx.ledgerEntry.findFirst({
+    where: { paymentId: payment.id, type: "payment" },
+    select: { leaseId: true },
+  });
+  if (!posted) return null;
+
+  // Effective-dated like every other price here: the fee in force TODAY, since
+  // the return is happening today whatever date the payment carried.
+  const schedule = await tx.feeSchedule.findFirst({
+    where: {
+      facilityId: payment.facilityId,
+      feeType: "nsf",
+      effectiveFrom: { lte: new Date() },
+    },
+    orderBy: { effectiveFrom: "desc" },
+  });
+  if (!schedule || schedule.amountCents <= 0) return null;
+
+  const today = new Date();
+  const number = formatInvoiceNumber(
+    await nextInvoiceNumber(tx, payment.facilityId),
+  );
+  const invoice = await tx.invoice.create({
+    data: {
+      facilityId: payment.facilityId,
+      leaseId: posted.leaseId,
+      number,
+      kind: "fee",
+      status: "open",
+      issueDate: today,
+      // Due immediately, like a late fee: the event it charges for has already
+      // happened, and a grace period on an NSF fee is a second schedule nobody
+      // configured.
+      dueDate: today,
+      periodStart: today,
+      periodEnd: new Date(today.getTime() + 86_400_000),
+      subtotalCents: schedule.amountCents,
+      // Not a taxable service in Texas the way rent is (D-10), same as the
+      // late fee it sits beside.
+      taxCents: 0,
+      totalCents: schedule.amountCents,
+      lineItems: {
+        create: [
+          {
+            type: "fee" as const,
+            description: `Returned payment fee — ${reasonCode}`,
+            quantity: 1,
+            unitAmountCents: schedule.amountCents,
+            amountCents: schedule.amountCents,
+          },
+        ],
+      },
+    },
+  });
+
+  await tx.ledgerEntry.create({
+    data: {
+      facilityId: payment.facilityId,
+      leaseId: posted.leaseId,
+      type: "charge",
+      amountCents: schedule.amountCents,
+      description: `Returned payment fee — invoice ${number}`,
+      occurredAt: today,
+      invoiceId: invoice.id,
+    },
+  });
+
+  return { number, amountCents: schedule.amountCents, invoiceId: invoice.id };
+}
+
+export type ReturnablePayment = {
+  paymentId: string;
+  amountCents: number;
+  method: string;
+  receivedAt: Date;
+  receiptNumber: number | null;
+  facilityId: string;
+};
+
+/// Payments on this tenant that could still come back.
+///
+/// `succeeded` only, and not the refunded states: a payment already given back
+/// has nothing left for a bank to reclaim, and one already `returned` is done.
+export async function returnablePayments(
+  tenantId: string,
+): Promise<ReturnablePayment[]> {
+  const payments = await prisma.payment.findMany({
+    where: {
+      tenantId,
+      status: "succeeded",
+      // A refund is itself a Payment row (B-048's shape). A refund cannot bounce
+      // back to us — that would be money arriving, not leaving.
+      refundOfPaymentId: null,
+      // Nothing to reverse without a posted lease entry; see `nothing_posted`.
+      ledgerEntries: { some: { type: "payment" } },
+    },
+    orderBy: { receivedAt: "desc" },
+    take: 20,
+    select: {
+      id: true,
+      facilityId: true,
+      amountCents: true,
+      method: true,
+      receivedAt: true,
+      receiptNumber: true,
+    },
+  });
+
+  return payments.map((payment) => ({
+    paymentId: payment.id,
+    facilityId: payment.facilityId,
+    amountCents: payment.amountCents,
+    method: payment.method,
+    receivedAt: payment.receivedAt,
+    receiptNumber: payment.receiptNumber,
+  }));
+}

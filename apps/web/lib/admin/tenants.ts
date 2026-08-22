@@ -28,6 +28,7 @@ import { createTask } from "@/lib/admin/tasks";
 import { activeHolds, type ActiveHold } from "@/lib/admin/holds";
 import { syncActiveDutyHolds } from "@/lib/tenants/active-duty";
 import { refundablePayments } from "@/lib/billing/refunds";
+import { returnablePayments } from "@/lib/billing/reversals";
 
 // PRD 02 §4.4 US-13. "Any staffer can pick up any conversation" — search,
 // then one profile: contact, address history, leases and balance, notes,
@@ -290,6 +291,11 @@ export type TenantProfile = {
   accessHistory: Awaited<ReturnType<typeof tenantAccessHistory>>;
   /// US-23. Payments with something left to give back.
   refundable: Awaited<ReturnType<typeof refundablePayments>>;
+  /// US-46 / FR-8 (B-146). Payments a bank could still take back. A different
+  /// list from `refundable` and deliberately so — `refunded` money is gone and
+  /// cannot bounce, and a refund pulls cash from the drawer where a return
+  /// moves none at all.
+  returnable: Awaited<ReturnType<typeof returnablePayments>>;
   /// Facilities the viewing actor may act through for this tenant — what a
   /// mutation form needs to attribute a new note or document to.
   editableFacilityIds: string[];
@@ -547,6 +553,7 @@ export async function tenantProfile(
       extendedHours: grant.extendedHours,
     })),
     accessHistory: await tenantAccessHistory(actor, tenantId),
+    returnable: await returnablePayments(tenantId),
     accessState: grants
       .map((grant) => {
         const latest = latestByGrant.get(grant.id);

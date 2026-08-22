@@ -1,4 +1,4 @@
-import { prisma } from '@storage/db'
+import { prisma } from "@storage/db";
 
 // PRD 01 §4.7 US-705. The tenant's own paperwork.
 //
@@ -8,19 +8,19 @@ import { prisma } from '@storage/db'
 // reach far more than a lease.
 
 export type PortalDocument = {
-  id: string
-  title: string
-  kind: 'lease' | 'receipt' | 'other'
-  createdAt: Date
-  unitNumber: string | null
+  id: string;
+  title: string;
+  kind: "lease" | "receipt" | "other";
+  createdAt: Date;
+  unitNumber: string | null;
   /// Generated documents are HTML (B-023's decision — see lib/documents/
   /// render.ts). Nothing here is a PDF yet, so the UI says "view" rather
   /// than promising a download that would arrive as a web page.
-  viewable: boolean
+  viewable: boolean;
   /// An uploaded file (B-104 follow-up), fetched through
   /// `/portal/documents/[id]/file` after an ownership check.
-  downloadable: boolean
-}
+  downloadable: boolean;
+};
 
 /// The leases this tenant's documents can belong to — including ended ones.
 ///
@@ -31,18 +31,20 @@ async function leaseIdsFor(tenantId: string): Promise<Map<string, string>> {
   const leases = await prisma.lease.findMany({
     where: { tenantId },
     select: { id: true, unit: { select: { number: true } } },
-  })
-  return new Map(leases.map((lease) => [lease.id, lease.unit.number]))
+  });
+  return new Map(leases.map((lease) => [lease.id, lease.unit.number]));
 }
 
-export async function portalDocuments(tenantId: string): Promise<PortalDocument[]> {
-  const leases = await leaseIdsFor(tenantId)
-  if (leases.size === 0) return []
+export async function portalDocuments(
+  tenantId: string,
+): Promise<PortalDocument[]> {
+  const leases = await leaseIdsFor(tenantId);
+  if (leases.size === 0) return [];
 
   const documents = await prisma.document.findMany({
     where: {
       deletedAt: null,
-      subjectType: 'Lease',
+      subjectType: "Lease",
       subjectId: { in: [...leases.keys()] },
       // Only what the tenant is a party to. The same store holds lien
       // evidence and inspection photos against these very leases, and those
@@ -50,9 +52,9 @@ export async function portalDocuments(tenantId: string): Promise<PortalDocument[
       // B-104 follow-up adds `insurance_proof`: the tenant uploaded it, so it
       // is plainly their copy too. `lien_evidence` and `inspection_photo` stay
       // out for the reason above — same store, operator's file.
-      type: { in: ['lease', 'receipt', 'insurance_proof'] },
+      type: { in: ["lease", "receipt", "insurance_proof"] },
     },
-    orderBy: { createdAt: 'desc' },
+    orderBy: { createdAt: "desc" },
     select: {
       id: true,
       title: true,
@@ -62,19 +64,24 @@ export async function portalDocuments(tenantId: string): Promise<PortalDocument[
       content: true,
       storageRef: true,
     },
-  })
+  });
 
   return documents.map((document) => ({
     id: document.id,
     title: document.title,
-    kind: document.type === 'lease' ? 'lease' : document.type === 'receipt' ? 'receipt' : 'other',
+    kind:
+      document.type === "lease"
+        ? "lease"
+        : document.type === "receipt"
+          ? "receipt"
+          : "other",
     createdAt: document.createdAt,
     unitNumber: leases.get(document.subjectId) ?? null,
     viewable: Boolean(document.content),
     // An uploaded file, served through the authenticated download route rather
     // than rendered — its bytes are not ours and never go near the HTML path.
     downloadable: Boolean(document.storageRef),
-  }))
+  }));
 }
 
 /// One document, only if it belongs to this tenant.
@@ -87,26 +94,37 @@ export async function portalDocument(
   documentId: string,
 ): Promise<{ title: string; content: string } | null> {
   const document = await prisma.document.findFirst({
-    where: { id: documentId, deletedAt: null, subjectType: 'Lease', type: { in: ['lease', 'receipt'] } },
+    where: {
+      id: documentId,
+      deletedAt: null,
+      subjectType: "Lease",
+      type: { in: ["lease", "receipt"] },
+    },
     select: { title: true, content: true, subjectId: true },
-  })
-  if (!document?.content) return null
+  });
+  if (!document?.content) return null;
 
   const owns = await prisma.lease.findFirst({
     where: { id: document.subjectId, tenantId },
     select: { id: true },
-  })
-  if (!owns) return null
+  });
+  if (!owns) return null;
 
-  return { title: document.title, content: document.content }
+  return { title: document.title, content: document.content };
 }
 
 export type PortalReceipt = {
-  paymentId: string
-  amountCents: number
-  receivedAt: Date
-  unitNumber: string | null
-}
+  paymentId: string;
+  amountCents: number;
+  receivedAt: Date;
+  unitNumber: string | null;
+  /// B-146. The bank took this one back. Listed rather than hidden, and said
+  /// out loud rather than listed silently: the tenant is holding a receipt for
+  /// it and is about to be chased for the period it paid, and a payment history
+  /// that quietly drops it leaves them with a dunning notice and no explanation
+  /// on the one screen that is theirs.
+  returned: boolean;
+};
 
 /// Payments, as the receipt list US-705 asks for.
 ///
@@ -114,26 +132,35 @@ export type PortalReceipt = {
 /// generates a receipt document yet (B-050 owns the receipt itself). This is
 /// the honest version: every payment we actually took, listed, with the
 /// generated PDF still to come.
-export async function portalPayments(tenantId: string): Promise<PortalReceipt[]> {
+export async function portalPayments(
+  tenantId: string,
+): Promise<PortalReceipt[]> {
   const payments = await prisma.payment.findMany({
-    where: { tenantId, status: { in: ['succeeded', 'partially_refunded', 'refunded'] } },
-    orderBy: { receivedAt: 'desc' },
+    where: {
+      tenantId,
+      status: {
+        in: ["succeeded", "partially_refunded", "refunded", "returned"],
+      },
+    },
+    orderBy: { receivedAt: "desc" },
     take: 100,
     select: {
       id: true,
       amountCents: true,
       receivedAt: true,
+      status: true,
       ledgerEntries: { select: { leaseId: true }, take: 1 },
     },
-  })
+  });
 
-  const leases = await leaseIdsFor(tenantId)
+  const leases = await leaseIdsFor(tenantId);
   return payments.map((payment) => ({
     paymentId: payment.id,
     amountCents: payment.amountCents,
     receivedAt: payment.receivedAt,
-    unitNumber: leases.get(payment.ledgerEntries[0]?.leaseId ?? '') ?? null,
-  }))
+    unitNumber: leases.get(payment.ledgerEntries[0]?.leaseId ?? "") ?? null,
+    returned: payment.status === "returned",
+  }));
 }
 
 /// Whether this tenant may download this uploaded document.
@@ -150,17 +177,17 @@ export async function tenantOwnsDocument(
     where: {
       id: documentId,
       deletedAt: null,
-      subjectType: 'Lease',
-      type: { in: ['lease', 'receipt', 'insurance_proof'] },
+      subjectType: "Lease",
+      type: { in: ["lease", "receipt", "insurance_proof"] },
       storageRef: { not: null },
     },
     select: { subjectId: true },
-  })
-  if (!document) return false
+  });
+  if (!document) return false;
 
   const owns = await prisma.lease.findFirst({
     where: { id: document.subjectId, tenantId },
     select: { id: true },
-  })
-  return owns !== null
+  });
+  return owns !== null;
 }

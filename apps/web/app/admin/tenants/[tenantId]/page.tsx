@@ -17,6 +17,7 @@ import {
   liftHoldAction,
   placeHoldAction,
   refundAction,
+  returnPaymentAction,
   setExtendedHoursAction,
   updateContactAction,
   waiveFeeAction,
@@ -45,6 +46,18 @@ const EFFECT_LABELS: Record<HoldEffect, string> = {
 /// The reason vocabulary from the audit catalog, narrowed to the ones that
 /// actually explain a waived fee. Free text stays available in the note beside
 /// it — the code is what keeps the audit log filterable.
+/// B-146. The bank's own words, as a code the audit log can be filtered on —
+/// the same discipline `WAIVER_REASONS` uses below. Which one it was decides
+/// whether the fee was fair, so it is a field rather than free text.
+const RETURN_REASONS = [
+  { value: "insufficient_funds", label: "Insufficient funds" },
+  { value: "account_closed", label: "Account closed" },
+  { value: "stop_payment", label: "Stop payment" },
+  { value: "invalid_account", label: "Account details wrong" },
+  { value: "dispute_lost", label: "Card dispute lost" },
+  { value: "bank_error", label: "Bank error (not the tenant)" },
+] as const;
+
 const WAIVER_REASONS = [
   { value: "customer_goodwill", label: "Customer goodwill" },
   { value: "billing_error", label: "Billing error" },
@@ -883,6 +896,96 @@ export default async function TenantProfilePage({
           </ul>
         </section>
       )}
+
+      {profile.returnable.length > 0 &&
+        // `returnPayment` re-checks per facility and throws; this only decides
+        // whether to render a form the actor could never submit — the same
+        // shape the impersonation block above uses and for the same reason.
+        hasPermissionAnywhere(actor, ["refunds:approve"]) && (
+          <section
+            aria-labelledby="returns-heading"
+            className="flex flex-col gap-3"
+          >
+            <h2 id="returns-heading" className="font-medium">
+              Record a returned payment
+            </h2>
+            <p className="text-muted-foreground max-w-prose text-xs text-pretty">
+              For a cheque that bounced, an ACH return or a lost dispute — money
+              we recorded and the bank took back.{" "}
+              <strong>This is not a refund.</strong> No money leaves the drawer
+              and the deposit slip it was banked on is unchanged; what happens
+              is that the original entry is reversed, the invoices it settled
+              reopen with their original due dates, and the facility&apos;s
+              returned-payment fee is charged if one is configured. The tenant
+              sees it on their own payment list.
+            </p>
+            <ul className="flex flex-col gap-3">
+              {profile.returnable.map((payment) => (
+                <li
+                  key={payment.paymentId}
+                  className="border-input rounded-lg border p-3"
+                >
+                  <p className="text-sm">
+                    <span className="font-medium">
+                      {formatCents(payment.amountCents)}
+                    </span>{" "}
+                    <span className="text-muted-foreground">
+                      {payment.method.replace("_", " ")} ·{" "}
+                      {formatWhen(payment.receivedAt)}
+                      {payment.receiptNumber !== null &&
+                        ` · receipt #${payment.receiptNumber}`}
+                    </span>
+                  </p>
+                  <AdminForm
+                    action={returnPaymentAction}
+                    label={`Record a return of ${formatCents(payment.amountCents)}`}
+                    className="mt-3 flex flex-wrap items-end gap-3"
+                  >
+                    <input type="hidden" name="tenantId" value={tenantId} />
+                    <input
+                      type="hidden"
+                      name="paymentId"
+                      value={payment.paymentId}
+                    />
+                    <Field
+                      name="reasonCode"
+                      label="What the bank said"
+                      as="select"
+                      className={FIELD_CLASS}
+                    >
+                      {RETURN_REASONS.map((reason) => (
+                        <option key={reason.value} value={reason.value}>
+                          {reason.label}
+                        </option>
+                      ))}
+                    </Field>
+                    <Field name="note" label="Note" className={FIELD_CLASS} />
+                    <Field
+                      name="waiveFee"
+                      label="Charge the fee?"
+                      as="select"
+                      defaultValue="no"
+                      className={FIELD_CLASS}
+                    >
+                      <option value="no">
+                        Yes — charge the configured fee
+                      </option>
+                      <option value="yes">
+                        No — this was not the tenant&apos;s fault
+                      </option>
+                    </Field>
+                    <button
+                      type="submit"
+                      className="border-input hover:bg-accent inline-flex min-h-11 items-center justify-center rounded-md border px-4 text-sm font-medium"
+                    >
+                      Record the return
+                    </button>
+                  </AdminForm>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
       <section
         aria-labelledby="place-hold-heading"

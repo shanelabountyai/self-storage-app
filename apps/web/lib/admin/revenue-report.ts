@@ -1,4 +1,4 @@
-import { prisma } from '@storage/db'
+import { prisma } from "@storage/db";
 import {
   billedByCategory,
   categoryTotal,
@@ -6,11 +6,11 @@ import {
   emptyCategoryTotals,
   sumCategoryTotals,
   type CategoryTotals,
-} from '@storage/core/metrics'
-import { orderFor } from '@/lib/billing/allocation'
-import { financialFacilities } from '@/lib/admin/reports'
-import type { Actor } from '@/lib/rbac/actor'
-import { REFERRAL_DISCOUNT_PREFIX } from '@/lib/referrals/billing'
+} from "@storage/core/metrics";
+import { orderFor } from "@/lib/billing/allocation";
+import { financialFacilities } from "@/lib/admin/reports";
+import type { Actor } from "@/lib/rbac/actor";
+import { REFERRAL_DISCOUNT_PREFIX } from "@/lib/referrals/billing";
 
 // PRD 02 US-39.5 (B-055). Billed vs collected, by category.
 //
@@ -31,13 +31,13 @@ import { REFERRAL_DISCOUNT_PREFIX } from '@/lib/referrals/billing'
 // metric inline).
 
 export type RevenueRow = {
-  facilityId: string
-  facilityName: string
-  billed: CategoryTotals
-  collected: CategoryTotals
+  facilityId: string;
+  facilityName: string;
+  billed: CategoryTotals;
+  collected: CategoryTotals;
   /// US-39.5's "discounts/promos given" — invoice lines of type `discount` on
   /// invoices issued in the range. Positive cents: what was given away.
-  discountsCents: number
+  discountsCents: number;
   /// PRD 10 §5.7 (B-101). The referral share of `discountsCents`, split out.
   ///
   /// "One is acquisition cost and the other is a price decision" — the row's
@@ -46,26 +46,26 @@ export type RevenueRow = {
   /// what it paid a tenant for bringing somebody in, and that number is the one
   /// compared against the aggregator fee it displaces. Merged, neither
   /// question can be answered.
-  referralRewardsCents: number
+  referralRewardsCents: number;
   /// US-39.5's "write-offs" — ledger entries of type `write_off` in the range,
   /// as positive cents. Written off, not collected and no longer expected.
-  writeOffsCents: number
+  writeOffsCents: number;
   /// Money received that is not sitting against any invoice: an overpayment
   /// held, or a payment taken before there was anything to apply it to. Never
   /// folded into a category, because guessing which one is how a figure stops
   /// reconciling against a tenant's ledger.
-  unappliedCents: number
+  unappliedCents: number;
   /// Refunds issued in the range. **Informational only** — a refund unwinds
   /// the original payment's allocation rows, so `collected` above is already
   /// net of it. Shown because "we collected $40k" reads differently when $6k
   /// of it went back out, and adding this to anything would double-count.
-  refundsCents: number
-}
+  refundsCents: number;
+};
 
 export type RevenueReport = {
-  rows: RevenueRow[]
-  total: RevenueRow
-}
+  rows: RevenueRow[];
+  total: RevenueRow;
+};
 
 function emptyRow(facilityId: string, facilityName: string): RevenueRow {
   return {
@@ -78,7 +78,7 @@ function emptyRow(facilityId: string, facilityName: string): RevenueRow {
     writeOffsCents: 0,
     unappliedCents: 0,
     refundsCents: 0,
-  }
+  };
 }
 
 /// The four categories plus the standalone lines, per facility and rolled up.
@@ -91,13 +91,15 @@ export async function revenueReport(
   start: Date,
   end: Date,
 ): Promise<RevenueReport> {
-  const facilities = await financialFacilities(actor)
+  const facilities = await financialFacilities(actor);
 
   const rows = await Promise.all(
-    facilities.map((facility) => facilityRevenue(facility.id, facility.name, start, end)),
-  )
+    facilities.map((facility) =>
+      facilityRevenue(facility.id, facility.name, start, end),
+    ),
+  );
 
-  return { rows, total: sumRevenueRows(rows) }
+  return { rows, total: sumRevenueRows(rows) };
 }
 
 /// One facility's revenue. Exported for B-084 part 3's scheduled emails, which
@@ -110,13 +112,13 @@ export async function facilityRevenue(
   start: Date,
   end: Date,
 ): Promise<RevenueRow> {
-  const row = emptyRow(facilityId, facilityName)
+  const row = emptyRow(facilityId, facilityName);
 
   const settings = await prisma.facility.findUniqueOrThrow({
     where: { id: facilityId },
     select: { paymentAllocationOrder: true },
-  })
-  const order = orderFor(settings.paymentAllocationOrder)
+  });
+  const order = orderFor(settings.paymentAllocationOrder);
 
   // ── Billed ──────────────────────────────────────────────────────────
   // Void invoices are excluded: an invoice that was voided was never a real
@@ -124,18 +126,27 @@ export async function facilityRevenue(
   const issued = await prisma.invoice.findMany({
     where: {
       facilityId,
-      status: { not: 'void' },
+      status: { not: "void" },
       issueDate: { gte: start, lt: end },
     },
     // `description` too (B-101): it is what tells a referral reward from a
     // promotional discount, since both are the same line TYPE.
-    select: { lineItems: { select: { type: true, amountCents: true, description: true } } },
-  })
-  row.billed = sumCategoryTotals(issued.map((invoice) => billedByCategory(invoice.lineItems)))
+    select: {
+      lineItems: {
+        select: { type: true, amountCents: true, description: true },
+      },
+    },
+  });
+  row.billed = sumCategoryTotals(
+    issued.map((invoice) => billedByCategory(invoice.lineItems)),
+  );
   const discountLines = issued
     .flatMap((invoice) => invoice.lineItems)
-    .filter((line) => line.type === 'discount')
-  row.discountsCents = discountLines.reduce((sum, line) => sum + line.amountCents, 0)
+    .filter((line) => line.type === "discount");
+  row.discountsCents = discountLines.reduce(
+    (sum, line) => sum + line.amountCents,
+    0,
+  );
   // Identified by the description the referral hand-off writes
   // (`lib/referrals/billing.ts`), which is the only thing distinguishing the
   // two on an invoice line — they are deliberately the same line TYPE, because
@@ -144,7 +155,7 @@ export async function facilityRevenue(
   // line-item type nothing else would use.
   row.referralRewardsCents = discountLines
     .filter((line) => line.description.startsWith(REFERRAL_DISCOUNT_PREFIX))
-    .reduce((sum, line) => sum + line.amountCents, 0)
+    .reduce((sum, line) => sum + line.amountCents, 0);
 
   // ── Collected ───────────────────────────────────────────────────────
   //
@@ -160,9 +171,9 @@ export async function facilityRevenue(
         amountCents: { gt: 0 },
       },
       select: { invoiceId: true },
-      distinct: ['invoiceId'],
+      distinct: ["invoiceId"],
     })
-  ).map((allocation) => allocation.invoiceId)
+  ).map((allocation) => allocation.invoiceId);
 
   if (paidInvoiceIds.length > 0) {
     const invoices = await prisma.invoice.findMany({
@@ -172,38 +183,44 @@ export async function facilityRevenue(
         lineItems: { select: { type: true, amountCents: true } },
         allocations: {
           where: { amountCents: { gt: 0 } },
-          select: { id: true, amountCents: true, payment: { select: { receivedAt: true } } },
+          select: {
+            id: true,
+            amountCents: true,
+            payment: { select: { receivedAt: true } },
+          },
         },
       },
-    })
+    });
 
-    const collected: CategoryTotals[] = []
+    const collected: CategoryTotals[] = [];
     for (const invoice of invoices) {
-      const gross = billedByCategory(invoice.lineItems)
+      const gross = billedByCategory(invoice.lineItems);
       // Oldest payment first, then by id so two payments on the same instant
       // split the same way on every run — a report that reorders between two
       // refreshes is one nobody can reconcile.
       const ordered = [...invoice.allocations].sort((a, b) => {
-        const byTime = a.payment.receivedAt.getTime() - b.payment.receivedAt.getTime()
-        return byTime !== 0 ? byTime : a.id.localeCompare(b.id)
-      })
+        const byTime =
+          a.payment.receivedAt.getTime() - b.payment.receivedAt.getTime();
+        return byTime !== 0 ? byTime : a.id.localeCompare(b.id);
+      });
 
-      let cumulative = 0
+      let cumulative = 0;
       for (const allocation of ordered) {
-        const before = collectedByCategory(gross, cumulative, order)
-        cumulative += allocation.amountCents
-        const after = collectedByCategory(gross, cumulative, order)
+        const before = collectedByCategory(gross, cumulative, order);
+        cumulative += allocation.amountCents;
+        const after = collectedByCategory(gross, cumulative, order);
         const inRange =
-          allocation.payment.receivedAt >= start && allocation.payment.receivedAt < end
-        if (!inRange) continue
-        const delta = emptyCategoryTotals()
+          allocation.payment.receivedAt >= start &&
+          allocation.payment.receivedAt < end;
+        if (!inRange) continue;
+        const delta = emptyCategoryTotals();
         for (const category of Object.keys(delta) as (keyof CategoryTotals)[]) {
-          delta[category] = after[category] - before[category]
+          delta[category] = after[category] - before[category];
         }
-        collected.push(delta)
+        collected.push(delta);
       }
     }
-    row.collected = sumCategoryTotals(collected)
+    row.collected = sumCategoryTotals(collected);
   }
 
   // ── The standalone lines ────────────────────────────────────────────
@@ -211,7 +228,12 @@ export async function facilityRevenue(
     where: {
       facilityId,
       receivedAt: { gte: start, lt: end },
-      status: { in: ['succeeded', 'partially_refunded', 'refunded'] },
+      // B-146: `returned` deliberately ABSENT, unlike the drawer and deposit
+      // queries. Those answer "what was in the till"; this one answers "what
+      // did we collect", and money the bank took back was not collected. D-25's
+      // economic occupancy is collected ÷ gross potential, so counting a
+      // bounced cheque here would overstate it.
+      status: { in: ["succeeded", "partially_refunded", "refunded"] },
     },
     select: {
       amountCents: true,
@@ -219,58 +241,68 @@ export async function facilityRevenue(
       allocations: { select: { amountCents: true } },
       refunds: { select: { amountCents: true, status: true } },
     },
-  })
+  });
 
   for (const payment of payments) {
     if (payment.refundOfPaymentId) {
-      row.refundsCents += payment.amountCents
-      continue
+      row.refundsCents += payment.amountCents;
+      continue;
     }
-    const allocated = payment.allocations.reduce((sum, one) => sum + one.amountCents, 0)
+    const allocated = payment.allocations.reduce(
+      (sum, one) => sum + one.amountCents,
+      0,
+    );
     const refunded = payment.refunds
-      .filter((refund) => refund.status !== 'failed')
-      .reduce((sum, refund) => sum + refund.amountCents, 0)
+      .filter((refund) => refund.status !== "failed")
+      .reduce((sum, refund) => sum + refund.amountCents, 0);
     // What we took, less what is sitting against an invoice, less what went
     // back out. Floored at zero: a refund can outpace the unwinding within a
     // rounding of each other, and a negative "unapplied" would be nonsense on
     // a screen.
-    row.unappliedCents += Math.max(0, payment.amountCents - allocated - refunded)
+    row.unappliedCents += Math.max(
+      0,
+      payment.amountCents - allocated - refunded,
+    );
   }
 
   const writeOffs = await prisma.ledgerEntry.aggregate({
-    where: { facilityId, type: 'write_off', occurredAt: { gte: start, lt: end } },
+    where: {
+      facilityId,
+      type: "write_off",
+      occurredAt: { gte: start, lt: end },
+    },
     _sum: { amountCents: true },
-  })
+  });
   // Write-offs are stored as negative cents (they reduce the balance). Reported
   // positive, because "wrote off $400" is the sentence an owner reads.
-  row.writeOffsCents = Math.abs(writeOffs._sum.amountCents ?? 0)
+  row.writeOffsCents = Math.abs(writeOffs._sum.amountCents ?? 0);
 
-  return row
+  return row;
 }
 
 /// US-39's roll-up rule: the total is the sum of the facility rows, with no
 /// double counting. Asserted in a test, not just stated here.
 export function sumRevenueRows(rows: readonly RevenueRow[]): RevenueRow {
-  const total = emptyRow('', 'All facilities')
-  total.billed = sumCategoryTotals(rows.map((row) => row.billed))
-  total.collected = sumCategoryTotals(rows.map((row) => row.collected))
+  const total = emptyRow("", "All facilities");
+  total.billed = sumCategoryTotals(rows.map((row) => row.billed));
+  total.collected = sumCategoryTotals(rows.map((row) => row.collected));
   for (const row of rows) {
-    total.discountsCents += row.discountsCents
-    total.referralRewardsCents += row.referralRewardsCents
-    total.writeOffsCents += row.writeOffsCents
-    total.unappliedCents += row.unappliedCents
-    total.refundsCents += row.refundsCents
+    total.discountsCents += row.discountsCents;
+    total.referralRewardsCents += row.referralRewardsCents;
+    total.writeOffsCents += row.writeOffsCents;
+    total.unappliedCents += row.unappliedCents;
+    total.refundsCents += row.refundsCents;
   }
-  return total
+  return total;
 }
 
 export function billedTotal(row: RevenueRow): number {
-  return categoryTotal(row.billed)
+  return categoryTotal(row.billed);
 }
 
 /// Collected across every category PLUS the money that has not landed on an
 /// invoice — the honest answer to "how much came in", which is not the same as
 /// the sum of the four columns.
 export function collectedTotal(row: RevenueRow): number {
-  return categoryTotal(row.collected) + row.unappliedCents
+  return categoryTotal(row.collected) + row.unappliedCents;
 }

@@ -5,27 +5,27 @@
 // touching the completion logic.
 
 export type TaskTypeSpec = {
-  type: string
-  label: string
+  type: string;
+  label: string;
   /// Keys that must be present and non-empty in `proof` before this task can
   /// be completed. Every type requires at least a note: a queue item marked
   /// "done" with nothing to show for it is how a task queue becomes noise
   /// nobody trusts.
-  requiredProofFields: readonly string[]
+  requiredProofFields: readonly string[];
   /// Whether completing this type writes an AuditLog entry alongside marking
   /// it done — for the types where "who resolved this and when" matters
   /// beyond the task row itself.
-  sensitive: boolean
-}
+  sensitive: boolean;
+};
 
 export const TASK_TYPES = [
   {
     // B-026's own comment named this the reason B-095 had to exist: gate
     // provisioning failing after a paid move-in must not be a silent retry
     // with no one watching.
-    type: 'move_in_provisioning_failed',
-    label: 'Move-in provisioning failed',
-    requiredProofFields: ['note'],
+    type: "move_in_provisioning_failed",
+    label: "Move-in provisioning failed",
+    requiredProofFields: ["note"],
     sensitive: false,
   },
   {
@@ -33,9 +33,9 @@ export const TASK_TYPES = [
     // sitting in a folder." Sensitive because stale contact info can affect
     // whether a legal notice is deemed delivered — worth a record of who
     // reviewed it and when, not just that the row flipped to completed.
-    type: 'returned_mail_review',
-    label: 'Returned mail — contact info may be stale',
-    requiredProofFields: ['note'],
+    type: "returned_mail_review",
+    label: "Returned mail — contact info may be stale",
+    requiredProofFields: ["note"],
     sensitive: true,
   },
   {
@@ -44,9 +44,9 @@ export const TASK_TYPES = [
     // the verification queue itself; finalizing (B-040's move-out screen)
     // completes it directly rather than through this catalog's own
     // proof-gate, since the real evidence is the move-out completing at all.
-    type: 'move_out_request_review',
-    label: 'Tenant requested a move-out — verify and finalize',
-    requiredProofFields: ['note'],
+    type: "move_out_request_review",
+    label: "Tenant requested a move-out — verify and finalize",
+    requiredProofFields: ["note"],
     sensitive: false,
   },
   {
@@ -63,9 +63,9 @@ export const TASK_TYPES = [
     // Not sensitive: the transfer itself writes `lease.transferred` to the
     // audit log when it commits, which is the record anyone would ask about.
     // This row only says somebody asked.
-    type: 'transfer_request_review',
-    label: 'Tenant asked to transfer to another unit',
-    requiredProofFields: ['note'],
+    type: "transfer_request_review",
+    label: "Tenant asked to transfer to another unit",
+    requiredProofFields: ["note"],
     sensitive: false,
   },
   {
@@ -77,9 +77,9 @@ export const TASK_TYPES = [
     // Sensitive: whether a unit was covered on the day it flooded is exactly
     // the question a coverage argument turns on, so who saw this and what they
     // did about it belongs in the audit trail, not only on the task row.
-    type: 'insurance_proof_lapsed',
-    label: 'Proof of insurance lapsed — no current cover on file',
-    requiredProofFields: ['note'],
+    type: "insurance_proof_lapsed",
+    label: "Proof of insurance lapsed — no current cover on file",
+    requiredProofFields: ["note"],
     sensitive: true,
   },
   {
@@ -95,9 +95,9 @@ export const TASK_TYPES = [
     //
     // Sensitive: whether a unit was covered, and by whom, is the first question
     // asked after a fire or a flood.
-    type: 'insurance_proof_review',
-    label: 'Check a tenant’s proof of insurance',
-    requiredProofFields: ['note'],
+    type: "insurance_proof_review",
+    label: "Check a tenant’s proof of insurance",
+    requiredProofFields: ["note"],
     sensitive: true,
   },
   {
@@ -109,9 +109,9 @@ export const TASK_TYPES = [
     // the card gave a decline no retry will fix, or the last scheduled attempt
     // failed. A task per failed attempt would put four rows in front of staff
     // for one tenant and train them to ignore the queue.
-    type: 'failed_payment',
-    label: 'Payment failed — autopay has stopped retrying',
-    requiredProofFields: ['note'],
+    type: "failed_payment",
+    label: "Payment failed — autopay has stopped retrying",
+    requiredProofFields: ["note"],
     sensitive: false,
   },
   {
@@ -126,9 +126,9 @@ export const TASK_TYPES = [
     // Not sensitive. The tenant's own words are already permanent in the
     // domain event this task points at, so an audit row would record only that
     // a staffer marked a message read — which the task row already says.
-    type: 'inbound_sms_review',
-    label: 'A tenant texted back — read it and reply',
-    requiredProofFields: ['note'],
+    type: "inbound_sms_review",
+    label: "A tenant texted back — read it and reply",
+    requiredProofFields: ["note"],
     sensitive: false,
   },
   {
@@ -138,9 +138,9 @@ export const TASK_TYPES = [
     //
     // Sensitive: whether a tenant was reachable bears directly on whether a
     // notice was properly served, which is a question a lien dispute turns on.
-    type: 'no_reachable_channel',
-    label: 'Email is bouncing — no way to reach this tenant',
-    requiredProofFields: ['note'],
+    type: "no_reachable_channel",
+    label: "Email is bouncing — no way to reach this tenant",
+    requiredProofFields: ["note"],
     sensitive: true,
   },
   {
@@ -151,9 +151,9 @@ export const TASK_TYPES = [
     // system, changed who can get through a gate — and "was the code actually
     // removed after they moved out" is a question that gets asked after
     // something goes missing.
-    type: 'gate_manual_action',
-    label: 'Key an access change into the keypad',
-    requiredProofFields: ['note'],
+    type: "gate_manual_action",
+    label: "Key an access change into the keypad",
+    requiredProofFields: ["note"],
     sensitive: true,
   },
   {
@@ -165,9 +165,15 @@ export const TASK_TYPES = [
     // tenant who has a receipt, may have been let through a gate on it, and
     // will now start getting dunning letters. The conversation is different
     // and so is the urgency.
-    type: 'settling_payment_failed',
-    label: 'A bank payment bounced after it was accepted',
-    requiredProofFields: ['note'],
+    //
+    // B-146 widened it from ACH to every payment that came back after we
+    // recorded it — a bounced cheque and a lost card dispute raise exactly this
+    // conversation, and US-41's rule is one queue rather than a new type per
+    // source. The LABEL changed with it: it said "a bank payment", which read
+    // as wrong on a returned cheque.
+    type: "settling_payment_failed",
+    label: "A payment bounced after it was accepted",
+    requiredProofFields: ["note"],
     sensitive: false,
   },
   {
@@ -182,9 +188,9 @@ export const TASK_TYPES = [
     // Sensitive: the findings include which codes the gate honours that we have
     // no record of, and "who could get in on the 3rd" is asked after something
     // goes missing — the same reason `gate_manual_action` is marked sensitive.
-    type: 'gate_drift_review',
-    label: 'Reconcile the gate controller against our records',
-    requiredProofFields: ['note'],
+    type: "gate_drift_review",
+    label: "Reconcile the gate controller against our records",
+    requiredProofFields: ["note"],
     sensitive: true,
   },
   {
@@ -194,9 +200,9 @@ export const TASK_TYPES = [
     //
     // Not sensitive: this is a sales nudge, not a record anyone will be asked
     // about later. The lead's own `contactedAt` is the durable fact.
-    type: 'lead_follow_up',
-    label: 'Call this inquiry back',
-    requiredProofFields: ['note'],
+    type: "lead_follow_up",
+    label: "Call this inquiry back",
+    requiredProofFields: ["note"],
     sensitive: false,
   },
   {
@@ -206,9 +212,9 @@ export const TASK_TYPES = [
     // Sensitive: US-28 requires an auction to be defensible from the step
     // history with proof at each stage, and who completed a step — and when —
     // is exactly what a wrongful-sale claim asks about.
-    type: 'delinquency_step',
-    label: 'Delinquency step needs doing',
-    requiredProofFields: ['note'],
+    type: "delinquency_step",
+    label: "Delinquency step needs doing",
+    requiredProofFields: ["note"],
     sensitive: true,
   },
   {
@@ -218,17 +224,17 @@ export const TASK_TYPES = [
     // A photo is required, not optional. US-25's table calls it "photo
     // optional"; US-28's evidence rules for the sale it leads to do not, and a
     // lock nobody photographed is a lock a tenant can say was never fitted.
-    type: 'overlock_apply',
-    label: 'Fit an overlock',
-    requiredProofFields: ['note', 'photo_reference'],
+    type: "overlock_apply",
+    label: "Fit an overlock",
+    requiredProofFields: ["note", "photo_reference"],
     sensitive: true,
   },
   {
     // The other half, on cure. US-25: "restores gate access, and queues
     // overlock removal."
-    type: 'overlock_remove',
-    label: 'Take the overlock off — the tenant has paid',
-    requiredProofFields: ['note'],
+    type: "overlock_remove",
+    label: "Take the overlock off — the tenant has paid",
+    requiredProofFields: ["note"],
     sensitive: true,
   },
   {
@@ -242,25 +248,27 @@ export const TASK_TYPES = [
     // Not sensitive: nothing legal turns on whether this particular task row
     // was completed — the things it points at (overlocks, tickets) carry their
     // own record if something goes wrong.
-    type: 'daily_walkthrough',
-    label: 'Daily walkthrough — confirm the property was walked',
-    requiredProofFields: ['note'],
+    type: "daily_walkthrough",
+    label: "Daily walkthrough — confirm the property was walked",
+    requiredProofFields: ["note"],
     sensitive: false,
   },
-] as const satisfies readonly TaskTypeSpec[]
+] as const satisfies readonly TaskTypeSpec[];
 
-export type TaskType = (typeof TASK_TYPES)[number]['type']
+export type TaskType = (typeof TASK_TYPES)[number]["type"];
 
-const BY_TYPE = new Map<string, TaskTypeSpec>(TASK_TYPES.map((spec) => [spec.type, spec]))
+const BY_TYPE = new Map<string, TaskTypeSpec>(
+  TASK_TYPES.map((spec) => [spec.type, spec]),
+);
 
 export function taskTypeSpec(type: string): TaskTypeSpec | undefined {
-  return BY_TYPE.get(type)
+  return BY_TYPE.get(type);
 }
 
 /// Every type's floor: a note. Used verbatim for a registered type with no
 /// stricter requirements, and as the fail-closed default for a type the
 /// catalog has never heard of.
-const DEFAULT_REQUIRED_FIELDS: readonly string[] = ['note']
+const DEFAULT_REQUIRED_FIELDS: readonly string[] = ["note"];
 
 /// Which of a type's required proof fields are missing or blank. Empty means
 /// the task can be completed.
@@ -268,15 +276,18 @@ const DEFAULT_REQUIRED_FIELDS: readonly string[] = ['note']
 /// An unrecognised `type` falls back to the same default floor rather than
 /// requiring nothing — the fail-closed direction, so a typo'd type string
 /// blocks completion instead of silently accepting an empty proof object.
-export function missingProofFields(type: string, proof: Record<string, unknown> | null): string[] {
-  const spec = taskTypeSpec(type)
-  const required = spec?.requiredProofFields ?? DEFAULT_REQUIRED_FIELDS
+export function missingProofFields(
+  type: string,
+  proof: Record<string, unknown> | null,
+): string[] {
+  const spec = taskTypeSpec(type);
+  const required = spec?.requiredProofFields ?? DEFAULT_REQUIRED_FIELDS;
   return required.filter((key) => {
-    const value = proof?.[key]
-    return typeof value !== 'string' || value.trim() === ''
-  })
+    const value = proof?.[key];
+    return typeof value !== "string" || value.trim() === "";
+  });
 }
 
 export function taskTypeIsSensitive(type: string): boolean {
-  return taskTypeSpec(type)?.sensitive ?? false
+  return taskTypeSpec(type)?.sensitive ?? false;
 }
