@@ -33,12 +33,16 @@ import type { Actor } from '@/lib/rbac/actor'
 
 /// Facilities this actor may report on. Everything below scopes through here,
 /// so a roll-up can never include a facility the viewer cannot open.
-export async function reportableFacilities(actor: Actor): Promise<{ id: string; name: string }[]> {
+export async function reportableFacilities(
+  actor: Actor,
+): Promise<{ id: string; name: string; timezone: string }[]> {
   const access = facilityAccess(actor)
   return prisma.facility.findMany({
     where: access.all ? {} : { id: { in: access.facilityIds } },
     orderBy: { name: 'asc' },
-    select: { id: true, name: true },
+    // B-150. `timezone` so a point-in-time figure can name the instant it
+    // describes in the operator's own clock rather than in UTC.
+    select: { id: true, name: true, timezone: true },
   })
 }
 
@@ -54,7 +58,9 @@ export async function reportableFacilities(actor: Actor): Promise<{ id: string; 
 /// hold financial access at one site and operational at another; throwing
 /// would deny them the report entirely instead of showing the half they are
 /// entitled to.
-export async function financialFacilities(actor: Actor): Promise<{ id: string; name: string }[]> {
+export async function financialFacilities(
+  actor: Actor,
+): Promise<{ id: string; name: string; timezone: string }[]> {
   const facilities = await reportableFacilities(actor)
   return facilities.filter((facility) => can(actor, 'reports:financial', facility.id))
 }
@@ -103,6 +109,43 @@ function formatDay(at: Date): string {
     day: 'numeric',
     timeZone: 'UTC',
   })
+}
+
+/// B-150. The one sentence a surface prints under an AR aging table.
+///
+/// The sibling of `unitOccupancyNote`, and it exists for the identical reason:
+/// the reports screen puts a MONTH PICKER above both, which implies every
+/// figure beneath it answers for the month chosen. Unit occupancy got this
+/// sentence in B-131; the aging table one section below did not, so a month-end
+/// AR figure and the aging table under it disagreed with nothing on screen
+/// explaining why.
+///
+/// This one has no `as-at-period-end` branch to offer, and that is D-65 rather
+/// than an omission: AR aging is stored as the sole record of a closed month
+/// and is never recomputed, so there is no past instant to answer for. The
+/// honest move is the second one B-150 allows — name the instant it does
+/// answer for.
+///
+/// `timeZoneName: 'short'` always, so the sentence carries its own clock
+/// ("CDT", "UTC") and cannot be read against the wrong one. When the facilities
+/// in scope span zones there is no single local clock, so it says UTC and the
+/// suffix makes that visible rather than implied.
+export function arAgingNote(asOf: Date, timezone: string | null, periodLabel: string): string {
+  // Spelled out rather than `dateStyle`/`timeStyle`: `timeZoneName` cannot be
+  // combined with either, and the zone suffix is the half that matters here.
+  const at = new Intl.DateTimeFormat('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone: timezone ?? 'UTC',
+    timeZoneName: 'short',
+  }).format(asOf)
+  const scope = timezone
+    ? ''
+    : ' These facilities span more than one timezone, so this is stated in UTC.'
+  return `Balances are aged as at ${at} — the ${periodLabel} range above does not apply to them, because how old a debt is describes one instant rather than a range.${scope}`
 }
 
 /// The one sentence every surface prints under a unit-occupancy figure.
@@ -515,6 +558,19 @@ export async function movesForFacility(
 export type DelinquencyReport = {
   rows: { facilityId: string; facilityName: string; aging: ArAging }[]
   total: ArAging
+  /// B-150. The instant every bucket in this report describes.
+  ///
+  /// AR aging is point-in-time and D-65 settled that it stays that way — how
+  /// old a debt is has no meaning across a range, and the frozen month-end copy
+  /// is the only record a past month will ever have. So the report cannot
+  /// answer for a past date, and the fix is the one D-68 chose for unit
+  /// occupancy one section above it on the same screen: say which instant it
+  /// DOES answer for, rather than let a month picker imply an answer it never
+  /// gave.
+  asOf: Date
+  /// The timezone to read `asOf` in: the one every facility in scope shares, or
+  /// null when they do not agree and no single local clock is the right one.
+  timezone: string | null
 }
 
 /// US-39.4's aging.
@@ -536,11 +592,21 @@ export async function delinquencyReport(actor: Actor): Promise<DelinquencyReport
   // whose only reporting key is `reports:operational`.
   const facilities = await financialFacilities(actor)
 
+  // One clock for every facility, not one per call. Each `agingForFacility`
+  // would otherwise take its own `new Date()`, so the instant the note names
+  // would be none of the instants the buckets were actually cut at.
+  const asOf = new Date()
   const rows = await Promise.all(
-    facilities.map((facility) => agingForFacility(facility.id, facility.name)),
+    facilities.map((facility) => agingForFacility(facility.id, facility.name, asOf)),
   )
 
-  return { rows, total: sumArAging(rows.map((row) => row.aging)) }
+  const zones = new Set(facilities.map((facility) => facility.timezone))
+  return {
+    rows,
+    total: sumArAging(rows.map((row) => row.aging)),
+    asOf,
+    timezone: zones.size === 1 ? [...zones][0]! : null,
+  }
 }
 
 /// One facility's aging, as of now.
@@ -551,6 +617,7 @@ export async function delinquencyReport(actor: Actor): Promise<DelinquencyReport
 export async function agingForFacility(
   facilityId: string,
   facilityName: string,
+  asOf: Date = new Date(),
 ): Promise<{ facilityId: string; facilityName: string; aging: ArAging }> {
   const leases = await prisma.lease.findMany({
     where: { facilityId },
@@ -568,13 +635,12 @@ export async function agingForFacility(
   })
   const balanceByLease = new Map(balances.map((row) => [row.leaseId, row._sum.amountCents ?? 0]))
 
-  const now = new Date()
   return {
     facilityId,
     facilityName,
     aging: arAging(
       leases.map((lease) => ({
-        daysPastDue: daysPastDue(lease.invoices, now),
+        daysPastDue: daysPastDue(lease.invoices, asOf),
         outstandingCents: balanceByLease.get(lease.id) ?? 0,
       })),
     ),

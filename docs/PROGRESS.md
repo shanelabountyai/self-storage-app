@@ -5427,3 +5427,29 @@ The card's `href` has always pointed at `/admin/tenants/{tenantId}`, so the fix 
 **Test verification.** Full unit suite **3,514 passed, 8 skipped of 3,522** (216 files passed, 1 skipped), exit 0. Typecheck clean including `tsconfig.tests.json`; lint 0 errors, 7 pre-existing warnings. Schema drift: no difference detected. No migration.
 
 **Left behind.** **No e2e covers the sold-out branch.** Reaching it needs a lapsed session whose size has since gone — two mutations against shared demo inventory, which fits none of the three disciplines B-120 settled, so it would have to build its own facility. **No nearby-facility fallback.** When the facility is genuinely full, `alternativeSizes` returns empty and the renter gets the phone number and the waitlist and nothing else; offering another site is the recommender the row rules out. **The alternatives are links, not a one-click switch.** Putting the renter straight onto another size would mean re-pricing the basket mid-session, which is B-106's machinery and a larger change than this row. **`relock` itself still only tries the same unit type** — it does not consider a larger size at the same price, which is what a counter agent would do.
+
+## B-150 — AR aging sat under a month picker and always answered "as of today"
+
+`PENDING`
+
+**What it built.** `/admin/reports` has a month picker at the top. Two sections down, B-131/D-68 had made unit occupancy either answer for the month or say which instant it does answer for. One section below **that**, the AR aging table computed from `new Date()` and said nothing — so a month-end AR figure and the aging table beneath it disagreed with nothing on screen explaining why, and the fix for one had not generalised to the other. Confirmed as reported: `agingForFacility` did `const now = new Date()` and its own comment said it "takes no date and cannot be given one".
+
+- **`arAgingNote(asOf, timezone, periodLabel)`** in `lib/admin/reports.ts` — the sibling of `unitOccupancyNote`, printed above the table and wired with `aria-describedby` the same way, so a reader who reaches the table by table navigation still gets it.
+- **`delinquencyReport` returns `asOf` and `timezone`**, and passes **one** clock down to every `agingForFacility` call instead of each taking its own.
+- **`reportableFacilities`/`financialFacilities` now select `timezone`**, which is what makes "facility-local" possible at all.
+- **FR-22 (1.3.1): the facility cell is a `<th scope="row">`** in all three tables on the page — occupancy, moves and AR — including the "All facilities" total rows.
+- **`tests/ar-aging-note.test.ts`** (3) and two additions to `tests/reports-financial-db.test.ts`.
+
+**What it decided.**
+
+**It names the instant rather than answering for the date, and that is D-65 rather than laziness.** The row allowed either. D-65 already settled that AR aging is point-in-time, stored as the sole record of a closed month and never recomputed — reconstructing a past bucket would answer a different question under the same name, and it would also reopen the accounting close's freeze, which D-68 explicitly left alone. **No new D-number:** this applies a settled decision, it does not make one.
+
+**The zone is printed, never implied.** `timeZoneName: 'short'` is on unconditionally, so the sentence carries "CDT" or "UTC" with it. When the facilities in scope span more than one zone there is no single local clock, so it states UTC *and says that is why* — a portfolio table cannot have a facility-local instant, and silently picking one facility's zone would be a new version of the same lie. Note that `dateStyle`/`timeStyle` cannot be combined with `timeZoneName` (it throws `Invalid option`), so the components are spelled out.
+
+**One clock for the whole report.** `delinquencyReport` fanned out to `agingForFacility` in parallel, each calling `new Date()`. Individually harmless; but once the page prints an instant, the instant named has to be the one the buckets were cut at, and with N clocks it was none of them. `asOf` is now a parameter with a `new Date()` default, so the standalone callers (`accounting-close`, `report-subscriptions`) are unchanged.
+
+**The three row-header fixes went together.** The row named only the occupancy table, but the moves and AR tables on the same page had the identical `<td>`, and fixing one of three is how a defect comes back as a review finding. `font-normal` on the data rows so the visual weight is unchanged; the total rows keep `font-medium`.
+
+**Test verification.** Full unit suite **3,519 passed, 8 skipped of 3,527** (217 files passed, 1 skipped), exit 0 — up 5 from B-149's 3,514 by exactly the tests added. Typecheck clean including `tsconfig.tests.json`; lint 0 errors, 7 pre-existing warnings. Schema drift: no difference detected. No migration. The accessibility statement was re-read and annotated with no prose change — every surface here is under `/admin`.
+
+**Left behind.** **The dashboard tile and the delinquency detail page do not print the sentence.** Neither has a date picker, so neither makes the implied claim — the detail page already says "Point-in-time, as of now" in prose — but they now have `asOf` available and do not use it. **The CSV export is unchanged.** D-68's rule is that the screen, the scheduled email and the CSV print the caveat identically; `/admin/reports/delinquency.csv` has no date column and does not carry the instant, which is a real gap in that rule that this row did not close. **`unitOccupancyNote` still formats in UTC** (`formatDay`, since B-131) while this one formats facility-local, so the two sentences on the same page use different clocks. They say different kinds of thing — one names a period end, one names a timestamp — so nothing is currently wrong on screen, but the inconsistency is one edit away from mattering. **Nothing reconstructs a historical aging bucket**, and per D-65 nothing should.

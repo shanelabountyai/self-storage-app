@@ -200,6 +200,14 @@ const LAST_REVIEWED = '19 August 2026'
 // data-dependent state — **B-156 owns that gap** and this is one more instance
 // of it, not a new exception to declare. `LAST_REVIEWED` is not bumped, for the
 // reason the entries above give.
+//
+// Re-verified 2026-08-22, at B-150 (AR aging names the instant it answers for;
+// three report tables get their row headers). Nothing customer-facing changed —
+// every surface it touches is under `/admin`, which this page does not make
+// claims about — and no route was added, so the generated coverage claim is
+// untouched. Recorded rather than skipped because this page's rule is about
+// merges making it stale, and "staff-facing only" is a claim worth having
+// checked rather than assumed. `LAST_REVIEWED` is not bumped.
 export default function AccessibilityPage() {
   return (
     <ProsePage

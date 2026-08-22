@@ -9,7 +9,7 @@ import {
   sumRevenueRows,
 } from '../apps/web/lib/admin/revenue-report'
 import { agingByFacility, delinquencyDetail } from '../apps/web/lib/admin/delinquency-detail'
-import { delinquencyReport } from '../apps/web/lib/admin/reports'
+import { agingForFacility, delinquencyReport } from '../apps/web/lib/admin/reports'
 import { moneyOwedRollup } from '../apps/web/lib/admin/rollups'
 import { formatCents } from '../apps/web/lib/format'
 import type { Actor } from '../apps/web/lib/rbac/actor'
@@ -321,6 +321,45 @@ describeDb('financial reports', () => {
     it('shows nothing to a staffer with only the operational report key', async () => {
       const report = await delinquencyDetail(actor(['reports:operational']), d('2026-04-20'))
       expect(report.rows.find((row) => row.facilityId === facilityId)).toBeUndefined()
+    })
+  })
+
+  describe('the instant the aging describes (B-150)', () => {
+    // The reports screen puts a MONTH PICKER above this table and these buckets
+    // have never answered for the month chosen — D-65 says they cannot, so the
+    // report has to say which instant it does answer for instead. What can
+    // silently revert is the plumbing: an `agingForFacility` that goes back to
+    // taking its own `new Date()` would still pass every bucket assertion above
+    // while making the sentence name an instant no bucket was cut at.
+
+    it('ages from the clock it is given, not from the wall clock', async () => {
+      const now = await agingForFacility(facilityId, 'now')
+      // Far enough back that every unpaid invoice in the fixture is not yet
+      // due, so nothing can be past due at all.
+      const longAgo = await agingForFacility(
+        facilityId,
+        'long ago',
+        new Date('2000-01-01T00:00:00Z'),
+      )
+
+      expect(now.aging.totalCents).toBeGreaterThan(0)
+      // The BALANCE is unchanged — the ledger is what it is — but none of it
+      // is aged past the first bucket, because nothing was due yet.
+      expect(longAgo.aging.totalCents).toBe(now.aging.totalCents)
+      expect(longAgo.aging.d0to10).toBe(longAgo.aging.totalCents)
+      expect(longAgo.aging.over90).toBe(0)
+    })
+
+    it('reports one clock for every facility, and a timezone only when they agree', async () => {
+      const report = await delinquencyReport(actor())
+
+      expect(report.asOf).toBeInstanceOf(Date)
+      const zones = await prisma.facility.findMany({
+        where: { id: { in: report.rows.map((row) => row.facilityId) } },
+        select: { timezone: true },
+      })
+      const distinct = new Set(zones.map((row) => row.timezone))
+      expect(report.timezone).toBe(distinct.size === 1 ? [...distinct][0] : null)
     })
   })
 

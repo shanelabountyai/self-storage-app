@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { getAdminActor } from '@/lib/admin/context'
 import {
+  arAgingNote,
   delinquencyReport,
   movesReport,
   occupancyReport,
@@ -315,11 +316,14 @@ export default async function ReportsPage({
           <tbody>
             {occupancy.rows.map((row) => (
               <tr key={row.facilityId} className="border-b">
-                <td className="py-2">
+                {/* B-150 / FR-22. The facility names this row, so it is a
+                    row header — a `<td>` leaves a screen reader announcing
+                    "94%" with no way to know which site it belongs to. */}
+                <th scope="row" className="py-2 font-normal">
                   <Link href={`/admin/reports/rent-roll?facility=${row.facilityId}`} className="underline underline-offset-2">
                     {row.facilityName}
                   </Link>
-                </td>
+                </th>
                 <td className="py-2 text-right tabular-nums">{row.occupancy.occupiedCount}</td>
                 <td className="py-2 text-right tabular-nums">{row.occupancy.rentableCount}</td>
                 <td className="py-2 text-right tabular-nums">{percent(row.occupancy.ratio)}</td>
@@ -329,7 +333,7 @@ export default async function ReportsPage({
               </tr>
             ))}
             <tr className="font-medium">
-              <td className="py-2">All facilities</td>
+              <th scope="row" className="py-2 font-medium">All facilities</th>
               <td className="py-2 text-right tabular-nums">{occupancy.total.occupancy.occupiedCount}</td>
               <td className="py-2 text-right tabular-nums">{occupancy.total.occupancy.rentableCount}</td>
               <td className="py-2 text-right tabular-nums">{percent(occupancy.total.occupancy.ratio)}</td>
@@ -361,7 +365,7 @@ export default async function ReportsPage({
           <tbody>
             {moves.rows.map((row) => (
               <tr key={row.facilityId} className="border-b">
-                <td className="py-2">{row.facilityName}</td>
+                <th scope="row" className="py-2 font-normal">{row.facilityName}</th>
                 <td className="py-2 text-right tabular-nums">{row.moves.moveIns}</td>
                 <td className="py-2 text-right tabular-nums">{row.moves.moveOuts}</td>
                 <td className="py-2 text-right tabular-nums">{row.moves.net}</td>
@@ -377,7 +381,7 @@ export default async function ReportsPage({
               </tr>
             ))}
             <tr className="font-medium">
-              <td className="py-2">All facilities</td>
+              <th scope="row" className="py-2 font-medium">All facilities</th>
               <td className="py-2 text-right tabular-nums">{moves.total.moves.moveIns}</td>
               <td className="py-2 text-right tabular-nums">{moves.total.moves.moveOuts}</td>
               <td className="py-2 text-right tabular-nums">{moves.total.moves.net}</td>
@@ -427,10 +431,19 @@ export default async function ReportsPage({
             Tenant detail and CSV
           </Link>
         </div>
+        {/* B-150. The same defect B-131 fixed two sections up, in the same
+            file: the picker above implies these buckets answer for the month
+            chosen, and they never have. D-65 rules out making them, so the
+            sentence names the instant they DO answer for. `aria-describedby`
+            rather than a bare paragraph, for B-131's reason — a reader who
+            jumps to the table by table navigation still gets it. */}
+        <p id="ar-as-at" className="text-muted-foreground text-sm text-pretty">
+          {arAgingNote(delinquency.asOf, delinquency.timezone, label)}
+        </p>
         {/* Wide table: scrolls inside its own container rather than pushing the
             page sideways. */}
         <div tabIndex={0} className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm" aria-describedby="ar-as-at">
             <caption className="sr-only">
               Outstanding balances per facility, aged into 0–10, 11–30, 31–60, 61–90 and over-90-day
               buckets
@@ -449,7 +462,7 @@ export default async function ReportsPage({
             <tbody>
               {delinquency.rows.map((row) => (
                 <tr key={row.facilityId} className="border-b">
-                  <td className="py-2">{row.facilityName}</td>
+                  <th scope="row" className="py-2 font-normal">{row.facilityName}</th>
                   {AR_BUCKET_LABELS.map(([key]) => (
                     <td key={key} className="py-2 text-right tabular-nums">
                       {formatCents(row.aging[key])}
@@ -459,7 +472,7 @@ export default async function ReportsPage({
                 </tr>
               ))}
               <tr className="font-medium">
-                <td className="py-2">All facilities</td>
+                <th scope="row" className="py-2 font-medium">All facilities</th>
                 {AR_BUCKET_LABELS.map(([key]) => (
                   <td key={key} className="py-2 text-right tabular-nums">
                     {formatCents(delinquency.total[key])}
