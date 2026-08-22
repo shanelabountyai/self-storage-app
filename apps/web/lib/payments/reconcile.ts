@@ -4,6 +4,8 @@ import { emitEvent } from '@storage/core/events'
 import { provisionMoveIn, requestDownstream } from '@/lib/checkout/provision'
 import { cancelOpenTask, createTask } from '@/lib/admin/tasks'
 import { applyPayment } from '@/lib/billing/allocation'
+import { reinstatePayment, returnPayment } from '@/lib/billing/reversals'
+import { systemActor } from '@/lib/rbac/actor'
 import { restoreAccessIfSettled } from '@/lib/access/delinquency-gate'
 
 /// How Stripe actually took the money.
@@ -51,6 +53,13 @@ export const HANDLED_EVENTS = [
   'payment_intent.processing',
   'payment_intent.payment_failed',
   'charge.refunded',
+  // B-147. Before this, a chargeback was something the operator learned about
+  // from a bank statement: the money was gone from the account and recorded
+  // here as collected, forever. Both halves are needed — `created` is when the
+  // funds are actually withdrawn, `closed` is the only thing that says whether
+  // they come back.
+  'charge.dispute.created',
+  'charge.dispute.closed',
   'setup_intent.succeeded',
 ] as const
 
@@ -409,6 +418,75 @@ export async function applyStripeEvent(event: Stripe.Event): Promise<void> {
           tx,
         )
       })
+      return
+    }
+
+    // B-147. A card dispute, riding B-146's reversal primitive rather than
+    // inventing a second one — a dispute handler with nowhere to write its
+    // reversal is the same defect one layer up.
+    case 'charge.dispute.created':
+    case 'charge.dispute.closed': {
+      const dispute = event.data.object as Stripe.Dispute
+      const intentId = typeof dispute.payment_intent === 'string' ? dispute.payment_intent : null
+      if (!intentId) return
+      const payment = await prisma.payment.findUnique({
+        where: { stripePaymentIntentId: intentId },
+        select: { id: true, facilityId: true },
+      })
+      // Same reasoning as every other handler here: an intent we have no row
+      // for is a replay or another environment sharing the account, not a crash.
+      if (!payment) return
+
+      // Not a staff decision. The bank has already moved the money and the only
+      // thing left to choose is whether our records say so — see
+      // `requireReversalAuthority`.
+      const actor = systemActor('stripe:dispute')
+      const reasonCode = `dispute_${dispute.reason ?? 'unknown'}`
+      const note = `Stripe dispute ${dispute.id} (${dispute.status})`
+
+      if (event.type === 'charge.dispute.created') {
+        // An early-warning object (`warning_needs_response`, `warning_under_review`)
+        // is a card network inquiry, NOT a withdrawal: the funds are still ours.
+        // Reversing on one would re-open invoices and start dunning a tenant over
+        // money we still hold. It still needs a person, which is the task below.
+        const withdrawn = !dispute.status.startsWith('warning_')
+        const result = withdrawn
+          ? await returnPayment(actor, payment.id, {
+              reasonCode,
+              note,
+              // No fee. `charge.dispute.created` is not an outcome — charging a
+              // returned-payment fee here bills a tenant for a dispute we may
+              // be about to win, and B-147 asks for the reversal, not a fee.
+              waiveFee: true,
+            })
+          : null
+
+        // `returnPayment` raises the queue card itself when it reverses. When it
+        // could not — an early warning, a payment posted against no lease, one
+        // already reversed — a human still has to see it, because the money is
+        // gone from the account either way and nothing else in the product will
+        // ever mention it. `createTask` is idempotent per (type, entity, day),
+        // so a redelivery does not stack cards.
+        if (!result?.ok) {
+          await createTask({
+            facilityId: payment.facilityId,
+            type: 'settling_payment_failed',
+            entityType: 'Payment',
+            entityId: payment.id,
+            priority: 'high',
+          })
+        }
+        return
+      }
+
+      // Closed. `lost` needs nothing: the reversal posted at `created` is
+      // already the truth, and the task is already open. `won` and
+      // `warning_closed` both mean the money stayed with us — the second only
+      // ever follows a warning we did not reverse, and `reinstatePayment`
+      // returns `not_returned` for it rather than inventing a credit.
+      if (dispute.status === 'won' || dispute.status === 'warning_closed') {
+        await reinstatePayment(actor, payment.id, { reasonCode, note })
+      }
       return
     }
 

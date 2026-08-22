@@ -40,6 +40,16 @@ export const AUDIT_ACTIONS = [
     label: "Payment recorded",
     requiresReason: false,
   },
+  // B-147. The other side of `payment.returned`: a card dispute we won, where
+  // the bank hands the money back. Its own action rather than a second
+  // `payment.recorded`, because what happened is that an earlier reversal was
+  // itself reversed, and a log that cannot tell those apart cannot answer the
+  // only question anyone asks of it — why does this receipt appear twice.
+  {
+    action: "payment.reinstated",
+    label: "Returned payment reinstated",
+    requiresReason: true,
+  },
 
   // Pricing
   {

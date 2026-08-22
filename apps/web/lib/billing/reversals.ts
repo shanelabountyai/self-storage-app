@@ -5,9 +5,9 @@ import { formatInvoiceNumber } from "@storage/core/billing";
 import { can, ForbiddenError } from "@/lib/rbac/authorize";
 import { toAuditActor } from "@/lib/rbac/audit-actor";
 import type { Actor } from "@/lib/rbac/actor";
-import { recomputeInvoices } from "@/lib/billing/allocation";
+import { applyPayment, recomputeInvoices } from "@/lib/billing/allocation";
 import { nextInvoiceNumber } from "@/lib/billing/numbering";
-import { createTask } from "@/lib/admin/tasks";
+import { cancelOpenTask, createTask } from "@/lib/admin/tasks";
 
 // PRD 02 §4.5 US-46, US-21, US-23; §5.3 FR-8 (B-146). A payment that came back.
 //
@@ -81,6 +81,34 @@ export type ReturnPaymentInput = {
 /// the NSF fee. A reversal that posted without re-opening its invoices would
 /// move the balance and leave AR ageing lying, which is the same split B-048
 /// was raised to fix on the way in.
+/// The gate on both directions of a bank-imposed reversal.
+///
+/// `refunds:approve` rather than a new permission key: this is the existing
+/// "move money backwards" gate, and it is manager-and-above, which is the right
+/// level for something that re-opens invoices and charges a fee.
+///
+/// Deliberately NOT `checkMonetaryAuthority`. A refund limit exists because a
+/// staffer CHOOSES the amount; here the bank chose it, and refusing to record a
+/// $2,000 returned cheque because it exceeds somebody's refund limit would leave
+/// the money recorded as collected — which is the defect, not a control.
+///
+/// A `system` actor passes (B-147). The seeded system role is deliberately
+/// narrow and does NOT hold `refunds:approve` — widening it there would hand the
+/// delinquency engine a refund button. But the Stripe dispute webhook is not
+/// exercising discretion: the money has already left the account, and the only
+/// choice available is whether our records admit it. `systemActor` is
+/// constructible in server code only, behind a verified webhook signature.
+function requireReversalAuthority(actor: Actor, facilityId: string): void {
+  if (actor.kind === "system") return;
+  if (!can(actor, "refunds:approve", facilityId)) {
+    throw new ForbiddenError(
+      "Missing permission refunds:approve",
+      "refunds:approve",
+      facilityId,
+    );
+  }
+}
+
 export async function returnPayment(
   actor: Actor,
   paymentId: string,
@@ -107,21 +135,7 @@ export async function returnPayment(
   });
   if (!payment) return { ok: false, reason: "not_found" };
 
-  // `refunds:approve` rather than a new permission key: this is the existing
-  // "move money backwards" gate, and it is manager-and-above, which is the
-  // right level for something that re-opens invoices and charges a fee.
-  //
-  // Deliberately NOT `checkMonetaryAuthority`. A refund limit exists because a
-  // staffer CHOOSES the amount; here the bank chose it, and refusing to record
-  // a $2,000 returned cheque because it exceeds somebody's refund limit would
-  // leave the money recorded as collected — which is the defect, not a control.
-  if (!can(actor, "refunds:approve", payment.facilityId)) {
-    throw new ForbiddenError(
-      "Missing permission refunds:approve",
-      "refunds:approve",
-      payment.facilityId,
-    );
-  }
+  requireReversalAuthority(actor, payment.facilityId);
 
   if (payment.status === "returned")
     return { ok: false, reason: "already_returned" };
@@ -135,6 +149,18 @@ export async function returnPayment(
   // payment against no lease. There is nothing to reverse on a lease ledger,
   // and inventing an entry would attach the money to a lease it never touched.
   if (!posted) return { ok: false, reason: "nothing_posted" };
+
+  // A payment that was returned and later REINSTATED (B-147's won dispute) is
+  // `succeeded` again, so the status check above lets a second return through —
+  // and `reversalOfId` is unique, so creating a second reversal of the same
+  // posted entry throws inside the transaction. From a webhook that is a 500
+  // Stripe retries for days. Refuse it here instead, with the reason that is
+  // true: this entry has already been reversed once and that pair still stands.
+  const alreadyReversed = await prisma.ledgerEntry.findUnique({
+    where: { reversalOfId: posted.id },
+    select: { id: true },
+  });
+  if (alreadyReversed) return { ok: false, reason: "already_returned" };
 
   const invoiceIds = payment.allocations.map(
     (allocation) => allocation.invoiceId,
@@ -245,6 +271,147 @@ export async function returnPayment(
     feeInvoiceNumber: result.fee?.number ?? null,
     feeCents: result.fee?.amountCents ?? 0,
     reopenedInvoiceIds: invoiceIds,
+  };
+}
+
+export type ReinstatePaymentResult =
+  | {
+      ok: true;
+      /// The entry that reverses the reversal. FR-8 again: three rows, none
+      /// edited, and the pair either side of the original tells the story.
+      entryId: string;
+      /// Invoices this money settled on the way back in. NOT necessarily the
+      /// ones it settled the first time — see the note in the body.
+      reallocatedInvoiceIds: string[];
+    }
+  | { ok: false; reason: "not_found" | "not_returned" | "nothing_reversed" };
+
+/// Undoes a return: the money came back to us after all.
+///
+/// The only caller today is B-147's `charge.dispute.closed` with `status: won`,
+/// where Stripe releases the disputed funds. It is deliberately not restricted
+/// to that, because the same thing happens when a bank reverses its own return.
+///
+/// Symmetric with `returnPayment` and for the same reason — FR-8 is append-only,
+/// so nothing here deletes the reversal or rewrites the original. A third entry
+/// is posted pointing back at the second, and the payment goes back to
+/// `succeeded`, which is what makes its allocations count again.
+export async function reinstatePayment(
+  actor: Actor,
+  paymentId: string,
+  input: { reasonCode: string; note?: string },
+): Promise<ReinstatePaymentResult> {
+  const payment = await prisma.payment.findUnique({
+    where: { id: paymentId },
+    select: {
+      id: true,
+      facilityId: true,
+      tenantId: true,
+      amountCents: true,
+      method: true,
+      status: true,
+      receiptNumber: true,
+      ledgerEntries: {
+        where: { type: "payment" },
+        select: { id: true, leaseId: true },
+      },
+    },
+  });
+  if (!payment) return { ok: false, reason: "not_found" };
+
+  requireReversalAuthority(actor, payment.facilityId);
+
+  // The idempotency guard, and the one that matters: Stripe redelivers
+  // `charge.dispute.closed` for days. A second delivery finds `succeeded` and
+  // stops here rather than posting a second counter-entry.
+  if (payment.status !== "returned") return { ok: false, reason: "not_returned" };
+
+  const posted = payment.ledgerEntries[0];
+  const reversal = posted
+    ? await prisma.ledgerEntry.findUnique({
+        where: { reversalOfId: posted.id },
+        select: { id: true, leaseId: true },
+      })
+    : null;
+  // `returned` with nothing reversed should not exist, but a status set by hand
+  // in a database client would produce it, and inventing a credit off the back
+  // of that is worse than refusing.
+  if (!reversal) return { ok: false, reason: "nothing_reversed" };
+
+  const result = await prisma.$transaction(async (tx) => {
+    const entry = await tx.ledgerEntry.create({
+      data: {
+        facilityId: payment.facilityId,
+        leaseId: reversal.leaseId,
+        // Negative: the tenant stops owing it again. `adjustment` rather than
+        // `payment`, so `ledgerEntries[0]` above keeps meaning the ONE original
+        // posting and a later return still reverses the right row.
+        type: "adjustment",
+        amountCents: -payment.amountCents,
+        description: `Reinstated ${payment.method.replace("_", " ")} payment${
+          payment.receiptNumber !== null
+            ? `, receipt #${payment.receiptNumber}`
+            : ""
+        } — ${input.reasonCode}`,
+        paymentId: payment.id,
+        reversalOfId: reversal.id,
+      },
+    });
+
+    // Order matters, exactly as it does in `reconcile.ts`: allocation sums only
+    // SETTLING statuses, and this update is what makes this payment count.
+    await tx.payment.update({
+      where: { id: payment.id },
+      data: { status: "succeeded", failureReason: null },
+    });
+
+    // Re-allocated, not restored. The invoices this settled originally may have
+    // been superseded while the dispute ran — next month's rent was raised, a
+    // late fee landed because the arrears were real for those weeks. Money
+    // settles what is open in the facility's configured order, which is the
+    // same rule every other payment follows; pinning it back to the old
+    // invoices would leave a paid invoice sitting behind an unpaid older one.
+    const applied = await applyPayment(tx, payment);
+
+    await recordAudit(
+      {
+        actor: toAuditActor(actor),
+        action: "payment.reinstated",
+        entityType: "Payment",
+        entityId: payment.id,
+        facilityId: payment.facilityId,
+        reasonCode: input.reasonCode,
+        context: {
+          amountCents: payment.amountCents,
+          method: payment.method,
+          receiptNumber: payment.receiptNumber,
+          reversedEntryId: reversal.id,
+          entryId: entry.id,
+          reallocatedInvoiceIds: [
+            ...new Set(applied.lines.map((line) => line.invoiceId)),
+          ],
+          unappliedCents: applied.unappliedCents,
+          note: input.note ?? null,
+        },
+      },
+      tx,
+    );
+
+    return {
+      entryId: entry.id,
+      invoiceIds: [...new Set(applied.lines.map((line) => line.invoiceId))],
+    };
+  });
+
+  // Outside the transaction, on `returnPayment`'s own reasoning. The queue is
+  // what staff are working from: leaving the "a payment bounced" card open on a
+  // dispute we won sends somebody to chase a tenant who owes nothing.
+  await cancelOpenTask("settling_payment_failed", payment.id);
+
+  return {
+    ok: true,
+    entryId: result.entryId,
+    reallocatedInvoiceIds: result.invoiceIds,
   };
 }
 

@@ -335,3 +335,352 @@ describeDb('reconciliation into the ledger', () => {
     expect(gap.map((e) => e.id)).toContain(`evt_${suffix}_stuck`)
   })
 })
+
+// B-147 / PRD 02 §4.5 US-46. Card disputes.
+//
+// `HANDLED_EVENTS` covered five Stripe events and no `charge.dispute.*`, so a
+// chargeback was something the operator learned about from a bank statement:
+// the money was out of the account and recorded here as collected, forever.
+//
+// Its own block rather than rows in the one above, because these need a lease
+// and an invoice to have anything to reverse, and the block above deliberately
+// tears its lease down inside the one test that makes one.
+describeDb('card disputes', () => {
+  const dsuffix = randomUUID().slice(0, 8)
+  let dFacilityId = ''
+  let dTenantId = ''
+  let dLeaseId = ''
+  let dUnitTypeId = ''
+  let invoiceCounter = 0
+
+  beforeAll(async () => {
+    const facility = await prisma.facility.create({
+      data: {
+        name: 'Dispute Test',
+        slug: `dispute-${dsuffix}`,
+        addressLine1: '2 Storage Way',
+        city: 'Austin',
+        state: 'TX',
+        postalCode: '78704',
+        timezone: 'America/Chicago',
+      },
+    })
+    dFacilityId = facility.id
+    const tenant = await prisma.tenant.create({
+      data: {
+        email: `dispute-${dsuffix}@example.com`,
+        firstName: 'Dee',
+        lastName: 'Disputer',
+      },
+    })
+    dTenantId = tenant.id
+    const unitType = await prisma.unitType.create({
+      data: { facilityId: dFacilityId, name: `10x10 ${dsuffix}`, widthFt: 10, lengthFt: 10 },
+    })
+    dUnitTypeId = unitType.id
+    const unit = await prisma.unit.create({
+      data: { facilityId: dFacilityId, unitTypeId: unitType.id, number: `D-${dsuffix}` },
+    })
+    const lease = await prisma.lease.create({
+      data: {
+        facilityId: dFacilityId,
+        tenantId: dTenantId,
+        unitId: unit.id,
+        status: 'active',
+        startDate: new Date(),
+        monthlyRateCents: 12_900,
+        billingDay: 1,
+      },
+    })
+    dLeaseId = lease.id
+  })
+
+  // Every test here builds its own settled invoice, and `applyPayment`
+  // allocates across every OPEN invoice the tenant has. Left standing, one
+  // test's re-opened invoice absorbs the next test's payment and the fixture
+  // assertion fails for a reason that has nothing to do with disputes.
+  beforeEach(async () => {
+    if (!hasDatabase) return
+    await prisma.task.deleteMany({ where: { facilityId: dFacilityId } })
+    await prisma.domainEvent.deleteMany({ where: { facilityId: dFacilityId } })
+    await prisma.ledgerEntry.deleteMany({ where: { facilityId: dFacilityId } })
+    await prisma.paymentAllocation.deleteMany({
+      where: { payment: { facilityId: dFacilityId } },
+    })
+    await prisma.payment.deleteMany({ where: { facilityId: dFacilityId } })
+    await prisma.invoice.deleteMany({ where: { facilityId: dFacilityId } })
+  })
+
+  afterAll(async () => {
+    if (!hasDatabase) return
+    await prisma.task.deleteMany({ where: { facilityId: dFacilityId } })
+    await prisma.domainEvent.deleteMany({ where: { facilityId: dFacilityId } })
+    await prisma.ledgerEntry.deleteMany({ where: { facilityId: dFacilityId } })
+    await prisma.paymentAllocation.deleteMany({ where: { payment: { facilityId: dFacilityId } } })
+    await prisma.payment.deleteMany({ where: { facilityId: dFacilityId } })
+    await prisma.invoice.deleteMany({ where: { facilityId: dFacilityId } })
+    await prisma.lease.deleteMany({ where: { facilityId: dFacilityId } })
+    await prisma.unit.deleteMany({ where: { facilityId: dFacilityId } })
+    await prisma.unitType.deleteMany({ where: { id: dUnitTypeId } })
+    await prisma.tenant.deleteMany({ where: { id: dTenantId } })
+    // The facility deliberately stays. `payment.returned` and
+    // `payment.reinstated` write audit rows that reference it, and `audit_log`
+    // is append-only — the database itself refuses the DELETE, so there is no
+    // way to drop the parent. Same as `refunds-db.test.ts`, for the same reason.
+    await prisma.$disconnect()
+  })
+
+  /// A rent invoice, paid in full by a card payment that reached `succeeded`
+  /// through the ordinary webhook path — which is the only state a dispute can
+  /// arrive against.
+  async function settledRent(intentId: string, amountCents = 12_900) {
+    invoiceCounter += 1
+    // `(leaseId, periodStart)` is unique, so each test gets its own month.
+    const due = new Date(Date.UTC(2026, invoiceCounter, 1))
+    const invoice = await prisma.invoice.create({
+      data: {
+        facilityId: dFacilityId,
+        leaseId: dLeaseId,
+        number: `DP${dsuffix}${String(invoiceCounter).padStart(3, '0')}`,
+        kind: 'rent',
+        status: 'open',
+        issueDate: due,
+        dueDate: due,
+        periodStart: due,
+        periodEnd: new Date(Date.UTC(2026, invoiceCounter + 1, 0)),
+        subtotalCents: amountCents,
+        totalCents: amountCents,
+        lineItems: {
+          create: [
+            {
+              type: 'rent',
+              description: 'Rent',
+              quantity: 1,
+              unitAmountCents: amountCents,
+              amountCents,
+            },
+          ],
+        },
+      },
+    })
+    const payment = await prisma.payment.create({
+      data: {
+        facilityId: dFacilityId,
+        tenantId: dTenantId,
+        amountCents,
+        method: 'card',
+        status: 'pending',
+        stripePaymentIntentId: intentId,
+      },
+    })
+    await applyStripeEvent({
+      id: `evt_${dsuffix}_ok_${invoiceCounter}`,
+      type: 'payment_intent.succeeded',
+      data: { object: { id: intentId, created: Math.floor(Date.now() / 1000) } },
+    } as unknown as Stripe.Event)
+
+    const settled = await prisma.invoice.findUniqueOrThrow({ where: { id: invoice.id } })
+    expect(settled.status, 'fixture: the payment must have settled the invoice').toBe('paid')
+    return { paymentId: payment.id, invoiceId: invoice.id, dueDate: due }
+  }
+
+  const disputeEvent = (
+    id: string,
+    type: 'charge.dispute.created' | 'charge.dispute.closed',
+    intentId: string,
+    status: string,
+  ) =>
+    ({
+      id,
+      type,
+      data: {
+        object: {
+          id: `dp_${dsuffix}`,
+          payment_intent: intentId,
+          status,
+          reason: 'fraudulent',
+        },
+      },
+    }) as unknown as Stripe.Event
+
+  it('is in the handled set', () => {
+    // The whole defect in one assertion: these two were absent, so the default
+    // branch recorded them and acknowledged them and nothing else happened.
+    expect(isHandled('charge.dispute.created')).toBe(true)
+    expect(isHandled('charge.dispute.closed')).toBe(true)
+  })
+
+  it('reverses the payment and raises the queue card when a dispute opens', async () => {
+    const intentId = `pi_${dsuffix}_open`
+    const { paymentId, invoiceId, dueDate } = await settledRent(intentId)
+
+    await applyStripeEvent(disputeEvent(`evt_${dsuffix}_d1`, 'charge.dispute.created', intentId, 'needs_response'))
+
+    // The money is gone from the account, so it must be gone from the ledger.
+    const payment = await prisma.payment.findUniqueOrThrow({ where: { id: paymentId } })
+    expect(payment.status).toBe('returned')
+
+    const original = await prisma.ledgerEntry.findFirstOrThrow({
+      where: { paymentId, type: 'payment' },
+    })
+    const reversal = await prisma.ledgerEntry.findUniqueOrThrow({
+      where: { reversalOfId: original.id },
+    })
+    // FR-8: append-only. The original stands and the correction points at it.
+    expect(original.amountCents).toBe(-12_900)
+    expect(reversal.amountCents).toBe(12_900)
+
+    // And the arrears are visible again — the invoice re-opens with its
+    // ORIGINAL due date, so ageing does not restart today (D-25).
+    const invoice = await prisma.invoice.findUniqueOrThrow({ where: { id: invoiceId } })
+    expect(invoice.status).toBe('open')
+    expect(invoice.amountPaidCents).toBe(0)
+    expect(invoice.dueDate).toEqual(dueDate)
+
+    const task = await prisma.task.findFirst({
+      where: { entityId: paymentId, type: 'settling_payment_failed' },
+    })
+    expect(task?.status).toBe('open')
+    expect(task?.priority).toBe('high')
+  })
+
+  it('does not reverse twice when Stripe redelivers the dispute', async () => {
+    // Stripe delivers at-least-once and retries for days; the StripeEvent row
+    // is the outer guard, but `applyStripeEvent` must be safe on its own.
+    const intentId = `pi_${dsuffix}_twice`
+    const { paymentId } = await settledRent(intentId)
+
+    await applyStripeEvent(disputeEvent(`evt_${dsuffix}_d2a`, 'charge.dispute.created', intentId, 'needs_response'))
+    await applyStripeEvent(disputeEvent(`evt_${dsuffix}_d2b`, 'charge.dispute.created', intentId, 'needs_response'))
+
+    const entries = await prisma.ledgerEntry.findMany({
+      where: { paymentId, type: 'adjustment' },
+    })
+    expect(entries).toHaveLength(1)
+  })
+
+  it('leaves the reversal standing when the dispute is lost', async () => {
+    const intentId = `pi_${dsuffix}_lost`
+    const { paymentId, invoiceId } = await settledRent(intentId)
+
+    await applyStripeEvent(disputeEvent(`evt_${dsuffix}_d3a`, 'charge.dispute.created', intentId, 'needs_response'))
+    await applyStripeEvent(disputeEvent(`evt_${dsuffix}_d3b`, 'charge.dispute.closed', intentId, 'lost'))
+
+    expect(
+      (await prisma.payment.findUniqueOrThrow({ where: { id: paymentId } })).status,
+    ).toBe('returned')
+    expect(
+      (await prisma.invoice.findUniqueOrThrow({ where: { id: invoiceId } })).status,
+    ).toBe('open')
+    // Still one adjustment: losing posts nothing new, because `created`
+    // already told the truth.
+    expect(
+      await prisma.ledgerEntry.count({ where: { paymentId, type: 'adjustment' } }),
+    ).toBe(1)
+  })
+
+  it('reinstates the payment when the dispute is won', async () => {
+    const intentId = `pi_${dsuffix}_won`
+    const { paymentId, invoiceId } = await settledRent(intentId)
+
+    await applyStripeEvent(disputeEvent(`evt_${dsuffix}_d4a`, 'charge.dispute.created', intentId, 'needs_response'))
+    await applyStripeEvent(disputeEvent(`evt_${dsuffix}_d4b`, 'charge.dispute.closed', intentId, 'won'))
+
+    expect(
+      (await prisma.payment.findUniqueOrThrow({ where: { id: paymentId } })).status,
+    ).toBe('succeeded')
+    // The invoice is settled again, by re-allocation rather than by rewriting
+    // anything the reversal did.
+    const invoice = await prisma.invoice.findUniqueOrThrow({ where: { id: invoiceId } })
+    expect(invoice.status).toBe('paid')
+    expect(invoice.amountPaidCents).toBe(12_900)
+
+    // Three entries, none edited: the payment, its reversal, and the reversal
+    // of the reversal. They net to exactly one payment's worth of credit, which
+    // is the balance the tenant had before anyone disputed anything.
+    const balance = await prisma.ledgerEntry.aggregate({
+      where: { paymentId },
+      _sum: { amountCents: true },
+    })
+    expect(balance._sum.amountCents).toBe(-12_900)
+    expect(await prisma.ledgerEntry.count({ where: { paymentId } })).toBe(3)
+
+    // Staff must not be left chasing a tenant who owes nothing.
+    const task = await prisma.task.findFirst({
+      where: { entityId: paymentId, type: 'settling_payment_failed' },
+    })
+    expect(task?.status).toBe('cancelled')
+
+    // And a redelivered win must not post a second credit.
+    await applyStripeEvent(disputeEvent(`evt_${dsuffix}_d4c`, 'charge.dispute.closed', intentId, 'won'))
+    expect(await prisma.ledgerEntry.count({ where: { paymentId } })).toBe(3)
+  })
+
+  it('does not reverse an early-warning inquiry, but does raise it', async () => {
+    // `warning_needs_response` is a card network inquiry, not a withdrawal —
+    // the funds are still ours. Reversing would re-open the invoice and start
+    // dunning a tenant over money we still hold.
+    const intentId = `pi_${dsuffix}_warning`
+    const { paymentId, invoiceId } = await settledRent(intentId)
+
+    await applyStripeEvent(
+      disputeEvent(`evt_${dsuffix}_d5a`, 'charge.dispute.created', intentId, 'warning_needs_response'),
+    )
+
+    expect(
+      (await prisma.payment.findUniqueOrThrow({ where: { id: paymentId } })).status,
+    ).toBe('succeeded')
+    expect(
+      (await prisma.invoice.findUniqueOrThrow({ where: { id: invoiceId } })).status,
+    ).toBe('paid')
+    // It still needs a person: the inquiry is a real signal and nothing else in
+    // the product would ever mention it.
+    expect(
+      (await prisma.task.findFirst({
+        where: { entityId: paymentId, type: 'settling_payment_failed' },
+      }))?.status,
+    ).toBe('open')
+
+    // Closing a warning reinstates nothing, because nothing was reversed.
+    await applyStripeEvent(
+      disputeEvent(`evt_${dsuffix}_d5b`, 'charge.dispute.closed', intentId, 'warning_closed'),
+    )
+    expect(await prisma.ledgerEntry.count({ where: { paymentId, type: 'adjustment' } })).toBe(0)
+  })
+
+  it('raises the queue card for a dispute on a payment with no lease', async () => {
+    // A merchandise sale, or a payment posted against no lease. There is
+    // nothing on a lease ledger to reverse and inventing an entry would attach
+    // the money to a lease it never touched — but the money is still gone.
+    const intentId = `pi_${dsuffix}_nolease`
+    const payment = await prisma.payment.create({
+      data: {
+        facilityId: dFacilityId,
+        tenantId: dTenantId,
+        amountCents: 2_500,
+        method: 'card',
+        status: 'succeeded',
+        stripePaymentIntentId: intentId,
+      },
+    })
+
+    await applyStripeEvent(
+      disputeEvent(`evt_${dsuffix}_d6`, 'charge.dispute.created', intentId, 'needs_response'),
+    )
+
+    expect(await prisma.ledgerEntry.count({ where: { paymentId: payment.id } })).toBe(0)
+    expect(
+      (await prisma.task.findFirst({
+        where: { entityId: payment.id, type: 'settling_payment_failed' },
+      }))?.status,
+    ).toBe('open')
+  })
+
+  it('ignores a dispute for a payment intent it has no record of', async () => {
+    await expect(
+      applyStripeEvent(
+        disputeEvent(`evt_${dsuffix}_d7`, 'charge.dispute.created', `pi_${dsuffix}_ghost`, 'needs_response'),
+      ),
+    ).resolves.toBeUndefined()
+  })
+})
