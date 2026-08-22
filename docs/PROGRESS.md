@@ -5373,7 +5373,7 @@ The card's `href` has always pointed at `/admin/tenants/{tenantId}`, so the fix 
 
 ## B-148 — Waitlist and lead forms announce success to nobody
 
-`PENDING`
+`8d0e3d1`
 
 **What it built.** Both public marketing forms — the sold-out-size notify-me (B-090a) and the quote/callback form (B-068) — rendered their `role="status"` paragraph **only in the success branch**, so the live region was inserted into the DOM already carrying its message. That is the exact failure `AdminForm`'s own comment describes and B-111 fixed product-wide: a region that appears with the event it reports is unreliably announced by VoiceOver and routinely missed by NVDA (4.1.3). Both also replaced the entire form on success, unmounting the submit button the user was standing on and dropping focus to `<body>` (2.4.3).
 
