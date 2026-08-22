@@ -35,6 +35,7 @@ import { LeadForm } from '@/components/marketing/lead-form'
 import { submitLeadAction, trackPageView } from './lead-actions'
 import { joinWaitlistAction } from './waitlist-actions'
 import { WaitlistForm } from '@/components/marketing/waitlist-form'
+import { CallLink, phoneFor, type Phone as PhoneNumber } from '@/components/marketing/call-link'
 import { citySlugPath } from '@/lib/marketing/paths'
 import { offerFor } from '@/lib/promotions/service'
 import { PromoCodeEntry } from '@/components/promo-code-entry'
@@ -107,30 +108,6 @@ export async function generateMetadata({
   }
 }
 
-/// The one place the page decides which number to show. Mixing the facility's
-/// own line with the org line on a single page sends a renter to a different
-/// number than the button they just read — so this is resolved once and passed
-/// down, never re-derived per component.
-function phoneFor(facility: PublicFacility) {
-  if (facility.phone) {
-    return { href: facility.phone.replace(/[^\d+]/g, ''), display: facility.phone, isMain: false }
-  }
-  return { href: SITE.phone.href, display: SITE.phone.display, isMain: true }
-}
-
-type Phone = ReturnType<typeof phoneFor>
-
-/// "Call (512) 555-0100" / "Call our main line, (512) 555-0100" — a renter who
-/// might get transferred should know that before they dial.
-function CallLink({ phone, className }: { phone: Phone; className?: string }) {
-  return (
-    <a href={`tel:${phone.href}`} className={className}>
-      Call {phone.isMain ? 'our main line, ' : ''}
-      {phone.display}
-    </a>
-  )
-}
-
 function HoursTable({
   caption,
   schedule,
@@ -138,7 +115,7 @@ function HoursTable({
 }: {
   caption: string
   schedule: WeeklySchedule | null
-  phone: Phone
+  phone: PhoneNumber
 }) {
   if (!schedule) {
     return (
@@ -328,7 +305,7 @@ function UnitTypeCard({
   code,
 }: {
   unitType: PublicUnitType
-  phone: Phone
+  phone: PhoneNumber
   pricing: PublicPricingContext
   facility: PublicFacility
   promo: { terms: string; firstPeriodCents: number; fromCode: boolean } | null
@@ -342,7 +319,9 @@ function UnitTypeCard({
   const available = unitType.availableCount
   const saving = Math.max(0, unitType.streetRateCents - unitType.webRateCents)
   return (
-    <li className="rounded-lg border p-4">
+    // B-149 links here by unit-type id from checkout's unit-lost branch, so a
+    // renter who lost a size lands on the alternative rather than on the page.
+    <li id={`unit-${unitType.unitTypeId}`} className="rounded-lg border p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <h3 className="text-lg font-medium">
           {/* U+00D7 is the multiplication sign and is read as "ten times
@@ -588,7 +567,7 @@ function UnitList({
   code,
 }: {
   unitTypes: PublicUnitType[] | null
-  phone: Phone
+  phone: PhoneNumber
   pricing: PublicPricingContext
   filtered: boolean
   facility: PublicFacility
@@ -687,7 +666,7 @@ function UnitList({
   )
 }
 
-function ContactBlock({ facility, phone }: { facility: PublicFacility; phone: Phone }) {
+function ContactBlock({ facility, phone }: { facility: PublicFacility; phone: PhoneNumber }) {
   return (
     <>
       <address className="mt-2 text-base not-italic">{formatAddress(facility)}</address>
@@ -769,7 +748,7 @@ export default async function FacilityPage({
   const visible = unitTypes === null ? null : applyFilters(unitTypes, filters)
 
   const embed = mapEmbedUrl(facility)
-  const phone = phoneFor(facility)
+  const phone = phoneFor(facility.phone)
 
   // B-118. Split once, used by the hero strip above the fold and the lazy
   // gallery further down — never the same photo twice on one page load.

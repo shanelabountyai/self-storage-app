@@ -6,6 +6,7 @@ import { LockWarning } from '@/components/checkout/lock-warning'
 import { BackControl } from '@/components/checkout/back-control'
 import { labelForStep, stepAnnouncement, Stepper } from '@/components/checkout/stepper'
 import { SITE } from '@/lib/site-config'
+import { formatCents } from '@/lib/format'
 import { prisma } from '@storage/db'
 import { billingDayFor } from '@storage/core/billing'
 import { isoDate, startDateWindow } from '@storage/core/checkout'
@@ -14,9 +15,13 @@ import { publicInventoryForFacility } from '@/lib/inventory/public-inventory'
 import {
   LOCK_WARNING_MINUTES,
   STEPS,
+  alternativeSizes,
   promoDiscountOn,
   sessionByToken,
 } from '@/lib/checkout/session'
+import { CallLink, phoneFor } from '@/components/marketing/call-link'
+import { WaitlistForm } from '@/components/marketing/waitlist-form'
+import { joinWaitlistAction } from '../storage/[state]/[city]/[slug]/waitlist-actions'
 import { prefillFromReservation } from '@/lib/checkout/details'
 import { localityForZip } from '@/lib/geo/geocode'
 import { DetailsStep } from '@/components/checkout/details-step'
@@ -293,6 +298,12 @@ export default async function CheckoutPage({
   // done), and withdrawn on the payment step once the charge has left `pending`
   // — at which point "nothing has been charged yet" would be a lie and `goBack`
   // would refuse anyway.
+  // B-149. `availableCount` is the same number `relock` acts on, so the branch
+  // the panel shows and the button it offers cannot disagree.
+  const sizeStillAvailable = (unitType?.availableCount ?? 0) > 0
+  const alternatives = alternativeSizes(inventory?.unitTypes ?? [], session.unitTypeId)
+  const lostPhone = phoneFor(inventory?.facility.phone ?? null)
+
   const stepIndex = STEPS.indexOf(session.step)
   const previousStep = stepIndex > 0 ? STEPS[stepIndex - 1] : null
   const canGoBack =
@@ -319,7 +330,14 @@ export default async function CheckoutPage({
       </div>
 
       {/* FR-4.1's unit-lost fallback. The renter keeps every answer they have
-          given; only the unit changes. */}
+          given; only the unit changes.
+
+          B-149: and when the size is genuinely gone, this stops being a dead
+          end. It used to say "call us" with no number on it — the highest-intent
+          moment in the whole funnel, ending in an instruction the renter cannot
+          follow. The branch is decided from `availableCount`, the same number
+          `relock` will act on, so the screen and the button agree; a relock that
+          loses the race re-renders here with the sold-out half showing. */}
       {session.lockLapsed && (
         <section aria-labelledby="lost" className="border-input mt-6 rounded-lg border p-4">
           <h2 id="lost" className="text-xl font-medium">
@@ -327,18 +345,73 @@ export default async function CheckoutPage({
           </h2>
           <p className="mt-2 text-pretty">
             We hold a unit for 30 minutes while you move in, and that time ran out.{' '}
-            <strong>Nothing has been charged.</strong> Everything you have entered is still here — we
-            just need to put you on another unit the same size.
+            <strong>Nothing has been charged.</strong>{' '}
+            {sizeStillAvailable
+              ? 'Everything you have entered is still here — we just need to put you on another unit the same size.'
+              : 'Everything you have entered is still here, but that size has gone while you were deciding.'}
           </p>
-          <AdminForm action={relockAction} label="Find me another unit" className="mt-3">
-            <input type="hidden" name="sessionId" value={session.id} />
-            <button
-              type="submit"
-              className="bg-primary text-primary-foreground inline-flex min-h-11 items-center rounded-md px-4 text-sm font-medium"
-            >
-              Find me another unit the same size
-            </button>
-          </AdminForm>
+
+          {sizeStillAvailable ? (
+            <AdminForm action={relockAction} label="Find me another unit" className="mt-3">
+              <input type="hidden" name="sessionId" value={session.id} />
+              <button
+                type="submit"
+                className="bg-primary text-primary-foreground inline-flex min-h-11 items-center rounded-md px-4 text-sm font-medium"
+              >
+                Find me another unit the same size
+              </button>
+            </AdminForm>
+          ) : (
+            <div className="mt-4 grid gap-4">
+              <p className="text-pretty">
+                <CallLink
+                  phone={lostPhone}
+                  className="font-medium underline underline-offset-4"
+                />{' '}
+                and we will find you something — or pick one of these.
+              </p>
+
+              {/* The facility's own ordering, smallest first. No recommender:
+                  B-149 rules one out, and the list the facility page already
+                  renders is what a renter would have browsed anyway. */}
+              {alternatives.length > 0 && inventory && (
+                <div>
+                  <h3 className="font-medium">Other sizes at {inventory.facility.name}</h3>
+                  <ul className="mt-2 grid gap-1">
+                    {alternatives.map((type) => (
+                      <li key={type.unitTypeId}>
+                        <Link
+                          href={`${facilityPath(inventory.facility)}#unit-${type.unitTypeId}`}
+                          className="underline underline-offset-4"
+                        >
+                          {type.widthFt}&prime; &times; {type.lengthFt}&prime; {type.name}
+                        </Link>{' '}
+                        <span className="text-muted-foreground text-sm">
+                          {formatCents(type.webRateCents)}/mo
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* US-43. The same capture the facility page offers on a sold-out
+                  size, at the moment somebody has proved they want it. */}
+              {unitType && (
+                <div>
+                  <h3 className="font-medium">
+                    Or wait for a {unitType.widthFt}&prime; &times; {unitType.lengthFt}&prime;
+                  </h3>
+                  <WaitlistForm
+                    facilityId={session.facilityId}
+                    unitTypeId={unitType.unitTypeId}
+                    sizeLabel={`${unitType.widthFt} foot by ${unitType.lengthFt} foot`}
+                    action={joinWaitlistAction}
+                  />
+                </div>
+              )}
+            </div>
+          )}
         </section>
       )}
 

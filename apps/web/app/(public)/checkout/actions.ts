@@ -668,10 +668,15 @@ export async function relockAction(_prev: FormState, formData: FormData): Promis
   const result = await relock(sessionId)
 
   if (!result.ok) {
+    // B-149. Revalidate on the FAILURE path too: the panel below decides what
+    // it offers from `availableCount`, and this is the moment that number went
+    // to zero. Without it the renter is told the size sold out and left looking
+    // at the button that just failed, which is the dead end this row is about.
+    revalidatePath('/checkout')
     return {
       status: 'error',
       message:
-        'That size has sold out while you were deciding. Nothing has been charged — call us and we will find you something.',
+        'That size has sold out while you were deciding. Nothing has been charged — the phone number, the other sizes here, and the waiting list are below.',
       fieldErrors: {},
     }
   }

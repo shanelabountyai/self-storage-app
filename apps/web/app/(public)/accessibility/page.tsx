@@ -186,6 +186,20 @@ const LAST_REVIEWED = '19 August 2026'
 // submit for both, using B-156's `expectPreexisting`, so this cannot silently
 // regress the way it did between B-094 and B-111. `LAST_REVIEWED` is not
 // bumped, for the reason two entries above give.
+//
+// Re-verified 2026-08-22, at B-149 (checkout's unit-lost branch stops being a
+// dead end). No prose change and none needed, in either direction. It adds no
+// route — the coverage claim below is generated from routes under `app/` and
+// `/checkout` was already scanned at every reachable step — and the controls it
+// adds are the ones already covered: the waitlist form is the same `WaitlistForm`
+// B-148 moved onto `FormResult`, so "a successful save is announced too" is true
+// of it here for the reason it is true of it on the facility page, and the
+// alternatives are plain links under an `<h3>` inside the existing `<h2>`
+// section. What it does NOT get is a scan: the sold-out branch only renders for
+// a lapsed session whose size has since gone, which is a post-interaction,
+// data-dependent state — **B-156 owns that gap** and this is one more instance
+// of it, not a new exception to declare. `LAST_REVIEWED` is not bumped, for the
+// reason the entries above give.
 export default function AccessibilityPage() {
   return (
     <ProsePage

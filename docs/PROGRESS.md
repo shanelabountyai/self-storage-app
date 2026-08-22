@@ -5399,3 +5399,31 @@ The card's `href` has always pointed at `/admin/tenants/{tenantId}`, so the fix 
 **Test verification.** Full unit suite **3,509 passed, 8 skipped of 3,517** — unchanged, as expected for a component-level a11y fix with no service change. Typecheck clean, lint 0 errors. 8 e2e passed across desktop and mobile Chrome (`sold-out size offers to email`, `lead form announces and keeps focus`, `waitlist form has no WCAG 2.1 AA violations once opened`). No schema change. **One self-inflicted failure on the first e2e run, worth recording because the locator lesson generalises:** `getByLabel('Email')` substring-matches, and the marketing-consent checkbox's label begins "Send me occasional emails" — a strict-mode violation resolving to two elements, fixed with `{ exact: true }`. It was a test bug, not a product one; the waitlist half passed on that same run, including both new assertions.
 
 **Left behind.** **The error path is still not asserted to pre-exist.** `expectPreexisting` can only run against an unconditionally-mounted region, and both forms — like `AdminForm` itself — render their error messages conditionally. `a11y-helpers.ts` already names this gap in its own comment; B-148 does not close it, and closing it means making the error summary persistent everywhere, which is a product-wide change with the same shape as B-111. **The waitlist form's confirmation still replaces the disclosure entirely**, so a visitor who wants a second size has to find the next card rather than being offered one. Deliberate: the row is about announcement, and changing what the success state *offers* is a UX decision nobody has asked for. **No test asserts the region is empty at idle for the lead form on a page with JavaScript off**; the no-JS posture is unchanged (the form still posts and the page re-renders) but the inline announcement is a client-side behaviour and always was.
+
+## B-149 — Checkout's unit-lost branch was a dead end
+
+`PENDING`
+
+**What it built.** When a checkout's 30-minute hold lapsed, `/checkout` offered one control — "Find me another unit the same size" — and if that failed, `relockAction` returned the words *"call us and we will find you something"* **with no phone number on the page**, no alternatives and no waitlist. That is the highest-intent moment in the funnel ending in an instruction the renter cannot follow. B-090a had shipped `WaitlistForm` only on the public facility page, the lower-intent surface.
+
+- **`apps/web/components/marketing/call-link.tsx`** — `phoneFor` / `CallLink` lifted out of the facility page, unchanged. Prefers the facility's own line, falls back to the org line and says *"our main line"* so a transfer is no surprise.
+- **`alternativeSizes()` in `lib/checkout/session.ts`** — the other sizes at the facility, excluding the lost type and anything with `availableCount === 0`.
+- **The lapsed-lock panel now branches.** Size still available → the relock button, exactly as before. Size gone → the facility's phone number, the other available sizes at that facility (linked to the facility page, which gained a per-unit-type `id` anchor), and `WaitlistForm` for the size that was lost, submitting the existing `joinWaitlistAction`.
+- **`relockAction` revalidates on the failure path**, so a relock that loses the race re-renders into the sold-out half rather than leaving the renter beside the button that just failed.
+- **`tests/checkout-unit-lost.test.ts`** — five assertions on the two decisions that can silently go wrong.
+
+**What it decided.**
+
+**The branch is decided from `availableCount`, the same number `relock` acts on.** Not from a relock attempt, and not from a separate query. The screen and the button therefore cannot disagree about whether the size exists, and the race that remains (sold out between render and submit) resolves into the same panel via the new `revalidatePath`.
+
+**No recommender, per the row.** Alternatives are the facility's own ordering, smallest first — the same list the facility page renders. Ranking alternative sizes or nearby facilities is a feature nobody asked for.
+
+**`phoneFor` was moved rather than copied.** Two surfaces most likely to make a renter dial must not disagree about what they dial, and the facility page's own comment already says that is why the rule is resolved once per page. Copying it into checkout would have made that comment false. The facility page's `Phone` type is imported as `PhoneNumber` there because `lucide-react`'s `Phone` icon already owns the name.
+
+**The waitlist form is reused verbatim, including its `<details>` disclosure.** Collapsed is right on a facility page with five sold-out sizes; on checkout there is exactly one and expanded would be defensible. Left as-is anyway — a variant prop for one caller is a config for a value that never changes, and B-148's `FormResult` announcement behaviour comes with it unmodified.
+
+**The accessibility statement needed no prose change.** No new route, so the generated coverage claim is unaffected; the sold-out branch is a post-interaction, data-dependent state, which is **B-156's** general gap rather than a new exception. Recorded with a dated note; `LAST_REVIEWED` not bumped.
+
+**Test verification.** Full unit suite **3,514 passed, 8 skipped of 3,522** (216 files passed, 1 skipped), exit 0. Typecheck clean including `tsconfig.tests.json`; lint 0 errors, 7 pre-existing warnings. Schema drift: no difference detected. No migration.
+
+**Left behind.** **No e2e covers the sold-out branch.** Reaching it needs a lapsed session whose size has since gone — two mutations against shared demo inventory, which fits none of the three disciplines B-120 settled, so it would have to build its own facility. **No nearby-facility fallback.** When the facility is genuinely full, `alternativeSizes` returns empty and the renter gets the phone number and the waitlist and nothing else; offering another site is the recommender the row rules out. **The alternatives are links, not a one-click switch.** Putting the renter straight onto another size would mean re-pricing the basket mid-session, which is B-106's machinery and a larger change than this row. **`relock` itself still only tries the same unit type** — it does not consider a larger size at the same price, which is what a counter agent would do.

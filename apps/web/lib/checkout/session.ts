@@ -744,3 +744,21 @@ export async function expireCheckoutSessions(
   }
   return { expired }
 }
+
+/// B-149. The other sizes a renter can still rent at this facility, for the
+/// unit-lost branch.
+///
+/// Excludes the size that was just lost — offering it back as an "alternative"
+/// on the screen that has already said it is gone is the contradiction the
+/// branch exists to avoid — and anything with no rentable unit behind it, since
+/// `availableCount` is the only number PRD 01 US-201 lets us make a claim from.
+/// Deliberately NOT a recommender (B-149 scope): the facility's own ordering,
+/// which is smallest first, is the ordering.
+export function alternativeSizes<T extends { unitTypeId: string; availableCount: number }>(
+  unitTypes: T[],
+  lostUnitTypeId: string,
+): T[] {
+  return unitTypes.filter(
+    (type) => type.unitTypeId !== lostUnitTypeId && type.availableCount > 0,
+  )
+}
