@@ -5275,7 +5275,7 @@ The card's `href` has always pointed at `/admin/tenants/{tenantId}`, so the fix 
 
 ## B-145 — Recapture when a promoted lease ends before its minimum stay
 
-`PENDING`
+`93d4207`
 
 **What it built.** B-144 gave `minStayMonths` a control, a place on the checkout summary and a sentence on the lease. Nothing enforced it — US-10's own parenthetical is "min stay implied by **recapture rules**" and there were none, which is worse than no column because it reads as enforced.
 
