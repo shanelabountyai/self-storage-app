@@ -5307,7 +5307,7 @@ The card's `href` has always pointed at `/admin/tenants/{tenantId}`, so the fix 
 
 ## B-146 — A payment that came back
 
-`PENDING`
+`37634a2`
 
 **What it built.** `LedgerEntry.reversalOfId` had existed since B-002 carrying a schema comment citing FR-8 and was written by **no code**. `FeeType.nsf` had been configurable per facility since B-047 and was read by **no code**. So a bounced cheque or an ACH return left the money recorded as collected, the invoice reading `paid`, and the arrears invisible to `daysPastDue` — forever.
 
