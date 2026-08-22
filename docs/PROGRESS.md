@@ -5341,7 +5341,7 @@ The card's `href` has always pointed at `/admin/tenants/{tenantId}`, so the fix 
 
 ## B-147 — Card disputes reach nothing
 
-`PENDING`
+`ee10a67`
 
 **What it built.** `HANDLED_EVENTS` in `reconcile.ts` covered five Stripe events and no `charge.dispute.*`, so a chargeback was something the operator learned about from a bank statement: the money was out of the Stripe balance and recorded here as collected, the invoice reading `paid`, forever. Same defect as B-146 one layer up, and it rides B-146's reversal primitive rather than inventing a second one.
 
