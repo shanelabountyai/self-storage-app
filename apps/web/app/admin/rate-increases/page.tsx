@@ -33,6 +33,18 @@ const STATUS_LABEL: Record<string, string> = {
   pending_approval: 'Awaiting approval',
   approved: 'Approved — notice pending',
   notice_sent: 'Notice sent',
+  notice_failed: 'On hold — notice did not arrive',
+}
+
+/// B-152 / D-88. What the operator has to do about a held increase, said in
+/// the row rather than only in the task queue: the increase will never apply
+/// on its own, so a status with no next step reads as a warning instead of an
+/// instruction.
+const NOTICE_FAILURE_HELP: Record<string, string> = {
+  undeliverable:
+    'The notice bounced or the address is suppressed. Get a working address, then cancel this and schedule it again — the notice period restarts.',
+  no_send_record:
+    'No notice was ever sent for this increase. Cancel it and schedule it again once you know the tenant can be reached.',
 }
 
 export default async function RateIncreasesPage() {
@@ -120,7 +132,15 @@ export default async function RateIncreasesPage() {
                     <td className="py-2 pr-4 text-right tabular-nums">{formatCents(row.newRateCents)}</td>
                     <td className="py-2 pr-4">{formatDate(row.noticeDate)}</td>
                     <td className="py-2 pr-4">{formatDate(row.effectiveDate)}</td>
-                    <td className="py-2 pr-4">{STATUS_LABEL[row.status] ?? row.status}</td>
+                    <td className="py-2 pr-4">
+                      {STATUS_LABEL[row.status] ?? row.status}
+                      {row.status === 'notice_failed' && (
+                        <span className="text-muted-foreground mt-1 block text-xs text-pretty">
+                          {NOTICE_FAILURE_HELP[row.noticeFailureReason ?? ''] ??
+                            'This increase is on hold until the tenant has been given notice.'}
+                        </span>
+                      )}
+                    </td>
                     <td className="py-2 pr-4">
                       <div className="flex flex-col gap-2">
                         {row.status === 'pending_approval' && (

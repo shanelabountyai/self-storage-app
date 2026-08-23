@@ -144,6 +144,25 @@ export const TASK_TYPES = [
     sensitive: true,
   },
   {
+    // PRD 02 US-11 / D-88 (B-152). A scheduled rate increase whose notice
+    // provably did not arrive. The increase is HELD, not applied — D-88's
+    // Option A — so this task is the only thing that says so: somebody has to
+    // get a working address and schedule the increase again, which restarts
+    // the notice clock.
+    //
+    // `high` at creation, like `inbound_sms_review` and for the mirror-image
+    // reason: revenue is slipping a month per bad address, and unlike the rest
+    // of this queue the delay compounds silently.
+    //
+    // Sensitive: whether notice was served is the fact a rate-increase dispute
+    // turns on, so who decided what to do about a failed one is worth keeping
+    // beyond the task row.
+    type: "rate_increase_notice_undelivered",
+    label: "Rate-increase notice did not arrive — the increase is on hold",
+    requiredProofFields: ["note"],
+    sensitive: true,
+  },
+  {
     // PRD 03 US-6 AC1. A gate command at a facility running the ManualAdapter:
     // there is no controller to talk to, so somebody walks to the keypad.
     //

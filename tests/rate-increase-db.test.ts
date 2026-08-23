@@ -4,6 +4,7 @@ import { prisma } from '../packages/db'
 import {
   applyDueRateIncreases,
   applyRateChange,
+  reconcileRateIncreaseNotices,
   approveRateIncrease,
   cancelRateIncrease,
   pendingRateIncreases,
@@ -506,6 +507,151 @@ describeDb('tenant rate increases (US-11 / CN-9)', () => {
       const result = await applyDueRateIncreases(facilityId, daysFromNow(45), () => {})
       expect(result.applied).toBe(0)
       expect(result.skipped).toBe(1)
+    })
+  })
+
+  // B-152 / D-88. `notice_sent` used to mean "we emitted an event", and an
+  // increase whose notice hard-bounced applied thirty days later regardless.
+  // D-88 (Option A): a bounce, a suppression hit or no send record blocks the
+  // increase and raises a task.
+  describe('notice delivery reconciliation (D-88)', () => {
+    async function noticedAndDelivered(effectiveInDays = 45) {
+      const { leaseId } = await makeLease()
+      await scheduleRateIncrease(manager(), facilityId, {
+        leaseId,
+        newRateCents: 14_900,
+        effectiveDate: daysFromNow(effectiveInDays),
+      })
+      const row = await prisma.tenantRateIncrease.findFirstOrThrow({ where: { leaseId } })
+      await approveRateIncrease(regional(), row.id, 'reason')
+      await sendDueRateIncreaseNotices(facilityId, daysFromNow(effectiveInDays - 30), () => {})
+
+      const after = await prisma.tenantRateIncrease.findUniqueOrThrow({ where: { id: row.id } })
+      const event = await prisma.domainEvent.findUniqueOrThrow({
+        where: { id: after.noticeEventId! },
+      })
+      await processCommsEvent(event)
+      return { row, leaseId, eventId: after.noticeEventId! }
+    }
+
+    it('records the event the notice was sent as, in the same breath as the status', async () => {
+      const { row } = await noticedAndDelivered()
+      const after = await prisma.tenantRateIncrease.findUniqueOrThrow({ where: { id: row.id } })
+      expect(after.noticeEventId).not.toBeNull()
+      const messages = await prisma.message.findMany({ where: { eventId: after.noticeEventId! } })
+      expect(messages).toHaveLength(1)
+    })
+
+    it('leaves a delivered notice alone and applies the increase', async () => {
+      const { leaseId } = await noticedAndDelivered()
+      const result = await applyDueRateIncreases(facilityId, daysFromNow(45), () => {})
+      expect(result.applied).toBe(1)
+      const lease = await prisma.lease.findUniqueOrThrow({ where: { id: leaseId } })
+      expect(lease.monthlyRateCents).toBe(14_900)
+    })
+
+    it('holds the increase and raises a high-priority task when the notice bounced', async () => {
+      const { row, leaseId, eventId } = await noticedAndDelivered()
+      await prisma.message.updateMany({ where: { eventId }, data: { status: 'bounced' } })
+
+      const result = await applyDueRateIncreases(facilityId, daysFromNow(45), () => {})
+      expect(result.applied).toBe(0)
+
+      const after = await prisma.tenantRateIncrease.findUniqueOrThrow({ where: { id: row.id } })
+      expect(after.status).toBe('notice_failed')
+      expect(after.noticeFailureReason).toBe('undeliverable')
+
+      // The rate is the one fact that must not have moved.
+      const lease = await prisma.lease.findUniqueOrThrow({ where: { id: leaseId } })
+      expect(lease.monthlyRateCents).toBe(12_900)
+
+      const task = await prisma.task.findFirstOrThrow({
+        where: { type: 'rate_increase_notice_undelivered', entityId: leaseId },
+      })
+      expect(task.priority).toBe('high')
+    })
+
+    it('holds it for a suppression hit too — a notice we chose not to send is not notice', async () => {
+      const { row, eventId } = await noticedAndDelivered()
+      await prisma.message.updateMany({ where: { eventId }, data: { status: 'suppressed' } })
+
+      await applyDueRateIncreases(facilityId, daysFromNow(45), () => {})
+      const after = await prisma.tenantRateIncrease.findUniqueOrThrow({ where: { id: row.id } })
+      expect(after.status).toBe('notice_failed')
+    })
+
+    it('holds it when the pipeline produced no message at all, once the grace window has passed', async () => {
+      const { leaseId } = await makeLease()
+      await scheduleRateIncrease(manager(), facilityId, {
+        leaseId,
+        newRateCents: 14_900,
+        effectiveDate: daysFromNow(45),
+      })
+      const row = await prisma.tenantRateIncrease.findFirstOrThrow({ where: { leaseId } })
+      await approveRateIncrease(regional(), row.id, 'reason')
+      await sendDueRateIncreaseNotices(facilityId, daysFromNow(15), () => {})
+      // The event was never dispatched. Backdated past the two-hour window
+      // that separates "the dispatcher has not got to it" from "there is
+      // nothing to get to".
+      await prisma.tenantRateIncrease.update({
+        where: { id: row.id },
+        data: { noticeSentAt: new Date(Date.now() - 3 * 60 * 60 * 1000) },
+      })
+
+      const result = await reconcileRateIncreaseNotices(facilityId, () => {})
+      expect(result.blocked).toBe(1)
+      const after = await prisma.tenantRateIncrease.findUniqueOrThrow({ where: { id: row.id } })
+      expect(after.status).toBe('notice_failed')
+      expect(after.noticeFailureReason).toBe('no_send_record')
+    })
+
+    it('does not judge a notice the dispatcher has not reached yet', async () => {
+      const { leaseId } = await makeLease()
+      await scheduleRateIncrease(manager(), facilityId, {
+        leaseId,
+        newRateCents: 14_900,
+        effectiveDate: daysFromNow(45),
+      })
+      const row = await prisma.tenantRateIncrease.findFirstOrThrow({ where: { leaseId } })
+      await approveRateIncrease(regional(), row.id, 'reason')
+      await sendDueRateIncreaseNotices(facilityId, daysFromNow(15), () => {})
+
+      const result = await reconcileRateIncreaseNotices(facilityId, () => {})
+      expect(result.blocked).toBe(0)
+      const after = await prisma.tenantRateIncrease.findUniqueOrThrow({ where: { id: row.id } })
+      expect(after.status).toBe('notice_sent')
+    })
+
+    it('raises one task, not one per nightly run', async () => {
+      const { leaseId, eventId } = await noticedAndDelivered()
+      await prisma.message.updateMany({ where: { eventId }, data: { status: 'bounced' } })
+
+      await applyDueRateIncreases(facilityId, daysFromNow(45), () => {})
+      const second = await applyDueRateIncreases(facilityId, daysFromNow(46), () => {})
+      expect(second.applied).toBe(0)
+
+      const tasks = await prisma.task.findMany({
+        where: { type: 'rate_increase_notice_undelivered', entityId: leaseId },
+      })
+      expect(tasks).toHaveLength(1)
+    })
+
+    it('a held increase is still cancellable, and blocks a second one on the lease', async () => {
+      const { row, leaseId, eventId } = await noticedAndDelivered()
+      await prisma.message.updateMany({ where: { eventId }, data: { status: 'bounced' } })
+      await applyDueRateIncreases(facilityId, daysFromNow(45), () => {})
+
+      // D-88: the operator re-notices from a good address, so the held row
+      // must not silently allow a duplicate alongside it.
+      expect(
+        await scheduleRateIncrease(manager(), facilityId, {
+          leaseId,
+          newRateCents: 15_900,
+          effectiveDate: daysFromNow(60),
+        }),
+      ).toMatchObject({ ok: false })
+
+      expect(await cancelRateIncrease(manager(), row.id, 'bad address, re-noticing')).toEqual({ ok: true })
     })
   })
 

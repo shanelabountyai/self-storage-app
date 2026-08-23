@@ -39,7 +39,7 @@ let unitBId = "";
 let counterId = "";
 let managerId = "";
 
-function actorOf(staffUserId: string, rank: number): Actor {
+function actorOf(staffUserId: string, rank: number): Extract<Actor, { kind: "staff" }> {
   return {
     kind: "staff",
     staffUserId,
@@ -287,9 +287,21 @@ describeDb("move-out", () => {
       });
       // `completeTask` wants `tenants:edit`, which the move-out actor in this
       // file does not carry. Extended here rather than in `actorOf`, so no
-      // refusal test in this file quietly gains a permission.
-      const closer = actorOf(managerId, 20);
-      closer.assignments[0]!.permissions.add("tenants:edit");
+      // refusal test in this file quietly gains a permission. Copied rather
+      // than mutated: `permissions` is a `ReadonlySet`.
+      const base = actorOf(managerId, 20);
+      const closer: Actor = {
+        ...base,
+        assignments: [
+          {
+            ...base.assignments[0]!,
+            permissions: new Set<PermissionKey>([
+              ...base.assignments[0]!.permissions,
+              "tenants:edit",
+            ]),
+          },
+        ],
+      };
       await completeTask(closer, removal.id, { note: "Lock off, unit empty" });
 
       const unit = await prisma.unit.findUniqueOrThrow({ where: { id: unitAId } });

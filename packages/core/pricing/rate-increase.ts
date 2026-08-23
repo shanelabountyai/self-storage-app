@@ -133,7 +133,25 @@ export function projectedMonthlyDeltaCents(
   return rows.reduce((total, row) => total + (row.newRateCents - row.currentRateCents), 0)
 }
 
-export type RateIncreaseState = 'pending_approval' | 'approved' | 'notice_sent' | 'applied' | 'cancelled'
+export type RateIncreaseState =
+  | 'pending_approval'
+  | 'approved'
+  | 'notice_sent'
+  | 'notice_failed'
+  | 'applied'
+  | 'cancelled'
+
+/// The states an increase is still in flight in — not yet applied, not yet
+/// cancelled. One constant rather than the same four-element array repeated at
+/// every call site: `notice_failed` (B-152) had to be added to all of them at
+/// once, and a list that missed it would have let a second increase be
+/// scheduled on a lease whose first one is merely blocked.
+export const LIVE_RATE_INCREASE_STATUSES = [
+  'pending_approval',
+  'approved',
+  'notice_sent',
+  'notice_failed',
+] as const satisfies readonly RateIncreaseState[]
 
 /// US-11: "Increases are cancellable up to the effective date."
 ///
@@ -143,7 +161,7 @@ export type RateIncreaseState = 'pending_approval' | 'approved' | 'notice_sent' 
 /// out needs to be able to stop the charge, and telling the tenant it is
 /// cancelled is a phone call, not a schema constraint.
 export function isCancellable(status: RateIncreaseState): boolean {
-  return status === 'pending_approval' || status === 'approved' || status === 'notice_sent'
+  return (LIVE_RATE_INCREASE_STATUSES as readonly string[]).includes(status)
 }
 
 /// The notice may go out only once an approver has signed off (US-11 AC:
@@ -165,4 +183,39 @@ export function applyIsDue(
   today: Date,
 ): boolean {
   return row.status === 'notice_sent' && daysBetween(today, row.effectiveDate) <= 0
+}
+
+/// PRD 02 §4.3 US-11, D-88 (B-152). Whether the notice for an increase can be
+/// shown to have gone out.
+///
+/// US-11 blocks an effective date that violates the minimum notice period —
+/// a guarantee about DELIVERY that the workflow used to make about INTENT:
+/// the status flipped to `notice_sent` the moment the event was emitted, and
+/// nothing afterwards ever looked at what the provider said happened. An
+/// increase whose notice hard-bounced applied thirty days later anyway, and
+/// the one fact that makes an increase indefensible in a dispute is a notice
+/// we can prove did not arrive.
+///
+/// Takes the `Message.status` of every message the notice event produced —
+/// there can be more than one, because a rule may reach the tenant on more
+/// than one channel, and reaching them on either is reaching them.
+export type NoticeDeliveryVerdict = 'reached' | 'undeliverable' | 'no_send_record'
+
+/// Statuses that mean the message never got to the tenant and never will.
+/// `suppressed` and `cancelled` are decisions WE made before sending, which
+/// is exactly D-88's "suppression hit" — an increase noticed to an address we
+/// had already stopped mailing was not noticed.
+const DEAD_MESSAGE_STATUSES: readonly string[] = ['bounced', 'failed', 'suppressed', 'cancelled']
+
+export function noticeDeliveryVerdict(statuses: readonly string[]): NoticeDeliveryVerdict {
+  // D-88: "no send record blocks". A skip condition firing, a rule matching
+  // nothing, or a dispatcher that never ran all land here — and all three
+  // mean nobody was told.
+  if (statuses.length === 0) return 'no_send_record'
+  // `queued`, `deferred` and `sent` all count as reached. They are not proof
+  // of arrival, but they are not evidence of failure either, and blocking on
+  // "the provider has not called back yet" would hold every increase whose
+  // webhook is a minute late. Only a positive failure blocks.
+  if (statuses.every((status) => DEAD_MESSAGE_STATUSES.includes(status))) return 'undeliverable'
+  return 'reached'
 }

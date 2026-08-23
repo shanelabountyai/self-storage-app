@@ -538,7 +538,7 @@ model Facility {
   /// It is a real driver against a fake vendor, which is what makes it prove
   /// anything about the port; it is not a real integration and must never be
   /// pointed at a live site.
-  gateAdapter                  String        @default("simulated")
+  gateAdapter                  String               @default("simulated")
   /// B-103 / PRD 01 §3. Whether a renter may pay by bank debit at CHECKOUT.
   ///
   /// Off by default, and per facility because it is a risk appetite rather than
@@ -547,36 +547,36 @@ model Facility {
   /// to "portal payments and autopay; optional at checkout" — this is that
   /// option, and an operator who does not want it never has to think about it.
   /// Portal ACH is not gated: there the tenant already has the unit.
-  achAtCheckoutEnabled         Boolean       @default(false)
+  achAtCheckoutEnabled         Boolean              @default(false)
   /// PRD 03 US-6 AC2: "Overdue manual tasks (configurable, default 4 business
   /// hours) escalate in the dashboard." Business hours, counted against this
   /// facility's own `officeHours` — a task raised at 6pm on Friday is not four
   /// hours overdue on Saturday morning, because nobody was there.
-  manualTaskSlaHours           Int           @default(4)
+  manualTaskSlaHours           Int                  @default(4)
   /// Weekly schedules land in B-008; held as JSON until that item defines them.
   officeHours                  Json?
   gateHours                    Json?
-  amenities                    String[]      @default([])
+  amenities                    String[]             @default([])
   /// US-44: protection **required** (a proof-of-insurance waiver is still
   /// permitted) vs optional. Texas practice is generally "required, or show
   /// proof", so that is the shipped default — configuration, not law (D-10).
-  protectionRequired           Boolean       @default(true)
+  protectionRequired           Boolean              @default(true)
   /// US-9 AC1: default cap of 3 named people per lease, configurable.
-  authorizedAccessCap          Int           @default(3)
+  authorizedAccessCap          Int                  @default(3)
   /// US-32: a cash payment at or above this needs manager-or-above to take it.
   /// Configuration, not policy — $500 is a starting value, not a rule.
-  cashApprovalThresholdCents   Int           @default(50000)
+  cashApprovalThresholdCents   Int                  @default(50000)
   /// PRD 02 US-33 (B-078). "Over/short beyond a configurable threshold
   /// requires a manager note." A drawer is never exactly right — a few cents
   /// of miscount is noise, and demanding a written explanation for every one
   /// of them teaches people to write "count" and move on. $5 is a starting
   /// value, not a rule.
-  drawerVarianceThresholdCents Int           @default(500)
+  drawerVarianceThresholdCents Int                  @default(500)
   /// US-14 move-out. Whether the final month is prorated to the move-out day,
   /// or the tenant pays through the period they are in. Texas has no statute
   /// either way and "no proration on move-out" is the common lease term, so
   /// that is the shipped default — configuration, not law (D-10).
-  prorateOnMoveOut             Boolean       @default(false)
+  prorateOnMoveOut             Boolean              @default(false)
   /// US-10 (B-145). Whether a promotional discount already given is charged
   /// back when the lease ends inside its minimum stay, and how much of it.
   /// `prorated` recovers the share of the discount matching the months of the
@@ -586,13 +586,13 @@ model Facility {
   /// anniversary. **Anniversary is the default (D-27)** — the move-in payment
   /// buys a full period starting that day, so nothing is prorated on the way
   /// in, and the tenant's due date never moves.
-  billingPolicy                BillingPolicy @default(anniversary)
+  billingPolicy                BillingPolicy        @default(anniversary)
   /// US-17: "invoices generate N days before due (configurable, default 5)".
-  invoiceLeadDays              Int           @default(5)
+  invoiceLeadDays              Int                  @default(5)
   /// US-18's other half. Only ever reachable under `first_of_month`: under
   /// anniversary billing there is no partial first period to prorate, because
   /// the period starts on the day the tenant moved in.
-  prorateOnMoveIn              Boolean       @default(true)
+  prorateOnMoveIn              Boolean              @default(true)
   /// US-20's retry schedule: days AFTER the invoice's original due date on
   /// which a failed autopay is tried again. The default is US-20's own
   /// +1/+3/+5, which with the attempt on the due date itself is four tries.
@@ -602,18 +602,18 @@ model Facility {
   /// same anchoring rule `daysPastDue` uses (D-25), and for the same reason:
   /// measuring from the previous try stretches the schedule further on every
   /// decline instead of converging.
-  paymentRetryDays             Int[]         @default([1, 3, 5])
+  paymentRetryDays             Int[]                @default([1, 3, 5])
   /// D-16 / US-45. Days past due at which the tenant's gate access is
   /// suspended. Texas practice is around 6; configuration, not law (D-10).
   /// Zero or less disables the rule entirely, which is a real operator choice.
-  accessSuspendDaysPastDue     Int           @default(6)
+  accessSuspendDaysPastDue     Int                  @default(6)
   /// US-28 (B-062). How long an auction surplus is held before it must be
   /// dispositioned — paid to the former tenant, or remitted to the state.
   ///
   /// Configuration, emphatically not law: US-28's own note says the Texas
   /// duration needs an attorney pass under D-10. The default is a placeholder
   /// of the right order of magnitude, and the settings screen says so.
-  surplusHoldDays              Int           @default(365)
+  surplusHoldDays              Int                  @default(365)
   /// What counts as a qualifying payment for automatic restore.
   ///
   /// Zero — the default and D-16's decision — means the balance must reach
@@ -623,16 +623,16 @@ model Facility {
   /// any partial-payment rule teaches a tenant to pay the minimum that reopens
   /// the gate, every month, which converts a collections tool into a
   /// subscription for the delinquent.
-  accessRestoreAtOrBelowCents  Int           @default(0)
+  accessRestoreAtOrBelowCents  Int                  @default(0)
   /// US-22's configurable allocation order. Categories from
   /// `packages/core/billing`; a category left out is paid last rather than
   /// never, so a misconfigured order degrades to a worse sequence rather than
   /// making money uncollectable.
-  paymentAllocationOrder       String[]      @default(["tax", "fee", "protection", "rent"])
+  paymentAllocationOrder       String[]             @default(["tax", "fee", "protection", "rent"])
   /// PRD 05 CN-3's dunning ladder: days past due at which the tenant is
   /// chased. Empty means no automated chasing, which is a real operator
   /// choice for a site that phones instead.
-  dunningDays                  Int[]         @default([1, 5, 10, 30])
+  dunningDays                  Int[]                @default([1, 5, 10, 30])
   /// PRD 05 CN-17. The name a tenant sees in their inbox. Null falls back to
   /// the facility name, which is the sensible default and what shipped before
   /// this was configurable.
@@ -653,8 +653,8 @@ model Facility {
   /// ALL SMS regardless of classification — not just marketing. Defaults are
   /// the PRD's own conservative default; a per-org stricter override (e.g.
   /// 8am-8pm to clear Florida's mini-TCPA window) is this pair of fields.
-  smsQuietHoursStartHour       Int           @default(8)
-  smsQuietHoursEndHour         Int           @default(21)
+  smsQuietHoursStartHour       Int                  @default(8)
+  smsQuietHoursEndHour         Int                  @default(21)
   /// PRD 01 US-401 (B-018), made configurable by B-126 / D-50.
   ///
   /// Days AFTER the renter's own chosen move-in date that a free reservation
@@ -668,7 +668,7 @@ model Facility {
   /// which is US-401's rule and the reason D-7's "7 days from booking" was
   /// never built: a renter picking the maximum 14-day-out move-in would have
   /// lost the unit a week before the day they reserved it for.
-  reservationHoldGraceDays     Int           @default(1)
+  reservationHoldGraceDays     Int                  @default(1)
   /// PRD 01 §9 Phase 2 (B-106). How far ahead a PAID checkout may schedule its
   /// move-in.
   ///
@@ -683,7 +683,7 @@ model Facility {
   /// 60 days as the shipped default — long enough for the lease-end and
   /// house-move planning that makes somebody book ahead, short enough that the
   /// rate they locked is still a rate the facility recognises.
-  maxCheckoutStartDaysAhead    Int           @default(60)
+  maxCheckoutStartDaysAhead    Int                  @default(60)
   // ── PRD 10 (B-100). Refer a friend. ──────────────────────────────────────
   //
   // Every one of these is a column that configures behaviour, so every one
@@ -693,28 +693,28 @@ model Facility {
   /// OFF by default, deliberately. The program pays real money on a rule set
   /// an attorney has not reviewed (§9), so an operator turns it on knowingly
   /// rather than discovering it is already running.
-  referralEnabled              Boolean       @default(false)
+  referralEnabled              Boolean              @default(false)
   /// §3. Both sides separately configurable, because "give the new customer
   /// $75 and the referrer $25" is a real campaign and a single shared field
   /// would need a migration to allow it. Both default to $50.
-  referralRewardCents          Int           @default(5000)
-  refereeRewardCents           Int           @default(5000)
+  referralRewardCents          Int                  @default(5000)
+  refereeRewardCents           Int                  @default(5000)
   /// §4.1. Move out inside this and an unapplied reward is cancelled; an
   /// already-applied one is NOT clawed back.
-  referralMinimumStayDays      Int           @default(30)
+  referralMinimumStayDays      Int                  @default(30)
   /// §5.4. Qualifying referrals one referrer may earn per rolling 12 months.
-  referralAnnualCap            Int           @default(10)
+  referralAnnualCap            Int                  @default(10)
   /// §5.1. An unused invite dies after this, so outstanding exposure has a
   /// horizon rather than accumulating for the life of the tenancy.
-  referralInviteExpiryDays     Int           @default(60)
+  referralInviteExpiryDays     Int                  @default(60)
   /// §5.1/§5.4. Unredeemed invites one tenant may hold at once. Minting a
   /// hundred and posting them all is the same attack as a permanent code.
-  referralOpenInviteCap        Int           @default(5)
+  referralOpenInviteCap        Int                  @default(5)
   /// §5.4. Referrals are local by default; cross-facility is a different
   /// economic bet an operator opts into.
-  referralCrossFacility        Boolean       @default(false)
+  referralCrossFacility        Boolean              @default(false)
   /// Days of notice the lease requires before a move-out. 0 means none.
-  moveOutNoticeDays            Int           @default(10)
+  moveOutNoticeDays            Int                  @default(10)
   /// PRD 02 US-11 (B-076). Minimum advance notice before a tenant rate
   /// increase may take effect. "Default 30 days; configurable, since required
   /// notice varies by state/lease" — the AC's own words. Zero is refused
@@ -722,10 +722,10 @@ model Facility {
   /// the one configuration that is never a deliberate operator choice, and
   /// D-10's attorney pass has not settled the Texas figure (PROGRESS.md
   /// still lists it open), so the default is the conservative common term.
-  rateIncreaseNoticeDays       Int           @default(30)
+  rateIncreaseNoticeDays       Int                  @default(30)
   /// A residual balance at or below this can be written off to close the
   /// lease; anything above needs a manager (US-14's own AC).
-  writeOffThresholdCents       Int           @default(1000)
+  writeOffThresholdCents       Int                  @default(1000)
   /// D-17. What happens when a tenant's proof of insurance lapses: enrol the
   /// lease into `defaultProtectionTier`, or only raise a staff task.
   ///
@@ -735,13 +735,13 @@ model Facility {
   /// attorney pass before it runs against a real tenant". A default of true
   /// would start charging the moment a facility is seeded; false means the
   /// switch is thrown deliberately, per facility, once that pass is done.
-  autoEnrolProtectionOnLapse   Boolean       @default(false)
+  autoEnrolProtectionOnLapse   Boolean              @default(false)
   /// The `ProtectionPlan.tier` a lapsed waiver enrols into. Null means no tier
   /// has been chosen, and the lapse raises a task rather than a charge even
   /// when the switch above is on.
   defaultProtectionTier        String?
-  createdAt                    DateTime      @default(now()) @db.Timestamptz(6)
-  updatedAt                    DateTime      @updatedAt @db.Timestamptz(6)
+  createdAt                    DateTime             @default(now()) @db.Timestamptz(6)
+  updatedAt                    DateTime             @updatedAt @db.Timestamptz(6)
 
   unitTypes              UnitType[]
   units                  Unit[]
@@ -2022,45 +2022,59 @@ model LeaseRateChange {
 /// `rateIncreaseId`; a cancelled one never writes history at all, because
 /// nothing happened.
 model TenantRateIncrease {
-  id                 String             @id @default(cuid())
-  facilityId         String
-  leaseId            String
+  id                  String             @id @default(cuid())
+  facilityId          String
+  leaseId             String
   /// Snapshotted at scheduling, not read live at apply time. The approval
   /// screen showed a projected delta against THIS figure, and an increase
   /// approved against $129 must not silently become a different increase
   /// because something else moved the rate in between — `applyDue` refuses
   /// the row instead (see the service).
-  currentRateCents   Int
-  newRateCents       Int
+  currentRateCents    Int
+  newRateCents        Int
   /// Calendar dates, not instants: "effective on the 1st" is a facility-local
   /// day, and a timestamp would imply a precision the fact does not have —
   /// the same reasoning `Lease.moveOutDate` and `JobRun.businessDate` use.
-  effectiveDate      DateTime           @db.Date
+  effectiveDate       DateTime           @db.Date
   /// When the tenant must be told by. Derived from `effectiveDate` minus the
   /// facility's `rateIncreaseNoticeDays` at scheduling time, and stored
   /// rather than recomputed so a later settings change cannot retroactively
   /// make an already-served notice look late.
-  noticeDate         DateTime           @db.Date
+  noticeDate          DateTime           @db.Date
   /// The figure the notice quotes, snapshotted for the same reason.
-  noticeDays         Int
-  status             RateIncreaseStatus @default(pending_approval)
+  noticeDays          Int
+  status              RateIncreaseStatus @default(pending_approval)
   /// US-11: "one-off (selected tenants) or rule-based". Groups a rule-based
   /// batch so the approval screen can approve one worklist rather than
   /// forty rows, and so a batch is cancellable as a unit.
-  batchId            String?
-  createdByStaffId   String?
+  batchId             String?
+  createdByStaffId    String?
   /// US-11 AC: "regional/owner approval is required before notices go out."
-  approvedByStaffId  String?
-  approvedAt         DateTime?          @db.Timestamptz(6)
+  approvedByStaffId   String?
+  approvedAt          DateTime?          @db.Timestamptz(6)
   /// Set by the notice job on the notice date. The presence of this is what
   /// `applyDue` requires before it will move a rate — an increase whose
   /// notice never went out is never applied.
-  noticeSentAt       DateTime?          @db.Timestamptz(6)
-  appliedAt          DateTime?          @db.Timestamptz(6)
-  cancelledAt        DateTime?          @db.Timestamptz(6)
-  cancelledByStaffId String?
-  createdAt          DateTime           @default(now()) @db.Timestamptz(6)
-  updatedAt          DateTime           @updatedAt @db.Timestamptz(6)
+  noticeSentAt        DateTime?          @db.Timestamptz(6)
+  /// B-152. The `DomainEvent` the notice job emitted, written in the same
+  /// transaction as the status flip so the row can never claim a notice went
+  /// out with nothing to check it against. `Message.eventId` carries this, so
+  /// it is the anchor the delivery reconciliation reads. A plain snapshot
+  /// column rather than a relation, for the same reason `Message.eventId` is.
+  /// Null on rows scheduled before B-152 — those are unjudgeable, not failed.
+  noticeEventId       String?
+  /// B-152 / D-88. Why the notice could not be shown to have arrived —
+  /// `undeliverable` (every message bounced, failed or was suppressed) or
+  /// `no_send_record` (the pipeline produced no message at all). Set with the
+  /// `notice_failed` status and cleared by nothing: an increase that gets a
+  /// good address is re-noticed as a new increase, because D-88 says the
+  /// clock restarts.
+  noticeFailureReason String?
+  appliedAt           DateTime?          @db.Timestamptz(6)
+  cancelledAt         DateTime?          @db.Timestamptz(6)
+  cancelledByStaffId  String?
+  createdAt           DateTime           @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime           @updatedAt @db.Timestamptz(6)
 
   facility    Facility          @relation(fields: [facilityId], references: [id], onDelete: Cascade)
   lease       Lease             @relation(fields: [leaseId], references: [id], onDelete: Cascade)
@@ -2081,6 +2095,12 @@ enum RateIncreaseStatus {
   pending_approval
   approved
   notice_sent
+  /// B-152 / D-88. The notice was emitted and provably did not arrive — every
+  /// message it produced bounced, failed or was suppressed, or it produced
+  /// none at all. Terminal for this increase: `applyIsDue` requires
+  /// `notice_sent`, so a blocked increase can never take effect by
+  /// construction rather than by a check somebody has to remember to write.
+  notice_failed
   applied
   cancelled
 }

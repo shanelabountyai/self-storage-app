@@ -6,6 +6,7 @@ import {
   isCancellable,
   isEligibleForIncrease,
   noticeDateFor,
+  noticeDeliveryVerdict,
   noticeIsDue,
   projectedMonthlyDeltaCents,
   scheduleProblem,
@@ -236,5 +237,47 @@ describe('applyIsDue', () => {
 
   it('never applies a cancelled increase', () => {
     expect(applyIsDue({ status: 'cancelled', effectiveDate: day('2026-10-01') }, day('2026-10-05'))).toBe(false)
+  })
+})
+
+// B-152 / D-88. US-11's minimum-notice block is a guarantee about DELIVERY,
+// and until this the code made it about intent.
+describe('noticeDeliveryVerdict', () => {
+  it('treats no message at all as no notice — D-88\u2019s "no send record blocks"', () => {
+    expect(noticeDeliveryVerdict([])).toBe('no_send_record')
+  })
+
+  it('blocks when every message bounced', () => {
+    expect(noticeDeliveryVerdict(['bounced'])).toBe('undeliverable')
+  })
+
+  it('blocks on a suppression hit — a notice we chose not to send is not notice', () => {
+    expect(noticeDeliveryVerdict(['suppressed'])).toBe('undeliverable')
+    expect(noticeDeliveryVerdict(['cancelled'])).toBe('undeliverable')
+    expect(noticeDeliveryVerdict(['failed'])).toBe('undeliverable')
+  })
+
+  it('does not block on a webhook that has not called back yet', () => {
+    // `sent` is not proof of arrival, but it is not evidence of failure, and
+    // holding every increase whose provider callback is a minute late would
+    // block far more increases than bad addresses ever will.
+    expect(noticeDeliveryVerdict(['sent'])).toBe('reached')
+    expect(noticeDeliveryVerdict(['queued'])).toBe('reached')
+    expect(noticeDeliveryVerdict(['deferred'])).toBe('reached')
+  })
+
+  it('reaching them on either channel is reaching them', () => {
+    expect(noticeDeliveryVerdict(['bounced', 'delivered'])).toBe('reached')
+  })
+})
+
+describe('isCancellable', () => {
+  it('covers a held increase — D-88\u2019s remedy is to cancel and re-notice', () => {
+    expect(isCancellable('notice_failed')).toBe(true)
+  })
+
+  it('still refuses one that already happened', () => {
+    expect(isCancellable('applied')).toBe(false)
+    expect(isCancellable('cancelled')).toBe(false)
   })
 })

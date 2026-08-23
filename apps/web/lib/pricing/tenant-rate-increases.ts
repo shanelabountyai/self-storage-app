@@ -10,7 +10,9 @@ import {
   DEFAULT_ELIGIBILITY,
   isCancellable,
   isEligibleForIncrease,
+  LIVE_RATE_INCREASE_STATUSES,
   noticeDateFor,
+  noticeDeliveryVerdict,
   noticeIsDue,
   projectedMonthlyDeltaCents,
   scheduleProblem,
@@ -20,6 +22,7 @@ import {
   type EligibilityRule,
   type ScheduleProblem,
 } from '@storage/core/pricing'
+import { createTask } from '@/lib/admin/tasks'
 import { requirePermission } from '@/lib/rbac/authorize'
 import { toAuditActor } from '@/lib/rbac/audit-actor'
 import type { Actor } from '@/lib/rbac/actor'
@@ -157,7 +160,7 @@ export async function scheduleRateIncrease(
   // mean two notices quoting different "new rates" to the same tenant, and
   // whichever applied second would silently overwrite the other.
   const existing = await prisma.tenantRateIncrease.findFirst({
-    where: { leaseId: input.leaseId, status: { in: ['pending_approval', 'approved', 'notice_sent'] } },
+    where: { leaseId: input.leaseId, status: { in: [...LIVE_RATE_INCREASE_STATUSES] } },
     select: { id: true },
   })
   if (existing) {
@@ -208,7 +211,7 @@ export async function previewEligibleIncreases(
       unit: { select: { number: true, unitTypeId: true } },
       rateChanges: { orderBy: { effectiveFrom: 'desc' }, take: 1, select: { effectiveFrom: true } },
       rateIncreases: {
-        where: { status: { in: ['pending_approval', 'approved', 'notice_sent'] } },
+        where: { status: { in: [...LIVE_RATE_INCREASE_STATUSES] } },
         select: { id: true },
       },
     },
@@ -409,7 +412,7 @@ export async function cancelRateIncrease(
 
 export async function cancelBatch(actor: Actor, batchId: string, reasonCode: string): Promise<{ cancelled: number }> {
   const rows = await prisma.tenantRateIncrease.findMany({
-    where: { batchId, status: { in: ['pending_approval', 'approved', 'notice_sent'] } },
+    where: { batchId, status: { in: [...LIVE_RATE_INCREASE_STATUSES] } },
     select: { id: true },
   })
   let cancelled = 0
@@ -441,10 +444,18 @@ export type NoticeRunResult = { sent: number }
 ///
 /// Emits the event and stamps `noticeSentAt`; the comms pipeline renders and
 /// delivers it through the ordinary rule/template path (CN-9's own scope:
-/// "this module only sends the electronic copy and records it"). Stamping
-/// here rather than on delivery is deliberate — an increase whose email
-/// bounced has still been noticed as far as this workflow is concerned, and
-/// the bounce raises its own `no_reachable_channel` task (B-054).
+/// "this module only sends the electronic copy and records it").
+///
+/// **B-152 / D-88.** The claim, the stamp and the emit are ONE transaction,
+/// and the emitted event id is written onto the row. Before B-152 the status
+/// flipped first and the emit followed outside any transaction, so a row
+/// could assert a notice had gone out with no event to show for it — and
+/// nothing downstream ever asked what the provider did with it, which is why
+/// an increase whose notice hard-bounced still applied thirty days later.
+/// This function still cannot know the outcome (the outbox is drained by the
+/// hourly cron, not inline), so the status it sets is a claim about the SEND,
+/// and `reconcileRateIncreaseNotices` below is what later turns that claim
+/// into a fact or into `notice_failed`.
 export async function sendDueRateIncreaseNotices(
   facilityId: string,
   businessDate: Date,
@@ -460,31 +471,145 @@ export async function sendDueRateIncreaseNotices(
 
     // Guarded update: two runs of the same business date (a catch-up tick,
     // a retry) must not send twice. `status: 'approved'` in the WHERE is the
-    // claim — the second run matches zero rows.
-    const claimed = await prisma.tenantRateIncrease.updateMany({
-      where: { id: row.id, status: 'approved' },
-      data: { status: 'notice_sent', noticeSentAt: new Date() },
-    })
-    if (claimed.count === 0) continue
+    // claim — the second run matches zero rows. The emit rides inside the
+    // same transaction, which is the outbox pattern `emitEvent`'s own doc
+    // comment asks for: the status and the event it asserts commit together
+    // or neither does.
+    const noticed = await prisma.$transaction(async (tx) => {
+      const claimed = await tx.tenantRateIncrease.updateMany({
+        where: { id: row.id, status: 'approved' },
+        data: { status: 'notice_sent', noticeSentAt: new Date() },
+      })
+      if (claimed.count === 0) return false
 
-    await emitEvent({
-      name: 'lease.rate_increase_scheduled',
-      entityType: 'Lease',
-      entityId: row.leaseId,
-      facilityId,
-      payload: {
-        rateIncreaseId: row.id,
-        previousRateCents: row.currentRateCents,
-        newRateCents: row.newRateCents,
-        effectiveDate: row.effectiveDate.toISOString().slice(0, 10),
-        noticeDays: row.noticeDays,
-      },
+      const event = await emitEvent(
+        {
+          name: 'lease.rate_increase_scheduled',
+          entityType: 'Lease',
+          entityId: row.leaseId,
+          facilityId,
+          payload: {
+            rateIncreaseId: row.id,
+            previousRateCents: row.currentRateCents,
+            newRateCents: row.newRateCents,
+            effectiveDate: row.effectiveDate.toISOString().slice(0, 10),
+            noticeDays: row.noticeDays,
+          },
+        },
+        tx,
+      )
+      await tx.tenantRateIncrease.update({
+        where: { id: row.id },
+        data: { noticeEventId: event.id },
+      })
+      return true
     })
+    if (!noticed) continue
+
     sent += 1
     recordItem({ itemId: row.leaseId, ok: true, message: `rate-increase notice sent (effective ${row.effectiveDate.toISOString().slice(0, 10)})` })
   }
 
   return { sent }
+}
+
+/// How long a notice is given to produce a `Message` before "no send record"
+/// is treated as a fact rather than as "the dispatcher has not got to it yet".
+///
+/// Two hours because the outbox drain is the FIRST thing the hourly cron does
+/// (`app/api/cron/route.ts`), so an event emitted at any point in an hour has
+/// been dispatched by the end of the next one. Anything still showing no
+/// message after that produced none — a skip condition fired, or no rule
+/// matched — and D-88 says that blocks.
+///
+/// It applies only to the "no record at all" verdict. A message that has
+/// already bounced or been suppressed is a fact the moment it is recorded and
+/// waits for nothing.
+const NO_SEND_RECORD_GRACE_MS = 2 * 60 * 60 * 1000
+
+export type NoticeReconcileResult = { checked: number; blocked: number }
+
+/// PRD 02 §4.3 US-11, PRD 05 CN-9, D-88 (B-152). Checks what actually became
+/// of every notice this facility has claimed to send, and holds the increases
+/// whose notice provably did not arrive.
+///
+/// US-11 blocks an effective date that violates the minimum notice period —
+/// a guarantee about DELIVERY. Until B-152 the code made that guarantee about
+/// INTENT: `notice_sent` meant "we emitted an event", nothing ever reconciled
+/// it against `Message.status`, and an increase noticed to a hard-bounced or
+/// suppressed address applied on schedule anyway. That is the single fact
+/// that makes an increase indefensible if the tenant disputes it.
+///
+/// D-88 (owner, Option A): a hard bounce, a suppression hit or no send record
+/// **blocks** the increase and raises a task; the operator re-notices from a
+/// good address and the clock restarts. Blocking is `notice_failed`, which
+/// `applyIsDue` can never act on — the hold is structural, not a check the
+/// apply job has to remember to repeat.
+///
+/// Called at the top of `applyDueRateIncreases`, which is per-facility and
+/// daily, so it sweeps EVERY live notice rather than only the ones due today:
+/// an operator who first hears about a dead address on the effective date has
+/// no time left to re-notice, and thirty days of warning is the whole point.
+export async function reconcileRateIncreaseNotices(
+  facilityId: string,
+  recordItem: RecordItem,
+  now: Date = new Date(),
+): Promise<NoticeReconcileResult> {
+  const rows = await prisma.tenantRateIncrease.findMany({
+    // `noticeEventId: null` is a row noticed before B-152 existed. Unjudgeable
+    // rather than failed: there is nothing to look the messages up by, and
+    // blocking on missing bookkeeping would hold increases whose notices were
+    // fine. Every row written from B-152 onward has one, in the same
+    // transaction as the status.
+    where: { facilityId, status: 'notice_sent', noticeEventId: { not: null } },
+    select: { id: true, leaseId: true, noticeEventId: true, noticeSentAt: true, effectiveDate: true },
+  })
+
+  const result: NoticeReconcileResult = { checked: 0, blocked: 0 }
+  for (const row of rows) {
+    const messages = await prisma.message.findMany({
+      where: { eventId: row.noticeEventId! },
+      select: { status: true },
+    })
+    result.checked += 1
+
+    const verdict = noticeDeliveryVerdict(messages.map((message) => message.status))
+    if (verdict === 'reached') continue
+    if (
+      verdict === 'no_send_record' &&
+      now.getTime() - (row.noticeSentAt?.getTime() ?? 0) < NO_SEND_RECORD_GRACE_MS
+    ) {
+      continue
+    }
+
+    // Guarded on `notice_sent` for the same reason the send is: two ticks must
+    // raise one task, not two.
+    const blocked = await prisma.tenantRateIncrease.updateMany({
+      where: { id: row.id, status: 'notice_sent' },
+      data: { status: 'notice_failed', noticeFailureReason: verdict },
+    })
+    if (blocked.count === 0) continue
+
+    await createTask({
+      facilityId,
+      type: 'rate_increase_notice_undelivered',
+      entityType: 'Lease',
+      entityId: row.leaseId,
+      priority: 'high',
+    })
+
+    result.blocked += 1
+    recordItem({
+      itemId: row.leaseId,
+      ok: false,
+      message:
+        verdict === 'undeliverable'
+          ? `rate increase held — the notice did not arrive (effective ${row.effectiveDate.toISOString().slice(0, 10)})`
+          : `rate increase held — no notice was ever sent (effective ${row.effectiveDate.toISOString().slice(0, 10)})`,
+    })
+  }
+
+  return result
 }
 
 export type ApplyRunResult = { applied: number; skipped: number }
@@ -502,6 +627,11 @@ export async function applyDueRateIncreases(
   businessDate: Date,
   recordItem: RecordItem,
 ): Promise<ApplyRunResult> {
+  // D-88 (B-152). Before anything is applied, ask what became of the notices.
+  // Anything that provably did not arrive moves to `notice_failed` here and is
+  // therefore not in the `due` set read on the next line.
+  await reconcileRateIncreaseNotices(facilityId, recordItem)
+
   const due = await prisma.tenantRateIncrease.findMany({
     where: { facilityId, status: 'notice_sent', effectiveDate: { lte: utcDay(businessDate) } },
   })
@@ -578,6 +708,8 @@ export type PendingIncreaseRow = {
   status: string
   approvedAt: Date | null
   noticeSentAt: Date | null
+  /// B-152. Why a `notice_failed` row is held. Null on every other status.
+  noticeFailureReason: string | null
 }
 
 export type RateIncreaseReview = {
@@ -593,7 +725,7 @@ export async function pendingRateIncreases(actor: Actor, facilityId: string): Pr
   requirePermission(actor, 'rates:tenant_increase', facilityId)
 
   const rows = await prisma.tenantRateIncrease.findMany({
-    where: { facilityId, status: { in: ['pending_approval', 'approved', 'notice_sent'] } },
+    where: { facilityId, status: { in: [...LIVE_RATE_INCREASE_STATUSES] } },
     orderBy: [{ effectiveDate: 'asc' }, { createdAt: 'asc' }],
     include: {
       lease: {
@@ -620,7 +752,13 @@ export async function pendingRateIncreases(actor: Actor, facilityId: string): Pr
       status: row.status,
       approvedAt: row.approvedAt,
       noticeSentAt: row.noticeSentAt,
+      noticeFailureReason: row.noticeFailureReason,
     })),
-    projectedMonthlyDeltaCents: projectedMonthlyDeltaCents(rows),
+    // B-152: a held increase is not projected revenue. It cannot apply until
+    // somebody re-notices it, and counting it here would put money in front of
+    // an approver that the workflow has already decided not to charge.
+    projectedMonthlyDeltaCents: projectedMonthlyDeltaCents(
+      rows.filter((row) => row.status !== 'notice_failed'),
+    ),
   }
 }
