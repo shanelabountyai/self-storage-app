@@ -7,6 +7,7 @@ import { rateVariance, wholeMonthsBetween } from '@storage/core/metrics'
 import { OCCUPYING_LEASE_STATUSES } from '@storage/core/inventory'
 import {
   applyIsDue,
+  decreaseProblem,
   DEFAULT_ELIGIBILITY,
   isCancellable,
   isEligibleForIncrease,
@@ -16,14 +17,16 @@ import {
   noticeIsDue,
   projectedMonthlyDeltaCents,
   scheduleProblem,
+  isRateDecrease,
   targetRateFor,
   utcDay,
   type CandidateLease,
+  type DecreaseProblem,
   type EligibilityRule,
   type ScheduleProblem,
 } from '@storage/core/pricing'
 import { createTask } from '@/lib/admin/tasks'
-import { requirePermission } from '@/lib/rbac/authorize'
+import { can, checkMonetaryAuthority, nextApproverRole, requirePermission } from '@/lib/rbac/authorize'
 import { toAuditActor } from '@/lib/rbac/audit-actor'
 import type { Actor } from '@/lib/rbac/actor'
 
@@ -81,7 +84,7 @@ export async function applyRateChange(
     leaseId: string
     newRateCents: number
     effectiveFrom: Date
-    reason: 'move_in' | 'ecri' | 'transfer' | 'promo_expiry' | 'manual'
+    reason: 'move_in' | 'ecri' | 'transfer' | 'promo_expiry' | 'retention' | 'manual'
     actorStaffId?: string | null
     noticeDays?: number | null
     rateIncreaseId?: string | null
@@ -180,6 +183,170 @@ export async function scheduleRateIncrease(
     },
   })
   return { ok: true, id: created.id }
+}
+
+const DECREASE_PROBLEM_MESSAGE: Record<DecreaseProblem, string> = {
+  rate_below_zero: 'A monthly rate cannot be negative.',
+  not_a_decrease: 'The new rate has to be lower than what they pay now. Use an increase for the other direction.',
+  effective_in_past: 'The effective date cannot be in the past — the rate that applied on an invoiced day is a fact.',
+}
+
+export type ScheduleDecreaseInput = {
+  leaseId: string
+  newRateCents: number
+  effectiveDate: Date
+  /// US-38: this is a discretionary giveaway to one tenant, so the audit row
+  /// is worthless without it.
+  reasonCode: string
+}
+
+export type ScheduleDecreaseResult =
+  | { ok: true; id: string }
+  | { ok: false; reason: string }
+  | { ok: false; reason: string; overLimit: true; limitCents: number; escalateTo: string | null }
+
+/// PRD 02 §4.3 US-11, §3 Roles & Permissions (B-153). The retention save:
+/// the same workflow in the other direction.
+///
+/// B-076 built the increase and D-37 gave it a model; ECRI itself is what
+/// creates the demand for this, and without it a manager keeping a good
+/// tenant either edits the lease rate directly — bypassing the write-through
+/// US-11's schema AC exists to enforce — or does nothing.
+///
+/// **Three things are deliberately NOT symmetric with an increase:**
+///
+/// *No notice period.* US-11's minimum notice protects a tenant about to be
+/// charged more. Nothing statutory governs charging less, and a discount that
+/// waits thirty days is no use against a tenant who is on the phone now.
+///
+/// *No separate approval step.* The authority check IS the approval, so the
+/// row is created `approved` and applies on its effective date. A
+/// pending_approval state would mean a manager acting inside their own limit
+/// still had to wait for somebody else.
+///
+/// *A different permission.* `rates:tenant_increase` is regional-and-above by
+/// seed, which is right for raising a cohort's rent and wrong for a counter
+/// conversation. This gates on the EXISTING monetary limits instead —
+/// `checkMonetaryAuthority(..., 'credit', ...)` against the monthly amount
+/// being given away — which lands on manager-and-above by default (a manager
+/// holds `credits:manual` with a limit; counter and bookkeeper hold neither)
+/// without minting a new threshold or touching the seed. Over the limit it
+/// escalates to the next role that can carry it, exactly as a refund does.
+export async function scheduleRateDecrease(
+  actor: Actor,
+  facilityId: string,
+  input: ScheduleDecreaseInput,
+): Promise<ScheduleDecreaseResult> {
+  if (!input.reasonCode.trim()) return { ok: false, reason: 'Lowering a rate has to record why.' }
+
+  const lease = await prisma.lease.findUnique({
+    where: { id: input.leaseId },
+    select: { id: true, facilityId: true, status: true, monthlyRateCents: true },
+  })
+  if (!lease || lease.facilityId !== facilityId) {
+    return { ok: false, reason: 'That lease is not at this facility.' }
+  }
+  if (!OCCUPYING_LEASE_STATUSES.includes(lease.status as never)) {
+    return { ok: false, reason: 'That lease has ended — there is no rate to lower.' }
+  }
+
+  const facility = await prisma.facility.findUniqueOrThrow({
+    where: { id: facilityId },
+    select: { timezone: true, rateIncreaseNoticeDays: true },
+  })
+  const today = businessDateFor(new Date(), facility.timezone)
+  const effectiveDate = utcDay(input.effectiveDate)
+
+  const problem = decreaseProblem({
+    currentRateCents: lease.monthlyRateCents,
+    newRateCents: input.newRateCents,
+    effectiveDate,
+    today,
+  })
+  if (problem) return { ok: false, reason: DECREASE_PROBLEM_MESSAGE[problem] }
+
+  // The monthly giveaway, which is what the limit is measured against — not
+  // the new rate, and not the whole remaining term. A $15 save is a $15
+  // decision every month, and annualising it here would put a routine
+  // retention call over every manager's limit.
+  const monthlyReductionCents = lease.monthlyRateCents - input.newRateCents
+  const decision = checkMonetaryAuthority(actor, 'credit', monthlyReductionCents, facilityId)
+  if (!decision.allowed) {
+    if (decision.reason === 'forbidden') {
+      return { ok: false, reason: 'You do not have the authority to lower a tenant’s rate.' }
+    }
+    const approver = await nextApproverRole('credit', monthlyReductionCents, decision.escalateToRank ?? 0)
+    return {
+      ok: false,
+      overLimit: true,
+      limitCents: decision.limitCents,
+      escalateTo: approver?.name ?? null,
+      reason: approver
+        ? `That is more than your ${formatLimit(decision.limitCents)} a month limit. A ${approver.name} has to make this one.`
+        : `That is more than your ${formatLimit(decision.limitCents)} a month limit, and no role above you can carry it either.`,
+    }
+  }
+
+  // The same one-live-change-per-lease rule the increase path enforces, and
+  // for a sharper reason here: a decrease and an increase both pending would
+  // race, and whichever applied second would silently win.
+  const existing = await prisma.tenantRateIncrease.findFirst({
+    where: { leaseId: input.leaseId, status: { in: [...LIVE_RATE_INCREASE_STATUSES] } },
+    select: { id: true },
+  })
+  if (existing) {
+    return { ok: false, reason: 'This lease already has a scheduled rate change. Cancel it first.' }
+  }
+
+  const staffId = staffIdOf(actor)
+  const created = await prisma.$transaction(async (tx) => {
+    const row = await tx.tenantRateIncrease.create({
+      data: {
+        facilityId,
+        leaseId: input.leaseId,
+        currentRateCents: lease.monthlyRateCents,
+        newRateCents: input.newRateCents,
+        effectiveDate,
+        // A decrease gives no notice, so there is no notice date to record.
+        // Stored as the effective date rather than left misleading: the
+        // column is not nullable, and a date in the past here would read as
+        // a notice that was due and never went out.
+        noticeDate: effectiveDate,
+        noticeDays: 0,
+        createdByStaffId: staffId,
+        // The authority check above IS the approval — recorded as such so the
+        // review screen and any later dispute see who made the call.
+        status: 'approved',
+        approvedByStaffId: staffId,
+        approvedAt: new Date(),
+      },
+    })
+    await recordAudit(
+      {
+        actor: toAuditActor(actor),
+        facilityId,
+        action: 'rate.tenant_decreased',
+        entityType: 'TenantRateIncrease',
+        entityId: row.id,
+        reasonCode: input.reasonCode.trim(),
+        context: {
+          leaseId: input.leaseId,
+          previousRateCents: lease.monthlyRateCents,
+          newRateCents: input.newRateCents,
+          monthlyReductionCents,
+          effectiveDate: effectiveDate.toISOString().slice(0, 10),
+        },
+      },
+      tx,
+    )
+    return row
+  })
+
+  return { ok: true, id: created.id }
+}
+
+function formatLimit(cents: number): string {
+  return `$${(cents / 100).toFixed(2)}`
 }
 
 export type BatchPreviewRow = CandidateLease & {
@@ -633,7 +800,16 @@ export async function applyDueRateIncreases(
   await reconcileRateIncreaseNotices(facilityId, recordItem)
 
   const due = await prisma.tenantRateIncrease.findMany({
-    where: { facilityId, status: 'notice_sent', effectiveDate: { lte: utcDay(businessDate) } },
+    // `approved` is here for B-153's decreases, which never reach
+    // `notice_sent` because they give no notice. `applyIsDue` is what decides
+    // which of the two states is right for the row's direction — an approved
+    // INCREASE is still refused, which is the property that had to survive
+    // widening this query at all.
+    where: {
+      facilityId,
+      status: { in: ['notice_sent', 'approved'] },
+      effectiveDate: { lte: utcDay(businessDate) },
+    },
   })
 
   const result: ApplyRunResult = { applied: 0, skipped: 0 }
@@ -644,9 +820,11 @@ export async function applyDueRateIncreases(
       where: { id: row.leaseId },
       select: { monthlyRateCents: true, status: true },
     })
+    const decrease = isRateDecrease(row)
+    const noun = decrease ? 'rate decrease' : 'rate increase'
     if (!lease || !OCCUPYING_LEASE_STATUSES.includes(lease.status as never)) {
       result.skipped += 1
-      recordItem({ itemId: row.leaseId, ok: true, message: 'rate increase skipped — the lease has ended' })
+      recordItem({ itemId: row.leaseId, ok: true, message: `${noun} skipped — the lease has ended` })
       continue
     }
     // The rate moved under an already-approved increase. Refused rather than
@@ -658,14 +836,14 @@ export async function applyDueRateIncreases(
       recordItem({
         itemId: row.leaseId,
         ok: false,
-        message: `rate increase skipped — the rate changed to ${lease.monthlyRateCents} after approval at ${row.currentRateCents}`,
+        message: `${noun} skipped — the rate changed to ${lease.monthlyRateCents} after approval at ${row.currentRateCents}`,
       })
       continue
     }
 
     await prisma.$transaction(async (tx) => {
       const claimed = await tx.tenantRateIncrease.updateMany({
-        where: { id: row.id, status: 'notice_sent' },
+        where: { id: row.id, status: row.status },
         data: { status: 'applied', appliedAt: new Date() },
       })
       if (claimed.count === 0) return
@@ -675,7 +853,7 @@ export async function applyDueRateIncreases(
           leaseId: row.leaseId,
           newRateCents: row.newRateCents,
           effectiveFrom: row.effectiveDate,
-          reason: 'ecri',
+          reason: decrease ? 'retention' : 'ecri',
           actorStaffId: row.approvedByStaffId,
           noticeDays: row.noticeDays,
           rateIncreaseId: row.id,
@@ -686,7 +864,7 @@ export async function applyDueRateIncreases(
       recordItem({
         itemId: row.leaseId,
         ok: true,
-        message: `rate raised ${row.currentRateCents} → ${row.newRateCents}`,
+        message: `rate ${decrease ? 'lowered' : 'raised'} ${row.currentRateCents} → ${row.newRateCents}`,
       })
     })
   }
@@ -710,6 +888,9 @@ export type PendingIncreaseRow = {
   noticeSentAt: Date | null
   /// B-152. Why a `notice_failed` row is held. Null on every other status.
   noticeFailureReason: string | null
+  /// B-153. A retention save reads differently from an increase at every
+  /// column — "Approved — notice pending" is a lie about one.
+  isDecrease: boolean
 }
 
 export type RateIncreaseReview = {
@@ -722,7 +903,13 @@ export type RateIncreaseReview = {
 /// are history, and a review screen that accumulates every increase ever made
 /// stops being a worklist.
 export async function pendingRateIncreases(actor: Actor, facilityId: string): Promise<RateIncreaseReview> {
-  requirePermission(actor, 'rates:tenant_increase', facilityId)
+  // B-153: either rate authority sees the worklist. A manager who can make a
+  // retention save but cannot see or cancel the one they just made has half a
+  // feature, and this exposes nothing new — the same manager already reads
+  // in-place rates on the tenant page and in the rate-variance report.
+  if (!can(actor, 'rates:tenant_increase', facilityId)) {
+    requirePermission(actor, 'credits:manual', facilityId)
+  }
 
   const rows = await prisma.tenantRateIncrease.findMany({
     where: { facilityId, status: { in: [...LIVE_RATE_INCREASE_STATUSES] } },
@@ -753,6 +940,7 @@ export async function pendingRateIncreases(actor: Actor, facilityId: string): Pr
       approvedAt: row.approvedAt,
       noticeSentAt: row.noticeSentAt,
       noticeFailureReason: row.noticeFailureReason,
+      isDecrease: isRateDecrease(row),
     })),
     // B-152: a held increase is not projected revenue. It cannot apply until
     // somebody re-notices it, and counting it here would put money in front of

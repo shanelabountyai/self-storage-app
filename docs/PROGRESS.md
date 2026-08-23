@@ -5509,3 +5509,38 @@ The card's `href` has always pointed at `/admin/tenants/{tenantId}`, so the fix 
 **Test verification.** Full unit suite **3,537 passed, 8 skipped of 3,545** (217 files passed, 1 skipped), exit 0 — up 15 from B-151, exactly the tests added — and **run twice**, per the repo's rule for anything touching shared fixtures. Typecheck clean including `tsconfig.tests.json`; lint 0 errors, 7 pre-existing warnings. Schema drift: no difference detected. `db:migrate:test` and `db:migrate:e2e` both run. Production build green. The accessibility statement was not re-read: this item ships no customer-facing surface — the only customer-visible effect is a tenant *not* being charged more on a notice that never arrived.
 
 **Left behind.** **There is no re-notice control.** D-88's remedy is "the operator re-notices from a good address and the clock restarts", and the way to do that today is to cancel the held increase and schedule a new one — two actions on the same screen, with the new effective date chosen by hand. A single "re-notice" button that reschedules from the corrected address is a genuine gap and no row owns it. **Nothing clears `noticeFailureReason`**, deliberately: a held increase is never revived in place. **The reconciliation makes one query per live notice** rather than one grouped query for the facility; at a realistic count of concurrent increases that is a handful of round trips a night, and it is the shape the loop needed to keep the per-row task and record-item honest. **No e2e spec covers the held state** — the block is asserted only at the service layer, so the review screen's new label and help text are typechecked and built but not exercised by a browser. **A soft bounce still counts as reached**, which is correct per PRD 05's own treatment, but it means a mailbox full for the whole notice period reads as delivered.
+
+## B-153 — A tenant's rate can now come down
+
+`PENDING`
+
+**What it built.** The retention save that ECRI itself creates demand for. B-076 built the increase and D-37 gave it a model; there was no path in the other direction, so a manager keeping a good tenant either edited `Lease.monthlyRateCents` directly — bypassing the write-through US-11's schema AC exists to enforce — or did nothing.
+
+- **`scheduleRateDecrease`** creates a `TenantRateIncrease` with a negative delta, already `approved`, and audits it as `rate.tenant_decreased` with a required reason code.
+- **`decreaseProblem`** in `packages/core/pricing` is the mirror of `scheduleProblem`: refuses a negative rate, a rate that is not lower, and a past effective date. **Today is allowed**, unlike an increase.
+- **`applyIsDue` and `noticeIsDue` became direction-aware**, keyed on `isRateDecrease` derived from the two figures on the row rather than on a stored `direction` column.
+- **`applyRateChange` gained `reason: 'retention'`** (new `LeaseRateReason` enum value, migration `20260823155351_lease_rate_reason_retention`), so "how much did we give away to keep people" is answerable.
+- **The review screen** gained a retention-save form, a direction-aware status label and a signed projected delta; the increase machinery is hidden from an actor who can only lower.
+- **Tests**: 21 new — 12 unit over `decreaseProblem` and the two direction-aware predicates, 9 database over the service.
+
+**What it decided.**
+
+**The permission is `credits:manual`, not `rates:tenant_increase`.** The row asked for "manager-and-above, reusing `checkMonetaryAuthority` rather than minting a new threshold", and the two halves of that only fit together this way: `rates:tenant_increase` is granted to **regional and above** in the seed, which is right for raising a cohort's rent and wrong for the counter conversation this feature exists for. `checkMonetaryAuthority(actor, 'credit', monthlyReductionCents, facilityId)` lands on manager-and-above by construction — a manager holds `credits:manual` with a $50 limit, counter and bookkeeper hold neither the permission nor a limit — with **no seed change and no new limit column**. Over the limit it escalates by naming the role that can carry it, exactly as a refund does.
+
+**The limit is measured against the MONTHLY giveaway,** not the new rate and not the remaining term. A $15 save is a $15 decision every month; annualising it would put a routine retention call over every manager's limit and make the feature unusable by the people it is for.
+
+**There is no `pending_approval` state for a decrease.** The authority check is the approval, so the row is created `approved` with `approvedByStaffId` set. A pending state would mean a manager acting inside their own limit still had to wait for somebody else — which is the delay the feature exists to remove.
+
+**The direction is derived, never stored.** A `direction` column could disagree with the delta beside it. `scheduleProblem` and `decreaseProblem` between them make an equal-rate row impossible, so `isRateDecrease` is total.
+
+**`noticeIsDue` needed the direction check more than `applyIsDue` did, and that is the sharp edge of this item.** A decrease is `approved` from creation, which is exactly the state the notice job fires on — without the guard, the tenant whose rent had just been lowered would be emailed a rate-**increase** letter quoting the new figure. Both guards were mutation-tested: removing either turns four tests red, two unit and two database.
+
+**An approved INCREASE still cannot apply.** Widening the apply query to `status: { in: ['notice_sent', 'approved'] }` is the change most able to do damage here, so the property that made B-152 worth building is asserted directly rather than left implied.
+
+**The review screen is readable by either rate authority.** A manager who could make a save but could not see or cancel it has half a feature, and this exposes nothing new — the same manager already reads in-place rates on the tenant page and in the rate-variance report.
+
+**No D-number, per the row's own instruction:** the approval level is a default the RBAC already models and is reversible in a seed.
+
+**Test verification.** Full unit suite **3,558 passed, 8 skipped of 3,566** (217 files passed, 1 skipped), exit 0 — up 21 from B-152, exactly the tests added — and **run twice**. Typecheck clean including `tsconfig.tests.json`; lint 0 errors, 7 pre-existing warnings. Schema drift: no difference detected. `db:migrate:test` and `db:migrate:e2e` both run. Production build green. The accessibility statement was not re-read: this item ships no customer-facing surface.
+
+**Left behind.** **The lease is still identified by typing a Lease ID**, the same as B-076's one-off increase form — the natural place to lower a rate is the tenant page, which already lists every lease with its rate and its move-out and transfer links, and neither form is there. **No batch decrease and no eligibility rule**, deliberately: there is no "who should we save" query, and inventing one would be a feature nobody asked for. **The monthly-reduction figure is checked against `maxCreditCents`, which is also what a one-off credit is checked against** — a recurring giveaway is arguably worth a stricter bar than a single credit, and the row explicitly ruled out minting a new threshold, so that judgement is deferred rather than made. **No e2e spec covers the retention form.** **Nothing reports retention saves as a category** even though `LeaseRateChange.reason = 'retention'` now makes it queryable; B-155's attach-rate work is the nearest thing and does not cover it.

@@ -164,13 +164,58 @@ export function isCancellable(status: RateIncreaseState): boolean {
   return (LIVE_RATE_INCREASE_STATUSES as readonly string[]).includes(status)
 }
 
+/// PRD 02 §4.3 US-11 (B-153). Which direction a scheduled change goes.
+///
+/// Derived from the two figures rather than stored: a `direction` column
+/// could disagree with the delta beside it, and there is exactly one right
+/// answer already sitting in the row. `scheduleProblem` and `decreaseProblem`
+/// between them make an equal pair impossible, so this is total.
+export function isRateDecrease(row: { currentRateCents: number; newRateCents: number }): boolean {
+  return row.newRateCents < row.currentRateCents
+}
+
+export type DecreaseProblem = 'not_a_decrease' | 'effective_in_past' | 'rate_below_zero'
+
+/// B-153. The mirror of `scheduleProblem` for a retention save.
+///
+/// **The notice period is deliberately absent.** US-11's minimum notice
+/// exists because a tenant is about to be charged more; nothing statutory
+/// governs charging them less, and making a discount wait thirty days would
+/// defeat the only thing a retention save is for — the tenant is on the phone
+/// threatening to leave.
+///
+/// Today is allowed as an effective date, unlike an increase. A past one is
+/// not: the rate that applied on a date already invoiced is a fact, and
+/// moving it retroactively would make `LeaseRateChange` disagree with the
+/// invoices a billing dispute reads it against.
+export function decreaseProblem(input: {
+  currentRateCents: number
+  newRateCents: number
+  effectiveDate: Date
+  /// Today, facility-local.
+  today: Date
+}): DecreaseProblem | null {
+  // A trust boundary, not a formality: negative cents here would flow into
+  // `Lease.monthlyRateCents` and invoice as a credit every month forever.
+  if (input.newRateCents < 0) return 'rate_below_zero'
+  if (input.newRateCents >= input.currentRateCents) return 'not_a_decrease'
+  if (daysBetween(input.today, input.effectiveDate) < 0) return 'effective_in_past'
+  return null
+}
+
 /// The notice may go out only once an approver has signed off (US-11 AC:
 /// "regional/owner approval is required before notices go out") and only on
 /// or after the notice date.
+///
+/// B-153: never for a decrease. A retention save is `approved` from the
+/// moment it is created, which is the same shape this predicate fires on, so
+/// without the direction check the tenant whose rent was just lowered would
+/// be emailed a rate-INCREASE notice.
 export function noticeIsDue(
-  row: { status: RateIncreaseState; noticeDate: Date },
+  row: { status: RateIncreaseState; noticeDate: Date; currentRateCents: number; newRateCents: number },
   today: Date,
 ): boolean {
+  if (isRateDecrease(row)) return false
   return row.status === 'approved' && daysBetween(today, row.noticeDate) <= 0
 }
 
@@ -178,11 +223,17 @@ export function noticeIsDue(
 /// date has arrived. `notice_sent` rather than `approved` is the guard that
 /// makes "no tenant is charged more without having been told" true by
 /// construction rather than by the jobs happening to run in the right order.
+///
+/// B-153: a decrease applies from `approved` instead, because it never gets a
+/// notice. The guard is the direction rather than a second predicate, so the
+/// two cases cannot drift apart — and an APPROVED INCREASE still cannot apply,
+/// which is the property that must survive adding decreases at all.
 export function applyIsDue(
-  row: { status: RateIncreaseState; effectiveDate: Date },
+  row: { status: RateIncreaseState; effectiveDate: Date; currentRateCents: number; newRateCents: number },
   today: Date,
 ): boolean {
-  return row.status === 'notice_sent' && daysBetween(today, row.effectiveDate) <= 0
+  if (daysBetween(today, row.effectiveDate) > 0) return false
+  return isRateDecrease(row) ? row.status === 'approved' : row.status === 'notice_sent'
 }
 
 /// PRD 02 §4.3 US-11, D-88 (B-152). Whether the notice for an increase can be

@@ -2110,6 +2110,11 @@ enum LeaseRateReason {
   ecri
   transfer
   promo_expiry
+  /// B-153. A retention save — the rate lowered to keep a tenant who would
+  /// otherwise leave. Its own reason rather than `manual` because "how much
+  /// did we give away to keep people" is the question the whole feature is
+  /// answerable for, and `manual` is the bucket everything else lands in.
+  retention
   manual
 }
 

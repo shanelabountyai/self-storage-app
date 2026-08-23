@@ -5,6 +5,8 @@ import {
   earliestEffectiveDate,
   isCancellable,
   isEligibleForIncrease,
+  decreaseProblem,
+  isRateDecrease,
   noticeDateFor,
   noticeDeliveryVerdict,
   noticeIsDue,
@@ -18,6 +20,12 @@ import {
 // one thing here that has a legal consequence if it is off by a day.
 
 const day = (iso: string) => new Date(`${iso}T00:00:00.000Z`)
+
+// B-153 made both predicates direction-aware, so every row now carries the two
+// figures the direction is derived from. `UP` is an increase, `DOWN` a
+// retention save.
+const UP = { currentRateCents: 12_900, newRateCents: 14_900 }
+const DOWN = { currentRateCents: 14_900, newRateCents: 12_900 }
 
 describe('noticeDateFor', () => {
   it('is the effective date minus the notice period', () => {
@@ -196,47 +204,47 @@ describe('isCancellable — US-11’s "cancellable up to the effective date"', (
 
 describe('noticeIsDue', () => {
   it('is due on the notice date once approved', () => {
-    expect(noticeIsDue({ status: 'approved', noticeDate: day('2026-09-01') }, day('2026-09-01'))).toBe(true)
+    expect(noticeIsDue({ ...UP, status: 'approved', noticeDate: day('2026-09-01') }, day('2026-09-01'))).toBe(true)
   })
 
   it('catches up on a later run', () => {
-    expect(noticeIsDue({ status: 'approved', noticeDate: day('2026-09-01') }, day('2026-09-05'))).toBe(true)
+    expect(noticeIsDue({ ...UP, status: 'approved', noticeDate: day('2026-09-01') }, day('2026-09-05'))).toBe(true)
   })
 
   it('is not due before the notice date', () => {
-    expect(noticeIsDue({ status: 'approved', noticeDate: day('2026-09-02') }, day('2026-09-01'))).toBe(false)
+    expect(noticeIsDue({ ...UP, status: 'approved', noticeDate: day('2026-09-02') }, day('2026-09-01'))).toBe(false)
   })
 
   it('never fires without approval — US-11’s "approval is required before notices go out"', () => {
-    expect(noticeIsDue({ status: 'pending_approval', noticeDate: day('2026-09-01') }, day('2026-09-01'))).toBe(false)
+    expect(noticeIsDue({ ...UP, status: 'pending_approval', noticeDate: day('2026-09-01') }, day('2026-09-01'))).toBe(false)
   })
 
   it('never re-fires once sent', () => {
-    expect(noticeIsDue({ status: 'notice_sent', noticeDate: day('2026-09-01') }, day('2026-09-05'))).toBe(false)
+    expect(noticeIsDue({ ...UP, status: 'notice_sent', noticeDate: day('2026-09-01') }, day('2026-09-05'))).toBe(false)
   })
 })
 
 describe('applyIsDue', () => {
   it('is due on the effective date once the notice has gone out', () => {
-    expect(applyIsDue({ status: 'notice_sent', effectiveDate: day('2026-10-01') }, day('2026-10-01'))).toBe(true)
+    expect(applyIsDue({ ...UP, status: 'notice_sent', effectiveDate: day('2026-10-01') }, day('2026-10-01'))).toBe(true)
   })
 
   it('never applies an increase whose notice never went out', () => {
     // The guard that makes "no tenant is charged more without having been
     // told" true by construction rather than by job ordering.
-    expect(applyIsDue({ status: 'approved', effectiveDate: day('2026-10-01') }, day('2026-10-01'))).toBe(false)
+    expect(applyIsDue({ ...UP, status: 'approved', effectiveDate: day('2026-10-01') }, day('2026-10-01'))).toBe(false)
   })
 
   it('is not due before the effective date', () => {
-    expect(applyIsDue({ status: 'notice_sent', effectiveDate: day('2026-10-02') }, day('2026-10-01'))).toBe(false)
+    expect(applyIsDue({ ...UP, status: 'notice_sent', effectiveDate: day('2026-10-02') }, day('2026-10-01'))).toBe(false)
   })
 
   it('never re-applies', () => {
-    expect(applyIsDue({ status: 'applied', effectiveDate: day('2026-10-01') }, day('2026-10-05'))).toBe(false)
+    expect(applyIsDue({ ...UP, status: 'applied', effectiveDate: day('2026-10-01') }, day('2026-10-05'))).toBe(false)
   })
 
   it('never applies a cancelled increase', () => {
-    expect(applyIsDue({ status: 'cancelled', effectiveDate: day('2026-10-01') }, day('2026-10-05'))).toBe(false)
+    expect(applyIsDue({ ...UP, status: 'cancelled', effectiveDate: day('2026-10-01') }, day('2026-10-05'))).toBe(false)
   })
 })
 
@@ -279,5 +287,79 @@ describe('isCancellable', () => {
   it('still refuses one that already happened', () => {
     expect(isCancellable('applied')).toBe(false)
     expect(isCancellable('cancelled')).toBe(false)
+  })
+})
+
+// B-153 / PRD 02 §4.3 US-11. The retention save: the same workflow in the
+// other direction, and the direction is derived from the two figures rather
+// than stored.
+describe('decreaseProblem', () => {
+  const base = { currentRateCents: 14_900, effectiveDate: day('2026-10-01'), today: day('2026-09-15') }
+
+  it('allows a real decrease with no notice period at all', () => {
+    // The whole point: an increase from the same date would be refused for
+    // insufficient notice, and a decrease is not.
+    expect(decreaseProblem({ ...base, newRateCents: 12_900 })).toBeNull()
+    expect(
+      scheduleProblem({ ...base, newRateCents: 12_900, noticeDays: 30 }),
+    ).toBe('not_an_increase')
+  })
+
+  it('allows today — a retention save is agreed on the phone, not next month', () => {
+    expect(
+      decreaseProblem({ ...base, newRateCents: 12_900, effectiveDate: day('2026-09-15') }),
+    ).toBeNull()
+  })
+
+  it('refuses a past date — an invoiced rate is a fact', () => {
+    expect(
+      decreaseProblem({ ...base, newRateCents: 12_900, effectiveDate: day('2026-09-14') }),
+    ).toBe('effective_in_past')
+  })
+
+  it('refuses an increase, and refuses no change at all', () => {
+    expect(decreaseProblem({ ...base, newRateCents: 15_900 })).toBe('not_a_decrease')
+    expect(decreaseProblem({ ...base, newRateCents: 14_900 })).toBe('not_a_decrease')
+  })
+
+  it('refuses a negative rate before anything else', () => {
+    // A trust boundary: this figure lands on `Lease.monthlyRateCents` and
+    // would invoice as a credit every month forever.
+    expect(decreaseProblem({ ...base, newRateCents: -100 })).toBe('rate_below_zero')
+  })
+
+  it('allows a rate of zero — a comped unit is a decision, not a bug', () => {
+    expect(decreaseProblem({ ...base, newRateCents: 0 })).toBeNull()
+  })
+})
+
+describe('direction-aware notice and apply', () => {
+  it('a decrease is never noticed — it would email a rate-INCREASE letter', () => {
+    // A decrease is `approved` from creation, which is exactly the state
+    // `noticeIsDue` fires on. Without the direction check the tenant whose
+    // rent just came down gets told it is going up.
+    expect(noticeIsDue({ ...DOWN, status: 'approved', noticeDate: day('2026-09-01') }, day('2026-09-05'))).toBe(false)
+  })
+
+  it('a decrease applies from approved, because it never reaches notice_sent', () => {
+    expect(applyIsDue({ ...DOWN, status: 'approved', effectiveDate: day('2026-10-01') }, day('2026-10-01'))).toBe(true)
+  })
+
+  it('an approved INCREASE still cannot apply — the property that had to survive', () => {
+    expect(applyIsDue({ ...UP, status: 'approved', effectiveDate: day('2026-10-01') }, day('2026-10-01'))).toBe(false)
+  })
+
+  it('a decrease is not due early either', () => {
+    expect(applyIsDue({ ...DOWN, status: 'approved', effectiveDate: day('2026-10-02') }, day('2026-10-01'))).toBe(false)
+  })
+
+  it('a cancelled or held decrease never applies', () => {
+    expect(applyIsDue({ ...DOWN, status: 'cancelled', effectiveDate: day('2026-10-01') }, day('2026-10-05'))).toBe(false)
+    expect(applyIsDue({ ...DOWN, status: 'notice_failed', effectiveDate: day('2026-10-01') }, day('2026-10-05'))).toBe(false)
+  })
+
+  it('reads the direction off the figures', () => {
+    expect(isRateDecrease(DOWN)).toBe(true)
+    expect(isRateDecrease(UP)).toBe(false)
   })
 })

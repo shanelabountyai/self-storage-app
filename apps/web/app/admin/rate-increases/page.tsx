@@ -2,12 +2,18 @@ import { AdminForm, Field } from '@/components/admin/form'
 import { Button } from '@/components/ui/button'
 import { getSwitcherData } from '@/lib/admin/context'
 import { resolveSelectedFacility } from '@/lib/admin/facility-selection-logic'
-import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
+import { can, hasPermissionAnywhere } from '@/lib/rbac/authorize'
 import { formatCents } from '@/lib/format'
 import { DEFAULT_ELIGIBILITY, earliestEffectiveDate } from '@storage/core/pricing'
 import { pendingRateIncreases, previewEligibleIncreases } from '@/lib/pricing/tenant-rate-increases'
 import { prisma } from '@storage/db'
-import { approveAction, cancelAction, scheduleBatchAction, scheduleOneOffAction } from './actions'
+import {
+  approveAction,
+  cancelAction,
+  scheduleBatchAction,
+  scheduleDecreaseAction,
+  scheduleOneOffAction,
+} from './actions'
 
 export const metadata = { title: 'Rate increases' }
 
@@ -50,8 +56,12 @@ const NOTICE_FAILURE_HELP: Record<string, string> = {
 export default async function RateIncreasesPage() {
   const { actor, facilities, cookieValue, canSeeAll } = await getSwitcherData()
 
-  if (!hasPermissionAnywhere(actor, ['rates:tenant_increase'])) {
-    return <p className="text-muted-foreground text-sm">You don&apos;t have access to rate increases.</p>
+  // B-153. Two authorities reach this screen: `rates:tenant_increase` raises
+  // rates (regional and above by seed), `credits:manual` lowers one as a
+  // retention save (manager and above). A manager sees the worklist and the
+  // save form and none of the increase machinery.
+  if (!hasPermissionAnywhere(actor, ['rates:tenant_increase', 'credits:manual'])) {
+    return <p className="text-muted-foreground text-sm">You don&apos;t have access to rate changes.</p>
   }
 
   const selected = resolveSelectedFacility(cookieValue, facilities, canSeeAll)
@@ -65,9 +75,10 @@ export default async function RateIncreasesPage() {
   }
 
   const facilityId = selected.facility.id
+  const canRaise = can(actor, 'rates:tenant_increase', facilityId)
   const [review, eligible, facility] = await Promise.all([
     pendingRateIncreases(actor, facilityId),
-    previewEligibleIncreases(actor, facilityId),
+    canRaise ? previewEligibleIncreases(actor, facilityId) : Promise.resolve([]),
     prisma.facility.findUniqueOrThrow({
       where: { id: facilityId },
       select: { rateIncreaseNoticeDays: true },
@@ -80,7 +91,7 @@ export default async function RateIncreasesPage() {
   return (
     <div className="flex flex-col gap-8">
       <div>
-        <h1 className="text-lg font-semibold">Rate increases — {selected.facility.name}</h1>
+        <h1 className="text-lg font-semibold">Rate changes — {selected.facility.name}</h1>
         <p className="text-muted-foreground mt-1 max-w-prose text-sm text-pretty">
           This facility gives {facility.rateIncreaseNoticeDays} days&apos; notice, so the soonest an
           increase scheduled today can take effect is {soonest}. Nothing is sent to a tenant until a
@@ -97,7 +108,12 @@ export default async function RateIncreasesPage() {
             <p className="text-sm">
               Projected monthly change:{' '}
               <span className="font-medium tabular-nums">
-                +{formatCents(review.projectedMonthlyDeltaCents)}
+                {/* B-153: the sign is no longer always plus. A retention save
+                    scheduled beside an increase nets off here, and a hardcoded
+                    "+" in front of a negative figure is the kind of number an
+                    approver acts on without reading. */}
+                {review.projectedMonthlyDeltaCents >= 0 ? '+' : '−'}
+                {formatCents(Math.abs(review.projectedMonthlyDeltaCents))}
               </span>
             </p>
           )}
@@ -133,7 +149,9 @@ export default async function RateIncreasesPage() {
                     <td className="py-2 pr-4">{formatDate(row.noticeDate)}</td>
                     <td className="py-2 pr-4">{formatDate(row.effectiveDate)}</td>
                     <td className="py-2 pr-4">
-                      {STATUS_LABEL[row.status] ?? row.status}
+                      {row.isDecrease && row.status === 'approved'
+                        ? 'Retention save — applies on its date'
+                        : (STATUS_LABEL[row.status] ?? row.status)}
                       {row.status === 'notice_failed' && (
                         <span className="text-muted-foreground mt-1 block text-xs text-pretty">
                           {NOTICE_FAILURE_HELP[row.noticeFailureReason ?? ''] ??
@@ -143,7 +161,7 @@ export default async function RateIncreasesPage() {
                     </td>
                     <td className="py-2 pr-4">
                       <div className="flex flex-col gap-2">
-                        {row.status === 'pending_approval' && (
+                        {row.status === 'pending_approval' && canRaise && (
                           <AdminForm action={approveAction} label={`Approve increase for ${row.tenantName}`} className="flex flex-wrap items-end gap-2">
                             <input type="hidden" name="id" value={row.id} />
                             <Field name="reason" label="Why" className="flex flex-col gap-1 text-xs" />
@@ -164,7 +182,7 @@ export default async function RateIncreasesPage() {
           </div>
         )}
 
-        {batchIds.length > 0 && (
+        {batchIds.length > 0 && canRaise && (
           <div className="border-input flex flex-col gap-3 rounded-lg border p-4">
             <h3 className="text-sm font-medium">Whole batches</h3>
             <p className="text-muted-foreground text-xs text-pretty">
@@ -189,6 +207,7 @@ export default async function RateIncreasesPage() {
         )}
       </section>
 
+      {canRaise && (
       <section aria-labelledby="eligible-heading" className="flex flex-col gap-3">
         <h2 id="eligible-heading" className="font-medium">
           Who the rule would pick ({eligible.length})
@@ -244,7 +263,9 @@ export default async function RateIncreasesPage() {
           <Button type="submit">Schedule batch</Button>
         </AdminForm>
       </section>
+      )}
 
+      {canRaise && (
       <section aria-labelledby="oneoff-heading" className="flex flex-col gap-3">
         <h2 id="oneoff-heading" className="font-medium">
           Schedule one tenant
@@ -273,6 +294,56 @@ export default async function RateIncreasesPage() {
             required
           />
           <Button type="submit">Schedule</Button>
+        </AdminForm>
+      </section>
+      )}
+
+      {/* PRD 02 US-11 (B-153). The retention save — the same workflow in the
+          other direction, and the reason it is a separate form rather than a
+          direction toggle: it needs a reason code, gives no notice, and is
+          approved by the act of making it. */}
+      <section aria-labelledby="decrease-heading" className="flex flex-col gap-3">
+        <h2 id="decrease-heading" className="font-medium">
+          Lower one tenant&apos;s rate
+        </h2>
+        <p className="text-muted-foreground max-w-prose text-xs text-pretty">
+          A retention save. There is no notice period — nothing governs charging a tenant less — and
+          no separate approval: the amount you give away each month has to sit inside your own
+          monetary limit, and anything above it names the role that can carry it. It applies on its
+          effective date and is cancellable until then.
+        </p>
+        <AdminForm action={scheduleDecreaseAction} label="Lower one tenant's rate" className="flex flex-wrap items-end gap-3">
+          <input type="hidden" name="facilityId" value={facilityId} />
+          <Field
+            name="leaseId"
+            label="Lease ID"
+            required
+            className="flex flex-col gap-1 text-sm"
+            hint="From the tenant's lease page."
+          />
+          <Field
+            name="newRateDollars"
+            label="New monthly rate ($)"
+            inputMode="decimal"
+            required
+            hint="Has to be lower than what they pay now."
+          />
+          <Field
+            name="effectiveDate"
+            label="Effective date"
+            type="date"
+            defaultValue={isoDay(new Date())}
+            required
+            hint="Today is allowed."
+          />
+          <Field
+            name="reason"
+            label="Why"
+            required
+            className="flex flex-col gap-1 text-sm"
+            hint="Recorded against the tenant, permanently."
+          />
+          <Button type="submit">Lower the rate</Button>
         </AdminForm>
       </section>
 

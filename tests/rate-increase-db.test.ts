@@ -5,6 +5,7 @@ import {
   applyDueRateIncreases,
   applyRateChange,
   reconcileRateIncreaseNotices,
+  scheduleRateDecrease,
   approveRateIncrease,
   cancelRateIncrease,
   pendingRateIncreases,
@@ -68,6 +69,26 @@ function actorWith(staffUserId: string, rank: number): Actor {
 
 const regional = () => actorWith(regionalId, 30)
 const manager = () => actorWith(managerId, 20)
+
+/// B-153. A retention save is gated on the EXISTING monetary limits rather
+/// than on `rates:tenant_increase`, so these actors carry `credits:manual`
+/// with a real limit — the seeded manager's is $50 a month, and the point of
+/// the reuse is that no new threshold was invented.
+function saver(staffUserId: string, rank: number, maxCreditCents: number | null): Actor {
+  return {
+    kind: 'staff',
+    staffUserId,
+    assignments: [
+      {
+        facilityId,
+        roleKey: rank >= 30 ? 'regional' : 'manager',
+        rank,
+        permissions: new Set<PermissionKey>(['tenants:view', 'credits:manual'] as never),
+        limits: { maxFeeWaiverCents: null, maxRefundCents: null, maxCreditCents },
+      },
+    ],
+  }
+}
 
 const day = (iso: string) => new Date(`${iso}T00:00:00.000Z`)
 
@@ -652,6 +673,189 @@ describeDb('tenant rate increases (US-11 / CN-9)', () => {
       ).toMatchObject({ ok: false })
 
       expect(await cancelRateIncrease(manager(), row.id, 'bad address, re-noticing')).toEqual({ ok: true })
+    })
+  })
+
+  // B-153 / PRD 02 §4.3 US-11, §3. The retention save. B-076 built the
+  // increase and ECRI is what creates the demand for this; without it a
+  // manager keeping a good tenant edits the lease rate directly, bypassing
+  // the write-through US-11's schema AC exists to enforce.
+  describe('lowering a rate (B-153: the retention save)', () => {
+    it('lowers the rate with no notice period and no separate approval', async () => {
+      const { leaseId } = await makeLease()
+      const result = await scheduleRateDecrease(saver(managerId, 20, 5_000), facilityId, {
+        leaseId,
+        newRateCents: 11_900,
+        effectiveDate: daysFromNow(1),
+        reasonCode: 'threatened to move to the place on Lamar',
+      })
+      expect(result).toMatchObject({ ok: true })
+
+      const row = await prisma.tenantRateIncrease.findFirstOrThrow({ where: { leaseId } })
+      // Approved by the act of making it — the authority check IS the approval.
+      expect(row.status).toBe('approved')
+      expect(row.approvedByStaffId).toBe(managerId)
+      expect(row.noticeDays).toBe(0)
+
+      const audit = await prisma.auditLog.findFirstOrThrow({
+        where: { action: 'rate.tenant_decreased', entityId: row.id },
+      })
+      expect(audit.reasonCode).toBe('threatened to move to the place on Lamar')
+    })
+
+    it('applies on its effective date through applyRateChange, with reason retention', async () => {
+      const { leaseId } = await makeLease()
+      await scheduleRateDecrease(saver(managerId, 20, 5_000), facilityId, {
+        leaseId,
+        newRateCents: 11_900,
+        effectiveDate: daysFromNow(1),
+        reasonCode: 'retention',
+      })
+
+      const result = await applyDueRateIncreases(facilityId, daysFromNow(1), () => {})
+      expect(result.applied).toBe(1)
+
+      const lease = await prisma.lease.findUniqueOrThrow({ where: { id: leaseId } })
+      expect(lease.monthlyRateCents).toBe(11_900)
+
+      const history = await prisma.leaseRateChange.findFirstOrThrow({
+        where: { leaseId, reason: 'retention' },
+      })
+      expect(history.previousRateCents).toBe(12_900)
+      expect(history.newRateCents).toBe(11_900)
+    })
+
+    it('never emails a rate-increase notice for a decrease', async () => {
+      const { leaseId } = await makeLease()
+      await scheduleRateDecrease(saver(managerId, 20, 5_000), facilityId, {
+        leaseId,
+        newRateCents: 11_900,
+        effectiveDate: daysFromNow(1),
+        reasonCode: 'retention',
+      })
+
+      // The notice job selects on `status: 'approved'`, which a decrease is
+      // from creation — the direction check in `noticeIsDue` is the only
+      // thing standing between this tenant and a letter saying their rent is
+      // going up.
+      const result = await sendDueRateIncreaseNotices(facilityId, daysFromNow(30), () => {})
+      expect(result.sent).toBe(0)
+      const row = await prisma.tenantRateIncrease.findFirstOrThrow({ where: { leaseId } })
+      expect(row.status).toBe('approved')
+    })
+
+    it('escalates over the actor’s own monthly credit limit rather than refusing flatly', async () => {
+      const { leaseId } = await makeLease()
+      const result = await scheduleRateDecrease(saver(managerId, 20, 5_000), facilityId, {
+        leaseId,
+        // $69 a month off a $129 rate — over a $50 limit.
+        newRateCents: 6_000,
+        effectiveDate: daysFromNow(1),
+        reasonCode: 'retention',
+      })
+      expect(result).toMatchObject({ ok: false, overLimit: true, limitCents: 5_000 })
+      expect(await prisma.tenantRateIncrease.count({ where: { leaseId } })).toBe(0)
+    })
+
+    it('refuses somebody with no monetary authority at all', async () => {
+      const { leaseId } = await makeLease()
+      // The increase permission is not the decrease permission, deliberately:
+      // `rates:tenant_increase` is regional-and-above by seed and this has to
+      // reach a manager at the counter.
+      const result = await scheduleRateDecrease(regional(), facilityId, {
+        leaseId,
+        newRateCents: 11_900,
+        effectiveDate: daysFromNow(1),
+        reasonCode: 'retention',
+      })
+      expect(result).toMatchObject({ ok: false })
+      expect('overLimit' in result).toBe(false)
+    })
+
+    it('refuses without a reason, and refuses a rate that is not lower', async () => {
+      const { leaseId } = await makeLease()
+      const actor = saver(managerId, 20, null)
+      expect(
+        await scheduleRateDecrease(actor, facilityId, {
+          leaseId,
+          newRateCents: 11_900,
+          effectiveDate: daysFromNow(1),
+          reasonCode: '   ',
+        }),
+      ).toMatchObject({ ok: false })
+      expect(
+        await scheduleRateDecrease(actor, facilityId, {
+          leaseId,
+          newRateCents: 13_900,
+          effectiveDate: daysFromNow(1),
+          reasonCode: 'retention',
+        }),
+      ).toMatchObject({ ok: false })
+      expect(await prisma.tenantRateIncrease.count({ where: { leaseId } })).toBe(0)
+    })
+
+    it('will not sit alongside a live increase on the same lease, in either order', async () => {
+      const { leaseId } = await makeLease()
+      await scheduleRateIncrease(manager(), facilityId, {
+        leaseId,
+        newRateCents: 14_900,
+        effectiveDate: daysFromNow(45),
+      })
+      expect(
+        await scheduleRateDecrease(saver(managerId, 20, null), facilityId, {
+          leaseId,
+          newRateCents: 11_900,
+          effectiveDate: daysFromNow(1),
+          reasonCode: 'retention',
+        }),
+      ).toMatchObject({ ok: false })
+
+      const { leaseId: otherLeaseId } = await makeLease()
+      await scheduleRateDecrease(saver(managerId, 20, null), facilityId, {
+        leaseId: otherLeaseId,
+        newRateCents: 11_900,
+        effectiveDate: daysFromNow(1),
+        reasonCode: 'retention',
+      })
+      expect(
+        await scheduleRateIncrease(manager(), facilityId, {
+          leaseId: otherLeaseId,
+          newRateCents: 14_900,
+          effectiveDate: daysFromNow(45),
+        }),
+      ).toMatchObject({ ok: false })
+    })
+
+    it('shows on the review screen as a decrease and nets off the projected delta', async () => {
+      const { leaseId } = await makeLease()
+      await scheduleRateDecrease(saver(managerId, 20, null), facilityId, {
+        leaseId,
+        newRateCents: 11_900,
+        effectiveDate: daysFromNow(1),
+        reasonCode: 'retention',
+      })
+
+      const review = await pendingRateIncreases(manager(), facilityId)
+      const row = review.rows.find((one) => one.leaseId === leaseId)
+      expect(row?.isDecrease).toBe(true)
+      expect(row?.newRateCents).toBe(11_900)
+    })
+
+    it('is cancellable before its effective date, and then never applies', async () => {
+      const { leaseId } = await makeLease()
+      await scheduleRateDecrease(saver(managerId, 20, null), facilityId, {
+        leaseId,
+        newRateCents: 11_900,
+        effectiveDate: daysFromNow(2),
+        reasonCode: 'retention',
+      })
+      const row = await prisma.tenantRateIncrease.findFirstOrThrow({ where: { leaseId } })
+      expect(await cancelRateIncrease(manager(), row.id, 'they left anyway')).toEqual({ ok: true })
+
+      const result = await applyDueRateIncreases(facilityId, daysFromNow(5), () => {})
+      expect(result.applied).toBe(0)
+      const lease = await prisma.lease.findUniqueOrThrow({ where: { id: leaseId } })
+      expect(lease.monthlyRateCents).toBe(12_900)
     })
   })
 

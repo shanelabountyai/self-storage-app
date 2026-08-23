@@ -62,6 +62,15 @@ export const AUDIT_ACTIONS = [
     label: "Tenant rate increased",
     requiresReason: true,
   },
+  /// B-153. The retention save. `requiresReason` for the same reason the
+  /// increase does, and arguably more: an increase is a policy applied to a
+  /// cohort, a decrease is a discretionary giveaway to one tenant, and "why
+  /// does unit 114 pay less than unit 116" is asked by the next manager.
+  {
+    action: "rate.tenant_decreased",
+    label: "Tenant rate lowered (retention)",
+    requiresReason: true,
+  },
   /// US-11: "Increases are cancellable up to the effective date; cancellation
   /// is audit-logged." A reason is required for the same reason approval
   /// needs one — a tenant who was told their rate was going up and then was
