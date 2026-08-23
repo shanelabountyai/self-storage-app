@@ -5479,7 +5479,7 @@ The card's `href` has always pointed at `/admin/tenants/{tenantId}`, so the fix 
 
 ## B-152 — A rate-increase notice was recorded as sent with no delivery check
 
-`PENDING`
+`b9409d2`
 
 **What it built.** Confirmed as reported. `sendDueRateIncreaseNotices` flipped the status to `notice_sent` and *then* emitted the event, outside any transaction — so the row could assert a notice had gone out with no event behind it — and nothing anywhere afterwards read `Message.status`. An increase whose notice hard-bounced or landed on a suppressed address applied thirty days later regardless, which is exactly the fact that makes an increase indefensible if the tenant disputes it. US-11 blocks an effective date that violates the minimum notice period: a guarantee about **delivery** that the code made about **intent**.
 
