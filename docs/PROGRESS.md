@@ -5547,7 +5547,7 @@ The card's `href` has always pointed at `/admin/tenants/{tenantId}`, so the fix 
 
 ## B-154 — Waitlist at the counter, and a report that could finally be called from
 
-`<SHA>`
+`a1cf2d8`
 
 **What it built.** Three findings from one operator-review row, all against `WaitlistEntry` rows that already existed.
 
