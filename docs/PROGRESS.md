@@ -5456,7 +5456,7 @@ The card's `href` has always pointed at `/admin/tenants/{tenantId}`, so the fix 
 
 ## B-151 — An overlock outlived the lease it was applied to
 
-`PENDING`
+`de346e5`
 
 **What it built.** Confirmed exactly as reported, and all three consequences were real. `evaluate` halts a lease with `cured` when the qualifying balance clears and `moved_out` when the lease has ended — and **only the `cured` branch called `releaseOverlock`**. A lease that ends still owing takes the other branch, so the lock stayed live. `deriveUnitStatus` returns `overlocked` before anything else, ahead of the `maintenance` that `completeMoveOut` sets one line earlier, so the unit read `overlocked` indefinitely. The reconciliation view compares system state against physical state, and both said "locked" — **no mismatch, both wrong**. `isOccupied` counts `overlocked` as occupied, so the unit stayed in the numerator and out of `publicInventoryForFacility`'s `status: 'available'` count: one unit of sellable inventory gone per event, reported by nothing.
 
