@@ -167,6 +167,16 @@ export async function runDelinquencyTimeline(
       } else if (decision.halt && decision.halt !== 'cured') {
         result.halted += 1
       }
+
+      // B-151's backstop. The three paths that end a lease each release the
+      // lock in their own transaction now, so this is not the fix — it is what
+      // catches the locks ALREADY stuck on leases that ended before that
+      // shipped, and any future fourth way to end a lease that forgets to.
+      // `releaseOverlock` is idempotent and returns immediately when there is
+      // no live lock, which is every lease here on every other night.
+      if (!OCCUPYING_LEASE_STATUSES.includes(lease.status as never)) {
+        await releaseOverlock({ leaseId: lease.id, facilityId })
+      }
       continue
     }
 

@@ -120,18 +120,30 @@ export async function confirmOverlockApplied(
   )
 }
 
-/// US-25's "queues overlock removal" on cure.
+/// US-25's "queues overlock removal" on cure — and, since B-151, on lease end.
 ///
 /// Raised only where a lock is actually ON — `requestOverlock` may have been
 /// asked for and never fitted, in which case the request is withdrawn instead
 /// and nobody is sent to remove a lock that was never there.
-export async function releaseOverlock(input: {
-  leaseId: string
-  facilityId: string
-}): Promise<{ taskId: string | null; withdrawn: boolean }> {
-  const overlock = await prisma.unitOverlock.findFirst({
+///
+/// **Idempotent, which it was not before B-151.** Curing calls this once, so a
+/// second task could not happen; ending a lease can be reached from four places
+/// and the nightly backstop re-runs every night, and `createTask` is unique per
+/// `(type, entityId, businessDate)` — so an un-guarded re-call raises one fresh
+/// `overlock_remove` task per DAY until somebody removes the lock. A queue that
+/// grows a duplicate every morning is the same trust problem as the withdrawn
+/// branch above, arriving by a different route. A removal already asked for and
+/// still open is returned rather than re-raised.
+export async function releaseOverlock(
+  input: {
+    leaseId: string
+    facilityId: string
+  },
+  client: Prisma.TransactionClient | typeof prisma = prisma,
+): Promise<{ taskId: string | null; withdrawn: boolean }> {
+  const overlock = await client.unitOverlock.findFirst({
     where: { leaseId: input.leaseId, removedAt: null },
-    select: { id: true, unitId: true, appliedAt: true, appliedTaskId: true },
+    select: { id: true, unitId: true, appliedAt: true, appliedTaskId: true, removedTaskId: true },
   })
   if (!overlock) return { taskId: null, withdrawn: false }
 
@@ -139,18 +151,26 @@ export async function releaseOverlock(input: {
     // Never fitted. Close the record and cancel the request rather than
     // creating a removal task for a lock that does not exist — a queue that
     // sends somebody to a unit for nothing is one they stop trusting.
-    await prisma.unitOverlock.update({
+    await client.unitOverlock.update({
       where: { id: overlock.id },
       data: { removedAt: new Date() },
     })
     if (overlock.appliedTaskId) {
-      await prisma.task.updateMany({
+      await client.task.updateMany({
         where: { id: overlock.appliedTaskId, status: 'open' },
         data: { status: 'cancelled' },
       })
     }
-    await recomputeUnitStatus(overlock.unitId)
+    await recomputeUnitStatus(overlock.unitId, client)
     return { taskId: null, withdrawn: true }
+  }
+
+  if (overlock.removedTaskId) {
+    const open = await client.task.findFirst({
+      where: { id: overlock.removedTaskId, status: 'open' },
+      select: { id: true },
+    })
+    if (open) return { taskId: open.id, withdrawn: false }
   }
 
   const task = await createTask({
@@ -160,12 +180,16 @@ export async function releaseOverlock(input: {
     entityId: input.leaseId,
     // High: the tenant has paid, and every hour the lock stays on is an hour
     // somebody who settled their account cannot reach their own belongings.
+    // On a lease END the urgency is the operator's rather than the tenant's —
+    // the unit is out of sellable inventory until the lock comes off — and it
+    // is the same priority for the same reason.
     priority: 'high',
+    client,
   })
   // Recorded on the lock itself, same as `appliedTaskId` — a defect fixed in
   // passing while building B-060's reconciliation view, which needs exactly
   // this to tell "confirmed, steady" apart from "confirmed, removal pending".
-  await prisma.unitOverlock.update({ where: { id: overlock.id }, data: { removedTaskId: task.id } })
+  await client.unitOverlock.update({ where: { id: overlock.id }, data: { removedTaskId: task.id } })
   return { taskId: task.id, withdrawn: false }
 }
 

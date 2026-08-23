@@ -18,6 +18,7 @@ import { requirePermission } from '@/lib/rbac/authorize'
 import { toAuditActor } from '@/lib/rbac/audit-actor'
 import type { Actor } from '@/lib/rbac/actor'
 import { recomputeUnitStatus } from '@/lib/admin/units'
+import { releaseOverlock } from '@/lib/delinquency/overlock'
 import { leaseHasEffect } from '@/lib/admin/holds'
 import { storeGeneratedDocument } from '@/lib/documents/store'
 import { formatCents } from '@/lib/format'
@@ -678,6 +679,18 @@ export async function recordSaleOutcome(
       data: { status: 'ended', endDate: input.soldAt, moveOutDate: input.soldAt },
     })
     await tx.unit.update({ where: { id: view.unitId }, data: { operationalStatus: 'maintenance' } })
+    // B-151. The lock comes off with the lease, whatever the balance did.
+    //
+    // The delinquency engine only queued a removal on CURE, and a lease that
+    // ends still owing halts as `moved_out` instead — so the lock stayed on a
+    // unit nobody was renting, `deriveUnitStatus` kept returning `overlocked`
+    // ahead of the `maintenance` set just above, the reconciliation screen saw
+    // system and physical agreeing (both wrong), and the unit sat out of
+    // sellable inventory with nothing reporting it. The unit does NOT go back
+    // in the denominator here — there is still a real lock on it — it goes back
+    // when `confirmOverlockRemoved` records somebody taking it off, which is
+    // what this task now asks for.
+    await releaseOverlock({ leaseId: view.leaseId, facilityId: view.facilityId }, tx)
     await recomputeUnitStatus(view.unitId, tx)
 
     await recordAudit(

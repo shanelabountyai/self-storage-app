@@ -208,6 +208,12 @@ const LAST_REVIEWED = '19 August 2026'
 // untouched. Recorded rather than skipped because this page's rule is about
 // merges making it stale, and "staff-facing only" is a claim worth having
 // checked rather than assumed. `LAST_REVIEWED` is not bumped.
+//
+// Re-verified 2026-08-22, at B-151 (an overlock no longer outlives its lease).
+// Nothing customer-facing: the change is in the move-out, transfer, auction and
+// nightly-delinquency services and raises a staff task. No route, no control, no
+// copy. Recorded rather than skipped, per the rule two entries above.
+// `LAST_REVIEWED` is not bumped.
 export default function AccessibilityPage() {
   return (
     <ProsePage

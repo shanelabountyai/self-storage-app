@@ -15,6 +15,12 @@ import {
   markUnitReadyToRent,
   previewMoveOut,
 } from "../apps/web/lib/admin/move-out";
+import {
+  confirmOverlockApplied,
+  requestOverlock,
+} from "../apps/web/lib/delinquency/overlock";
+import { completeTask } from "../apps/web/lib/admin/tasks";
+import { isOccupied, isRentable } from "@storage/core/metrics";
 import type { Actor } from "../apps/web/lib/rbac/actor";
 import { ForbiddenError } from "../apps/web/lib/rbac/authorize";
 import type { PermissionKey } from "@storage/db/rbac-catalog";
@@ -147,6 +153,8 @@ describeDb("move-out", () => {
     await prisma.ledgerEntry.deleteMany({ where: { facilityId } });
     await prisma.accessCredential.deleteMany({ where: { facilityId } });
     await prisma.accessGrant.deleteMany({ where: { facilityId } });
+    await prisma.unitOverlock.deleteMany({ where: { facilityId } });
+    await prisma.task.deleteMany({ where: { facilityId } });
     await prisma.lease.deleteMany({ where: { facilityId } });
     await prisma.unit.updateMany({
       where: { facilityId },
@@ -216,6 +224,82 @@ describeDb("move-out", () => {
     });
     expect(unit.operationalStatus).toBe("maintenance");
     expect(unit.status).toBe("maintenance");
+  });
+
+  describe("an overlock does not outlive the lease (B-151)", () => {
+    // The delinquency engine queued a removal only on CURE. A lease that ends
+    // still owing halts as `moved_out` instead, so the lock stayed on: the unit
+    // read `overlocked` forever (it wins over the `maintenance` the move-out
+    // sets), the reconciliation screen saw system and physical agreeing — both
+    // wrong — and the unit was out of sellable inventory with nothing
+    // reporting it.
+
+    it("queues the physical removal when the lease ends still owing", async () => {
+      const lease = await makeLease(unitAId, 40_000);
+      const requested = await requestOverlock({
+        leaseId: lease.id,
+        facilityId,
+        reason: "Delinquent",
+      });
+      await confirmOverlockApplied(actorOf(managerId, 20), requested!.overlockId);
+      expect(
+        (await prisma.unit.findUniqueOrThrow({ where: { id: unitAId } })).status,
+      ).toBe("overlocked");
+
+      const result = await completeMoveOut(actorOf(managerId, 20), {
+        leaseId: lease.id,
+        moveOutDate: d("2026-08-15"),
+        reason: "tenant_request",
+      });
+      expect(result.ok).toBe(true);
+
+      const removal = await prisma.task.findFirstOrThrow({
+        where: { facilityId, type: "overlock_remove", entityId: lease.id },
+      });
+      expect(removal.status).toBe("open");
+      expect(removal.priority).toBe("high");
+
+      // Deliberately still `overlocked`: there is a real lock on the door. What
+      // changed is that somebody has now been ASKED to take it off.
+      const stillLocked = await prisma.unit.findUniqueOrThrow({ where: { id: unitAId } });
+      expect(stillLocked.status).toBe("overlocked");
+      expect(isOccupied(stillLocked.status)).toBe(true);
+    });
+
+    it("returns the unit to the rentable denominator once the lock comes off", async () => {
+      const lease = await makeLease(unitAId, 40_000);
+      const requested = await requestOverlock({
+        leaseId: lease.id,
+        facilityId,
+        reason: "Delinquent",
+      });
+      await confirmOverlockApplied(actorOf(managerId, 20), requested!.overlockId);
+      await completeMoveOut(actorOf(managerId, 20), {
+        leaseId: lease.id,
+        moveOutDate: d("2026-08-15"),
+        reason: "tenant_request",
+      });
+
+      // Through the TASK the fix raised, not by calling the service directly —
+      // otherwise this passes with the release removed and guards nothing.
+      const removal = await prisma.task.findFirstOrThrow({
+        where: { facilityId, type: "overlock_remove", entityId: lease.id },
+      });
+      // `completeTask` wants `tenants:edit`, which the move-out actor in this
+      // file does not carry. Extended here rather than in `actorOf`, so no
+      // refusal test in this file quietly gains a permission.
+      const closer = actorOf(managerId, 20);
+      closer.assignments[0]!.permissions.add("tenants:edit");
+      await completeTask(closer, removal.id, { note: "Lock off, unit empty" });
+
+      const unit = await prisma.unit.findUniqueOrThrow({ where: { id: unitAId } });
+      // `maintenance`, not `available` — a human still has to open the door
+      // (US-14). But it is back IN the denominator and out of the numerator,
+      // which is the figure the site was quietly losing a unit from.
+      expect(unit.status).toBe("maintenance");
+      expect(isRentable(unit.status)).toBe(true);
+      expect(isOccupied(unit.status)).toBe(false);
+    });
   });
 
   it("emits lease.moved_out so the confirmation can be sent", async () => {

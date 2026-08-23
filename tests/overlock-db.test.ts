@@ -205,6 +205,27 @@ describeDb('overlocks', () => {
       expect(row.removedByStaffId).toBe(staffId)
     })
 
+    it('asks for one removal however many times it is released (B-151)', async () => {
+      const requested = await requestOverlock({ leaseId, facilityId, reason: 'Overlock' })
+      await confirmOverlockApplied(actor(), requested!.overlockId)
+
+      // Curing called this exactly once, so a duplicate was impossible. B-151
+      // added three lease-ending callers AND a nightly backstop, and
+      // `createTask` is unique per (type, entityId, businessDate) — so without
+      // the guard this raises a fresh removal task every morning until somebody
+      // takes the lock off.
+      const first = await releaseOverlock({ leaseId, facilityId })
+      const second = await releaseOverlock({ leaseId, facilityId })
+      const third = await releaseOverlock({ leaseId, facilityId })
+
+      expect(first.taskId).not.toBeNull()
+      expect(second.taskId).toBe(first.taskId)
+      expect(third.taskId).toBe(first.taskId)
+      expect(
+        await prisma.task.count({ where: { facilityId, type: 'overlock_remove' } }),
+      ).toBe(1)
+    })
+
     it('allows a fresh lock on the same unit after one was removed', async () => {
       const first = await requestOverlock({ leaseId, facilityId, reason: 'Overlock' })
       await confirmOverlockApplied(actor(), first!.overlockId)
