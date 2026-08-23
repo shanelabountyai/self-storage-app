@@ -5512,7 +5512,7 @@ The card's `href` has always pointed at `/admin/tenants/{tenantId}`, so the fix 
 
 ## B-153 — A tenant's rate can now come down
 
-`PENDING`
+`e0da7d0`
 
 **What it built.** The retention save that ECRI itself creates demand for. B-076 built the increase and D-37 gave it a model; there was no path in the other direction, so a manager keeping a good tenant either edited `Lease.monthlyRateCents` directly — bypassing the write-through US-11's schema AC exists to enforce — or did nothing.
 
