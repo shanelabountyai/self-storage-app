@@ -292,4 +292,32 @@ describeDb('what an operator sees', () => {
     })
     expect(await waitlistPosition(entry.id)).toEqual({ position: 1, total: 2 })
   })
+
+  it('names who is waiting, not just how many (B-154)', async () => {
+    const unitTypeId = await makeType('contacts', 1)
+    const email = `contact-${suffix}@example.com`
+    await joinWaitlist({ facilityId: state.facilityId, unitTypeId, email, phone: '512-555-0199', firstName: 'Ada' })
+
+    const rows = await waitlistDemand(state.facilityId)
+    const row = rows.find((one) => one.unitTypeId === unitTypeId)
+    expect(row?.contacts).toMatchObject([{ name: 'Ada', email, phone: '512-555-0199', status: 'waiting' }])
+  })
+})
+
+describeDb('the sweep email (D-87)', () => {
+  it('never tells a prospect we are holding the unit for them', async () => {
+    const unitTypeId = await makeType('honest', 1)
+    const email = `honest-${suffix}@example.com`
+    await join(email, unitTypeId)
+    await freeUnits(unitTypeId, 1)
+    await sweepWaitlists(new Date())
+
+    const message = await prisma.message.findFirstOrThrow({
+      where: { templateKey: 'waitlist_unit_available', facilityId: state.facilityId, toAddress: email },
+    })
+    // D-87 (owner, 2026-08-21): no unit hold — the sweep stays a race, and the
+    // copy has to say so rather than implying a claim that does not exist.
+    expect(message.bodySnapshot.toLowerCase()).not.toContain('holding your place')
+    expect(message.bodySnapshot).toContain('first person to complete a rental gets it')
+  })
 })

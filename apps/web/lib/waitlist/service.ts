@@ -246,7 +246,10 @@ async function sendAvailabilityEmail(
     '',
     `A ${size} unit has come free at ${unitType.facility.name}.`,
     '',
-    `You asked us to tell you. We are holding your place for ${CLAIM_WINDOW_HOURS} hours — after that we let the next person on the list know.`,
+    // D-87: no unit hold. This stays a race against everyone else who can see
+    // it on the website, and the copy says so rather than implying a claim
+    // that does not exist.
+    `You asked us to tell you — it's on sale to everyone else too, so the first person to complete a rental gets it.`,
     '',
     `Rent it online: ${facilityUrl}`,
     ...(unitType.facility.phone ? ['', `Or call us on ${unitType.facility.phone}.`] : []),

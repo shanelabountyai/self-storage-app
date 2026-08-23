@@ -9,6 +9,15 @@ import { CLAIM_WINDOW_HOURS } from '@storage/core/waitlist'
 // build, and it exists nowhere else. B-088 part 1's street-rate suggestions
 // read occupancy, which can only ever say a site is full; this says how full.
 
+export type WaitlistContact = {
+  id: string
+  name: string | null
+  email: string
+  phone: string | null
+  status: 'waiting' | 'notified'
+  since: Date
+}
+
 export type WaitlistDemandRow = {
   unitTypeId: string
   unitTypeName: string
@@ -25,6 +34,10 @@ export type WaitlistDemandRow = {
   availableNow: number
   /// When the longest-waiting person joined. Null when nobody is waiting.
   waitingSince: Date | null
+  /// B-154: this report used to render demand with none of the contact
+  /// details the row already holds, which made it a list of people who wanted
+  /// to give us money. Oldest first, matching `waitingSince`.
+  contacts: WaitlistContact[]
 }
 
 /// One facility's waitlist, by unit type, longest queue first.
@@ -32,9 +45,13 @@ export async function waitlistDemand(facilityId: string): Promise<WaitlistDemand
   const entries = await prisma.waitlistEntry.findMany({
     where: { facilityId, status: { in: ['waiting', 'notified'] } },
     select: {
+      id: true,
       unitTypeId: true,
       status: true,
       createdAt: true,
+      firstName: true,
+      email: true,
+      phone: true,
       unitType: { select: { name: true, widthFt: true, lengthFt: true } },
     },
     orderBy: { createdAt: 'asc' },
@@ -62,6 +79,7 @@ export async function waitlistDemand(facilityId: string): Promise<WaitlistDemand
         claiming: 0,
         availableNow: availableBy.get(entry.unitTypeId) ?? 0,
         waitingSince: null,
+        contacts: [],
       }
       rows.set(entry.unitTypeId, row)
     }
@@ -73,6 +91,14 @@ export async function waitlistDemand(facilityId: string): Promise<WaitlistDemand
     } else {
       row.claiming += 1
     }
+    row.contacts.push({
+      id: entry.id,
+      name: entry.firstName,
+      email: entry.email,
+      phone: entry.phone,
+      status: entry.status as 'waiting' | 'notified',
+      since: entry.createdAt,
+    })
   }
 
   return [...rows.values()].sort(

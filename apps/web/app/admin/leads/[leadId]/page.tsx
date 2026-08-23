@@ -2,12 +2,12 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { prisma } from '@storage/db'
 import { leadStatusLabel } from '@storage/core/labels'
-import { AdminForm } from '@/components/admin/form'
+import { AdminForm, Field } from '@/components/admin/form'
 import { Button } from '@/components/ui/button'
 import { getAdminActor } from '@/lib/admin/context'
 import { facilityLeads, quoteForFacility } from '@/lib/admin/inquiries'
 import { formatCents } from '@/lib/format'
-import { holdForLeadAction, setLeadStatusAction } from '../actions'
+import { holdForLeadAction, joinWaitlistForLeadAction, setLeadStatusAction } from '../actions'
 
 export const metadata = { title: 'Inquiry' }
 
@@ -131,18 +131,43 @@ export default async function LeadPage({ params }: { params: Promise<{ leadId: s
                   </td>
                   <td className="py-2 pr-4 text-right tabular-nums">{line.availableCount}</td>
                   <td className="py-2 pr-4">
-                    {line.availableCount > 0 && !held ? (
-                      <AdminForm action={holdForLeadAction} label={`Hold a ${line.name}`}>
+                    {line.availableCount > 0 ? (
+                      held ? (
+                        <span className="text-muted-foreground">already held</span>
+                      ) : (
+                        <AdminForm action={holdForLeadAction} label={`Hold a ${line.name}`}>
+                          <input type="hidden" name="leadId" value={leadId} />
+                          <input type="hidden" name="unitTypeId" value={line.unitTypeId} />
+                          <Button type="submit" variant="outline">
+                            Hold
+                          </Button>
+                        </AdminForm>
+                      )
+                    ) : (
+                      // B-154: the identical call about a size we do NOT have
+                      // used to capture nothing — notify-me only existed on the
+                      // public facility page. Not gated on `held`: a caller can
+                      // hold one size and still wait for a better one.
+                      <AdminForm
+                        action={joinWaitlistForLeadAction}
+                        label={`Join the waitlist for a ${line.name}`}
+                        className="flex flex-wrap items-end gap-2"
+                      >
                         <input type="hidden" name="leadId" value={leadId} />
                         <input type="hidden" name="unitTypeId" value={line.unitTypeId} />
+                        <Field
+                          name="email"
+                          label={<span className="sr-only">Email for the waitlist</span>}
+                          type="email"
+                          required
+                          defaultValue={row.email ?? ''}
+                          placeholder="Email"
+                          className="flex flex-col gap-1 text-sm"
+                        />
                         <Button type="submit" variant="outline">
-                          Hold
+                          Join waitlist
                         </Button>
                       </AdminForm>
-                    ) : (
-                      <span className="text-muted-foreground">
-                        {held ? 'already held' : 'none free'}
-                      </span>
                     )}
                   </td>
                 </tr>
@@ -159,7 +184,9 @@ export default async function LeadPage({ params }: { params: Promise<{ leadId: s
         </div>
         <p className="text-muted-foreground text-xs text-pretty">
           A hold is free, needs no card and no account, and goes through the same service the
-          website uses. It expires on its own — nothing is charged either way.
+          website uses. It expires on its own — nothing is charged either way. A size with none
+          free goes to the waitlist instead — first to complete a rental gets it once we email,
+          same as everyone else.
         </p>
       </section>
     </div>

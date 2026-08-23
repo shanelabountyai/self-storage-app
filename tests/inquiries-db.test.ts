@@ -6,6 +6,7 @@ import {
   createInquiry,
   facilityLeads,
   holdForLead,
+  joinWaitlistForLead,
   quoteForFacility,
   setLeadStatus,
 } from '../apps/web/lib/admin/inquiries'
@@ -112,6 +113,7 @@ describeDb('inquiry capture', () => {
     if (!hasDatabase) return
     await prisma.task.deleteMany({ where: { facilityId } })
     await prisma.reservation.deleteMany({ where: { facilityId } })
+    await prisma.waitlistEntry.deleteMany({ where: { facilityId } })
     await prisma.lead.deleteMany({ where: { facilityId } })
     await prisma.$disconnect()
   })
@@ -258,6 +260,47 @@ describeDb('inquiry capture', () => {
       const result = await holdForLead(actor(), third.leadId, unitTypeId)
       expect(result).toMatchObject({ ok: false })
       if (!result.ok) expect(result.problem).toContain('another size')
+    })
+  })
+
+  describe('waitlist — the counter/phone half of notify-me (B-154)', () => {
+    it('adds the caller with their phone carried over from the lead', async () => {
+      const created = await inquiry({ phone: '512-555-0177' })
+      if (!created.ok) throw new Error('unreachable')
+
+      const email = `caller-${suffix}@example.com`
+      const result = await joinWaitlistForLead(actor(), created.leadId, unitTypeId, email)
+      expect(result).toMatchObject({ ok: true, alreadyOn: false })
+
+      const entry = await prisma.waitlistEntry.findFirstOrThrow({ where: { unitTypeId, email } })
+      expect(entry.phone).toBe('512-555-0177')
+    })
+
+    it('marks a new lead contacted, the same disposition a hold gets', async () => {
+      const created = await inquiry()
+      if (!created.ok) throw new Error('unreachable')
+      await joinWaitlistForLead(actor(), created.leadId, unitTypeId, `contacted-${suffix}@example.com`)
+
+      const lead = await prisma.lead.findUniqueOrThrow({ where: { id: created.leadId } })
+      expect(lead.status).toBe('contacted')
+      expect(lead.contactedAt).not.toBeNull()
+    })
+
+    it('is idempotent by address, same as the public form', async () => {
+      const created = await inquiry()
+      if (!created.ok) throw new Error('unreachable')
+      const email = `twice-${suffix}@example.com`
+      await joinWaitlistForLead(actor(), created.leadId, unitTypeId, email)
+      const second = await joinWaitlistForLead(actor(), created.leadId, unitTypeId, email)
+      expect(second).toMatchObject({ ok: true, alreadyOn: true })
+    })
+
+    it('refuses a staffer who cannot edit at this facility', async () => {
+      const created = await inquiry()
+      if (!created.ok) throw new Error('unreachable')
+      await expect(
+        joinWaitlistForLead(actor([]), created.leadId, unitTypeId, `refused-${suffix}@example.com`),
+      ).rejects.toThrow()
     })
   })
 

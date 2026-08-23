@@ -5,6 +5,7 @@ import { calculateMoveInCost } from '@storage/core/pricing'
 import { offerFor } from '@/lib/promotions/service'
 import { createReservation } from '@/lib/reservations/reserve'
 import { publicInventoryForFacility } from '@/lib/inventory/public-inventory'
+import { joinWaitlist, type JoinResult } from '@/lib/waitlist/service'
 import { assertFacilityAccess, can, ForbiddenError } from '@/lib/rbac/authorize'
 import { toAuditActor } from '@/lib/rbac/audit-actor'
 import type { Actor } from '@/lib/rbac/actor'
@@ -247,6 +248,51 @@ export async function holdForLead(actor: Actor, leadId: string, unitTypeId: stri
   })
 
   return { ok: true, reservationId: result.reservationId, expiresAt: result.expiresAt }
+}
+
+/// B-154. The counter/phone half of `WaitlistForm`: the identical call about a
+/// size we do NOT have captured nothing, because the notify-me form only ever
+/// existed on the public facility page. Same `joinWaitlist` the public form
+/// calls (D-79's model, not reinvented here) — the email comes from this
+/// screen rather than the lead's own record, because a caller who gave no
+/// email when the lead was taken still deserves the list.
+export async function joinWaitlistForLead(
+  actor: Actor,
+  leadId: string,
+  unitTypeId: string,
+  email: string,
+): Promise<JoinResult> {
+  const lead = await prisma.lead.findUniqueOrThrow({
+    where: { id: leadId },
+    select: { id: true, facilityId: true, firstName: true, phone: true, status: true, contactedAt: true },
+  })
+  if (!lead.facilityId) return { ok: false, problem: 'This inquiry is not attached to a facility.' }
+
+  assertFacilityAccess(actor, lead.facilityId)
+  if (!can(actor, 'tenants:edit', lead.facilityId)) {
+    throw new ForbiddenError('Missing permission to join a waitlist', 'tenants:edit', lead.facilityId)
+  }
+
+  const result = await joinWaitlist({
+    facilityId: lead.facilityId,
+    unitTypeId,
+    email,
+    phone: lead.phone,
+    firstName: lead.firstName,
+  })
+  if (!result.ok) return result
+
+  // Same disposition rule `holdForLead` uses (US-41): doing something for a
+  // caller IS contact, and a waitlist join is not a status a follow-up task
+  // should keep chasing.
+  if (lead.status === 'new') {
+    await prisma.lead.update({
+      where: { id: lead.id },
+      data: { status: 'contacted', contactedAt: lead.contactedAt ?? new Date() },
+    })
+  }
+
+  return result
 }
 
 export type LeadRow = {

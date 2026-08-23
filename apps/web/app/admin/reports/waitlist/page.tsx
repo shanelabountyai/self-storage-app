@@ -65,10 +65,11 @@ export default async function WaitlistPage({
       </div>
 
       <p className="text-muted-foreground max-w-prose text-sm text-pretty">
-        People who asked to be emailed when a size comes free. Nobody here needs calling — when a
-        unit becomes available we email as many people as there are units, oldest first, and give
-        them {WAITLIST_CLAIM_WINDOW_HOURS} hours before telling the next person. These numbers are
-        demand for inventory you don&apos;t have.
+        People who asked to be emailed when a size comes free. Nobody here needs calling for the
+        sweep to work — when a unit becomes available we email as many people as there are units,
+        oldest first, and give them {WAITLIST_CLAIM_WINDOW_HOURS} hours before telling the next
+        person. These numbers are demand for inventory you don&apos;t have, and each size&apos;s
+        contact details are listed below it if you want to call somebody yourself.
       </p>
 
       {rows.length === 0 ? (
@@ -101,6 +102,7 @@ export default async function WaitlistPage({
                   <th scope="col" className="py-2 pr-4">Been told</th>
                   <th scope="col" className="py-2 pr-4">Free now</th>
                   <th scope="col" className="py-2 pr-4">Longest wait since</th>
+                  <th scope="col" className="py-2 pr-4">Contact</th>
                 </tr>
               </thead>
               <tbody>
@@ -120,6 +122,34 @@ export default async function WaitlistPage({
                     <td className="py-2 pr-4 tabular-nums">{row.availableNow}</td>
                     <td className="text-muted-foreground py-2 pr-4">
                       {row.waitingSince ? formatSince(row.waitingSince) : '—'}
+                    </td>
+                    <td className="py-2 pr-4">
+                      {/* Native <details>/<summary> — no client JS needed to
+                          keep the report's PII off-screen until asked for. */}
+                      <details>
+                        <summary className="cursor-pointer text-sm underline underline-offset-2">
+                          {row.contacts.length} {row.contacts.length === 1 ? 'person' : 'people'}
+                        </summary>
+                        <ul className="mt-2 flex flex-col gap-1 text-xs">
+                          {row.contacts.map((contact) => (
+                            <li key={contact.id}>
+                              {contact.name ?? 'No name'} ·{' '}
+                              <a href={`mailto:${contact.email}`} className="underline underline-offset-2">
+                                {contact.email}
+                              </a>
+                              {contact.phone && (
+                                <>
+                                  {' · '}
+                                  <a href={`tel:${contact.phone}`} className="underline underline-offset-2">
+                                    {contact.phone}
+                                  </a>
+                                </>
+                              )}
+                              {contact.status === 'notified' ? ' · notified' : ''}
+                            </li>
+                          ))}
+                        </ul>
+                      </details>
                     </td>
                   </tr>
                 ))}

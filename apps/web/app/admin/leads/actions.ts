@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { requireStaffActor } from '@/lib/rbac/session'
 import { fieldError, parseDate, success, type FormState } from '@/lib/admin/form-state'
-import { createInquiry, holdForLead, setLeadStatus } from '@/lib/admin/inquiries'
+import { createInquiry, holdForLead, joinWaitlistForLead, setLeadStatus } from '@/lib/admin/inquiries'
 
 // PRD 02 US-43 (B-097). Every gate lives in lib/admin/inquiries.ts; these turn
 // a refusal into a sentence.
@@ -53,6 +53,27 @@ export async function holdForLeadAction(_prev: FormState, formData: FormData): P
   revalidatePath('/admin/leads')
   return success(
     `Held until ${new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' }).format(result.expiresAt)}. No card, no account — they can finish online or at the counter.`,
+  )
+}
+
+export async function joinWaitlistForLeadAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const actor = await requireStaffActor()
+  const leadId = String(formData.get('leadId') ?? '')
+
+  const result = await joinWaitlistForLead(
+    actor,
+    leadId,
+    String(formData.get('unitTypeId') ?? ''),
+    String(formData.get('email') ?? ''),
+  )
+  if (!result.ok) return fieldError({ email: result.problem })
+
+  revalidatePath(`/admin/leads/${leadId}`)
+  revalidatePath('/admin/leads')
+  return success(
+    result.alreadyOn
+      ? 'Already on the waitlist for that size.'
+      : "On the waitlist. We'll email as soon as one is free.",
   )
 }
 
