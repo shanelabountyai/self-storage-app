@@ -543,6 +543,15 @@ export async function updateBillingPolicyAction(
           : formData.get("promoRecapturePolicy") === "prorated"
             ? "prorated"
             : "none",
+      // D-93's default is the safe direction here too: an unrecognised value
+      // must not silently become `street`, which is the one setting that can
+      // raise a tenant's rent with no notice.
+      transferRatePolicy:
+        formData.get("transferRatePolicy") === "street"
+          ? "street"
+          : formData.get("transferRatePolicy") === "in_place"
+            ? "in_place"
+            : "preserve_discount",
     });
   } catch (error) {
     return asFormError(error, "Could not save the billing policy.");

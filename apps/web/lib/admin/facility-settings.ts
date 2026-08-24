@@ -337,6 +337,11 @@ export type BillingPolicyInput = {
   /// `prorateOnMoveOut` two fields above it, and because it is per facility
   /// while a promotion can span several.
   promoRecapturePolicy: "none" | "full" | "prorated";
+  /// B-162 / D-93. What rate a unit transfer opens the new lease at. In this
+  /// form because it is a rent rule like `prorateOnMoveIn` above it, and
+  /// because the alternative — leaving it reachable only from a database
+  /// client — is the mistake this codebase has already made five times.
+  transferRatePolicy: "preserve_discount" | "street" | "in_place";
 };
 
 export class InvalidRetryScheduleError extends Error {
@@ -422,6 +427,7 @@ export async function updateBillingPolicy(
       dunningDays: before.dunningDays,
       achAtCheckoutEnabled: before.achAtCheckoutEnabled,
       promoRecapturePolicy: before.promoRecapturePolicy,
+      transferRatePolicy: before.transferRatePolicy,
     },
     after: {
       billingPolicy: after.billingPolicy,
@@ -436,6 +442,7 @@ export async function updateBillingPolicy(
       dunningDays: after.dunningDays,
       achAtCheckoutEnabled: after.achAtCheckoutEnabled,
       promoRecapturePolicy: after.promoRecapturePolicy,
+      transferRatePolicy: after.transferRatePolicy,
     },
   });
 }

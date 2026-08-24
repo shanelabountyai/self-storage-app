@@ -5,6 +5,7 @@ import { OCCUPYING_LEASE_STATUSES } from '@storage/core/inventory'
 import { nextInvoiceNumber } from '@/lib/billing/numbering'
 import { discountForLeasePeriod, markDiscountApplied } from '@/lib/promotions/billing'
 import { markReferralRewardApplied, referralRewardsForLease } from '@/lib/referrals/billing'
+import { leaseChainIds } from '@/lib/billing/transfer-chain'
 import {
   buildInvoice,
   formatInvoiceNumber,
@@ -78,10 +79,40 @@ export async function generateInvoices(
         protectionCents: true,
         protectionPlanName: true,
         moveOutDate: true,
+        transferredFromLeaseId: true,
       },
     }),
     prisma.taxComponent.findMany({ where: { facilityId } }),
   ])
+
+  // B-162. Where each lease's tenancy actually began.
+  //
+  // The period index is what a promotion's schedule is keyed to ("period 0 is
+  // free"), and it was counted from THIS lease's start — so a transfer restarted
+  // it at zero. With the redemption now following the tenant (D-93), that would
+  // have landed the remaining discounts on the wrong months: `appliedPeriods`
+  // already holds 0 and 1, so the new lease's first two periods would be
+  // silently skipped and month three's discount would arrive in month five.
+  // Counting from the chain's origin makes the index describe the TENANCY,
+  // which is what the promise was made about. Only the transferred leases need
+  // the walk; everything else maps to itself.
+  const transferred = leases.filter((lease) => lease.transferredFromLeaseId !== null)
+  const chains = transferred.length
+    ? await leaseChainIds(transferred.map((lease) => lease.id))
+    : new Map<string, string[]>()
+  const originStarts = new Map<string, Date>()
+  if (chains.size > 0) {
+    const origins = await prisma.lease.findMany({
+      // `leaseChainIds` returns each chain oldest LAST.
+      where: { id: { in: [...chains.values()].map((chain) => chain[chain.length - 1]) } },
+      select: { id: true, startDate: true },
+    })
+    const startById = new Map(origins.map((row) => [row.id, row.startDate]))
+    for (const [leaseId, chain] of chains) {
+      const start = startById.get(chain[chain.length - 1])
+      if (start) originStarts.set(leaseId, start)
+    }
+  }
 
   // Effective as of the business date being run, not today's date — a
   // catch-up run for last Tuesday must use last Tuesday's tax rates (FR-9).
@@ -98,11 +129,34 @@ export async function generateInvoices(
     // comparison from turning on a time of day.
     const leaseStart = startOfDay(lease.startDate)
 
-    // Counted from the lease's first billed period, so a promotion's schedule
+    // Counted from the TENANCY's first billed period, so a promotion's schedule
     // ("period 0 is free") lines up with the invoice that actually bills it.
     // Incremented for every period the generator yields, INCLUDING ones skipped
     // for a move-out — the index describes the calendar, not what got billed.
-    let periodIndex = -1
+    //
+    // B-162: on a transferred lease the count starts where the previous lease
+    // left off. `billingDay` is carried across a transfer, so the two halves
+    // sit on the same period boundaries and the offset is simply how many of
+    // them elapsed before this lease opened.
+    const originStart = originStarts.get(lease.id)
+    //
+    // `periodStartsBetween` yields the periods starting strictly AFTER its
+    // `after` argument and up to and including `through` — which is exactly the
+    // set already billed on the leases this one came from, since the first
+    // period a lease bills is the first one after its own start (the move-in
+    // payment covers the period it lands in). The cap is raised past the
+    // 12-period default because a tenancy that has run for years before a
+    // transfer would otherwise silently undercount.
+    const offset = originStart
+      ? periodStartsBetween(
+          facility.billingPolicy as BillingPolicy,
+          lease.billingDay,
+          startOfDay(originStart),
+          leaseStart,
+          600,
+        ).length
+      : 0
+    let periodIndex = offset - 1
 
     for (const period of periodStartsBetween(
       facility.billingPolicy as BillingPolicy,

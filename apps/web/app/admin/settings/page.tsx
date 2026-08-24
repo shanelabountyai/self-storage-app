@@ -559,6 +559,26 @@ export default async function AdminSettingsPage() {
             </option>
             <option value="full">Recover the whole discount given</option>
           </Field>
+          {/* B-162 / D-93. Beside the other rent rules, because it decides what
+              a tenant pays and because "street" is a rent increase served with
+              none of US-11's notice, approval or record. */}
+          <Field
+            name="transferRatePolicy"
+            label="When a tenant moves to another unit here"
+            as="select"
+            defaultValue={facility.transferRatePolicy}
+            hint="Staff can still type a different figure on the transfer screen; this is what it starts at. Keeping their discount means a like-for-like move costs exactly what they pay now — the other two either raise the rent with no notice period, or charge 10×20 money for a 5×10."
+          >
+            <option value="preserve_discount">
+              Keep their discount off street — scaled to the new unit
+            </option>
+            <option value="street">
+              Charge the new unit&apos;s street rate, as a new tenant would
+            </option>
+            <option value="in_place">
+              Carry the same rate they pay now, whatever they move to
+            </option>
+          </Field>
           <Field
             name="prorateOnMoveIn"
             label="On move-in"

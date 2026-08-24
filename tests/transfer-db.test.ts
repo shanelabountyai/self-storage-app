@@ -3,6 +3,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 import { prisma } from '../packages/db'
 import { completeTransfer, previewTransfer, transferTargets } from '../apps/web/lib/admin/transfer'
 import { auctionCase, openAuctionCase } from '../apps/web/lib/auctions/service'
+import { recaptureForLease } from '../apps/web/lib/promotions/billing'
 import { processCommsEvent } from '../apps/web/lib/comms/service'
 import * as provider from '../apps/web/lib/comms/provider'
 import type { Actor } from '../apps/web/lib/rbac/actor'
@@ -155,6 +156,11 @@ describeDb('unit transfer (US-14)', () => {
     await prisma.accessGrant.deleteMany({ where: { facilityId } })
     await prisma.leaseRateChange.deleteMany({ where: { lease: { facilityId } } })
     await prisma.leaseHold.deleteMany({ where: { lease: { facilityId } } })
+    await prisma.tenantRateIncrease.deleteMany({ where: { facilityId } })
+    // B-162's promotion cases. `PromoRedemption` RESTRICTs the promotion and
+    // the facility, so the redemptions go before either.
+    await prisma.promoRedemption.deleteMany({ where: { facilityId } })
+    await prisma.promotion.deleteMany({ where: { name: { contains: suffix } } })
     await prisma.invoice.deleteMany({ where: { facilityId } })
     // B-157's cases RESTRICT-reference the lease.
     await prisma.auctionCase.deleteMany({ where: { facilityId } })
@@ -178,6 +184,11 @@ describeDb('unit transfer (US-14)', () => {
     await prisma.accessGrant.deleteMany({ where: { facilityId } })
     await prisma.leaseRateChange.deleteMany({ where: { lease: { facilityId } } })
     await prisma.leaseHold.deleteMany({ where: { lease: { facilityId } } })
+    await prisma.tenantRateIncrease.deleteMany({ where: { facilityId } })
+    // B-162's promotion cases. `PromoRedemption` RESTRICTs the promotion and
+    // the facility, so the redemptions go before either.
+    await prisma.promoRedemption.deleteMany({ where: { facilityId } })
+    await prisma.promotion.deleteMany({ where: { name: { contains: suffix } } })
     await prisma.invoice.deleteMany({ where: { facilityId } })
     // B-157's cases RESTRICT-reference the lease.
     await prisma.auctionCase.deleteMany({ where: { facilityId } })
@@ -1037,6 +1048,231 @@ describeDb('unit transfer (US-14)', () => {
       expect((await auctionCase(manager(), caseId))?.readiness.blockers.map((one) => one.kind)).toContain(
         'on_hold',
       )
+    })
+  })
+
+  // B-162 / D-93. Three defects with one cause: the new lease was built as if
+  // the tenant were new.
+  describe('the rate the new lease opens at (B-162, D-93)', () => {
+    /// A tenant $20 under street on a 5×5 — the shape that made a like-for-like
+    /// move a rent rise.
+    async function discountedLease() {
+      const from = await makeUnit(smallTypeId)
+      return { from, lease: await makeLease(from.id, 8_000) }
+    }
+
+    it('a like-for-like move costs exactly what they pay now', async () => {
+      const { lease } = await discountedLease()
+      const to = await makeUnit(smallTypeId)
+
+      const preview = await previewTransfer(manager(), lease.id, to.id, d('2026-08-15'))
+      if (!preview.ok) throw new Error(preview.problem)
+
+      // Before this it returned 10_000 — a $20 rise with no notice period, no
+      // approval and no `TenantRateIncrease` record.
+      expect(preview.preview.newRateCents).toBe(8_000)
+      expect(preview.preview.policyRateCents).toBe(8_000)
+      expect(preview.preview.toStreetRateCents).toBe(10_000)
+      expect(preview.preview.raisesRate).toBe(false)
+    })
+
+    it('an upsize keeps the same discount and says the rent is going up', async () => {
+      const { lease } = await discountedLease()
+      const to = await makeUnit(largeTypeId)
+
+      const preview = await previewTransfer(manager(), lease.id, to.id, d('2026-08-15'))
+      if (!preview.ok) throw new Error(preview.problem)
+
+      // 20% off $200, not $200 and not $80.
+      expect(preview.preview.newRateCents).toBe(16_000)
+      expect(preview.preview.raisesRate).toBe(true)
+    })
+
+    it('honours the facility policy when it is set to street', async () => {
+      await prisma.facility.update({
+        where: { id: facilityId },
+        data: { transferRatePolicy: 'street' },
+      })
+      try {
+        const { lease } = await discountedLease()
+        const to = await makeUnit(smallTypeId)
+
+        const preview = await previewTransfer(manager(), lease.id, to.id, d('2026-08-15'))
+        if (!preview.ok) throw new Error(preview.problem)
+        expect(preview.preview.newRateCents).toBe(10_000)
+        expect(preview.preview.raisesRate).toBe(true)
+      } finally {
+        await prisma.facility.update({
+          where: { id: facilityId },
+          data: { transferRatePolicy: 'preserve_discount' },
+        })
+      }
+    })
+
+    it('takes a rate staff set, records that they set it, and posts that figure', async () => {
+      const { lease } = await discountedLease()
+      const to = await makeUnit(smallTypeId)
+
+      const preview = await previewTransfer(manager(), lease.id, to.id, d('2026-08-15'), 7_500)
+      if (!preview.ok) throw new Error(preview.problem)
+      expect(preview.preview.newRateCents).toBe(7_500)
+      expect(preview.preview.policyRateCents).toBe(8_000)
+      expect(preview.preview.rateOverridden).toBe(true)
+
+      const done = await completeTransfer(manager(), {
+        leaseId: lease.id,
+        toUnitId: to.id,
+        transferDate: d('2026-08-15'),
+        rateOverrideCents: 7_500,
+      })
+      if (!done.ok) throw new Error(done.problem)
+
+      const opened = await prisma.lease.findUniqueOrThrow({ where: { id: done.newLeaseId } })
+      expect(opened.monthlyRateCents).toBe(7_500)
+
+      // Both figures on the audit row: "they paid the policy rate" and "a
+      // manager typed this in" are different facts.
+      const entry = await prisma.auditLog.findFirstOrThrow({
+        where: { action: 'lease.transferred', entityId: lease.id },
+        orderBy: { occurredAt: 'desc' },
+      })
+      // `context` is merged into `after` by `recordAudit`.
+      const context = entry.after as Record<string, unknown>
+      expect(context.rateOverridden).toBe(true)
+      expect(context.policyRateCents).toBe(8_000)
+      expect(context.newRateCents).toBe(7_500)
+    })
+
+    it('names an in-flight rate increase on the preview and cancels it on commit', async () => {
+      const { lease } = await discountedLease()
+      const to = await makeUnit(smallTypeId)
+      const increase = await prisma.tenantRateIncrease.create({
+        data: {
+          facilityId,
+          leaseId: lease.id,
+          currentRateCents: 8_000,
+          newRateCents: 9_000,
+          effectiveDate: d('2026-10-01'),
+          noticeDate: d('2026-09-01'),
+          noticeDays: 30,
+          status: 'notice_sent',
+          noticeSentAt: new Date(),
+        },
+      })
+
+      const preview = await previewTransfer(manager(), lease.id, to.id, d('2026-08-15'))
+      if (!preview.ok) throw new Error(preview.problem)
+      expect(preview.preview.liveRateIncrease?.id).toBe(increase.id)
+      expect(preview.preview.liveRateIncrease?.newRateCents).toBe(9_000)
+
+      await completeTransfer(manager(), {
+        leaseId: lease.id,
+        toUnitId: to.id,
+        transferDate: d('2026-08-15'),
+      })
+
+      // Before this it stayed `notice_sent` for ever and the nightly run
+      // reported `ok: true, "skipped — the lease has ended"` every night.
+      const after = await prisma.tenantRateIncrease.findUniqueOrThrow({ where: { id: increase.id } })
+      expect(after.status).toBe('cancelled')
+      expect(
+        await prisma.auditLog.count({
+          where: { action: 'rate.increase_cancelled', entityId: increase.id },
+        }),
+      ).toBe(1)
+    })
+  })
+
+  // B-162 / D-93. D-89 settled that a transfer recaptures nothing and named
+  // the hole that left: the redemption stayed on the ended lease, so a tenant
+  // inside a minimum stay could transfer to the cheapest unit on site and walk
+  // out of the next lease owing nothing.
+  describe('the promotion follows the tenant (B-162, D-93)', () => {
+    async function promoLease() {
+      const from = await makeUnit(smallTypeId)
+      const lease = await makeLease(from.id, 8_000)
+      const promotion = await prisma.promotion.create({
+        data: {
+          name: `Half off ${suffix}`,
+          type: 'percent_off',
+          value: 50,
+          durationPeriods: 3,
+          status: 'active',
+          minStayMonths: 6,
+        },
+      })
+      const redemption = await prisma.promoRedemption.create({
+        data: {
+          promotionId: promotion.id,
+          facilityId,
+          leaseId: lease.id,
+          schedule: [
+            { periodIndex: 0, amountCents: 4_000 },
+            { periodIndex: 1, amountCents: 4_000 },
+            { periodIndex: 2, amountCents: 4_000 },
+          ],
+          totalCents: 12_000,
+          appliedPeriods: [0, 1],
+        },
+      })
+      return { lease, promotion, redemption }
+    }
+
+    it('re-points the redemption and leaves what was already given alone', async () => {
+      const { lease, redemption } = await promoLease()
+      const to = await makeUnit(smallTypeId)
+
+      const done = await completeTransfer(manager(), {
+        leaseId: lease.id,
+        toUnitId: to.id,
+        transferDate: d('2026-08-15'),
+      })
+      if (!done.ok) throw new Error(done.problem)
+
+      const after = await prisma.promoRedemption.findUniqueOrThrow({ where: { id: redemption.id } })
+      expect(after.leaseId).toBe(done.newLeaseId)
+      // Untouched on purpose: the period index is counted across the transfer
+      // chain, so period 2's discount lands on the month it was promised for
+      // rather than on the new lease's third.
+      expect(after.appliedPeriods).toEqual([0, 1])
+      expect(after.totalCents).toBe(12_000)
+
+      const entry = await prisma.auditLog.findFirstOrThrow({
+        where: { action: 'lease.transferred', entityId: lease.id },
+        orderBy: { occurredAt: 'desc' },
+      })
+      expect((entry.after as Record<string, unknown>).promoRedemptionMoved).toBe(true)
+    })
+
+    it('counts the minimum stay from when the tenancy began, not from the transfer', async () => {
+      await prisma.facility.update({
+        where: { id: facilityId },
+        data: { promoRecapturePolicy: 'full' },
+      })
+      try {
+        const { lease } = await promoLease()
+        const to = await makeUnit(smallTypeId)
+        const done = await completeTransfer(manager(), {
+          leaseId: lease.id,
+          toUnitId: to.id,
+          transferDate: d('2026-08-15'),
+        })
+        if (!done.ok) throw new Error(done.problem)
+
+        const moved = await prisma.lease.findUniqueOrThrow({ where: { id: done.newLeaseId } })
+        // The tenancy started 2026-01-01; the new lease started 2026-08-15.
+        // Leaving on 2026-09-01 is eight months served, not half of one.
+        const recapture = await recaptureForLease(
+          { id: moved.id, startDate: moved.startDate, facilityId },
+          d('2026-09-01'),
+        )
+        expect(recapture.amountCents).toBe(0)
+      } finally {
+        await prisma.facility.update({
+          where: { id: facilityId },
+          data: { promoRecapturePolicy: 'none' },
+        })
+      }
     })
   })
 

@@ -305,6 +305,45 @@ describeDb('tenant rate increases (US-11 / CN-9)', () => {
       expect(await previewEligibleIncreases(manager(), facilityId)).toEqual([])
     })
 
+    // B-162. The ECRI clock used to reset on a unit swap, twice over: the
+    // transfer wrote a `LeaseRateChange` dated today, and `lease.startDate` on
+    // the new lease is the transfer date — so months-since-last-change read as
+    // zero either way and the tenant was exempt for another cycle. Asking to
+    // move units was a way to opt out of every increase.
+    it('still raises a tenant who transferred, counting from when their tenancy began', async () => {
+      const { leaseId, tenantId } = await makeLease({ monthlyRateCents: 12_900, lastChangeMonthsAgo: 24 })
+      const unit = await prisma.unit.create({
+        data: { facilityId, unitTypeId, number: `RX-${suffix.slice(0, 4)}` },
+      })
+      await prisma.lease.update({ where: { id: leaseId }, data: { status: 'ended' } })
+      const moved = await prisma.lease.create({
+        data: {
+          facilityId,
+          tenantId,
+          unitId: unit.id,
+          status: 'active',
+          // The transfer date, which is what made the fallback lie.
+          startDate: new Date(),
+          billingDay: 1,
+          monthlyRateCents: 12_900,
+          transferredFromLeaseId: leaseId,
+        },
+      })
+      await prisma.leaseRateChange.create({
+        data: {
+          leaseId: moved.id,
+          previousRateCents: 12_900,
+          newRateCents: 12_900,
+          effectiveFrom: new Date(),
+          reason: 'transfer',
+        },
+      })
+
+      const rows = await previewEligibleIncreases(manager(), facilityId)
+      expect(rows.map((row) => row.leaseId)).toEqual([moved.id])
+      expect(rows[0].newRateCents).toBe(14_900)
+    })
+
     it('skips a lease that already has a live increase', async () => {
       const { leaseId } = await makeLease({ lastChangeMonthsAgo: 24 })
       await scheduleRateIncrease(manager(), facilityId, {

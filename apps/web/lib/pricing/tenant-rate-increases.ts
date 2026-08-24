@@ -5,6 +5,7 @@ import { emitEvent } from '@storage/core/events'
 import { businessDateFor } from '@storage/core/jobs'
 import { rateVariance, wholeMonthsBetween } from '@storage/core/metrics'
 import { OCCUPYING_LEASE_STATUSES } from '@storage/core/inventory'
+import { leaseChainIds } from '@/lib/billing/transfer-chain'
 import {
   applyIsDue,
   decreaseProblem,
@@ -376,7 +377,17 @@ export async function previewEligibleIncreases(
       startDate: true,
       tenant: { select: { firstName: true, lastName: true } },
       unit: { select: { number: true, unitTypeId: true } },
-      rateChanges: { orderBy: { effectiveFrom: 'desc' }, take: 1, select: { effectiveFrom: true } },
+      transferredFromLeaseId: true,
+      // B-162. `reason` is selected and `transfer` is excluded below: a unit
+      // swap re-prices the lease and wrote a `LeaseRateChange` dated today, so
+      // reading the latest change of any kind made every transferred tenant
+      // look as though their rent had just moved. `take: 1` is gone for the
+      // same reason — the newest row may be the one being ignored.
+      rateChanges: {
+        orderBy: { effectiveFrom: 'desc' },
+        take: 5,
+        select: { effectiveFrom: true, reason: true },
+      },
       rateIncreases: {
         where: { status: { in: [...LIVE_RATE_INCREASE_STATUSES] } },
         select: { id: true },
@@ -395,6 +406,29 @@ export async function previewEligibleIncreases(
     if (!streetByType.has(rate.unitTypeId)) streetByType.set(rate.unitTypeId, rate.streetRateCents)
   }
 
+  // B-162. Where each tenancy began, for the leases that have moved.
+  //
+  // `lease.startDate` is the TRANSFER date on a transferred lease, so it was
+  // the fallback that reset months-since-last-increase to zero and exempted a
+  // transferring tenant from ECRI for another cycle. Combined with the
+  // `transfer` rate change above, a tenant could opt out of every increase by
+  // asking to swap units.
+  const transferred = leases.filter((lease) => lease.transferredFromLeaseId !== null)
+  const tenancyStarts = new Map<string, Date>()
+  if (transferred.length > 0) {
+    const chains = await leaseChainIds(transferred.map((lease) => lease.id))
+    const origins = await prisma.lease.findMany({
+      // Oldest last.
+      where: { id: { in: [...chains.values()].map((chain) => chain[chain.length - 1]) } },
+      select: { id: true, startDate: true },
+    })
+    const startById = new Map(origins.map((row) => [row.id, row.startDate]))
+    for (const [leaseId, chain] of chains) {
+      const start = startById.get(chain[chain.length - 1])
+      if (start) tenancyStarts.set(leaseId, start)
+    }
+  }
+
   const now = new Date()
   const rows: BatchPreviewRow[] = leases
     // A lease already carrying a live increase is not a candidate — the same
@@ -402,7 +436,10 @@ export async function previewEligibleIncreases(
     .filter((lease) => lease.rateIncreases.length === 0)
     .map((lease) => {
       const streetRateCents = streetByType.get(lease.unit.unitTypeId) ?? 0
-      const lastChange = lease.rateChanges[0]?.effectiveFrom ?? lease.startDate
+      const lastChange =
+        lease.rateChanges.find((change) => change.reason !== 'transfer')?.effectiveFrom ??
+        tenancyStarts.get(lease.id) ??
+        lease.startDate
       const candidate: CandidateLease = {
         leaseId: lease.id,
         inPlaceRateCents: lease.monthlyRateCents,
@@ -818,13 +855,33 @@ export async function applyDueRateIncreases(
 
     const lease = await prisma.lease.findUnique({
       where: { id: row.leaseId },
-      select: { monthlyRateCents: true, status: true },
+      select: { monthlyRateCents: true, status: true, moveOutReason: true },
     })
     const decrease = isRateDecrease(row)
     const noun = decrease ? 'rate decrease' : 'rate increase'
     if (!lease || !OCCUPYING_LEASE_STATUSES.includes(lease.status as never)) {
+      // B-162. Cancelled here rather than skipped again tomorrow night, and
+      // for a plain reason: an approved, noticed increase against a lease that
+      // has ended is never going to apply, and reporting `ok: true, "skipped"`
+      // every night until the effective date passed is how one evaporated in
+      // silence. `completeTransfer` now cancels its own before the lease ends,
+      // so a transfer reaching here at all is worth flagging — every other way
+      // a lease ends is ordinary, and this is bookkeeping.
+      const transferred = lease?.moveOutReason === 'transfer'
+      if (row.id) {
+        await prisma.tenantRateIncrease.update({
+          where: { id: row.id },
+          data: { status: 'cancelled', cancelledAt: new Date() },
+        })
+      }
       result.skipped += 1
-      recordItem({ itemId: row.leaseId, ok: true, message: `${noun} skipped — the lease has ended` })
+      recordItem({
+        itemId: row.leaseId,
+        ok: !transferred,
+        message: transferred
+          ? `${noun} cancelled — the lease was transferred and the increase did not move with it`
+          : `${noun} cancelled — the lease has ended`,
+      })
       continue
     }
     // The rate moved under an already-approved increase. Refused rather than

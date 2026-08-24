@@ -23,6 +23,12 @@ export async function completeTransferAction(_prev: FormState, formData: FormDat
     // ordinary transfer never renders these and stays reason-free.
     reasonCode: String(formData.get('reasonCode') ?? ''),
     reasonNote: String(formData.get('reasonNote') ?? ''),
+    // B-162 / D-93. Present only when staff moved off the policy figure on the
+    // preview; the commit re-runs the preview with it, so what was confirmed is
+    // what posts.
+    rateOverrideCents: formData.has('rateOverrideCents')
+      ? Number(formData.get('rateOverrideCents'))
+      : null,
   })
 
   if (!result.ok) {

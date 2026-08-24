@@ -45,10 +45,10 @@ export default async function TransferPage({
   searchParams,
 }: {
   params: Promise<{ tenantId: string }>
-  searchParams: Promise<{ lease?: string; unit?: string; date?: string }>
+  searchParams: Promise<{ lease?: string; unit?: string; date?: string; rate?: string }>
 }) {
   const { tenantId } = await params
-  const { lease: leaseId, unit: toUnitId, date } = await searchParams
+  const { lease: leaseId, unit: toUnitId, date, rate } = await searchParams
   const actor = await getAdminActor()
 
   if (!leaseId) {
@@ -70,8 +70,21 @@ export default async function TransferPage({
   const transferDate = date ?? (requested ? requested.transferDate.toISOString().slice(0, 10) : todayIso())
   const selectedUnitId = toUnitId ?? requested?.toUnitId
   const targets = await transferTargets(actor, leaseId)
+  // B-162 / D-93. A rate staff typed, in dollars, re-previewed rather than
+  // applied on confirm — the same discipline the date and unit already keep, so
+  // the figure somebody confirms is the figure that posts. A blank or unusable
+  // entry falls back to the facility's policy rather than to zero.
+  const dollars = rate === undefined || rate.trim() === '' ? null : Number(rate)
+  const rateOverrideCents =
+    dollars !== null && Number.isFinite(dollars) && dollars >= 0 ? Math.round(dollars * 100) : null
   const preview = selectedUnitId
-    ? await previewTransfer(actor, leaseId, selectedUnitId, new Date(`${transferDate}T00:00:00.000Z`))
+    ? await previewTransfer(
+        actor,
+        leaseId,
+        selectedUnitId,
+        new Date(`${transferDate}T00:00:00.000Z`),
+        rateOverrideCents,
+      )
     : null
 
   return (
@@ -141,6 +154,28 @@ export default async function TransferPage({
               className="border-input bg-background min-h-11 rounded-md border px-3 text-sm"
             />
           </label>
+          {/* B-162 / D-93. Empty means the facility's policy decides. Typed in
+              dollars because that is what a person reads off a screen and says
+              on the phone; the preview restates what the policy would have
+              charged so moving off it is visible rather than invisible. */}
+          <label className={FIELD_CLASS} htmlFor="rate">
+            Rent on the new unit
+            <input
+              id="rate"
+              name="rate"
+              type="number"
+              min={0}
+              step="0.01"
+              inputMode="decimal"
+              defaultValue={rate ?? ''}
+              placeholder={preview?.ok ? (preview.preview.policyRateCents / 100).toFixed(2) : ''}
+              aria-describedby="rate-hint"
+              className="border-input bg-background min-h-11 rounded-md border px-3 text-sm"
+            />
+            <span id="rate-hint" className="text-muted-foreground text-xs text-pretty">
+              Leave blank to use this facility&apos;s transfer rate policy.
+            </span>
+          </label>
           <Button type="submit" variant="outline">
             Recalculate
           </Button>
@@ -164,7 +199,16 @@ export default async function TransferPage({
             <dt>Rent now</dt>
             <dd className="text-right tabular-nums">{formatCents(preview.preview.currentRateCents)}/mo</dd>
 
-            <dt>Rent on the new unit</dt>
+            <dt>
+              Rent on the new unit
+              {preview.preview.rateOverridden && (
+                <span className="text-muted-foreground block text-xs">
+                  You set this. The policy figure is{' '}
+                  {formatCents(preview.preview.policyRateCents)}/mo; street is{' '}
+                  {formatCents(preview.preview.toStreetRateCents)}/mo.
+                </span>
+              )}
+            </dt>
             <dd className="text-right tabular-nums">{formatCents(preview.preview.newRateCents)}/mo</dd>
 
             {preview.preview.prorates ? (
@@ -214,6 +258,58 @@ export default async function TransferPage({
             <input type="hidden" name="leaseId" value={leaseId} />
             <input type="hidden" name="toUnitId" value={preview.preview.toUnitId} />
             <input type="hidden" name="transferDate" value={transferDate} />
+            {preview.preview.rateOverridden && (
+              <input
+                type="hidden"
+                name="rateOverrideCents"
+                value={String(preview.preview.newRateCents)}
+              />
+            )}
+
+            {/* B-162. A transfer is a service request the tenant asked for, and
+                it used to be able to raise their rent with none of US-11's
+                notice period, approval or record. It still can — an upsize
+                legitimately costs more — but nobody confirms it without being
+                told, and the amount is stated rather than left to be worked out
+                from two rows of a table. Never colour alone (WCAG 1.4.1). */}
+            {preview.preview.raisesRate && (
+              <p
+                role="note"
+                className="rounded-md border-2 border-amber-500 bg-amber-50 p-3 text-sm text-amber-950 text-pretty"
+              >
+                <strong className="font-medium">This puts their rent up.</strong>{' '}
+                {formatCents(preview.preview.currentRateCents)} →{' '}
+                {formatCents(preview.preview.newRateCents)} a month, from{' '}
+                {new Intl.DateTimeFormat('en-US', {
+                  month: 'long',
+                  day: 'numeric',
+                  year: 'numeric',
+                }).format(new Date(`${transferDate}T00:00:00.000Z`))}
+                . A transfer is not a rate increase, so there is no notice period behind this figure
+                — tell them before you confirm.
+              </p>
+            )}
+
+            {/* D-93. Cancelled on commit, and said before rather than after. */}
+            {preview.preview.liveRateIncrease && (
+              <p
+                role="note"
+                className="rounded-md border-2 border-amber-500 bg-amber-50 p-3 text-sm text-amber-950 text-pretty"
+              >
+                <strong className="font-medium">
+                  An approved rate change to{' '}
+                  {formatCents(preview.preview.liveRateIncrease.newRateCents)} is in flight
+                </strong>{' '}
+                for{' '}
+                {new Intl.DateTimeFormat('en-US', {
+                  month: 'long',
+                  day: 'numeric',
+                  year: 'numeric',
+                }).format(preview.preview.liveRateIncrease.effectiveDate)}
+                . Transferring cancels it, because it was approved against a rate this move
+                replaces. Raise a new one against the new lease if it is still wanted.
+              </p>
+            )}
 
             {/*
               B-157 / D-85. A lien notice naming this unit has been served and

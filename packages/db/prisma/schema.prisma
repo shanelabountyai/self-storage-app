@@ -123,6 +123,18 @@ enum PromoRecapturePolicy {
   prorated
 }
 
+/// B-162 / D-93. What rate a transfer opens the new lease at.
+enum TransferRatePolicy {
+  /// New street rate scaled by the discount the tenant already had off the old
+  /// unit type's street rate, capped at street. The default and the only value
+  /// that is right on a lateral move, a downsize AND an upsize.
+  preserve_discount
+  /// The new unit type's published street rate, as a new tenant would pay.
+  street
+  /// The same dollar rate they were paying, whatever they move to.
+  in_place
+}
+
 enum InvoiceKind {
   rent
   fee
@@ -582,6 +594,15 @@ model Facility {
   /// `prorated` recovers the share of the discount matching the months of the
   /// minimum the tenant did not serve. Default `none` — see the enum.
   promoRecapturePolicy         PromoRecapturePolicy @default(none)
+  /// US-14 transfer (B-162, D-93). What rate the new lease opens at when a
+  /// tenant moves between units at this site. **`preserve_discount` is the
+  /// default**: the tenant keeps their discount off street, so a lateral move
+  /// costs exactly what they pay now, a downsize prices down and an upsize
+  /// prices up — and no move is a rent rise the tenant was never given notice
+  /// of. `street` re-prices to the new unit type's street rate; `in_place`
+  /// carries the same dollar rate whatever they move to. Staff can override
+  /// the figure on the transfer preview either way.
+  transferRatePolicy           TransferRatePolicy   @default(preserve_discount)
   /// US-17. Whether every lease bills on the 1st, or each on its own move-in
   /// anniversary. **Anniversary is the default (D-27)** — the move-in payment
   /// buys a full period starting that day, so nothing is prorated on the way

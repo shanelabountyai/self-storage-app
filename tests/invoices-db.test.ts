@@ -91,6 +91,11 @@ describeDb('recurring invoice generation', () => {
     await prisma.invoiceLineItem.deleteMany({ where: { invoice: { facilityId } } })
     await prisma.invoice.deleteMany({ where: { facilityId } })
     await prisma.domainEvent.deleteMany({ where: { facilityId } })
+    // B-162's transfer case. A redemption RESTRICTs its promotion, and a
+    // transferred lease REFERENCES the one it came from.
+    await prisma.promoRedemption.deleteMany({ where: { facilityId } })
+    await prisma.promotion.deleteMany({ where: { name: { contains: suffix } } })
+    await prisma.lease.deleteMany({ where: { facilityId, transferredFromLeaseId: { not: null } } })
     await prisma.lease.deleteMany({ where: { facilityId } })
     await prisma.unit.deleteMany({ where: { facilityId } })
     await prisma.taxComponent.deleteMany({ where: { facilityId } })
@@ -104,6 +109,84 @@ describeDb('recurring invoice generation', () => {
     await prisma.tenant.deleteMany({ where: { id: tenantId } })
     await prisma.facility.deleteMany({ where: { id: facilityId } })
     await prisma.$disconnect()
+  })
+
+  // B-162 / D-93. A promotion now follows a tenant through a transfer, and the
+  // period index is what its schedule is keyed to. Counted from the new lease
+  // it restarted at zero — so `appliedPeriods` (which already held 0 and 1)
+  // silently swallowed the new lease's first two months and month three's
+  // discount would have arrived in month five.
+  it('counts the period index across a transfer, so a carried promotion lands on the right month', async () => {
+    await setPolicy({ billingPolicy: 'first_of_month' })
+    const originId = await makeLease({ startDate: d('2026-06-01'), billingDay: 1 })
+    await prisma.lease.update({
+      where: { id: originId },
+      data: { status: 'ended', endDate: d('2026-08-01'), moveOutReason: 'transfer' },
+    })
+
+    const unit = await prisma.unit.create({
+      data: { facilityId, unitTypeId, number: `IX-${suffix.slice(0, 4)}` },
+    })
+    const moved = await prisma.lease.create({
+      data: {
+        facilityId,
+        tenantId,
+        unitId: unit.id,
+        status: 'active',
+        // Periods 0 (June) and 1 (July) ran on the lease they came from.
+        startDate: d('2026-08-01'),
+        billingDay: 1,
+        monthlyRateCents: 12_900,
+        transferredFromLeaseId: originId,
+      },
+    })
+
+    const promotion = await prisma.promotion.create({
+      data: {
+        name: `Three months ${suffix}`,
+        type: 'percent_off',
+        value: 50,
+        durationPeriods: 3,
+        status: 'active',
+      },
+    })
+    await prisma.promoRedemption.create({
+      data: {
+        promotionId: promotion.id,
+        facilityId,
+        leaseId: moved.id,
+        // Distinct amounts, so the assertion can tell period 2 from period 1 —
+        // three equal discounts would pass whichever index was read.
+        schedule: [
+          { periodIndex: 0, amountCents: 9_000 },
+          { periodIndex: 1, amountCents: 6_000 },
+          { periodIndex: 2, amountCents: 3_000 },
+        ],
+        totalCents: 18_000,
+        appliedPeriods: [0, 1],
+      },
+    })
+
+    // Through 2026-09-01, so the September period is the one issued: a lease
+    // never bills the period its own start lands in.
+    await generateInvoices(facilityId, d('2026-08-27'), recordItem)
+
+    // September is period 2 of the TENANCY — June's and July's discounts were
+    // already given — so it gets the third and last one. Read from the new
+    // lease alone it is period 0, `appliedPeriods` says 0 is spent, and the
+    // tenant silently loses the month they were promised.
+    const invoice = await prisma.invoice.findFirstOrThrow({
+      where: { leaseId: moved.id, kind: 'rent' },
+      include: { lineItems: true },
+    })
+    expect(invoice.periodStart).toEqual(d('2026-09-01'))
+    const discount = invoice.lineItems.find((line) => line.type === 'discount')
+    expect(discount?.amountCents).toBe(3_000)
+
+    const redemption = await prisma.promoRedemption.findFirstOrThrow({
+      where: { leaseId: moved.id },
+    })
+    expect([...redemption.appliedPeriods].sort((a, b) => a - b)).toEqual([0, 1, 2])
   })
 
   it('never bills the period the move-in payment already covered', async () => {

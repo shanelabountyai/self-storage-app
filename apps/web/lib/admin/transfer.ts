@@ -5,6 +5,12 @@ import { billingPeriodFor, describeDayRange, prorate, unusedRemainder } from '@s
 import { businessDateFor } from '@storage/core/jobs'
 import { OCCUPYING_LEASE_STATUSES, TRANSFER_HOLD_SOURCE } from '@storage/core/inventory'
 import { effectiveAsOf } from '@storage/core/facility-settings'
+import {
+  isRateRise,
+  LIVE_RATE_INCREASE_STATUSES,
+  transferRateFor,
+  type TransferRatePolicy,
+} from '@storage/core/pricing'
 import { assertFacilityAccess, can, ForbiddenError } from '@/lib/rbac/authorize'
 import { toAuditActor } from '@/lib/rbac/audit-actor'
 import type { Actor } from '@/lib/rbac/actor'
@@ -54,6 +60,27 @@ export type TransferPreview = {
   transferDate: Date
   currentRateCents: number
   newRateCents: number
+  /// B-162 / D-93. What the facility's policy says this transfer should cost,
+  /// before any staff override — shown beside `newRateCents` so a person can
+  /// see that they have moved off it, and audited alongside what they chose.
+  policyRateCents: number
+  transferRatePolicy: TransferRatePolicy
+  /// True when `newRateCents` came from the form rather than from the policy.
+  rateOverridden: boolean
+  /// The destination unit type's published street rate, for context on the
+  /// screen: "policy says $120, street is $150".
+  toStreetRateCents: number
+  /// B-162. This move puts the tenant's rent UP. Not a refusal — an upsize
+  /// legitimately costs more — but the one fact a person confirming a service
+  /// request the tenant asked for needs stated rather than inferred from two
+  /// numbers.
+  raisesRate: boolean
+  /// B-162. An approved or noticed rate increase still live on this lease.
+  /// D-93: the transfer sets a new rate, so this one is cancelled on commit —
+  /// named here so staff see it before they confirm, rather than discovering
+  /// it never happened. Before this it was dropped silently and the nightly
+  /// run reported `ok: true, "skipped — the lease has ended"`.
+  liveRateIncrease: { id: string; newRateCents: number; effectiveDate: Date } | null
   /// The unused part of the old unit's already-billed period, credited back.
   refundCents: number
   /// The new unit's charge from the transfer date to the end of the same
@@ -216,9 +243,16 @@ export const TRANSFER_LEASE_SELECT = {
     paidThroughDate: true,
     delinquencyTimelineId: true,
     facility: {
-      select: { name: true, billingPolicy: true, timezone: true, prorateOnMoveOut: true },
+      select: {
+        name: true,
+        billingPolicy: true,
+        timezone: true,
+        prorateOnMoveOut: true,
+        // B-162 / D-93. The rate rule the preview defaults to.
+        transferRatePolicy: true,
+      },
     },
-    unit: { select: { number: true } },
+    unit: { select: { number: true, unitTypeId: true } },
     tenant: { select: { firstName: true, lastName: true } },
 } as const satisfies Prisma.LeaseSelect
 
@@ -236,10 +270,13 @@ async function loadForTransfer(actor: Actor, leaseId: string): Promise<TransferL
   return lease
 }
 
-/// The current street rate for a unit type — what a new tenant would pay, and
-/// therefore what the transferring tenant moves on to. US-14: "opens new
-/// lease with new rate."
-async function currentRateFor(facilityId: string, unitTypeId: string, asOf: Date): Promise<number | null> {
+/// The published street rate for a unit type — what a new tenant would pay.
+///
+/// B-162: read for BOTH unit types now, not just the destination. Under
+/// `preserve_discount` the tenant's position relative to the rate on the unit
+/// they are leaving is the thing being carried, so the old type's street rate
+/// is an input rather than a curiosity.
+async function streetRateFor(facilityId: string, unitTypeId: string, asOf: Date): Promise<number | null> {
   const rows = await prisma.unitTypeRate.findMany({
     where: { facilityId, unitTypeId },
     orderBy: { effectiveFrom: 'desc' },
@@ -266,8 +303,14 @@ export async function previewTransfer(
   leaseId: string,
   toUnitId: string,
   transferDate: Date,
+  rateOverrideCents?: number | null,
 ): Promise<TransferPreviewResult> {
-  return previewTransferFor(await loadForTransfer(actor, leaseId), toUnitId, transferDate)
+  return previewTransferFor(
+    await loadForTransfer(actor, leaseId),
+    toUnitId,
+    transferDate,
+    rateOverrideCents,
+  )
 }
 
 /// The same preview against an already-loaded lease, with no authorization of
@@ -282,6 +325,7 @@ export async function previewTransferFor(
   lease: TransferLease,
   toUnitId: string,
   transferDate: Date,
+  rateOverrideCents?: number | null,
 ): Promise<TransferPreviewResult> {
   if (!OCCUPYING_LEASE_STATUSES.includes(lease.status as never)) {
     return { ok: false, problem: 'lease_not_occupying' }
@@ -309,10 +353,40 @@ export async function previewTransferFor(
     }
   }
 
-  const newRateCents =
+  const toStreetRateCents = await streetRateFor(lease.facilityId, target.unitTypeId, transferDate)
+  if (toStreetRateCents === null) return { ok: false, problem: 'no_rate_for_unit_type' }
+
+  // B-162 / D-93. The policy figure, then the two things that may displace it.
+  //
+  // Order matters and is deliberate. A live portal hold (B-136 / D-84) is a
+  // number the TENANT was shown and agreed to, so it wins over the policy —
+  // the same rule that already applied when the policy was always "street". A
+  // staff override wins over both, because a person looking at the account is
+  // the last word on it and the audit records that they were.
+  const policyRateCents =
     heldRateFor(held, target.id) ??
-    (await currentRateFor(lease.facilityId, target.unitTypeId, transferDate))
-  if (newRateCents === null) return { ok: false, problem: 'no_rate_for_unit_type' }
+    transferRateFor({
+      policy: lease.facility.transferRatePolicy as TransferRatePolicy,
+      inPlaceRateCents: lease.monthlyRateCents,
+      fromStreetRateCents: lease.unit
+        ? await streetRateFor(lease.facilityId, lease.unit.unitTypeId, transferDate)
+        : null,
+      toStreetRateCents,
+    })
+
+  const overrideValid =
+    typeof rateOverrideCents === 'number' &&
+    Number.isInteger(rateOverrideCents) &&
+    rateOverrideCents >= 0
+  const newRateCents = overrideValid ? rateOverrideCents : policyRateCents
+
+  // Live only. An applied or cancelled increase is history and says nothing
+  // about what this transfer is about to do.
+  const liveRateIncrease = await prisma.tenantRateIncrease.findFirst({
+    where: { leaseId: lease.id, status: { in: [...LIVE_RATE_INCREASE_STATUSES] } },
+    orderBy: { effectiveDate: 'asc' },
+    select: { id: true, newRateCents: true, effectiveDate: true },
+  })
 
   const period = billingPeriodFor(lease.facility.billingPolicy, lease.billingDay, transferDate)
   const prorates = lease.facility.prorateOnMoveOut
@@ -358,6 +432,12 @@ export async function previewTransferFor(
       transferDate,
       currentRateCents: lease.monthlyRateCents,
       newRateCents,
+      policyRateCents,
+      transferRatePolicy: lease.facility.transferRatePolicy as TransferRatePolicy,
+      rateOverridden: overrideValid && rateOverrideCents !== policyRateCents,
+      toStreetRateCents,
+      raisesRate: isRateRise(lease.monthlyRateCents, newRateCents),
+      liveRateIncrease,
       refundCents,
       chargeCents,
       netCents,
@@ -379,6 +459,10 @@ export type CompleteTransferInput = {
   /// audit catalog says so on `lease.transferred` itself.
   reasonCode?: string
   reasonNote?: string
+  /// B-162 / D-93. The rate staff set on the preview, when they moved off the
+  /// facility's policy figure. Omitted means "use the policy", which is what
+  /// every existing caller does.
+  rateOverrideCents?: number | null
 }
 
 export type CompleteTransferResult =
@@ -400,7 +484,13 @@ export async function completeTransfer(
   // Re-run the preview rather than trusting figures posted from a form: the
   // rate, the unit's availability or the fee could all have moved since the
   // screen rendered, and the confirmed figure must be the posted one.
-  const previewed = await previewTransfer(actor, input.leaseId, input.toUnitId, input.transferDate)
+  const previewed = await previewTransfer(
+    actor,
+    input.leaseId,
+    input.toUnitId,
+    input.transferDate,
+    input.rateOverrideCents,
+  )
   if (!previewed.ok) return previewed
   const preview = previewed.preview
 
@@ -567,6 +657,72 @@ export async function completeTransfer(
       },
       tx,
     )
+
+    // ── The in-flight rate increase (B-162, D-93) ────────────────────────
+    //
+    // Cancelled, and said out loud. The transfer has just set a new rate, so
+    // an increase approved against the old one is a delta from a figure that
+    // no longer exists — `applyDueIncreases` would refuse it at apply time
+    // anyway ("the rate moved under an already-approved increase"), except
+    // that it never got that far: the lease had ended, so the nightly run
+    // reported `ok: true, "skipped — the lease has ended"` every night until
+    // the effective date passed, and an approved, NOTICED increase evaporated
+    // while the run said it was fine. The preview names it before staff
+    // confirm; this is what makes the record match.
+    const cancelledIncreases = await tx.tenantRateIncrease.findMany({
+      where: { leaseId: lease.id, status: { in: [...LIVE_RATE_INCREASE_STATUSES] } },
+      select: { id: true, newRateCents: true, effectiveDate: true, status: true },
+    })
+    for (const increase of cancelledIncreases) {
+      await tx.tenantRateIncrease.update({
+        where: { id: increase.id },
+        data: {
+          status: 'cancelled',
+          cancelledAt: new Date(),
+          cancelledByStaffId: actor.kind === 'staff' ? actor.staffUserId : null,
+        },
+      })
+      await recordAudit(
+        {
+          actor: toAuditActor(actor),
+          facilityId: lease.facilityId,
+          action: 'rate.increase_cancelled',
+          entityType: 'TenantRateIncrease',
+          entityId: increase.id,
+          reasonCode: 'transfer',
+          context: {
+            leaseId: lease.id,
+            newLeaseId: created.id,
+            newRateCents: increase.newRateCents,
+            effectiveDate: increase.effectiveDate.toISOString().slice(0, 10),
+            statusWhenCancelled: increase.status,
+            transferRateCents: preview.newRateCents,
+          },
+        },
+        tx,
+      )
+    }
+
+    // ── The promotion follows the tenant (B-162, D-93) ───────────────────
+    //
+    // D-89 settled that a transfer recaptures nothing — "a transferred tenant
+    // is still a tenant" — and named the hole it left open: the redemption
+    // stayed attached to the ended lease, so the remaining discounted periods
+    // died with it AND the minimum stay died with it, which let a tenant
+    // inside a minimum stay transfer to the cheapest unit on site and walk out
+    // of the next lease owing nothing.
+    //
+    // Re-pointed rather than copied. `PromoRedemption.leaseId` is unique, one
+    // redemption is one promise, and a second row would give `recaptureForLease`
+    // and `discountForLeasePeriod` two answers. `appliedPeriods` and the
+    // schedule are untouched on purpose: the period index is counted across the
+    // whole transfer chain (see `generateInvoices`), so the periods already
+    // discounted stay discounted and the remaining ones land on the months they
+    // were promised for rather than restarting at the new lease's first.
+    const movedRedemption = await tx.promoRedemption.updateMany({
+      where: { leaseId: lease.id },
+      data: { leaseId: created.id },
+    })
 
     if (preview.chargeCents > 0) {
       await tx.ledgerEntry.create({
@@ -739,6 +895,15 @@ export async function completeTransfer(
           toUnitNumber: preview.toUnitNumber,
           previousRateCents: preview.currentRateCents,
           newRateCents: preview.newRateCents,
+          // B-162. Both figures, always: "they paid the policy rate" and "a
+          // manager typed this in" are different facts and the audit row is
+          // the only place the second one is recorded.
+          policyRateCents: preview.policyRateCents,
+          transferRatePolicy: preview.transferRatePolicy,
+          rateOverridden: preview.rateOverridden,
+          raisesRate: preview.raisesRate,
+          cancelledRateIncreaseIds: cancelledIncreases.map((one) => one.id),
+          promoRedemptionMoved: movedRedemption.count > 0,
           refundCents: preview.refundCents,
           chargeCents: preview.chargeCents,
           transferFeeCents: preview.transferFeeCents,
@@ -846,15 +1011,32 @@ export async function transferTargets(
     if (!rateByType.has(rate.unitTypeId)) rateByType.set(rate.unitTypeId, rate.streetRateCents)
   }
 
-  // The held unit is priced at what the tenant was quoted, not at today's
-  // street rate — otherwise the dropdown and the settlement below it disagree
-  // about the same unit, and staff have no way to tell which one posts.
-  return units.map((unit) => ({
-    id: unit.id,
-    number: unit.number,
-    unitTypeName: unit.unitType.name,
-    rateCents: heldRateFor(held, unit.id) ?? rateByType.get(unit.unitTypeId) ?? null,
-  }))
+  // B-162. Priced the way the SETTLEMENT prices it, for the reason the held
+  // unit already was: a dropdown quoting street beside a settlement quoting the
+  // policy figure is two answers to one question, and staff have no way to tell
+  // which one posts. `preserve_discount` in particular makes them differ on
+  // nearly every row, which is the point of it.
+  const fromStreetRateCents = lease.unit ? (rateByType.get(lease.unit.unitTypeId) ?? null) : null
+  const policy = lease.facility.transferRatePolicy as TransferRatePolicy
+
+  return units.map((unit) => {
+    const toStreetRateCents = rateByType.get(unit.unitTypeId)
+    return {
+      id: unit.id,
+      number: unit.number,
+      unitTypeName: unit.unitType.name,
+      rateCents:
+        heldRateFor(held, unit.id) ??
+        (toStreetRateCents === undefined
+          ? null
+          : transferRateFor({
+              policy,
+              inPlaceRateCents: lease.monthlyRateCents,
+              fromStreetRateCents,
+              toStreetRateCents,
+            })),
+    }
+  })
 }
 
 export type PendingTransferRequest = {

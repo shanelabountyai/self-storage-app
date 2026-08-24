@@ -266,6 +266,18 @@ const LAST_REVIEWED = '19 August 2026'
 // claims about. No public route added, so the generated coverage claim and the
 // route-keyed exception list are both untouched. Recorded rather than skipped,
 // per the rule the B-150 entry states. `LAST_REVIEWED` is not bumped.
+//
+// Re-verified 2026-08-24, at B-162 (a transfer no longer re-prices to street,
+// drops an in-flight increase or resets the ECRI clock). Nothing
+// customer-facing in the sense this page makes claims about: the new UI is one
+// select on `/admin/settings`, and a number input plus two `role="note"`
+// warnings on the staff transfer wizard, all under `/admin`. **The tenant's own
+// portal transfer request IS customer-facing and its quoted rate changes** —
+// `portal/transfer.ts` quotes `preview.newRateCents`, which is now the policy
+// figure rather than street — but that is a different number in an existing,
+// already-labelled field, not a new control or a new route. No public route
+// added, so the generated coverage claim and the route-keyed exception list are
+// untouched. `LAST_REVIEWED` is not bumped.
 export default function AccessibilityPage() {
   return (
     <ProsePage

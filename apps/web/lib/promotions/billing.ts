@@ -6,6 +6,7 @@ import {
   type DiscountPeriod,
   type Recapture,
 } from "@storage/core/promotions";
+import { leaseChainIds } from "@/lib/billing/transfer-chain";
 
 /// The answer for every lease that carried no promotion, every facility whose
 /// policy is `none`, and every tenant who served their term — which is nearly
@@ -140,6 +141,36 @@ export async function recaptureForLease(
     policy: facility.promoRecapturePolicy,
     discountGivenCents,
     minStayMonths: redemption.promotion.minStayMonths,
-    monthsServed: monthsServed(lease.startDate, moveOutDate),
+    // B-162 / D-93. Months served by the TENANT, not by this lease row.
+    //
+    // A promotion now follows a transfer, so the lease holding the redemption
+    // may have opened three months after the tenancy did — and `startDate` on
+    // it is the transfer date. Measuring the minimum stay from there would
+    // credit a tenant with nothing for the months they served on the unit they
+    // came from, and bill a recapture on somebody who has already served the
+    // whole minimum.
+    monthsServed: monthsServed(
+      await tenancyStart(lease.id, lease.startDate, client),
+      moveOutDate,
+    ),
   });
+}
+
+/// When this tenant's unbroken tenancy began — the start date of the oldest
+/// lease in the transfer chain, or this lease's own if it has never moved.
+async function tenancyStart(
+  leaseId: string,
+  ownStart: Date,
+  client: Prisma.TransactionClient | typeof prisma,
+): Promise<Date> {
+  const chains = await leaseChainIds([leaseId], client);
+  const chain = chains.get(leaseId) ?? [leaseId];
+  // `leaseChainIds` returns each chain oldest LAST.
+  const originId = chain[chain.length - 1];
+  if (originId === leaseId) return ownStart;
+  const origin = await client.lease.findUnique({
+    where: { id: originId },
+    select: { startDate: true },
+  });
+  return origin?.startDate ?? ownStart;
 }
