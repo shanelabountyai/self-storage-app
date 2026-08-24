@@ -1,7 +1,13 @@
 import { randomUUID } from 'node:crypto'
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { prisma } from '../packages/db'
-import { drainGateCommands, ensureGrant, issueCredential, transitionGrant } from '../apps/web/lib/access/service'
+import {
+  drainGateCommands,
+  ensureGrant,
+  enqueueCommand,
+  issueCredential,
+  transitionGrant,
+} from '../apps/web/lib/access/service'
 import {
   evaluateKeypadEntry,
   replayVendorEventBacklog,
@@ -122,6 +128,44 @@ describeDb('mock gate controller', () => {
     await transitionGrant(grantId, 'active', 'system:delinquency_cleared')
     await drainGateCommands(new Date(), facilityId)
     expect((await evaluateKeypadEntry(facilityId, code)).result).toBe('granted')
+  })
+
+  it('B-158: nextAttemptAt is stamped from the app clock, not the database default', async () => {
+    // Regression: the column used to default from Postgres's own now(), while
+    // drainGateCommands compares it against a Node-side `new Date()` taken
+    // moments later — two independent clocks, which skip a command whenever
+    // the DB's clock runs ahead of the app's (real on a remote DB; not
+    // reproducible as a timing race against the local test DB, where both
+    // sides share one clock). Freezing Node's clock and asserting the
+    // persisted value matches it exactly proves which clock wrote it —
+    // Postgres's real wall clock cannot see a JS fake timer, so this fails
+    // pre-fix and passes post-fix without depending on real clock drift.
+    const frozen = new Date('2026-01-01T00:00:00.000Z')
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(frozen)
+    try {
+      await enqueueCommand({
+        facilityId,
+        grantId: randomUUID(),
+        type: 'grant_access',
+        idempotencyKey: `b158-clock-${suffix}`,
+        payload: {},
+      })
+    } finally {
+      vi.useRealTimers()
+    }
+
+    const command = await prisma.gateCommand.findFirstOrThrow({
+      where: { facilityId, idempotencyKey: `b158-clock-${suffix}` },
+    })
+    expect(command.nextAttemptAt.toISOString()).toBe(frozen.toISOString())
+
+    // And the behavioural guarantee this exists for: drained immediately, it
+    // is picked up rather than skipped.
+    await drainGateCommands(new Date(), facilityId)
+    expect(
+      await prisma.gateCommand.findFirst({ where: { facilityId, idempotencyKey: `b158-clock-${suffix}` } }),
+    ).toMatchObject({ status: 'succeeded' })
   })
 
   it('stores the code only at the mock vendor, never on our own credential row', async () => {

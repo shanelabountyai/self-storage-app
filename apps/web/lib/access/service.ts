@@ -293,6 +293,13 @@ export async function enqueueCommand(
 ): Promise<void> {
   // A duplicate key means the same effect was already asked for; the outbox
   // swallows it rather than the caller having to check first.
+  //
+  // B-158: nextAttemptAt is set here from the app clock rather than left to
+  // the column's DB-side `now()` default. drainGateCommands compares
+  // nextAttemptAt against a Node-side `new Date()` — if the row's timestamp
+  // came from Postgres's clock instead, a command enqueued microseconds
+  // before a drain can carry a timestamp the drain's cutoff hasn't reached
+  // yet, and get silently passed over until the next cron tick.
   await client.gateCommand.createMany({
     data: [
       {
@@ -302,6 +309,7 @@ export async function enqueueCommand(
         type: input.type,
         idempotencyKey: input.idempotencyKey,
         payload: input.payload as Prisma.InputJsonValue,
+        nextAttemptAt: new Date(),
       },
     ],
     skipDuplicates: true,
