@@ -5818,7 +5818,7 @@ Four changes, and the first is the one that matters most:
 
 ## B-165 — A rule-based rate increase is a step, not a jump to street
 
-`PENDING`
+`caccde5`
 
 **What it built.** `targetRateFor` was one line — `return candidate.streetRateCents` — so a rule-based batch raised every eligible tenant the whole distance to street in a single letter: a tenant at $89 against a $145 street rate got a 63% increase, and nothing in the product could express anything else. It now takes a **per-facility ECRI policy**: `min(street, round(inPlace + clamp(inPlace × pct, minStep, maxStep)))`. Six new `Facility` columns (`ecriPercentBasisPoints`, `ecriMinStepCents`, `ecriMaxStepCents`, `ecriCapAtStreet`, `ecriMinMonthsSinceChange`, `ecriMinGapCents`), six controls on `/admin/settings` in the same item, and `ecriPolicyFor()` reading them for both the preview and the commit. `/admin/rate-increases` states the rule in the words of the settings that produced it, links to them, and the worklist gains **New** and **Change** columns showing the dollar step *and its percentage* per row.
 
