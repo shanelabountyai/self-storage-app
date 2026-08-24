@@ -2,13 +2,15 @@ import { prisma, type Prisma } from '@storage/db'
 import { recordAudit } from '@storage/core/audit'
 import { businessDateFor } from '@storage/core/jobs'
 import {
-  missingProofFields,
+  missingFromRequired,
+  requiredProofFieldsForType,
   taskTypeIsSensitive,
   taskTypeResolvedByAction,
   taskTypeSpec,
   type TaskType,
   type TaskTypeSpec,
 } from '@storage/core/tasks'
+import type { ProofField, TimelineStep } from '@storage/core/delinquency'
 import { assertFacilityAccess, can, facilityAccess, ForbiddenError } from '@/lib/rbac/authorize'
 import { toAuditActor } from '@/lib/rbac/audit-actor'
 import type { Actor } from '@/lib/rbac/actor'
@@ -110,10 +112,11 @@ export type TaskRow = {
   detail: string | null
   assigneeName: string | null
   status: 'open' | 'completed' | 'cancelled'
-  /// The catalog's proof gate for this type, so a list can render the right
-  /// fields (e.g. a photo for `overlock_apply`) instead of a note-only form
-  /// that `completeTask` would then refuse.
-  requiredProofFields: readonly string[]
+  /// The proof gate for this task, so a list can render the right fields (e.g.
+  /// a photo for `overlock_apply`) instead of a note-only form that
+  /// `completeTask` would then refuse. `requiredProofFieldsFor` — the same
+  /// function the gate uses, never the catalog on its own.
+  requiredProofFields: readonly ProofField[]
   /// B-166. Set when a note cannot close this type, and saying what can and
   /// where — the card renders this instead of a completion form.
   resolvedByAction: TaskTypeSpec['resolvedByAction']
@@ -161,6 +164,50 @@ function isTaskOverdue(
   }
 
   return task.businessDate.getTime() < context.today.getTime()
+}
+
+/// What proof each of these tasks needs before it can be completed.
+///
+/// B-170. The catalog is no longer the whole answer. A `delinquency_step` task
+/// is raised by whatever step the operator configured, and that step carries
+/// its OWN `requiredProofFields` — `tracking_number` and `delivered_on` on both
+/// shipped certified-mail steps. Nothing read them: the catalog said "a note",
+/// the form rendered a note, the task completed, and `auctionReadiness` then
+/// blocked the sale for ever with "missing: tracking_number, delivered_on" and
+/// no screen anywhere that could supply them.
+///
+/// So the union, resolved once here and used by BOTH the queues that render the
+/// form and `completeTask`'s gate. Two lists would put us back where we started
+/// — a form that asks for less than the gate demands is a task nobody can
+/// close, and one that asks for more is a refusal nobody can act on.
+export async function requiredProofFieldsFor(
+  tasks: readonly { id: string; type: string }[],
+): Promise<Map<string, readonly ProofField[]>> {
+  const byId = new Map<string, readonly ProofField[]>(
+    tasks.map((task) => [task.id, requiredProofFieldsForType(task.type)]),
+  )
+
+  const stepTaskIds = tasks.filter((task) => task.type === 'delinquency_step').map((task) => task.id)
+  if (stepTaskIds.length === 0) return byId
+
+  const runs = await prisma.delinquencyStepRun.findMany({
+    where: { taskId: { in: stepTaskIds } },
+    select: { taskId: true, dayOffset: true, timeline: { select: { steps: true } } },
+  })
+
+  for (const run of runs) {
+    if (!run.taskId) continue
+    const steps = (run.timeline.steps ?? []) as unknown as TimelineStep[]
+    const step = steps.find((candidate) => candidate.dayOffset === run.dayOffset)
+    if (!step) continue
+    const merged = new Set<ProofField>([
+      ...(byId.get(run.taskId) ?? []),
+      ...step.requiredProofFields,
+    ])
+    byId.set(run.taskId, [...merged])
+  }
+
+  return byId
 }
 
 /// "My day": open tasks at a facility, today's business date by default.
@@ -215,6 +262,7 @@ export async function facilityTasks(
   })
 
   const subjects = await resolveTaskSubjects(tasks)
+  const required = await requiredProofFieldsFor(tasks)
 
   return tasks.map((task) => ({
     id: task.id,
@@ -236,7 +284,7 @@ export async function facilityTasks(
     detail: task.detail,
     assigneeName: task.assignee ? `${task.assignee.firstName} ${task.assignee.lastName}` : null,
     status: task.status,
-    requiredProofFields: taskTypeSpec(task.type)?.requiredProofFields ?? ['note'],
+    requiredProofFields: required.get(task.id) ?? requiredProofFieldsForType(task.type),
     resolvedByAction: taskTypeResolvedByAction(task.type),
     subject: subjects.get(`${task.entityType}:${task.entityId}`) ?? fallbackSubject(task.entityType),
   }))
@@ -282,7 +330,7 @@ export type CompleteTaskResult =
   /// B-166. `reason` carries a refusal that is not about a missing field —
   /// today, a type that no note can close. The two are one union rather than
   /// two returns because every caller already handles `ok: false`.
-  | { ok: false; missingFields: string[]; reason?: string }
+  | { ok: false; missingFields: ProofField[]; reason?: string }
 
 /// Completes a task. Refuses when the type's required proof fields (the
 /// catalog) are not all present — "proof-gated completion" is enforced here,
@@ -309,7 +357,10 @@ export async function completeTask(
   const resolvedByAction = taskTypeResolvedByAction(task.type)
   if (resolvedByAction) return { ok: false, missingFields: [], reason: resolvedByAction.sentence }
 
-  const missingFields = missingProofFields(task.type, proof)
+  // B-170. The same union the queue rendered a field for, so the gate and the
+  // form can never disagree about what this task needs.
+  const required = (await requiredProofFieldsFor([task])).get(task.id) ?? []
+  const missingFields = missingFromRequired(required, proof)
   if (missingFields.length > 0) return { ok: false, missingFields }
 
   await prisma.$transaction(async (tx) => {

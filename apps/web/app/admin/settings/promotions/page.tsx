@@ -4,6 +4,7 @@ import { getSwitcherData } from "@/lib/admin/context";
 import { resolveSelectedFacility } from "@/lib/admin/facility-selection-logic";
 import { hasPermissionAnywhere } from "@/lib/rbac/authorize";
 import { promotionsFor } from "@/lib/admin/promotions";
+import { AnnounceRegion } from "@/components/admin/announce";
 import { formatCents } from "@/lib/format";
 import {
   addCodeAction,
@@ -69,6 +70,9 @@ export default async function PromotionsPage() {
         </p>
       </div>
 
+      {/* B-170. Above the list: a status change removes the control that was
+          pressed, so the outcome has to be reported somewhere that survives. */}
+      <AnnounceRegion>
       <ul className="flex flex-col gap-4">
         {promotions.map((promotion) => (
           <li
@@ -135,8 +139,18 @@ export default async function PromotionsPage() {
                     key={status}
                     action={setStatusAction}
                     label={`${status} ${promotion.name}`}
+                    // B-170. The row reporting the outcome is the row the
+                    // outcome removes: changing the status filters this very
+                    // form out of the list, so a region inside it is unmounted
+                    // in the same commit that populates it.
+                    announceOutside
                   >
                     <input type="hidden" name="facilityId" value={facilityId} />
+                    <input
+                      type="hidden"
+                      name="promotionName"
+                      value={promotion.name}
+                    />
                     <input
                       type="hidden"
                       name="promotionId"
@@ -192,6 +206,7 @@ export default async function PromotionsPage() {
           <li className="text-muted-foreground text-sm">No promotions yet.</li>
         )}
       </ul>
+      </AnnounceRegion>
 
       <AdminForm
         action={createPromotionAction}

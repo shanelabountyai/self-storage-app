@@ -52,6 +52,27 @@ export const DELIVERY_METHOD_LABELS: Record<DeliveryMethod, string> = {
 export const PROOF_FIELDS = ['note', 'tracking_number', 'photo_reference', 'delivered_on'] as const
 export type ProofField = (typeof PROOF_FIELDS)[number]
 
+/// One label and one input type per proof field, in one place (B-170).
+///
+/// The completion form used to render `note` and a conditional
+/// `photo_reference` and nothing else, while an operator could require
+/// `tracking_number` and `delivered_on` on any staff step — so a step
+/// configured that way raised a task whose proof could never be recorded, and
+/// the refusal it produced was the raw enum key.
+///
+/// Typed `Record<ProofField, ...>` rather than `Record<string, ...>` on
+/// purpose: adding a member to `PROOF_FIELDS` now fails the BUILD here, which
+/// is the only way a fifth field cannot repeat the same story.
+export const PROOF_FIELD_LABELS: Record<
+  ProofField,
+  { label: string; inputType: 'text' | 'date' }
+> = {
+  note: { label: 'Note', inputType: 'text' },
+  tracking_number: { label: 'Tracking number', inputType: 'text' },
+  photo_reference: { label: 'Photo reference', inputType: 'text' },
+  delivered_on: { label: 'Date delivered', inputType: 'date' },
+}
+
 export type TimelineStep = {
   /// Days past due, measured by the one shared `daysPastDue` definition (D-25)
   /// — from the ORIGINAL due date of the oldest unpaid rent invoice, never from

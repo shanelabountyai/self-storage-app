@@ -130,8 +130,16 @@ export async function setStatusAction(
   // Every facility page shows badges, and a promo going live that nobody can
   // see for five minutes is a campaign that starts late.
   revalidatePath("/storage", "layout");
+  // B-170. Named, because this message is announced from a region ABOVE the
+  // list: the control that was pressed is filtered out of the row the moment
+  // the status changes, and two unnamed "Saved."s in a row are identical text
+  // in a live region, which is no mutation and so no announcement at all.
+  const name = String(formData.get("promotionName") ?? "").trim();
+  const subject = name ? `${name}: ` : "";
   return success(
-    status === "active" ? "Live. It is on the facility pages now." : "Saved.",
+    status === "active"
+      ? `${subject}live. It is on the facility pages now.`
+      : `${subject}saved as ${status}.`,
   );
 }
 

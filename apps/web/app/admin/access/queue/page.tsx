@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { getSwitcherData } from '@/lib/admin/context'
 import { resolveSelectedFacility } from '@/lib/admin/facility-selection-logic'
 import { manualQueue } from '@/lib/access/manual-queue'
+import { AnnounceRegion } from '@/components/admin/announce'
 import { TaskCompleteForm } from '@/components/admin/task-complete-form'
 
 export const metadata = { title: 'Keypad queue' }
@@ -70,6 +71,9 @@ export default async function KeypadQueuePage() {
         </p>
       )}
 
+      {/* B-170. Keying in a change removes its card, and with it any region
+          inside the card that reported the outcome. */}
+      <AnnounceRegion>
       <ul className="flex flex-col gap-3">
         {items.map((item) => (
           <li
@@ -104,6 +108,7 @@ export default async function KeypadQueuePage() {
               subjectLabel={item.instruction.action}
               notePlaceholder="Keyed in at the north gate panel"
               buttonLabel="Done at the keypad"
+              requiredProofFields={item.requiredProofFields}
             />
           </li>
         ))}
@@ -114,6 +119,7 @@ export default async function KeypadQueuePage() {
           </li>
         )}
       </ul>
+      </AnnounceRegion>
     </div>
   )
 }

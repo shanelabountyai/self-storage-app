@@ -16,6 +16,7 @@ import {
   noticeTypeLabel,
   NOTICE_TYPES,
 } from '@storage/core/notices'
+import { PROOF_FIELD_LABELS } from '@storage/core/delinquency'
 import { formatCents } from '@/lib/format'
 import { generateNoticeAction, mailNoticeAction, recordDeliveryAction } from './actions'
 
@@ -30,10 +31,13 @@ export const metadata = { title: 'Notices' }
 // invoices disagree is a refusal with a reason, not a missing button.
 
 
+// B-170. The four `PROOF_FIELDS` come from the one shared map; `email_address`
+// is this screen's own — a delivery proof rather than a task proof, and not a
+// member of `PROOF_FIELDS`.
 const PROOF_LABELS: Record<string, string> = {
-  tracking_number: 'Tracking number',
-  note: 'Note',
-  photo_reference: 'Photo reference',
+  ...Object.fromEntries(
+    Object.entries(PROOF_FIELD_LABELS).map(([field, spec]) => [field, spec.label]),
+  ),
   email_address: 'Email address it went to',
 }
 

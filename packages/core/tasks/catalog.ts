@@ -4,6 +4,8 @@
 // — a data table is how a new consumer adds a task type without anyone
 // touching the completion logic.
 
+import { type ProofField } from "../delinquency/timeline.ts";
+
 export type TaskTypeSpec = {
   type: string;
   label: string;
@@ -11,7 +13,10 @@ export type TaskTypeSpec = {
   /// be completed. Every type requires at least a note: a queue item marked
   /// "done" with nothing to show for it is how a task queue becomes noise
   /// nobody trusts.
-  requiredProofFields: readonly string[];
+  /// B-170: `ProofField`, not `string`. Every screen that renders these keys
+  /// reads one label map (`PROOF_FIELD_LABELS`), and a key with no label there
+  /// is a build failure rather than a raw enum shown to staff.
+  requiredProofFields: readonly ProofField[];
   /// Whether completing this type writes an AuditLog entry alongside marking
   /// it done — for the types where "who resolved this and when" matters
   /// beyond the task row itself.
@@ -325,7 +330,30 @@ export function taskTypeSpec(type: string): TaskTypeSpec | undefined {
 /// Every type's floor: a note. Used verbatim for a registered type with no
 /// stricter requirements, and as the fail-closed default for a type the
 /// catalog has never heard of.
-const DEFAULT_REQUIRED_FIELDS: readonly string[] = ["note"];
+const DEFAULT_REQUIRED_FIELDS: readonly ProofField[] = ["note"];
+
+/// What a type asks for, with the fail-closed default for a type the catalog
+/// has never heard of.
+export function requiredProofFieldsForType(type: string): readonly ProofField[] {
+  return taskTypeSpec(type)?.requiredProofFields ?? DEFAULT_REQUIRED_FIELDS;
+}
+
+/// Which of `required` are missing or blank in `proof`.
+///
+/// Split out of `missingProofFields` (B-170) because the catalog is no longer
+/// the only source of a task's required fields: a `delinquency_step` task also
+/// inherits whatever proof the configured step asked for, and the form that
+/// collects it and the gate that refuses without it have to read the same
+/// list or the task becomes uncompletable.
+export function missingFromRequired(
+  required: readonly ProofField[],
+  proof: Record<string, unknown> | null,
+): ProofField[] {
+  return required.filter((key) => {
+    const value = proof?.[key];
+    return typeof value !== "string" || value.trim() === "";
+  });
+}
 
 /// Which of a type's required proof fields are missing or blank. Empty means
 /// the task can be completed.
@@ -336,13 +364,8 @@ const DEFAULT_REQUIRED_FIELDS: readonly string[] = ["note"];
 export function missingProofFields(
   type: string,
   proof: Record<string, unknown> | null,
-): string[] {
-  const spec = taskTypeSpec(type);
-  const required = spec?.requiredProofFields ?? DEFAULT_REQUIRED_FIELDS;
-  return required.filter((key) => {
-    const value = proof?.[key];
-    return typeof value !== "string" || value.trim() === "";
-  });
+): ProofField[] {
+  return missingFromRequired(requiredProofFieldsForType(type), proof);
 }
 
 export function taskTypeIsSensitive(type: string): boolean {

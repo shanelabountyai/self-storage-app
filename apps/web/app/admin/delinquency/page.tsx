@@ -5,6 +5,7 @@ import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
 import { delinquencyQueue } from '@/lib/admin/delinquency-queue'
 import { moneyOwedRollup } from '@/lib/admin/rollups'
 import { FacilityRollup } from '@/components/admin/facility-rollup'
+import { AnnounceRegion } from '@/components/admin/announce'
 import { TaskCompleteForm } from '@/components/admin/task-complete-form'
 import { formatCents } from '@/lib/format'
 
@@ -77,6 +78,9 @@ export default async function DelinquencyQueuePage({
         </p>
       )}
 
+      {/* B-170. Above the groups, because completing a step removes the card
+          that would otherwise have carried the message and the focus. */}
+      <AnnounceRegion>
       {groups.length === 0 ? (
         <p className="text-muted-foreground text-sm">Nothing due right now.</p>
       ) : (
@@ -138,7 +142,7 @@ export default async function DelinquencyQueuePage({
                     subjectLabel={`${task.label}, ${task.subject.label}`}
                     notePlaceholder="What did you do?"
                     buttonLabel="Complete"
-                    requiresPhoto={task.requiredProofFields.includes('photo_reference')}
+                    requiredProofFields={task.requiredProofFields}
                   />
                 </li>
               ))}
@@ -146,6 +150,7 @@ export default async function DelinquencyQueuePage({
           </section>
         ))
       )}
+      </AnnounceRegion>
     </div>
   )
 }

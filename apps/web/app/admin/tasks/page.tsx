@@ -4,6 +4,7 @@ import { getSwitcherData } from '@/lib/admin/context'
 import { resolveSelectedFacility } from '@/lib/admin/facility-selection-logic'
 import { facilityTasks, taskRollup } from '@/lib/admin/tasks'
 import { FacilityRollup } from '@/components/admin/facility-rollup'
+import { AnnounceRegion } from '@/components/admin/announce'
 import { TaskCompleteForm } from '@/components/admin/task-complete-form'
 
 export const metadata = { title: 'Tasks' }
@@ -79,6 +80,10 @@ export default async function TasksPage({
         <FacilityRollup heading="Across your facilities" rows={rollupRows(rollup)} />
       )}
 
+      {/* B-170. The completion message lives HERE, above the list, because
+          completing a task removes the card that would otherwise have carried
+          it — and with it the live region and the focus. */}
+      <AnnounceRegion>
       {tasks.length === 0 ? (
         <p className="text-muted-foreground text-sm">
           {typeParam ? 'None open of this type right now.' : 'Nothing open right now.'}
@@ -148,13 +153,14 @@ export default async function TasksPage({
                   subjectLabel={`${task.label}, ${task.subject.label}`}
                   notePlaceholder="What did you do?"
                   buttonLabel="Complete"
-                  requiresPhoto={task.requiredProofFields.includes('photo_reference')}
+                  requiredProofFields={task.requiredProofFields}
                 />
               )}
             </li>
           ))}
         </ul>
       )}
+      </AnnounceRegion>
     </div>
   )
 }

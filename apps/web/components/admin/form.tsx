@@ -11,6 +11,7 @@ import {
 } from 'react'
 import { IDLE_FORM_STATE, type FormState } from '@/lib/admin/form-state'
 import { RecoveryCodes } from '@/components/auth/recovery-codes'
+import { useAnnounceOutside } from '@/components/admin/announce'
 
 // PRD 02 FR-19/FR-20. The one place admin forms get their error and success
 // behaviour, so every later form (B-021, B-038, B-039, B-048) inherits it
@@ -29,9 +30,25 @@ type AdminFormProps = {
   /// user has to keep, and it gets copy/download/print and an
   /// acknowledgement gate instead.
   detailsAs?: 'list' | 'recovery-codes'
+  /// B-170. Send the success message to the nearest `AnnounceRegion` instead of
+  /// announcing it here. For the forms whose own success REMOVES them — a task
+  /// leaving its queue, a promotion leaving the "scheduled" list, a returned
+  /// payment leaving `profile.returnable` — where a region inside the form is
+  /// unmounted in the same commit that populates it and therefore announces
+  /// nothing. Opt-in, because every other form in the product stays mounted and
+  /// is right to keep its message where the reader already is.
+  announceOutside?: boolean
 }
 
-export function AdminForm({ action, children, className, label, detailsAs = 'list' }: AdminFormProps) {
+export function AdminForm({
+  action,
+  children,
+  className,
+  label,
+  detailsAs = 'list',
+  announceOutside = false,
+}: AdminFormProps) {
+  const announce = useAnnounceOutside()
   const summaryRef = useRef<HTMLDivElement>(null)
   const formRef = useRef<HTMLFormElement>(null)
   const submitted = useRef<FormData | null>(null)
@@ -53,9 +70,16 @@ export function AdminForm({ action, children, className, label, detailsAs = 'lis
   const rememberSubmission = useCallback(
     async (state: FormState, formData: FormData) => {
       submitted.current = formData
-      return action(state, formData)
+      const next = await action(state, formData)
+      // Pushed from HERE, not from an effect on `state`: by the time the
+      // success state commits, the revalidation it triggered may already have
+      // unmounted this form, and an effect that never runs announces nothing.
+      // This runs while the form is still mounted, and lands in state owned by
+      // a component above the list.
+      if (announceOutside && announce && next.status === 'success') announce(next.message)
+      return next
     },
-    [action],
+    [action, announce, announceOutside],
   )
 
   const [state, formAction] = useActionState(rememberSubmission, IDLE_FORM_STATE)
@@ -119,7 +143,7 @@ export function AdminForm({ action, children, className, label, detailsAs = 'lis
             nothing changed it. An empty <p> has no visible footprint, so the
             class bought nothing. */}
         <p role="status" className="col-span-full text-sm font-medium text-green-700">
-          {state.status === 'success' ? state.message : ''}
+          {state.status === 'success' && !announceOutside ? state.message : ''}
         </p>
 
         {/* Outside the live region on purpose. A list the user has to read,

@@ -7,6 +7,7 @@ import {
 } from "@/lib/admin/tenants";
 import { formatCents } from "@/lib/format";
 import { AdminForm, Field, FieldSet } from "@/components/admin/form";
+import { AnnounceRegion } from "@/components/admin/announce";
 import {
   addNoteAction,
   flagAddressReturnedAction,
@@ -980,6 +981,7 @@ export default async function TenantProfilePage({
               returned-payment fee is charged if one is configured. The tenant
               sees it on their own payment list.
             </p>
+            <AnnounceRegion>
             <ul className="flex flex-col gap-3">
               {profile.returnable.map((payment) => (
                 <li
@@ -1000,6 +1002,12 @@ export default async function TenantProfilePage({
                   <AdminForm
                     action={returnPaymentAction}
                     label={`Record a return of ${formatCents(payment.amountCents)}`}
+                    // B-170. Recording the return removes this payment from
+                    // `profile.returnable`, so the row reporting the outcome is
+                    // the row the outcome deletes — and the message says which
+                    // invoices reopened, which is the part a staffer needs
+                    // before the tenant rings.
+                    announceOutside
                     className="mt-3 flex flex-wrap items-end gap-3"
                   >
                     <input type="hidden" name="tenantId" value={tenantId} />
@@ -1045,6 +1053,7 @@ export default async function TenantProfilePage({
                 </li>
               ))}
             </ul>
+            </AnnounceRegion>
           </section>
         )}
 

@@ -1,9 +1,16 @@
 import { prisma } from '@storage/db'
 import { isOverdue } from '@storage/core/access'
+import { requiredProofFieldsForType } from '@storage/core/tasks'
+import type { ProofField } from '@storage/core/delinquency'
 import { parseWeeklySchedule } from '@storage/core/facility-settings'
 import { instructionFor, type ManualInstruction } from '@/lib/access/manual-adapter'
 import { assertFacilityAccess, can, ForbiddenError } from '@/lib/rbac/authorize'
 import type { Actor } from '@/lib/rbac/actor'
+
+/// Every row in this queue is one type, which is what makes the proof gate a
+/// constant here rather than a lookup per row.
+const TASK_TYPE = 'gate_manual_action'
+const PROOF_FIELDS_FOR_TYPE = requiredProofFieldsForType(TASK_TYPE)
 
 // PRD 03 US-6 (B-065). The work queue a manual facility runs from.
 //
@@ -26,6 +33,11 @@ export type ManualQueueItem = {
   overdue: boolean
   assigneeName: string | null
   instruction: ManualInstruction
+  /// B-170. The gate `completeTask` will apply, so the card renders a control
+  /// for each field rather than assuming a note. Read from the type here rather
+  /// than in the view, for the same reason the instruction is: a queue should
+  /// not have to know a `Task.type` string to render its own row.
+  requiredProofFields: readonly ProofField[]
 }
 
 export async function manualQueue(
@@ -43,7 +55,7 @@ export async function manualQueue(
   })
 
   const tasks = await prisma.task.findMany({
-    where: { facilityId, type: 'gate_manual_action', status: 'open' },
+    where: { facilityId, type: TASK_TYPE, status: 'open' },
     orderBy: { createdAt: 'asc' },
     select: {
       id: true,
@@ -100,6 +112,7 @@ export async function manualQueue(
 
     items.push({
       taskId: task.id,
+      requiredProofFields: PROOF_FIELDS_FOR_TYPE,
       commandId: command.id,
       commandType: command.type,
       createdAt: task.createdAt,

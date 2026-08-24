@@ -4,6 +4,7 @@ import { getSwitcherData } from '@/lib/admin/context'
 import { resolveSelectedFacility } from '@/lib/admin/facility-selection-logic'
 import { facilityTasks } from '@/lib/admin/tasks'
 import { delinquencyQueue } from '@/lib/admin/delinquency-queue'
+import { AnnounceRegion } from '@/components/admin/announce'
 import { TaskCompleteForm } from '@/components/admin/task-complete-form'
 import { reportFindingAction } from './actions'
 
@@ -55,6 +56,9 @@ export default async function WalkthroughPage() {
         </p>
       </div>
 
+      {/* B-170. Completing the walk removes the card the message would have
+          been written into, so the region sits above it. */}
+      <AnnounceRegion>
       <section className="flex flex-col gap-3">
         <h2 className="text-sm font-medium">Confirm the walk</h2>
         {walkthroughTasks.length === 0 ? (
@@ -81,12 +85,14 @@ export default async function WalkthroughPage() {
                   subjectLabel={`Walkthrough for ${formatDate(task.businessDate)}`}
                   notePlaceholder="Walked the property, all clear"
                   buttonLabel="Walked"
+                  requiredProofFields={task.requiredProofFields}
                 />
               </li>
             ))}
           </ul>
         )}
       </section>
+      </AnnounceRegion>
 
       {overlockGroups.length > 0 && (
         <section className="flex flex-col gap-3">

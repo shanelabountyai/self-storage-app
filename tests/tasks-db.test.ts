@@ -244,6 +244,70 @@ describeDb('task queue', () => {
       expect((await prisma.task.findUniqueOrThrow({ where: { id } })).status).toBe('open')
     })
 
+    // B-170. The catalog says `delinquency_step` needs a note. The STEP that
+    // raised it says tracking number and date delivered — and nothing read
+    // that, so the task closed on a note and `auctionReadiness` then blocked
+    // the sale for ever on proof no screen could record.
+    it('gates a delinquency step on the proof its configured step asked for', async () => {
+      const timeline = await prisma.delinquencyTimeline.create({
+        data: {
+          facilityId,
+          version: 900,
+          label: 'B-170 fixture',
+          steps: [
+            {
+              dayOffset: 45,
+              label: 'Certified letter',
+              automatedActions: [],
+              noticeTemplateKey: null,
+              deliveryMethods: ['certified_mail'],
+              staffTaskLabel: 'Post it and keep the receipt',
+              requiredProofFields: ['tracking_number', 'delivered_on'],
+            },
+          ],
+        },
+      })
+      const { id } = await createTask({
+        facilityId,
+        type: 'delinquency_step',
+        entityType: 'Lease',
+        entityId: leaseId,
+      })
+      await prisma.delinquencyStepRun.create({
+        data: {
+          leaseId,
+          facilityId,
+          timelineId: timeline.id,
+          dayOffset: 45,
+          label: 'Certified letter',
+          businessDate: new Date('2026-08-24T00:00:00.000Z'),
+          taskId: id,
+        },
+      })
+
+      // The queue renders a control per field, so it has to be told about all
+      // three — the catalog's note UNION the step's two.
+      const rows = await facilityTasks(actorAt(counterId, facilityId), facilityId, {
+        businessDate: businessDateFor(new Date(), 'America/Chicago'),
+      })
+      const row = rows.find((task) => task.id === id)
+      expect(row?.requiredProofFields).toEqual(
+        expect.arrayContaining(['note', 'tracking_number', 'delivered_on']),
+      )
+
+      const refused = await completeTask(actorAt(counterId, facilityId), id, { note: 'Posted it.' })
+      expect(refused).toEqual({ ok: false, missingFields: ['tracking_number', 'delivered_on'] })
+
+      const done = await completeTask(actorAt(counterId, facilityId), id, {
+        note: 'Posted it.',
+        tracking_number: '9400 1000 0000 0000 0000 00',
+        delivered_on: '2026-08-26',
+      })
+      expect(done).toEqual({ ok: true })
+      const task = await prisma.task.findUniqueOrThrow({ where: { id } })
+      expect(task.proof).toMatchObject({ tracking_number: '9400 1000 0000 0000 0000 00' })
+    })
+
     it('completes once proof is supplied, recording who and when', async () => {
       const { id } = await createTask({
         facilityId,

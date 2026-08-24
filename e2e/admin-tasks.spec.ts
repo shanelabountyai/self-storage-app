@@ -98,11 +98,53 @@ test.describe('signed in as the demo owner', () => {
     // demo data carries none.
     await expect(card.getByRole('link', { name: 'Dana Delinquent' })).toBeVisible()
 
+    // B-170. A real, visible <label> on the proof control — it used to be
+    // labelled only by its placeholder, which vanishes the moment anything is
+    // typed and is unavailable to speech input (3.3.2). Asserted here rather
+    // than in a test of its own because this is the one point in the suite
+    // where a task card is guaranteed to exist.
+    await expect(card.getByLabel('Note')).toBeVisible()
+
     await card.getByPlaceholder('What did you do?').fill('Confirmed a current address on file.')
     await card.getByRole('button', { name: 'Complete' }).click()
 
-    await expect(page.getByText('Returned mail — contact info may be stale')).toHaveCount(0)
+    // The CARD is gone. Not `getByText(...)` on the whole page any more: since
+    // B-170 the success message names the task it completed, so the subject
+    // string is still on the page — in the announcement, which is the point.
+    await expect(card).toHaveCount(0)
+
+    // B-170. The outcome has to survive the card it reports on. This message
+    // used to be written into a `role="status"` INSIDE the `<li>` that the
+    // completion removes, in the same commit — so it was never an observable
+    // mutation and nothing was announced, and focus, which was on the submit
+    // inside that `<li>`, fell to `<body>`. Both halves asserted here, on the
+    // one completion this suite can safely drive against shared demo data.
+    await expect(
+      page.getByRole('status').filter({ hasText: 'Task completed' }),
+    ).toContainText('Returned mail')
+    await expect(page.locator('body')).not.toBeFocused()
   })
+
+  // B-170. All four queues share `TaskCompleteForm`, and all four had the same
+  // failure: the message was announced from a region INSIDE the card that the
+  // completion removes, in the same commit — never an observable mutation, so
+  // never announced. The fix is structural, and this is the structure: a live
+  // region that is mounted and empty at load, above the list, on every queue
+  // that renders the form. Read-only, and it does not depend on a task
+  // existing, which is why it does not skip.
+  for (const route of ['/admin/tasks', '/admin/delinquency', '/admin/walkthrough', '/admin/access/queue']) {
+    test(`${route} mounts its completion live region before anything happens`, async ({ page }) => {
+      await page.goto(route)
+      await expect(page.getByRole('main')).toBeVisible()
+      // The page-level region specifically: `AdminForm`'s own status paragraph
+      // is not focusable, so `tabindex="-1"` picks out the one `AnnounceRegion`
+      // renders and nothing else. Empty at load, and focusable so that the
+      // announcement can take the focus the removed card gave up.
+      const region = page.locator('p[role="status"][tabindex="-1"]')
+      await expect(region).toHaveCount(1)
+      await expect(region).toBeEmpty()
+    })
+  }
 
   // B-141. Before this, `completeTaskAction` discarded the service's
   // `{ ok: false, missingFields }` refusal: the button was pressed, the page
@@ -127,7 +169,7 @@ test.describe('signed in as the demo owner', () => {
 
     const alert = page.getByRole('alert')
     await expect(alert).toBeVisible()
-    await expect(alert).toContainText('note is required')
+    await expect(alert).toContainText(/note is required/i)
     // The summary receives focus (PRD 02 FR-19) rather than leaving the user
     // at the button with no idea anything happened.
     await expect(alert).toBeFocused()

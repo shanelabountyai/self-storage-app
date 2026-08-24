@@ -15,6 +15,7 @@ import {
   DELIVERY_METHODS,
   DELIVERY_METHOD_LABELS,
   PROOF_FIELDS,
+  PROOF_FIELD_LABELS,
   QUALIFYING_AMOUNTS,
   QUALIFYING_AMOUNT_LABELS,
   TIMELINE_DISCLAIMER,
@@ -32,13 +33,6 @@ export const metadata = { title: 'Delinquency timeline' }
 // compliant; defaults are labeled 'example configuration'." The disclaimer is
 // persistent rather than dismissible, because the person approving a sale eight
 // months from now is not the person reading this today.
-
-const PROOF_LABELS: Record<string, string> = {
-  note: 'A note',
-  tracking_number: 'Tracking number',
-  photo_reference: 'Photo',
-  delivered_on: 'Date delivered',
-}
 
 function formatDate(value: Date): string {
   return new Intl.DateTimeFormat('en-US', { dateStyle: 'medium' }).format(value)
@@ -271,7 +265,7 @@ export default async function DelinquencyTimelinePage({
                       defaultChecked={step?.requiredProofFields.includes(proof)}
                       className="size-4"
                     />
-                    {PROOF_LABELS[proof]}
+                    {PROOF_FIELD_LABELS[proof].label}
                   </label>
                 ))}
               </fieldset>
