@@ -5707,7 +5707,7 @@ The fix is one idea applied everywhere: **the case's pin is the evidence, not th
 
 ## B-161 — One returned ACH served the whole lien ladder in a night
 
-`PENDING`
+`f3188fe`
 
 **What it built.** `packages/core/delinquency/engine.ts` returned *every* unexecuted step at or below `daysPastDue` and the nightly run executed all of them in one pass. `cure()` supersedes the whole step history, and `returnPayment` re-opens the invoices at their **original** due date (D-25 — correct, the money never arrived). So a bank clawing back a payment on a 90-day-old invoice put the lease back at full age with an empty record, and that night's run sent four dunning letters in the same post, re-cut the gate and called `openAuctionCase`. The lien pipeline opened by a chargeback, overnight, with no human in it.
 
