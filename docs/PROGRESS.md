@@ -5577,6 +5577,8 @@ The card's `href` has always pointed at `/admin/tenants/{tenantId}`, so the fix 
 
 ## B-155 — Protection attach rate, finally reportable
 
+`d4355b6`
+
 **What it built.** US-44's own AC ("attach rate is reportable... a coaching number, not a vanity metric") had never been built — dollars were reported, the ratio was not. One operator-review row, three pieces:
 
 - **`packages/core/metrics/attach-rate.ts`** — the definition, same pattern as every other module (D-25): `attachRate(events)` takes `{ enrolled, channel, staffId }` per move-in and returns overall / by-channel / by-staff buckets of `{ moveIns, enrolled, rate }`; `sumAttachRate` rolls facilities up by summing the components and recomputing the ratio, never averaging it. `channel` reuses `MoveSource` from `moves.ts` (web/phone/walk_in/referral/drive_by/unknown) rather than inventing a second vocabulary for "web / counter / phone." A staffId of `null` buckets under the fixed key `UNASSIGNED_STAFF` rather than being dropped or folded into a real staffer's count.
