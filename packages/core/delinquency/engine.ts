@@ -20,6 +20,11 @@ export type HaltReason =
   /// a system which has not been told what this state requires should run no
   /// lien pipeline at all.
   | 'no_timeline'
+  /// B-161 / D-92. A payment came back — a returned ACH, a bounced cheque, a
+  /// chargeback — and the arrear it re-opened is inside its grace window, or a
+  /// `settling_payment_failed` task about it is still open. The tenant is
+  /// holding a receipt and believes they are current; the ladder waits.
+  | 'reversal_grace'
 
 export type EngineInput = {
   steps: readonly TimelineStep[]
@@ -34,6 +39,14 @@ export type EngineInput = {
   /// a re-run of tonight, or a catch-up over a missed week, must not fire a
   /// step twice.
   executedDays: readonly number[]
+  /// B-161. A step already ran for this lease on this business date. The other
+  /// half of "one step per run": without it, running the nightly job twice in
+  /// one evening walks the ladder two rungs and puts two notices on one date.
+  executedToday: boolean
+  /// B-161 / D-92. A reversal re-opened this arrear recently, or staff have not
+  /// finished settling it. Resolved by the caller from the timeline's own
+  /// `reversalGraceDays` and the open task, so this stays clock-free.
+  reversalGrace: boolean
 }
 
 export type EngineDecision =
@@ -50,14 +63,27 @@ export function evaluate(input: EngineInput): EngineDecision {
   if (input.onHold) return { act: false, halt: 'on_hold' }
   if (input.qualifyingOutstandingCents <= 0) return { act: false, halt: 'cured' }
   if (input.leaseEnded) return { act: false, halt: 'moved_out' }
+  if (input.reversalGrace) return { act: false, halt: 'reversal_grace' }
 
   const executed = new Set(input.executedDays)
   const due = orderedSteps(input.steps).filter(
     (step) => input.daysPastDue >= step.dayOffset && !executed.has(step.dayOffset),
   )
 
-  // Past due but not yet at the first step: nothing to do and nothing wrong.
-  return due.length > 0 ? { act: true, steps: due } : { act: false, halt: null }
+  // B-161: ONE step per lease per run, however many are arithmetically due.
+  //
+  // Before this, a lease that arrived at full age with an empty history — a
+  // reversal re-opening a 90-day invoice at its original due date (D-25), a
+  // facility that configured its first timeline after the fact, a run that
+  // missed a week — executed every step in the same pass. One returned ACH put
+  // four dunning letters in the same post, cut the gate and opened the auction
+  // case overnight. A ladder is a sequence of chances to pay; served all at
+  // once it is neither a sequence nor a chance, and it is the part of a lien
+  // file that has to look like it happened over ninety days because it did.
+  //
+  // The cost is deliberate: catching up N missed steps now takes N nights.
+  if (due.length === 0 || input.executedToday) return { act: false, halt: null }
+  return { act: true, steps: due.slice(0, 1) }
 }
 
 /// The stage a lease is at — the last step it has passed. Used for

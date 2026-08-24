@@ -237,6 +237,33 @@ describeDb('late fees', () => {
       expect(await prisma.invoice.count({ where: { leaseId: moved.id, kind: 'fee' } })).toBe(0)
     })
 
+    // B-161. A returned ACH or a chargeback re-opens the rent invoice at its
+    // ORIGINAL due date (D-25), so the lease is instantly back at full age. The
+    // fee invoices it already paid are NOT voided by a reversal, and the ladder
+    // reads its position from them — so the steps already billed stay billed.
+    it('does not re-charge a step after a payment is returned', async () => {
+      await seedSteps()
+      const rent = await rentInvoice({ dueDate: d('2026-09-01') })
+      await assessLateFees(facilityId, d('2026-09-06'), recordItem)
+      const fees = await prisma.invoice.findMany({ where: { leaseId, kind: 'fee' } })
+      expect(fees).toHaveLength(1)
+
+      // Paid at the counter, then the bank takes it back: `recomputeInvoices`
+      // puts the rent invoice back to open at the same due date.
+      await prisma.invoice.update({
+        where: { id: fees[0].id },
+        data: { amountPaidCents: fees[0].totalCents, status: 'paid' },
+      })
+      await prisma.invoice.update({
+        where: { id: rent.id },
+        data: { amountPaidCents: 0, status: 'open' },
+      })
+
+      await assessLateFees(facilityId, d('2026-09-20'), recordItem)
+
+      expect(await prisma.invoice.count({ where: { leaseId, kind: 'fee' } })).toBe(1)
+    })
+
     it('is idempotent on a re-run of the same night', async () => {
       await seedSteps()
       await rentInvoice({ dueDate: d('2026-09-01') })

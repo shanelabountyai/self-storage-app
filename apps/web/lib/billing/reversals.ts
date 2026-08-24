@@ -8,6 +8,7 @@ import type { Actor } from "@/lib/rbac/actor";
 import { applyPayment, recomputeInvoices } from "@/lib/billing/allocation";
 import { nextInvoiceNumber } from "@/lib/billing/numbering";
 import { cancelOpenTask, createTask } from "@/lib/admin/tasks";
+import { leaseChainIds } from "@/lib/billing/transfer-chain";
 
 // PRD 02 §4.5 US-46, US-21, US-23; §5.3 FR-8 (B-146). A payment that came back.
 //
@@ -128,7 +129,7 @@ export async function returnPayment(
       receiptNumber: true,
       ledgerEntries: {
         where: { type: "payment" },
-        select: { id: true, leaseId: true },
+        select: { id: true, leaseId: true, occurredAt: true },
       },
       allocations: { select: { id: true, invoiceId: true } },
     },
@@ -265,6 +266,12 @@ export async function returnPayment(
     priority: "high",
   });
 
+  await resumeLadderAfterReversal(
+    payment.facilityId,
+    posted.leaseId,
+    posted.occurredAt,
+  );
+
   return {
     ok: true,
     reversalEntryId: result.reversalEntryId,
@@ -272,6 +279,59 @@ export async function returnPayment(
     feeCents: result.fee?.amountCents ?? 0,
     reopenedInvoiceIds: invoiceIds,
   };
+}
+
+/// B-161 / D-92. Puts back the delinquency history the cure closed out.
+///
+/// When the tenant paid, the nightly run's `cure()` superseded every open step
+/// run — deliberately, so that a NEW delinquency starts at day one rather than
+/// resuming at day 30. A reversal is not a new delinquency. The money never
+/// arrived, D-25 restores the invoices at their original due date, and the
+/// notices that were served really were served. Leaving the history closed puts
+/// the tenant back at full age with an empty record, which is precisely how one
+/// returned ACH re-serves the entire ladder.
+///
+/// Owner decision D-92: resume at the stage reached, which is also what stops a
+/// tenant deferring an auction indefinitely by paying and reversing. A facility
+/// that would rather re-serve everything sets `reversalResumes = false` and this
+/// does nothing.
+///
+/// Scoped to runs superseded at or after the payment posted: those are the ones
+/// this money closed. An older episode the tenant genuinely settled and moved
+/// past stays closed.
+async function resumeLadderAfterReversal(
+  facilityId: string,
+  leaseId: string,
+  paymentPostedAt: Date,
+): Promise<void> {
+  const timeline = await prisma.delinquencyTimeline.findFirst({
+    where: { facilityId, active: true },
+    orderBy: { version: "desc" },
+    select: { reversalResumes: true },
+  });
+  if (!timeline?.reversalResumes) return;
+
+  // Chain-wide, because `cure()` supersedes chain-wide (B-138): an episode that
+  // began on the lease this one was transferred out of is the same episode.
+  const chains = await leaseChainIds([leaseId]);
+  for (const id of chains.get(leaseId) ?? [leaseId]) {
+    // Per lease, because the partial unique index is per (leaseId, dayOffset)
+    // where `supersededAt` is null. A day already live on this lease belongs to
+    // an episode that started after the cure; restoring the old row would
+    // collide, and skipping the whole batch would re-serve its notice.
+    const live = await prisma.delinquencyStepRun.findMany({
+      where: { leaseId: id, supersededAt: null },
+      select: { dayOffset: true },
+    });
+    await prisma.delinquencyStepRun.updateMany({
+      where: {
+        leaseId: id,
+        supersededAt: { gte: paymentPostedAt },
+        dayOffset: { notIn: live.map((run) => run.dayOffset) },
+      },
+      data: { supersededAt: null },
+    });
+  }
 }
 
 export type ReinstatePaymentResult =

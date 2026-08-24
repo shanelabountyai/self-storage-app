@@ -68,7 +68,14 @@ export type TimelineStep = {
   requiredProofFields: ProofField[]
 }
 
-export type TimelineProblem = { index: number | null; problem: string }
+export type TimelineProblem = {
+  index: number | null
+  problem: string
+  /// The form field to hang the message on, when the problem is about a
+  /// setting rather than a step. Absent means "the steps", which is where every
+  /// problem `validateTimeline` itself raises belongs.
+  field?: string
+}
 
 /// What a timeline must satisfy before it can be activated.
 ///

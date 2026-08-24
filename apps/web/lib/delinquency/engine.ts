@@ -110,11 +110,20 @@ export async function runDelinquencyTimeline(
   const chains = await leaseChainIds(leaseIds)
   const runs = await prisma.delinquencyStepRun.findMany({
     where: { leaseId: { in: allChainIds(chains) }, supersededAt: null },
-    select: { leaseId: true, dayOffset: true },
+    select: { leaseId: true, dayOffset: true, businessDate: true },
   })
   const daysByRunLease = new Map<string, number[]>()
+  // B-161. Which leases have already had a step tonight, read chain-wide for
+  // the same reason the positions are: two runs of the nightly job in one
+  // evening must not walk the ladder two rungs.
+  const ranToday = new Set<string>()
   for (const run of runs) {
     daysByRunLease.set(run.leaseId, [...(daysByRunLease.get(run.leaseId) ?? []), run.dayOffset])
+    // Compared as calendar days, not instants: the column is a `date` and
+    // comes back at UTC midnight, while the caller's business date need not.
+    if (run.businessDate.toISOString().slice(0, 10) === businessDate.toISOString().slice(0, 10)) {
+      ranToday.add(run.leaseId)
+    }
   }
   const executedByLease = new Map<string, number[]>()
   for (const [leaseId, chain] of chains) {
@@ -130,6 +139,13 @@ export async function runDelinquencyTimeline(
     _sum: { amountCents: true },
   })
   const balanceByLease = new Map(balances.map((row) => [row.leaseId, row._sum.amountCents ?? 0]))
+
+  const gracedLeases = await reversalGracedLeases(
+    facilityId,
+    leaseIds,
+    businessDate,
+    timeline.reversalGraceDays,
+  )
 
   const steps = timeline.steps
 
@@ -152,6 +168,8 @@ export async function runDelinquencyTimeline(
       leaseEnded: !OCCUPYING_LEASE_STATUSES.includes(lease.status as never),
       onHold: onHold.has(lease.id),
       executedDays,
+      executedToday: (chains.get(lease.id) ?? [lease.id]).some((id) => ranToday.has(id)),
+      reversalGrace: gracedLeases.has(lease.id),
     })
 
     if (!decision.act) {
@@ -166,6 +184,16 @@ export async function runDelinquencyTimeline(
         result.cured += 1
       } else if (decision.halt && decision.halt !== 'cured') {
         result.halted += 1
+        if (decision.halt === 'reversal_grace') {
+          // Said out loud on the Billing Runs screen. A pipeline that has
+          // stopped for a reason nobody can see is indistinguishable from one
+          // that is broken, and this one stops for days at a time.
+          recordItem({
+            itemId: lease.id,
+            ok: true,
+            message: 'ladder held — a returned payment is still being settled',
+          })
+        }
       }
 
       // B-151's backstop. The three paths that end a lease each release the
@@ -234,6 +262,67 @@ export async function runDelinquencyTimeline(
   }
 
   return result
+}
+
+/// B-161 / D-92. Leases whose ladder must not move tonight because a payment
+/// came back.
+///
+/// Two gates, and a lease needs only one of them:
+///
+///   * **The grace window.** `returnPayment` re-opens the invoices at their
+///     ORIGINAL due date (D-25, and correct — the money never arrived), so a
+///     reversal on a 90-day-old invoice puts the tenant back at full age the
+///     instant the bank claws it back. They are holding a receipt and a cure
+///     confirmation. `reversalGraceDays` is how long they get to make it right
+///     before the ladder is allowed to move again.
+///   * **An open `settling_payment_failed` task.** While staff are still
+///     working the bounce there is a person in the loop, and the whole point of
+///     that queue is that somebody rings the tenant before a notice does.
+///
+/// A payment that was later REINSTATED (B-147's won dispute) is `succeeded`
+/// again, which is why the filter is on the payment's status rather than on the
+/// reversal entry alone — the entry stays for ever, the gate must not.
+async function reversalGracedLeases(
+  facilityId: string,
+  leaseIds: string[],
+  businessDate: Date,
+  graceDays: number,
+): Promise<Set<string>> {
+  const reversals = await prisma.ledgerEntry.findMany({
+    where: {
+      leaseId: { in: leaseIds },
+      type: 'adjustment',
+      reversalOfId: { not: null },
+      payment: { status: 'returned' },
+    },
+    select: { leaseId: true, paymentId: true, occurredAt: true },
+  })
+  if (reversals.length === 0) return new Set()
+
+  const graced = new Set<string>()
+  const graceMs = graceDays * 24 * 60 * 60 * 1000
+  const stillOpen: typeof reversals = []
+  for (const reversal of reversals) {
+    if (businessDate.getTime() - reversal.occurredAt.getTime() < graceMs) graced.add(reversal.leaseId)
+    else stillOpen.push(reversal)
+  }
+  if (stillOpen.length === 0) return graced
+
+  // Only the ones the window no longer covers need the task lookup.
+  const openTasks = await prisma.task.findMany({
+    where: {
+      facilityId,
+      type: 'settling_payment_failed',
+      status: 'open',
+      entityId: { in: [...new Set(stillOpen.map((row) => row.paymentId!))] },
+    },
+    select: { entityId: true },
+  })
+  const openPaymentIds = new Set(openTasks.map((task) => task.entityId))
+  for (const reversal of stillOpen) {
+    if (openPaymentIds.has(reversal.paymentId!)) graced.add(reversal.leaseId)
+  }
+  return graced
 }
 
 /// Runs one step, or returns false if another run got there first.

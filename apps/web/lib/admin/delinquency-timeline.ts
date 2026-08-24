@@ -27,6 +27,10 @@ export type TimelineVersion = {
   active: boolean
   label: string
   qualifyingAmount: QualifyingAmount
+  /// D-92 (B-161). Grace after a returned payment re-opens an arrear, and
+  /// whether the ladder resumes at the stage reached or restarts at day one.
+  reversalGraceDays: number
+  reversalResumes: boolean
   steps: TimelineStep[]
   createdAt: Date
   createdByName: string | null
@@ -53,6 +57,8 @@ export async function timelinesFor(actor: Actor, facilityId: string): Promise<Ti
     active: row.active,
     label: row.label,
     qualifyingAmount: row.qualifyingAmount as QualifyingAmount,
+    reversalGraceDays: row.reversalGraceDays,
+    reversalResumes: row.reversalResumes,
     steps: orderedSteps((row.steps ?? []) as unknown as TimelineStep[]),
     createdAt: row.createdAt,
     createdByName: row.createdByStaff
@@ -85,6 +91,8 @@ export async function activeTimeline(facilityId: string): Promise<TimelineVersio
     active: row.active,
     label: row.label,
     qualifyingAmount: row.qualifyingAmount as QualifyingAmount,
+    reversalGraceDays: row.reversalGraceDays,
+    reversalResumes: row.reversalResumes,
     steps: orderedSteps((row.steps ?? []) as unknown as TimelineStep[]),
     createdAt: row.createdAt,
     createdByName: row.createdByStaff
@@ -106,15 +114,41 @@ export type SaveResult =
 export async function saveTimeline(
   actor: Actor,
   facilityId: string,
-  input: { label: string; qualifyingAmount: QualifyingAmount; steps: TimelineStep[] },
+  input: {
+    label: string
+    qualifyingAmount: QualifyingAmount
+    /// D-92. Omitted means the column defaults — 10 days, resume at the stage
+    /// reached — which is what an org-default push and every pre-D-92 caller
+    /// should get rather than a zero.
+    reversalGraceDays?: number
+    reversalResumes?: boolean
+    steps: TimelineStep[]
+  },
 ): Promise<SaveResult> {
   requirePermission(actor, 'facility:settings', facilityId)
 
   const steps = orderedSteps(input.steps)
+  const reversalGraceDays = input.reversalGraceDays ?? 10
+  const reversalResumes = input.reversalResumes ?? true
+
   // Validated against the templates that ACTUALLY exist for this facility, not
   // against a typed string. A step naming a template nobody has written reads
   // as "sends a notice" on every screen and sends nothing.
   const problems = validateTimeline(steps, await noticeTemplateKeys(facilityId))
+  // D-92's grace window. Validated here as well as by the input's min/max,
+  // because this is a legal configuration reachable by a POST: a negative or a
+  // NaN grace would decide when somebody's property moves closer to a sale.
+  if (
+    !Number.isInteger(reversalGraceDays) ||
+    reversalGraceDays < 0 ||
+    reversalGraceDays > 90
+  ) {
+    problems.push({
+      index: null,
+      field: 'reversalGraceDays',
+      problem: 'Grace after a returned payment must be a whole number of days from 0 to 90.',
+    })
+  }
   if (problems.length > 0) return { ok: false, problems }
 
   const latest = await prisma.delinquencyTimeline.findFirst({
@@ -133,6 +167,8 @@ export async function saveTimeline(
         active: true,
         label: input.label.trim() || `Version ${version}`,
         qualifyingAmount: input.qualifyingAmount,
+        reversalGraceDays,
+        reversalResumes,
         steps: steps as unknown as object,
         createdByStaffId: actor.kind === 'staff' ? actor.staffUserId : null,
       },
@@ -149,6 +185,8 @@ export async function saveTimeline(
           version,
           label: input.label.trim(),
           qualifyingAmount: input.qualifyingAmount,
+          reversalGraceDays,
+          reversalResumes,
           stepDays: steps.map((step) => step.dayOffset),
         },
       },

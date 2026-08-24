@@ -57,17 +57,25 @@ export async function saveTimelineAction(_prev: FormState, formData: FormData): 
   const result = await saveTimeline(actor, facilityId, {
     label: String(formData.get('label') ?? ''),
     qualifyingAmount: formData.get('qualifyingAmount') === 'rent_only' ? 'rent_only' : 'full_balance',
+    // D-92. Passed through as typed — including a blank, which becomes NaN and
+    // is refused by `saveTimeline` rather than quietly meaning zero days.
+    reversalGraceDays: Number(formData.get('reversalGraceDays')),
+    reversalResumes: formData.get('reversalResumes') !== 'restart',
     steps: stepsFromForm(formData),
   })
 
   if (!result.ok) {
     // Numbered by step so a person can find the row, since the refusals are
-    // about a specific day rather than about the form as a whole.
-    return fieldError({
-      steps: result.problems
-        .map((problem) => (problem.index === null ? problem.problem : `Step ${problem.index + 1}: ${problem.problem}`))
-        .join(' '),
-    })
+    // about a specific day rather than about the form as a whole — except the
+    // ones that name their own field (D-92's grace window), which belong on it.
+    const errors: Record<string, string> = {}
+    for (const problem of result.problems) {
+      const key = problem.field ?? 'steps'
+      const text =
+        problem.index === null ? problem.problem : `Step ${problem.index + 1}: ${problem.problem}`
+      errors[key] = errors[key] ? `${errors[key]} ${text}` : text
+    }
+    return fieldError(errors)
   }
 
   revalidatePath('/admin/settings/delinquency')

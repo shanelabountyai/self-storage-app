@@ -3,6 +3,9 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { prisma } from '../packages/db'
 import { runDelinquencyTimeline } from '../apps/web/lib/delinquency/engine'
 import { saveTimeline } from '../apps/web/lib/admin/delinquency-timeline'
+import { applyPayment } from '../apps/web/lib/billing/allocation'
+import { returnPayment } from '../apps/web/lib/billing/reversals'
+import { systemActor } from '../apps/web/lib/rbac/actor'
 import type { TimelineStep } from '../packages/core/delinquency'
 import type { Actor } from '../apps/web/lib/rbac/actor'
 import type { PermissionKey } from '@storage/db/rbac-catalog'
@@ -132,7 +135,12 @@ describeDb('the delinquency engine', () => {
   beforeEach(async () => {
     await prisma.delinquencyStepRun.deleteMany({ where: { facilityId } })
     await prisma.task.deleteMany({ where: { facilityId } })
+    // Reversal entries first: `reversalOfId` is `onDelete: Restrict`, so a
+    // single sweep would try to remove a row another row still points at.
+    await prisma.ledgerEntry.deleteMany({ where: { facilityId, reversalOfId: { not: null } } })
     await prisma.ledgerEntry.deleteMany({ where: { facilityId } })
+    await prisma.paymentAllocation.deleteMany({ where: { payment: { facilityId } } })
+    await prisma.payment.deleteMany({ where: { facilityId } })
     await prisma.invoice.deleteMany({ where: { facilityId } })
     // B-138's cases open a second lease pointing at this one.
     await prisma.lease.deleteMany({ where: { facilityId, transferredFromLeaseId: { not: null } } })
@@ -160,7 +168,7 @@ describeDb('the delinquency engine', () => {
     expect(await prisma.delinquencyStepRun.count({ where: { facilityId } })).toBe(0)
   })
 
-  it('runs every passed step once and records the history', async () => {
+  it('runs ONE passed step a night and records the history — B-161', async () => {
     await saveTimeline(actor(), facilityId, {
       label: 'Test',
       qualifyingAmount: 'full_balance',
@@ -168,9 +176,12 @@ describeDb('the delinquency engine', () => {
     })
     await makeOverdueLease()
 
-    // 2026-07-15 is 44 days past a 1 June due date.
-    const result = await runDelinquencyTimeline(facilityId, d('2026-07-15'), noop)
-    expect(result.stepsExecuted).toBe(3)
+    // 2026-07-15 is 44 days past a 1 June due date, so all three steps are
+    // arithmetically due. Before B-161 all three fired in this one pass.
+    const first = await runDelinquencyTimeline(facilityId, d('2026-07-15'), noop)
+    expect(first.stepsExecuted).toBe(1)
+    await runDelinquencyTimeline(facilityId, d('2026-07-16'), noop)
+    await runDelinquencyTimeline(facilityId, d('2026-07-17'), noop)
 
     const runs = await prisma.delinquencyStepRun.findMany({
       where: { leaseId },
@@ -178,6 +189,9 @@ describeDb('the delinquency engine', () => {
     })
     expect(runs.map((one) => one.dayOffset)).toEqual([1, 15, 30])
     expect(runs[0].label).toBe('Late')
+    // One per calendar day, which is the point: a lien file whose ninety days
+    // of notices all bear one date is not a lien file.
+    expect(new Set(runs.map((one) => one.businessDate.toISOString())).size).toBe(3)
   })
 
   it('is idempotent — a second run the same night changes nothing', async () => {
@@ -191,8 +205,10 @@ describeDb('the delinquency engine', () => {
     await runDelinquencyTimeline(facilityId, d('2026-07-15'), noop)
     const second = await runDelinquencyTimeline(facilityId, d('2026-07-15'), noop)
 
+    // B-161: not just "no step twice" but "no SECOND step" — running the job
+    // twice in one evening must not walk the ladder two rungs.
     expect(second.stepsExecuted).toBe(0)
-    expect(await prisma.delinquencyStepRun.count({ where: { leaseId } })).toBe(2)
+    expect(await prisma.delinquencyStepRun.count({ where: { leaseId } })).toBe(1)
   })
 
   it('pins the timeline version that governed the lease — US-25', async () => {
@@ -260,11 +276,14 @@ describeDb('the delinquency engine', () => {
     })
     await makeOverdueLease()
     await runDelinquencyTimeline(facilityId, d('2026-07-15'), noop)
+    // A night each, since B-161 — the event under test is the SECOND move.
+    await runDelinquencyTimeline(facilityId, d('2026-07-16'), noop)
 
     const event = await prisma.domainEvent.findFirstOrThrow({
       where: { name: 'delinquency.stage_changed', entityId: leaseId },
       orderBy: { occurredAt: 'desc' },
     })
+    expect((event.payload as Record<string, unknown>).from).toBe('Late')
     expect((event.payload as Record<string, unknown>).to).toBe('Pre-lien')
   })
 
@@ -450,6 +469,109 @@ describeDb('the delinquency engine', () => {
       const again = await runDelinquencyTimeline(facilityId, d('2026-08-15'), noop)
       expect(again.stepsExecuted).toBe(1)
       expect(await prisma.delinquencyStepRun.count({ where: { leaseId } })).toBe(2)
+    })
+  })
+
+  describe('a payment that came back — B-161 / D-92', () => {
+    /// Walks the ladder to the lien step, settles it, then has the bank take
+    /// the money back. Returns the payment id.
+    async function ladderToLienThenBounce() {
+      await saveTimeline(actor(), facilityId, {
+        label: 'Test',
+        qualifyingAmount: 'full_balance',
+        steps: [step(1, 'Late'), step(15, 'Pre-lien'), step(30, 'Lien'), step(60, 'Auction')],
+      })
+      await makeOverdueLease()
+
+      // One a night, since B-161.
+      await runDelinquencyTimeline(facilityId, d('2026-07-15'), noop)
+      await runDelinquencyTimeline(facilityId, d('2026-07-16'), noop)
+      await runDelinquencyTimeline(facilityId, d('2026-07-17'), noop)
+      expect(await prisma.delinquencyStepRun.count({ where: { leaseId } })).toBe(3)
+
+      const payment = await prisma.payment.create({
+        data: { facilityId, tenantId, amountCents: 12_900, method: 'ach', status: 'succeeded' },
+      })
+      await prisma.ledgerEntry.create({
+        data: {
+          facilityId,
+          leaseId,
+          type: 'payment',
+          amountCents: -12_900,
+          description: 'Payment',
+          paymentId: payment.id,
+        },
+      })
+      await prisma.$transaction(async (tx) => {
+        await applyPayment(tx, { id: payment.id, tenantId, facilityId, amountCents: 12_900 })
+      })
+
+      // The cure closes the episode: every step run is superseded.
+      await runDelinquencyTimeline(facilityId, d('2026-07-18'), noop)
+      expect(
+        await prisma.delinquencyStepRun.count({ where: { leaseId, supersededAt: null } }),
+      ).toBe(0)
+
+      const returned = await returnPayment(systemActor('test'), payment.id, {
+        reasonCode: 'insufficient_funds',
+      })
+      expect(returned.ok).toBe(true)
+      return payment.id
+    }
+
+    it('puts the served history back rather than starting from an empty one', async () => {
+      await ladderToLienThenBounce()
+
+      // D-92's resume. Without this the lease is back at full age with no
+      // record of the three notices it has already had — which is what made
+      // one returned ACH re-serve the whole ladder.
+      const live = await prisma.delinquencyStepRun.findMany({
+        where: { leaseId, supersededAt: null },
+        orderBy: { dayOffset: 'asc' },
+      })
+      expect(live.map((one) => one.dayOffset)).toEqual([1, 15, 30])
+    })
+
+    it('holds the ladder for the grace window, and says so', async () => {
+      await ladderToLienThenBounce()
+
+      const messages: string[] = []
+      // Two days after the bounce, and 90+ days past due: every remaining step
+      // is arithmetically due.
+      const result = await runDelinquencyTimeline(facilityId, d('2026-08-26'), (outcome) => {
+        if (outcome.message) messages.push(outcome.message)
+      })
+
+      expect(result.stepsExecuted).toBe(0)
+      expect(messages.some((line) => line.includes('returned payment'))).toBe(true)
+    })
+
+    it('resumes at the next step once the grace window is over — one step, not four', async () => {
+      const paymentId = await ladderToLienThenBounce()
+      // The queue card has to be closed before the ladder may move: while staff
+      // are still working the bounce there is a person in the loop.
+      await prisma.task.updateMany({
+        where: { facilityId, type: 'settling_payment_failed', entityId: paymentId },
+        data: { status: 'completed' },
+      })
+
+      const result = await runDelinquencyTimeline(facilityId, d('2026-09-10'), noop)
+
+      expect(result.stepsExecuted).toBe(1)
+      const live = await prisma.delinquencyStepRun.findMany({
+        where: { leaseId, supersededAt: null },
+        orderBy: { dayOffset: 'asc' },
+      })
+      // Day 60, and days 1/15/30 not served a second time.
+      expect(live.map((one) => one.dayOffset)).toEqual([1, 15, 30, 60])
+    })
+
+    it('keeps holding while the settling_payment_failed task is open', async () => {
+      await ladderToLienThenBounce()
+
+      // Long past the grace window, but nobody has worked the bounce.
+      const result = await runDelinquencyTimeline(facilityId, d('2026-09-10'), noop)
+      expect(result.stepsExecuted).toBe(0)
     })
   })
 

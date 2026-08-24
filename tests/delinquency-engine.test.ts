@@ -23,6 +23,8 @@ const base = {
   leaseEnded: false,
   onHold: false,
   executedDays: [] as number[],
+  executedToday: false,
+  reversalGrace: false,
 }
 
 describe('evaluate — the halts, in order', () => {
@@ -53,23 +55,57 @@ describe('evaluate — the halts, in order', () => {
   it('stops on a lease that ended still owing', () => {
     expect(evaluate({ ...base, leaseEnded: true })).toEqual({ act: false, halt: 'moved_out' })
   })
+
+  it('holds the ladder while a returned payment is still being settled', () => {
+    // B-161 / D-92. The invoice is re-opened at its ORIGINAL due date (D-25),
+    // so a chargeback on a 90-day arrear arrives here at full age. Without the
+    // gate this is the night four dunning letters go in the same post.
+    expect(evaluate({ ...base, daysPastDue: 90, reversalGrace: true })).toEqual({
+      act: false,
+      halt: 'reversal_grace',
+    })
+  })
+
+  it('still lets a tenant cure during the reversal grace window', () => {
+    // The gate stops the ladder ADVANCING, not the episode closing. Somebody
+    // who replaces the bounced cheque inside the window has cured.
+    expect(
+      evaluate({ ...base, qualifyingOutstandingCents: 0, reversalGrace: true }),
+    ).toEqual({ act: false, halt: 'cured' })
+  })
 })
 
 describe('evaluate — which steps fire', () => {
-  it('fires every step passed, oldest first', () => {
+  it('fires the OLDEST step due, and only that one', () => {
+    // B-161 reversed what this used to assert. Three steps were arithmetically
+    // due here and all three fired in one pass, which is how one returned ACH
+    // put four notices in the same post, cut the gate and opened an auction
+    // case overnight. A ladder served all at once is not a ladder.
     const decision = evaluate({ ...base, daysPastDue: 30 })
     expect(decision.act).toBe(true)
     if (decision.act) {
-      expect(decision.steps.map((one) => one.dayOffset)).toEqual([1, 15, 30])
+      expect(decision.steps.map((one) => one.dayOffset)).toEqual([1])
     }
   })
 
-  it('catches up a missed week in one run rather than one step a night', () => {
-    // The nightly job is re-runnable and catches up missed dates (FR-4). A
-    // lease that went from day 0 to day 40 while nothing ran must not take
-    // three more nights to reach the lien step.
+  it('catches up a missed week one step a night, not all of it at once', () => {
+    // The nightly job is still re-runnable and still catches up (FR-4) — it
+    // now takes a night per step. B-161's deliberate cost: the alternative is
+    // a lien file whose ninety days of notices all bear one date.
     const decision = evaluate({ ...base, daysPastDue: 40, executedDays: [1] })
-    expect(decision.act && decision.steps.map((one) => one.dayOffset)).toEqual([15, 30])
+    expect(decision.act && decision.steps.map((one) => one.dayOffset)).toEqual([15])
+    const next = evaluate({ ...base, daysPastDue: 40, executedDays: [1, 15] })
+    expect(next.act && next.steps.map((one) => one.dayOffset)).toEqual([30])
+  })
+
+  it('does nothing when a step has already run tonight', () => {
+    // The other half of one-step-per-run. Steps 15 and 30 are both due, but
+    // step 1 went out this evening — running the job twice must not put two
+    // notices on one date.
+    expect(evaluate({ ...base, daysPastDue: 40, executedDays: [1], executedToday: true })).toEqual({
+      act: false,
+      halt: null,
+    })
   })
 
   it('never re-fires a step already executed', () => {

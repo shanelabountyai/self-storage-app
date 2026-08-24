@@ -152,6 +152,33 @@ export default async function DelinquencyTimelinePage({
           </Field>
         </div>
 
+        {/* D-92 (B-161). Both halves of the same decision, on the same screen
+            and referring to each other, because either one alone is a trap: a
+            grace window with a day-one restart delays the pipeline twice over,
+            and a resume with no grace serves the next notice the morning after
+            the bank clawed the money back. */}
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field
+            name="reversalGraceDays"
+            label="Grace after a returned payment"
+            type="number"
+            min={0}
+            max={90}
+            defaultValue={String(active?.reversalGraceDays ?? 10)}
+            hint="Days before the ladder may move again once a cheque bounces or an ACH is returned. The tenant is holding a receipt; this is how long they get to make it right. 0 means no pause."
+          />
+          <Field
+            name="reversalResumes"
+            label="Where the ladder picks up"
+            as="select"
+            defaultValue={active?.reversalResumes === false ? 'restart' : 'resume'}
+            hint="Resuming keeps the notices already served and continues from there. Restarting re-serves every notice from day one, which is kinder and adds the whole ladder to the time before an auction."
+          >
+            <option value="resume">Resume at the stage already reached</option>
+            <option value="restart">Restart at day one and re-serve everything</option>
+          </Field>
+        </div>
+
         <div className="flex flex-col gap-4">
           {rows.map((step, index) => (
             <fieldset key={index} className="border-input flex flex-col gap-3 rounded-lg border p-4">

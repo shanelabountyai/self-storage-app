@@ -258,6 +258,14 @@ const LAST_REVIEWED = '19 August 2026'
 // `LAST_REVIEWED` is deliberately NOT bumped. These are retractions, and a
 // retraction is not a re-verification — the date is a claim about the whole
 // page, and the "where we fall short" list below was not re-checked here.
+//
+// Re-verified 2026-08-24, at B-161 (a returned payment no longer replays the
+// whole delinquency ladder in one night). Nothing customer-facing: the change
+// is in the nightly delinquency service and the reversal path, and the only new
+// UI is two controls on `/admin/settings/delinquency`, which this page makes no
+// claims about. No public route added, so the generated coverage claim and the
+// route-keyed exception list are both untouched. Recorded rather than skipped,
+// per the rule the B-150 entry states. `LAST_REVIEWED` is not bumped.
 export default function AccessibilityPage() {
   return (
     <ProsePage

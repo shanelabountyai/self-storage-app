@@ -2540,21 +2540,31 @@ model City {
 /// it** (US-25's own AC) — and a lien file whose timeline has been rewritten
 /// since is a lien file that cannot be defended.
 model DelinquencyTimeline {
-  id               String   @id @default(cuid())
-  facilityId       String
-  version          Int
-  active           Boolean  @default(false)
+  id                String   @id @default(cuid())
+  facilityId        String
+  version           Int
+  active            Boolean  @default(false)
   /// What the operator called this revision: "after the 2026 attorney review".
-  label            String
+  label             String
   /// US-25's AC: paying this halts the pipeline.
-  qualifyingAmount String   @default("full_balance")
+  qualifyingAmount  String   @default("full_balance")
+  /// D-92 (B-161). Days of grace a reversal-re-opened arrear gets before the
+  /// ladder may move again. A returned ACH or a chargeback re-opens an invoice
+  /// at its ORIGINAL due date (D-25), so without this the tenant is instantly
+  /// back at full age and the whole ladder is due at once.
+  reversalGraceDays Int      @default(10)
+  /// D-92 (B-161). Where the ladder picks up after a reversal: `true` resumes
+  /// at the stage already reached, `false` restarts at day one and re-serves
+  /// every notice. Resume is the default — it closes the pay-then-reverse loop
+  /// that otherwise defers auction for ever.
+  reversalResumes   Boolean  @default(true)
   /// The steps, as an ordered array of the shape in
   /// packages/core/delinquency. JSON rather than a table: a version is
   /// immutable once activated, so there is nothing to update in place and
   /// nothing joins to an individual step.
-  steps            Json
-  createdByStaffId String?
-  createdAt        DateTime @default(now()) @db.Timestamptz(6)
+  steps             Json
+  createdByStaffId  String?
+  createdAt         DateTime @default(now()) @db.Timestamptz(6)
 
   facility       Facility             @relation(fields: [facilityId], references: [id], onDelete: Cascade)
   createdByStaff StaffUser?           @relation(fields: [createdByStaffId], references: [id], onDelete: SetNull)
