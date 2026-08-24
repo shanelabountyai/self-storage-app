@@ -5872,7 +5872,7 @@ Four changes, and the first is the one that matters most:
 
 ## B-167 — Six fee types that could be configured and never charged
 
-`PENDING`
+`9d64d3c`
 
 **What it built.** `FeeType` has ten members and `/admin/settings` gives every one an editable, effective-dated schedule; repo-wide only `admin`, `late`, `nsf` and `transfer` were ever posted. So a unit left full of rubbish, a lock cut at the operator's cost and a damaged door were each a settings screen with no consequence, and the certified-mail and lien costs a Texas operator is allowed to recover never reached a cure quote. This adds one charge control — fee type, amount pre-filled from the facility's schedule and overridable, required note — on the tenant profile and on the move-out screen, a new `fees:charge` permission, and two automatic postings from the notice pipeline. `apps/web/lib/billing/fee-invoice.ts` is the one fee-invoice primitive all three callers now share.
 
