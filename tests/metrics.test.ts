@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   arAging,
   arBucketFor,
+  attachRate,
   daysPastDue,
   economicOccupancy,
   isOccupied,
@@ -15,10 +16,13 @@ import {
   rateVariance,
   reservationConversion,
   sumArAging,
+  sumAttachRate,
   sumEconomicOccupancy,
   sumMoveCounts,
   sumOccupancy,
+  UNASSIGNED_STAFF,
   wholeMonthsBetween,
+  type AttachEvent,
   type MoveEvent,
   type UnitForOccupancy,
 } from '../packages/core/metrics'
@@ -406,5 +410,88 @@ describe('move counts and conversion', () => {
     const result = reservationConversion([{ createdAt: d('2026-08-01'), convertedAt: null }])
     expect(result.averageDaysToMoveIn).toBeNull()
     expect(result.conversionRatio).toBe(0)
+  })
+})
+
+describe('attach rate', () => {
+  it('is enrolled ÷ move-ins, not enrolled ÷ enrolled or move-ins ÷ move-ins', () => {
+    const events: AttachEvent[] = [
+      { enrolled: true, channel: 'web', staffId: null },
+      { enrolled: true, channel: 'web', staffId: null },
+      { enrolled: false, channel: 'web', staffId: null },
+      { enrolled: false, channel: 'web', staffId: null },
+    ]
+    const result = attachRate(events)
+    expect(result.overall.moveIns).toBe(4)
+    expect(result.overall.enrolled).toBe(2)
+    expect(result.overall.rate).toBeCloseTo(0.5, 10)
+  })
+
+  it('reports zero, not NaN, for a bucket with no move-ins', () => {
+    const result = attachRate([])
+    expect(result.overall.moveIns).toBe(0)
+    expect(result.overall.rate).toBe(0)
+    // Every channel bucket starts empty too, same reasoning.
+    expect(result.byChannel.web.rate).toBe(0)
+  })
+
+  it('splits by channel using the same vocabulary as move-ins-by-source', () => {
+    const events: AttachEvent[] = [
+      { enrolled: true, channel: 'web', staffId: null },
+      { enrolled: false, channel: 'walk_in', staffId: 'staff_1' },
+      { enrolled: true, channel: 'walk_in', staffId: 'staff_1' },
+    ]
+    const result = attachRate(events)
+    expect(result.byChannel.web.moveIns).toBe(1)
+    expect(result.byChannel.web.enrolled).toBe(1)
+    expect(result.byChannel.walk_in.moveIns).toBe(2)
+    expect(result.byChannel.walk_in.enrolled).toBe(1)
+  })
+
+  // US-44: "per staff member who completed the move-in... is the point — it
+  // is a coaching number." A move-in with no staff behind it (an online,
+  // card-paid checkout) must not be silently credited to, or hidden inside, a
+  // real staffer's count.
+  it('buckets a move-in with no staff actor under UNASSIGNED_STAFF, never a real staffer', () => {
+    const events: AttachEvent[] = [
+      { enrolled: true, channel: 'web', staffId: null },
+      { enrolled: true, channel: 'walk_in', staffId: 'staff_1' },
+      { enrolled: false, channel: 'phone', staffId: 'staff_1' },
+    ]
+    const result = attachRate(events)
+    expect(result.byStaff[UNASSIGNED_STAFF].moveIns).toBe(1)
+    expect(result.byStaff[UNASSIGNED_STAFF].enrolled).toBe(1)
+    expect(result.byStaff.staff_1.moveIns).toBe(2)
+    expect(result.byStaff.staff_1.enrolled).toBe(1)
+    expect(result.byStaff.staff_1.rate).toBeCloseTo(0.5, 10)
+  })
+
+  // D-25's own rule, restated for this metric: a 100%-attach 2-lease month
+  // and a 10%-attach 40-lease month must not average to 55% — that hides the
+  // site that actually needs coaching.
+  it('rolls up by summing components and recomputing the ratio, never averaging ratios', () => {
+    const smallSite = attachRate([
+      { enrolled: true, channel: 'web', staffId: 'staff_1' },
+      { enrolled: true, channel: 'web', staffId: 'staff_1' },
+    ])
+    const bigSite = attachRate(
+      Array.from({ length: 40 }, (_, index): AttachEvent => ({
+        enrolled: index < 4,
+        channel: 'web',
+        staffId: 'staff_2',
+      })),
+    )
+    expect(smallSite.overall.rate).toBeCloseTo(1, 10)
+    expect(bigSite.overall.rate).toBeCloseTo(0.1, 10)
+
+    const rolled = sumAttachRate([smallSite, bigSite])
+    expect(rolled.overall.moveIns).toBe(42)
+    expect(rolled.overall.enrolled).toBe(6)
+    expect(rolled.overall.rate).toBeCloseTo(6 / 42, 10)
+    expect(rolled.overall.rate).not.toBeCloseTo(0.55, 1)
+
+    // And the per-staff split survives the roll-up merge, keyed correctly.
+    expect(rolled.byStaff.staff_1.moveIns).toBe(2)
+    expect(rolled.byStaff.staff_2.moveIns).toBe(40)
   })
 })

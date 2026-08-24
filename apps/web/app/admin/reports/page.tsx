@@ -2,12 +2,14 @@ import Link from 'next/link'
 import { getAdminActor } from '@/lib/admin/context'
 import {
   arAgingNote,
+  attachRateReport,
   delinquencyReport,
   movesReport,
   occupancyReport,
   unitOccupancyNote,
 } from '@/lib/admin/reports'
 import { formatCents } from '@/lib/format'
+import { UNASSIGNED_STAFF, type AttachRateBucket } from '@storage/core/metrics'
 
 export const metadata = { title: 'Reports' }
 
@@ -121,6 +123,69 @@ function MoveSplit({
   )
 }
 
+/// The attach-rate table (B-155): same shape for the by-channel and
+/// by-staff splits, since both answer "move-ins, enrolled, rate" for a set of
+/// buckets — only the row label differs. Rows with no move-ins are omitted,
+/// same rule as `MoveSplit` above, for the same reason: a table of mostly
+/// zeroes is one nobody scans.
+function AttachSplit({
+  heading,
+  hint,
+  buckets,
+  labels,
+  rowHeading,
+}: {
+  heading: string
+  hint: string
+  buckets: Record<string, AttachRateBucket>
+  labels: Record<string, string>
+  rowHeading: string
+}) {
+  const rows = Object.entries(buckets).filter(([, bucket]) => bucket.moveIns > 0)
+
+  return (
+    <div className="flex flex-col gap-2">
+      <h3 className="text-sm font-medium">{heading}</h3>
+      <p className="text-muted-foreground text-sm text-pretty">{hint}</p>
+      {rows.length === 0 ? (
+        <p className="text-muted-foreground text-sm">No move-ins in this period.</p>
+      ) : (
+        <table className="w-full text-sm">
+          <caption className="sr-only">{heading}</caption>
+          <thead>
+            <tr className="border-b text-left">
+              <th scope="col" className="py-2 font-medium">
+                {rowHeading}
+              </th>
+              <th scope="col" className="py-2 text-right font-medium">
+                Move-ins
+              </th>
+              <th scope="col" className="py-2 text-right font-medium">
+                Enrolled
+              </th>
+              <th scope="col" className="py-2 text-right font-medium">
+                Attach rate
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(([key, bucket]) => (
+              <tr key={key} className="border-b">
+                <th scope="row" className="py-2 font-normal">
+                  {labels[key] ?? key}
+                </th>
+                <td className="py-2 text-right tabular-nums">{bucket.moveIns}</td>
+                <td className="py-2 text-right tabular-nums">{bucket.enrolled}</td>
+                <td className="py-2 text-right tabular-nums">{percent(bucket.rate)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  )
+}
+
 function monthBounds(month: string): { start: Date; end: Date; label: string } {
   const [year, monthIndex] = month.split('-').map(Number)
   const start = new Date(Date.UTC(year, monthIndex - 1, 1))
@@ -147,9 +212,10 @@ export default async function ReportsPage({
   const { start, end, label } = monthBounds(selectedMonth)
   const actor = await getAdminActor()
 
-  const [occupancy, moves, delinquency] = await Promise.all([
+  const [occupancy, moves, attach, delinquency] = await Promise.all([
     occupancyReport(actor, start, end),
     movesReport(actor, start, end),
+    attachRateReport(actor, start, end),
     delinquencyReport(actor),
   ])
 
@@ -414,6 +480,38 @@ export default async function ReportsPage({
             counts={moves.total.moves.bySource}
             labels={SOURCE_LABELS}
             total={moves.total.moves.moveIns}
+          />
+        </div>
+      </section>
+
+      {/* B-155 (operator review): US-44 already required attach rate be
+          reportable and nothing owned it. Its own two-way split — channel and
+          staff — is a coaching table, not a vanity metric (US-44's own
+          wording), which is why it sits beside the acquisition splits above
+          rather than folded into them: those answer where a move-in came
+          from, this answers whether it left with protection. */}
+      <section aria-labelledby="attach-heading" className="flex flex-col gap-3">
+        <h2 id="attach-heading" className="font-medium">
+          Protection attach rate
+        </h2>
+        <p className="text-muted-foreground text-sm text-pretty">
+          {attach.total.overall.enrolled} of {attach.total.overall.moveIns} new move-ins
+          ({percent(attach.total.overall.rate)}) enrolled in a protection plan for {label}.
+        </p>
+        <div className="grid gap-6 sm:grid-cols-2">
+          <AttachSplit
+            heading="Attach rate by channel"
+            hint="How the deal was taken — same vocabulary as the move-ins-by-source split above."
+            buckets={attach.total.byChannel}
+            labels={SOURCE_LABELS}
+            rowHeading="Channel"
+          />
+          <AttachSplit
+            heading="Attach rate by staff"
+            hint="The staff member who took the move-in's first payment. “Web / self-service” is every move-in nobody was behind the counter for — a card payment taken online has no staffer to coach."
+            buckets={attach.total.byStaff}
+            labels={{ ...attach.staffNames, [UNASSIGNED_STAFF]: 'Web / self-service' }}
+            rowHeading="Staff"
           />
         </div>
       </section>

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { prisma } from '../packages/db'
-import { delinquencyReport, movesReport, occupancyReport, rentRoll } from '../apps/web/lib/admin/reports'
+import { attachRateReport, delinquencyReport, movesReport, occupancyReport, rentRoll } from '../apps/web/lib/admin/reports'
 import type { Actor } from '../apps/web/lib/rbac/actor'
 import { ForbiddenError } from '../apps/web/lib/rbac/authorize'
 import type { PermissionKey } from '@storage/db/rbac-catalog'
@@ -18,6 +18,7 @@ let otherFacilityId = ''
 let tenantId = ''
 let staffId = ''
 let unitTypeId = ''
+let leaseId = ''
 
 function actorFor(facilityIds: (string | null)[]): Actor {
   return {
@@ -99,6 +100,7 @@ describeDb('reports', () => {
         billingDay: 1,
       },
     })
+    leaseId = lease.id
     await prisma.unit.update({ where: { id: occupied.id }, data: { status: 'occupied' } })
 
     // A charge and a partial payment inside August.
@@ -113,6 +115,10 @@ describeDb('reports', () => {
   afterAll(async () => {
     if (!hasDatabase) return
     const ids = [facilityId, otherFacilityId]
+    // Cascades to `paymentAllocation`; invoices are Restrict-on-delete from
+    // the lease side, so they come out before the lease does.
+    await prisma.payment.deleteMany({ where: { facilityId: { in: ids } } })
+    await prisma.invoice.deleteMany({ where: { facilityId: { in: ids } } })
     await prisma.ledgerEntry.deleteMany({ where: { facilityId: { in: ids } } })
     await prisma.lease.deleteMany({ where: { facilityId: { in: ids } } })
     await prisma.unit.deleteMany({ where: { facilityId: { in: ids } } })
@@ -198,6 +204,65 @@ describeDb('reports', () => {
       const row = report.rows.find((r) => r.facilityId === facilityId)!
       expect(row.moves.bySource.unknown).toBe(1)
       expect(row.moves.bySource.web).toBe(0)
+    })
+  })
+
+  // B-155. `movesReport` above already has the fixture: one lease, started
+  // 2026-08-10, no protection plan, no payment. This describe extends the
+  // SAME lease rather than creating its own — attach rate is about that
+  // move-in's payment and plan, and a second lease would just be more
+  // fixture to keep in sync with the same date window.
+  describe('attachRateReport', () => {
+    it('reports zero enrolled and an unassigned move-in while nothing is set', async () => {
+      const report = await attachRateReport(actorFor([facilityId]), d('2026-08-01'), d('2026-09-01'))
+      const row = report.rows.find((r) => r.facilityId === facilityId)!
+      expect(row.attach.overall.moveIns).toBe(1)
+      expect(row.attach.overall.enrolled).toBe(0)
+      expect(row.attach.byStaff.unassigned.moveIns).toBe(1)
+    })
+
+    it('counts the move-in as enrolled once a plan is set, attributed to the staffer who took the payment', async () => {
+      await prisma.lease.update({
+        where: { id: leaseId },
+        data: { protectionPlanName: 'Basic', protectionCents: 500 },
+      })
+      const invoice = await prisma.invoice.create({
+        data: {
+          facilityId,
+          leaseId,
+          number: `RPT-${suffix}`,
+          status: 'paid',
+          issueDate: d('2026-08-10'),
+          dueDate: d('2026-08-10'),
+          periodStart: d('2026-08-10'),
+          periodEnd: d('2026-09-10'),
+          totalCents: 15_000,
+          amountPaidCents: 15_000,
+        },
+      })
+      const payment = await prisma.payment.create({
+        data: {
+          facilityId,
+          tenantId,
+          amountCents: 15_000,
+          method: 'cash',
+          receivedAt: d('2026-08-10'),
+          receivedByStaffId: staffId,
+        },
+      })
+      await prisma.paymentAllocation.create({
+        data: { paymentId: payment.id, invoiceId: invoice.id, amountCents: 15_000 },
+      })
+
+      const report = await attachRateReport(actorFor([facilityId]), d('2026-08-01'), d('2026-09-01'))
+      const row = report.rows.find((r) => r.facilityId === facilityId)!
+      expect(row.attach.overall.enrolled).toBe(1)
+      expect(row.attach.byStaff[staffId]?.moveIns).toBe(1)
+      expect(row.attach.byStaff[staffId]?.enrolled).toBe(1)
+      expect(report.staffNames[staffId]).toBe('Rae Reporter')
+      // Rolled to the portfolio total the same way `movesReport` is (D-25):
+      // summed, not averaged.
+      expect(report.total.overall.moveIns).toBeGreaterThanOrEqual(row.attach.overall.moveIns)
     })
   })
 

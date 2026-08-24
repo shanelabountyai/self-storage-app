@@ -1,6 +1,7 @@
 import { prisma } from '@storage/db'
 import {
   arAging,
+  attachRate,
   daysPastDue,
   economicOccupancy,
   moveCounts,
@@ -10,11 +11,14 @@ import {
   rateVariance,
   reservationConversion,
   sumArAging,
+  sumAttachRate,
   sumEconomicOccupancy,
   sumMoveCounts,
   sumOccupancy,
+  UNASSIGNED_STAFF,
   wholeMonthsBetween,
   type ArAging,
+  type AttachRateResult,
   type ConversionResult,
   type EconomicOccupancyResult,
   type MoveCounts,
@@ -642,6 +646,119 @@ export async function agingForFacility(
       leases.map((lease) => ({
         daysPastDue: daysPastDue(lease.invoices, asOf),
         outstandingCents: balanceByLease.get(lease.id) ?? 0,
+      })),
+    ),
+  }
+}
+
+export type FacilityAttachRate = {
+  facilityId: string
+  facilityName: string
+  attach: AttachRateResult
+}
+
+export type AttachRateReport = {
+  rows: FacilityAttachRate[]
+  total: AttachRateResult
+  /// Display name for every staffId that appears in any row's `byStaff`,
+  /// keyed the same way. `UNASSIGNED_STAFF` is not a real id and is not a key
+  /// here — the caller labels that bucket itself.
+  staffNames: Record<string, string>
+}
+
+/// PRD 02 US-44 / §4.11's AC (B-155, operator review 2026-08-21): "Dollars
+/// are reported and the ratio is not." Plan-enrolled leases ÷ new move-ins,
+/// per facility, per month, by channel and by staff member.
+///
+/// US-44 also says a **new** move-in is enrolled the moment it does not carry
+/// `protectionWaivedAt` — `provisionLease` (B-026) sets `protectionPlanName`
+/// to null exactly when the tenant waives, so "enrolled" is just "the column
+/// is not null" and needs no second flag.
+export async function attachRateReport(
+  actor: Actor,
+  periodStart: Date,
+  periodEnd: Date,
+): Promise<AttachRateReport> {
+  const facilities = await reportableFacilities(actor)
+  for (const facility of facilities) assertCanReport(actor, facility.id)
+
+  const rows = await Promise.all(
+    facilities.map((facility) =>
+      attachRateForFacility(facility.id, facility.name, periodStart, periodEnd),
+    ),
+  )
+
+  const total = sumAttachRate(rows.map((row) => row.attach))
+
+  // Names for the coaching table. `UNASSIGNED_STAFF` is excluded — it is not
+  // a StaffUser row, and the report labels that bucket itself ("Web /
+  // self-service").
+  const staffIds = Object.keys(total.byStaff).filter((id) => id !== UNASSIGNED_STAFF)
+  const staff =
+    staffIds.length === 0
+      ? []
+      : await prisma.staffUser.findMany({
+          where: { id: { in: staffIds } },
+          select: { id: true, firstName: true, lastName: true },
+        })
+
+  return {
+    rows,
+    total,
+    staffNames: Object.fromEntries(staff.map((s) => [s.id, `${s.firstName} ${s.lastName}`])),
+  }
+}
+
+/// One facility's attach rate. Same reasoning as `movesForFacility` above: a
+/// scheduled report knows its facility explicitly and has no actor to scope
+/// by.
+export async function attachRateForFacility(
+  facilityId: string,
+  facilityName: string,
+  periodStart: Date,
+  periodEnd: Date,
+): Promise<FacilityAttachRate> {
+  const leases = await prisma.lease.findMany({
+    where: { facilityId, startDate: { gte: periodStart, lt: periodEnd } },
+    select: { id: true, protectionPlanName: true, acquisitionSource: true },
+  })
+
+  if (leases.length === 0) return { facilityId, facilityName, attach: attachRate([]) }
+
+  // "The staff member who completed the move-in" has no column of its own —
+  // a move-in is finalized by `provisionLease` from a Stripe webhook (B-026),
+  // with no staff actor in that path at all. What DOES name a person is
+  // `Payment.receivedByStaffId` (US-32): required for cash, check and money
+  // order, and exactly who was behind the counter for a phone or walk-in
+  // rental. The move-in's EARLIEST payment is that attribution; a card
+  // payment taken online legitimately has nobody there, and reports as
+  // `UNASSIGNED_STAFF` rather than crediting (or blaming) a real staffer for
+  // a deal they never touched.
+  const allocations = await prisma.paymentAllocation.findMany({
+    where: { invoice: { leaseId: { in: leases.map((lease) => lease.id) } } },
+    select: {
+      invoice: { select: { leaseId: true } },
+      payment: { select: { receivedAt: true, receivedByStaffId: true } },
+    },
+  })
+
+  const earliestPaymentByLease = new Map<string, { receivedAt: Date; receivedByStaffId: string | null }>()
+  for (const allocation of allocations) {
+    const leaseId = allocation.invoice.leaseId
+    const current = earliestPaymentByLease.get(leaseId)
+    if (!current || allocation.payment.receivedAt < current.receivedAt) {
+      earliestPaymentByLease.set(leaseId, allocation.payment)
+    }
+  }
+
+  return {
+    facilityId,
+    facilityName,
+    attach: attachRate(
+      leases.map((lease) => ({
+        enrolled: lease.protectionPlanName !== null,
+        channel: normalizeSource(lease.acquisitionSource),
+        staffId: earliestPaymentByLease.get(lease.id)?.receivedByStaffId ?? null,
       })),
     ),
   }
