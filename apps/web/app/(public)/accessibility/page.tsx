@@ -309,6 +309,41 @@ const LAST_REVIEWED = '19 August 2026'
 // tenant receives is unchanged — only the figure inside it is smaller. No route
 // added, so the generated coverage claim is untouched. Recorded rather than
 // skipped, per the rule the B-150 entry states. `LAST_REVIEWED` is not bumped.
+//
+// Re-verified 2026-08-24, at B-171 (both public marketing forms stop being
+// silent when they refuse). This one IS customer-facing, and it makes an
+// existing claim more true without changing a word of it. The bullet below says
+// a rejection's message "is tied to the field itself", and that "a successful
+// save is announced too" — both were true before this item and both still are.
+// What was missing is a claim this page never made: that a rejection is
+// ANNOUNCED. `FormResult` wrote into its live region on the success branch only
+// (`{success ? state.message : ''}`), so every error path on the waitlist
+// notify-me and the quote/callback form left the region EMPTY and focus on the
+// submit — indistinguishable, to a screen-reader user, from being accepted in
+// silence. It writes on both branches now, moves focus either way, and renders
+// a refusal in red rather than in the hardcoded green of a confirmation (1.4.1).
+//
+// The bullet is deliberately NOT strengthened to claim announced rejections.
+// That would be a claim about every public form, and only these two are built
+// on `FormResult` — checkout's steps render their own refusals. Making a
+// sentence true everywhere before writing it is the order this page's own
+// history says to use.
+//
+// Same session, same forms, found by the new test rather than by review: the
+// quote/callback `Field` wrapped its hint AND its error inside the `<label>`,
+// so the phone field was named "Phone Required if you would like a call back."
+// at rest, and a refused email field was named "Email An email address or a
+// phone number — we need one way to reply." — the refusal read out as the
+// field's identity and then again as its description (2.4.6). Fixed to
+// `htmlFor` plus siblings, which is the shape `WaitlistForm` beside it already
+// used.
+//
+// Both refused states now carry an axe scan of their own in `e2e/smoke.spec.ts`
+// — the first time either has been scanned, since a refusal is a STATE and the
+// scan contract is route-keyed. That is B-184's gap, closed for these two
+// states specifically rather than in general. No route added, so the generated
+// coverage claim and the route-keyed exception list are both untouched.
+// `LAST_REVIEWED` is not bumped: this is one flow re-checked, not the page.
 export default function AccessibilityPage() {
   return (
     <ProsePage

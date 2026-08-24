@@ -1603,6 +1603,78 @@ test('the lead form announces and keeps focus when it succeeds', async ({ page }
   await expect(status).toBeFocused()
 })
 
+test('the waitlist form announces and takes focus when it REFUSES', async ({ page }) => {
+  // B-171. The other half of B-148, and the half that mattered more: the region
+  // was written into on success only, so a refusal left it EMPTY while focus
+  // stayed on the submit — a screen-reader user could not tell "we refused
+  // this" from "we accepted it and said nothing". Writes nothing to the
+  // database on any run, which is why it needs none of B-120's disciplines.
+  await page.goto('/storage/tx/austin/demo-austin-south')
+
+  const card = page.getByRole('listitem').filter({ hasText: '5 foot by 15 foot' }).first()
+  const status = card.getByRole('status')
+  // The same opening sequence as the success test above, deliberately: pressing
+  // the submit before React has hydrated posts the form NATIVELY, which
+  // navigates, collapses the disclosure and loses the inline state — a green
+  // empty region and no message, which reads exactly like this item's bug.
+  await expect(card.getByLabel('Your email')).toBeHidden()
+  await expectPreexisting(status)
+
+  await card.locator('summary').click()
+  const email = card.getByLabel('Your email')
+  await expect(email).toBeVisible()
+
+  // Passes the browser's own `type="email"` check — which accepts a domain with
+  // no dot — and fails `isPlausibleEmail` on the server. That is the way to
+  // reach the server's refusal in a real browser without fighting native
+  // validation, and native validation is exactly why this path was never tested.
+  await email.fill('someone@localhost')
+  await card.getByRole('button', { name: 'Add me to the list' }).click()
+
+  await expectAnnounced(status, /Enter an email address we can reach you at/)
+  await expect(status).toBeFocused()
+
+  // The form is still there to correct, and the message is also tied to the
+  // field itself (3.3.1) rather than only floating above it.
+  await expect(card.getByLabel('Your email')).toHaveAttribute('aria-invalid', 'true')
+
+  const { violations } = await new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+    .analyze()
+  expect(
+    violations.map((v) => `${v.id}: ${v.help}`),
+    'axe found accessibility violations on the refused state',
+  ).toEqual([])
+})
+
+test('the lead form announces and takes focus when it REFUSES', async ({ page }) => {
+  // B-171, same defect and same fix on the other public form. Refused before
+  // any `Lead` row is written, so it neither grows the table nor walks toward
+  // US-8 AC4's five-per-ten-minutes limit the way a successful submit would.
+  await page.goto('/storage/tx/austin/demo-austin-south')
+
+  const form = page.getByRole('main').locator('section:has(h2:text("Not ready yet"))')
+  const status = form.getByRole('status')
+  await expectPreexisting(status)
+
+  // A name and nothing to reply to. Neither field is `required`, so the refusal
+  // comes from the server rather than from the browser.
+  await form.getByLabel('Your name').fill('E2E Prospect')
+  await form.getByRole('button', { name: 'Send' }).click()
+
+  await expectAnnounced(status, /problem/)
+  await expect(status).toBeFocused()
+  await expect(form.getByLabel('Email', { exact: true })).toHaveAttribute('aria-invalid', 'true')
+
+  const { violations } = await new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+    .analyze()
+  expect(
+    violations.map((v) => `${v.id}: ${v.help}`),
+    'axe found accessibility violations on the refused state',
+  ).toEqual([])
+})
+
 test('a waitlist cancel link that is not ours says so without failing', async ({ page }) => {
   await page.goto('/waitlist/cancel/not-a-real-token')
   await expect(page.getByRole('heading', { level: 1 })).toContainText('Waitlist')

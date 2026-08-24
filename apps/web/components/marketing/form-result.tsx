@@ -27,6 +27,16 @@ import type { FormState } from '@/lib/admin/form-state'
 // success, and is right not to, because its form stays mounted and focus stays
 // somewhere meaningful. These two replace themselves, so there is no focus left
 // to preserve; the choice is the region or the body.
+//
+// B-171 fixed the half B-148 left: the region was written into on SUCCESS only
+// (`{success ? state.message : ''}`), so a refusal discarded its summary and
+// left the region EMPTY while focus stayed on the submit. The only evidence of
+// a refusal was a `<span>` beside the field, reachable by swiping backwards —
+// so a screen-reader user could not tell "we refused this" from "we accepted it
+// and said nothing", on every error path of both forms. The region is written
+// into on both branches now, focus follows it either way, and error text is red
+// rather than the hardcoded green that rendered a refusal in the colour of a
+// confirmation (1.4.1).
 export function FormResult({
   state,
   className,
@@ -44,10 +54,16 @@ export function FormResult({
 }) {
   const ref = useRef<HTMLParagraphElement>(null)
   const success = state.status === 'success'
+  const error = state.status === 'error'
+  const message = state.status === 'idle' ? '' : state.message
 
   useEffect(() => {
-    if (success) ref.current?.focus()
-  }, [success])
+    // On `state`, not on `success`: a second refusal is a new state object but
+    // the same boolean, and a keyboard user who fixes one field and is refused
+    // for another must be taken to the message again rather than left standing
+    // on the submit.
+    if (message) ref.current?.focus()
+  }, [state, message])
 
   return (
     <>
@@ -60,9 +76,9 @@ export function FormResult({
         ref={ref}
         tabIndex={-1}
         role="status"
-        className={`text-sm font-medium text-pretty text-green-700 ${success ? (className ?? '') : ''}`}
+        className={`text-sm font-medium text-pretty ${error ? 'text-red-700' : 'text-green-700'} ${message ? (className ?? '') : ''}`}
       >
-        {success ? state.message : ''}
+        {message}
       </p>
       {!success && children}
     </>

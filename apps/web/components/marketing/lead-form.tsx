@@ -1,6 +1,6 @@
 'use client'
 
-import { useActionState } from 'react'
+import { useActionState, useId } from 'react'
 import { IDLE_FORM_STATE, type FormState } from '@/lib/admin/form-state'
 import { FormResult } from '@/components/marketing/form-result'
 
@@ -130,12 +130,22 @@ function Field({
   error?: string
   hint?: string
 } & React.InputHTMLAttributes<HTMLInputElement>) {
-  const errorId = `${name}-error`
-  const hintId = `${name}-hint`
+  const id = useId()
+  const errorId = `${id}-error`
+  const hintId = `${id}-hint`
+  // B-171. `htmlFor` and a sibling <input>, not a wrapping <label>. Wrapped,
+  // the hint and the error were INSIDE the label, so they became part of the
+  // field's accessible NAME as well as its description: the phone field was
+  // named "Phone Required if you would like a call back." at rest, and a
+  // refused email field was named "Email An email address or a phone number —
+  // we need one way to reply." — the refusal read out as the field's identity
+  // and then again as its description (2.4.6, and a duplicate announcement).
+  // `WaitlistForm` beside it already does it this way.
   return (
-    <label className="flex flex-col gap-1 text-sm">
-      {label}
+    <div className="flex flex-col gap-1 text-sm">
+      <label htmlFor={id}>{label}</label>
       <input
+        id={id}
         name={name}
         // WCAG 3.3.1: the message is tied to the field, not floating above the
         // form, so a screen reader reads it when focus lands here.
@@ -154,6 +164,6 @@ function Field({
           {error}
         </span>
       )}
-    </label>
+    </div>
   )
 }
