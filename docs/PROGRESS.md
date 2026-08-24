@@ -5653,7 +5653,7 @@ D-86 (B-138) re-points the unpaid invoices at the new lease, so the old lease's 
 
 ## B-159 — The accessibility statement was overstating again, and the fix was to claim less
 
-`PENDING`
+`4b98ca6`
 
 **What it built.** Four claims in the public statement's "How we check" section, two of them plainly untrue, corrected — no new behaviour, no schema, no control. First row of the 2026-08-24 review block and taken first deliberately: this page is a live public claim about the codebase rather than a defect a visitor has to reach, and CLAUDE.md's end-of-item checklist names it for that reason.
 
