@@ -8,7 +8,9 @@ import { OCCUPYING_LEASE_STATUSES } from '@storage/core/inventory'
 import { leaseChainIds } from '@/lib/billing/transfer-chain'
 import {
   applyIsDue,
+  DEAD_MESSAGE_STATUSES,
   decreaseProblem,
+  earliestEffectiveDate,
   isCancellable,
   isEligibleForIncrease,
   LIVE_RATE_INCREASE_STATUSES,
@@ -25,6 +27,7 @@ import {
   type EcriPolicy,
   type ScheduleProblem,
 } from '@storage/core/pricing'
+import { formatCents } from '@/lib/format'
 import { createTask } from '@/lib/admin/tasks'
 import { can, checkMonetaryAuthority, nextApproverRole, requirePermission } from '@/lib/rbac/authorize'
 import { toAuditActor } from '@/lib/rbac/audit-actor'
@@ -628,6 +631,14 @@ export async function cancelRateIncrease(
       where: { id },
       data: { status: 'cancelled', cancelledAt: new Date(), cancelledByStaffId: staffIdOf(actor) },
     })
+    // B-166. Cancelling a HELD increase is one of the two things that
+    // genuinely resolves `rate_increase_notice_undelivered` — the increase is
+    // no longer on hold because it is no longer an increase. Done here rather
+    // than through `completeTask`, for the reason `move_out_request_review`
+    // already is: the evidence is the cancellation, not a note about it.
+    if (row.status === 'notice_failed') {
+      await closeUndeliveredNoticeTask(tx, actor, row.leaseId, 'Increase cancelled.')
+    }
     await recordAudit(
       {
         actor: toAuditActor(actor),
@@ -647,6 +658,262 @@ export async function cancelRateIncrease(
     )
   })
   return { ok: true }
+}
+
+/// B-166. Closes the open `rate_increase_notice_undelivered` task for a lease.
+///
+/// Directly, inside the caller's transaction, rather than through
+/// `completeTask` — which now REFUSES this type outright (the catalog's
+/// `resolvedByAction`), because a note is not proof that a held increase was
+/// unheld. The proof is that the row moved, so the only two callers are the
+/// two things that move it: a re-notice and a cancel.
+async function closeUndeliveredNoticeTask(
+  tx: Prisma.TransactionClient,
+  actor: Actor,
+  leaseId: string,
+  note: string,
+): Promise<void> {
+  await tx.task.updateMany({
+    where: { type: 'rate_increase_notice_undelivered', entityId: leaseId, status: 'open' },
+    data: {
+      status: 'completed',
+      completedByStaffId: staffIdOf(actor),
+      completedAt: new Date(),
+      proof: { note },
+    },
+  })
+}
+
+/// The address a failed notice was sent to that the tenant record still
+/// carries, or null if every one of them has been changed.
+///
+/// This is the guard that makes re-noticing mean something. D-88's remedy is
+/// "the operator re-notices FROM A GOOD ADDRESS"; without this check the
+/// batch button below is a way to send forty notices to forty addresses that
+/// have already bounced once, hold all forty again a day later, and raise
+/// forty fresh tasks — a loop that looks like work and gives no tenant notice.
+async function addressStillBad(
+  noticeEventId: string,
+  tenant: { email: string; phone: string | null },
+): Promise<string | null> {
+  const messages = await prisma.message.findMany({
+    where: { eventId: noticeEventId },
+    select: { channel: true, toAddress: true, status: true },
+  })
+  const current = new Map<string, string | null>([
+    ['email', tenant.email.trim().toLowerCase()],
+    ['sms', tenant.phone],
+  ])
+  for (const message of messages) {
+    if (!DEAD_MESSAGE_STATUSES.includes(message.status)) continue
+    const now = current.get(message.channel)
+    if (!now) continue
+    const then = message.channel === 'email' ? message.toAddress.trim().toLowerCase() : message.toAddress
+    if (now === then) return message.toAddress
+  }
+  // `no_send_record` lands here with no messages at all: there is no address
+  // to have corrected, because nothing was ever addressed. Re-noticing is
+  // exactly the right move — the pipeline skipped or matched nothing, and the
+  // second attempt is what finds out whether that is still true.
+  return null
+}
+
+export type RenoticeResult = { ok: true; id: string } | { ok: false; reason: string }
+
+/// PRD 02 §4.3 US-11, D-88 (B-166). The way back from a held increase.
+///
+/// B-152 built the hold and left the only control on the row as Cancel, with
+/// copy telling the operator to "schedule it again" — by hand, into a free
+/// text form, re-deriving the delta, per row, for an event that holds a whole
+/// bounced domain at once. This clones the increase at the SAME delta with a
+/// recomputed notice and effective date, cancels the held row, and links the
+/// two.
+///
+/// **A clone, not a revival.** D-88 says the clock restarts, and a served
+/// notice is evidence: editing the held row's dates in place would rewrite
+/// what was served and when. Two rows, one attempt — `renoticedFromId` is
+/// what says so.
+///
+/// **The approval carries over.** The clone is `approved` with the original's
+/// approver and timestamp, because the figure the approver signed off is
+/// unchanged — same lease, same current rate, same new rate. This is the
+/// mirror of B-162's reasoning for cancelling an in-flight increase on a
+/// transfer: there the transfer REPLACED the figure the approval was given
+/// against, so it could not carry; here nothing replaced it. Which is also
+/// why the rate is re-checked below rather than assumed.
+export async function renoticeRateIncrease(
+  actor: Actor,
+  id: string,
+  reasonCode: string,
+): Promise<RenoticeResult> {
+  const row = await prisma.tenantRateIncrease.findUniqueOrThrow({ where: { id } })
+  requirePermission(actor, 'rates:tenant_increase', row.facilityId)
+
+  if (!reasonCode.trim()) return { ok: false, reason: 'A re-notice has to record why.' }
+  if (row.status !== 'notice_failed') {
+    return {
+      ok: false,
+      reason: `Only an increase held for an undelivered notice can be re-noticed — this one is ${row.status.replace(/_/g, ' ')}.`,
+    }
+  }
+
+  const lease = await prisma.lease.findUnique({
+    where: { id: row.leaseId },
+    select: {
+      status: true,
+      monthlyRateCents: true,
+      tenant: { select: { email: true, phone: true } },
+    },
+  })
+  if (!lease || !OCCUPYING_LEASE_STATUSES.includes(lease.status as never)) {
+    return { ok: false, reason: 'That lease has ended — cancel this increase instead.' }
+  }
+  // The snapshot has to still describe the tenancy. An increase held for a
+  // month while a retention save went through would otherwise be re-noticed
+  // quoting an old rate as the "current" one, in a letter, to the tenant who
+  // was just given the discount.
+  if (lease.monthlyRateCents !== row.currentRateCents) {
+    return {
+      ok: false,
+      reason: `This tenant now pays ${formatCents(lease.monthlyRateCents)}, not the ${formatCents(row.currentRateCents)} this increase was approved against. Cancel it and schedule a new one.`,
+    }
+  }
+
+  if (row.noticeEventId) {
+    const stillBad = await addressStillBad(row.noticeEventId, lease.tenant)
+    if (stillBad) {
+      return {
+        ok: false,
+        reason: `The notice did not arrive at ${stillBad}, and that is still this tenant's address on file. Correct their contact details first — re-sending to the same address gives no notice.`,
+      }
+    }
+  }
+
+  const facility = await prisma.facility.findUniqueOrThrow({
+    where: { id: row.facilityId },
+    select: { timezone: true, rateIncreaseNoticeDays: true },
+  })
+  const today = businessDateFor(new Date(), facility.timezone)
+  // Keep the original effective date when there is still a full notice period
+  // left in it, and slide to the soonest legal date when there is not. The
+  // held increase usually has weeks of runway — the hold is raised the day
+  // after the notice, not on the effective date — so most re-notices keep the
+  // date the tenant would have been told about anyway.
+  const earliest = earliestEffectiveDate(today, facility.rateIncreaseNoticeDays)
+  const effectiveDate = utcDay(
+    row.effectiveDate.getTime() >= earliest.getTime() ? row.effectiveDate : earliest,
+  )
+  const problem = scheduleProblem({
+    currentRateCents: row.currentRateCents,
+    newRateCents: row.newRateCents,
+    effectiveDate,
+    noticeDays: facility.rateIncreaseNoticeDays,
+    today,
+  })
+  if (problem) return { ok: false, reason: PROBLEM_MESSAGE[problem] }
+
+  const created = await prisma.$transaction(async (tx) => {
+    // Cancel FIRST: the one-live-increase-per-lease rule is real, and a clone
+    // created beside a still-live original would be two notices quoting
+    // different dates to the same tenant.
+    await tx.tenantRateIncrease.update({
+      where: { id },
+      data: { status: 'cancelled', cancelledAt: new Date(), cancelledByStaffId: staffIdOf(actor) },
+    })
+    const clone = await tx.tenantRateIncrease.create({
+      data: {
+        facilityId: row.facilityId,
+        leaseId: row.leaseId,
+        currentRateCents: row.currentRateCents,
+        newRateCents: row.newRateCents,
+        effectiveDate,
+        noticeDate: noticeDateFor(effectiveDate, facility.rateIncreaseNoticeDays),
+        noticeDays: facility.rateIncreaseNoticeDays,
+        // The batch travels with it, so a bounced-domain event re-noticed row
+        // by row still approves and cancels as the one worklist it was.
+        batchId: row.batchId,
+        status: 'approved',
+        approvedByStaffId: row.approvedByStaffId,
+        approvedAt: row.approvedAt,
+        createdByStaffId: staffIdOf(actor),
+        renoticedFromId: row.id,
+      },
+    })
+    await closeUndeliveredNoticeTask(tx, actor, row.leaseId, 'Re-noticed from a corrected address.')
+    await recordAudit(
+      {
+        actor: toAuditActor(actor),
+        facilityId: row.facilityId,
+        action: 'rate.increase_renoticed',
+        entityType: 'TenantRateIncrease',
+        entityId: clone.id,
+        reasonCode: reasonCode.trim(),
+        context: {
+          leaseId: row.leaseId,
+          renoticedFromId: row.id,
+          noticeFailureReason: row.noticeFailureReason,
+          previousEffectiveDate: row.effectiveDate.toISOString().slice(0, 10),
+          effectiveDate: effectiveDate.toISOString().slice(0, 10),
+          newRateCents: row.newRateCents,
+        },
+      },
+      tx,
+    )
+    return clone
+  })
+
+  return { ok: true, id: created.id }
+}
+
+export type RenoticeBatchResult = {
+  renoticed: number
+  /// Named, not counted. A batch that says "3 of 5 re-noticed" and stops has
+  /// hidden the only two rows anyone has to do something about.
+  refused: { tenantName: string; unitNumber: string; reason: string }[]
+}
+
+/// B-166. Every held increase at one facility, in one press.
+///
+/// The reason this exists rather than being left to row-by-row work: the
+/// failure mode D-88 blocks on is not usually one bad address, it is a
+/// provider incident or a bounced corporate domain, and forty held rows with
+/// one control each is how a month of increases quietly lapses. Scoped to a
+/// facility for the same reason every other batch here is — the notice
+/// period is a per-facility setting.
+export async function renoticeHeldIncreases(
+  actor: Actor,
+  facilityId: string,
+  reasonCode: string,
+): Promise<RenoticeBatchResult> {
+  requirePermission(actor, 'rates:tenant_increase', facilityId)
+
+  const rows = await prisma.tenantRateIncrease.findMany({
+    where: { facilityId, status: 'notice_failed' },
+    orderBy: [{ effectiveDate: 'asc' }, { createdAt: 'asc' }],
+    include: {
+      lease: {
+        select: {
+          tenant: { select: { firstName: true, lastName: true } },
+          unit: { select: { number: true } },
+        },
+      },
+    },
+  })
+
+  const result: RenoticeBatchResult = { renoticed: 0, refused: [] }
+  for (const row of rows) {
+    const outcome = await renoticeRateIncrease(actor, row.id, reasonCode)
+    if (outcome.ok) {
+      result.renoticed += 1
+      continue
+    }
+    result.refused.push({
+      tenantName: `${row.lease.tenant.firstName} ${row.lease.tenant.lastName}`,
+      unitNumber: row.lease.unit?.number ?? '—',
+      reason: outcome.reason,
+    })
+  }
+  return result
 }
 
 export async function cancelBatch(actor: Actor, batchId: string, reasonCode: string): Promise<{ cancelled: number }> {
@@ -980,6 +1247,8 @@ export type PendingIncreaseRow = {
   noticeSentAt: Date | null
   /// B-152. Why a `notice_failed` row is held. Null on every other status.
   noticeFailureReason: string | null
+  /// B-166. The held increase this row replaces, when it is a re-notice.
+  renoticedFromId: string | null
   /// B-153. A retention save reads differently from an increase at every
   /// column — "Approved — notice pending" is a lie about one.
   isDecrease: boolean
@@ -1032,6 +1301,7 @@ export async function pendingRateIncreases(actor: Actor, facilityId: string): Pr
       approvedAt: row.approvedAt,
       noticeSentAt: row.noticeSentAt,
       noticeFailureReason: row.noticeFailureReason,
+      renoticedFromId: row.renoticedFromId,
       isDecrease: isRateDecrease(row),
     })),
     // B-152: a held increase is not projected revenue. It cannot apply until

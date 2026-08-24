@@ -120,13 +120,31 @@ export default async function TasksPage({
                 {task.assigneeName ? `Assigned to ${task.assigneeName}` : 'Unassigned'}
               </p>
 
-              <TaskCompleteForm
-                taskId={task.id}
-                subjectLabel={`${task.label}, ${task.subject.label}`}
-                notePlaceholder="What did you do?"
-                buttonLabel="Complete"
-                requiresPhoto={task.requiredProofFields.includes('photo_reference')}
-              />
+              {/* B-166. A task whose truth is a record's state is not
+                  closeable by typing — the card says what closes it and sends
+                  the reader there, rather than offering a note box that
+                  `completeTask` would refuse. */}
+              {task.resolvedByAction ? (
+                <p className="text-muted-foreground mt-3 text-sm text-pretty">
+                  {task.resolvedByAction.sentence}{' '}
+                  <Link
+                    href={task.resolvedByAction.href}
+                    className="underline underline-offset-2"
+                    aria-label={`${task.resolvedByAction.linkLabel} for ${task.subject.label}`}
+                  >
+                    {task.resolvedByAction.linkLabel}
+                  </Link>
+                  .
+                </p>
+              ) : (
+                <TaskCompleteForm
+                  taskId={task.id}
+                  subjectLabel={`${task.label}, ${task.subject.label}`}
+                  notePlaceholder="What did you do?"
+                  buttonLabel="Complete"
+                  requiresPhoto={task.requiredProofFields.includes('photo_reference')}
+                />
+              )}
             </li>
           ))}
         </ul>

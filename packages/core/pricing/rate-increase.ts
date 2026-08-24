@@ -297,7 +297,12 @@ export type NoticeDeliveryVerdict = 'reached' | 'undeliverable' | 'no_send_recor
 /// `suppressed` and `cancelled` are decisions WE made before sending, which
 /// is exactly D-88's "suppression hit" — an increase noticed to an address we
 /// had already stopped mailing was not noticed.
-const DEAD_MESSAGE_STATUSES: readonly string[] = ['bounced', 'failed', 'suppressed', 'cancelled']
+/// Exported since B-166, which needs the same list for a different question:
+/// the verdict below asks WHETHER the notice arrived, the re-notice guard asks
+/// WHICH ADDRESS it failed at. Two copies of this array would drift, and the
+/// drift would be silent — a status missing here lets a re-notice go back to
+/// an address that has already bounced.
+export const DEAD_MESSAGE_STATUSES: readonly string[] = ['bounced', 'failed', 'suppressed', 'cancelled']
 
 export function noticeDeliveryVerdict(statuses: readonly string[]): NoticeDeliveryVerdict {
   // D-88: "no send record blocks". A skip condition firing, a rule matching

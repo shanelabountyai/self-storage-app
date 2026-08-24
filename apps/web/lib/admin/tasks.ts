@@ -1,7 +1,14 @@
 import { prisma, type Prisma } from '@storage/db'
 import { recordAudit } from '@storage/core/audit'
 import { businessDateFor } from '@storage/core/jobs'
-import { missingProofFields, taskTypeIsSensitive, taskTypeSpec, type TaskType } from '@storage/core/tasks'
+import {
+  missingProofFields,
+  taskTypeIsSensitive,
+  taskTypeResolvedByAction,
+  taskTypeSpec,
+  type TaskType,
+  type TaskTypeSpec,
+} from '@storage/core/tasks'
 import { assertFacilityAccess, can, facilityAccess, ForbiddenError } from '@/lib/rbac/authorize'
 import { toAuditActor } from '@/lib/rbac/audit-actor'
 import type { Actor } from '@/lib/rbac/actor'
@@ -99,6 +106,9 @@ export type TaskRow = {
   /// fields (e.g. a photo for `overlock_apply`) instead of a note-only form
   /// that `completeTask` would then refuse.
   requiredProofFields: readonly string[]
+  /// B-166. Set when a note cannot close this type, and saying what can and
+  /// where — the card renders this instead of a completion form.
+  resolvedByAction: TaskTypeSpec['resolvedByAction']
   /// B-115. What this task is ABOUT — a name to read and, where one exists, a
   /// place to go. Always present: `resolveTaskSubjects` falls back to a named
   /// "no longer exists" line rather than leaving a card with nothing here.
@@ -217,6 +227,7 @@ export async function facilityTasks(
     assigneeName: task.assignee ? `${task.assignee.firstName} ${task.assignee.lastName}` : null,
     status: task.status,
     requiredProofFields: taskTypeSpec(task.type)?.requiredProofFields ?? ['note'],
+    resolvedByAction: taskTypeResolvedByAction(task.type),
     subject: subjects.get(`${task.entityType}:${task.entityId}`) ?? fallbackSubject(task.entityType),
   }))
 }
@@ -256,7 +267,12 @@ export async function taskRollup(actor: Actor): Promise<FacilityRollup[]> {
   }))
 }
 
-export type CompleteTaskResult = { ok: true } | { ok: false; missingFields: string[] }
+export type CompleteTaskResult =
+  | { ok: true }
+  /// B-166. `reason` carries a refusal that is not about a missing field —
+  /// today, a type that no note can close. The two are one union rather than
+  /// two returns because every caller already handles `ok: false`.
+  | { ok: false; missingFields: string[]; reason?: string }
 
 /// Completes a task. Refuses when the type's required proof fields (the
 /// catalog) are not all present — "proof-gated completion" is enforced here,
@@ -274,6 +290,14 @@ export async function completeTask(
     throw new ForbiddenError('Missing permission to complete tasks', 'tenants:edit', task.facilityId)
   }
   if (task.status !== 'open') return { ok: true }
+
+  // B-166. Some tasks report that a specific record is stuck, and stay true
+  // until that record moves. Completing one from the queue records an opinion
+  // as an outcome: the increase is still held, and the only thing that has
+  // changed is that nothing says so any more. Refused here rather than only
+  // by not rendering the form — this action is reachable with any task id.
+  const resolvedByAction = taskTypeResolvedByAction(task.type)
+  if (resolvedByAction) return { ok: false, missingFields: [], reason: resolvedByAction.sentence }
 
   const missingFields = missingProofFields(task.type, proof)
   if (missingFields.length > 0) return { ok: false, missingFields }

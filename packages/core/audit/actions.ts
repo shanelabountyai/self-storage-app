@@ -80,6 +80,17 @@ export const AUDIT_ACTIONS = [
     label: "Tenant rate increase cancelled",
     requiresReason: true,
   },
+  /// B-166 / D-88. A held increase re-noticed: the old row cancelled and a
+  /// clone scheduled at the same delta from a corrected address. Its own
+  /// action rather than a cancel plus an approval, because the question this
+  /// log has to answer is "how many times did we try to notice this tenant,
+  /// and to what address" — filed as two unrelated rows, the attempt reads as
+  /// somebody changing their mind twice.
+  {
+    action: "rate.increase_renoticed",
+    label: "Tenant rate increase re-noticed",
+    requiresReason: true,
+  },
 
   // Tenants
   {

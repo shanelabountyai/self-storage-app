@@ -11,6 +11,7 @@ import { prisma } from '@storage/db'
 import {
   approveAction,
   cancelAction,
+  renoticeAction,
   scheduleBatchAction,
   scheduleDecreaseAction,
   scheduleOneOffAction,
@@ -50,15 +51,20 @@ const STATUS_LABEL: Record<string, string> = {
   notice_failed: 'On hold — notice did not arrive',
 }
 
-/// B-152 / D-88. What the operator has to do about a held increase, said in
-/// the row rather than only in the task queue: the increase will never apply
-/// on its own, so a status with no next step reads as a warning instead of an
-/// instruction.
+/// B-152 / D-88, rewritten by B-166. What the operator has to do about a held
+/// increase, said in the row rather than only in the task queue: the increase
+/// will never apply on its own, so a status with no next step reads as a
+/// warning instead of an instruction.
+///
+/// The copy used to say "cancel this and schedule it again", which was true
+/// and was the defect — it described re-typing a lease id into a free-text
+/// form and re-deriving the delta by hand, per row. Re-notice does that, so
+/// the sentence now names the one thing the operator has to do first.
 const NOTICE_FAILURE_HELP: Record<string, string> = {
   undeliverable:
-    'The notice bounced or the address is suppressed. Get a working address, then cancel this and schedule it again — the notice period restarts.',
+    'The notice bounced or the address is suppressed. Correct the tenant’s contact details, then re-notice — the increase keeps its figures and the notice period restarts.',
   no_send_record:
-    'No notice was ever sent for this increase. Cancel it and schedule it again once you know the tenant can be reached.',
+    'No notice was ever sent for this increase. Check the tenant can be reached, then re-notice.',
 }
 
 export default async function RateIncreasesPage() {
@@ -99,6 +105,7 @@ export default async function RateIncreasesPage() {
 
   const soonest = isoDay(earliestEffectiveDate(new Date(), facility.rateIncreaseNoticeDays))
   const batchIds = [...new Set(review.rows.map((row) => row.batchId).filter((id): id is string => Boolean(id)))]
+  const heldCount = review.rows.filter((row) => row.status === 'notice_failed').length
 
   return (
     <div className="flex flex-col gap-8">
@@ -170,6 +177,15 @@ export default async function RateIncreasesPage() {
                             'This increase is on hold until the tenant has been given notice.'}
                         </span>
                       )}
+                      {/* B-166. The pair reads as one attempt to notice one
+                          increase, not as a second increase on the same
+                          tenant — which is what an approver would otherwise
+                          see a fortnight after cancelling the first. */}
+                      {row.renoticedFromId && (
+                        <span className="text-muted-foreground mt-1 block text-xs text-pretty">
+                          Re-noticed after an earlier notice did not arrive.
+                        </span>
+                      )}
                     </td>
                     <td className="py-2 pr-4">
                       <div className="flex flex-col gap-2">
@@ -178,6 +194,20 @@ export default async function RateIncreasesPage() {
                             <input type="hidden" name="id" value={row.id} />
                             <Field name="reason" label="Why" className="flex flex-col gap-1 text-xs" />
                             <Button type="submit">Approve</Button>
+                          </AdminForm>
+                        )}
+                        {/* B-166 / D-88. The way back. Named after its
+                            subject rather than repeating "Re-notice" down the
+                            column (2.4.6), and the outcome — including the
+                            refusal when the tenant still has the address that
+                            bounced — is announced from `AdminForm`'s live
+                            region, which is mounted with the page rather than
+                            inserted on submit (4.1.3). */}
+                        {row.status === 'notice_failed' && canRaise && (
+                          <AdminForm action={renoticeAction} label={`Re-notice increase for ${row.tenantName}`} className="flex flex-wrap items-end gap-2">
+                            <input type="hidden" name="id" value={row.id} />
+                            <Field name="reason" label="Why" className="flex flex-col gap-1 text-xs" />
+                            <Button type="submit">Re-notice</Button>
                           </AdminForm>
                         )}
                         <AdminForm action={cancelAction} label={`Cancel increase for ${row.tenantName}`} className="flex flex-wrap items-end gap-2">
@@ -191,6 +221,28 @@ export default async function RateIncreasesPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {heldCount > 0 && canRaise && (
+          <div className="border-input flex flex-col gap-3 rounded-lg border p-4">
+            <h3 className="text-sm font-medium">
+              On hold for an undelivered notice ({heldCount})
+            </h3>
+            {/* Why this exists as a batch at all: the usual cause is not one
+                bad address, it is a provider incident or a bounced corporate
+                domain, and forty held rows with one button each is how a
+                month of increases quietly lapses. */}
+            <p className="text-muted-foreground text-xs text-pretty">
+              Re-notices every held increase at this facility that has a corrected address, keeping
+              each one&apos;s figures and restarting its notice period. Any tenant whose contact
+              details still carry the address that bounced is listed back to you untouched, by name.
+            </p>
+            <AdminForm action={renoticeAction} label="Re-notice every held increase" className="flex flex-wrap items-end gap-3">
+              <input type="hidden" name="facilityId" value={facilityId} />
+              <Field name="reason" label="Why" className="flex flex-col gap-1 text-xs" />
+              <Button type="submit">Re-notice all held</Button>
+            </AdminForm>
           </div>
         )}
 

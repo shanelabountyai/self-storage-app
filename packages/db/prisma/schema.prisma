@@ -2112,15 +2112,27 @@ model TenantRateIncrease {
   /// good address is re-noticed as a new increase, because D-88 says the
   /// clock restarts.
   noticeFailureReason String?
+  /// B-166 / D-88. The held increase this one replaces. D-88's remedy is that
+  /// the operator re-notices from a good address and the clock restarts —
+  /// which is a NEW row, because the notice period and the effective date
+  /// both move and an already-served notice must stay exactly as it was
+  /// served. This column is what stops the two rows reading as one operator
+  /// changing their mind and another one raising the same rent again: the
+  /// pair is one attempt to notice one increase. `@unique` because a
+  /// re-noticed row is cancelled by the same transaction and can never be
+  /// re-noticed twice.
+  renoticedFromId     String?            @unique
   appliedAt           DateTime?          @db.Timestamptz(6)
   cancelledAt         DateTime?          @db.Timestamptz(6)
   cancelledByStaffId  String?
   createdAt           DateTime           @default(now()) @db.Timestamptz(6)
   updatedAt           DateTime           @updatedAt @db.Timestamptz(6)
 
-  facility    Facility          @relation(fields: [facilityId], references: [id], onDelete: Cascade)
-  lease       Lease             @relation(fields: [leaseId], references: [id], onDelete: Cascade)
-  rateChanges LeaseRateChange[]
+  facility      Facility            @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  lease         Lease               @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+  rateChanges   LeaseRateChange[]
+  renoticedFrom TenantRateIncrease? @relation("RateIncreaseRenotice", fields: [renoticedFromId], references: [id], onDelete: SetNull)
+  renoticedTo   TenantRateIncrease? @relation("RateIncreaseRenotice")
 
   @@index([facilityId, status])
   @@index([leaseId])

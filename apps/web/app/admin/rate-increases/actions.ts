@@ -7,6 +7,8 @@ import {
   approveRateIncrease,
   cancelBatch,
   cancelRateIncrease,
+  renoticeHeldIncreases,
+  renoticeRateIncrease,
   scheduleEligibleBatch,
   scheduleRateDecrease,
   scheduleRateIncrease,
@@ -106,6 +108,41 @@ export async function cancelAction(_prev: FormState, formData: FormData): Promis
   if (!result.ok) return fieldError({ reason: result.reason })
   revalidate()
   return success('Cancelled. Nothing will change on this lease.')
+}
+
+/// PRD 02 §4.3 US-11, D-88 (B-166). The way back from a held increase — one
+/// row, or every held row at the facility.
+///
+/// One action for both, like `approveAction` and `cancelAction`: the batch is
+/// the same operation repeated, and splitting it would give the two paths two
+/// places to drift on what a refusal reads like.
+export async function renoticeAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const actor = await requireStaffActor()
+  const reason = String(formData.get('reason') ?? '')
+  const facilityId = String(formData.get('facilityId') ?? '').trim()
+
+  if (facilityId) {
+    if (!reason.trim()) return fieldError({ reason: 'A re-notice has to record why.' })
+    const { renoticed, refused } = await renoticeHeldIncreases(actor, facilityId, reason)
+    revalidate()
+    if (refused.length === 0) {
+      return success(
+        `Re-noticed ${renoticed} increase${renoticed === 1 ? '' : 's'}. Each notice goes out on its new notice date.`,
+      )
+    }
+    // The refusals are the point of the batch reporting at all: they are the
+    // rows whose address is still the one that bounced, and a bare count would
+    // leave them looking done.
+    return success(
+      `Re-noticed ${renoticed} of ${renoticed + refused.length}. ${refused.length} still need${refused.length === 1 ? 's' : ''} attention.`,
+      refused.map((row) => `${row.tenantName} (unit ${row.unitNumber}) — ${row.reason}`),
+    )
+  }
+
+  const result = await renoticeRateIncrease(actor, String(formData.get('id') ?? ''), reason)
+  if (!result.ok) return fieldError({ reason: result.reason })
+  revalidate()
+  return success('Re-noticed. The notice goes out on its new notice date, and the increase applies after it.')
 }
 
 /// PRD 02 §4.3 US-11 (B-153). The retention save. Separate from

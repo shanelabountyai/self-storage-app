@@ -226,6 +226,24 @@ describeDb('task queue', () => {
       expect((await prisma.task.findUniqueOrThrow({ where: { id } })).status).toBe('open')
     })
 
+    // B-166. A type whose truth is a record's state, not an opinion.
+    it('refuses a type a note can never close, and says what does close it', async () => {
+      const { id } = await createTask({
+        facilityId,
+        type: 'rate_increase_notice_undelivered',
+        entityType: 'Lease',
+        entityId: `${leaseId}-held`,
+      })
+      const result = await completeTask(actorAt(counterId, facilityId), id, {
+        note: 'Called them, they say it is fine.',
+      })
+      expect(result).toMatchObject({ ok: false, missingFields: [] })
+      expect((result as { reason?: string }).reason).toContain('Re-notice or cancel')
+      // The point of the refusal: the increase is still held, so the queue
+      // must still be saying so.
+      expect((await prisma.task.findUniqueOrThrow({ where: { id } })).status).toBe('open')
+    })
+
     it('completes once proof is supplied, recording who and when', async () => {
       const { id } = await createTask({
         facilityId,

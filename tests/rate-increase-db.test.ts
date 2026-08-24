@@ -10,6 +10,8 @@ import {
   cancelRateIncrease,
   pendingRateIncreases,
   previewEligibleIncreases,
+  renoticeHeldIncreases,
+  renoticeRateIncrease,
   scheduleEligibleBatch,
   scheduleRateIncrease,
   sendDueRateIncreaseNotices,
@@ -764,6 +766,214 @@ describeDb('tenant rate increases (US-11 / CN-9)', () => {
       ).toMatchObject({ ok: false })
 
       expect(await cancelRateIncrease(manager(), row.id, 'bad address, re-noticing')).toEqual({ ok: true })
+    })
+  })
+
+  // B-166 / D-88. B-152 built the hold and left Cancel as the only control on
+  // it. D-88's remedy — "the operator re-notices from a good address and the
+  // clock restarts" — is what this builds, and the properties worth a database
+  // are that the clone carries the same figures and the original approval, the
+  // held row is closed out with it, and re-noticing to the SAME address is
+  // refused rather than sent.
+  describe('re-noticing a held increase (B-166 / D-88)', () => {
+    async function held(effectiveInDays = 45) {
+      const { leaseId } = await makeLease()
+      await scheduleRateIncrease(manager(), facilityId, {
+        leaseId,
+        newRateCents: 14_900,
+        effectiveDate: daysFromNow(effectiveInDays),
+      })
+      const row = await prisma.tenantRateIncrease.findFirstOrThrow({ where: { leaseId } })
+      await approveRateIncrease(regional(), row.id, 'the annual review')
+      await sendDueRateIncreaseNotices(facilityId, daysFromNow(effectiveInDays - 30), () => {})
+      const sent = await prisma.tenantRateIncrease.findUniqueOrThrow({ where: { id: row.id } })
+      const event = await prisma.domainEvent.findUniqueOrThrow({ where: { id: sent.noticeEventId! } })
+      await processCommsEvent(event)
+      await prisma.message.updateMany({ where: { eventId: sent.noticeEventId! }, data: { status: 'bounced' } })
+      await reconcileRateIncreaseNotices(facilityId, () => {})
+
+      const after = await prisma.tenantRateIncrease.findUniqueOrThrow({ where: { id: row.id } })
+      expect(after.status).toBe('notice_failed')
+      return { heldId: row.id, leaseId, eventId: sent.noticeEventId! }
+    }
+
+    /// The tenant got a working address. Everything below except the refusal
+    /// test needs this first, which is itself the point of the refusal test.
+    async function correctTheAddress(leaseId: string): Promise<void> {
+      const lease = await prisma.lease.findUniqueOrThrow({
+        where: { id: leaseId },
+        select: { tenantId: true },
+      })
+      await prisma.tenant.update({
+        where: { id: lease.tenantId },
+        data: { email: `fixed-${randomUUID().slice(0, 8)}@example.com` },
+      })
+    }
+
+    it('refuses while the tenant still has the address the notice bounced at, naming it', async () => {
+      const { heldId, leaseId } = await held()
+      const lease = await prisma.lease.findUniqueOrThrow({
+        where: { id: leaseId },
+        select: { tenant: { select: { email: true } } },
+      })
+
+      const result = await renoticeRateIncrease(manager(), heldId, 'trying again')
+      expect(result).toMatchObject({ ok: false })
+      // The address itself, not "the address is bad" — the operator has to
+      // know which one to go and change.
+      expect((result as { reason: string }).reason).toContain(lease.tenant.email)
+
+      // And nothing moved: a refused re-notice must not have cancelled the
+      // held row on its way out.
+      const after = await prisma.tenantRateIncrease.findUniqueOrThrow({ where: { id: heldId } })
+      expect(after.status).toBe('notice_failed')
+    })
+
+    it('clones at the same delta, carries the approval, and cancels the held row', async () => {
+      const { heldId, leaseId } = await held()
+      await correctTheAddress(leaseId)
+
+      const result = await renoticeRateIncrease(manager(), heldId, 'new address from the tenant')
+      expect(result).toMatchObject({ ok: true })
+
+      const oldRow = await prisma.tenantRateIncrease.findUniqueOrThrow({ where: { id: heldId } })
+      expect(oldRow.status).toBe('cancelled')
+
+      const clone = await prisma.tenantRateIncrease.findUniqueOrThrow({
+        where: { id: (result as { id: string }).id },
+      })
+      expect(clone.currentRateCents).toBe(oldRow.currentRateCents)
+      expect(clone.newRateCents).toBe(oldRow.newRateCents)
+      // Approved, by the original approver: the figure they signed off on is
+      // unchanged, so the sign-off still describes it.
+      expect(clone.status).toBe('approved')
+      expect(clone.approvedByStaffId).toBe(regionalId)
+      expect(clone.renoticedFromId).toBe(heldId)
+      // The clock restarted, which is a statement about the PERIOD, not about
+      // the date moving: the tenant gets a full notice period between the new
+      // notice and the effective date, and the notice is never scheduled into
+      // a day that has already passed. A held increase with weeks of runway
+      // left keeps the date the tenant would have been told about anyway.
+      expect(
+        Math.round((clone.effectiveDate.getTime() - clone.noticeDate.getTime()) / 86_400_000),
+      ).toBe(clone.noticeDays)
+      expect(clone.noticeDate.getTime()).toBeGreaterThanOrEqual(daysFromNow(0).getTime())
+
+      // One live increase on the lease, not two.
+      const live = await prisma.tenantRateIncrease.findMany({
+        where: { leaseId, status: { in: ['pending_approval', 'approved', 'notice_sent', 'notice_failed'] } },
+      })
+      expect(live).toHaveLength(1)
+    })
+
+    it('slides the effective date forward when the hold ate the notice period', async () => {
+      // The case the date arithmetic exists for: by the time somebody gets a
+      // working address there are five days left, and re-noticing on the old
+      // date would give the tenant five days' notice for a thirty-day
+      // requirement.
+      const { heldId, leaseId } = await held(31)
+      await prisma.tenantRateIncrease.update({
+        where: { id: heldId },
+        data: { effectiveDate: daysFromNow(5), noticeDate: daysFromNow(-25) },
+      })
+      await correctTheAddress(leaseId)
+
+      const result = await renoticeRateIncrease(manager(), heldId, 'new address')
+      expect(result).toMatchObject({ ok: true })
+      const clone = await prisma.tenantRateIncrease.findUniqueOrThrow({
+        where: { id: (result as { id: string }).id },
+      })
+      expect(clone.effectiveDate.getTime()).toBe(daysFromNow(clone.noticeDays).getTime())
+      expect(clone.noticeDate.getTime()).toBe(daysFromNow(0).getTime())
+    })
+
+    it('re-notices and then actually applies, end to end', async () => {
+      const { heldId, leaseId } = await held()
+      await correctTheAddress(leaseId)
+      const result = await renoticeRateIncrease(manager(), heldId, 'new address')
+      const cloneId = (result as { id: string }).id
+      const clone = await prisma.tenantRateIncrease.findUniqueOrThrow({ where: { id: cloneId } })
+
+      await sendDueRateIncreaseNotices(facilityId, clone.noticeDate, () => {})
+      const noticed = await prisma.tenantRateIncrease.findUniqueOrThrow({ where: { id: cloneId } })
+      expect(noticed.status).toBe('notice_sent')
+      const event = await prisma.domainEvent.findUniqueOrThrow({ where: { id: noticed.noticeEventId! } })
+      await processCommsEvent(event)
+
+      const applied = await applyDueRateIncreases(facilityId, clone.effectiveDate, () => {})
+      expect(applied.applied).toBe(1)
+      const lease = await prisma.lease.findUniqueOrThrow({ where: { id: leaseId } })
+      expect(lease.monthlyRateCents).toBe(14_900)
+    })
+
+    it('closes the undelivered-notice task — and a note never could have', async () => {
+      const { heldId, leaseId } = await held()
+      await correctTheAddress(leaseId)
+      await renoticeRateIncrease(manager(), heldId, 'new address')
+
+      const task = await prisma.task.findFirstOrThrow({
+        where: { type: 'rate_increase_notice_undelivered', entityId: leaseId },
+        orderBy: { createdAt: 'desc' },
+      })
+      expect(task.status).toBe('completed')
+    })
+
+    it('cancelling a held increase closes the task too — the other honest ending', async () => {
+      const { heldId, leaseId } = await held()
+      expect(await cancelRateIncrease(manager(), heldId, 'tenant is moving out anyway')).toEqual({ ok: true })
+
+      const task = await prisma.task.findFirstOrThrow({
+        where: { type: 'rate_increase_notice_undelivered', entityId: leaseId },
+        orderBy: { createdAt: 'desc' },
+      })
+      expect(task.status).toBe('completed')
+    })
+
+    it('refuses when the tenant now pays something else — the approved delta no longer describes them', async () => {
+      const { heldId, leaseId } = await held()
+      await correctTheAddress(leaseId)
+      await applyRateChange({
+        leaseId,
+        newRateCents: 11_900,
+        effectiveFrom: new Date(),
+        reason: 'retention',
+      })
+
+      const result = await renoticeRateIncrease(manager(), heldId, 'trying again')
+      expect(result).toMatchObject({ ok: false })
+      const after = await prisma.tenantRateIncrease.findUniqueOrThrow({ where: { id: heldId } })
+      expect(after.status).toBe('notice_failed')
+    })
+
+    it('refuses anything that is not held', async () => {
+      const { leaseId } = await makeLease()
+      await scheduleRateIncrease(manager(), facilityId, {
+        leaseId,
+        newRateCents: 14_900,
+        effectiveDate: daysFromNow(45),
+      })
+      const row = await prisma.tenantRateIncrease.findFirstOrThrow({ where: { leaseId } })
+      expect(await renoticeRateIncrease(manager(), row.id, 'why not')).toMatchObject({ ok: false })
+    })
+
+    it('the batch re-notices the corrected ones and names the rest', async () => {
+      const first = await held(46)
+      const second = await held(47)
+      await correctTheAddress(first.leaseId)
+
+      const result = await renoticeHeldIncreases(manager(), facilityId, 'the mail server outage')
+      expect(result.renoticed).toBe(1)
+      // The one that could not go is reported by name, not swallowed by a
+      // count — it is the only row anybody still has to do something about.
+      expect(result.refused).toHaveLength(1)
+      expect(result.refused[0]?.tenantName).toContain('Ada')
+
+      expect(
+        (await prisma.tenantRateIncrease.findUniqueOrThrow({ where: { id: first.heldId } })).status,
+      ).toBe('cancelled')
+      expect(
+        (await prisma.tenantRateIncrease.findUniqueOrThrow({ where: { id: second.heldId } })).status,
+      ).toBe('notice_failed')
     })
   })
 

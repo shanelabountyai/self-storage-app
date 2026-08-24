@@ -16,6 +16,23 @@ export type TaskTypeSpec = {
   /// it done — for the types where "who resolved this and when" matters
   /// beyond the task row itself.
   sensitive: boolean;
+  /// B-166. Types that a note can never close, and the sentence telling the
+  /// reader what actually closes them.
+  ///
+  /// The proof gate above asks for evidence and accepts typing as evidence.
+  /// That is right for most of this queue — "what did you do" about returned
+  /// mail is a note by nature — and wrong for a task whose whole content is
+  /// that a specific record is still in a blocked state: the increase is on
+  /// hold whatever anybody types, so a completed row would mean the queue had
+  /// forgotten about a held increase rather than that anyone had unheld it.
+  /// Set this and `completeTask` refuses from the queue, and the card renders
+  /// the sentence and the link instead of a note form. The screen named here
+  /// completes the task itself, as `move_out_request_review` already does.
+  ///
+  /// The href lives in the catalog rather than in the queue's JSX so the view
+  /// never has to switch on a `Task.type` string to know where to send
+  /// somebody — the same reason `label` is here.
+  resolvedByAction?: { sentence: string; href: string; linkLabel: string };
 };
 
 export const TASK_TYPES = [
@@ -157,10 +174,23 @@ export const TASK_TYPES = [
     // Sensitive: whether notice was served is the fact a rate-increase dispute
     // turns on, so who decided what to do about a failed one is worth keeping
     // beyond the task row.
+    //
+    // B-166: `resolvedByAction`, and this is the type the field was added
+    // for. Until B-166 the only thing this card offered was a note box, so
+    // the one recorded outcome of a held increase was somebody typing
+    // "called them" — the increase still held, the task closed, and the queue
+    // no longer saying so. Re-noticing or cancelling closes it; nothing else
+    // can.
     type: "rate_increase_notice_undelivered",
     label: "Rate-increase notice did not arrive — the increase is on hold",
     requiredProofFields: ["note"],
     sensitive: true,
+    resolvedByAction: {
+      sentence:
+        "Re-notice or cancel the increase — a note cannot close this, because the increase stays on hold either way.",
+      href: "/admin/rate-increases",
+      linkLabel: "Open rate changes",
+    },
   },
   {
     // PRD 03 US-6 AC1. A gate command at a facility running the ManualAdapter:
@@ -309,4 +339,13 @@ export function missingProofFields(
 
 export function taskTypeIsSensitive(type: string): boolean {
   return taskTypeSpec(type)?.sensitive ?? false;
+}
+
+/// B-166. What closes this type, when a note cannot. Undefined for every
+/// ordinary type, which is what `completeTask` and the queue card both branch
+/// on.
+export function taskTypeResolvedByAction(
+  type: string,
+): TaskTypeSpec["resolvedByAction"] {
+  return taskTypeSpec(type)?.resolvedByAction;
 }

@@ -29,6 +29,10 @@ export async function completeTaskAction(_prev: FormState, formData: FormData): 
   })
 
   if (!result.ok) {
+    // B-166. A refusal with no field to hang it on — this type cannot be
+    // closed by completing a form at all. On the note, because that is the
+    // control the reader just used and the one the message is about.
+    if (result.reason) return fieldError({ note: result.reason })
     return fieldError(
       Object.fromEntries(
         result.missingFields.map((field) => [field, PROOF_FIELD_ERRORS[field] ?? `${field} is required.`]),
