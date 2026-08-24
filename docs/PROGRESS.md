@@ -5980,7 +5980,7 @@ Four changes, and the first is the one that matters most:
 
 ## B-171 — Both public marketing forms were silent on the error path
 
-`PENDING`
+`91f99d4`
 
 **What it built.** `FormResult` writes its live region on the **error** branch as well as the success one, moves focus to it either way, and renders a refusal in red rather than in the hardcoded green of a confirmation. Both public forms — the sold-out waitlist notify-me and the quote/callback — get an e2e test of their refused state, including the first axe scan either has ever had.
 
