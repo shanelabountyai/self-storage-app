@@ -1,5 +1,8 @@
 import { prisma } from "@storage/db";
-import { OCCUPYING_LEASE_STATUSES } from "@storage/core/inventory";
+import {
+  isPortalSelfService,
+  OCCUPYING_LEASE_STATUSES,
+} from "@storage/core/inventory";
 import { emitEvent } from "@storage/core/events";
 import {
   noticeShortfallDays,
@@ -37,6 +40,12 @@ export type PortalMoveOutLease = {
   /// finalized lease has `status: 'ended'` and is not in this list at all
   /// (see the query below).
   pendingMoveOutDate: Date | null;
+  /// B-164 / D-85. False for a lien-pipeline lease. **Listed rather than
+  /// hidden**, the same as the transfer screen: a tenant with one unit who is
+  /// told we see no unit on their account has been told something false, and
+  /// has nowhere to go next. They get the lease, the reason and the office's
+  /// phone number instead.
+  schedulable: boolean;
 };
 
 function startOfDayUtc(date: Date): Date {
@@ -60,6 +69,7 @@ export async function tenantMoveOutLeases(
     orderBy: { startDate: "asc" },
     select: {
       id: true,
+      status: true,
       facilityId: true,
       monthlyRateCents: true,
       moveOutDate: true,
@@ -81,6 +91,7 @@ export async function tenantMoveOutLeases(
     moveOutNoticeDays: lease.facility.moveOutNoticeDays,
     minMoveOutDate: addDays(today, lease.facility.moveOutNoticeDays),
     pendingMoveOutDate: lease.moveOutDate,
+    schedulable: isPortalSelfService(lease.status),
   }));
 }
 
@@ -98,7 +109,23 @@ export type PortalMoveOutPreview = {
 
 export type PreviewResult =
   | { ok: true; preview: PortalMoveOutPreview }
-  | { ok: false; reason: "not_found" };
+  | { ok: false; reason: "not_found" | "lien_pipeline" };
+
+/// B-164 / D-85. Said in the tenant's own words, never in ours.
+///
+/// "Lien process" is the plainest true phrase available: the tenant has had a
+/// notice about this unit, so talking around it helps nobody, and D-15's rule
+/// is that customer copy explains rather than cites. It never claims the lease
+/// does not exist — that is the version of this refusal that produces an angry
+/// phone call about a bug that is not one.
+///
+/// The phone number is deliberately NOT in here. The screen renders it through
+/// `phoneFor`/`CallLink`, which falls back to the org line when a facility has
+/// none and makes it a real `tel:` link — a refusal whose only next step is a
+/// phone call must not be able to ship without a number to call.
+export function lienMoveOutRefusal(unitNumber: string): string {
+  return `Unit ${unitNumber} is in the lien process, so a move-out has to be arranged with the office rather than online. They'll go through what you owe and what happens next with you.`;
+}
 
 /// What a move-out on this date would settle to, for a tenant looking at
 /// their own lease. Read-only — nothing is written until `requestMoveOut`.
@@ -114,6 +141,7 @@ export async function previewTenantMoveOut(
       status: { in: [...OCCUPYING_LEASE_STATUSES] },
     },
     select: {
+      status: true,
       facilityId: true,
       monthlyRateCents: true,
       billingDay: true,
@@ -135,6 +163,10 @@ export async function previewTenantMoveOut(
     },
   });
   if (!lease) return { ok: false, reason: "not_found" };
+  // B-164 / D-85. Distinguished from `not_found` deliberately: the lease is
+  // theirs and it does exist, and the screen has a real thing to tell them.
+  if (!isPortalSelfService(lease.status))
+    return { ok: false, reason: "lien_pipeline" };
 
   const balance = await prisma.ledgerEntry.aggregate({
     where: { leaseId },
@@ -157,6 +189,7 @@ export async function previewTenantMoveOut(
         moveOutNoticeDays: lease.facility.moveOutNoticeDays,
         minMoveOutDate: addDays(today, lease.facility.moveOutNoticeDays),
         pendingMoveOutDate: null,
+        schedulable: true,
       },
       balanceCents,
       settlement: settleMoveOut({
@@ -185,7 +218,14 @@ export async function previewTenantMoveOut(
 
 export type RequestMoveOutResult =
   | { ok: true }
-  | { ok: false; reason: "not_found" | "date_too_soon" | "already_requested" };
+  | {
+      ok: false;
+      reason:
+        | "not_found"
+        | "date_too_soon"
+        | "already_requested"
+        | "lien_pipeline";
+    };
 
 /// Records the tenant's own request: the lease stays `active` (they still
 /// have access, still owe rent up to the date), gets a `moveOutDate` and a
@@ -205,12 +245,18 @@ export async function requestMoveOut(
       status: { in: [...OCCUPYING_LEASE_STATUSES] },
     },
     select: {
+      status: true,
       facilityId: true,
       moveOutDate: true,
       facility: { select: { moveOutNoticeDays: true } },
     },
   });
   if (!lease) return { ok: false, reason: "not_found" };
+  // B-164 / D-85. The screen never offers the control, and this is why that is
+  // not the whole fix: the refusal has to hold against a form post that never
+  // rendered the screen at all.
+  if (!isPortalSelfService(lease.status))
+    return { ok: false, reason: "lien_pipeline" };
   if (lease.moveOutDate) return { ok: false, reason: "already_requested" };
 
   const today = startOfDayUtc(new Date());

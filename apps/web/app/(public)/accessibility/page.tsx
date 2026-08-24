@@ -288,6 +288,19 @@ const LAST_REVIEWED = '19 August 2026'
 // unscanned, and it caught this one. No public route added, so the generated
 // coverage claim and the route-keyed exception list are untouched.
 // `LAST_REVIEWED` is not bumped.
+//
+// Re-verified 2026-08-24, at B-164 (a lien-pipeline tenant can no longer
+// schedule their own move-out). This one IS customer-facing —
+// `/portal/move-out` gains a refusal panel — and it was built to this page's
+// own standards rather than around them: `role="alert"` present at page load
+// rather than inserted on submit (4.1.3 AA), the reason stated in text rather
+// than a control that silently refuses (3.3.1 A), and nothing conveyed by
+// colour alone (1.4.1 A). No route added and no existing claim affected —
+// `/portal/move-out` was already in `PORTAL_SCAN_ROUTES`, so the new branch is
+// inside a page the axe loop already covers. **The branch itself is a state,
+// not a route**, which is exactly the route-list gap this page now names and
+// B-184 owns: the scan will render the schedulable version of the page and
+// never this one. `LAST_REVIEWED` is not bumped.
 export default function AccessibilityPage() {
   return (
     <ProsePage

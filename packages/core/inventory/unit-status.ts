@@ -23,6 +23,30 @@ export const OCCUPYING_LEASE_STATUSES = [
   'pending_auction',
 ] as const
 
+/// The lease statuses a TENANT may act on unattended, from the portal: every
+/// occupying one except the lien pipeline (D-85).
+///
+/// `pending_auction` means a lien notice naming a unit has been served and the
+/// goods in it are being prepared for sale. Every self-service screen that
+/// scopes itself on `OCCUPYING_LEASE_STATUSES` therefore offers that tenant a
+/// way to act on those goods unattended, by clicking twice — B-137 found it on
+/// the transfer screen and B-164 found the identical hole on move-out, one
+/// file over. It lives here, beside the list it is derived from, so the third
+/// screen does not have to rediscover it: the two lists are visibly a pair and
+/// a reviewer can see which one a query used.
+///
+/// D-85 settled the STAFF side the other way — staff may act on a lien-pipeline
+/// lease with manager-and-above approval, a reason code and an unreset lien
+/// clock — which is why this is a portal rule and never a rule in the shared
+/// service the admin screens call.
+export const PORTAL_SELF_SERVICE_STATUSES = OCCUPYING_LEASE_STATUSES.filter(
+  (status) => status !== 'pending_auction',
+)
+
+export function isPortalSelfService(status: string): boolean {
+  return (PORTAL_SELF_SERVICE_STATUSES as readonly string[]).includes(status)
+}
+
 export type UnitOccupancyFacts = {
   /// Any non-ended lease on the unit.
   activeLease: { id: string; status: string } | null

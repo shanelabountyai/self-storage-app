@@ -1,5 +1,10 @@
 import { prisma } from '@storage/db'
-import { OCCUPYING_LEASE_STATUSES, TRANSFER_HOLD_SOURCE } from '@storage/core/inventory'
+import {
+  isPortalSelfService,
+  OCCUPYING_LEASE_STATUSES,
+  PORTAL_SELF_SERVICE_STATUSES,
+  TRANSFER_HOLD_SOURCE,
+} from '@storage/core/inventory'
 import { emitEvent } from '@storage/core/events'
 import {
   heldRateFor,
@@ -103,12 +108,14 @@ export type PortalTransferOption = {
 /// lease, with manager-and-above approval, a reason code and an unreset lien
 /// clock. That is why the refusal lives here and not in `previewTransferFor` —
 /// the admin wizard is meant to reach it, a self-service screen is not.
-export const PORTAL_TRANSFERABLE_STATUSES = OCCUPYING_LEASE_STATUSES.filter(
-  (status) => status !== 'pending_auction',
-)
+///
+/// B-164: the rule itself now lives in `@storage/core/inventory`, beside the
+/// list it is carved out of, because the identical hole was open on the
+/// move-out screen. These two names stay as the transfer screen's vocabulary.
+export const PORTAL_TRANSFERABLE_STATUSES = PORTAL_SELF_SERVICE_STATUSES
 
 export function isPortalTransferable(status: string): boolean {
-  return PORTAL_TRANSFERABLE_STATUSES.includes(status as never)
+  return isPortalSelfService(status)
 }
 
 function startOfDayUtc(date: Date): Date {

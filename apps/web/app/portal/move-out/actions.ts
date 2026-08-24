@@ -18,6 +18,12 @@ const REQUEST_PROBLEM_COPY: Record<string, string> = {
   not_found: 'We couldn’t find that unit on your account.',
   date_too_soon: 'That date is before the notice this unit requires. Pick a later date.',
   already_requested: 'A move-out is already scheduled for this unit.',
+  // B-164 / D-85. The screen never renders the control, so reaching this means
+  // a post that skipped it — and the answer is still the true one rather than
+  // "that request could not be completed", which tells a tenant nothing and
+  // sends them to the phone anyway, angrier.
+  lien_pipeline:
+    'This unit is in the lien process, so a move-out has to be arranged with the office rather than online. Please ring them.',
 }
 
 const CANCEL_PROBLEM_COPY: Record<string, string> = {

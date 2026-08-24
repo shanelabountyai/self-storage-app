@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { requireTenantActor } from "@/lib/rbac/session";
 import {
+  lienMoveOutRefusal,
   previewTenantMoveOut,
   tenantMoveOutLeases,
 } from "@/lib/portal/move-out";
 import { formatRate } from "@/lib/format";
 import { AdminForm } from "@/components/admin/form";
+import { CallLink, phoneFor } from "@/components/marketing/call-link";
 import { cancelMoveOutAction, requestMoveOutAction } from "./actions";
 
 export const metadata = { title: "Request a move-out" };
@@ -60,12 +62,28 @@ export default async function PortalMoveOutPage({
         <ul className="flex flex-col gap-2">
           {leases.map((lease) => (
             <li key={lease.leaseId}>
-              <Link
-                href={`/portal/move-out?lease=${lease.leaseId}`}
-                className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
-              >
-                {lease.facilityName} — Unit {lease.unitNumber}
-              </Link>
+              {/* B-164 / D-85. A lien-pipeline unit is LISTED and not
+                  actionable, rather than hidden: hiding it tells a tenant with
+                  one unit that we see no unit on their account, which is false
+                  and a dead end. The reason is stated in text rather than shown
+                  as a control that silently refuses (3.3.1 A), and nothing here
+                  depends on colour (1.4.1 A). */}
+              {lease.schedulable ? (
+                <Link
+                  href={`/portal/move-out?lease=${lease.leaseId}`}
+                  className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
+                >
+                  {lease.facilityName} — Unit {lease.unitNumber}
+                </Link>
+              ) : (
+                <p className="text-muted-foreground text-sm text-pretty">
+                  {lease.facilityName} — {lienMoveOutRefusal(lease.unitNumber)}{" "}
+                  <CallLink
+                    phone={phoneFor(lease.facilityPhone || null)}
+                    className="underline underline-offset-4"
+                  />
+                </p>
+              )}
             </li>
           ))}
         </ul>
@@ -86,6 +104,35 @@ export default async function PortalMoveOutPage({
           className="text-sm underline underline-offset-4"
         >
           Choose a unit
+        </Link>
+      </div>
+    );
+  }
+
+  // In the lien pipeline (B-164, D-85): no date picker, no preview, no
+  // confirm. The office is the only route and saying so is the whole screen.
+  //
+  // `role="alert"` and mounted WITH the page rather than inserted on submit
+  // (4.1.3 AA): a tenant who navigated here expecting a form is told at once,
+  // by a screen reader as well as by eye, instead of tabbing through a page
+  // whose only content is a refusal they have not been read yet.
+  if (!lease.schedulable) {
+    return (
+      <div className="flex flex-col gap-4">
+        <h1 className="text-xl font-semibold">Request a move-out</h1>
+        <p
+          role="alert"
+          className="border-input rounded-lg border p-4 text-sm text-pretty"
+        >
+          {lienMoveOutRefusal(lease.unitNumber)}{" "}
+          <CallLink
+            phone={phoneFor(lease.facilityPhone || null)}
+            className="underline underline-offset-4"
+          />
+          .
+        </p>
+        <Link href="/portal" className="text-sm underline underline-offset-4">
+          Back to my account
         </Link>
       </div>
     );

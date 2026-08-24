@@ -198,6 +198,90 @@ describeDb('portal move-out request', () => {
     })
   })
 
+  // B-164 / D-85. B-137 closed this on the transfer screen and left the
+  // identical hole one screen over: both scoped on `OCCUPYING_LEASE_STATUSES`,
+  // which includes `pending_auction`. A tenant whose goods are being prepared
+  // for sale could schedule their own move-out, unattended, by clicking twice.
+  describe('the lien pipeline (B-164, D-85)', () => {
+    async function lienLease() {
+      const made = await makeLease(tenantId)
+      await prisma.lease.update({ where: { id: made.leaseId }, data: { status: 'pending_auction' } })
+      return made
+    }
+
+    it('lists the lease but marks it not schedulable', async () => {
+      const { leaseId } = await lienLease()
+
+      const [lease] = await tenantMoveOutLeases(tenantId)
+
+      // LISTED, not hidden: a tenant with one unit who is told we see no unit
+      // on their account has been told something false and has nowhere to go.
+      expect(lease.leaseId).toBe(leaseId)
+      expect(lease.schedulable).toBe(false)
+
+      await prisma.lease.delete({ where: { id: leaseId } })
+    })
+
+    it('refuses the preview as lien_pipeline, never as not_found', async () => {
+      const { leaseId } = await lienLease()
+
+      const result = await previewTenantMoveOut(tenantId, leaseId, d('2026-12-01'))
+
+      // The distinction is the whole point of the row: the lease is theirs and
+      // it does exist, and `not_found` is the answer that produces an angry
+      // call about a bug that is not one.
+      expect(result).toEqual({ ok: false, reason: 'lien_pipeline' })
+
+      await prisma.lease.delete({ where: { id: leaseId } })
+    })
+
+    it('refuses the request itself, so skipping the screen changes nothing', async () => {
+      const { leaseId } = await lienLease()
+      const minDate = new Date(Date.now() + 30 * 86_400_000)
+
+      const result = await requestMoveOut(tenantId, leaseId, minDate)
+
+      expect(result).toEqual({ ok: false, reason: 'lien_pipeline' })
+      const after = await prisma.lease.findUniqueOrThrow({ where: { id: leaseId } })
+      expect(after.moveOutDate).toBeNull()
+      expect(after.noticeGivenAt).toBeNull()
+      expect(
+        await prisma.task.count({ where: { type: 'move_out_request_review', entityId: leaseId } }),
+      ).toBe(0)
+
+      await prisma.lease.delete({ where: { id: leaseId } })
+    })
+
+    it('still lets them cancel a request made before the pipeline opened', async () => {
+      // Trapping a tenant with a scheduled move-out they cannot withdraw is a
+      // worse outcome than the one this row is about, and cancelling moves
+      // nobody's goods.
+      const { leaseId } = await makeLease(tenantId)
+      const minDate = (await tenantMoveOutLeases(tenantId)).find((l) => l.leaseId === leaseId)!
+        .minMoveOutDate
+      await requestMoveOut(tenantId, leaseId, minDate)
+      await prisma.lease.update({ where: { id: leaseId }, data: { status: 'pending_auction' } })
+
+      expect(await cancelMoveOutRequest(tenantId, leaseId)).toEqual({ ok: true })
+
+      await prisma.task.deleteMany({ where: { entityId: leaseId } })
+      await prisma.domainEvent.deleteMany({ where: { entityId: leaseId } })
+      await prisma.lease.delete({ where: { id: leaseId } })
+    })
+
+    it('leaves the staff move-out alone — D-85 settled that side the other way', async () => {
+      const { leaseId } = await lienLease()
+
+      // `previewMoveOut` returns the settlement directly — there is no refusal
+      // to assert, which IS the assertion: the staff path is untouched.
+      const preview = await previewMoveOut(managerActor(), leaseId, d('2026-12-01'))
+
+      expect(preview.leaseId).toBe(leaseId)
+
+      await prisma.lease.delete({ where: { id: leaseId } })
+    })
+  })
+
   describe('cancelMoveOutRequest', () => {
     it('clears the request and withdraws the task', async () => {
       const { leaseId } = await makeLease(tenantId)
