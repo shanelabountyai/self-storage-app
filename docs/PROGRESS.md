@@ -5954,7 +5954,7 @@ Four changes, and the first is the one that matters most:
 
 ## B-170 — Two of four proof fields, and an announcement that died with the row it reported on
 
-`PENDING`
+`dedbc57`
 
 **What it built.** `TaskCompleteForm` renders one labelled control for **every** field the task's own gate requires, from one label map; the gate itself now reads the configured delinquency step as well as the catalog; and the four task queues, the promotions list and the tenant page's returned-payment list announce their outcomes from a live region **above** the list, which the outcome cannot unmount.
 
