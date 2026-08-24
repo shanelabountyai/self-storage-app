@@ -5738,7 +5738,7 @@ Four changes, and the first is the one that matters most:
 
 ## B-162 — A transfer was built as if the tenant were new
 
-`PENDING`
+`3d873c7`
 
 **What it built.** Three defects with one cause. `previewTransfer` opened the new lease at the destination unit type's **street rate**, so a like-for-like move between two 10×10s was a rent increase — served with no notice period, no approval and no `TenantRateIncrease` record, through a screen for a service request the tenant asked for. Every protection US-11 puts around raising a rent was bypassed by moving the tenant sideways. An approved, *noticed* increase on the old lease evaporated and the nightly run reported `ok: true, "skipped — the lease has ended"` for it, every night, until the effective date passed. And ECRI tenure read `rateChanges[0].effectiveFrom ?? lease.startDate` on the new lease — where the transfer had just written a `LeaseRateChange` dated today and `startDate` *is* the transfer date — so months-since-last-change reset to zero on both halves of the fallback and asking to swap units was a way to opt out of every increase.
 
