@@ -32,6 +32,10 @@ export type CreateTaskInput = {
   /// last occupancy evidence) — none do yet.
   at?: Date
   priority?: 'normal' | 'high'
+  /// B-169. One sentence of context only the creator knows — rendered under
+  /// the subject on the card. See `Task.detail` in the schema for why the
+  /// label alone could not carry it.
+  detail?: string
   sourceEventId?: string
   client?: Prisma.TransactionClient | typeof prisma
 }
@@ -66,6 +70,7 @@ export async function createTask(input: CreateTaskInput): Promise<{ id: string; 
         entityId: input.entityId,
         businessDate,
         priority: input.priority ?? 'normal',
+        detail: input.detail,
         sourceEventId: input.sourceEventId,
       },
     })
@@ -100,6 +105,9 @@ export type TaskRow = {
   businessDate: Date
   priority: 'normal' | 'high'
   overdue: boolean
+  /// B-169. Why this particular task exists, when its creator knew something
+  /// the type could not say.
+  detail: string | null
   assigneeName: string | null
   status: 'open' | 'completed' | 'cancelled'
   /// The catalog's proof gate for this type, so a list can render the right
@@ -200,6 +208,7 @@ export async function facilityTasks(
       businessDate: true,
       priority: true,
       status: true,
+      detail: true,
       createdAt: true,
       assignee: { select: { firstName: true, lastName: true } },
     },
@@ -224,6 +233,7 @@ export async function facilityTasks(
       timezone: facility.timezone,
       slaHours: facility.manualTaskSlaHours,
     }),
+    detail: task.detail,
     assigneeName: task.assignee ? `${task.assignee.firstName} ${task.assignee.lastName}` : null,
     status: task.status,
     requiredProofFields: taskTypeSpec(task.type)?.requiredProofFields ?? ['note'],

@@ -14,11 +14,40 @@ function row(overrides: Partial<OverlockReconciliationInput> = {}): OverlockReco
     appliedAt: null,
     createdAt: NOW,
     removalRequestedAt: null,
+    leaseEnded: false,
     ...overrides,
   }
 }
 
 describe('classifyOverlock', () => {
+  // B-169. The state this list could not express, and the one that costs
+  // sellable inventory: a lock on a unit with no tenant, which
+  // `deriveUnitStatus` reports as `overlocked` — so system and physical agreed
+  // and both were wrong.
+  it('flags a lock on a unit whose lease has ended, immediately', () => {
+    const applied = new Date('2026-08-10T11:00:00Z')
+    const result = classifyOverlock(row({ appliedAt: applied, leaseEnded: true }), NOW)
+    expect(result.state).toBe('stuck_no_lease')
+    expect(result.shouldBeLocked).toBe(false)
+    expect(result.confirmedLocked).toBe(true)
+    // One hour old, and already flagged: every other mismatch here waits 24
+    // hours because it is somebody not having got there yet. This one is a
+    // unit out of inventory with nothing in any queue about it.
+    expect(result.mismatch).toBe(true)
+  })
+
+  it('does not call it stuck once a removal has actually been asked for', () => {
+    const result = classifyOverlock(
+      row({
+        appliedAt: new Date('2026-08-09T11:00:00Z'),
+        leaseEnded: true,
+        removalRequestedAt: new Date('2026-08-10T11:00:00Z'),
+      }),
+      NOW,
+    )
+    expect(result.state).toBe('awaiting_removal')
+  })
+
   it('is awaiting_apply the moment it is requested — should be locked, is not yet', () => {
     const result = classifyOverlock(row({ createdAt: NOW }), NOW)
     expect(result.state).toBe('awaiting_apply')

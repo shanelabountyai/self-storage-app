@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { getSwitcherData } from '@/lib/admin/context'
 import { resolveSelectedFacility } from '@/lib/admin/facility-selection-logic'
 import { overlockReconciliation } from '@/lib/delinquency/overlock-reconciliation'
@@ -12,6 +13,10 @@ const STATE_LABEL: Record<string, string> = {
   awaiting_apply: 'Should be locked — not yet confirmed',
   awaiting_removal: 'Should be removed — still confirmed locked',
   confirmed: 'Locked, steady',
+  // B-169. The finding this screen could not previously make. Named for the
+  // consequence rather than the mechanism — an operator reads "out of
+  // inventory" and knows why it matters.
+  stuck_no_lease: 'Locked with no tenant — out of inventory',
 }
 
 function formatHours(hours: number): string {
@@ -34,6 +39,7 @@ export default async function OverlocksPage() {
 
   const rows = await overlockReconciliation(actor, selected.facility.id)
   const mismatchCount = rows.filter((r) => r.mismatch).length
+  const stuckCount = rows.filter((r) => r.state === 'stuck_no_lease').length
 
   return (
     <div className="flex flex-col gap-6">
@@ -44,6 +50,27 @@ export default async function OverlocksPage() {
           unlocked — system state next to what staff have confirmed on the ground.
         </p>
       </div>
+
+      {/* B-169. Its own banner above the 24-hour one, because it is a
+          different problem with a different remedy: these units are not
+          rentable and nothing was chasing them. The nightly sweep
+          (`delinquency.stuck-overlocks`) queues the removals; this says how
+          many are waiting for somebody to walk out. */}
+      {stuckCount > 0 && (
+        <p role="alert" className="rounded-lg border-2 border-red-500 bg-red-50 p-4 text-red-950">
+          <span className="font-semibold">
+            {stuckCount} {stuckCount === 1 ? 'unit is' : 'units are'} locked with no tenant
+          </span>
+          <span className="mt-1 block text-sm text-pretty">
+            The lease has ended and the lock is still on, so the unit cannot be rented. A removal is
+            queued for each of them on{' '}
+            <Link href="/admin/tasks?type=overlock_remove" className="underline underline-offset-2">
+              the task list
+            </Link>
+            .
+          </span>
+        </p>
+      )}
 
       {mismatchCount > 0 && (
         <p role="alert" className="rounded-lg border-2 border-red-500 bg-red-50 p-4 text-red-950">

@@ -1,4 +1,9 @@
 import { prisma, type Prisma } from '@storage/db'
+import { OCCUPYING_LEASE_STATUSES } from '@storage/core/inventory'
+import {
+  overlockRemovalLabel,
+  type OverlockRemovalReason,
+} from '@storage/core/delinquency'
 import { recordAudit } from '@storage/core/audit'
 import { emitEvent } from '@storage/core/events'
 import { createTask } from '@/lib/admin/tasks'
@@ -138,6 +143,11 @@ export async function releaseOverlock(
   input: {
     leaseId: string
     facilityId: string
+    /// B-169. Why the lock is coming off, which the caller always knows and
+    /// the task's TYPE cannot say. Defaults to `cured` only because that is
+    /// the path B-058 built and the one where omitting it is harmless; every
+    /// other caller passes its own.
+    reason?: OverlockRemovalReason
   },
   client: Prisma.TransactionClient | typeof prisma = prisma,
 ): Promise<{ taskId: string | null; withdrawn: boolean }> {
@@ -173,23 +183,31 @@ export async function releaseOverlock(
     if (open) return { taskId: open.id, withdrawn: false }
   }
 
+  const reason: OverlockRemovalReason = input.reason ?? 'cured'
   const task = await createTask({
     facilityId: input.facilityId,
     type: 'overlock_remove',
     entityType: 'Lease',
     entityId: input.leaseId,
-    // High: the tenant has paid, and every hour the lock stays on is an hour
-    // somebody who settled their account cannot reach their own belongings.
-    // On a lease END the urgency is the operator's rather than the tenant's —
-    // the unit is out of sellable inventory until the lock comes off — and it
-    // is the same priority for the same reason.
+    // High: on a cure, every hour the lock stays on is an hour somebody who
+    // settled their account cannot reach their own belongings. On a lease END
+    // the urgency is the operator's rather than the tenant's — the unit is out
+    // of sellable inventory until the lock comes off — and it is the same
+    // priority for the same reason.
     priority: 'high',
+    // B-169. The label states the fact; this states which of the five reasons
+    // produced it. Without it the card asserted "the tenant has paid" on the
+    // two paths where they most certainly had not.
+    detail: overlockRemovalLabel(reason),
     client,
   })
   // Recorded on the lock itself, same as `appliedTaskId` — a defect fixed in
   // passing while building B-060's reconciliation view, which needs exactly
   // this to tell "confirmed, steady" apart from "confirmed, removal pending".
-  await client.unitOverlock.update({ where: { id: overlock.id }, data: { removedTaskId: task.id } })
+  await client.unitOverlock.update({
+    where: { id: overlock.id },
+    data: { removedTaskId: task.id, removalReason: reason },
+  })
   return { taskId: task.id, withdrawn: false }
 }
 
@@ -238,4 +256,78 @@ export async function confirmOverlockRemoved(
     },
     client,
   )
+}
+
+/// B-169. Every lock still on a unit whose lease has ended, released.
+///
+/// **A job step of its own, and that is the entire point.** B-151 put this
+/// backstop inside `runDelinquencyTimeline`, after a guard that returns early
+/// when the facility has no configured timeline (`skippedNoTimeline`) — so the
+/// facilities most likely to have stuck locks, the ones nobody has configured,
+/// were the only ones it could never reach. The units B-151 was built to free
+/// were exactly the ones it could not.
+///
+/// Unconditional, nightly and idempotent, which is why it is a sweep rather
+/// than the one-off repair script the backlog row asked for: B-151's own
+/// reasoning is that a nightly job that fixes what it finds cannot be forgotten
+/// the way a script can. The first run IS the repair.
+///
+/// `releaseOverlock` decides between withdrawing a request never fitted and
+/// raising a removal task for a lock that is really on, so this only has to
+/// find them.
+export async function releaseStuckOverlocks(
+  facilityId: string,
+  recordItem: (outcome: { itemId: string; ok: boolean; message?: string }) => void,
+): Promise<{ released: number; withdrawn: number }> {
+  const stuck = await prisma.unitOverlock.findMany({
+    where: {
+      facilityId,
+      removedAt: null,
+      lease: { status: { notIn: [...OCCUPYING_LEASE_STATUSES] } },
+    },
+    select: {
+      id: true,
+      leaseId: true,
+      lease: { select: { status: true, moveOutReason: true } },
+      unit: { select: { number: true } },
+    },
+  })
+
+  const result = { released: 0, withdrawn: 0 }
+  for (const overlock of stuck) {
+    // The lease's own recorded reason where it has one, rather than a blanket
+    // "lease ended": a card that says the goods were sold at auction is the
+    // difference between a staffer expecting a grateful tenant and one who
+    // knows what they are walking into.
+    const reason: OverlockRemovalReason =
+      overlock.lease.moveOutReason === 'abandonment'
+        ? 'abandoned'
+        : overlock.lease.moveOutReason === 'transfer'
+          ? 'transfer'
+          : 'lease_ended'
+
+    const outcome = await releaseOverlock({
+      leaseId: overlock.leaseId,
+      facilityId,
+      reason,
+    })
+    if (outcome.withdrawn) {
+      result.withdrawn += 1
+      recordItem({
+        itemId: overlock.leaseId,
+        ok: true,
+        message: `unit ${overlock.unit.number}: overlock request withdrawn — the lease ended before anybody fitted it`,
+      })
+      continue
+    }
+    if (!outcome.taskId) continue
+    result.released += 1
+    recordItem({
+      itemId: overlock.leaseId,
+      ok: true,
+      message: `unit ${overlock.unit.number}: removal queued — the lock is on a unit with no live lease`,
+    })
+  }
+
+  return result
 }

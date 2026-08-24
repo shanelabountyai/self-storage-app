@@ -1,5 +1,6 @@
 import { prisma } from '@storage/db'
 import { classifyOverlock, type OverlockReconciliationRow } from '@storage/core/delinquency'
+import { OCCUPYING_LEASE_STATUSES } from '@storage/core/inventory'
 import { assertFacilityAccess, can, ForbiddenError } from '@/lib/rbac/authorize'
 import type { Actor } from '@/lib/rbac/actor'
 
@@ -22,6 +23,8 @@ export async function overlockReconciliation(actor: Actor, facilityId: string): 
       appliedAt: true,
       createdAt: true,
       unit: { select: { number: true } },
+      // B-169. The one fact this list could not previously express.
+      lease: { select: { status: true } },
     },
     orderBy: { createdAt: 'asc' },
   })
@@ -44,6 +47,7 @@ export async function overlockReconciliation(actor: Actor, facilityId: string): 
         appliedAt: overlock.appliedAt,
         createdAt: overlock.createdAt,
         removalRequestedAt: removalRequestedAt.get(overlock.leaseId) ?? null,
+        leaseEnded: !OCCUPYING_LEASE_STATUSES.includes(overlock.lease.status as never),
       },
       now,
     ),

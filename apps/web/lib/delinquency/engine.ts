@@ -196,15 +196,15 @@ export async function runDelinquencyTimeline(
         }
       }
 
-      // B-151's backstop. The three paths that end a lease each release the
-      // lock in their own transaction now, so this is not the fix — it is what
-      // catches the locks ALREADY stuck on leases that ended before that
-      // shipped, and any future fourth way to end a lease that forgets to.
-      // `releaseOverlock` is idempotent and returns immediately when there is
-      // no live lock, which is every lease here on every other night.
-      if (!OCCUPYING_LEASE_STATUSES.includes(lease.status as never)) {
-        await releaseOverlock({ leaseId: lease.id, facilityId })
-      }
+      // B-151's backstop USED to be here, and B-169 moved it out to its own
+      // job step (`delinquency.stuck-overlocks` → `releaseStuckOverlocks`).
+      //
+      // It could never do its job from inside this function: the guard at the
+      // top returns early for any facility with no configured timeline, so the
+      // sites most likely to have locks stuck on ended leases — the ones nobody
+      // has configured — were the only ones it could not reach. Left here as
+      // well it would be a second copy of the same rule that could drift from
+      // the first.
       continue
     }
 
@@ -521,7 +521,7 @@ async function cure(
   // US-25's "queues overlock removal". `releaseOverlock` decides between a
   // removal task and a silent withdrawal: a lock that was asked for but never
   // fitted is closed out rather than generating a trip to a unit for nothing.
-  const released = await releaseOverlock({ leaseId: lease.id, facilityId })
+  const released = await releaseOverlock({ leaseId: lease.id, facilityId, reason: 'cured' })
   if (released.taskId) {
     recordItem({ itemId: lease.id, ok: true, message: 'overlock removal queued' })
   }

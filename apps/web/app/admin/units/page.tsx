@@ -18,6 +18,19 @@ import type { UnitFilters } from '@/lib/admin/unit-query'
 import { formatCents } from '@/lib/format'
 import { applyBulkAction, setUnitStatusAction } from './actions'
 
+// B-169. A unit reading `overlocked` with nobody in it is not a tenant behind
+// on rent — it is a lock left on after the lease ended, and it is out of
+// sellable inventory until somebody walks out and cuts it off. The board showed
+// it as plain `overlocked`, which reads as the ordinary delinquency case, so
+// nothing on this screen said the unit was unrentable for a reason nobody was
+// chasing. Derived from two facts the row already carries rather than a fifth
+// query.
+function stuckLock(unit: { status: string; occupant: unknown }): boolean {
+  return unit.status === 'overlocked' && !unit.occupant
+}
+
+const STUCK_LOCK_HREF = '/admin/tasks?type=overlock_remove'
+
 const ALL_STATUSES = ['available', 'reserved', 'occupied', 'overlocked', 'maintenance', 'unrentable'] as const
 
 type SearchParams = {
@@ -262,7 +275,15 @@ export default async function AdminUnitsPage({
                     return rate ? formatCents(rate.streetRateCents) : <span className="text-muted-foreground">not priced</span>
                   })()}
                 </td>
-                <td className="py-2"><UnitStatusBadge status={unit.status} /></td>
+                <td className="py-2">
+                  <UnitStatusBadge status={unit.status} />
+                  {/* 1.4.1: words, never a colour. */}
+                  {stuckLock(unit) && (
+                    <Link href={STUCK_LOCK_HREF} className="mt-1 block text-xs underline underline-offset-2">
+                      Lock still on, no tenant — not rentable
+                    </Link>
+                  )}
+                </td>
                 <td className="py-2">
                   {unit.occupant ? (
                     <Link href={`/admin/tenants/${unit.occupant.tenantId}`} className="underline underline-offset-2">
@@ -320,6 +341,13 @@ export default async function AdminUnitsPage({
                       <p className="truncate text-sm font-medium">{unit.number}</p>
                       <p className="text-muted-foreground truncate text-xs">{unit.unitType.name}</p>
                       <UnitStatusBadge status={unit.status} className="mt-1" />
+                      {stuckLock(unit) && (
+                        <p className="text-xs text-pretty">
+                          <Link href={STUCK_LOCK_HREF} className="underline underline-offset-2">
+                            Lock on, no tenant
+                          </Link>
+                        </p>
+                      )}
                       {unit.occupant && (
                         <p className="truncate text-xs">
                           <Link href={`/admin/tenants/${unit.occupant.tenantId}`} className="underline underline-offset-2">
@@ -373,6 +401,13 @@ export default async function AdminUnitsPage({
                   <span className="text-muted-foreground">Vacant</span>
                 )}
               </p>
+              {stuckLock(unit) && (
+                <p className="mt-1 text-sm text-pretty">
+                  <Link href={STUCK_LOCK_HREF} className="underline underline-offset-2">
+                    Lock still on with no tenant — not rentable until it comes off
+                  </Link>
+                </p>
+              )}
 
               <form action={setUnitStatusAction} className="mt-3 flex flex-wrap items-end gap-2">
                 <input type="hidden" name="facilityId" value={facilityId} />

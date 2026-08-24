@@ -4,6 +4,7 @@ import { prisma } from '../packages/db'
 import {
   confirmOverlockApplied,
   releaseOverlock,
+  releaseStuckOverlocks,
   requestOverlock,
 } from '../apps/web/lib/delinquency/overlock'
 import { completeTask } from '../apps/web/lib/admin/tasks'
@@ -90,6 +91,14 @@ describeDb('overlocks', () => {
     await prisma.unitOverlock.deleteMany({ where: { facilityId } })
     await prisma.task.deleteMany({ where: { facilityId } })
     await prisma.unit.update({ where: { id: unitId }, data: { status: 'occupied' } })
+    // B-169. The sweep's tests END the lease, and one shared lease row is the
+    // fixture for the whole file — without this reset, "leaves a live lease
+    // alone" inherits the previous test's `ended` and passes or fails on the
+    // order the file happens to run in.
+    await prisma.lease.update({
+      where: { id: leaseId },
+      data: { status: 'active', moveOutReason: null },
+    })
   })
 
   afterAll(async () => {
@@ -226,6 +235,36 @@ describeDb('overlocks', () => {
       ).toBe(1)
     })
 
+    // B-169. The card used to assert "the tenant has paid" on every path,
+    // including the two where their goods had just been sold or the unit
+    // recorded as abandoned.
+    it('states the actual reason on the card rather than asserting a payment', async () => {
+      const requested = await requestOverlock({ leaseId, facilityId, reason: 'Overlock' })
+      await confirmOverlockApplied(actor(), requested!.overlockId)
+
+      const released = await releaseOverlock({ leaseId, facilityId, reason: 'auction_sold' })
+      const task = await prisma.task.findUniqueOrThrow({ where: { id: released.taskId! } })
+      expect(task.detail).toContain('sold at auction')
+      expect(task.detail).toContain('has not paid')
+
+      // And the lock itself records why it came off — "was this removed
+      // because they paid or because we sold their things" is a question the
+      // record has to answer on its own.
+      const row = await prisma.unitOverlock.findUniqueOrThrow({
+        where: { id: requested!.overlockId },
+      })
+      expect(row.removalReason).toBe('auction_sold')
+    })
+
+    it('still says the tenant paid when they did', async () => {
+      const requested = await requestOverlock({ leaseId, facilityId, reason: 'Overlock' })
+      await confirmOverlockApplied(actor(), requested!.overlockId)
+
+      const released = await releaseOverlock({ leaseId, facilityId, reason: 'cured' })
+      const task = await prisma.task.findUniqueOrThrow({ where: { id: released.taskId! } })
+      expect(task.detail).toBe('The tenant has paid.')
+    })
+
     it('allows a fresh lock on the same unit after one was removed', async () => {
       const first = await requestOverlock({ leaseId, facilityId, reason: 'Overlock' })
       await confirmOverlockApplied(actor(), first!.overlockId)
@@ -255,5 +294,82 @@ describeDb('overlocks', () => {
     expect(after.state).toBe('active')
 
     await prisma.accessGrant.deleteMany({ where: { id: grant.id } })
+  })
+
+  // B-169. B-151 put this backstop inside `runDelinquencyTimeline`, behind a
+  // guard that returns early for a facility with no configured timeline — so
+  // the sites most likely to have stuck locks were the only ones it could never
+  // reach. It is its own job step now, and these are the properties that make
+  // the move worth anything.
+  describe('the stuck-lock sweep (B-169)', () => {
+    it('releases a lock left on a lease that has ended', async () => {
+      const requested = await requestOverlock({ leaseId, facilityId, reason: 'Overlock' })
+      await confirmOverlockApplied(actor(), requested!.overlockId)
+      await prisma.lease.update({ where: { id: leaseId }, data: { status: 'ended' } })
+
+      const result = await releaseStuckOverlocks(facilityId, () => {})
+      expect(result.released).toBe(1)
+
+      const task = await prisma.task.findFirstOrThrow({
+        where: { facilityId, type: 'overlock_remove', entityId: leaseId },
+      })
+      expect(task.status).toBe('open')
+      expect(task.detail).toContain('lease has ended')
+    })
+
+    it('runs for a facility with NO delinquency timeline — the whole point', async () => {
+      // This fixture has never had one, which is why it is the right test:
+      // `runDelinquencyTimeline` returns `skippedNoTimeline` before reaching
+      // anything, and the units B-151 was built to free were exactly these.
+      expect(
+        await prisma.delinquencyTimeline.count({ where: { facilityId } }),
+      ).toBe(0)
+
+      const requested = await requestOverlock({ leaseId, facilityId, reason: 'Overlock' })
+      await confirmOverlockApplied(actor(), requested!.overlockId)
+      await prisma.lease.update({ where: { id: leaseId }, data: { status: 'ended' } })
+
+      expect((await releaseStuckOverlocks(facilityId, () => {})).released).toBe(1)
+    })
+
+    it('names an abandonment as an abandonment, from the lease’s own record', async () => {
+      const requested = await requestOverlock({ leaseId, facilityId, reason: 'Overlock' })
+      await confirmOverlockApplied(actor(), requested!.overlockId)
+      await prisma.lease.update({
+        where: { id: leaseId },
+        data: { status: 'ended', moveOutReason: 'abandonment' },
+      })
+
+      await releaseStuckOverlocks(facilityId, () => {})
+      const task = await prisma.task.findFirstOrThrow({
+        where: { facilityId, type: 'overlock_remove', entityId: leaseId },
+      })
+      expect(task.detail).toContain('abandoned')
+    })
+
+    it('withdraws a request nobody ever fitted rather than sending somebody', async () => {
+      const requested = await requestOverlock({ leaseId, facilityId, reason: 'Overlock' })
+      await prisma.lease.update({ where: { id: leaseId }, data: { status: 'ended' } })
+
+      const result = await releaseStuckOverlocks(facilityId, () => {})
+      expect(result).toEqual({ released: 0, withdrawn: 1 })
+      expect(
+        (await prisma.task.findUniqueOrThrow({ where: { id: requested!.taskId } })).status,
+      ).toBe('cancelled')
+    })
+
+    it('leaves a live lease alone, and re-running raises no second task', async () => {
+      const requested = await requestOverlock({ leaseId, facilityId, reason: 'Overlock' })
+      await confirmOverlockApplied(actor(), requested!.overlockId)
+
+      expect((await releaseStuckOverlocks(facilityId, () => {})).released).toBe(0)
+
+      await prisma.lease.update({ where: { id: leaseId }, data: { status: 'ended' } })
+      await releaseStuckOverlocks(facilityId, () => {})
+      await releaseStuckOverlocks(facilityId, () => {})
+      expect(
+        await prisma.task.count({ where: { facilityId, type: 'overlock_remove' } }),
+      ).toBe(1)
+    })
   })
 })

@@ -893,7 +893,7 @@ export async function completeTransfer(
     // in the denominator here — there is still a real lock on it — it goes back
     // when `confirmOverlockRemoved` records somebody taking it off, which is
     // what this task now asks for.
-    await releaseOverlock({ leaseId: lease.id, facilityId: lease.facilityId }, tx)
+    await releaseOverlock({ leaseId: lease.id, facilityId: lease.facilityId, reason: 'transfer' }, tx)
 
     await recomputeUnitStatus(input.toUnitId, tx)
     if (fromUnitId) await recomputeUnitStatus(fromUnitId, tx)

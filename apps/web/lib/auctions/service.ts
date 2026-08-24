@@ -812,7 +812,11 @@ export async function recordSaleOutcome(
     // in the denominator here — there is still a real lock on it — it goes back
     // when `confirmOverlockRemoved` records somebody taking it off, which is
     // what this task now asks for.
-    await releaseOverlock({ leaseId: view.leaseId, facilityId: view.facilityId }, tx)
+    // B-169. Not "the tenant has paid" — their goods were just sold.
+    await releaseOverlock(
+      { leaseId: view.leaseId, facilityId: view.facilityId, reason: 'auction_sold' },
+      tx,
+    )
     await recomputeUnitStatus(view.unitId, tx)
 
     await recordAudit(

@@ -20,9 +20,55 @@ export type OverlockReconciliationInput = {
   /// creation time — null if the lock has not had removal requested (or
   /// already came off, in which case the row would not be "live" at all).
   removalRequestedAt: Date | null
+  /// B-169. Whether the lease this lock was fitted against is still occupying.
+  ///
+  /// The state this list could not previously express, and the one that costs
+  /// real money: a lock on a unit with no tenant is inventory nobody can rent,
+  /// and `deriveUnitStatus` reports it as `overlocked` — which reads as "a
+  /// tenant is behind", so system and physical agreed and both were wrong.
+  leaseEnded: boolean
 }
 
-export type OverlockReconciliationState = 'awaiting_apply' | 'awaiting_removal' | 'confirmed'
+/// B-169. Why a lock is coming off. The removal task's card states this,
+/// because its type cannot: B-058 wrote `overlock_remove` for the CURE path and
+/// labelled it "the tenant has paid", and B-151 then raised the same task after
+/// a lease ended, after an auction sale and after an abandonment — three paths
+/// where the tenant most certainly did not pay.
+export const OVERLOCK_REMOVAL_REASONS = [
+  'cured',
+  'lease_ended',
+  'transfer',
+  'auction_sold',
+  'abandoned',
+] as const
+
+export type OverlockRemovalReason = (typeof OVERLOCK_REMOVAL_REASONS)[number]
+
+/// In an operator's words, as the sentence under the card's subject.
+export const OVERLOCK_REMOVAL_LABELS: Record<OverlockRemovalReason, string> = {
+  cured: 'The tenant has paid.',
+  lease_ended: 'The lease has ended — the unit is out of inventory until the lock comes off.',
+  transfer: 'The tenant moved to another unit.',
+  auction_sold: 'The contents were sold at auction. The tenant has not paid.',
+  abandoned: 'The unit was recorded as abandoned. The tenant has not paid.',
+}
+
+export function overlockRemovalLabel(reason: string | null): string {
+  return (
+    OVERLOCK_REMOVAL_LABELS[reason as OverlockRemovalReason] ??
+    'The lock is no longer wanted on this unit.'
+  )
+}
+
+export type OverlockReconciliationState =
+  | 'awaiting_apply'
+  | 'awaiting_removal'
+  | 'confirmed'
+  /// B-169. A lock still on a unit whose lease has ended and which nothing has
+  /// asked to have removed. Its own state rather than a flag on `confirmed`,
+  /// because `confirmed` means "system and physical agree" and here they agree
+  /// on something wrong — which is exactly why nothing reported it.
+  | 'stuck_no_lease'
 
 export type OverlockReconciliationRow = OverlockReconciliationInput & {
   state: OverlockReconciliationState
@@ -53,6 +99,26 @@ export function classifyOverlock(row: OverlockReconciliationInput, now: Date): O
       confirmedLocked: false,
       ageHours,
       mismatch: ageHours > OVERLOCK_MISMATCH_THRESHOLD_HOURS,
+    }
+  }
+
+  // Ahead of the removal-requested branch: a lock whose removal HAS been asked
+  // for is already visible and already ageing, and `stuck` is for the ones
+  // nothing is chasing.
+  if (row.leaseEnded && !row.removalRequestedAt) {
+    const ageHours = hoursBetween(row.appliedAt, now)
+    return {
+      ...row,
+      state: 'stuck_no_lease',
+      // Nothing wants this locked. That is the whole finding.
+      shouldBeLocked: false,
+      confirmedLocked: true,
+      ageHours,
+      // Flagged immediately rather than after 24 hours, unlike every other
+      // mismatch here: the others are a staff member not having got there yet,
+      // and this one is a unit that has fallen out of sellable inventory with
+      // nothing in any queue about it.
+      mismatch: true,
     }
   }
 

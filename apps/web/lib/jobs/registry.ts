@@ -16,6 +16,7 @@ import { runDunning } from '@/lib/billing/dunning'
 import { createTask } from '@/lib/admin/tasks'
 import { raiseLeadFollowUps } from '@/lib/admin/lead-follow-up'
 import { runDelinquencyTimeline } from '@/lib/delinquency/engine'
+import { releaseStuckOverlocks } from '@/lib/delinquency/overlock'
 import { raiseDailyWalkthrough } from '@/lib/field-ops/walkthrough'
 import { raiseReviewRequests } from '@/lib/reviews/request-job'
 import { raiseLeadDripSteps } from '@/lib/leads/drip-job'
@@ -350,6 +351,25 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
     scope: 'per_facility',
     handler: async ({ facilityId, businessDate, recordItem }) => {
       await runDelinquencyTimeline(facilityId!, businessDate, recordItem)
+    },
+  },
+  {
+    // B-169. Locks left on units whose lease has ended.
+    //
+    // **Its own step, deliberately, and that is the whole fix.** B-151 put this
+    // inside `delinquency.timeline` above, which returns early for any facility
+    // with no configured timeline — so the sites most likely to have stuck
+    // locks were the only ones the backstop could never reach, and the units it
+    // was built to free were exactly the units it could not.
+    //
+    // Runs at the same hour, after the timeline: a lease that ENDS tonight
+    // releases its own lock in its own transaction, and this is what catches
+    // the ones that did not.
+    name: 'delinquency.stuck-overlocks',
+    localHour: 6,
+    scope: 'per_facility',
+    handler: async ({ facilityId, recordItem }) => {
+      await releaseStuckOverlocks(facilityId!, recordItem)
     },
   },
   {

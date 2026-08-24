@@ -281,8 +281,16 @@ export const TASK_TYPES = [
   {
     // The other half, on cure. US-25: "restores gate access, and queues
     // overlock removal."
+    // B-169. The label states the FACT; `Task.detail` carries the reason.
+    //
+    // It read "the tenant has paid", which B-058 wrote for the cure path and
+    // was true of it. B-151 then raised this same task after a lease ended,
+    // after an auction sale and after an abandonment — so the card asserted a
+    // payment that had not happened, on the two paths where the tenant most
+    // certainly had not paid, and a staffer walked to the unit expecting a
+    // grateful customer.
     type: "overlock_remove",
-    label: "Take the overlock off — the tenant has paid",
+    label: "Take the overlock off",
     requiredProofFields: ["note"],
     sensitive: true,
   },

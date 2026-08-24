@@ -102,6 +102,12 @@ export default async function TasksPage({
                       <span className="text-muted-foreground">{task.subject.label}</span>
                     )}
                   </p>
+                  {/* B-169. Why THIS task exists, when its type cannot say —
+                      "the contents were sold at auction" under a card whose
+                      label is only "take the overlock off". */}
+                  {task.detail && (
+                    <p className="text-sm text-pretty">{task.detail}</p>
+                  )}
                   <p className="text-muted-foreground text-sm">
                     {formatDate(task.businessDate)}
                     {task.priority === 'high' && <span className="font-medium"> · High priority</span>}

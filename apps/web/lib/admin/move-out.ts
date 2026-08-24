@@ -507,7 +507,22 @@ export async function completeMoveOut(
     // in the denominator here — there is still a real lock on it — it goes back
     // when `confirmOverlockRemoved` records somebody taking it off, which is
     // what this task now asks for.
-    await releaseOverlock({ leaseId: lease.id, facilityId: lease.facilityId }, tx);
+    // B-169. The reason the card will state. `abandonment` and a plain
+    // departure produce very different sentences for the staffer walking out
+    // to the unit, and until now both said "the tenant has paid".
+    await releaseOverlock(
+      {
+        leaseId: lease.id,
+        facilityId: lease.facilityId,
+        reason:
+          input.reason === "abandonment"
+            ? "abandoned"
+            : input.reason === "transfer"
+              ? "transfer"
+              : "lease_ended",
+      },
+      tx,
+    );
     await recomputeUnitStatus(lease.unitId, tx);
 
     // If a portal request (B-041) raised a verification task for this lease,

@@ -2725,6 +2725,12 @@ model UnitOverlock {
   /// Why it was fitted: the timeline step's label, so the record reads without
   /// a join.
   reason           String
+  /// B-169. Why it came OFF, which is not the same question and until now had
+  /// no answer at all. `cured`, `lease_ended`, `transfer`, `auction_sold` or
+  /// `abandoned` — the fact the removal task's card has to state, since the
+  /// three paths B-151 added are not the cure path B-058 wrote the label for.
+  /// Null until a removal is asked for.
+  removalReason    String?
   createdAt        DateTime  @default(now()) @db.Timestamptz(6)
 
   unit     Unit     @relation(fields: [unitId], references: [id], onDelete: Cascade)
@@ -4176,6 +4182,21 @@ model Task {
   /// blob store) are type-specific. Validated against the catalog at
   /// completion time, not by the column.
   proof              Json?
+  /// B-169. One sentence of context the CREATOR knows and the catalog cannot:
+  /// why this particular task exists, as opposed to what its type means.
+  ///
+  /// `overlock_remove` is what forced it. Its label read "the tenant has paid"
+  /// — true on the cure path B-058 built it for, and a lie on the three paths
+  /// B-151 added, where the lease ended, the goods were sold at auction, or the
+  /// unit was abandoned. The type cannot say which; the caller always knows.
+  /// So the LABEL states the fact ("take the lock off") and this states the
+  /// reason, rendered under the subject on the card.
+  ///
+  /// Generic on purpose rather than an overlock-shaped column: `subject`
+  /// (B-115) solved the same class of problem — a card with nothing on it that
+  /// the row's own creator could have supplied — and this is the second
+  /// instance of it.
+  detail             String?
   /// The domain event that created this task, if any — lets a redelivered
   /// event find (rather than duplicate) the row it already made, alongside
   /// the (type, entityId, businessDate) uniqueness below.
