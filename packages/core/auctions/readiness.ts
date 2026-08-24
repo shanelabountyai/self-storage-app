@@ -15,6 +15,7 @@ export type BlockerKind =
   | 'step_not_executed'
   | 'step_lacks_proof'
   | 'no_lien_notice_served'
+  | 'notice_names_another_unit'
   | 'not_approved'
   | 'balance_settled'
   | 'already_sold'
@@ -54,6 +55,14 @@ export type ReadinessInput = {
   /// preceded by no served notice is the single most common wrongful-sale
   /// claim there is.
   lienNoticeServed: boolean
+  /// Whether the goods have been moved to another unit since the notice was
+  /// served, and no notice has been served naming the unit they are in now
+  /// (B-160, D-91). Only changes which of two messages a manager reads — the
+  /// block itself is `lienNoticeServed` being false — but "no notice has been
+  /// served" is a lie when one was, on a unit the tenant is no longer in, and
+  /// a manager who knows they served it will spend the afternoon looking for
+  /// the bug rather than re-serving.
+  noticeUnitChanged?: boolean
   /// Whether a hold declaring `block_auction` is in force on this lease
   /// (B-121). The catalog has carried that effect since B-096 and NOTHING read
   /// it — not this function, not `approveAuction`, not `scheduleSale` — so an
@@ -173,12 +182,23 @@ export function auctionReadiness(input: ReadinessInput): Readiness {
   }
 
   if (!input.lienNoticeServed) {
-    blockers.push({
-      kind: 'no_lien_notice_served',
-      message:
-        'No lien notice has been generated and recorded as served for this lease. A sale with no ' +
-        'served notice behind it cannot be defended.',
-    })
+    blockers.push(
+      input.noticeUnitChanged
+        ? {
+            kind: 'notice_names_another_unit',
+            message:
+              'The goods have been moved to another unit since the lien notice was served, so the ' +
+              'notice on file names a unit they are no longer in. Serve a new lien notice naming ' +
+              'the unit they are in now. The notice period runs again from that service; what the ' +
+              'tenant owes, and how long they have owed it, are unchanged.',
+          }
+        : {
+            kind: 'no_lien_notice_served',
+            message:
+              'No lien notice has been generated and recorded as served for this lease. A sale with no ' +
+              'served notice behind it cannot be defended.',
+          },
+    )
   }
 
   if (!input.approved) {

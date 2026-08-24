@@ -115,6 +115,25 @@ describe('auctionReadiness — the hard blocks', () => {
     expect(result.blockers.map((one) => one.kind)).toContain('no_lien_notice_served')
   })
 
+  // B-160 / D-91. Same block, different sentence — and the sentence is the
+  // point. A manager who served the notice themselves, reading "no lien notice
+  // has been served", goes looking for a bug instead of re-serving.
+  it('says the notice names another unit once the goods have been moved', () => {
+    const result = auctionReadiness(ready({ lienNoticeServed: false, noticeUnitChanged: true }))
+    expect(result.ready).toBe(false)
+    expect(result.blockers.map((one) => one.kind)).toContain('notice_names_another_unit')
+    expect(result.blockers.map((one) => one.kind)).not.toContain('no_lien_notice_served')
+    // D-85's rule survives it: re-serving restarts the NOTICE period, and the
+    // message must not suggest the arrears clock restarts with it.
+    const message = result.blockers.find((one) => one.kind === 'notice_names_another_unit')!.message
+    expect(message).toMatch(/unchanged/)
+  })
+
+  it('does not claim a unit change on a case whose goods never moved', () => {
+    const result = auctionReadiness(ready({ lienNoticeServed: false, noticeUnitChanged: false }))
+    expect(result.blockers.map((one) => one.kind)).toContain('no_lien_notice_served')
+  })
+
   it('blocks without regional or owner approval', () => {
     const result = auctionReadiness(ready({ approved: false }))
     expect(result.blockers.map((one) => one.kind)).toContain('not_approved')

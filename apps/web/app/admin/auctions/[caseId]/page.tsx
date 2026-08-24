@@ -66,6 +66,20 @@ export default async function AuctionCasePage({
         {TIMELINE_DISCLAIMER}
       </p>
 
+      {/* B-160 / D-91. Both facts, on the screen every downstream action is
+          started from. The heading above names the unit to walk to; this names
+          the unit the notice was served on, because they are different
+          documents about the same claim and staff have to be able to see that
+          without opening the file. */}
+      {view.goodsMoved && (
+        <p role="note" className="rounded-lg border-2 border-amber-500 bg-amber-50 p-4 text-sm text-amber-950 text-pretty">
+          <strong className="block">The goods have been moved since the notice was served.</strong>
+          The lien notice named <strong>unit {view.noticeUnitNumber}</strong>. The contents are now
+          in <strong>unit {view.unitNumber}</strong>, which is the unit to open, advertise and cut a
+          lock on. Unit {view.noticeUnitNumber} may since have been rented to somebody else.
+        </p>
+      )}
+
       <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
         <dt className="text-muted-foreground">Status</dt>
         <dd className="font-medium">{view.status}</dd>

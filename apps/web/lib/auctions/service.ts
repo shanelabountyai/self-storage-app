@@ -52,6 +52,21 @@ async function claimLeaseIds(leaseId: string): Promise<string[]> {
   return allChainIds(await leaseSuccessorIds([leaseId]))
 }
 
+/// The same forward walk, but keeping the ORDER as well as the set: where the
+/// tenant and their goods are now, as against where the served notice says they
+/// were.
+///
+/// B-160 / D-91. `leaseSuccessorIds` returns each chain newest last, so the
+/// tail is the lease the tenant actually holds — and its unit is the unit
+/// somebody has to open. Nothing is stored: a `currentUnitId` column would be a
+/// second answer to a question the chain already answers, and the two would
+/// drift the first time a transfer path forgot to write it.
+async function claimChain(leaseId: string): Promise<{ ids: string[]; currentLeaseId: string }> {
+  const chains = await leaseSuccessorIds([leaseId])
+  const ordered = chains.get(leaseId) ?? [leaseId]
+  return { ids: allChainIds(chains), currentLeaseId: ordered[ordered.length - 1] ?? leaseId }
+}
+
 function rankAt(actor: Actor, facilityId: string): number {
   if (actor.kind !== 'staff') return 0
   return Math.max(
@@ -107,8 +122,23 @@ export type AuctionCaseView = {
   id: string
   facilityId: string
   leaseId: string
+  /// B-160 / D-91. `unitId`/`unitNumber` are where the goods are NOW — the unit
+  /// staff have to open, advertise and cut a lock on. The unit the served
+  /// notice named is `noticeUnitId`/`noticeUnitNumber`, and it is what the case
+  /// stays pinned to (B-157). They differ only after a D-85 transfer out of the
+  /// pipeline, which `goodsMoved` says in one boolean.
+  ///
+  /// This way round on purpose: a reader that has not been told about the split
+  /// names the unit somebody should walk to, rather than one that was re-rented
+  /// three weeks ago.
   unitId: string
   unitNumber: string
+  noticeUnitId: string
+  noticeUnitNumber: string
+  goodsMoved: boolean
+  /// The lease the claim now sits on — where D-86 moved the unpaid invoices,
+  /// and therefore where a sale's proceeds have to post.
+  currentLeaseId: string
   tenantId: string
   tenantName: string
   status: string
@@ -170,7 +200,16 @@ export async function auctionCase(actor: Actor, caseId: string): Promise<Auction
 
   // The balance and the holds span the whole chain; the evidence below does
   // not, and must not (B-157). See `claimLeaseIds`.
-  const claimIds = await claimLeaseIds(row.leaseId)
+  const { ids: claimIds, currentLeaseId } = await claimChain(row.leaseId)
+  const goodsMoved = currentLeaseId !== row.leaseId
+  // Only when they differ — the overwhelmingly common case is one lease, and
+  // it should not cost a second query.
+  const currentLease = goodsMoved
+    ? await prisma.lease.findUnique({
+        where: { id: currentLeaseId },
+        select: { unitId: true, unit: { select: { number: true } } },
+      })
+    : null
 
   const [ledger, stepRuns, servedLienNotice, approver, blockedByHold] = await Promise.all([
     prisma.ledgerEntry.aggregate({
@@ -183,8 +222,15 @@ export async function auctionCase(actor: Actor, caseId: string): Promise<Auction
     }),
     // B-061. A generated AND served lien notice, not merely generated, and not
     // one that has since been superseded by a correction.
+    //
+    // Read against the CURRENT lease, not the pinned one (B-160 / D-91). A
+    // §59 notice names the space, so once the goods have been moved to another
+    // unit the notice that was served describes somewhere they are no longer —
+    // and the owner's answer was that it has to be re-served. Nothing else
+    // changes to make that hold: a notice on a lease that no longer exists in
+    // the chain's tail simply is not found, and the blocker below says why.
     prisma.notice.findFirst({
-      where: { leaseId: row.leaseId, type: 'lien', status: 'delivered', supersededAt: null },
+      where: { leaseId: currentLeaseId, type: 'lien', status: 'delivered', supersededAt: null },
       select: { id: true },
     }),
     row.approvedByStaffId
@@ -230,6 +276,7 @@ export async function auctionCase(actor: Actor, caseId: string): Promise<Auction
     steps,
     containsVehicle: row.containsVehicle,
     lienNoticeServed: Boolean(servedLienNotice),
+    noticeUnitChanged: goodsMoved && !servedLienNotice,
     blockedByHold,
     approved: Boolean(row.approvedAt),
     outstandingCents,
@@ -251,8 +298,12 @@ export async function auctionCase(actor: Actor, caseId: string): Promise<Auction
     id: row.id,
     facilityId: row.facilityId,
     leaseId: row.leaseId,
-    unitId: row.unitId,
-    unitNumber: row.unit.number,
+    unitId: currentLease?.unitId ?? row.unitId,
+    unitNumber: currentLease?.unit.number ?? row.unit.number,
+    noticeUnitId: row.unitId,
+    noticeUnitNumber: row.unit.number,
+    goodsMoved,
+    currentLeaseId,
     tenantId: row.lease.tenantId,
     tenantName: `${row.lease.tenant.firstName} ${row.lease.tenant.lastName}`,
     status: row.status,
@@ -496,6 +547,21 @@ export async function recordLockCut(
   })
   requirePermission(actor, 'auctions:approve', row.facilityId)
 
+  // B-160. Which unit somebody is standing in front of with the bolt cutters.
+  // The case is pinned to the unit the notice named; after a D-85 transfer the
+  // goods are somewhere else, and an inventory headed with the pinned number
+  // is a document about a unit that has since been re-rented to a stranger.
+  const { currentLeaseId } = await claimChain(row.leaseId)
+  const currentLease =
+    currentLeaseId === row.leaseId
+      ? null
+      : await prisma.lease.findUnique({
+          where: { id: currentLeaseId },
+          select: { unit: { select: { number: true } } },
+        })
+  const unitNumber = currentLease?.unit.number ?? row.unit.number
+  const noticeUnitNumber = row.unit.number
+
   if (row.lockCutAt) {
     // Written once. A re-cut inventory that overwrote the first would destroy
     // the evidence this record exists to be.
@@ -538,12 +604,23 @@ export async function recordLockCut(
         type: 'lien_evidence',
         subjectType: 'AuctionCase',
         subjectId: caseId,
-        title: `Unit ${row.unit.number} — contents inventory at lock cut`,
+        title: `Unit ${unitNumber} — contents inventory at lock cut`,
+        // `movedNote` carries the second fact rather than replacing the first:
+        // the document has to say both which unit was opened and which unit the
+        // notice named, or it silently contradicts the notice sitting beside it
+        // in the same file. It is never blank — FR-6 treats an empty merge
+        // value as a missing one and throws, and an inventory that AFFIRMS the
+        // notice named this same unit is better evidence than one that is
+        // silent about it.
         template:
           '<p>Unit {{unitNumber}}. Lock cut {{cutAt}} by {{cutBy}}. ' +
-          'Tenant’s lock: {{lockDisposition}}.</p>{{itemsTable}}',
+          'Tenant’s lock: {{lockDisposition}}.{{movedNote}}</p>{{itemsTable}}',
         values: {
-          unitNumber: row.unit.number,
+          unitNumber,
+          movedNote:
+            unitNumber === noticeUnitNumber
+              ? ' The lien notice was served naming this same unit.'
+              : ` The lien notice was served naming unit ${noticeUnitNumber}; the contents were moved to unit ${unitNumber} before this cut.`,
           cutAt: input.cutAt.toISOString(),
           cutBy: actor.kind === 'staff' ? actor.staffUserId : 'system',
           lockDisposition: input.oldLockDisposition.trim(),
@@ -578,7 +655,13 @@ export async function recordLockCut(
         action: 'auction.lock_cut',
         entityType: 'AuctionCase',
         entityId: caseId,
-        context: { cutAt: input.cutAt.toISOString(), itemCount: items.length, documentId },
+        context: {
+          cutAt: input.cutAt.toISOString(),
+          itemCount: items.length,
+          documentId,
+          unitNumber,
+          noticeUnitNumber,
+        },
       },
       tx,
     )
@@ -662,7 +745,15 @@ export async function recordSaleOutcome(
       await tx.ledgerEntry.create({
         data: {
           facilityId: view.facilityId,
-          leaseId: view.leaseId,
+          // B-160. The lease the claim sits on now, not the one the notice
+          // named. `outstandingCents` above is summed across the whole chain
+          // because D-86 moved the unpaid invoices forward on a transfer —
+          // posting the proceeds back to the pinned lease credited a ledger
+          // that already netted to zero and left the live lease showing the
+          // full arrears after a completed sale, with the delinquency ladder
+          // still running on a tenant whose goods had been sold. The balance
+          // was read forward and the credit posted backward.
+          leaseId: view.currentLeaseId,
           type: posting.type,
           amountCents: posting.amountCents,
           description: posting.description,

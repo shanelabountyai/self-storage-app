@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { prisma } from '../packages/db'
 import {
   addAdvertisement,
@@ -703,6 +703,230 @@ describeDb('the auction pipeline', () => {
 
       const result = await cancelAuction(regional(), caseId, 'changed my mind')
       expect(result.ok).toBe(false)
+    })
+  })
+
+  // B-160 / D-91. D-85 lets staff move a `pending_auction` tenant's goods to
+  // another unit. B-157 made the BALANCE and the holds follow them; every other
+  // reader of the case still named the unit the notice was served on, so the
+  // lock-cut instruction and the advertisement pointed at a unit that had since
+  // been re-rented, and the sale's proceeds posted to the lease D-86 had
+  // already zeroed.
+  //
+  // The chain is built here with `transferredFromLeaseId` directly rather than
+  // through `completeTransfer`, which is what that column is and what the
+  // transfer writes — `transfer-db.test.ts` owns the wizard's own behaviour.
+  describe('after the goods are moved to another unit — D-85, D-91', () => {
+    let movedUnitId = ''
+    let movedLeaseId = ''
+    let movedUnitNumber = ''
+
+    async function moveGoods(): Promise<void> {
+      movedUnitNumber = `B160-${randomUUID().slice(0, 6)}`
+      const unitType = await prisma.unit.findUniqueOrThrow({
+        where: { id: unitId },
+        select: { unitTypeId: true },
+      })
+      const unit = await prisma.unit.create({
+        data: { facilityId, unitTypeId: unitType.unitTypeId, number: movedUnitNumber, status: 'occupied' },
+      })
+      movedUnitId = unit.id
+      const lease = await prisma.lease.create({
+        data: {
+          facilityId,
+          tenantId,
+          unitId: unit.id,
+          status: 'pending_auction',
+          startDate: new Date('2026-07-20T00:00:00Z'),
+          billingDay: 1,
+          monthlyRateCents: 12_900,
+          delinquencyTimelineId: timelineId,
+          transferredFromLeaseId: leaseId,
+        },
+      })
+      movedLeaseId = lease.id
+      // D-86: the unpaid balance moves with the tenant, which is what left the
+      // pinned lease netting to zero in the first place.
+      await prisma.ledgerEntry.updateMany({ where: { leaseId }, data: { leaseId: movedLeaseId } })
+    }
+
+    /// A lien notice served against whichever lease is named — the thing D-91
+    /// says has to happen again once the goods have moved.
+    async function serveLienNoticeOn(targetLeaseId: string): Promise<void> {
+      const document = await prisma.document.create({
+        data: {
+          facilityId,
+          type: 'notice',
+          subjectType: 'Lease',
+          subjectId: targetLeaseId,
+          title: 'Lien notice',
+          content: '<p>notice</p>',
+          mimeType: 'text/html',
+          contentHash: 'hash',
+        },
+      })
+      await prisma.notice.create({
+        data: {
+          facilityId,
+          leaseId: targetLeaseId,
+          type: 'lien',
+          status: 'delivered',
+          generatedAt: new Date('2026-07-25T00:00:00Z'),
+          deliveredAt: new Date('2026-07-26T00:00:00Z'),
+          deliveryMethod: 'certified_mail',
+          documentId: document.id,
+          documentHash: 'hash',
+        },
+      })
+    }
+
+    afterEach(async () => {
+      if (!movedLeaseId) return
+      await prisma.ledgerEntry.deleteMany({ where: { leaseId: movedLeaseId } })
+      await prisma.notice.deleteMany({ where: { leaseId: movedLeaseId } })
+      await prisma.lease.delete({ where: { id: movedLeaseId } })
+      await prisma.unit.delete({ where: { id: movedUnitId } })
+      movedLeaseId = ''
+      movedUnitId = ''
+    })
+
+    it('names the unit the goods are in now, and still says which unit the notice named', async () => {
+      const caseId = await makeReadyCase()
+      const pinnedUnitNumber = (await auctionCase(regional(), caseId))!.unitNumber
+      await moveGoods()
+
+      const view = (await auctionCase(regional(), caseId))!
+      // What staff have to walk to, advertise, and cut a lock on.
+      expect(view.unitId).toBe(movedUnitId)
+      expect(view.unitNumber).toBe(movedUnitNumber)
+      // What the served notice says. The case stays pinned to it (B-157) —
+      // that anchoring is the evidentiary point and must not move.
+      expect(view.noticeUnitId).toBe(unitId)
+      expect(view.noticeUnitNumber).toBe(pinnedUnitNumber)
+      expect(view.goodsMoved).toBe(true)
+      expect(view.currentLeaseId).toBe(movedLeaseId)
+    })
+
+    it('says nothing about a move on a case whose goods never moved', async () => {
+      const caseId = await makeReadyCase()
+      const view = (await auctionCase(regional(), caseId))!
+      expect(view.goodsMoved).toBe(false)
+      expect(view.unitId).toBe(view.noticeUnitId)
+      expect(view.currentLeaseId).toBe(view.leaseId)
+    })
+
+    it('blocks the sale until the notice is re-served naming the unit the goods are in', async () => {
+      const caseId = await makeReadyCase()
+      expect((await auctionCase(regional(), caseId))!.readiness.ready).toBe(true)
+
+      await moveGoods()
+      const moved = (await auctionCase(regional(), caseId))!
+      expect(moved.readiness.ready).toBe(false)
+      expect(moved.readiness.blockers.map((one) => one.kind)).toContain('notice_names_another_unit')
+      // Not the generic one: a manager who served the notice themselves must
+      // not be told no notice was served.
+      expect(moved.readiness.blockers.map((one) => one.kind)).not.toContain('no_lien_notice_served')
+      expect(await scheduleSale(regional(), caseId, new Date('2026-09-01T00:00:00Z'))).toMatchObject({ ok: false })
+
+      await serveLienNoticeOn(movedLeaseId)
+      const reserved = (await auctionCase(regional(), caseId))!
+      expect(reserved.readiness.blockers.map((one) => one.kind)).not.toContain('notice_names_another_unit')
+      expect(reserved.readiness.ready).toBe(true)
+    })
+
+    it('posts the sale proceeds to the lease the claim moved to, not the pinned one', async () => {
+      const caseId = await makeReadyCase()
+      await moveGoods()
+      await serveLienNoticeOn(movedLeaseId)
+      await scheduleSale(regional(), caseId, new Date('2026-09-01T00:00:00Z'))
+      await recordLockCut(regional(), caseId, {
+        cutAt: new Date('2026-09-01T15:00:00Z'),
+        oldLockDisposition: 'Cut and binned',
+        items: [{ description: 'Sofa', photoReference: 'IMG_1' }],
+      })
+
+      const before = await prisma.ledgerEntry.aggregate({
+        where: { leaseId: movedLeaseId },
+        _sum: { amountCents: true },
+      })
+      expect(before._sum.amountCents).toBe(60_000)
+
+      const result = await recordSaleOutcome(regional(), caseId, {
+        soldAt: new Date('2026-09-02T00:00:00Z'),
+        grossProceedsCents: 80_000,
+        saleCostsCents: 5_000,
+        buyer: BUYER,
+      })
+      expect(result).toMatchObject({ ok: true })
+
+      // The live lease is settled by the sale...
+      const after = await prisma.ledgerEntry.aggregate({
+        where: { leaseId: movedLeaseId },
+        _sum: { amountCents: true },
+      })
+      expect(after._sum.amountCents).toBe(0)
+      // ...and nothing lands on the lease the tenant no longer holds, which
+      // D-86 had already zeroed. Crediting it there left the live lease showing
+      // the full arrears after a completed sale.
+      const pinned = await prisma.ledgerEntry.aggregate({
+        where: { leaseId },
+        _sum: { amountCents: true },
+      })
+      expect(pinned._sum.amountCents ?? 0).toBe(0)
+      expect(await prisma.ledgerEntry.count({ where: { leaseId } })).toBe(0)
+    })
+
+    it('sends the unit that was actually emptied for cleanout, not the one that was re-rented', async () => {
+      const caseId = await makeReadyCase()
+      await moveGoods()
+      await serveLienNoticeOn(movedLeaseId)
+      await scheduleSale(regional(), caseId, new Date('2026-09-01T00:00:00Z'))
+      await recordLockCut(regional(), caseId, {
+        cutAt: new Date('2026-09-01T15:00:00Z'),
+        oldLockDisposition: 'Cut and binned',
+        items: [{ description: 'Sofa', photoReference: 'IMG_1' }],
+      })
+      await recordSaleOutcome(regional(), caseId, {
+        soldAt: new Date('2026-09-02T00:00:00Z'),
+        grossProceedsCents: 80_000,
+        saleCostsCents: 5_000,
+        buyer: BUYER,
+      })
+
+      const moved = await prisma.unit.findUniqueOrThrow({ where: { id: movedUnitId } })
+      expect(moved.operationalStatus).toBe('maintenance')
+      // The pinned unit has been free since the transfer and may already have a
+      // new tenant in it. Marking it for cleanout after somebody else's sale is
+      // the same defect as cutting its lock.
+      const pinnedUnit = await prisma.unit.findUniqueOrThrow({ where: { id: unitId } })
+      expect(pinnedUnit.operationalStatus).toBe('available')
+    })
+
+    it('heads the inventory with the unit that was actually opened, and names the served unit in it', async () => {
+      const caseId = await makeReadyCase()
+      const pinnedUnitNumber = (await auctionCase(regional(), caseId))!.unitNumber
+      await moveGoods()
+      await serveLienNoticeOn(movedLeaseId)
+      await scheduleSale(regional(), caseId, new Date('2026-09-01T00:00:00Z'))
+
+      expect(
+        await recordLockCut(regional(), caseId, {
+          cutAt: new Date('2026-09-01T15:00:00Z'),
+          oldLockDisposition: 'Cut and binned',
+          items: [{ description: 'Sofa', photoReference: 'IMG_1' }],
+        }),
+      ).toMatchObject({ ok: true })
+
+      const view = (await auctionCase(regional(), caseId))!
+      const document = await prisma.document.findUniqueOrThrow({
+        where: { id: view.inventoryDocumentId! },
+      })
+      expect(document.title).toContain(movedUnitNumber)
+      expect(document.title).not.toContain(pinnedUnitNumber)
+      // Both facts in the document itself: it sits in the same file as a notice
+      // naming the other unit, and silence there reads as a contradiction.
+      expect(document.content).toContain(movedUnitNumber)
+      expect(document.content).toContain(pinnedUnitNumber)
     })
   })
 

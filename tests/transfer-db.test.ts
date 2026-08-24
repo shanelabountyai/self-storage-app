@@ -973,7 +973,17 @@ describeDb('unit transfer (US-14)', () => {
       // anchoring is the evidentiary point — the reason code is what
       // reconciles it against the move, not a re-pointed row.
       expect(after?.leaseId).toBe(lease.id)
-      expect(after?.unitNumber).toBe(before?.unitNumber)
+      expect(after?.noticeUnitNumber).toBe(before?.noticeUnitNumber)
+
+      // B-160 / D-91. The pin is the EVIDENCE; it is not the instruction. The
+      // view's own `unitNumber` names the unit somebody has to walk to, open
+      // and cut a lock on, which after this move is the new one — reading the
+      // pinned number here is how staff cut the lock on a unit that had since
+      // been re-rented. Both facts, and a boolean saying they differ.
+      expect(after?.goodsMoved).toBe(true)
+      expect(after?.unitNumber).toBe(to.number)
+      expect(after?.unitNumber).not.toBe(after?.noticeUnitNumber)
+      expect(before?.goodsMoved).toBe(false)
     })
 
     it('carries the claim forward when the move itself charges, never resetting it', async () => {
