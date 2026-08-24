@@ -214,6 +214,50 @@ const LAST_REVIEWED = '19 August 2026'
 // nightly-delinquency services and raises a staff task. No route, no control, no
 // copy. Recorded rather than skipped, per the rule two entries above.
 // `LAST_REVIEWED` is not bumped.
+//
+// Corrected 2026-08-24 by B-159, and this is the OVERSTATING failure shipped
+// rather than caught — the fourth review block found four claims in "How we
+// check", two of them plainly untrue, and the entry is long because the shape
+// of the mistake is the reusable part.
+//
+// (1) "they block a release if they fail" was FALSE. Every axe scan lives in
+// the `e2e` lane of `.github/workflows/ci.yml`, gated on `main` or a non-draft
+// PR, while `vercel.json` carries no `ignoreCommand` and there is no deploy
+// workflow — so Vercel's Git integration builds and ships a push to `main` in
+// PARALLEL with Actions and independently of its result. A failing scan has
+// never stopped anything. Compounding it, CLAUDE.md's own always-open-as-a-
+// draft rule means the lane does not run at all on the PR where the code is
+// written. The owner chose to correct the sentence rather than build the gate
+// (D-90): it now says where the tests run and says in as many words that they
+// are not a release gate. Building the gate is a separate, costed decision and
+// the row deliberately did not smuggle it in.
+//
+// (2) "We test by keyboard by hand" was UNRECORDED, which on this page is the
+// same thing as untrue: PRD 02 §5.5 FR-24 defines "recorded" as a line in
+// `docs/PROGRESS.md`, and there is none for any item. The screen-reader
+// sentence beside it was correctly disclaimed and the keyboard one was not, so
+// they are now one disclaimed sentence. It goes back to being a claim when a
+// pass is recorded with its date, not before.
+//
+// (3) The generated exception list is route-keyed BY CONSTRUCTION — it filters
+// an array of routes, so no post-interaction STATE can ever appear in it — and
+// a list that reads as a complete account of gaps while being structurally
+// unable to hold half of them is the same overstatement in a new form. One
+// sentence now says it names pages. Enumerating the states is B-184 and this
+// row deliberately did not wait for it: a true sentence today beats a complete
+// list later.
+//
+// (4) "They also fail on checks the tool could not decide" held only for the
+// public route loop in `e2e/a11y.spec.ts`. `smoke.spec.ts`, `portal.spec.ts`,
+// `admin.spec.ts` and the rest destructure `violations` only — so every
+// checkout step, the money path, was scanned without the `incomplete`
+// assertion the page claimed for it. Scoped to the public pages, with the
+// account and checkout named as collected-but-not-enforced. B-184 makes it
+// true everywhere by lifting the assertion into the shared helper.
+//
+// `LAST_REVIEWED` is deliberately NOT bumped. These are retractions, and a
+// retraction is not a re-verification — the date is a claim about the whole
+// page, and the "where we fall short" list below was not re-checked here.
 export default function AccessibilityPage() {
   return (
     <ProsePage
@@ -263,10 +307,13 @@ export default function AccessibilityPage() {
 
       <Section heading="How we check">
         <p>
-          Automated accessibility tests run on every change, at both phone and desktop
-          widths, and they block a release if they fail. They also fail on checks the tool
-          could not decide, so &ldquo;we did not test that&rdquo; cannot quietly read as
-          &ldquo;that passed&rdquo;.
+          Automated accessibility tests run at both phone and desktop widths on every
+          push to our main branch, and on every pull request that is open for review.
+          They are not a release gate: a failing run tells us, it does not stop the
+          deploy. On the public pages they also fail on checks the tool could not decide,
+          so &ldquo;we did not test that&rdquo; cannot quietly read as &ldquo;that
+          passed&rdquo; — inside your account and in checkout those undecided checks are
+          collected but not yet enforced.
         </p>
         <p>
           They do not yet cover everything. These are the pages outside that run, and the
@@ -283,10 +330,15 @@ export default function AccessibilityPage() {
           appears here rather than quietly disappearing from both.
         </p>
         <p>
+          It names pages. Some screens have states — an error message, a hold that has
+          expired, a size that sold out while you were deciding — that only appear once
+          you have done something, and those are not all covered.
+        </p>
+        <p>
           Automated testing is a floor, not a ceiling — it catches roughly a third of real
           problems, and it cannot judge whether a screen reader says something that makes
-          sense. We test by keyboard by hand. <strong>A full screen-reader pass has not
-          been carried out yet</strong>, so nothing on this page rests on one.
+          sense. <strong>Neither a full screen-reader pass nor a recorded keyboard pass
+          has been carried out yet</strong>, so nothing on this page rests on one.
         </p>
       </Section>
 

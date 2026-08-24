@@ -261,7 +261,14 @@ describeDb('comms observability (FR-19/CN-19)', () => {
 
     it('stays quiet for a consumer with nothing stale', async () => {
       const consumer: Consumer = { name: `quiet-consumer-${suffix}`, events: ['lease.moved_in'], handle: async () => {} }
-      const [result] = await detectConsumerLag([consumer])
+      // `now` is pinned to a date older than anything in the database rather
+      // than left to the wall clock. The outbox is GLOBAL and never cleaned
+      // between tests, so a brand-new consumer name is genuinely behind on
+      // every `lease.moved_in` any other suite has ever emitted — this test
+      // used to pass only because the shared schema happened to be empty of
+      // them, and it started failing at seventeen. Pinning the clock asks the
+      // question the test means to ask: with nothing stale, is it quiet?
+      const [result] = await detectConsumerLag([consumer], new Date('2020-01-01T00:00:00Z'))
       expect(result.alerted).toBe(false)
       expect(result.stale).toBe(0)
     })
@@ -282,7 +289,9 @@ describeDb('comms observability (FR-19/CN-19)', () => {
         data: { eventId: event.id, consumer: consumerName, status: 'succeeded', attempts: 1, completedAt: new Date() },
       })
       const consumer: Consumer = { name: consumerName, events: ['lease.moved_in'], handle: async () => {} }
-      const stale = await staleDeliveryCount(consumer, 15 * 60_000)
+      // Scoped to this run's own facility, for the reason above: an absolute
+      // count over a shared outbox is an assertion about every other suite.
+      const stale = await staleDeliveryCount(consumer, 15 * 60_000, new Date(), facilityId)
       expect(stale).toBe(0)
     })
   })

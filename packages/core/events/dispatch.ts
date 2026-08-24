@@ -192,15 +192,25 @@ export async function deadLetters(limit = 100) {
 /// an age floor added: a healthy consumer always has *some* pending events
 /// between dispatch ticks, so the count that matters is how many have sat
 /// there past a threshold, not whether the count is zero.
+///
+/// `facilityId` narrows it the same way `dispatchEvents` does, and for the same
+/// reason spelled out there: the outbox is global, so a test asserting an
+/// ABSOLUTE count on a shared database is really asserting that no other suite
+/// ever emitted one of these events. It is not — `lease.moved_in` accumulates —
+/// and the two tests that made that assumption failed on a database dirty
+/// enough, which is to say eventually. Production passes nothing and gets the
+/// global count it wants.
 export async function staleDeliveryCount(
   consumer: Consumer,
   olderThanMs: number,
   now: Date = new Date(),
+  facilityId?: string,
 ): Promise<number> {
   const cutoff = new Date(now.getTime() - olderThanMs)
   return prisma.domainEvent.count({
     where: {
       name: { in: [...consumer.events] },
+      ...(facilityId ? { facilityId } : {}),
       occurredAt: { lte: cutoff },
       OR: [
         { deliveries: { none: { consumer: consumer.name } } },
