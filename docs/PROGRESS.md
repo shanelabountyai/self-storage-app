@@ -5900,7 +5900,7 @@ Four changes, and the first is the one that matters most:
 
 ## B-168 — A promotional recapture you can argue down without forgiving the arrears
 
-`PENDING`
+`f661a45`
 
 **What it built.** B-145 posted the recapture as a bare `type: 'charge'` ledger row, so `waivableFees` could not list it, `waiveFeeInvoice` could not void it, it never aged, it never dunned, and autopay never collected it. The only lever `CompleteMoveOutInput` offered was `writeOff?: boolean` — **all or nothing across the entire residual**, so forgiving a disputed $60 recapture also forgave $400 of genuine arrears under one reason code. It now posts through B-167's `raiseFeeInvoice` as its own `kind: 'fee'` invoice, and reducing or waiving it is a lever of its own with a reason code and the fee-waiver ladder behind it. `PromoRedemption` gains `recaptureChargedCents`, `recaptureWaivedCents` and `recaptureInvoiceId`, and the promotions report gains three columns off them.
 
