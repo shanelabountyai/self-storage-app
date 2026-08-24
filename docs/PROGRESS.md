@@ -5602,6 +5602,8 @@ The card's `href` has always pointed at `/admin/tenants/{tenantId}`, so the fix 
 
 ## B-158 — A gate command could be skipped by clock skew between the app and the database
 
+`aa51d57`
+
 **What it built.** `GateCommand.nextAttemptAt` defaulted to Postgres's own `now()`, while `drainGateCommands` selects `nextAttemptAt: { lte: now }` against a **Node-side `new Date()`** taken separately. A command enqueued moments before a drain could carry a DB-clock timestamp later than the drain's Node-clock cutoff and be passed over — self-healing on the next cron tick, but for a move-in that means a tenant standing at a keypad that does not work in the meantime. `enqueueCommand` (the single insertion path for every `GateCommand` row — verified, nothing else in the codebase writes to that table) now stamps `nextAttemptAt: new Date()` explicitly, so the value that gets compared always comes from the same clock family the drain reads with.
 
 **What it decided.** **Fixed at the write side (app clock in, not DB clock in), not the read side.** The backlog row offered either "drain on `nextAttemptAt <= NOW()` evaluated in the database" or "default the column from the application clock that will later read it." The DB-side option needs raw SQL (`$queryRaw`) in place of the typed `findMany` `drainGateCommands` already uses, for the same outcome; the write-side fix is a one-line addition to a single existing call, keeps the whole file on the Prisma client, and needs no new query path. The schema's `@default(now())` is left in place as a fallback for any insert that bypasses `enqueueCommand` (there are none today, but it costs nothing to leave the column self-defaulting).
