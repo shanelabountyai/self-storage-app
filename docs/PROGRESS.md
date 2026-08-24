@@ -5616,6 +5616,8 @@ The card's `href` has always pointed at `/admin/tenants/{tenantId}`, so the fix 
 
 ## B-157 — The staff side of D-85: approval, a reason code, and a lien clock that genuinely does not reset
 
+`7bd00ab`
+
 **What it built.** D-85 chose Option A on 2026-08-21 — staff **may** move a tenant out of a unit in the lien pipeline, because refusing costs the operator the tenant *and* the balance, and letting somebody downsize into a unit they can afford is a collections tool rather than a concession. B-137 shipped the half every option agreed on (the portal refuses outright). This row builds the three controls Option A actually chose, and which the wizard asked for none of.
 
 **1. Manager-and-above, stated rather than inherited.** `leases:transfer` happens to be granted to manager and above today, so the authority level held *by accident* — and would have stopped holding silently the moment somebody granted that permission to counter staff. `completeTransfer` now checks rank explicitly (`MANAGER_RANK = 20`, the same shape `approveAuction` uses for `REGIONAL_RANK`). The test that pins this uses an actor holding `leases:transfer` at rank 10, so it fails for the rank and not for the permission.
