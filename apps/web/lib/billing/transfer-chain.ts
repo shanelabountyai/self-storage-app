@@ -67,3 +67,46 @@ export async function leaseChainIds(
 export function allChainIds(chains: Map<string, string[]>): string[] {
   return [...new Set([...chains.values()].flat())]
 }
+
+/// The same walk FORWARD: a lease's own id followed by every lease it was
+/// later transferred into, newest last.
+///
+/// B-157 / D-85. The ancestor walk above serves a reader standing on the
+/// tenant's CURRENT lease asking what came before it. An `AuctionCase` is the
+/// opposite case: it stays pinned to the lease and unit the served notice
+/// named — that anchoring is the whole evidentiary point and must not move —
+/// so it is standing at the OLD end of the chain and has to look forward to
+/// find where the money went.
+///
+/// Why it has to: D-86 re-points the unpaid invoices at the new lease, so
+/// after a transfer the old lease's ledger nets to zero. A case reading only
+/// its own lease therefore saw `outstandingCents: 0` and raised a
+/// `balance_settled` blocker — "This lease owes nothing. There is no lien to
+/// enforce." — on a tenant who still owed every cent. That is the lien clock
+/// resetting, which is exactly what D-85 chose must not happen.
+export async function leaseSuccessorIds(
+  leaseIds: readonly string[],
+  client: Prisma.TransactionClient | typeof prisma = prisma,
+): Promise<Map<string, string[]>> {
+  const chains = new Map<string, string[]>(leaseIds.map((id) => [id, [id]]))
+  let frontier = new Map<string, string>(leaseIds.map((id) => [id, id]))
+
+  for (let hop = 0; hop < MAX_HOPS && frontier.size > 0; hop += 1) {
+    const rows = await client.lease.findMany({
+      where: { transferredFromLeaseId: { in: [...frontier.keys()] } },
+      select: { id: true, transferredFromLeaseId: true },
+    })
+    const next = new Map<string, string>()
+    for (const row of rows) {
+      const parent = row.transferredFromLeaseId
+      const root = parent ? frontier.get(parent) : undefined
+      if (!root) continue
+      if (chains.get(root)?.includes(row.id)) continue
+      chains.get(root)?.push(row.id)
+      next.set(row.id, root)
+    }
+    frontier = next
+  }
+
+  return chains
+}

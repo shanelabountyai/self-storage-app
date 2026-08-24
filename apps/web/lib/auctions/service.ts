@@ -19,7 +19,8 @@ import { toAuditActor } from '@/lib/rbac/audit-actor'
 import type { Actor } from '@/lib/rbac/actor'
 import { recomputeUnitStatus } from '@/lib/admin/units'
 import { releaseOverlock } from '@/lib/delinquency/overlock'
-import { leaseHasEffect } from '@/lib/admin/holds'
+import { effectsByLease } from '@/lib/admin/holds'
+import { allChainIds, leaseSuccessorIds } from '@/lib/billing/transfer-chain'
 import { storeGeneratedDocument } from '@/lib/documents/store'
 import { formatCents } from '@/lib/format'
 
@@ -36,6 +37,20 @@ import { formatCents } from '@/lib/format'
 /// approval", and a site manager approving the sale of their own site's tenant
 /// is exactly the check this is.
 const REGIONAL_RANK = 30
+
+/// Every lease this case's claim now spans: the lease the served notice named,
+/// plus any lease the tenant was transferred into afterwards.
+///
+/// B-157 / D-85. The case itself stays pinned to the original lease and unit —
+/// that is what keeps the file honest about which unit was served — but D-86
+/// moves the unpaid invoices onto the new lease when staff transfer somebody
+/// out of the pipeline. Reading only the pinned lease therefore reported a
+/// balance of zero, and `auctionReadiness` raised `balance_settled` on a
+/// tenant who still owed the entire claim. The money and the holds follow the
+/// tenant; the evidence stays where it happened.
+async function claimLeaseIds(leaseId: string): Promise<string[]> {
+  return allChainIds(await leaseSuccessorIds([leaseId]))
+}
 
 function rankAt(actor: Actor, facilityId: string): number {
   if (actor.kind !== 'staff') return 0
@@ -153,8 +168,15 @@ export async function auctionCase(actor: Actor, caseId: string): Promise<Auction
   if (!row) return null
   requirePermission(actor, 'tenants:view', row.facilityId)
 
+  // The balance and the holds span the whole chain; the evidence below does
+  // not, and must not (B-157). See `claimLeaseIds`.
+  const claimIds = await claimLeaseIds(row.leaseId)
+
   const [ledger, stepRuns, servedLienNotice, approver, blockedByHold] = await Promise.all([
-    prisma.ledgerEntry.aggregate({ where: { leaseId: row.leaseId }, _sum: { amountCents: true } }),
+    prisma.ledgerEntry.aggregate({
+      where: { leaseId: { in: claimIds } },
+      _sum: { amountCents: true },
+    }),
     prisma.delinquencyStepRun.findMany({
       where: { leaseId: row.leaseId, supersededAt: null },
       select: { dayOffset: true, taskId: true },
@@ -171,7 +193,11 @@ export async function auctionCase(actor: Actor, caseId: string): Promise<Auction
           select: { firstName: true, lastName: true },
         })
       : null,
-    leaseHasEffect(row.leaseId, 'block_auction'),
+    // Across the chain too: a hold placed AFTER a transfer lands on the lease
+    // the tenant now holds, and a case reading only the original would let an
+    // SCRA, bankruptcy, deceased or litigation hold fail open — the one
+    // blocker on this list where proceeding is a federal matter.
+    effectsByLease(claimIds, 'block_auction').then((leases) => leases.size > 0),
   ])
 
   const taskIds = stepRuns.map((run) => run.taskId).filter((id): id is string => !!id)
@@ -349,7 +375,12 @@ export async function approveAuction(
   // signed-off decision to sell a servicemember's property sitting in the file.
   // The check is on the effect, never the hold type — a new hold that declares
   // `block_auction` gets this by saying so, per US-42.
-  if (await leaseHasEffect(row.leaseId, 'block_auction')) {
+  //
+  // Across the transfer chain (B-157), for the same reason `auctionCase` is: a
+  // hold placed after a lien-pipeline transfer sits on the lease the tenant
+  // now holds, and approving against the original alone would sign off a sale
+  // this hold exists to stop.
+  if ((await effectsByLease(await claimLeaseIds(row.leaseId), 'block_auction')).size > 0) {
     return {
       ok: false,
       reason:

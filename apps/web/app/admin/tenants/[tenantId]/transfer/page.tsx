@@ -1,13 +1,14 @@
 import Link from 'next/link'
 import { getAdminActor } from '@/lib/admin/context'
 import {
+  LIEN_TRANSFER_REASONS,
   pendingTransferRequest,
   previewTransfer,
   transferTargets,
   TRANSFER_PROBLEM_COPY,
 } from '@/lib/admin/transfer'
 import { formatCents } from '@/lib/format'
-import { AdminForm } from '@/components/admin/form'
+import { AdminForm, Field } from '@/components/admin/form'
 import { Button } from '@/components/ui/button'
 import { completeTransferAction } from './actions'
 
@@ -213,6 +214,38 @@ export default async function TransferPage({
             <input type="hidden" name="leaseId" value={leaseId} />
             <input type="hidden" name="toUnitId" value={preview.preview.toUnitId} />
             <input type="hidden" name="transferDate" value={transferDate} />
+
+            {/*
+              B-157 / D-85. A lien notice naming this unit has been served and
+              the goods in it are being prepared for sale. D-85 chose to allow
+              the move rather than block it — refusing costs the operator the
+              tenant AND the balance — on three conditions, and this is where
+              two of them are asked for. The third (the lien clock does not
+              reset) is enforced in the auction case's own reads.
+            */}
+            {preview.preview.inLienPipeline && (
+              <div className="flex flex-col gap-3 rounded-md border-2 border-amber-500 bg-amber-50 p-3">
+                <p role="alert" className="max-w-prose text-sm text-amber-950 text-pretty">
+                  <strong className="font-medium">
+                    Unit {preview.preview.fromUnitNumber} is in the lien pipeline.
+                  </strong>{' '}
+                  A served lien notice names this unit, so moving the tenant&apos;s goods out of it
+                  needs a recorded reason — the notice and the move have to reconcile if the sale is
+                  ever challenged. The balance and the lien clock both follow the tenant to the new
+                  unit; this does not restart their timeline or settle what they owe.
+                </p>
+                <Field name="reasonCode" label="Why is this tenant being moved?" as="select" defaultValue="">
+                  <option value="">Choose a reason…</option>
+                  {LIEN_TRANSFER_REASONS.map((reason) => (
+                    <option key={reason.value} value={reason.value}>
+                      {reason.label}
+                    </option>
+                  ))}
+                </Field>
+                <Field name="reasonNote" label="Note (optional)" />
+              </div>
+            )}
+
             <p className="text-muted-foreground max-w-prose text-xs text-pretty">
               Confirming closes the lease on unit {preview.preview.fromUnitNumber} and opens one on{' '}
               {preview.preview.toUnitNumber}. Both units change status at the same moment, the

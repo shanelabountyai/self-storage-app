@@ -67,6 +67,11 @@ export type TransferPreview = {
   totalDueTodayCents: number
   dayRange: string
   prorates: boolean
+  /// B-157 / D-85. Whether this move is out of a unit in the lien pipeline, so
+  /// the wizard knows to ask for the reason `completeTransfer` will require.
+  /// The preview does NOT refuse — staff are meant to be able to price the
+  /// move before deciding, and D-85 chose to allow it.
+  inLienPipeline: boolean
 }
 
 export type TransferPreviewResult =
@@ -79,6 +84,8 @@ export type TransferProblem =
   | 'unit_different_facility'
   | 'same_unit'
   | 'no_rate_for_unit_type'
+  | 'lien_transfer_needs_manager'
+  | 'lien_transfer_needs_reason'
 
 export const TRANSFER_PROBLEM_COPY: Record<TransferProblem, string> = {
   lease_not_occupying: 'That lease has already ended — there is nothing to transfer.',
@@ -86,6 +93,60 @@ export const TRANSFER_PROBLEM_COPY: Record<TransferProblem, string> = {
   unit_different_facility: 'A transfer moves a tenant within one facility. That unit is at another site.',
   same_unit: 'That is the unit they are already in.',
   no_rate_for_unit_type: 'That unit type has no published rate, so there is no rate to move the tenant on to.',
+  lien_transfer_needs_manager:
+    'This unit is in the lien pipeline. Moving a tenant out of it needs a facility manager or above.',
+  lien_transfer_needs_reason:
+    'This unit is in the lien pipeline. Record why the tenant is being moved out of it.',
+}
+
+/// D-85's authority level, stated rather than inherited.
+///
+/// `leases:transfer` happens to be granted to manager and above today, so the
+/// rule held by accident — and would stop holding the moment somebody granted
+/// the permission to counter staff, with nothing failing to say so. A lien
+/// sale is being prepared against these goods; who may move them is a rule,
+/// not a side effect of the permission catalog.
+const MANAGER_RANK = 20
+
+function rankAt(actor: Actor, facilityId: string): number {
+  if (actor.kind !== 'staff') return 0
+  return Math.max(
+    0,
+    ...actor.assignments
+      .filter((one) => one.facilityId === null || one.facilityId === facilityId)
+      .map((one) => one.rank),
+  )
+}
+
+/// Why a tenant is being moved out of a unit whose contents are being prepared
+/// for sale (D-85, B-157).
+///
+/// Shaped like the monetary-override vocabularies (`WAIVER_REASONS`,
+/// `RETURN_REASONS`) and used the same way: a fixed code so the audit log
+/// stays filterable, with free text alongside it rather than instead of it.
+/// The vocabulary is transfer-specific because the generic one cannot answer
+/// the question this record exists for — "the notice named unit A and the
+/// goods are now in unit B, why" — and `management_approval` against a lien
+/// file says only that somebody senior agreed, which was never in doubt.
+export const LIEN_TRANSFER_REASONS = [
+  { value: 'downsize_to_affordable', label: 'Downsizing to a unit they can afford' },
+  { value: 'payment_plan_agreed', label: 'Payment plan agreed' },
+  { value: 'facility_need', label: 'Facility needs the unit (consolidation, works)' },
+  { value: 'unit_uninhabitable', label: 'Unit is damaged or unusable' },
+  { value: 'billing_error', label: 'Billing error — they should not be in the pipeline' },
+  { value: 'other', label: 'Other (explain in the note)' },
+] as const
+
+export type LienTransferReason = (typeof LIEN_TRANSFER_REASONS)[number]['value']
+
+export function isLienTransferReason(value: string): value is LienTransferReason {
+  return LIEN_TRANSFER_REASONS.some((reason) => reason.value === value)
+}
+
+/// The status D-85 is about. A lien notice naming this unit has been served
+/// and the goods in it are being prepared for sale.
+export function inLienPipeline(status: string): boolean {
+  return status === 'pending_auction'
 }
 
 /// The unit this tenant has asked, from the portal, to transfer into.
@@ -304,6 +365,7 @@ export async function previewTransferFor(
       totalDueTodayCents: netCents + transferFeeCents,
       dayRange: describeDayRange(transferDate, period.end),
       prorates,
+      inLienPipeline: inLienPipeline(lease.status),
     },
   }
 }
@@ -312,6 +374,11 @@ export type CompleteTransferInput = {
   leaseId: string
   toUnitId: string
   transferDate: Date
+  /// Required when, and only when, the lease is in the lien pipeline (D-85).
+  /// An ordinary unit swap is a service request and stays reason-free — the
+  /// audit catalog says so on `lease.transferred` itself.
+  reasonCode?: string
+  reasonNote?: string
 }
 
 export type CompleteTransferResult =
@@ -336,6 +403,24 @@ export async function completeTransfer(
   const previewed = await previewTransfer(actor, input.leaseId, input.toUnitId, input.transferDate)
   if (!previewed.ok) return previewed
   const preview = previewed.preview
+
+  // ── D-85's staff side (B-157) ────────────────────────────────────────────
+  //
+  // Checked here rather than in the preview: staff are meant to be able to
+  // price the move before deciding — D-85 chose to ALLOW this transfer, on
+  // conditions — so the refusal belongs at the commit, not at the quote.
+  //
+  // Both conditions are refused before the transaction opens, so a lien-
+  // pipeline transfer with neither cannot half-commit.
+  const lienTransfer = inLienPipeline(lease.status)
+  if (lienTransfer) {
+    if (rankAt(actor, lease.facilityId) < MANAGER_RANK) {
+      return { ok: false, problem: 'lien_transfer_needs_manager' }
+    }
+    if (!isLienTransferReason((input.reasonCode ?? '').trim())) {
+      return { ok: false, problem: 'lien_transfer_needs_reason' }
+    }
+  }
 
   const localToday = businessDateFor(input.transferDate, lease.facility.timezone)
   const fromUnitId = lease.unitId
@@ -641,9 +726,13 @@ export async function completeTransfer(
       {
         actor: toAuditActor(actor),
         facilityId: lease.facilityId,
-        action: 'lease.transferred',
+        // B-157 / D-85. A move out of the lien pipeline is its own action, and
+        // `recordAudit` refuses to write it without a reason code — so the
+        // record a lien file needs cannot be omitted by a caller that forgot.
+        action: lienTransfer ? 'lease.transferred_in_lien_pipeline' : 'lease.transferred',
         entityType: 'Lease',
         entityId: lease.id,
+        reasonCode: lienTransfer ? (input.reasonCode ?? '').trim() : undefined,
         context: {
           newLeaseId: created.id,
           fromUnitNumber: preview.fromUnitNumber,
@@ -657,6 +746,16 @@ export async function completeTransfer(
           carriedHoldTypes: carried.map((hold) => hold.type),
           carriedArrearsCents,
           carriedInvoiceNumbers: outstanding.map((invoice) => invoice.number),
+          // The unit the served notice named, recorded on the transfer itself
+          // so "the notice says A, the goods are in B" reconciles from one row
+          // rather than from a join somebody has to think to make.
+          ...(lienTransfer
+            ? {
+                lienPipelineNoticeUnitNumber: preview.fromUnitNumber,
+                approvedByRank: rankAt(actor, lease.facilityId),
+                reasonNote: input.reasonNote?.trim() || null,
+              }
+            : {}),
         },
       },
       tx,

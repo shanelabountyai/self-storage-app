@@ -159,6 +159,22 @@ export const AUDIT_ACTIONS = [
     label: "Tenant transferred between units",
     requiresReason: false,
   },
+  /// B-157 / D-85. The same act, but out of a unit whose contents are being
+  /// prepared for sale — which is NOT an ordinary service request. A served
+  /// lien notice names a unit, and moving the goods after service is the fact
+  /// somebody's attorney asks about, so the reason is what reconciles the
+  /// notice against the move.
+  ///
+  /// Its own action rather than a reason code on `lease.transferred`, for two
+  /// reasons: `requiresReason` is enforced by `recordAudit` itself, so the
+  /// entry cannot be written without one; and a lien-pipeline transfer stays
+  /// independently filterable instead of being one row among every routine
+  /// unit swap.
+  {
+    action: "lease.transferred_in_lien_pipeline",
+    label: "Tenant transferred out of a unit in the lien pipeline",
+    requiresReason: true,
+  },
   { action: "unit.created", label: "Unit created", requiresReason: false },
   { action: "unit.updated", label: "Unit updated", requiresReason: false },
   {

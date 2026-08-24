@@ -19,10 +19,21 @@ export async function completeTransferAction(_prev: FormState, formData: FormDat
     // A UTC calendar date, matching how the lease's own dates are stored —
     // a transfer happens on a day, not at an instant.
     transferDate: new Date(`${String(formData.get('transferDate') ?? '')}T00:00:00.000Z`),
+    // Only read when the lease is in the lien pipeline (B-157/D-85); an
+    // ordinary transfer never renders these and stays reason-free.
+    reasonCode: String(formData.get('reasonCode') ?? ''),
+    reasonNote: String(formData.get('reasonNote') ?? ''),
   })
 
   if (!result.ok) {
-    return fieldError({ toUnitId: TRANSFER_PROBLEM_COPY[result.problem as TransferProblem] })
+    // The lien-pipeline refusals are about the reason field, not the unit —
+    // pointing them at `toUnitId` would put the error message above a control
+    // that is already correct.
+    const field =
+      result.problem === 'lien_transfer_needs_reason' || result.problem === 'lien_transfer_needs_manager'
+        ? 'reasonCode'
+        : 'toUnitId'
+    return fieldError({ [field]: TRANSFER_PROBLEM_COPY[result.problem as TransferProblem] })
   }
 
   revalidatePath(`/admin/tenants/${tenantId}`)

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { prisma } from '../packages/db'
 import { completeTransfer, previewTransfer, transferTargets } from '../apps/web/lib/admin/transfer'
+import { auctionCase, openAuctionCase } from '../apps/web/lib/auctions/service'
 import { processCommsEvent } from '../apps/web/lib/comms/service'
 import * as provider from '../apps/web/lib/comms/provider'
 import type { Actor } from '../apps/web/lib/rbac/actor'
@@ -155,6 +156,8 @@ describeDb('unit transfer (US-14)', () => {
     await prisma.leaseRateChange.deleteMany({ where: { lease: { facilityId } } })
     await prisma.leaseHold.deleteMany({ where: { lease: { facilityId } } })
     await prisma.invoice.deleteMany({ where: { facilityId } })
+    // B-157's cases RESTRICT-reference the lease.
+    await prisma.auctionCase.deleteMany({ where: { facilityId } })
     // A transferred lease REFERENCES the one it came from, so the ancestors
     // cannot go first (B-138's `onDelete: Restrict`).
     await prisma.lease.deleteMany({ where: { facilityId, transferredFromLeaseId: { not: null } } })
@@ -176,11 +179,14 @@ describeDb('unit transfer (US-14)', () => {
     await prisma.leaseRateChange.deleteMany({ where: { lease: { facilityId } } })
     await prisma.leaseHold.deleteMany({ where: { lease: { facilityId } } })
     await prisma.invoice.deleteMany({ where: { facilityId } })
+    // B-157's cases RESTRICT-reference the lease.
+    await prisma.auctionCase.deleteMany({ where: { facilityId } })
     // A transferred lease REFERENCES the one it came from, so the ancestors
     // cannot go first (B-138's `onDelete: Restrict`).
     await prisma.lease.deleteMany({ where: { facilityId, transferredFromLeaseId: { not: null } } })
     await prisma.lease.deleteMany({ where: { facilityId } })
     await prisma.unit.deleteMany({ where: { facilityId } })
+    await prisma.delinquencyTimeline.deleteMany({ where: { facilityId } })
     await prisma.unitTypeRate.deleteMany({ where: { facilityId } })
     await prisma.unitType.deleteMany({ where: { facilityId } })
     await prisma.tenant.updateMany({ where: { id: tenantId }, data: { activeDutyMilitary: false } })
@@ -765,6 +771,261 @@ describeDb('unit transfer (US-14)', () => {
       ).toBe(0)
       expect((await prisma.lease.findUniqueOrThrow({ where: { id: result.newLeaseId } })).status).toBe(
         'active',
+      )
+    })
+  })
+
+  // B-157 / D-85. Staff MAY move a tenant out of a unit whose contents are
+  // being prepared for sale — refusing costs the operator the tenant and the
+  // balance — but only with manager-and-above authority, a recorded reason,
+  // and a lien clock that does not reset.
+  describe('the lien pipeline (B-157, D-85)', () => {
+    let timelineId = ''
+    let invoiceCounter = 0
+
+    /// An actor holding `leases:transfer` at a rank BELOW manager. The
+    /// permission alone used to be the whole gate, so this is the case that
+    /// proves the authority rule is stated rather than inherited: grant the
+    /// permission to counter staff and nothing else changes.
+    function permittedCounter(): Actor {
+      return {
+        kind: 'staff',
+        staffUserId: managerId,
+        assignments: [
+          {
+            facilityId,
+            roleKey: 'counter',
+            rank: 10,
+            permissions: new Set<PermissionKey>(PERMISSIONS as never),
+            limits: { maxFeeWaiverCents: null, maxRefundCents: null, maxCreditCents: null },
+          },
+        ],
+      }
+    }
+
+    async function timeline(): Promise<string> {
+      if (timelineId) return timelineId
+      const row = await prisma.delinquencyTimeline.create({
+        data: {
+          facilityId,
+          label: `Lien ${suffix}`,
+          version: 1,
+          active: true,
+          steps: [{ dayOffset: 30, label: 'Lien notice', requiredProofFields: [] }],
+        },
+      })
+      timelineId = row.id
+      return timelineId
+    }
+
+    /// A tenant in the pipeline: two months unpaid, invoiced, on a
+    /// `pending_auction` lease with a live auction case against it.
+    async function inPipeline(toTypeId = largeTypeId) {
+      const from = await makeUnit(smallTypeId)
+      const to = await makeUnit(toTypeId)
+      const lease = await makeLease(from.id)
+      await prisma.lease.update({
+        where: { id: lease.id },
+        data: { status: 'pending_auction', delinquencyTimelineId: await timeline() },
+      })
+
+      for (const due of [d('2026-06-01'), d('2026-07-01')]) {
+        invoiceCounter += 1
+        const invoice = await prisma.invoice.create({
+          data: {
+            facilityId,
+            leaseId: lease.id,
+            number: `LN${suffix.slice(0, 4)}${String(invoiceCounter).padStart(4, '0')}`,
+            kind: 'rent',
+            status: 'open',
+            issueDate: due,
+            dueDate: due,
+            periodStart: due,
+            periodEnd: due,
+            subtotalCents: 10_000,
+            totalCents: 10_000,
+            amountPaidCents: 0,
+          },
+        })
+        await prisma.ledgerEntry.create({
+          data: {
+            facilityId,
+            leaseId: lease.id,
+            invoiceId: invoice.id,
+            type: 'charge',
+            amountCents: 10_000,
+            description: `Invoice ${invoice.number}`,
+            occurredAt: due,
+          },
+        })
+      }
+
+      const opened = await openAuctionCase({ leaseId: lease.id, facilityId })
+      return { lease, to, caseId: opened!.id }
+    }
+
+    it('refuses staff below manager, even holding leases:transfer', async () => {
+      const { lease, to } = await inPipeline()
+      const result = await completeTransfer(permittedCounter(), {
+        leaseId: lease.id,
+        toUnitId: to.id,
+        transferDate: d('2026-07-15'),
+        reasonCode: 'downsize_to_affordable',
+      })
+      expect(result).toMatchObject({ ok: false, problem: 'lien_transfer_needs_manager' })
+      // Refused before anything committed — the lease is untouched.
+      expect((await prisma.lease.findUniqueOrThrow({ where: { id: lease.id } })).status).toBe(
+        'pending_auction',
+      )
+    })
+
+    it('refuses a manager who records no reason, and one who invents a code', async () => {
+      const { lease, to } = await inPipeline()
+      const base = { leaseId: lease.id, toUnitId: to.id, transferDate: d('2026-07-15') }
+
+      expect(await completeTransfer(manager(), base)).toMatchObject({
+        ok: false,
+        problem: 'lien_transfer_needs_reason',
+      })
+      // Free text is not a code. The audit log stays filterable only if the
+      // vocabulary is closed.
+      expect(await completeTransfer(manager(), { ...base, reasonCode: 'he asked nicely' })).toMatchObject(
+        { ok: false, problem: 'lien_transfer_needs_reason' },
+      )
+      expect((await prisma.lease.findUniqueOrThrow({ where: { id: lease.id } })).status).toBe(
+        'pending_auction',
+      )
+    })
+
+    it('allows a manager with a reason, and records it under its own audit action', async () => {
+      const { lease, to } = await inPipeline()
+      const result = await completeTransfer(manager(), {
+        leaseId: lease.id,
+        toUnitId: to.id,
+        transferDate: d('2026-07-15'),
+        reasonCode: 'downsize_to_affordable',
+        reasonNote: 'Moving to a 5x5 they can afford.',
+      })
+      expect(result.ok).toBe(true)
+
+      // Its own action, not `lease.transferred` — a lien-pipeline move stays
+      // independently filterable rather than being one row among every swap.
+      const entry = await prisma.auditLog.findFirstOrThrow({
+        where: { action: 'lease.transferred_in_lien_pipeline', entityId: lease.id },
+        orderBy: { occurredAt: 'desc' },
+      })
+      expect(entry.reasonCode).toBe('downsize_to_affordable')
+      expect(entry.after).toMatchObject({
+        // The unit the served notice named, on the transfer row itself.
+        lienPipelineNoticeUnitNumber: expect.any(String),
+        reasonNote: 'Moving to a 5x5 they can afford.',
+      })
+      // And nothing wrote the ordinary action for the same move.
+      expect(
+        await prisma.auditLog.count({ where: { action: 'lease.transferred', entityId: lease.id } }),
+      ).toBe(0)
+    })
+
+    it('an ordinary transfer still needs no reason, and keeps the plain action', async () => {
+      const from = await makeUnit(smallTypeId)
+      const to = await makeUnit(largeTypeId)
+      const lease = await makeLease(from.id)
+
+      const result = await completeTransfer(manager(), {
+        leaseId: lease.id,
+        toUnitId: to.id,
+        transferDate: d('2026-08-16'),
+      })
+      expect(result.ok).toBe(true)
+      expect(
+        await prisma.auditLog.count({ where: { action: 'lease.transferred', entityId: lease.id } }),
+      ).toBe(1)
+    })
+
+    // The guarantee D-85 actually chose, and the one the row asks for by name.
+    it('the lien clock reads the same value either side of the move', async () => {
+      // A same-rate target, so the transfer itself moves no money: the credit
+      // for the old unit and the charge for the new one are the same days at
+      // the same rate. That isolates the property under test — the existing
+      // claim survives the move — from the arithmetic of the move itself.
+      const { lease, to, caseId } = await inPipeline(smallTypeId)
+      const before = await auctionCase(manager(), caseId)
+
+      const result = await completeTransfer(manager(), {
+        leaseId: lease.id,
+        toUnitId: to.id,
+        transferDate: d('2026-07-15'),
+        reasonCode: 'downsize_to_affordable',
+      })
+      if (!result.ok) throw new Error('unreachable')
+
+      const after = await auctionCase(manager(), caseId)
+
+      // Before B-157 this read 0: D-86 re-points the unpaid invoices at the
+      // new lease, so the old lease's ledger nets to zero and the case — still
+      // pinned to it — reported `balance_settled`, "there is no lien to
+      // enforce", against a tenant who owed every cent of it.
+      expect(after?.outstandingCents).toBe(before?.outstandingCents)
+      expect(after?.outstandingCents).toBe(20_000)
+      expect(after?.readiness.blockers.map((one) => one.kind)).not.toContain('balance_settled')
+
+      // The case stays pinned to the lease and the unit the notice named. That
+      // anchoring is the evidentiary point — the reason code is what
+      // reconciles it against the move, not a re-pointed row.
+      expect(after?.leaseId).toBe(lease.id)
+      expect(after?.unitNumber).toBe(before?.unitNumber)
+    })
+
+    it('carries the claim forward when the move itself charges, never resetting it', async () => {
+      // The realistic case: the tenant moves to a differently-priced unit, so
+      // the transfer posts its own proration. The claim must GROW by that
+      // charge — it must never drop below what was already owed, which is the
+      // failure this row exists to close.
+      const { lease, to, caseId } = await inPipeline(largeTypeId)
+      const before = (await auctionCase(manager(), caseId))?.outstandingCents ?? 0
+
+      const result = await completeTransfer(manager(), {
+        leaseId: lease.id,
+        toUnitId: to.id,
+        transferDate: d('2026-07-15'),
+        reasonCode: 'downsize_to_affordable',
+      })
+      if (!result.ok) throw new Error('unreachable')
+
+      const after = await auctionCase(manager(), caseId)
+      expect(after?.outstandingCents).toBeGreaterThanOrEqual(before)
+      expect(after?.readiness.blockers.map((one) => one.kind)).not.toContain('balance_settled')
+    })
+
+    it('sees a blocking hold placed on the lease the tenant now holds', async () => {
+      const { lease, to, caseId } = await inPipeline()
+      const result = await completeTransfer(manager(), {
+        leaseId: lease.id,
+        toUnitId: to.id,
+        transferDate: d('2026-07-15'),
+        reasonCode: 'downsize_to_affordable',
+      })
+      if (!result.ok) throw new Error('unreachable')
+
+      expect((await auctionCase(manager(), caseId))?.readiness.blockers.map((one) => one.kind)).not.toContain(
+        'on_hold',
+      )
+
+      // Declared AFTER the move, so it lands on the new lease only. A case
+      // reading just its pinned lease would never see it — and this is the
+      // blocker where proceeding is a federal matter, not a state lien-law
+      // defect.
+      await prisma.leaseHold.create({
+        data: {
+          leaseId: result.newLeaseId,
+          type: 'military_scra',
+          reason: 'Declared after the transfer',
+          effectiveFrom: d('2026-07-16'),
+        },
+      })
+
+      expect((await auctionCase(manager(), caseId))?.readiness.blockers.map((one) => one.kind)).toContain(
+        'on_hold',
       )
     })
   })
