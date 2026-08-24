@@ -5928,7 +5928,7 @@ Four changes, and the first is the one that matters most:
 
 ## B-169 — The backstop that could not reach the units it was built for
 
-`PENDING`
+`7631936`
 
 **What it built.** B-151's release backstop lived inside `runDelinquencyTimeline`, **after** the guard that returns `skippedNoTimeline` for a facility with no configured timeline — so the sites most likely to have locks stuck on ended leases were the only ones it could never reach. It is now its own nightly job step, `delinquency.stuck-overlocks`, unconditional on timeline configuration. The removal task's label stopped asserting a payment, the reason moved into a new `Task.detail`, the reconciliation list gained a `stuck_no_lease` state, and the units board says a lock-with-no-tenant is not rentable.
 
