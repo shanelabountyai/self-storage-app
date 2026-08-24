@@ -5844,7 +5844,7 @@ Four changes, and the first is the one that matters most:
 
 ## B-166 — A held rate increase has a way back: Re-notice
 
-`PENDING`
+`64defdf`
 
 **What it built.** D-88 blocks an increase whose notice provably did not arrive, and B-152 built the hold with **Cancel as its only control** — the row's own copy told the operator to "cancel this and schedule it again", which meant re-typing a lease id into a free-text form and re-deriving the delta by hand, per row, for a failure mode whose usual cause holds forty rows at once. `renoticeRateIncrease` clones a held increase at the same figures with a recomputed notice and effective date, cancels the held row, and links the pair through a new `TenantRateIncrease.renoticedFromId`. `renoticeHeldIncreases` does every held row at one facility in one press. `/admin/rate-increases` gains a per-row **Re-notice** beside Cancel, an **On hold for an undelivered notice (n)** panel with the batch, a line marking a row as a re-notice, and corrected help copy. `rate_increase_notice_undelivered` can no longer be closed by typing.
 
