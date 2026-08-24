@@ -5794,7 +5794,7 @@ Four changes, and the first is the one that matters most:
 
 ## B-164 — The lien-pipeline hole B-137 closed on one screen and left open on the next
 
-`PENDING`
+`d1d2b0a`
 
 **What it built.** `tenantMoveOutLeases`, `previewTenantMoveOut` and `requestMoveOut` all scoped on `OCCUPYING_LEASE_STATUSES`, which includes `pending_auction` — so a tenant whose goods are being prepared for sale could schedule their own move-out, unattended, by clicking twice. B-137 narrowed exactly this on the transfer screen and the move-out screen one file over was never touched. Same defect class, same fix, different file.
 
