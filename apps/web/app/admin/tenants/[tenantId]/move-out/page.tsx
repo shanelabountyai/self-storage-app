@@ -5,6 +5,9 @@ import { formatCents } from "@/lib/format";
 import { AdminForm, Field } from "@/components/admin/form";
 import { REASON_CODES } from "@storage/core/audit";
 import { completeMoveOutAction } from "./actions";
+import { ChargeFeeForm } from "@/components/admin/charge-fee-form";
+import { chargeableFees } from "@/lib/billing/charges";
+import { can } from "@/lib/rbac/authorize";
 
 export const metadata = { title: "Move out" };
 
@@ -180,6 +183,32 @@ export default async function MoveOutPage({
           </dd>
         </div>
       </dl>
+
+      {/* B-167. The charge control ON the move-out screen, which is where a
+          cleaning or damage fee is actually discovered — somebody has just
+          walked the unit. Above the Complete button rather than below it: post
+          the fee first and the settlement below re-reads with it in, which is
+          the whole reason it is on this screen and not only on the profile.
+          Charging after completing still works; it just means the tenant gets a
+          second statement. */}
+      {can(actor, "fees:charge", preview.facilityId) && (
+        <details className="border-input rounded-lg border p-4">
+          <summary className="cursor-pointer text-sm font-medium">
+            Charge a fee for this unit
+          </summary>
+          <p className="text-muted-foreground mt-2 mb-3 max-w-prose text-xs text-pretty">
+            Cleaning, damage, a cut lock. Posts as its own invoice and lands in
+            the settlement below — reload the page after charging to see it in
+            the figures.
+          </p>
+          <ChargeFeeForm
+            tenantId={tenantId}
+            leaseId={leaseId}
+            fees={await chargeableFees(preview.facilityId)}
+            unitLabel={`unit ${preview.unitNumber}`}
+          />
+        </details>
+      )}
 
       {settlement.needsManagerOverride && (
         <p

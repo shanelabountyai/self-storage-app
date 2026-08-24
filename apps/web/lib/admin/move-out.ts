@@ -28,6 +28,9 @@ import type { Recapture } from "@storage/core/promotions";
 export type MoveOutPreview = {
   leaseId: string;
   unitNumber: string;
+  /// B-167. The screen needs it to read the facility's fee schedule and to ask
+  /// whether this actor may charge here — a facility NAME cannot answer either.
+  facilityId: string;
   facilityName: string;
   tenantName: string;
   balanceCents: number;
@@ -133,6 +136,7 @@ export async function previewMoveOut(
   return {
     leaseId: lease.id,
     unitNumber: lease.unit.number,
+    facilityId: lease.facilityId,
     facilityName: lease.facility.name,
     tenantName: `${lease.tenant.firstName} ${lease.tenant.lastName}`,
     balanceCents,

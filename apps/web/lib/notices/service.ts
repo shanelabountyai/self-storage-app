@@ -24,6 +24,7 @@ import { certifiedMailConfig, sendCertifiedLetter } from '@/lib/notices/certifie
 import { assertFacilityAccess, can, ForbiddenError, requirePermission } from '@/lib/rbac/authorize'
 import { toAuditActor } from '@/lib/rbac/audit-actor'
 import type { Actor } from '@/lib/rbac/actor'
+import { postIncurredNoticeCost } from '@/lib/billing/charges'
 import { storeGeneratedDocument } from '@/lib/documents/store'
 import { renderDocument } from '@/lib/documents/render'
 import { formatCents } from '@/lib/format'
@@ -496,6 +497,33 @@ export async function generateNotice(
       tx,
     )
 
+    // B-167. The lien-processing cost, posted as it is incurred.
+    //
+    // On the LIEN notice only, and never on a correction: a correction is the
+    // same notice said properly, not a second lien process, and charging the
+    // tenant for our own typo is indefensible. `pre_lien` is excluded because
+    // one lien process should be billed once, at the stage that names it.
+    //
+    // **After the claim above is snapshotted, deliberately.** The notice states
+    // the balance as of generation; a notice that quoted a fee it was itself
+    // creating would be arithmetically self-referential and would read, to a
+    // tenant, as the claim being inflated by the act of making it. The cost
+    // joins the running balance from here, so it is in the cure quote and in
+    // the next notice's claim — which is `claimForLease`'s doing, not a second
+    // calculation: it sums open invoices plus uninvoiced ledger charges, and
+    // this is now one of them.
+    if (type === 'lien' && !options.correctsNoticeId) {
+      await postIncurredNoticeCost(
+        {
+          facilityId: context.facilityId,
+          leaseId,
+          feeType: 'lien',
+          description: `${noticeTypeLabel(type)} prepared ${new Date().toISOString().slice(0, 10)}`,
+        },
+        tx,
+      )
+    }
+
     return { id: notice.id, documentId, documentHash: rendered.contentHash }
   })
 
@@ -525,8 +553,13 @@ export async function recordNoticeDelivery(
     select: {
       id: true,
       facilityId: true,
+      leaseId: true,
+      type: true,
       status: true,
       supersededAt: true,
+      // B-167. Whether this notice has ALREADY been recorded as served, so a
+      // second recording cannot post a second postage cost.
+      deliveredAt: true,
       lease: { select: { tenantId: true } },
     },
   })
@@ -573,6 +606,33 @@ export async function recordNoticeDelivery(
       },
       tx,
     )
+
+    // B-167. The postage, posted as it is incurred.
+    //
+    // Here rather than at either call site, which is the whole point: the
+    // hand-recorded route and B-083's `mailNoticeCertified` both land in this
+    // function, so one hook covers both and no third route can be added that
+    // silently eats the cost. Guarded on `deliveredAt` having been null, so
+    // re-recording a delivery corrects the proof without charging twice.
+    //
+    // Texas Property Code Ch. 59 lets an operator recover the cost of the
+    // statutory notice, and until now this one was never billed — the operator
+    // ate the postage and the tenant's cure quote was short by it (D-10: Texas
+    // default, per-state configurable, draft-only and not legal advice).
+    if (input.method === 'certified_mail' && notice.deliveredAt === null) {
+      await postIncurredNoticeCost(
+        {
+          facilityId: notice.facilityId,
+          leaseId: notice.leaseId,
+          feeType: 'certified_mail',
+          description: `${noticeTypeLabel(notice.type)} posted ${input.deliveredAt.toISOString().slice(0, 10)}${
+            input.proof.tracking_number ? `, tracking ${input.proof.tracking_number}` : ''
+          }`,
+          on: input.deliveredAt,
+        },
+        tx,
+      )
+    }
   })
 
   return { ok: true }

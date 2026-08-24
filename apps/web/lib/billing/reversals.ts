@@ -1,12 +1,11 @@
 import { prisma } from "@storage/db";
 import { recordAudit } from "@storage/core/audit";
 import { emitEvent } from "@storage/core/events";
-import { formatInvoiceNumber } from "@storage/core/billing";
 import { can, ForbiddenError } from "@/lib/rbac/authorize";
 import { toAuditActor } from "@/lib/rbac/audit-actor";
 import type { Actor } from "@/lib/rbac/actor";
 import { applyPayment, recomputeInvoices } from "@/lib/billing/allocation";
-import { nextInvoiceNumber } from "@/lib/billing/numbering";
+import { raiseFeeInvoice, scheduledFeeCents } from "@/lib/billing/fee-invoice";
 import { cancelOpenTask, createTask } from "@/lib/admin/tasks";
 import { leaseChainIds } from "@/lib/billing/transfer-chain";
 
@@ -477,11 +476,11 @@ export async function reinstatePayment(
 
 /// US-21's NSF fee, raised as its own `kind: 'fee'` invoice.
 ///
-/// The same shape `raiseFeeInvoice` uses for late fees, and deliberately so:
-/// a fee invoice is what `waivableFees` lists and what `waiveFee` voids, so
-/// "waivable like any other fee" comes for free rather than needing a second
-/// waiver path. Posting it only to the ledger would also make it invisible to
-/// autopay, which collects invoices.
+/// Through `raiseFeeInvoice` since B-167 — the same shape late fees and the
+/// ad-hoc charge use, which is what makes "waivable like any other fee" come
+/// for free: `waivableFees` lists fee invoices and `waiveFeeInvoice` voids
+/// them. Posting it only to the ledger would also make it invisible to autopay,
+/// which collects invoices.
 ///
 /// Returns null when the facility has configured no NSF amount — which is the
 /// shipped state, since `FeeType.nsf` has never had a reader.
@@ -496,68 +495,28 @@ async function assessNsfFee(
   });
   if (!posted) return null;
 
-  // Effective-dated like every other price here: the fee in force TODAY, since
-  // the return is happening today whatever date the payment carried.
-  const schedule = await tx.feeSchedule.findFirst({
-    where: {
-      facilityId: payment.facilityId,
-      feeType: "nsf",
-      effectiveFrom: { lte: new Date() },
-    },
-    orderBy: { effectiveFrom: "desc" },
-  });
-  if (!schedule || schedule.amountCents <= 0) return null;
-
-  const today = new Date();
-  const number = formatInvoiceNumber(
-    await nextInvoiceNumber(tx, payment.facilityId),
+  const amountCents = await scheduledFeeCents(
+    payment.facilityId,
+    "nsf",
+    new Date(),
+    tx,
   );
-  const invoice = await tx.invoice.create({
-    data: {
-      facilityId: payment.facilityId,
-      leaseId: posted.leaseId,
-      number,
-      kind: "fee",
-      status: "open",
-      issueDate: today,
-      // Due immediately, like a late fee: the event it charges for has already
-      // happened, and a grace period on an NSF fee is a second schedule nobody
-      // configured.
-      dueDate: today,
-      periodStart: today,
-      periodEnd: new Date(today.getTime() + 86_400_000),
-      subtotalCents: schedule.amountCents,
-      // Not a taxable service in Texas the way rent is (D-10), same as the
-      // late fee it sits beside.
-      taxCents: 0,
-      totalCents: schedule.amountCents,
-      lineItems: {
-        create: [
-          {
-            type: "fee" as const,
-            description: `Returned payment fee — ${reasonCode}`,
-            quantity: 1,
-            unitAmountCents: schedule.amountCents,
-            amountCents: schedule.amountCents,
-          },
-        ],
+  if (amountCents === null) return null;
+
+  const raised = await raiseFeeInvoice(tx, {
+    facilityId: payment.facilityId,
+    leaseId: posted.leaseId,
+    on: new Date(),
+    ledgerDescription: "Returned payment fee",
+    lines: [
+      {
+        description: `Returned payment fee — ${reasonCode}`,
+        amountCents,
       },
-    },
+    ],
   });
 
-  await tx.ledgerEntry.create({
-    data: {
-      facilityId: payment.facilityId,
-      leaseId: posted.leaseId,
-      type: "charge",
-      amountCents: schedule.amountCents,
-      description: `Returned payment fee — invoice ${number}`,
-      occurredAt: today,
-      invoiceId: invoice.id,
-    },
-  });
-
-  return { number, amountCents: schedule.amountCents, invoiceId: invoice.id };
+  return { number: raised.number, amountCents, invoiceId: raised.id };
 }
 
 export type ReturnablePayment = {

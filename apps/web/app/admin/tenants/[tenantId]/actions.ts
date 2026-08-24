@@ -14,6 +14,7 @@ import {
 } from "@/lib/admin/tenants";
 import { fieldError, success, type FormState } from "@/lib/admin/form-state";
 import { waiveFeeInvoice } from "@/lib/billing/late-fees";
+import { postFeeCharge } from "@/lib/billing/charges";
 import { formatCents } from "@/lib/format";
 import { liftHold, placeHold } from "@/lib/admin/holds";
 import { refundPayment } from "@/lib/billing/refunds";
@@ -225,6 +226,81 @@ export async function waiveFeeAction(
   revalidateProfile(tenantId);
   return success(
     `${formatCents(result.amountCents)} fee waived. The credit is on the ledger.`,
+  );
+}
+
+/// PRD 02 §4.5 US-21/US-23 (B-167). Posting a fee.
+///
+/// Every gate is `postFeeCharge`'s — the `fees:charge` permission, and the
+/// fee-waiver limit measured against however far the typed amount departs from
+/// the facility's own schedule. This only maps the refusals onto the field the
+/// reader has to change, which for an authority refusal is the AMOUNT: putting
+/// it on the form as a whole would leave a manager staring at a message with no
+/// control attached to it.
+///
+/// Shared with the move-out screen through `ChargeFeeForm`, so both revalidate.
+export async function chargeFeeAction(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const actor = await requireStaffActor();
+  const tenantId = String(formData.get("tenantId") ?? "");
+  const leaseId = String(formData.get("leaseId") ?? "");
+
+  // A ceiling as well as a floor, and the ceiling is the point: a fat-fingered
+  // "7500" for a $75 cleaning fee is a $7,500 charge on somebody's account, and
+  // the authority ladder below would refuse it — but only after the number had
+  // been believed. $10,000 is above any fee this catalogue describes.
+  const amount = parseScaled(formData.get("amountDollars"), {
+    scale: 100,
+    min: 0.01,
+    max: 10_000,
+    unit: "dollars",
+  });
+  if ("error" in amount) return fieldError({ amountDollars: amount.error });
+
+  const result = await postFeeCharge(actor, {
+    leaseId,
+    feeType: String(formData.get("feeType") ?? ""),
+    amountCents: amount.value,
+    note: String(formData.get("note") ?? ""),
+  });
+
+  if (!result.ok) {
+    switch (result.reason) {
+      case "missing_note":
+        return fieldError({ note: "Say what this fee is for — the tenant reads it." });
+      case "bad_amount":
+        return fieldError({ amountDollars: "Enter an amount above zero, like 75.00." });
+      case "unknown_fee_type":
+        return fieldError({ feeType: "Pick a fee from the facility's schedule." });
+      case "override_forbidden":
+        return fieldError({
+          amountDollars: `That is ${formatCents(result.overrideCents ?? 0)} away from this facility's price for it, and you have no fee-waiver authority. Charge the scheduled amount, or ask a manager.`,
+        });
+      case "over_limit":
+        return fieldError({
+          amountDollars: `That is ${formatCents(result.overrideCents ?? 0)} away from this facility's price for it, more than your ${formatCents(result.limitCents ?? 0)} limit.${result.escalateTo ? ` A ${result.escalateTo} can carry it.` : ""}`,
+        });
+      case "forbidden":
+        return {
+          status: "error",
+          message: "You do not have permission to charge fees at this facility.",
+          fieldErrors: {},
+        };
+      default:
+        return {
+          status: "error",
+          message: "That lease could not be found.",
+          fieldErrors: {},
+        };
+    }
+  }
+
+  revalidateProfile(tenantId);
+  revalidatePath(`/admin/tenants/${tenantId}/move-out`);
+  return success(
+    `${formatCents(result.amountCents)} charged on invoice ${result.number}. It collects with autopay, and it can be waived like any other fee.`,
   );
 }
 

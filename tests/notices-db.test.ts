@@ -10,6 +10,7 @@ import {
 import { saveNoticeTemplate, exampleNoticeTemplate } from '../apps/web/lib/admin/notice-templates'
 import { verifyDocument } from '../apps/web/lib/documents/store'
 import { recordConsent } from '../packages/core/consent'
+import { claimForLease } from '../apps/web/lib/notices/service'
 import type { Actor } from '../apps/web/lib/rbac/actor'
 import type { PermissionKey } from '@storage/db/rbac-catalog'
 
@@ -390,6 +391,143 @@ describeDb('lien notices', () => {
       expect(notice.status).toBe('delivered')
       expect(notice.deliveryMethod).toBe('certified_mail')
       expect(notice.deliveryProof).toEqual({ tracking_number: '9400 1111 2222' })
+    })
+
+    // B-167. The postage and the lien-processing cost, posted as they are
+    // incurred. Until this item the operator ate both, and the tenant's cure
+    // quote was short by them — Texas Property Code Ch. 59 lets an operator
+    // recover the cost of the statutory notice (D-10).
+    describe('the costs a notice incurs (B-167)', () => {
+      beforeEach(async () => {
+        // The facility outlives every test in this file, so a price set by one
+        // of these tests would otherwise decide what the next one charges —
+        // including the one asserting that an unpriced fee charges nothing.
+        await prisma.feeSchedule.deleteMany({ where: { facilityId } })
+      })
+
+      async function priceFee(feeType: 'certified_mail' | 'lien', amountCents: number) {
+        await prisma.feeSchedule.create({
+          data: {
+            facilityId,
+            feeType,
+            amountCents,
+            effectiveFrom: new Date('2020-01-01T00:00:00Z'),
+          },
+        })
+      }
+
+      /// The claim total, or a thrown error if the ledger stopped reconciling —
+      /// which is itself worth failing on, since a fee posted to the invoice
+      /// but not the ledger (or the reverse) shows up exactly here.
+      async function claimTotal(): Promise<number> {
+        const claim = await claimForLease(leaseId)
+        if (!claim.ok) throw new Error(claim.problem.message)
+        return claim.claim.totalCents
+      }
+
+      it('posts the certified-mail cost when delivery is recorded, and puts it in the claim', async () => {
+        await priceFee('certified_mail', 899)
+        await oweOneMonth()
+        const generated = await generateNotice(actor(), leaseId, 'lien')
+        if (!generated.ok) throw new Error('unreachable')
+
+        const before = await claimTotal()
+        await recordNoticeDelivery(actor(), generated.noticeId, {
+          method: 'certified_mail',
+          deliveredAt: new Date('2026-08-01T15:00:00Z'),
+          proof: { tracking_number: '9400 3333' },
+        })
+
+        const fee = await prisma.invoice.findFirstOrThrow({
+          where: { leaseId, kind: 'fee' },
+          include: { lineItems: true },
+        })
+        expect(fee.totalCents).toBe(899)
+        // The tracking number on the line the tenant reads: "what is this
+        // $8.99" has to be answerable from the invoice itself.
+        expect(fee.lineItems[0]?.description).toContain('9400 3333')
+
+        // The whole reason it is posted here: the cure quote is now complete.
+        expect(await claimTotal()).toBe(before + 899)
+      })
+
+      it('does not post it twice when a delivery is re-recorded', async () => {
+        await priceFee('certified_mail', 899)
+        await oweOneMonth()
+        const generated = await generateNotice(actor(), leaseId, 'lien')
+        if (!generated.ok) throw new Error('unreachable')
+
+        const record = () =>
+          recordNoticeDelivery(actor(), generated.noticeId, {
+            method: 'certified_mail',
+            deliveredAt: new Date('2026-08-01T15:00:00Z'),
+            proof: { tracking_number: '9400 4444' },
+          })
+        await record()
+        await record()
+
+        const fees = await prisma.invoice.findMany({ where: { leaseId, kind: 'fee' } })
+        expect(fees).toHaveLength(1)
+      })
+
+      it('posts nothing when the facility has priced the fee at nothing', async () => {
+        await oweOneMonth()
+        const generated = await generateNotice(actor(), leaseId, 'lien')
+        if (!generated.ok) throw new Error('unreachable')
+
+        await recordNoticeDelivery(actor(), generated.noticeId, {
+          method: 'certified_mail',
+          deliveredAt: new Date(),
+          proof: { tracking_number: '9400 5555' },
+        })
+
+        expect(await prisma.invoice.findMany({ where: { leaseId, kind: 'fee' } })).toHaveLength(0)
+      })
+
+      it('charges nothing for a delivery method that costs nothing', async () => {
+        await priceFee('certified_mail', 899)
+        await oweOneMonth()
+        const generated = await generateNotice(actor(), leaseId, 'lien')
+        if (!generated.ok) throw new Error('unreachable')
+
+        await recordNoticeDelivery(actor(), generated.noticeId, {
+          method: 'hand_delivered',
+          deliveredAt: new Date(),
+          proof: { note: 'Handed to the tenant at the counter' },
+        })
+
+        expect(await prisma.invoice.findMany({ where: { leaseId, kind: 'fee' } })).toHaveLength(0)
+      })
+
+      it('posts the lien-processing cost when the lien notice is generated', async () => {
+        await priceFee('lien', 2_500)
+        await oweOneMonth()
+        const generated = await generateNotice(actor(), leaseId, 'lien')
+        if (!generated.ok) throw new Error('unreachable')
+
+        const fee = await prisma.invoice.findFirstOrThrow({ where: { leaseId, kind: 'fee' } })
+        expect(fee.totalCents).toBe(2_500)
+
+        // NOT in the claim this very notice states: the notice quotes the
+        // balance as of generation, and a claim inflated by the act of making
+        // it reads to a tenant exactly as badly as it sounds.
+        const notice = await prisma.notice.findUniqueOrThrow({ where: { id: generated.noticeId } })
+        expect(notice.claimTotalCents).toBe(12_900)
+        // It IS in the running balance from here, which is what the cure quote
+        // and the next notice read.
+        expect(await claimTotal()).toBe(12_900 + 2_500)
+      })
+
+      it('does not charge the tenant for our own correction', async () => {
+        await priceFee('lien', 2_500)
+        await oweOneMonth()
+        const first = await generateNotice(actor(), leaseId, 'lien')
+        if (!first.ok) throw new Error('unreachable')
+        await generateNotice(actor(), leaseId, 'lien', { correctsNoticeId: first.noticeId })
+
+        const fees = await prisma.invoice.findMany({ where: { leaseId, kind: 'fee' } })
+        expect(fees).toHaveLength(1)
+      })
     })
 
     it('refuses certified mail with no tracking number', async () => {

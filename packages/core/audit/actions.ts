@@ -14,6 +14,13 @@ export type AuditActionSpec = {
 
 export const AUDIT_ACTIONS = [
   // Money — every one of these moves or forgives money, so all require a reason.
+  /// B-167. A fee posted by hand onto a tenant's account. `requiresReason` for
+  /// the same reason the waiver does, and arguably more: a waiver forgives
+  /// money and a charge takes it, and "what was this $75 for" is the question
+  /// a disputed move-out statement turns on. The reason IS the note the form
+  /// requires — there is no code list, because what a damage fee is for is a
+  /// sentence, not a category.
+  { action: "fee.charged", label: "Fee charged", requiresReason: true },
   { action: "fee.waived", label: "Fee waived", requiresReason: true },
   {
     action: "credit.issued",

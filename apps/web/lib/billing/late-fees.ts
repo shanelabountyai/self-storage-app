@@ -1,14 +1,13 @@
 import { prisma } from '@storage/db'
-import { emitEvent } from '@storage/core/events'
 import { effectiveByGroup } from '@storage/core/facility-settings'
 import { OCCUPYING_LEASE_STATUSES } from '@storage/core/inventory'
 import { daysPastDue, outstandingCents } from '@storage/core/metrics'
-import { formatInvoiceNumber, lateFeeAmount, stepsDue, type LateFeeStep } from '@storage/core/billing'
+import { lateFeeAmount, stepsDue, type LateFeeStep } from '@storage/core/billing'
 import { recordAudit } from '@storage/core/audit'
 import { effectsByLease } from '@/lib/admin/holds'
 import { allChainIds, leaseChainIds } from '@/lib/billing/transfer-chain'
 import { leasesWithSettlingPayment } from './allocation'
-import { nextInvoiceNumber } from '@/lib/billing/numbering'
+import { raiseFeeInvoice } from '@/lib/billing/fee-invoice'
 import { checkMonetaryAuthority } from '@/lib/rbac/authorize'
 import { toAuditActor } from '@/lib/rbac/audit-actor'
 import type { Actor } from '@/lib/rbac/actor'
@@ -164,7 +163,7 @@ export async function assessLateFees(
       continue
     }
 
-    const created = await raiseFeeInvoice(facilityId, lease.id, businessDate, lines)
+    const created = await raiseLateFeeInvoice(facilityId, lease.id, businessDate, lines)
     if (created === null) {
       result.skipped += 1
       continue
@@ -203,83 +202,36 @@ function chargedSteps(invoices: { kind: string; lineItems: { description: string
 /// One fee invoice per lease per business date, carrying whichever steps came
 /// due that day.
 ///
-/// Its own invoice rather than a line appended to the rent invoice: an invoice
-/// the tenant has already been sent must not change totals after the fact, and
-/// autopay collects invoices — a fee posted only to the ledger would never be
-/// charged automatically. `periodStart` is the day the fee was raised, which
-/// also makes `Invoice`'s existing `(leaseId, periodStart)` constraint the
-/// idempotency guard for free.
-async function raiseFeeInvoice(
+/// The shape lives in `fee-invoice.ts` since B-167 — this is the late-fee
+/// caller of it. **The `(leaseId, periodStart)` unique that used to make this
+/// idempotent is now scoped to `kind: 'rent'`** (B-167), and losing it costs
+/// nothing here: `chargedSteps` above reads back which ladder steps a lease has
+/// already been charged from the fee line descriptions, which is what actually
+/// stops a step being charged twice and always was. The catch below stays for
+/// the invoice NUMBER, whose per-facility unique is untouched.
+async function raiseLateFeeInvoice(
   facilityId: string,
   leaseId: string,
   businessDate: Date,
   lines: { step: LateFeeStep; amountCents: number }[],
 ): Promise<string | null> {
-  const total = lines.reduce((sum, line) => sum + line.amountCents, 0)
-
   try {
-    return await prisma.$transaction(async (tx) => {
-      const number = formatInvoiceNumber(await nextInvoiceNumber(tx, facilityId))
-      const invoice = await tx.invoice.create({
-        data: {
-          facilityId,
-          leaseId,
-          number,
-          kind: 'fee',
-          status: 'open',
-          issueDate: businessDate,
-          // Due the day it is raised: the fee is for lateness that has already
-          // happened, and a grace period on a late fee is a second late fee
-          // schedule nobody configured.
-          dueDate: businessDate,
-          periodStart: businessDate,
-          periodEnd: new Date(businessDate.getTime() + 86_400_000),
-          subtotalCents: total,
-          // Late fees are not a taxable service in Texas the way rent is
-          // (D-10). A state that taxes them configures it where rent's
-          // taxability lives — one flag per line in `buildInvoice`.
-          taxCents: 0,
-          totalCents: total,
-          lineItems: {
-            create: lines.map((line) => ({
-              type: 'fee' as const,
-              description: `Late fee (step ${line.step.step}) — ${line.step.daysPastDue}+ days past due`,
-              quantity: 1,
-              unitAmountCents: line.amountCents,
-              amountCents: line.amountCents,
-            })),
-          },
-        },
-      })
-
-      await tx.ledgerEntry.create({
-        data: {
-          facilityId,
-          leaseId,
-          type: 'charge',
-          amountCents: total,
-          description: `Late fee — invoice ${number}`,
-          occurredAt: businessDate,
-          invoiceId: invoice.id,
-        },
-      })
-
-      await emitEvent(
-        {
-          name: 'invoice.created',
-          entityType: 'Invoice',
-          entityId: invoice.id,
-          facilityId,
-          payload: { leaseId, number, totalCents: total, kind: 'fee' },
-        },
-        tx,
-      )
-
-      return number
-    })
+    const raised = await prisma.$transaction((tx) =>
+      raiseFeeInvoice(tx, {
+        facilityId,
+        leaseId,
+        on: businessDate,
+        ledgerDescription: 'Late fee',
+        lines: lines.map((line) => ({
+          description: `Late fee (step ${line.step.step}) — ${line.step.daysPastDue}+ days past due`,
+          amountCents: line.amountCents,
+        })),
+      }),
+    )
+    return raised.number
   } catch (error) {
-    // Another run raised today's fee invoice first — the unique constraint is
-    // the real guarantee and losing that race is the correct outcome.
+    // Another run took this invoice number first — the unique constraint is the
+    // real guarantee and losing that race is the correct outcome.
     if (isUniqueConstraintError(error)) return null
     throw error
   }

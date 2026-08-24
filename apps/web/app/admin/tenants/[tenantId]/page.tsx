@@ -24,7 +24,9 @@ import {
 } from "./actions";
 import { startTenantImpersonationAction } from "@/app/admin/impersonation/actions";
 import { IMPERSONATION_TTL_MINUTES } from "@/lib/impersonation/service";
-import { hasPermissionAnywhere } from "@/lib/rbac/authorize";
+import { can, hasPermissionAnywhere } from "@/lib/rbac/authorize";
+import { ChargeFeeForm } from "@/components/admin/charge-fee-form";
+import { chargeableFees, chargeableLeases } from "@/lib/billing/charges";
 import { HOLD_TYPES, type HoldEffect } from "@storage/core/holds";
 import { leaseStatusLabel } from "@storage/core/labels";
 import {
@@ -101,6 +103,22 @@ export default async function TenantProfilePage({
   const { tenantId } = await params;
   const actor = await getAdminActor();
   const profile = await tenantProfile(actor, tenantId);
+
+  // B-167. The charge control, one per lease this tenant has — ended leases
+  // included, because the walk that finds the damage happens after they have
+  // gone. The fee schedule is per FACILITY, so a tenant with units at two sites
+  // gets the price each site set.
+  const chargeable = (await chargeableLeases(tenantId)).filter((lease) =>
+    can(actor, "fees:charge", lease.facilityId),
+  );
+  const feeSchedules = new Map(
+    await Promise.all(
+      [...new Set(chargeable.map((lease) => lease.facilityId))].map(
+        async (facilityId) =>
+          [facilityId, await chargeableFees(facilityId)] as const,
+      ),
+    ),
+  );
   // PRD 10 §5.7 (B-101). Both sides — this tenant may be the referrer on one
   // and the referee on another.
   const referrals = await referralsForStaff(tenantId);
@@ -787,6 +805,49 @@ export default async function TenantProfilePage({
                     </span>
                   </button>
                 </AdminForm>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {chargeable.length > 0 && (
+        <section
+          aria-labelledby="charge-heading"
+          className="flex flex-col gap-3"
+        >
+          <h2 id="charge-heading" className="font-medium">
+            Charge a fee
+          </h2>
+          <p className="text-muted-foreground max-w-prose text-xs text-pretty">
+            Posts the fee as its own invoice, so autopay collects it and it can
+            be waived like any other. The amount starts at this facility&apos;s
+            own price — changing it is subject to your fee-waiver limit, in
+            either direction. Your name, the price and what you charged are all
+            recorded.
+          </p>
+          <ul className="flex flex-col gap-3">
+            {chargeable.map((lease) => (
+              <li
+                key={lease.leaseId}
+                className="border-input rounded-lg border p-4"
+              >
+                <p className="mb-3 text-sm font-medium">
+                  Unit {lease.unitNumber} · {lease.facilityName}
+                  {/* 1.4.1: the ended state is words, not a greyed row. */}
+                  {lease.ended && (
+                    <span className="text-muted-foreground font-normal">
+                      {" "}
+                      · moved out
+                    </span>
+                  )}
+                </p>
+                <ChargeFeeForm
+                  tenantId={profile.tenantId}
+                  leaseId={lease.leaseId}
+                  fees={feeSchedules.get(lease.facilityId) ?? []}
+                  unitLabel={`unit ${lease.unitNumber} at ${lease.facilityName}`}
+                />
               </li>
             ))}
           </ul>

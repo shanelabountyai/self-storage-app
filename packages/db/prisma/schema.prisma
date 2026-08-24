@@ -1377,6 +1377,21 @@ model Invoice {
   /// database constraint rather than a check-then-insert: the nightly run is
   /// re-runnable and catches up missed dates (FR-4), so "already billed" has
   /// to be unforgeable rather than merely checked.
+  ///
+  /// **B-167 scoped it to `kind: 'rent'`, in a PARTIAL unique index in raw
+  /// SQL** (migration 20260824230000_invoice_rent_period_unique), because
+  /// Prisma cannot express one — the same device as
+  /// `reservation_one_held_per_unit` and `delinquency_step_run_open_episode`:
+  ///   invoice_one_rent_per_period — unique(leaseId, periodStart)
+  ///                                 where "kind" = 'rent'
+  /// It was never the generator's key for anything but rent, and unscoped it
+  /// silently capped a lease at ONE fee invoice per day: a move-out posting a
+  /// cleaning fee and a damage fee on the same afternoon lost the second, and
+  /// an NSF fee landing on a day a late fee had already been raised THREW
+  /// (`assessNsfFee` has no unique-violation catch). Late fees keep their own
+  /// idempotency, which was always the real one — `chargedSteps` reads back
+  /// which ladder steps a lease has been charged from the fee line
+  /// descriptions, so the constraint was a backstop there, never the guard.
   periodStart     DateTime      @db.Date
   periodEnd       DateTime      @db.Date
   /// What this invoice is for. `rent` is a recurring service period; `fee` is a
@@ -1403,7 +1418,8 @@ model Invoice {
   ledgerEntries LedgerEntry[]
 
   @@unique([facilityId, number])
-  @@unique([leaseId, periodStart])
+  /// `unique(leaseId, periodStart) where kind = 'rent'` lives in raw SQL — see
+  /// the note on `periodStart`.
   @@index([leaseId, dueDate])
   @@index([facilityId, status])
   @@map("invoice")

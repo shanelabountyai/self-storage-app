@@ -15,6 +15,7 @@ export const PERMISSIONS = [
 
   // Money
   { key: 'payments:take', name: 'Take payments', category: 'billing', description: 'Accept card, cash, or check payments.' },
+  { key: 'fees:charge', name: 'Charge a fee', category: 'billing', description: 'Post a fee from the facility\u2019s own schedule onto a tenant\u2019s account. Departing from the scheduled amount, in either direction, is subject to the fee-waiver monetary limit.' },
   { key: 'fees:waive', name: 'Waive fees', category: 'billing', description: 'Waive a fee, subject to the role monetary limit.' },
   { key: 'credits:manual', name: 'Issue manual credits', category: 'billing', description: 'Post a manual credit, subject to the role monetary limit.' },
   { key: 'refunds:request', name: 'Request refunds', category: 'billing', description: 'Submit a refund for approval.' },
@@ -148,6 +149,11 @@ export const ROLES: readonly RoleSeed[] = [
       'tenants:edit',
       'leases:move_in',
       'payments:take',
+      // B-167. Counter staff post the fee the facility already decided on —
+      // the person who cut the lock or inspected the dirty unit is who knows
+      // it is owed. Their $0 fee-waiver limit is what stops them departing
+      // from the scheduled figure by a cent in either direction.
+      'fees:charge',
       'drawer:manage',
       'access:manage_grants',
       'access:view_codes',
@@ -184,6 +190,7 @@ export const ROLES: readonly RoleSeed[] = [
       'payments:take',
       'drawer:manage',
       'merchandise:manage',
+      'fees:charge',
       'fees:waive',
       'credits:manual',
       'refunds:request',
@@ -215,6 +222,7 @@ export const ROLES: readonly RoleSeed[] = [
       'payments:take',
       'drawer:manage',
       'merchandise:manage',
+      'fees:charge',
       'fees:waive',
       'credits:manual',
       'refunds:request',
