@@ -5678,7 +5678,7 @@ D-86 (B-138) re-points the unpaid invoices at the new lease, so the old lease's 
 
 ## B-160 — The auction file named the wrong unit, and the sale paid off the wrong lease
 
-`PENDING`
+`13d23a2`
 
 **What it built.** D-85 lets staff move a `pending_auction` tenant's goods to another unit; B-157 made the balance and the holds follow them. Every other reader of the case still named the unit the notice was served on, and the money still posted to the lease D-86 had already emptied. Four consequences, all of them live:
 
