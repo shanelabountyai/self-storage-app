@@ -16,7 +16,7 @@
       "Bash(vercel crons *)",
       "Bash(DATABASE_URL='postgres://inline-wins/x' npx dotenv -e .env.local -- node -e \"console.log\\(process.env.DATABASE_URL\\)\")",
       "Bash(DATABASE_URL='postgresql://u:p@ep-not-dev-123-pooler.c-4.us-east-2.aws.neon.tech/neondb' npm run db:reset-link -- --email x@y.com)",
-      "mcp__claude_ai_Vercel__get_project_deployment_protection",
+      "mcp__Vercel__get_project_deployment_protection",
       "Bash(curl -s https://api.vercel.com/v9/projects/prj_IJCLSDCSpdQjVZITdCU4gE2uI73q?teamId=team_HJnm56EPKbrqWwd75nQEytBd -H 'Authorization: Bearer __TRACKED_VAR__')",
       "Bash(cp apps/web/middleware.ts /tmp/mw.bak)",
       "Bash(sed -i '' \"s|  '/api/cron',||\" apps/web/middleware.ts)",
