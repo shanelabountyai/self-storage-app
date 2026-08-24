@@ -78,6 +78,15 @@ export async function promoRoiReport(
       // them separately could show a move-in count and a rent figure taken a
       // moment apart.
       lease: { select: { status: true, monthlyRateCents: true } },
+      // B-168. What the minimum stay actually did. Null on every redemption
+      // whose lease is still live, and on every promotion with no minimum stay
+      // — "not decided yet" is not "recovered nothing".
+      recaptureChargedCents: true,
+      recaptureWaivedCents: true,
+      // Read through the invoice rather than recomputed: CHARGED is a decision
+      // and COLLECTED is what a tenant who had already left actually paid, and
+      // conflating them is how a minimum stay looks like it is working.
+      recaptureInvoice: { select: { amountPaidCents: true, status: true } },
     },
   })
 
@@ -96,6 +105,9 @@ export async function promoRoiReport(
         realisedCents: 0,
         outstandingCents: 0,
         monthlyRentCents: 0,
+        recaptureChargedCents: 0,
+        recaptureWaivedCents: 0,
+        recaptureCollectedCents: 0,
       }
       byPromotion.set(redemption.promotionId, row)
     }
@@ -109,6 +121,9 @@ export async function promoRoiReport(
     const cost = redemptionCost(periods, redemption.appliedPeriods, redemption.totalCents)
 
     row.redemptions += 1
+    row.recaptureChargedCents += redemption.recaptureChargedCents ?? 0
+    row.recaptureWaivedCents += redemption.recaptureWaivedCents ?? 0
+    row.recaptureCollectedCents += redemption.recaptureInvoice?.amountPaidCents ?? 0
     row.committedCents += cost.committedCents
     row.realisedCents += cost.realisedCents
     row.outstandingCents += cost.outstandingCents

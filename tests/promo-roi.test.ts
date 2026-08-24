@@ -81,6 +81,9 @@ function row(overrides: Partial<PromotionRoi> = {}): PromotionRoi {
     realisedCents: 12_900,
     outstandingCents: 12_900,
     monthlyRentCents: 25_800,
+    recaptureChargedCents: 0,
+    recaptureWaivedCents: 0,
+    recaptureCollectedCents: 0,
     ...overrides,
   }
 }
@@ -124,6 +127,9 @@ describe('the footer totals', () => {
       realisedCents: 0,
       outstandingCents: 0,
       monthlyRentCents: 0,
+      recaptureChargedCents: 0,
+      recaptureWaivedCents: 0,
+      recaptureCollectedCents: 0,
     })
   })
 })

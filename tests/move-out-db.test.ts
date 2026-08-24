@@ -20,6 +20,7 @@ import {
   requestOverlock,
 } from "../apps/web/lib/delinquency/overlock";
 import { completeTask } from "../apps/web/lib/admin/tasks";
+import { waiveFeeInvoice } from "../apps/web/lib/billing/late-fees";
 import { isOccupied, isRentable } from "@storage/core/metrics";
 import type { Actor } from "../apps/web/lib/rbac/actor";
 import { ForbiddenError } from "../apps/web/lib/rbac/authorize";
@@ -38,6 +39,29 @@ let unitAId = "";
 let unitBId = "";
 let counterId = "";
 let managerId = "";
+
+/// B-168. The same actor with fee-waiver authority, which is the ladder a
+/// recapture reduction is measured against. `null` is unlimited.
+function waiverOf(
+  staffUserId: string,
+  rank: number,
+  maxFeeWaiverCents: number | null,
+): Extract<Actor, { kind: "staff" }> {
+  const base = actorOf(staffUserId, rank);
+  return {
+    ...base,
+    assignments: [
+      {
+        ...base.assignments[0]!,
+        permissions: new Set<PermissionKey>([
+          ...base.assignments[0]!.permissions,
+          "fees:waive",
+        ]),
+        limits: { maxFeeWaiverCents, maxRefundCents: 0, maxCreditCents: 0 },
+      },
+    ],
+  };
+}
 
 function actorOf(staffUserId: string, rank: number): Extract<Actor, { kind: "staff" }> {
   return {
@@ -155,6 +179,15 @@ describeDb("move-out", () => {
     await prisma.accessGrant.deleteMany({ where: { facilityId } });
     await prisma.unitOverlock.deleteMany({ where: { facilityId } });
     await prisma.task.deleteMany({ where: { facilityId } });
+    // B-168. The recapture is a fee INVOICE now, and an invoice holds the
+    // lease down — before this item a move-out created none, so nothing here
+    // had to know about them. The redemption goes first: it points at the
+    // invoice.
+    await prisma.promoRedemption.deleteMany({ where: { facilityId } });
+    await prisma.invoiceLineItem.deleteMany({
+      where: { invoice: { facilityId } },
+    });
+    await prisma.invoice.deleteMany({ where: { facilityId } });
     await prisma.lease.deleteMany({ where: { facilityId } });
     await prisma.unit.updateMany({
       where: { facilityId },
@@ -168,6 +201,11 @@ describeDb("move-out", () => {
     await prisma.ledgerEntry.deleteMany({ where: { facilityId } });
     await prisma.accessCredential.deleteMany({ where: { facilityId } });
     await prisma.accessGrant.deleteMany({ where: { facilityId } });
+    await prisma.promoRedemption.deleteMany({ where: { facilityId } });
+    await prisma.invoiceLineItem.deleteMany({
+      where: { invoice: { facilityId } },
+    });
+    await prisma.invoice.deleteMany({ where: { facilityId } });
     await prisma.lease.deleteMany({ where: { facilityId } });
     await prisma.unit.deleteMany({ where: { facilityId } });
     await prisma.unitType.deleteMany({ where: { facilityId } });
@@ -654,8 +692,9 @@ describeDb("move-out", () => {
       });
       expect(charge.amountCents).toBe(12_900);
       // The ledger row must not be a different form of words from the screen
-      // that got consent — one sentence, produced once.
-      expect(charge.description).toBe(preview.recapture.reason);
+      // that got consent — one sentence, produced once. B-168 appended the
+      // invoice number to it, and nothing else changed.
+      expect(charge.description).toContain(preview.recapture.reason);
       // The invariant worth having: what the preview said the lease settles to
       // is what the ledger actually holds once it is closed. This fixture is
       // paid through August, so the $310 proration credit outweighs the $129
@@ -667,6 +706,214 @@ describeDb("move-out", () => {
       });
       expect(balance._sum.amountCents).toBe(preview.settlement.netBalanceCents);
       expect(preview.settlement.refundDueCents).toBe(18_100);
+    });
+
+    // B-168. The recapture used to be a bare `type: 'charge'` ledger row, so
+    // no existing tool could see it and the only lever over a disputed one was
+    // `writeOff` — all or nothing across the whole residual.
+    it("posts it as a fee invoice every existing tool can reach", async () => {
+      const lease = await promotedLease({
+        policy: "full",
+        minStayMonths: 6,
+        appliedPeriods: [0, 1],
+      });
+      const preview = await previewMoveOut(
+        actorOf(managerId, 20),
+        lease.id,
+        d("2026-03-01"),
+      );
+
+      await completeMoveOut(actorOf(managerId, 20), {
+        leaseId: lease.id,
+        moveOutDate: d("2026-03-01"),
+        reason: "tenant_request",
+      });
+
+      const invoice = await prisma.invoice.findFirstOrThrow({
+        where: { leaseId: lease.id, kind: "fee" },
+        include: { lineItems: true },
+      });
+      expect(invoice.totalCents).toBe(12_900);
+      // Aged from the move-out, not from tonight: the charge is for a term
+      // that ended on that day.
+      expect(invoice.dueDate.toISOString().slice(0, 10)).toBe("2026-03-01");
+      // The sentence the tenant agreed to, on the line they read.
+      expect(invoice.lineItems[0]?.description).toBe(preview.recapture.reason);
+
+      // Reachable by the waiver path, which is the whole reason it is an
+      // invoice: `waivableFees` lists fee invoices and `waiveFeeInvoice` voids
+      // them, so a recapture disputed a fortnight later has a lever.
+      const waived = await waiveFeeInvoice(
+        waiverOf(managerId, 20, null),
+        invoice.id,
+        { reasonCode: "goodwill" },
+      );
+      expect(waived).toEqual({ ok: true, amountCents: 12_900 });
+    });
+
+    it("reduces it at the counter, records both halves, and audits why", async () => {
+      const lease = await promotedLease({
+        policy: "full",
+        minStayMonths: 6,
+        appliedPeriods: [0, 1],
+      });
+
+      const result = await completeMoveOut(waiverOf(managerId, 20, null), {
+        leaseId: lease.id,
+        moveOutDate: d("2026-03-01"),
+        reason: "tenant_request",
+        recaptureChargeCents: 5_000,
+        recaptureReasonCode: "goodwill",
+      });
+      expect(result.ok).toBe(true);
+      expect(result.ok && result.settlement.recaptureCents).toBe(5_000);
+
+      const invoice = await prisma.invoice.findFirstOrThrow({
+        where: { leaseId: lease.id, kind: "fee" },
+        include: { lineItems: true },
+      });
+      expect(invoice.totalCents).toBe(5_000);
+      // The sentence says what happened to the number beside it.
+      expect(invoice.lineItems[0]?.description).toContain("reduced by $79.00");
+
+      // Both halves on the redemption, which is what makes the term
+      // reportable: charged alone cannot show a term being given away.
+      const redemption = await prisma.promoRedemption.findFirstOrThrow({
+        where: { leaseId: lease.id },
+      });
+      expect(redemption.recaptureChargedCents).toBe(5_000);
+      expect(redemption.recaptureWaivedCents).toBe(7_900);
+      expect(redemption.recaptureInvoiceId).toBe(invoice.id);
+
+      const audit = await prisma.auditLog.findFirstOrThrow({
+        where: { action: "promo.recapture_reduced", entityId: lease.id },
+      });
+      expect(audit.reasonCode).toBe("goodwill");
+      expect(audit.after).toMatchObject({
+        ruledCents: 12_900,
+        chargedCents: 5_000,
+        forgivenCents: 7_900,
+      });
+    });
+
+    it("waives it in full without touching the rest of the residual", async () => {
+      // The defect this closes: `writeOff` is all-or-nothing across the ENTIRE
+      // residual, so forgiving a disputed recapture also forgave every arrear
+      // beside it under one reason code.
+      const lease = await promotedLease({
+        policy: "full",
+        minStayMonths: 6,
+        appliedPeriods: [0, 1],
+      });
+      await prisma.ledgerEntry.create({
+        data: {
+          facilityId,
+          leaseId: lease.id,
+          type: "charge",
+          amountCents: 40_000,
+          description: "Rent arrears nobody disputed",
+        },
+      });
+
+      const result = await completeMoveOut(waiverOf(managerId, 20, null), {
+        leaseId: lease.id,
+        moveOutDate: d("2026-03-01"),
+        reason: "tenant_request",
+        recaptureChargeCents: 0,
+        recaptureReasonCode: "goodwill",
+      });
+      expect(result.ok).toBe(true);
+
+      // No recapture invoice at all — nothing was charged.
+      expect(
+        await prisma.invoice.count({ where: { leaseId: lease.id, kind: "fee" } }),
+      ).toBe(0);
+      const redemption = await prisma.promoRedemption.findFirstOrThrow({
+        where: { leaseId: lease.id },
+      });
+      expect(redemption.recaptureChargedCents).toBe(0);
+      expect(redemption.recaptureWaivedCents).toBe(12_900);
+
+      // The arrears survived. That is the entire point.
+      expect(
+        await prisma.ledgerEntry.count({
+          where: { leaseId: lease.id, type: "write_off" },
+        }),
+      ).toBe(0);
+      const balance = await prisma.ledgerEntry.aggregate({
+        where: { leaseId: lease.id },
+        _sum: { amountCents: true },
+      });
+      expect(balance._sum.amountCents).toBe(
+        result.ok ? result.settlement.netBalanceCents : -1,
+      );
+    });
+
+    it("refuses a reduction with no reason, and one beyond the actor's waiver limit", async () => {
+      const lease = await promotedLease({
+        policy: "full",
+        minStayMonths: 6,
+        appliedPeriods: [0, 1],
+      });
+
+      expect(
+        await completeMoveOut(waiverOf(managerId, 20, null), {
+          leaseId: lease.id,
+          moveOutDate: d("2026-03-01"),
+          reason: "tenant_request",
+          recaptureChargeCents: 5_000,
+        }),
+      ).toMatchObject({ ok: false, problem: "recapture_reason_required" });
+
+      // $79 forgiven against a $50 limit. RBAC-2: the refusal names who can.
+      const overLimit = await completeMoveOut(waiverOf(managerId, 20, 5_000), {
+        leaseId: lease.id,
+        moveOutDate: d("2026-03-01"),
+        reason: "tenant_request",
+        recaptureChargeCents: 5_000,
+        recaptureReasonCode: "goodwill",
+      });
+      expect(overLimit).toMatchObject({
+        ok: false,
+        problem: "recapture_over_limit",
+        forgivenCents: 7_900,
+        limitCents: 5_000,
+      });
+
+      // No fee-waiver permission at all is a different refusal from being
+      // over the limit, and says so.
+      expect(
+        await completeMoveOut(actorOf(managerId, 20), {
+          leaseId: lease.id,
+          moveOutDate: d("2026-03-01"),
+          reason: "tenant_request",
+          recaptureChargeCents: 5_000,
+          recaptureReasonCode: "goodwill",
+        }),
+      ).toMatchObject({ ok: false, problem: "recapture_forbidden" });
+
+      // Refused means refused: the lease is still open.
+      expect(
+        (await prisma.lease.findUniqueOrThrow({ where: { id: lease.id } })).status,
+      ).not.toBe("ended");
+    });
+
+    it("cannot be used to charge MORE than the promotion gave away", async () => {
+      const lease = await promotedLease({
+        policy: "full",
+        minStayMonths: 6,
+        appliedPeriods: [0, 1],
+      });
+      const result = await completeMoveOut(waiverOf(managerId, 20, null), {
+        leaseId: lease.id,
+        moveOutDate: d("2026-03-01"),
+        reason: "tenant_request",
+        recaptureChargeCents: 99_000,
+        recaptureReasonCode: "goodwill",
+      });
+      // Clamped to the ruled figure, not billed at 99,000 — and no reason is
+      // needed, because nothing was forgiven.
+      expect(result.ok && result.settlement.recaptureCents).toBe(12_900);
     });
 
     it("recovers nothing on a transfer — a transferred tenant is still a tenant", async () => {

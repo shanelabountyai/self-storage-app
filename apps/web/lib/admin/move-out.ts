@@ -12,8 +12,11 @@ import { MANAGER_RANK } from "@storage/core/pos";
 import {
   assertFacilityAccess,
   can,
+  checkMonetaryAuthority,
   ForbiddenError,
+  nextApproverRole,
 } from "@/lib/rbac/authorize";
+import { raiseFeeInvoice } from "@/lib/billing/fee-invoice";
 import { toAuditActor } from "@/lib/rbac/audit-actor";
 import type { Actor } from "@/lib/rbac/actor";
 import { recomputeUnitStatus } from "@/lib/admin/units";
@@ -44,6 +47,12 @@ export type MoveOutPreview = {
   /// tenant who served the minimum. On the PREVIEW because a recapture a
   /// tenant first sees on a final invoice is a chargeback.
   recapture: Recapture;
+  /// B-168. What the RULE says, before any counter reduction. Equal to
+  /// `recapture.amountCents` unless somebody has moved it, and separate from it
+  /// so the screen can show both — "the promotion entitles us to $180, you are
+  /// charging $120" is the sentence an approver needs, and one figure cannot
+  /// say it.
+  ruledRecaptureCents: number;
   /// Set when the tenant already scheduled this themselves (B-041, still
   /// `active` until this screen finalizes it) — what the date picker
   /// defaults to, and what the screen tells staff the tenant already agreed
@@ -56,6 +65,44 @@ const NO_RECAPTURE: Recapture = {
   monthsRemaining: 0,
   reason: null,
 };
+
+/// B-168. The recapture as reduced, and the sentence saying so.
+///
+/// Clamped into `[0, ruled.amountCents]`: an operator may forgive a recapture,
+/// they may not invent one. Charging MORE than the promotion gave away would
+/// bill money nobody saved — the same reasoning `recaptureFor` uses for never
+/// billing back a discount that was never delivered.
+///
+/// The reason line is rewritten rather than left alone, because the sentence
+/// the tenant reads has to match the figure beside it. B-145's rule — "the
+/// description on the ledger row must not be a different form of words from
+/// the one on the screen that got consent" — applies with more force once a
+/// human has moved the number.
+export function applyRecaptureOverride(
+  ruled: Recapture,
+  chargeCents: number | undefined,
+): Recapture {
+  if (chargeCents === undefined || ruled.amountCents <= 0) return ruled;
+  const charged = Math.max(
+    0,
+    Math.min(Math.round(chargeCents), ruled.amountCents),
+  );
+  if (charged === ruled.amountCents) return ruled;
+  const forgiven = ruled.amountCents - charged;
+  const base = ruled.reason ?? "Promotional discount recovered";
+  return {
+    ...ruled,
+    amountCents: charged,
+    reason:
+      charged === 0
+        ? `${base} — waived in full`
+        : `${base} — reduced by ${formatDollars(forgiven)}`,
+  };
+}
+
+function formatDollars(cents: number): string {
+  return `$${(cents / 100).toFixed(2)}`;
+}
 
 function rankAt(actor: Actor, facilityId: string): number {
   if (actor.kind !== "staff") return 0;
@@ -113,6 +160,16 @@ export async function previewMoveOut(
   /// unset, because a preview is asked before a reason is chosen and a real
   /// departure is what it is previewing.
   reason?: MoveOutReason,
+  /// B-168. What the operator has decided to actually charge of the recapture,
+  /// when they have decided something other than all of it. `undefined` means
+  /// "the rule's figure"; `0` means waived outright.
+  ///
+  /// It flows through the SETTLEMENT rather than being subtracted afterwards,
+  /// which is the whole reason it is a parameter here: `amountDueCents`, the
+  /// write-off threshold and the manager-override decision all read the
+  /// settlement, and a reduction applied after them would leave the screen
+  /// demanding a manager for a debt that no longer exists.
+  recaptureChargeCents?: number,
 ): Promise<MoveOutPreview> {
   const lease = await loadLeaseForMoveOut(actor, leaseId);
   if (!can(actor, "leases:move_out", lease.facilityId)) {
@@ -128,10 +185,13 @@ export async function previewMoveOut(
     _sum: { amountCents: true },
   });
   const balanceCents = balance._sum.amountCents ?? 0;
-  const recapture =
+  // D-89 holds: "a transferred tenant is still a tenant", so a move between
+  // units at the same site recovers nothing and there is nothing to reduce.
+  const ruled =
     reason === "transfer"
       ? NO_RECAPTURE
       : await recaptureForLease(lease, moveOutDate);
+  const recapture = applyRecaptureOverride(ruled, recaptureChargeCents);
 
   return {
     leaseId: lease.id,
@@ -164,6 +224,7 @@ export async function previewMoveOut(
     prorateOnMoveOut: lease.facility.prorateOnMoveOut,
     writeOffThresholdCents: lease.facility.writeOffThresholdCents,
     recapture,
+    ruledRecaptureCents: ruled.amountCents,
     requestedMoveOutDate: lease.status === "ended" ? null : lease.moveOutDate,
   };
 }
@@ -178,13 +239,40 @@ export type CompleteMoveOutInput = {
   /// Required for a write-off and for closing over the threshold — the audit
   /// layer refuses `balance.written_off` without one.
   reasonCode?: string;
+  /// B-168. How much of the promotional recapture to actually charge.
+  /// `undefined` charges the rule's figure; anything lower forgives the
+  /// difference and needs both a reason and fee-waiver authority for the
+  /// amount forgiven.
+  ///
+  /// A lever of its own rather than a second use of `writeOff`, which is the
+  /// defect this closes: `writeOff` is all-or-nothing across the ENTIRE
+  /// residual, so forgiving a disputed $60 recapture also forgave $400 of
+  /// genuine arrears, in one boolean, with one reason code covering both.
+  recaptureChargeCents?: number;
+  /// Why the recapture was reduced. Required whenever anything is forgiven —
+  /// `promo.recapture_reduced` is `requiresReason: true`, and the audit layer
+  /// would refuse it anyway.
+  recaptureReasonCode?: string;
 };
 
 export type CompleteMoveOutResult =
   | { ok: true; settlement: MoveOutSettlement; wroteOff: boolean }
   | {
       ok: false;
-      problem: "not_occupying" | "needs_manager" | "reason_code_required";
+      problem:
+        | "not_occupying"
+        | "needs_manager"
+        | "reason_code_required"
+        | "recapture_reason_required"
+        | "recapture_forbidden"
+        | "recapture_over_limit";
+      /// Set on `recapture_over_limit`: how much was being forgiven, the
+      /// actor's fee-waiver limit, and who could carry it. RBAC-2 — an
+      /// over-limit refusal names the rank that can approve rather than simply
+      /// failing.
+      forgivenCents?: number;
+      limitCents?: number;
+      escalateTo?: string | null;
     };
 
 /// Ends a lease.
@@ -213,8 +301,48 @@ export async function completeMoveOut(
     input.leaseId,
     input.moveOutDate,
     input.reason,
+    input.recaptureChargeCents,
   );
   const { settlement } = preview;
+
+  // B-168. Forgiving part of a recapture is money given away, and it goes
+  // through the ladder that already governs giving fee money away rather than
+  // riding on `leases:move_out` — which every counter staffer holding a
+  // move-out has. Measured on the amount FORGIVEN, not on the amount charged:
+  // the discretion being exercised is the gap, exactly as B-167 measures a fee
+  // override against its departure from the schedule.
+  const forgivenCents = Math.max(
+    0,
+    preview.ruledRecaptureCents - settlement.recaptureCents,
+  );
+  if (forgivenCents > 0) {
+    if (!input.recaptureReasonCode?.trim()) {
+      return { ok: false, problem: "recapture_reason_required" };
+    }
+    const decision = checkMonetaryAuthority(
+      actor,
+      "fee_waiver",
+      forgivenCents,
+      lease.facilityId,
+    );
+    if (!decision.allowed) {
+      if (decision.reason === "forbidden") {
+        return { ok: false, problem: "recapture_forbidden", forgivenCents };
+      }
+      const approver = await nextApproverRole(
+        "fee_waiver",
+        forgivenCents,
+        decision.escalateToRank ?? 0,
+      );
+      return {
+        ok: false,
+        problem: "recapture_over_limit",
+        forgivenCents,
+        limitCents: decision.limitCents,
+        escalateTo: approver?.name ?? null,
+      };
+    }
+  }
 
   // US-14's AC: a lease cannot be closed over the write-off threshold without
   // a manager. Note this gates *closing with a debt*, not the write-off
@@ -244,24 +372,81 @@ export async function completeMoveOut(
       });
     }
 
-    // B-145. Posted as a plain charge on the lease, dated to the move-out, so
-    // it lands on the final statement beside the proration credit above and is
-    // collected, disputed and aged by every path that already handles a
-    // balance. `preview.recapture.reason` is the same sentence the tenant read
-    // before agreeing — the description on the ledger row must not be a
-    // different form of words from the one on the screen that got consent.
+    // B-145, rebuilt in B-168 as a fee INVOICE rather than a bare ledger entry.
+    //
+    // It was a `type: 'charge'` row and nothing else, so `waivableFees` could
+    // not list it, `waiveFeeInvoice` could not void it, it never aged, it never
+    // dunned, and autopay never collected it — the only lever anybody had over
+    // a disputed recapture was `writeOff`, which forgives the whole residual.
+    // Through `raiseFeeInvoice` it gets every one of those for free, and the
+    // ledger effect is identical (that primitive writes the same `charge` row),
+    // so the settlement arithmetic above is unchanged.
+    //
+    // Dated to the move-out rather than to now, as it was before: the charge is
+    // for a term that ended on that day, and its age is measured from it.
+    //
+    // `preview.recapture.reason` is the same sentence the tenant read before
+    // agreeing — the description on the invoice must not be a different form of
+    // words from the one on the screen that got consent (B-145), and since
+    // B-168 that sentence also says what was forgiven.
+    let recaptureInvoiceId: string | null = null;
     if (settlement.recaptureCents > 0) {
-      await tx.ledgerEntry.create({
+      const raised = await raiseFeeInvoice(tx, {
+        facilityId: lease.facilityId,
+        leaseId: lease.id,
+        on: input.moveOutDate,
+        // The full sentence, not a generic label: B-145's rule is that the
+        // LEDGER row — which is what the tenant's own statement renders — must
+        // not be a different form of words from the screen that got their
+        // consent. `raiseFeeInvoice` appends the invoice number to it.
+        ledgerDescription:
+          preview.recapture.reason ?? "Promotional discount recovered",
+        lines: [
+          {
+            description:
+              preview.recapture.reason ?? "Promotional discount recovered",
+            amountCents: settlement.recaptureCents,
+          },
+        ],
+      });
+      recaptureInvoiceId = raised.id;
+    }
+
+    // What the minimum stay actually did, on the redemption that carries the
+    // term. Written whenever a recapture was in play at all — including the
+    // fully-waived case, where `recaptureChargedCents` is 0 and the waived
+    // figure is the whole of it. Null stays null on a lease whose promotion had
+    // no minimum stay, because "no term to enforce" and "a term we recovered
+    // nothing on" are different facts and the report must not merge them.
+    if (preview.ruledRecaptureCents > 0) {
+      await tx.promoRedemption.updateMany({
+        where: { leaseId: lease.id },
         data: {
-          facilityId: lease.facilityId,
-          leaseId: lease.id,
-          type: "charge",
-          amountCents: settlement.recaptureCents,
-          description:
-            preview.recapture.reason ?? "Promotional discount recovered",
-          occurredAt: input.moveOutDate,
+          recaptureChargedCents: settlement.recaptureCents,
+          recaptureWaivedCents: forgivenCents,
+          recaptureInvoiceId,
         },
       });
+    }
+
+    if (forgivenCents > 0) {
+      await recordAudit(
+        {
+          actor: toAuditActor(actor),
+          facilityId: lease.facilityId,
+          action: "promo.recapture_reduced",
+          entityType: "Lease",
+          entityId: lease.id,
+          reasonCode: input.recaptureReasonCode,
+          context: {
+            ruledCents: preview.ruledRecaptureCents,
+            chargedCents: settlement.recaptureCents,
+            forgivenCents,
+            monthsRemaining: preview.recapture.monthsRemaining,
+          },
+        },
+        tx,
+      );
     }
 
     if (wroteOff) {

@@ -1417,6 +1417,8 @@ model Invoice {
   allocations   PaymentAllocation[]
   ledgerEntries LedgerEntry[]
 
+  promoRecaptures PromoRedemption[]
+
   @@unique([facilityId, number])
   /// `unique(leaseId, periodStart) where kind = 'rent'` lives in raw SQL — see
   /// the note on `periodStart`.
@@ -3360,23 +3362,38 @@ model PromoCode {
 /// must not rewrite what somebody already agreed to. Billing reads this row,
 /// never the `Promotion` it came from.
 model PromoRedemption {
-  id             String   @id @default(cuid())
-  promotionId    String
-  promoCodeId    String?
-  facilityId     String
-  reservationId  String?
-  leaseId        String?  @unique
+  id                    String   @id @default(cuid())
+  promotionId           String
+  promoCodeId           String?
+  facilityId            String
+  reservationId         String?
+  leaseId               String?  @unique
   /// The computed schedule: `[{ periodIndex, amountCents }]`. Whole cents,
   /// resolved against the rate quoted at the time.
-  schedule       Json
+  schedule              Json
   /// Sum of the schedule, denormalised so ROI reporting does not have to walk
   /// the JSON of every redemption.
-  totalCents     Int
+  totalCents            Int
   /// Which periods have actually been discounted on an invoice. Append-only:
   /// billing adds an index when it writes the line, so a re-run of the nightly
   /// job cannot discount the same period twice.
-  appliedPeriods Int[]    @default([])
-  createdAt      DateTime @default(now()) @db.Timestamptz(6)
+  appliedPeriods        Int[]    @default([])
+  /// B-168. What the minimum stay actually recovered, written when the lease
+  /// ends. Null on every redemption whose lease is still live — "not yet
+  /// decided" and "decided to recover nothing" are different facts, and a
+  /// zero default would report every open lease as a waived recapture.
+  ///
+  /// Both halves are stored because the report's whole question is the ratio:
+  /// a minimum stay that charges $4,000 and forgives $3,800 at the counter is
+  /// not a minimum stay, and neither figure alone says so. `recaptureInvoiceId`
+  /// is what turns CHARGED into COLLECTED — the invoice carries whether the
+  /// tenant actually paid it.
+  recaptureChargedCents Int?
+  recaptureWaivedCents  Int?
+  recaptureInvoiceId    String?
+  createdAt             DateTime @default(now()) @db.Timestamptz(6)
+
+  recaptureInvoice Invoice? @relation(fields: [recaptureInvoiceId], references: [id], onDelete: SetNull)
 
   promotion   Promotion    @relation(fields: [promotionId], references: [id], onDelete: Restrict)
   promoCode   PromoCode?   @relation(fields: [promoCodeId], references: [id], onDelete: SetNull)

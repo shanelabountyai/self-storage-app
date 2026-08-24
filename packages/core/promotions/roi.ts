@@ -75,6 +75,17 @@ export type PromotionRoi = {
   /// Monthly rent, at today's rate, across the leases still renting. The
   /// recurring revenue the discount is still buying.
   monthlyRentCents: number
+  /// B-168. What the minimum stay actually did, across the leases in this
+  /// cohort that have ended.
+  ///
+  /// Three figures rather than one, because the interesting number is the
+  /// ratio between them: a term that BILLS $4,000 and WAIVES $3,800 at the
+  /// counter is not a term, and a term that bills $4,000 and COLLECTS $600 is
+  /// a different failure — one is a policy nobody enforces, the other is a
+  /// debt nobody can collect from a tenant who has already gone.
+  recaptureChargedCents: number
+  recaptureWaivedCents: number
+  recaptureCollectedCents: number
 }
 
 /// Months of rent it takes to earn back what a promotion realised.
@@ -106,6 +117,9 @@ export function roiTotals(rows: readonly PromotionRoi[]): {
   realisedCents: number
   outstandingCents: number
   monthlyRentCents: number
+  recaptureChargedCents: number
+  recaptureWaivedCents: number
+  recaptureCollectedCents: number
 } {
   return rows.reduce(
     (total, row) => ({
@@ -116,6 +130,9 @@ export function roiTotals(rows: readonly PromotionRoi[]): {
       realisedCents: total.realisedCents + row.realisedCents,
       outstandingCents: total.outstandingCents + row.outstandingCents,
       monthlyRentCents: total.monthlyRentCents + row.monthlyRentCents,
+      recaptureChargedCents: total.recaptureChargedCents + row.recaptureChargedCents,
+      recaptureWaivedCents: total.recaptureWaivedCents + row.recaptureWaivedCents,
+      recaptureCollectedCents: total.recaptureCollectedCents + row.recaptureCollectedCents,
     }),
     {
       redemptions: 0,
@@ -125,6 +142,9 @@ export function roiTotals(rows: readonly PromotionRoi[]): {
       realisedCents: 0,
       outstandingCents: 0,
       monthlyRentCents: 0,
+      recaptureChargedCents: 0,
+      recaptureWaivedCents: 0,
+      recaptureCollectedCents: 0,
     },
   )
 }

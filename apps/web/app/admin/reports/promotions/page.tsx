@@ -81,10 +81,10 @@ export default async function PromotionsReportPage({
         </p>
       ) : (
         <div tabIndex={0} className="overflow-x-auto">
-          <table className="w-full min-w-3xl border-collapse text-sm">
+          <table className="w-full min-w-4xl border-collapse text-sm">
             <caption className="sr-only">
-              Promotions redeemed in {range.label}, with discount given, discount still owed, and
-              the rent the discount bought
+              Promotions redeemed in {range.label}, with discount given, discount still owed, what
+              the minimum stay recovered, and the rent the discount bought
             </caption>
             <thead>
               <tr className="border-input border-b text-left">
@@ -94,6 +94,13 @@ export default async function PromotionsReportPage({
                 <th scope="col" className="py-2 pr-4 text-right">Still renting</th>
                 <th scope="col" className="py-2 pr-4 text-right">Discount given</th>
                 <th scope="col" className="py-2 pr-4 text-right">Still to give</th>
+                {/* B-168. Three columns and not one: a minimum stay that
+                    bills $4,000 and waives $3,800 at the counter is not a
+                    term, and one that bills $4,000 and collects $600 from
+                    tenants who have already gone is a different failure. */}
+                <th scope="col" className="py-2 pr-4 text-right">Recapture billed</th>
+                <th scope="col" className="py-2 pr-4 text-right">Waived</th>
+                <th scope="col" className="py-2 pr-4 text-right">Collected</th>
                 <th scope="col" className="py-2 pr-4 text-right">Rent per month</th>
                 <th scope="col" className="py-2 pr-4 text-right">Months to earn back</th>
               </tr>
@@ -120,6 +127,15 @@ export default async function PromotionsReportPage({
                     {formatCents(row.outstandingCents)}
                   </td>
                   <td className="py-2 pr-4 text-right tabular-nums">
+                    {formatCents(row.recaptureChargedCents)}
+                  </td>
+                  <td className="text-muted-foreground py-2 pr-4 text-right tabular-nums">
+                    {formatCents(row.recaptureWaivedCents)}
+                  </td>
+                  <td className="py-2 pr-4 text-right tabular-nums">
+                    {formatCents(row.recaptureCollectedCents)}
+                  </td>
+                  <td className="py-2 pr-4 text-right tabular-nums">
                     {formatCents(row.monthlyRentCents)}
                   </td>
                   <td className="py-2 pr-4 text-right tabular-nums">
@@ -141,6 +157,15 @@ export default async function PromotionsReportPage({
                 </td>
                 <td className="text-muted-foreground py-2 pr-4 text-right tabular-nums">
                   {formatCents(report.totals.outstandingCents)}
+                </td>
+                <td className="py-2 pr-4 text-right tabular-nums">
+                  {formatCents(report.totals.recaptureChargedCents)}
+                </td>
+                <td className="text-muted-foreground py-2 pr-4 text-right tabular-nums">
+                  {formatCents(report.totals.recaptureWaivedCents)}
+                </td>
+                <td className="py-2 pr-4 text-right tabular-nums">
+                  {formatCents(report.totals.recaptureCollectedCents)}
                 </td>
                 <td className="py-2 pr-4 text-right tabular-nums">
                   {formatCents(report.totals.monthlyRentCents)}
@@ -166,6 +191,15 @@ export default async function PromotionsReportPage({
           <span className="font-medium">Months to earn back</span> is the discount already given
           divided by the rent those tenants pay each month. It is blank where nobody who took the
           promotion is still renting — that is not a very long payback, it is no payback.
+        </p>
+        <p>
+          <span className="font-medium">Recapture billed</span> is what the minimum stay actually
+          charged on the leases in this cohort that have ended;{' '}
+          <span className="font-medium">waived</span> is what staff forgave at the counter, and{' '}
+          <span className="font-medium">collected</span> is what a departed tenant actually paid.
+          A term that is mostly waived is not a term, and one that is billed and never collected is
+          a different problem. All three are blank for a promotion with no minimum stay, and for
+          leases still running.
         </p>
         <p>
           Redemptions that never reached a move-in are counted in the first column and nowhere

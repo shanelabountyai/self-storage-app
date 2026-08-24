@@ -21,6 +21,12 @@ export const AUDIT_ACTIONS = [
   /// requires — there is no code list, because what a damage fee is for is a
   /// sentence, not a category.
   { action: "fee.charged", label: "Fee charged", requiresReason: true },
+  /// B-168. A promotional recapture reduced or forgiven at the counter. Its own
+  /// action rather than `fee.waived`, because the question this answers is not
+  /// "who forgave a fee" but "is the minimum stay real" — a term the business
+  /// advertises and then routinely gives away at the desk is a term that does
+  /// not exist, and a row filed under every other waiver cannot show that.
+  { action: "promo.recapture_reduced", label: "Promotional recapture reduced or waived", requiresReason: true },
   { action: "fee.waived", label: "Fee waived", requiresReason: true },
   {
     action: "credit.issued",

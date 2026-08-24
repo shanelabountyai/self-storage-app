@@ -155,12 +155,19 @@ export default async function MoveOutPage({
             −{formatCents(settlement.prorationCreditCents)}
           </dd>
         </div>
-        {settlement.recaptureCents > 0 && (
+        {preview.ruledRecaptureCents > 0 && (
           <div className="flex justify-between gap-4">
             <dt>
               Promotional discount recovered
               <span className="text-muted-foreground block text-pretty">
                 {preview.recapture.reason}
+              </span>
+              {/* B-168. Its own settleable line, not a share of a residual:
+                  it posts as its own invoice, so it can be paid, chased,
+                  disputed and waived on its own after the tenant has gone. */}
+              <span className="text-muted-foreground block text-pretty">
+                Charged as its own invoice, so it can be paid or waived on its
+                own.
               </span>
             </dt>
             <dd className="tabular-nums">
@@ -242,6 +249,48 @@ export default async function MoveOutPage({
             Abandoned — dated to last occupancy evidence
           </option>
         </Field>
+
+        {/* B-168. Reducing the recapture is its own lever, separate from the
+            write-off below, and that separation IS the fix: `writeOff` is all
+            or nothing across the entire residual, so forgiving a disputed $60
+            recapture also forgave $400 of genuine arrears under one reason
+            code. What is forgiven here is measured against the fee-waiver
+            limit, so a counter staffer cannot quietly give the term away. */}
+        {preview.ruledRecaptureCents > 0 && (
+          <fieldset className="border-input flex flex-col gap-3 rounded-lg border p-4">
+            <legend className="px-1 text-sm font-medium">
+              Promotional recapture
+            </legend>
+            <p className="text-muted-foreground max-w-prose text-xs text-pretty">
+              The promotion&apos;s minimum stay entitles this facility to{" "}
+              {formatCents(preview.ruledRecaptureCents)}. Leave the amount alone
+              to charge it. Charging less forgives the difference, needs a
+              reason, and counts against your fee-waiver limit.
+            </p>
+            <Field
+              name="recaptureChargeDollars"
+              label="Charge instead ($)"
+              inputMode="decimal"
+              defaultValue={(preview.ruledRecaptureCents / 100).toFixed(2)}
+              className={FIELD_CLASS}
+              hint="Enter 0 to waive it in full."
+            />
+            <Field
+              name="recaptureReason"
+              label="Why it is being reduced"
+              as="select"
+              defaultValue=""
+              className={FIELD_CLASS}
+            >
+              <option value="">Not being reduced</option>
+              {REASON_CODES.map((code) => (
+                <option key={code} value={code}>
+                  {code.replace(/_/g, " ")}
+                </option>
+              ))}
+            </Field>
+          </fieldset>
+        )}
 
         {settlement.canWriteOff && (
           <>

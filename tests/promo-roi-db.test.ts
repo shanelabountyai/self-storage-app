@@ -224,6 +224,82 @@ describeDb('promo ROI', () => {
     expect(report.totals.committedCents).toBe(11_000)
   })
 
+  // B-168. What the minimum stay actually did — three figures because the
+  // interesting thing is the ratio between them.
+  it('reports recapture billed, waived and collected separately', async () => {
+    const promotionId = await makePromotion('Six-month minimum')
+    const redemptionId = await redeem({
+      promotionId,
+      leaseId: leaseIds.active,
+      totalCents: 12_900,
+      schedule: [{ periodIndex: 0, amountCents: 12_900 }],
+      appliedPeriods: [0],
+    })
+
+    const invoice = await prisma.invoice.create({
+      data: {
+        facilityId,
+        leaseId: leaseIds.active,
+        number: `INV-RC-${suffix}`,
+        kind: 'fee',
+        status: 'partially_paid',
+        issueDate: IN_RANGE,
+        dueDate: IN_RANGE,
+        periodStart: IN_RANGE,
+        periodEnd: new Date(IN_RANGE.getTime() + 86_400_000),
+        subtotalCents: 8_000,
+        taxCents: 0,
+        totalCents: 8_000,
+        // Billed $80, paid $30. A term nobody can collect from a tenant who
+        // has already gone is a different failure from one nobody charges.
+        amountPaidCents: 3_000,
+      },
+    })
+    await prisma.promoRedemption.update({
+      where: { id: redemptionId },
+      data: {
+        recaptureChargedCents: 8_000,
+        recaptureWaivedCents: 4_900,
+        recaptureInvoiceId: invoice.id,
+      },
+    })
+
+    try {
+      const report = await promoRoiReport(actor(), RANGE)
+      const row = report.rows.find((one) => one.name.startsWith('Six-month minimum'))
+      expect(row?.recaptureChargedCents).toBe(8_000)
+      expect(row?.recaptureWaivedCents).toBe(4_900)
+      expect(row?.recaptureCollectedCents).toBe(3_000)
+      expect(report.totals.recaptureWaivedCents).toBe(4_900)
+    } finally {
+      await prisma.promoRedemption.update({
+        where: { id: redemptionId },
+        data: { recaptureInvoiceId: null },
+      })
+      await prisma.invoice.delete({ where: { id: invoice.id } })
+    }
+  })
+
+  it('leaves the recapture figures at zero for a promotion with no minimum stay', async () => {
+    // Null on the redemption, not zero: "no term to enforce" and "a term we
+    // recovered nothing on" are different facts, and the report must not read
+    // an open lease as a waived recapture.
+    const promotionId = await makePromotion('No minimum')
+    await redeem({
+      promotionId,
+      leaseId: leaseIds.active,
+      totalCents: 6_450,
+      schedule: [{ periodIndex: 0, amountCents: 6_450 }],
+      appliedPeriods: [0],
+    })
+
+    const report = await promoRoiReport(actor(), RANGE)
+    const row = report.rows.find((one) => one.name.startsWith('No minimum'))
+    expect(row?.recaptureChargedCents).toBe(0)
+    expect(row?.recaptureWaivedCents).toBe(0)
+    expect(row?.recaptureCollectedCents).toBe(0)
+  })
+
   it('excludes redemptions outside the range', async () => {
     const promotionId = await makePromotion('Last month')
     await redeem({
