@@ -5766,7 +5766,7 @@ Four changes, and the first is the one that matters most:
 
 ## B-163 — Proof of insurance stopped being monitored the moment a tenant moved units
 
-`PENDING`
+`f73ca16`
 
 **What it built.** `completeTransfer` copied `protectionPlanName` and `protectionCents` and handled no `ProtectionWaiver`. That alone would be a missed night; what made it permanent is the shape of the scan. `scanExpiringProtectionProofs` reads waivers by `leaseId` and *then* filters to `OCCUPYING_LEASE_STATUSES`, so a waiver naming the lease a transfer ended matched nothing and matched nothing again every night after. The tenant's certificate expired, `protection.proof_expiring` never fired, `insurance_proof_lapsed` never fired, D-17's auto-enrolment never ran, and US-44's required-protection policy was silently unenforced for exactly the tenants who moved.
 
