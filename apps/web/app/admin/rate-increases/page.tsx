@@ -1,11 +1,12 @@
+import Link from 'next/link'
 import { AdminForm, Field } from '@/components/admin/form'
 import { Button } from '@/components/ui/button'
 import { getSwitcherData } from '@/lib/admin/context'
 import { resolveSelectedFacility } from '@/lib/admin/facility-selection-logic'
 import { can, hasPermissionAnywhere } from '@/lib/rbac/authorize'
 import { formatCents } from '@/lib/format'
-import { DEFAULT_ELIGIBILITY, earliestEffectiveDate } from '@storage/core/pricing'
-import { pendingRateIncreases, previewEligibleIncreases } from '@/lib/pricing/tenant-rate-increases'
+import { earliestEffectiveDate } from '@storage/core/pricing'
+import { ecriPolicyFor, pendingRateIncreases, previewEligibleIncreases } from '@/lib/pricing/tenant-rate-increases'
 import { prisma } from '@storage/db'
 import {
   approveAction,
@@ -29,6 +30,13 @@ export const metadata = { title: 'Rate increases' }
 
 function formatDate(date: Date): string {
   return new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeZone: 'UTC' }).format(date)
+}
+
+/// Hundredths of a percent as a person reads them: 1000 → "10%", 750 →
+/// "7.5%". Trailing zeros dropped, because "10.00%" in a sentence reads as a
+/// figure someone measured rather than one they chose.
+function formatPercent(basisPoints: number): string {
+  return `${String(Number((basisPoints / 100).toFixed(2)))}%`
 }
 
 function isoDay(date: Date): string {
@@ -76,9 +84,13 @@ export default async function RateIncreasesPage() {
 
   const facilityId = selected.facility.id
   const canRaise = can(actor, 'rates:tenant_increase', facilityId)
+  // B-165. The policy is loaded first and PASSED to the preview, rather than
+  // each of them reading it separately: the table below states the rule it
+  // was computed under, and the two must be the same read.
+  const policy = await ecriPolicyFor(facilityId)
   const [review, eligible, facility] = await Promise.all([
     pendingRateIncreases(actor, facilityId),
-    canRaise ? previewEligibleIncreases(actor, facilityId) : Promise.resolve([]),
+    canRaise ? previewEligibleIncreases(actor, facilityId, policy) : Promise.resolve([]),
     prisma.facility.findUniqueOrThrow({
       where: { id: facilityId },
       select: { rateIncreaseNoticeDays: true },
@@ -212,10 +224,21 @@ export default async function RateIncreasesPage() {
         <h2 id="eligible-heading" className="font-medium">
           Who the rule would pick ({eligible.length})
         </h2>
+        {/* B-165. The rule, in the words of the settings that produced it.
+            "Raises each of them to street" was true and was the defect: an
+            approver reading only a dollar delta could not see that a $89
+            tenant was being sent a 63% letter. */}
         <p className="text-muted-foreground max-w-prose text-xs text-pretty">
-          Leases at least {DEFAULT_ELIGIBILITY.minMonthsSinceLastChange} months since their last rate
-          change and at least {formatCents(DEFAULT_ELIGIBILITY.minGapCents)} below the current street
-          rate, largest gap first. Scheduling a batch raises each of them to street.
+          Leases at least {policy.minMonthsSinceLastChange} months since their last rate change and
+          at least {formatCents(policy.minGapCents)} below the current street rate, largest gap
+          first. Each is raised by {formatPercent(policy.percentStepBps)} of what they pay now — at
+          least {formatCents(policy.minStepCents)}, at most {formatCents(policy.maxStepCents)},
+          rounded to the dollar
+          {policy.capAtStreet ? ' and never above street' : ' (street is not a ceiling here)'}.{' '}
+          <Link className="underline" href="/admin/settings">
+            Change the rule in settings
+          </Link>
+          .
         </p>
 
         {eligible.length === 0 ? (
@@ -229,6 +252,8 @@ export default async function RateIncreasesPage() {
                   <th scope="col" className="py-2 pr-4">Tenant</th>
                   <th scope="col" className="py-2 pr-4">Unit</th>
                   <th scope="col" className="py-2 pr-4 text-right">Now</th>
+                  <th scope="col" className="py-2 pr-4 text-right">New</th>
+                  <th scope="col" className="py-2 pr-4 text-right">Change</th>
                   <th scope="col" className="py-2 pr-4 text-right">Street</th>
                   <th scope="col" className="py-2 pr-4 text-right">Gap</th>
                   <th scope="col" className="py-2 pr-4 text-right">Months since change</th>
@@ -240,6 +265,16 @@ export default async function RateIncreasesPage() {
                     <th scope="row" className="py-2 pr-4 text-left font-normal">{row.tenantName}</th>
                     <td className="py-2 pr-4">{row.unitNumber}</td>
                     <td className="py-2 pr-4 text-right tabular-nums">{formatCents(row.inPlaceRateCents)}</td>
+                    <td className="py-2 pr-4 text-right tabular-nums">{formatCents(row.newRateCents)}</td>
+                    {/* The percentage beside the dollars, per row: the delta
+                        alone hides which tenants are taking the whole step. */}
+                    <td className="py-2 pr-4 text-right tabular-nums">
+                      +{formatCents(row.newRateCents - row.inPlaceRateCents)} (
+                      {formatPercent(
+                        Math.round(((row.newRateCents - row.inPlaceRateCents) / row.inPlaceRateCents) * 10_000),
+                      )}
+                      )
+                    </td>
                     <td className="py-2 pr-4 text-right tabular-nums">{formatCents(row.streetRateCents)}</td>
                     <td className="py-2 pr-4 text-right tabular-nums">{formatCents(row.gapCents)}</td>
                     <td className="py-2 pr-4 text-right tabular-nums">{row.monthsSinceLastChange ?? '—'}</td>

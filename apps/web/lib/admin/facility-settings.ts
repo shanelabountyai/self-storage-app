@@ -516,6 +516,16 @@ export type OperationsPolicyInput = {
   /// same reason `moveOutNoticeDays` is: it is a term of the lease and a
   /// question of what the state requires, not a decision about invoicing.
   rateIncreaseNoticeDays: number;
+  /// PRD 02 US-11 (B-165), D-94. The ECRI step rule — six columns, six
+  /// controls, in the item that adds them. Before this the step was a return
+  /// statement and the eligibility rule a module constant, so "raise everyone
+  /// to street" was not a policy anyone had chosen; it was the only one.
+  ecriPercentBasisPoints: number;
+  ecriMinStepCents: number;
+  ecriMaxStepCents: number;
+  ecriCapAtStreet: boolean;
+  ecriMinMonthsSinceChange: number;
+  ecriMinGapCents: number;
   /// PRD 02 US-33 (B-078). How far a drawer may be out at close-out before
   /// the close demands a written explanation.
   drawerVarianceThresholdCents: number;
@@ -560,6 +570,12 @@ export async function updateOperationsPolicy(
     leadFollowUpHours: row.leadFollowUpHours,
     abandonmentFollowUpHours: row.abandonmentFollowUpHours,
     rateIncreaseNoticeDays: row.rateIncreaseNoticeDays,
+    ecriPercentBasisPoints: row.ecriPercentBasisPoints,
+    ecriMinStepCents: row.ecriMinStepCents,
+    ecriMaxStepCents: row.ecriMaxStepCents,
+    ecriCapAtStreet: row.ecriCapAtStreet,
+    ecriMinMonthsSinceChange: row.ecriMinMonthsSinceChange,
+    ecriMinGapCents: row.ecriMinGapCents,
     drawerVarianceThresholdCents: row.drawerVarianceThresholdCents,
     referralEnabled: row.referralEnabled,
     referralRewardCents: row.referralRewardCents,

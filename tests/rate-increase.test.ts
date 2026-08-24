@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   applyIsDue,
-  DEFAULT_ELIGIBILITY,
+  DEFAULT_ECRI_POLICY,
   earliestEffectiveDate,
   isCancellable,
   isEligibleForIncrease,
@@ -115,51 +115,97 @@ describe('isEligibleForIncrease — US-11’s rule-based selection', () => {
   }
 
   it('accepts a lease meeting both conditions', () => {
-    expect(isEligibleForIncrease(candidate, DEFAULT_ELIGIBILITY)).toBe(true)
+    expect(isEligibleForIncrease(candidate, DEFAULT_ECRI_POLICY)).toBe(true)
   })
 
   it('rejects a big gap on a recently-raised lease', () => {
-    expect(isEligibleForIncrease({ ...candidate, monthsSinceLastChange: 3 }, DEFAULT_ELIGIBILITY)).toBe(false)
+    expect(isEligibleForIncrease({ ...candidate, monthsSinceLastChange: 3 }, DEFAULT_ECRI_POLICY)).toBe(false)
   })
 
   it('rejects a long-untouched lease already at street', () => {
     expect(
-      isEligibleForIncrease({ ...candidate, streetRateCents: 12_900 }, DEFAULT_ELIGIBILITY),
+      isEligibleForIncrease({ ...candidate, streetRateCents: 12_900 }, DEFAULT_ECRI_POLICY),
     ).toBe(false)
   })
 
   it('rejects a gap just under the threshold', () => {
     expect(
-      isEligibleForIncrease({ ...candidate, streetRateCents: 12_900 + 1_499 }, DEFAULT_ELIGIBILITY),
+      isEligibleForIncrease({ ...candidate, streetRateCents: 12_900 + 1_499 }, DEFAULT_ECRI_POLICY),
     ).toBe(false)
   })
 
   it('accepts a gap exactly at the threshold', () => {
     expect(
-      isEligibleForIncrease({ ...candidate, streetRateCents: 12_900 + 1_500 }, DEFAULT_ELIGIBILITY),
+      isEligibleForIncrease({ ...candidate, streetRateCents: 12_900 + 1_500 }, DEFAULT_ECRI_POLICY),
     ).toBe(true)
   })
 
   it('accepts exactly the month threshold', () => {
-    expect(isEligibleForIncrease({ ...candidate, monthsSinceLastChange: 9 }, DEFAULT_ELIGIBILITY)).toBe(true)
+    expect(isEligibleForIncrease({ ...candidate, monthsSinceLastChange: 9 }, DEFAULT_ECRI_POLICY)).toBe(true)
   })
 
   it('rejects a lease with unknown history rather than assuming it is old enough', () => {
     expect(
-      isEligibleForIncrease({ ...candidate, monthsSinceLastChange: null }, DEFAULT_ELIGIBILITY),
+      isEligibleForIncrease({ ...candidate, monthsSinceLastChange: null }, DEFAULT_ECRI_POLICY),
     ).toBe(false)
   })
 
   it('rejects a lease priced ABOVE street', () => {
     expect(
-      isEligibleForIncrease({ ...candidate, streetRateCents: 10_000 }, DEFAULT_ELIGIBILITY),
+      isEligibleForIncrease({ ...candidate, streetRateCents: 10_000 }, DEFAULT_ECRI_POLICY),
     ).toBe(false)
   })
 })
 
-describe('targetRateFor', () => {
-  it('raises to street', () => {
-    expect(targetRateFor({ leaseId: 'l', inPlaceRateCents: 12_900, streetRateCents: 14_900, monthsSinceLastChange: 12 })).toBe(14_900)
+describe('targetRateFor — B-165 / D-94, the step rule', () => {
+  const lease = (inPlace: number, street: number) => ({
+    leaseId: 'l',
+    inPlaceRateCents: inPlace,
+    streetRateCents: street,
+    monthsSinceLastChange: 12,
+  })
+
+  it('takes a percentage of the in-place rate, not the gap', () => {
+    // $129 × 10% = $12.90 → $141.90 → $142.
+    expect(targetRateFor(lease(12_900, 20_000), DEFAULT_ECRI_POLICY)).toBe(14_200)
+  })
+
+  it('is the row this item exists for: $89 against a $145 street is not a 63% letter', () => {
+    // 89 × 1.10 = 97.90 → $98, and street is nowhere near it.
+    expect(targetRateFor(lease(8_900, 14_500), DEFAULT_ECRI_POLICY)).toBe(9_800)
+  })
+
+  it('never carries a tenant past street while capAtStreet holds', () => {
+    // 10% of $140 is $14, which would overshoot a $145 street rate.
+    expect(targetRateFor(lease(14_000, 14_500), DEFAULT_ECRI_POLICY)).toBe(14_500)
+  })
+
+  it('lets the step overshoot street when the cap is off', () => {
+    expect(
+      targetRateFor(lease(14_000, 14_500), { ...DEFAULT_ECRI_POLICY, capAtStreet: false }),
+    ).toBe(15_400)
+  })
+
+  it('raises a too-small step to the floor', () => {
+    // 10% of $30 is $3, below the $5 floor.
+    expect(targetRateFor(lease(3_000, 20_000), DEFAULT_ECRI_POLICY)).toBe(3_500)
+  })
+
+  it('clamps a too-large step to the ceiling', () => {
+    // 10% of $400 is $40, above the $30 ceiling.
+    expect(targetRateFor(lease(40_000, 90_000), DEFAULT_ECRI_POLICY)).toBe(43_000)
+  })
+
+  it('rounds the rate to a whole dollar, not the step', () => {
+    // $89.50 + $8.95 = $98.45 → $98. A notice quoting cents invites a call.
+    expect(targetRateFor(lease(8_950, 30_000), DEFAULT_ECRI_POLICY) % 100).toBe(0)
+    expect(targetRateFor(lease(8_950, 30_000), DEFAULT_ECRI_POLICY)).toBe(9_800)
+  })
+
+  it('is a real increase under the seeded default, which is the point', () => {
+    const target = targetRateFor(lease(8_900, 14_500), DEFAULT_ECRI_POLICY)
+    expect(target).toBeGreaterThan(8_900)
+    expect(target).toBeLessThan(14_500)
   })
 })
 

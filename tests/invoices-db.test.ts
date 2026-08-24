@@ -148,6 +148,10 @@ describeDb('recurring invoice generation', () => {
         value: 50,
         durationPeriods: 3,
         status: 'active',
+        // Scoped for the same reason as the transfer suite's fixture: an
+        // empty `facilityIds` means every facility, and this row is only ever
+        // read through its own redemption below.
+        facilityIds: [facilityId],
       },
     })
     await prisma.promoRedemption.create({

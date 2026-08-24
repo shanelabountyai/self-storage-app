@@ -194,7 +194,22 @@ describeDb('tenant rate increases (US-11 / CN-9)', () => {
     await prisma.lease.deleteMany({ where: { facilityId } })
     await prisma.unit.deleteMany({ where: { facilityId } })
     await prisma.tenant.deleteMany({ where: { email: { contains: suffix } } })
-    await prisma.facility.update({ where: { id: facilityId }, data: { rateIncreaseNoticeDays: 30 } })
+    // The facility outlives every test in this file, so anything a test
+    // changes about it has to be put back — B-165's step-rule tests set four
+    // of these, and a leaked 0% step drops every later test's candidate rows
+    // silently (they read as "no lease is eligible", not as a stale setting).
+    await prisma.facility.update({
+      where: { id: facilityId },
+      data: {
+        rateIncreaseNoticeDays: 30,
+        ecriPercentBasisPoints: 1_000,
+        ecriMinStepCents: 500,
+        ecriMaxStepCents: 3_000,
+        ecriCapAtStreet: true,
+        ecriMinMonthsSinceChange: 9,
+        ecriMinGapCents: 1_500,
+      },
+    })
   })
 
   afterAll(async () => {
@@ -291,8 +306,45 @@ describeDb('tenant rate increases (US-11 / CN-9)', () => {
       await makeLease({ monthlyRateCents: 12_900, lastChangeMonthsAgo: 24 })
       const rows = await previewEligibleIncreases(manager(), facilityId)
       expect(rows).toHaveLength(1)
-      expect(rows[0].newRateCents).toBe(14_900)
+      // B-165 / D-94. $129 × 10% = $12.90 → $141.90 → $142, well short of the
+      // $149 street rate. Before this row the answer was $149 in one letter.
+      expect(rows[0].newRateCents).toBe(14_200)
       expect(rows[0].gapCents).toBe(2_000)
+    })
+
+    it('B-165: uses the facility\'s configured step, not a module constant', async () => {
+      await makeLease({ monthlyRateCents: 12_900, lastChangeMonthsAgo: 24 })
+      await prisma.facility.update({
+        where: { id: facilityId },
+        data: { ecriPercentBasisPoints: 500, ecriMaxStepCents: 10_000 },
+      })
+      const rows = await previewEligibleIncreases(manager(), facilityId)
+      // 5% of $129 is $6.45 → $135.45 → $135.
+      expect(rows[0].newRateCents).toBe(13_500)
+    })
+
+    it('B-165: the street cap is the last word, and the setting turns it off', async () => {
+      // 10% of $145 is $14.50, which would overshoot the $149 street rate.
+      await makeLease({ monthlyRateCents: 14_500, lastChangeMonthsAgo: 24 })
+      await prisma.facility.update({
+        where: { id: facilityId },
+        data: { ecriMinGapCents: 100 },
+      })
+      expect((await previewEligibleIncreases(manager(), facilityId))[0].newRateCents).toBe(14_900)
+
+      await prisma.facility.update({ where: { id: facilityId }, data: { ecriCapAtStreet: false } })
+      expect((await previewEligibleIncreases(manager(), facilityId))[0].newRateCents).toBe(16_000)
+    })
+
+    it('B-165: drops a lease the policy cannot actually raise', async () => {
+      // Eligible by gap and tenure, but a zero step means the "increase" would
+      // be to the rate they already pay — a notice saying nothing changed.
+      await makeLease({ monthlyRateCents: 12_900, lastChangeMonthsAgo: 24 })
+      await prisma.facility.update({
+        where: { id: facilityId },
+        data: { ecriPercentBasisPoints: 0, ecriMinStepCents: 0 },
+      })
+      expect(await previewEligibleIncreases(manager(), facilityId)).toEqual([])
     })
 
     it('skips a recently-raised lease', async () => {
@@ -341,7 +393,7 @@ describeDb('tenant rate increases (US-11 / CN-9)', () => {
 
       const rows = await previewEligibleIncreases(manager(), facilityId)
       expect(rows.map((row) => row.leaseId)).toEqual([moved.id])
-      expect(rows[0].newRateCents).toBe(14_900)
+      expect(rows[0].newRateCents).toBe(14_200)
     })
 
     it('skips a lease that already has a live increase', async () => {

@@ -1277,6 +1277,57 @@ export default async function AdminSettingsPage() {
             defaultValue={facility.rateIncreaseNoticeDays}
             hint="The minimum an increase's effective date has to be from the day it is scheduled. 30 is the common lease term — what your state and lease actually require is a question for your attorney."
           />
+          {/* PRD 02 US-11 (B-165), D-94. How far a rule-based batch moves an
+              existing tenant. Until these existed the answer was "all the way
+              to street, in one letter" and nothing could change it. */}
+          <Field
+            name="ecriPercentStep"
+            label="Rate increase step (% of what they pay now)"
+            type="text"
+            inputMode="decimal"
+            defaultValue={(facility.ecriPercentBasisPoints / 100).toFixed(2)}
+            hint="A tenant judges an increase against their own rent, not against street. 10% is the common step."
+          />
+          <Field
+            name="ecriMinStepDollars"
+            label="Smallest increase worth sending ($)"
+            type="text"
+            inputMode="decimal"
+            defaultValue={(facility.ecriMinStepCents / 100).toFixed(2)}
+            hint="A step smaller than this is raised to it. Stops a cheap unit's percentage from being a letter that costs more to post than it collects."
+          />
+          <Field
+            name="ecriMaxStepDollars"
+            label="Largest increase in one step ($)"
+            type="text"
+            inputMode="decimal"
+            defaultValue={(facility.ecriMaxStepCents / 100).toFixed(2)}
+            hint="The control that actually bounds the letter. A tenant far below street closes the gap over several cycles instead of one."
+          />
+          <Field
+            name="ecriCapAtStreet"
+            as="checkbox"
+            label="Never raise an existing tenant above the street rate"
+            defaultChecked={facility.ecriCapAtStreet}
+            hint="On by default. Charging a sitting tenant more than a walk-in would pay today is not defensible on a retention call."
+          />
+          <Field
+            name="ecriMinMonthsSinceChange"
+            label="Months since their last rate change (minimum)"
+            type="number"
+            min={1}
+            max={60}
+            defaultValue={facility.ecriMinMonthsSinceChange}
+            hint="How long a lease must sit untouched before the rule will pick it."
+          />
+          <Field
+            name="ecriMinGapDollars"
+            label="Minimum gap to street before raising ($)"
+            type="text"
+            inputMode="decimal"
+            defaultValue={(facility.ecriMinGapCents / 100).toFixed(2)}
+            hint="A lease already close to street has nothing worth raising."
+          />
           <Field
             name="abandonmentFollowUpHours"
             label="Email a checkout that stalls, at these hours"

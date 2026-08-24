@@ -9,7 +9,6 @@ import { leaseChainIds } from '@/lib/billing/transfer-chain'
 import {
   applyIsDue,
   decreaseProblem,
-  DEFAULT_ELIGIBILITY,
   isCancellable,
   isEligibleForIncrease,
   LIVE_RATE_INCREASE_STATUSES,
@@ -23,7 +22,7 @@ import {
   utcDay,
   type CandidateLease,
   type DecreaseProblem,
-  type EligibilityRule,
+  type EcriPolicy,
   type ScheduleProblem,
 } from '@storage/core/pricing'
 import { createTask } from '@/lib/admin/tasks'
@@ -350,6 +349,34 @@ function formatLimit(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`
 }
 
+/// B-165 / D-94. The facility's ECRI rule, read from settings rather than
+/// from a module constant.
+///
+/// One loader used by both the preview and the commit, so the batch cannot
+/// be scheduled under a rule different from the one the approver was shown —
+/// which is exactly the failure mode a default parameter invited.
+export async function ecriPolicyFor(facilityId: string): Promise<EcriPolicy> {
+  const facility = await prisma.facility.findUniqueOrThrow({
+    where: { id: facilityId },
+    select: {
+      ecriPercentBasisPoints: true,
+      ecriMinStepCents: true,
+      ecriMaxStepCents: true,
+      ecriCapAtStreet: true,
+      ecriMinMonthsSinceChange: true,
+      ecriMinGapCents: true,
+    },
+  })
+  return {
+    percentStepBps: facility.ecriPercentBasisPoints,
+    minStepCents: facility.ecriMinStepCents,
+    maxStepCents: facility.ecriMaxStepCents,
+    capAtStreet: facility.ecriCapAtStreet,
+    minMonthsSinceLastChange: facility.ecriMinMonthsSinceChange,
+    minGapCents: facility.ecriMinGapCents,
+  }
+}
+
 export type BatchPreviewRow = CandidateLease & {
   tenantName: string
   unitNumber: string
@@ -365,9 +392,11 @@ export type BatchPreviewRow = CandidateLease & {
 export async function previewEligibleIncreases(
   actor: Actor,
   facilityId: string,
-  rule: EligibilityRule = DEFAULT_ELIGIBILITY,
+  policy?: EcriPolicy,
 ): Promise<BatchPreviewRow[]> {
   requirePermission(actor, 'rates:tenant_increase', facilityId)
+
+  const rule = policy ?? (await ecriPolicyFor(facilityId))
 
   const leases = await prisma.lease.findMany({
     where: { facilityId, status: { in: [...OCCUPYING_LEASE_STATUSES] } },
@@ -450,11 +479,17 @@ export async function previewEligibleIncreases(
         ...candidate,
         tenantName: `${lease.tenant.firstName} ${lease.tenant.lastName}`,
         unitNumber: lease.unit.number,
-        newRateCents: targetRateFor(candidate),
+        newRateCents: targetRateFor(candidate, rule),
         gapCents: streetRateCents - lease.monthlyRateCents,
       }
     })
     .filter((row) => isEligibleForIncrease(row, rule))
+    // A policy can be configured down to no step at all (0%, $0 floor), and a
+    // capped-at-street target on a lease already within a rounding cent of
+    // street lands on the rate it already has. Either way the row is not an
+    // increase, and scheduling it would put a notice in front of a tenant
+    // telling them their rent is going up by nothing.
+    .filter((row) => row.newRateCents > row.inPlaceRateCents)
 
   // Ordered by the same core definition the rate-variance report uses — the
   // worklist and the report must not disagree about which lease is most
@@ -471,7 +506,7 @@ export async function scheduleEligibleBatch(
   actor: Actor,
   facilityId: string,
   effectiveDate: Date,
-  rule: EligibilityRule = DEFAULT_ELIGIBILITY,
+  policy?: EcriPolicy,
 ): Promise<BatchResult> {
   requirePermission(actor, 'rates:tenant_increase', facilityId)
 
@@ -494,7 +529,7 @@ export async function scheduleEligibleBatch(
   })
   if (dateProblem) return { ok: false, reason: PROBLEM_MESSAGE[dateProblem] }
 
-  const candidates = await previewEligibleIncreases(actor, facilityId, rule)
+  const candidates = await previewEligibleIncreases(actor, facilityId, policy)
   if (candidates.length === 0) return { ok: false, reason: 'No leases meet the rule right now.' }
 
   const batchId = randomUUID()

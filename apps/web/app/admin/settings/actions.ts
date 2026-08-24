@@ -795,6 +795,45 @@ export async function updateOperationsPolicyAction(
     unit: "days",
   });
 
+  // ── PRD 02 US-11 (B-165), D-94. The ECRI step rule. ──────────────────────
+  //
+  // Six controls for six columns. The ceilings are deliberately tight: this
+  // whole row exists because an unbounded step sent a tenant at $89 a letter
+  // raising them to $145, so a form that would let someone type 900% has
+  // rebuilt the defect with more keystrokes.
+  const ecriPercent = parseScaled(formData.get("ecriPercentStep"), {
+    scale: 100,
+    min: 0,
+    max: 50,
+    unit: "percent",
+  });
+  const ecriMinStep = parseScaled(formData.get("ecriMinStepDollars"), {
+    scale: 100,
+    min: 0,
+    max: 500,
+    unit: "dollars",
+  });
+  const ecriMaxStep = parseScaled(formData.get("ecriMaxStepDollars"), {
+    scale: 100,
+    min: 0,
+    max: 500,
+    unit: "dollars",
+  });
+  // Minimum 1 month: zero would make every lease eligible every night, which
+  // is a batch that raises the same tenant twelve times a year.
+  const ecriMinMonths = parseScaled(formData.get("ecriMinMonthsSinceChange"), {
+    scale: 1,
+    min: 1,
+    max: 60,
+    unit: "months",
+  });
+  const ecriMinGap = parseScaled(formData.get("ecriMinGapDollars"), {
+    scale: 100,
+    min: 0,
+    max: 500,
+    unit: "dollars",
+  });
+
   // PRD 02 US-33 (B-078). Zero is legal here, unlike the notice period: a
   // facility that wants every penny explained is making a real choice.
   const drawerVariance = parseScaled(
@@ -869,6 +908,23 @@ export async function updateOperationsPolicyAction(
   if ("error" in leadHours) errors.leadFollowUpHours = leadHours.error;
   if ("error" in rateNoticeDays)
     errors.rateIncreaseNoticeDays = rateNoticeDays.error;
+  if ("error" in ecriPercent) errors.ecriPercentStep = ecriPercent.error;
+  if ("error" in ecriMinStep) errors.ecriMinStepDollars = ecriMinStep.error;
+  if ("error" in ecriMaxStep) errors.ecriMaxStepDollars = ecriMaxStep.error;
+  if ("error" in ecriMinMonths)
+    errors.ecriMinMonthsSinceChange = ecriMinMonths.error;
+  if ("error" in ecriMinGap) errors.ecriMinGapDollars = ecriMinGap.error;
+  // A ceiling below the floor is not a stricter rule, it is an unsatisfiable
+  // one: `targetRateFor` clamps to the max last, so the max would silently
+  // win and the floor the operator typed would never apply.
+  if (
+    !("error" in ecriMinStep) &&
+    !("error" in ecriMaxStep) &&
+    ecriMaxStep.value < ecriMinStep.value
+  ) {
+    errors.ecriMaxStepDollars =
+      "The largest step cannot be smaller than the smallest one.";
+  }
   if ("error" in drawerVariance)
     errors.drawerVarianceThresholdDollars = drawerVariance.error;
   if ("error" in referrerReward)
@@ -909,6 +965,11 @@ export async function updateOperationsPolicyAction(
     "error" in maxStartAhead ||
     "error" in leadHours ||
     "error" in rateNoticeDays ||
+    "error" in ecriPercent ||
+    "error" in ecriMinStep ||
+    "error" in ecriMaxStep ||
+    "error" in ecriMinMonths ||
+    "error" in ecriMinGap ||
     "error" in drawerVariance ||
     "error" in referrerReward ||
     "error" in refereeReward ||
@@ -931,6 +992,12 @@ export async function updateOperationsPolicyAction(
       leadFollowUpHours: leadHours.value,
       abandonmentFollowUpHours: abandonmentHours,
       rateIncreaseNoticeDays: rateNoticeDays.value,
+      ecriPercentBasisPoints: ecriPercent.value,
+      ecriMinStepCents: ecriMinStep.value,
+      ecriMaxStepCents: ecriMaxStep.value,
+      ecriCapAtStreet: formData.get("ecriCapAtStreet") === "yes",
+      ecriMinMonthsSinceChange: ecriMinMonths.value,
+      ecriMinGapCents: ecriMinGap.value,
       drawerVarianceThresholdCents: drawerVariance.value,
       referralEnabled: formData.get("referralEnabled") === "yes",
       referralCrossFacility: formData.get("referralCrossFacility") === "yes",

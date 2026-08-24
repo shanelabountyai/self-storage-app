@@ -1201,6 +1201,14 @@ describeDb('unit transfer (US-14)', () => {
           durationPeriods: 3,
           status: 'active',
           minStayMonths: 6,
+          // Scoped to THIS suite's facility. An active promotion with an empty
+          // `facilityIds` means "every facility" (see `evaluatePromotions`),
+          // and `candidates()` loads every active row in the database — so an
+          // unscoped fixture here advertises a discount at whatever facility
+          // another suite is quoting in parallel. It made
+          // `inquiries-db.test.ts`'s "reports no promotion when none is
+          // running" fail in a full sweep and pass on its own.
+          facilityIds: [facilityId],
         },
       })
       const redemption = await prisma.promoRedemption.create({

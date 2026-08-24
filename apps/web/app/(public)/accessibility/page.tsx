@@ -301,6 +301,14 @@ const LAST_REVIEWED = '19 August 2026'
 // not a route**, which is exactly the route-list gap this page now names and
 // B-184 owns: the scan will render the schedulable version of the page and
 // never this one. `LAST_REVIEWED` is not bumped.
+//
+// Re-verified 2026-08-24, at B-165 (a rule-based rate increase is a step, not a
+// jump to street). Nothing customer-facing: six controls added to
+// `/admin/settings` and two columns to the worklist on `/admin/rate-increases`,
+// both staff-only, and this page makes no claims about `/admin`. The notice a
+// tenant receives is unchanged — only the figure inside it is smaller. No route
+// added, so the generated coverage claim is untouched. Recorded rather than
+// skipped, per the rule the B-150 entry states. `LAST_REVIEWED` is not bumped.
 export default function AccessibilityPage() {
   return (
     <ProsePage

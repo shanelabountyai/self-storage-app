@@ -86,9 +86,42 @@ export type EligibilityRule = {
   minGapCents: number
 }
 
-export const DEFAULT_ELIGIBILITY: EligibilityRule = {
+/// B-165 / D-94. The whole ECRI rule for one facility — who is picked AND how
+/// far they move. It is one type rather than two because an operator sets it
+/// in one sitting and because splitting it is how the step half came to be a
+/// module constant nobody could reach: eligibility was configurable-shaped
+/// (a parameter) while the target was a hardcoded return, so the batch raised
+/// every picked tenant the entire distance to street in one letter.
+export type EcriPolicy = EligibilityRule & {
+  /// Hundredths of a percent, so 10% is 1000 — the same unit as tax rates and
+  /// the late-fee ladder. The step is a percentage of the IN-PLACE rate, not
+  /// of the gap: a tenant judges an increase against what they pay now.
+  percentStepBps: number
+  /// Floors and ceilings on the computed step, in cents. The floor stops a
+  /// cheap unit's 10% from being a $4 letter that costs more to post than it
+  /// collects; the ceiling is what actually prevents the 63% jump this row
+  /// exists to stop, because a percentage alone still compounds on a big rate.
+  minStepCents: number
+  maxStepCents: number
+  /// Whether the step is allowed to carry a tenant PAST the street rate.
+  /// True by default: charging an existing tenant more than a walk-in would
+  /// pay for the same unit today is indefensible in a retention call.
+  capAtStreet: boolean
+}
+
+/// The seeded default for a newly created facility (D-94, 2026-08-24).
+///
+/// 10% capped at $30 is the conservative-but-real industry step, and it is
+/// deliberately NOT the previous behaviour: a facility nobody has configured
+/// must not send the letter that loses the cohort. D-10 keeps every figure
+/// per-facility, so an operator who wants a different curve sets one.
+export const DEFAULT_ECRI_POLICY: EcriPolicy = {
   minMonthsSinceLastChange: 9,
   minGapCents: 1_500,
+  percentStepBps: 1_000,
+  minStepCents: 500,
+  maxStepCents: 3_000,
+  capAtStreet: true,
 }
 
 export type CandidateLease = {
@@ -113,15 +146,23 @@ export function isEligibleForIncrease(candidate: CandidateLease, rule: Eligibili
   return candidate.streetRateCents - candidate.inPlaceRateCents >= rule.minGapCents
 }
 
-/// What a rule-based batch would raise each eligible lease TO.
+/// What a rule-based batch would raise each eligible lease TO (B-165).
 ///
-/// Street, capped by nothing — the point of the rule is to close the gap to
-/// the rate a new tenant would pay today. An operator wanting a softer step
-/// schedules one-offs instead; a percentage cap is a real feature and
-/// deliberately not invented here, because the AC does not ask for one and a
-/// guessed cap would quietly become the thing every batch does.
-export function targetRateFor(candidate: CandidateLease): number {
-  return candidate.streetRateCents
+/// `min(street, inPlace × (1 + pct))`, with the step itself bounded by the
+/// policy's floor and ceiling and the result rounded to whole dollars — a
+/// notice quoting $98.79 invites a phone call about the 79 cents.
+///
+/// Order matters and is the whole correctness argument: the percentage is
+/// taken first, the floor and ceiling clamp the STEP (not the rate), the
+/// rounding lands on a dollar, and the street cap is applied LAST so nothing
+/// downstream of it can push a tenant past what a walk-in would pay.
+export function targetRateFor(candidate: CandidateLease, policy: EcriPolicy): number {
+  const raw = Math.round((candidate.inPlaceRateCents * policy.percentStepBps) / 10_000)
+  const step = Math.min(Math.max(raw, policy.minStepCents), policy.maxStepCents)
+  // Round the RATE, not the step: $89.50 + $9 should land on a whole dollar,
+  // and rounding the step would leave the half-dollar in place forever.
+  const target = Math.round((candidate.inPlaceRateCents + step) / 100) * 100
+  return policy.capAtStreet ? Math.min(target, candidate.streetRateCents) : target
 }
 
 /// US-11 AC: "a rate-increase review screen shows pending increases with

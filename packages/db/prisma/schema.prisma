@@ -744,6 +744,27 @@ model Facility {
   /// D-10's attorney pass has not settled the Texas figure (PROGRESS.md
   /// still lists it open), so the default is the conservative common term.
   rateIncreaseNoticeDays       Int                  @default(30)
+  /// PRD 02 US-11 (B-165), D-94. The ECRI step rule. Before these columns
+  /// existed a rule-based batch raised every eligible tenant the whole way to
+  /// street in one letter — a tenant at $89 against a $145 street rate got a
+  /// 63% increase, which is how an operator loses a cohort in a month.
+  ///
+  /// Hundredths of a percent, like `LateFeeStep.percentBasisPoints` and
+  /// `TaxComponent.rateBasisPoints`: 10% is 1000. Applied to the IN-PLACE
+  /// rate, then clamped by the two step bounds below.
+  ecriPercentBasisPoints       Int                  @default(1000)
+  /// Floor and ceiling on the computed step, in cents. The ceiling is the
+  /// control that actually bounds the letter — a percentage alone still
+  /// compounds on a high rate.
+  ecriMinStepCents             Int                  @default(500)
+  ecriMaxStepCents             Int                  @default(3000)
+  /// Whether a step may carry an existing tenant PAST the street rate.
+  ecriCapAtStreet              Boolean              @default(true)
+  /// US-11's eligibility example ("≥ 9 months since last increase and ≥ $15
+  /// below street"), which was a hardcoded module constant no form could
+  /// override until B-165.
+  ecriMinMonthsSinceChange     Int                  @default(9)
+  ecriMinGapCents              Int                  @default(1500)
   /// A residual balance at or below this can be written off to close the
   /// lease; anything above needs a manager (US-14's own AC).
   writeOffThresholdCents       Int                  @default(1000)
