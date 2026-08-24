@@ -187,6 +187,8 @@ export const ADMIN_SCAN_ROUTES = [
   '/admin/reports/structured-data',
   // B-090 part 1.
   '/admin/reports/waitlist',
+  // B-163.
+  '/admin/reports/protection',
   '/admin/reports/rent-roll',
   '/admin/reports/revenue',
   // B-092. A page not on this list is a page nobody scans — and this one is

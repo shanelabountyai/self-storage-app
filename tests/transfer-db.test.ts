@@ -157,6 +157,7 @@ describeDb('unit transfer (US-14)', () => {
     await prisma.leaseRateChange.deleteMany({ where: { lease: { facilityId } } })
     await prisma.leaseHold.deleteMany({ where: { lease: { facilityId } } })
     await prisma.tenantRateIncrease.deleteMany({ where: { facilityId } })
+    await prisma.protectionWaiver.deleteMany({ where: { facilityId } })
     // B-162's promotion cases. `PromoRedemption` RESTRICTs the promotion and
     // the facility, so the redemptions go before either.
     await prisma.promoRedemption.deleteMany({ where: { facilityId } })
@@ -185,6 +186,7 @@ describeDb('unit transfer (US-14)', () => {
     await prisma.leaseRateChange.deleteMany({ where: { lease: { facilityId } } })
     await prisma.leaseHold.deleteMany({ where: { lease: { facilityId } } })
     await prisma.tenantRateIncrease.deleteMany({ where: { facilityId } })
+    await prisma.protectionWaiver.deleteMany({ where: { facilityId } })
     // B-162's promotion cases. `PromoRedemption` RESTRICTs the promotion and
     // the facility, so the redemptions go before either.
     await prisma.promoRedemption.deleteMany({ where: { facilityId } })
@@ -1273,6 +1275,57 @@ describeDb('unit transfer (US-14)', () => {
           data: { promoRecapturePolicy: 'none' },
         })
       }
+    })
+  })
+
+  // B-163. The waiver was the last protective fact left on the closed lease,
+  // after B-137 carried the holds and B-162 the promotion.
+  describe('proof of insurance follows the tenant (B-163)', () => {
+    it('re-points the waiver, expiry untouched', async () => {
+      const from = await makeUnit(smallTypeId)
+      const lease = await makeLease(from.id)
+      const expiresAt = d('2027-03-01')
+      const waiver = await prisma.protectionWaiver.create({
+        data: { facilityId, leaseId: lease.id, tenantId, carrier: 'State Farm', expiresAt },
+      })
+      const to = await makeUnit(smallTypeId)
+
+      const done = await completeTransfer(manager(), {
+        leaseId: lease.id,
+        toUnitId: to.id,
+        transferDate: d('2026-08-15'),
+      })
+      if (!done.ok) throw new Error(done.problem)
+
+      const after = await prisma.protectionWaiver.findUniqueOrThrow({ where: { id: waiver.id } })
+      expect(after.leaseId).toBe(done.newLeaseId)
+      // A transfer is not a renewal: the certificate expires when it expires.
+      expect(after.expiresAt).toEqual(expiresAt)
+
+      const entry = await prisma.auditLog.findFirstOrThrow({
+        where: { action: 'lease.transferred', entityId: lease.id },
+        orderBy: { occurredAt: 'desc' },
+      })
+      expect((entry.after as Record<string, unknown>).protectionWaiverMoved).toBe(true)
+    })
+
+    it('moves an ALREADY-LAPSED waiver too, so a swap cannot shed a lapse', async () => {
+      const from = await makeUnit(smallTypeId)
+      const lease = await makeLease(from.id)
+      await prisma.protectionWaiver.create({
+        data: { facilityId, leaseId: lease.id, tenantId, expiresAt: d('2026-01-01') },
+      })
+      const to = await makeUnit(smallTypeId)
+
+      const done = await completeTransfer(manager(), {
+        leaseId: lease.id,
+        toUnitId: to.id,
+        transferDate: d('2026-08-15'),
+      })
+      if (!done.ok) throw new Error(done.problem)
+
+      const after = await prisma.protectionWaiver.findFirstOrThrow({ where: { facilityId } })
+      expect(after.leaseId).toBe(done.newLeaseId)
     })
   })
 

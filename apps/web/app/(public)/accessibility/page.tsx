@@ -278,6 +278,16 @@ const LAST_REVIEWED = '19 August 2026'
 // already-labelled field, not a new control or a new route. No public route
 // added, so the generated coverage claim and the route-keyed exception list are
 // untouched. `LAST_REVIEWED` is not bumped.
+//
+// Re-verified 2026-08-24, at B-163 (proof of insurance keeps being monitored
+// after a transfer). Nothing customer-facing: the change is in the transfer
+// service and the nightly scan, and the one new page is
+// `/admin/reports/protection`, which this statement makes no claims about. It
+// IS added to `ADMIN_SCAN_ROUTES`, so `admin.spec.ts` scans it like every other
+// admin page — the contract B-139 built exists so a new route cannot ship
+// unscanned, and it caught this one. No public route added, so the generated
+// coverage claim and the route-keyed exception list are untouched.
+// `LAST_REVIEWED` is not bumped.
 export default function AccessibilityPage() {
   return (
     <ProsePage

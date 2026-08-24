@@ -312,6 +312,16 @@ export default async function ReportsPage({
         >
           Waitlist — who is waiting for a size you are full on
         </Link>
+        {/* B-163. Beside the waitlist because both are worklists rather than
+            period metrics — the attach-rate table above says how last month's
+            move-ins were sold, this says which units are uninsured today, and
+            a tenant who waived two years ago and lapsed appears only here. */}
+        <Link
+          href="/admin/reports/protection"
+          className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
+        >
+          Uncovered units — occupied, with no plan and no current certificate
+        </Link>
         {/* B-087 part 1. Next to indexation and duplicate content: all three
             are about whether what we publish is reaching search engines
             intact. */}

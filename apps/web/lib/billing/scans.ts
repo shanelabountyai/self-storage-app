@@ -6,6 +6,7 @@ import { OCCUPYING_LEASE_STATUSES } from '@storage/core/inventory'
 import { createTask } from '@/lib/admin/tasks'
 import { stripeClient } from '@/lib/payments/stripe'
 import { currentPlans } from '@/lib/protection/plans'
+import { leaseSuccessorIds } from '@/lib/billing/transfer-chain'
 
 // B-043 / PRD 02 FR-4's two pre-emptive scans, and PRD 05 CN-10a.
 //
@@ -174,6 +175,29 @@ export async function scanExpiringProtectionProofs(
     select: { id: true, tenantId: true },
   })
   const live = new Map(leases.map((lease) => [lease.id, lease]))
+
+  // B-163. The waivers whose lease is no longer occupying, followed forward.
+  //
+  // `completeTransfer` re-points a waiver now, so nothing NEW lands here — but
+  // every waiver on a lease transferred before that shipped is still stranded,
+  // and a future writer that opens a lease from another and forgets would
+  // re-open the hole in silence. This is both the repair and the backstop, on
+  // B-151's reasoning: a nightly job that fixes what it finds cannot be
+  // forgotten the way a one-off script can, and it costs one extra query on
+  // the nights there is nothing to fix.
+  const stranded = waivers.filter((waiver) => !live.has(waiver.leaseId!))
+  const rehomed = stranded.length > 0 ? await rehomeStrandedWaivers(facilityId, stranded) : []
+  for (const moved of rehomed) {
+    live.set(moved.leaseId, { id: moved.leaseId, tenantId: moved.tenantId })
+    const waiver = waivers.find((one) => one.id === moved.waiverId)
+    if (waiver) waiver.leaseId = moved.leaseId
+    recordItem({
+      itemId: moved.leaseId,
+      ok: true,
+      message: 'proof of insurance re-attached to the lease the tenant transferred into',
+    })
+  }
+
   const scannable = waivers.filter((waiver) => live.has(waiver.leaseId!))
   if (scannable.length === 0) return
 
@@ -232,6 +256,56 @@ export async function scanExpiringProtectionProofs(
       message: enrolled ?? (open ? 'proof lapsed, task already open' : 'proof lapsed, task raised'),
     })
   }
+}
+
+/// B-163. Moves a waiver stranded on an ended lease onto the live lease the
+/// tenant transferred into, and reports the ones it moved.
+///
+/// Only leases that are still occupying and still on the waiver path are
+/// candidates: a lease carrying a `protectionPlanName` is covered by a plan we
+/// sell, so an old waiver on it is history rather than a live obligation —
+/// the same rule the scan itself applies.
+async function rehomeStrandedWaivers(
+  facilityId: string,
+  stranded: { id: string; leaseId: string | null }[],
+): Promise<{ waiverId: string; leaseId: string; tenantId: string }[]> {
+  const chains = await leaseSuccessorIds(stranded.map((waiver) => waiver.leaseId!))
+  const successorIds = [...new Set([...chains.values()].flat())]
+  const candidates = await prisma.lease.findMany({
+    where: {
+      id: { in: successorIds },
+      facilityId,
+      status: { in: [...OCCUPYING_LEASE_STATUSES] },
+      protectionPlanName: null,
+    },
+    select: { id: true, tenantId: true },
+  })
+  if (candidates.length === 0) return []
+  const byId = new Map(candidates.map((lease) => [lease.id, lease]))
+
+  // A successor that recorded its own waiver keeps it: `leaseId` is unique, and
+  // the tenant's newer certificate is the one that means anything.
+  const taken = new Set(
+    (
+      await prisma.protectionWaiver.findMany({
+        where: { leaseId: { in: candidates.map((lease) => lease.id) } },
+        select: { leaseId: true },
+      })
+    ).map((waiver) => waiver.leaseId!),
+  )
+
+  const moved: { waiverId: string; leaseId: string; tenantId: string }[] = []
+  for (const waiver of stranded) {
+    // `leaseSuccessorIds` returns each chain newest LAST, and the tenant is at
+    // the end of it — the only lease they are actually in today.
+    const chain = chains.get(waiver.leaseId!) ?? []
+    const target = [...chain].reverse().find((id) => byId.has(id) && !taken.has(id))
+    if (!target) continue
+    await prisma.protectionWaiver.update({ where: { id: waiver.id }, data: { leaseId: target } })
+    taken.add(target)
+    moved.push({ waiverId: waiver.id, leaseId: target, tenantId: byId.get(target)!.tenantId })
+  }
+  return moved
 }
 
 /// D-17's enrolment. Returns a message when it charged, null when it did not.

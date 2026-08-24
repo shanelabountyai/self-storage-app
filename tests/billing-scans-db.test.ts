@@ -116,6 +116,8 @@ describeDb('protection proof scan', () => {
     // cleaned up here — every assertion below is scoped to its own lease id.
     await prisma.domainEvent.deleteMany({ where: { facilityId } })
     await prisma.protectionWaiver.deleteMany({ where: { facilityId } })
+    // B-163's cases open a lease from another, which RESTRICTs its ancestor.
+    await prisma.lease.deleteMany({ where: { facilityId, transferredFromLeaseId: { not: null } } })
     await prisma.lease.deleteMany({ where: { facilityId } })
     await prisma.unit.deleteMany({ where: { facilityId } })
     await setPolicy(false, null)
@@ -130,6 +132,110 @@ describeDb('protection proof scan', () => {
     // under RESTRICT, which is the point of an audit trail. Same as the other
     // DB suites, which all leave their fixture facility behind.
     await prisma.$disconnect()
+  })
+
+  // B-163. The leak underneath the number B-155 built.
+  //
+  // The scan reads waivers by `leaseId` and then filters to occupying leases,
+  // so a waiver naming a lease a transfer ended was not missed once — it was
+  // dropped for ever. `completeTransfer` re-points the row now; this covers the
+  // waivers already stranded before that shipped, and the future writer who
+  // opens a lease from another and forgets.
+  describe('a tenant who transferred (B-163)', () => {
+    /// Ends `fromLeaseId` as a transfer and opens a lease from it, leaving the
+    /// waiver where it was — the state every pre-B-163 transfer left behind.
+    async function transferAway(fromLeaseId: string): Promise<string> {
+      unitCounter += 1
+      const unit = await prisma.unit.create({
+        data: { facilityId, unitTypeId, number: `SX-${unitCounter}` },
+      })
+      await prisma.lease.update({
+        where: { id: fromLeaseId },
+        data: { status: 'ended', endDate: new Date(), moveOutReason: 'transfer' },
+      })
+      const moved = await prisma.lease.create({
+        data: {
+          facilityId,
+          tenantId,
+          unitId: unit.id,
+          status: 'active',
+          startDate: new Date(),
+          monthlyRateCents: 12_900,
+          billingDay: 1,
+          transferredFromLeaseId: fromLeaseId,
+        },
+      })
+      return moved.id
+    }
+
+    it('re-attaches a stranded waiver and then notices it expiring', async () => {
+      const originId = await leaseWithWaiver(businessDay(20))
+      const movedId = await transferAway(originId)
+
+      await scanExpiringProtectionProofs(facilityId, businessDay(0), recordItem)
+
+      const waiver = await prisma.protectionWaiver.findFirstOrThrow({ where: { facilityId } })
+      expect(waiver.leaseId).toBe(movedId)
+
+      // And the notice it existed to send, against the lease the tenant is
+      // actually in. Before this, nothing fired — ever.
+      const event = await prisma.domainEvent.findFirstOrThrow({
+        where: { facilityId, name: 'protection.proof_expiring' },
+      })
+      expect(event.entityId).toBe(movedId)
+    })
+
+    it('raises the lapse task against the lease the tenant is in', async () => {
+      const originId = await leaseWithWaiver(businessDay(-1))
+      const movedId = await transferAway(originId)
+
+      await scanExpiringProtectionProofs(facilityId, businessDay(0), recordItem)
+
+      const task = await prisma.task.findFirstOrThrow({
+        where: { facilityId, type: 'insurance_proof_lapsed' },
+      })
+      expect(task.entityId).toBe(movedId)
+    })
+
+    it('leaves a successor that recorded its own certificate alone', async () => {
+      const originId = await leaseWithWaiver(businessDay(20))
+      const movedId = await transferAway(originId)
+      // The tenant produced a new certificate after moving. `leaseId` is
+      // unique, and the newer one is the one that means anything.
+      const own = await prisma.protectionWaiver.create({
+        data: {
+          facilityId,
+          leaseId: movedId,
+          tenantId,
+          carrier: 'Allstate',
+          policyNumber: 'POL-2',
+          expiresAt: new Date(businessDay(300).getTime() + 12 * 3_600_000),
+        },
+      })
+
+      await scanExpiringProtectionProofs(facilityId, businessDay(0), recordItem)
+
+      const stranded = await prisma.protectionWaiver.findFirstOrThrow({
+        where: { facilityId, id: { not: own.id } },
+      })
+      expect(stranded.leaseId).toBe(originId)
+      // Nothing to say: the live lease's own proof is 300 days out.
+      expect(await prisma.domainEvent.count({ where: { facilityId } })).toBe(0)
+    })
+
+    it('leaves a waiver behind when the tenant genuinely moved out', async () => {
+      const leaseId = await leaseWithWaiver(businessDay(20))
+      await prisma.lease.update({
+        where: { id: leaseId },
+        data: { status: 'ended', endDate: new Date(), moveOutReason: 'tenant_request' },
+      })
+
+      await scanExpiringProtectionProofs(facilityId, businessDay(0), recordItem)
+
+      const waiver = await prisma.protectionWaiver.findFirstOrThrow({ where: { facilityId } })
+      expect(waiver.leaseId).toBe(leaseId)
+      expect(await prisma.domainEvent.count({ where: { facilityId } })).toBe(0)
+    })
   })
 
   it('says nothing about a proof that is more than 30 days out', async () => {

@@ -703,6 +703,26 @@ export async function completeTransfer(
       )
     }
 
+    // ── Proof of insurance follows the tenant (B-163) ────────────────────
+    //
+    // B-137 carried the tenant's `LeaseHold`s and B-162 the promotion; the
+    // waiver was the one protective fact still left on the closed lease. It
+    // matters more than it looks: `scanExpiringProtectionProofs` reads waivers
+    // by `leaseId` and then filters to occupying leases, so a waiver naming an
+    // ended lease is not missed once — it is dropped for ever. The tenant's
+    // certificate expires, `insurance_proof_lapsed` never fires, and US-44's
+    // required-protection policy is silently unenforced for exactly the
+    // tenants who moved.
+    //
+    // Re-pointed, not copied, and `expiresAt` rides along untouched: the
+    // certificate expires when it expires, and a transfer is not a renewal.
+    // An ALREADY-EXPIRED waiver moves too, deliberately — leaving it behind
+    // would make a unit swap a way to shed a lapse that has already happened.
+    const movedWaiver = await tx.protectionWaiver.updateMany({
+      where: { leaseId: lease.id },
+      data: { leaseId: created.id },
+    })
+
     // ── The promotion follows the tenant (B-162, D-93) ───────────────────
     //
     // D-89 settled that a transfer recaptures nothing — "a transferred tenant
@@ -904,6 +924,7 @@ export async function completeTransfer(
           raisesRate: preview.raisesRate,
           cancelledRateIncreaseIds: cancelledIncreases.map((one) => one.id),
           promoRedemptionMoved: movedRedemption.count > 0,
+          protectionWaiverMoved: movedWaiver.count > 0,
           refundCents: preview.refundCents,
           chargeCents: preview.chargeCents,
           transferFeeCents: preview.transferFeeCents,
