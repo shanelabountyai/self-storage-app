@@ -149,7 +149,7 @@ export function arAgingNote(asOf: Date, timezone: string | null, periodLabel: st
   const scope = timezone
     ? ''
     : ' These facilities span more than one timezone, so this is stated in UTC.'
-  return `Balances are aged as at ${at} — the ${periodLabel} range above does not apply to them, because how old a debt is describes one instant rather than a range.${scope}`
+  return `Balances are aged as at ${at}. The ${periodLabel} range above does not apply to them.${scope}`
 }
 
 /// The one sentence every surface prints under a unit-occupancy figure.

@@ -99,15 +99,22 @@ export default async function WaitlistPage({
                 <tr className="border-input border-b text-left">
                   <th scope="col" className="py-2 pr-4">Size</th>
                   <th scope="col" className="py-2 pr-4">Waiting</th>
-                  <th scope="col" className="py-2 pr-4">Been told</th>
-                  <th scope="col" className="py-2 pr-4">Free now</th>
+                  <th scope="col" className="py-2 pr-4">Notified</th>
+                  <th scope="col" className="py-2 pr-4">Units free now</th>
                   <th scope="col" className="py-2 pr-4">Longest wait since</th>
                   <th scope="col" className="py-2 pr-4">Contact</th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row) => (
-                  <tr key={row.unitTypeId} className="border-input border-b">
+                {rows.map((row) => {
+                  // B-183: waiting AND free-right-now is the one actionable
+                  // row on this page — the sweep should already be emailing
+                  // it, but a stalled or slow-to-claim sweep means someone
+                  // could just be called. Surfaced as its own cell, not left
+                  // to be spotted by comparing two columns.
+                  const actionable = row.waiting > 0 && row.availableNow > 0
+                  return (
+                  <tr key={row.unitTypeId} className={`border-input border-b ${actionable ? 'bg-amber-50 dark:bg-amber-950' : ''}`}>
                     <th scope="row" className="py-2 pr-4 text-left font-normal">
                       <span aria-hidden="true">
                         {row.widthFt}×{row.lengthFt}
@@ -119,7 +126,14 @@ export default async function WaitlistPage({
                     </th>
                     <td className="py-2 pr-4 font-medium tabular-nums">{row.waiting}</td>
                     <td className="py-2 pr-4 tabular-nums">{row.claiming}</td>
-                    <td className="py-2 pr-4 tabular-nums">{row.availableNow}</td>
+                    <td className="py-2 pr-4 tabular-nums">
+                      {row.availableNow}
+                      {actionable && (
+                        <span className="ml-2 text-xs font-medium text-amber-800 dark:text-amber-200">
+                          waiting + free — call somebody
+                        </span>
+                      )}
+                    </td>
                     <td className="text-muted-foreground py-2 pr-4">
                       {row.waitingSince ? formatSince(row.waitingSince) : '—'}
                     </td>
@@ -127,7 +141,10 @@ export default async function WaitlistPage({
                       {/* Native <details>/<summary> — no client JS needed to
                           keep the report's PII off-screen until asked for. */}
                       <details>
-                        <summary className="cursor-pointer text-sm underline underline-offset-2">
+                        <summary
+                          className="cursor-pointer text-sm underline underline-offset-2"
+                          aria-label={`Contacts waiting for ${row.widthFt} foot by ${row.lengthFt} foot`}
+                        >
                           {row.contacts.length} {row.contacts.length === 1 ? 'person' : 'people'}
                         </summary>
                         <ul className="mt-2 flex flex-col gap-1 text-xs">
@@ -152,7 +169,8 @@ export default async function WaitlistPage({
                       </details>
                     </td>
                   </tr>
-                ))}
+                  )
+                })}
               </tbody>
             </table>
           </div>

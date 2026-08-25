@@ -370,7 +370,13 @@ export default async function ReportsPage({
             when one facility can answer as-at and another cannot, this
             under-claims for the one that can, which is the safe direction.
             `aria-describedby` rather than a bare paragraph so a reader who
-            jumps straight to the table by table navigation still gets it. */}
+            jumps straight to the table by table navigation still gets it.
+            B-183: only labelled "As of right now" when the note is actually
+            declining the period — a table that DOES answer for the month
+            picked needs no caveat heading at all. */}
+        {occupancy.total.unitOccupancy.reason !== 'as-at-period-end' && (
+          <h3 className="text-sm font-medium">As of right now</h3>
+        )}
         <p id="occupancy-as-at" className="text-sm text-muted-foreground">
           {unitOccupancyNote(occupancy.total.unitOccupancy, label)}
         </p>
@@ -544,7 +550,12 @@ export default async function ReportsPage({
             chosen, and they never have. D-65 rules out making them, so the
             sentence names the instant they DO answer for. `aria-describedby`
             rather than a bare paragraph, for B-131's reason — a reader who
-            jumps to the table by table navigation still gets it. */}
+            jumps to the table by table navigation still gets it.
+            B-183: AR aging never answers for the period (D-65), so unlike the
+            occupancy note above this heading is unconditional — and the
+            sentence itself dropped its "because…" justification, which argued
+            where a reader needed a fact. */}
+        <h3 className="text-sm font-medium">As of right now</h3>
         <p id="ar-as-at" className="text-muted-foreground text-sm text-pretty">
           {arAgingNote(delinquency.asOf, delinquency.timezone, label)}
         </p>
