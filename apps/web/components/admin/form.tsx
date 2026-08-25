@@ -206,7 +206,7 @@ export function AdminForm({
                   value="yes"
                   className="bg-primary text-primary-foreground mt-3 inline-flex h-9 items-center rounded-md px-4 text-sm font-medium"
                 >
-                  Yes, add it
+                  {state.confirmLabel ?? 'Yes, add it'}
                 </button>
               </>
             )}

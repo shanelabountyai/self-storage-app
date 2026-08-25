@@ -14,6 +14,8 @@ import {
   scheduleRateIncrease,
 } from '@/lib/pricing/tenant-rate-increases'
 import { fieldError, success, type FormState } from '@/lib/admin/form-state'
+import { formatCents } from '@/lib/format'
+import { prisma } from '@storage/db'
 
 // PRD 02 US-11 (B-076). Thin session wrapper; every rule lives in
 // `lib/pricing/tenant-rate-increases.ts`.
@@ -38,6 +40,47 @@ function dollarsToCents(value: FormDataEntryValue | null): number | null {
   return Math.round(Number(raw) * 100)
 }
 
+/// B-177. What a rate change is about to do, in the operator's terms, for the
+/// confirm step both money forms return before they commit (3.3.4).
+///
+/// Read from the database rather than from hidden fields on the form: the
+/// current rate is the number the operator is being asked to agree the change
+/// AGAINST, and echoing back a figure the browser supplied would confirm
+/// whatever the page happened to be showing rather than what is true.
+///
+/// `null` when the lease is missing or belongs elsewhere — the caller then
+/// falls through to the service, which owns that refusal's wording. Nothing
+/// here duplicates a rule; it only describes.
+async function rateChangeEcho(
+  facilityId: string,
+  leaseId: string,
+  newRateCents: number,
+  effectiveDate: Date,
+): Promise<{ label: string; value: string }[] | null> {
+  const lease = await prisma.lease.findUnique({
+    where: { id: leaseId },
+    select: {
+      facilityId: true,
+      monthlyRateCents: true,
+      tenant: { select: { firstName: true, lastName: true } },
+      unit: { select: { number: true } },
+    },
+  })
+  if (!lease || lease.facilityId !== facilityId) return null
+
+  return [
+    { label: 'Tenant', value: `${lease.tenant.firstName} ${lease.tenant.lastName}` },
+    { label: 'Unit', value: lease.unit.number },
+    { label: 'Pays now', value: `${formatCents(lease.monthlyRateCents)} a month` },
+    { label: 'Will pay', value: `${formatCents(newRateCents)} a month` },
+    { label: 'From', value: formatDay(effectiveDate) },
+  ]
+}
+
+function formatDay(date: Date): string {
+  return new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeZone: 'UTC' }).format(date)
+}
+
 export async function scheduleOneOffAction(_prev: FormState, formData: FormData): Promise<FormState> {
   const actor = await requireStaffActor()
   const facilityId = String(formData.get('facilityId') ?? '')
@@ -49,7 +92,19 @@ export async function scheduleOneOffAction(_prev: FormState, formData: FormData)
   const effectiveDate = dateFrom(formData.get('effectiveDate'))
   if (!effectiveDate) return fieldError({ effectiveDate: 'Pick the date the new rate starts.' })
 
-  if (!leaseId) return fieldError({ leaseId: 'Enter the lease this increase is for.' })
+  if (!leaseId) return fieldError({ leaseId: 'Choose the tenant this increase is for.' })
+
+  if (formData.get('confirmed') !== 'yes') {
+    const echo = await rateChangeEcho(facilityId, leaseId, newRateCents, effectiveDate)
+    if (echo) {
+      return {
+        status: 'confirm',
+        message: 'Check this before it is scheduled — the notice quotes these figures to the tenant.',
+        echo,
+        confirmLabel: 'Yes, schedule this increase',
+      }
+    }
+  }
 
   const result = await scheduleRateIncrease(actor, facilityId, { leaseId, newRateCents, effectiveDate })
   if (!result.ok) return fieldError({ effectiveDate: result.reason })
@@ -161,10 +216,25 @@ export async function scheduleDecreaseAction(_prev: FormState, formData: FormDat
   const effectiveDate = dateFrom(formData.get('effectiveDate'))
   if (!effectiveDate) return fieldError({ effectiveDate: 'Pick the date the lower rate starts.' })
 
-  if (!leaseId) return fieldError({ leaseId: 'Enter the lease this is for.' })
+  if (!leaseId) return fieldError({ leaseId: 'Choose the tenant this is for.' })
 
   const reasonCode = String(formData.get('reason') ?? '')
   if (!reasonCode.trim()) return fieldError({ reason: 'Record why the rate is coming down.' })
+
+  // The reason code is echoed too, and only here: it is recorded against this
+  // tenant permanently and is the half of a retention save that cannot be
+  // corrected afterwards.
+  if (formData.get('confirmed') !== 'yes') {
+    const echo = await rateChangeEcho(facilityId, leaseId, newRateCents, effectiveDate)
+    if (echo) {
+      return {
+        status: 'confirm',
+        message: 'Check this before it is applied — it is recorded against this tenant permanently.',
+        echo: [...echo, { label: 'Reason', value: reasonCode }],
+        confirmLabel: 'Yes, lower this rate',
+      }
+    }
+  }
 
   const result = await scheduleRateDecrease(actor, facilityId, {
     leaseId,

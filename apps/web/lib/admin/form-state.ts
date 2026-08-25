@@ -25,7 +25,17 @@ export type FormState =
   /// Held separately from `error` because the confirm step is not a failure —
   /// nothing is wrong, the action is simply waiting for the user to agree to
   /// what it parsed (3.3.4). `echo` is what we understood, in the user's terms.
-  | { status: 'confirm'; message: string; echo: { label: string; value: string }[] }
+  ///
+  /// `confirmLabel` names the button that commits. It defaults to "Yes, add it"
+  /// — right for an append-only tax component, wrong for the thing B-177 needed
+  /// it for, where the button reads "Yes, lower this rate" and naming the act
+  /// is most of what the step is for.
+  | {
+      status: 'confirm'
+      message: string
+      echo: { label: string; value: string }[]
+      confirmLabel?: string
+    }
 
 export const IDLE_FORM_STATE: FormState = { status: 'idle' }
 

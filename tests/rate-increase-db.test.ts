@@ -3,6 +3,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 import { prisma } from '../packages/db'
 import { businessDateFor } from '../packages/core/jobs'
 import {
+  activeLeaseOptions,
   applyDueRateIncreases,
   applyRateChange,
   reconcileRateIncreaseNotices,
@@ -1259,6 +1260,73 @@ describeDb('tenant rate increases (US-11 / CN-9)', () => {
       const review = await pendingRateIncreases(manager(), facilityId)
       expect(review.rows).toEqual([])
       expect(review.projectedMonthlyDeltaCents).toBe(0)
+    })
+  })
+
+  // B-177 / PRD 02 §4.3 US-11. The picker that replaced a free-text "Lease ID".
+  //
+  // The defect it closes is not a typo in a form: both money forms took a raw
+  // cuid, so a mistyped one permanently reduced a DIFFERENT tenant's rate with
+  // a reason code recorded against them. What has to hold is that the list can
+  // only offer leases a rate change is legal on, and that a manager who can
+  // only lower a rate can still reach it.
+  describe('activeLeaseOptions', () => {
+    it('offers each occupying lease with the tenant, the unit and what they pay now', async () => {
+      const { leaseId, unitId } = await makeLease({ monthlyRateCents: 13_400 })
+      const unit = await prisma.unit.findUniqueOrThrow({ where: { id: unitId } })
+
+      const options = await activeLeaseOptions(manager(), facilityId)
+
+      expect(options).toEqual([
+        {
+          id: leaseId,
+          tenantName: 'Ada Renter',
+          unitNumber: unit.number,
+          monthlyRateCents: 13_400,
+        },
+      ])
+    })
+
+    it('never offers a lease that has ended', async () => {
+      const open = await makeLease()
+      const closed = await makeLease()
+      await prisma.lease.update({ where: { id: closed.leaseId }, data: { status: 'ended' } })
+
+      const ids = (await activeLeaseOptions(manager(), facilityId)).map((option) => option.id)
+
+      expect(ids).toContain(open.leaseId)
+      // The whole point of the picker: a rate change scheduled against this
+      // lease is refused by both services, so offering it is offering a dead end.
+      expect(ids).not.toContain(closed.leaseId)
+    })
+
+    it('is reachable on the retention-save authority alone', async () => {
+      const { leaseId } = await makeLease()
+
+      // `credits:manual` and no `rates:tenant_increase` — a manager who can
+      // lower a rate but not raise one still has to say whose.
+      const options = await activeLeaseOptions(saver(managerId, 20, 5_000), facilityId)
+
+      expect(options.map((option) => option.id)).toEqual([leaseId])
+    })
+
+    it('refuses an actor holding neither authority', async () => {
+      await makeLease()
+      const bookkeeper: Actor = {
+        kind: 'staff',
+        staffUserId: managerId,
+        assignments: [
+          {
+            facilityId,
+            roleKey: 'manager',
+            rank: 20,
+            permissions: new Set<PermissionKey>(['tenants:view'] as never),
+            limits: { maxFeeWaiverCents: null, maxRefundCents: null, maxCreditCents: null },
+          },
+        ],
+      }
+
+      await expect(activeLeaseOptions(bookkeeper, facilityId)).rejects.toThrow()
     })
   })
 })

@@ -6,7 +6,13 @@ import { resolveSelectedFacility } from '@/lib/admin/facility-selection-logic'
 import { can, hasPermissionAnywhere } from '@/lib/rbac/authorize'
 import { formatCents } from '@/lib/format'
 import { earliestEffectiveDate } from '@storage/core/pricing'
-import { ecriPolicyFor, pendingRateIncreases, previewEligibleIncreases } from '@/lib/pricing/tenant-rate-increases'
+import {
+  activeLeaseOptions,
+  ecriPolicyFor,
+  pendingRateIncreases,
+  previewEligibleIncreases,
+  type LeaseOption,
+} from '@/lib/pricing/tenant-rate-increases'
 import { prisma } from '@storage/db'
 import {
   approveAction,
@@ -67,7 +73,27 @@ const NOTICE_FAILURE_HELP: Record<string, string> = {
     'No notice was ever sent for this increase. Check the tenant can be reached, then re-notice.',
 }
 
-export default async function RateIncreasesPage() {
+/// B-177. One <option> list, rendered by both money forms — the picker that
+/// replaced a free-text "Lease ID" on each of them.
+function leaseOptions(options: LeaseOption[]) {
+  return (
+    <>
+      <option value="">Choose a tenant…</option>
+      {options.map((option) => (
+        <option key={option.id} value={option.id}>
+          {option.tenantName} — unit {option.unitNumber} — {formatCents(option.monthlyRateCents)}/mo now
+        </option>
+      ))}
+    </>
+  )
+}
+
+export default async function RateIncreasesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ raise?: string; lower?: string; rate?: string }>
+}) {
+  const params = await searchParams
   const { actor, facilities, cookieValue, canSeeAll } = await getSwitcherData()
 
   // B-153. Two authorities reach this screen: `rates:tenant_increase` raises
@@ -90,21 +116,48 @@ export default async function RateIncreasesPage() {
 
   const facilityId = selected.facility.id
   const canRaise = can(actor, 'rates:tenant_increase', facilityId)
+  // B-177. The same gate `checkMonetaryAuthority('credit', …)` applies inside
+  // `scheduleRateDecrease`, hoisted so the section is hidden rather than shown
+  // and refused — and so the lease picker, which needs one of the two
+  // authorities AT THIS FACILITY, is only asked for when one is held.
+  const canLower = can(actor, 'credits:manual', facilityId)
   // B-165. The policy is loaded first and PASSED to the preview, rather than
   // each of them reading it separately: the table below states the rule it
   // was computed under, and the two must be the same read.
   const policy = await ecriPolicyFor(facilityId)
-  const [review, eligible, facility] = await Promise.all([
+  const [review, eligible, facility, leases] = await Promise.all([
     pendingRateIncreases(actor, facilityId),
     canRaise ? previewEligibleIncreases(actor, facilityId, policy) : Promise.resolve([]),
     prisma.facility.findUniqueOrThrow({
       where: { id: facilityId },
       select: { rateIncreaseNoticeDays: true },
     }),
+    // B-177. Replaces the free-text "Lease ID" both money forms used to take.
+    canRaise || canLower ? activeLeaseOptions(actor, facilityId) : Promise.resolve([]),
   ])
 
-  const soonest = isoDay(earliestEffectiveDate(new Date(), facility.rateIncreaseNoticeDays))
-  const batchIds = [...new Set(review.rows.map((row) => row.batchId).filter((id): id is string => Boolean(id)))]
+  // A prefill only counts if it names a lease that is actually in the list —
+  // otherwise the rate travelling beside it would render into the form beside
+  // no tenant at all.
+  const prefillRaise = leases.find((lease) => lease.id === params.raise)?.id
+  const prefillLower = leases.find((lease) => lease.id === params.lower)?.id
+  const prefillRate = prefillRaise && /^\d+(\.\d{1,2})?$/.test(params.rate ?? '') ? params.rate : undefined
+
+  const soonestDate = earliestEffectiveDate(new Date(), facility.rateIncreaseNoticeDays)
+  const soonest = isoDay(soonestDate)
+  // B-177. A batch's controls are named by what the batch holds rather than by
+  // the word "batch" repeated: two batches side by side gave a rotor "Approve
+  // batch, Cancel batch, Approve batch, Cancel batch" (2.4.6). Every row in a
+  // batch shares one effective date — `scheduleEligibleBatch` takes exactly one.
+  const batches = [
+    ...new Set(review.rows.map((row) => row.batchId).filter((id): id is string => Boolean(id))),
+  ].map((id) => {
+    const rows = review.rows.filter((row) => row.batchId === id)
+    return {
+      id,
+      label: `${rows.length} increase${rows.length === 1 ? '' : 's'} effective ${formatDate(rows[0].effectiveDate)}`,
+    }
+  })
   const heldCount = review.rows.filter((row) => row.status === 'notice_failed').length
 
   return (
@@ -113,8 +166,8 @@ export default async function RateIncreasesPage() {
         <h1 className="text-lg font-semibold">Rate changes — {selected.facility.name}</h1>
         <p className="text-muted-foreground mt-1 max-w-prose text-sm text-pretty">
           This facility gives {facility.rateIncreaseNoticeDays} days&apos; notice, so the soonest an
-          increase scheduled today can take effect is {soonest}. Nothing is sent to a tenant until a
-          regional manager or owner approves it.
+          increase scheduled today can take effect is {formatDate(soonestDate)}. Nothing is sent to a
+          tenant until a regional manager or owner approves it.
         </p>
       </div>
 
@@ -150,8 +203,10 @@ export default async function RateIncreasesPage() {
                 <tr className="border-input border-b text-left">
                   <th scope="col" className="py-2 pr-4">Tenant</th>
                   <th scope="col" className="py-2 pr-4">Unit</th>
-                  <th scope="col" className="py-2 pr-4 text-right">Now</th>
-                  <th scope="col" className="py-2 pr-4 text-right">New</th>
+                  {/* B-177. A money column headed "Now" is a figure with no
+                      unit — these are monthly rents, not balances. */}
+                  <th scope="col" className="py-2 pr-4 text-right">Now ($/mo)</th>
+                  <th scope="col" className="py-2 pr-4 text-right">New ($/mo)</th>
                   <th scope="col" className="py-2 pr-4">Notice on</th>
                   <th scope="col" className="py-2 pr-4">Effective</th>
                   <th scope="col" className="py-2 pr-4">Status</th>
@@ -193,7 +248,17 @@ export default async function RateIncreasesPage() {
                           <AdminForm action={approveAction} label={`Approve increase for ${row.tenantName}`} className="flex flex-wrap items-end gap-2">
                             <input type="hidden" name="id" value={row.id} />
                             <Field name="reason" label="Why" className="flex flex-col gap-1 text-xs" />
-                            <Button type="submit">Approve</Button>
+                            {/* B-177. "Approve" and "Cancel" rendered once
+                                per row with identical accessible names and
+                                identical styling side by side, so the rotor
+                                read "Approve, Cancel, Approve, Cancel…" and
+                                the destructive one was a row-misread away
+                                (2.4.6). The form's own label buys nothing —
+                                no screen reader composes it into a
+                                descendant's name. */}
+                            <Button type="submit" aria-label={`Approve increase for ${row.tenantName}, unit ${row.unitNumber}`}>
+                              Approve
+                            </Button>
                           </AdminForm>
                         )}
                         {/* B-166 / D-88. The way back. Named after its
@@ -207,13 +272,21 @@ export default async function RateIncreasesPage() {
                           <AdminForm action={renoticeAction} label={`Re-notice increase for ${row.tenantName}`} className="flex flex-wrap items-end gap-2">
                             <input type="hidden" name="id" value={row.id} />
                             <Field name="reason" label="Why" className="flex flex-col gap-1 text-xs" />
-                            <Button type="submit">Re-notice</Button>
+                            <Button type="submit" aria-label={`Re-notice increase for ${row.tenantName}, unit ${row.unitNumber}`}>
+                              Re-notice
+                            </Button>
                           </AdminForm>
                         )}
                         <AdminForm action={cancelAction} label={`Cancel increase for ${row.tenantName}`} className="flex flex-wrap items-end gap-2">
                           <input type="hidden" name="id" value={row.id} />
                           <Field name="reason" label="Why" className="flex flex-col gap-1 text-xs" />
-                          <Button type="submit">Cancel</Button>
+                          <Button
+                            type="submit"
+                            variant="destructive"
+                            aria-label={`Cancel increase for ${row.tenantName}, unit ${row.unitNumber}`}
+                          >
+                            Cancel
+                          </Button>
                         </AdminForm>
                       </div>
                     </td>
@@ -246,24 +319,29 @@ export default async function RateIncreasesPage() {
           </div>
         )}
 
-        {batchIds.length > 0 && canRaise && (
+        {batches.length > 0 && canRaise && (
           <div className="border-input flex flex-col gap-3 rounded-lg border p-4">
             <h3 className="text-sm font-medium">Whole batches</h3>
             <p className="text-muted-foreground text-xs text-pretty">
               A rule-based batch was scheduled as one worklist and can be approved or cancelled as
               one — approving row by row above works too.
             </p>
-            {batchIds.map((batchId) => (
-              <div key={batchId} className="flex flex-wrap items-end gap-3">
-                <AdminForm action={approveAction} label="Approve batch" className="flex flex-wrap items-end gap-2">
-                  <input type="hidden" name="batchId" value={batchId} />
+            {batches.map((batch) => (
+              <div key={batch.id} className="flex flex-wrap items-end gap-3">
+                <p className="w-full text-xs font-medium">{batch.label}</p>
+                <AdminForm action={approveAction} label={`Approve ${batch.label}`} className="flex flex-wrap items-end gap-2">
+                  <input type="hidden" name="batchId" value={batch.id} />
                   <Field name="reason" label="Why" className="flex flex-col gap-1 text-xs" />
-                  <Button type="submit">Approve batch</Button>
+                  <Button type="submit" aria-label={`Approve ${batch.label}`}>
+                    Approve batch
+                  </Button>
                 </AdminForm>
-                <AdminForm action={cancelAction} label="Cancel batch" className="flex flex-wrap items-end gap-2">
-                  <input type="hidden" name="batchId" value={batchId} />
+                <AdminForm action={cancelAction} label={`Cancel ${batch.label}`} className="flex flex-wrap items-end gap-2">
+                  <input type="hidden" name="batchId" value={batch.id} />
                   <Field name="reason" label="Why" className="flex flex-col gap-1 text-xs" />
-                  <Button type="submit">Cancel batch</Button>
+                  <Button type="submit" variant="destructive" aria-label={`Cancel ${batch.label}`}>
+                    Cancel batch
+                  </Button>
                 </AdminForm>
               </div>
             ))}
@@ -303,12 +381,13 @@ export default async function RateIncreasesPage() {
                 <tr className="border-input border-b text-left">
                   <th scope="col" className="py-2 pr-4">Tenant</th>
                   <th scope="col" className="py-2 pr-4">Unit</th>
-                  <th scope="col" className="py-2 pr-4 text-right">Now</th>
-                  <th scope="col" className="py-2 pr-4 text-right">New</th>
-                  <th scope="col" className="py-2 pr-4 text-right">Change</th>
-                  <th scope="col" className="py-2 pr-4 text-right">Street</th>
-                  <th scope="col" className="py-2 pr-4 text-right">Gap</th>
+                  <th scope="col" className="py-2 pr-4 text-right">Now ($/mo)</th>
+                  <th scope="col" className="py-2 pr-4 text-right">New ($/mo)</th>
+                  <th scope="col" className="py-2 pr-4 text-right">Change ($/mo)</th>
+                  <th scope="col" className="py-2 pr-4 text-right">Street ($/mo)</th>
+                  <th scope="col" className="py-2 pr-4 text-right">Gap ($/mo)</th>
                   <th scope="col" className="py-2 pr-4 text-right">Months since change</th>
+                  <th scope="col" className="py-2 pr-4">Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -330,6 +409,30 @@ export default async function RateIncreasesPage() {
                     <td className="py-2 pr-4 text-right tabular-nums">{formatCents(row.streetRateCents)}</td>
                     <td className="py-2 pr-4 text-right tabular-nums">{formatCents(row.gapCents)}</td>
                     <td className="py-2 pr-4 text-right tabular-nums">{row.monthsSinceLastChange ?? '—'}</td>
+                    {/* B-177. This table listed every tenant, unit and rate and
+                        offered no action, so the workflow was to copy a cuid out
+                        of it and paste it into a form below. Plain links, which
+                        prefill the picker and jump to it — no client JS, and the
+                        form still refuses anything the service refuses. */}
+                    <td className="py-2 pr-4">
+                      <span className="flex flex-col gap-1 text-xs">
+                        <Link
+                          className="underline"
+                          href={`?raise=${row.leaseId}&rate=${(row.newRateCents / 100).toFixed(2)}#oneoff-heading`}
+                        >
+                          Schedule an increase
+                          <span className="sr-only"> for {row.tenantName}, unit {row.unitNumber}</span>
+                        </Link>
+                        {/* Only where there is a form to jump to — the
+                            retention save is a different authority. */}
+                        {canLower && (
+                          <Link className="underline" href={`?lower=${row.leaseId}#decrease-heading`}>
+                            Lower this rate
+                            <span className="sr-only"> for {row.tenantName}, unit {row.unitNumber}</span>
+                          </Link>
+                        )}
+                      </span>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -361,16 +464,21 @@ export default async function RateIncreasesPage() {
           <input type="hidden" name="facilityId" value={facilityId} />
           <Field
             name="leaseId"
-            label="Lease ID"
+            label="Tenant"
+            as="select"
             required
+            defaultValue={prefillRaise ?? ''}
             className="flex flex-col gap-1 text-sm"
-            hint="From the tenant's lease page."
-          />
+            hint="What they pay now is shown beside each name."
+          >
+            {leaseOptions(leases)}
+          </Field>
           <Field
             name="newRateDollars"
             label="New monthly rate ($)"
             inputMode="decimal"
             required
+            defaultValue={prefillRate}
             hint="Has to be higher than what they pay now."
           />
           <Field
@@ -389,6 +497,7 @@ export default async function RateIncreasesPage() {
           other direction, and the reason it is a separate form rather than a
           direction toggle: it needs a reason code, gives no notice, and is
           approved by the act of making it. */}
+      {canLower && (
       <section aria-labelledby="decrease-heading" className="flex flex-col gap-3">
         <h2 id="decrease-heading" className="font-medium">
           Lower one tenant&apos;s rate
@@ -403,11 +512,15 @@ export default async function RateIncreasesPage() {
           <input type="hidden" name="facilityId" value={facilityId} />
           <Field
             name="leaseId"
-            label="Lease ID"
+            label="Tenant"
+            as="select"
             required
+            defaultValue={prefillLower ?? ''}
             className="flex flex-col gap-1 text-sm"
-            hint="From the tenant's lease page."
-          />
+            hint="What they pay now is shown beside each name."
+          >
+            {leaseOptions(leases)}
+          </Field>
           <Field
             name="newRateDollars"
             label="New monthly rate ($)"
@@ -433,6 +546,7 @@ export default async function RateIncreasesPage() {
           <Button type="submit">Lower the rate</Button>
         </AdminForm>
       </section>
+      )}
 
       <p className="text-muted-foreground max-w-prose text-xs text-pretty">
         The notice email goes out automatically on the notice date and quotes the old rate, the new

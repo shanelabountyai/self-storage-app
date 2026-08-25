@@ -380,6 +380,56 @@ export async function ecriPolicyFor(facilityId: string): Promise<EcriPolicy> {
   }
 }
 
+export type LeaseOption = {
+  id: string
+  tenantName: string
+  unitNumber: string
+  monthlyRateCents: number
+}
+
+/// B-177. Every lease at this facility that a rate change can be scheduled
+/// against — the picker that replaced a free-text "Lease ID".
+///
+/// Both money forms on the rate-changes screen took a raw cuid with the hint
+/// "From the tenant's lease page", while the eligible table beside them
+/// already listed every tenant, unit and rate and offered no action. So the
+/// workflow was copy a cuid, paste a cuid, and a mistyped one permanently
+/// reduced a DIFFERENT tenant's rate with a reason code recorded against them.
+/// There is no id to mistype now.
+///
+/// Gated on either authority, not on both: `rates:tenant_increase` raises a
+/// rate and `credits:manual` lowers one, and a manager who can only do the
+/// second still needs to say which tenant.
+///
+/// ponytail: one `<select>` of every occupying lease. Native, no JS, and
+/// linear in units — fine at a few hundred, and a facility large enough for
+/// that to bite wants a typeahead over a search endpoint, not a longer list.
+export async function activeLeaseOptions(actor: Actor, facilityId: string): Promise<LeaseOption[]> {
+  if (!can(actor, 'rates:tenant_increase', facilityId)) {
+    requirePermission(actor, 'credits:manual', facilityId)
+  }
+
+  const leases = await prisma.lease.findMany({
+    where: { facilityId, status: { in: [...OCCUPYING_LEASE_STATUSES] } },
+    select: {
+      id: true,
+      monthlyRateCents: true,
+      tenant: { select: { firstName: true, lastName: true } },
+      unit: { select: { number: true } },
+    },
+    // By person, because the option label leads with the person. Unit number
+    // is a string column, so ordering on it puts unit 10 before unit 9.
+    orderBy: [{ tenant: { lastName: 'asc' } }, { tenant: { firstName: 'asc' } }],
+  })
+
+  return leases.map((lease) => ({
+    id: lease.id,
+    tenantName: `${lease.tenant.firstName} ${lease.tenant.lastName}`,
+    unitNumber: lease.unit.number,
+    monthlyRateCents: lease.monthlyRateCents,
+  }))
+}
+
 export type BatchPreviewRow = CandidateLease & {
   tenantName: string
   unitNumber: string
