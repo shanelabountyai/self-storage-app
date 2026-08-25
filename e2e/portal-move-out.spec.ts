@@ -41,4 +41,56 @@ test.describe('signed in as the demo tenant', () => {
     await expect(page.getByText('Current balance')).toBeVisible()
     await expect(page.getByRole('button', { name: /^Request a move-out on / })).toBeVisible()
   })
+
+  // B-174. The refused preview, which used to render as a blank where the money
+  // had been while "Request this move-out" stayed live and pressable beside it
+  // (3.3.1) — B-142 fixed exactly this on the sibling transfer screen and the
+  // fix never crossed one file.
+  //
+  // Driven straight off the URL, so it needs no interaction and mutates
+  // nothing: the date is read from `searchParams` and priced server-side. Safe
+  // against the shared demo database for the reason B-120 asks for, and
+  // repeatable for the same one.
+  test('a date past the ceiling says so, and takes the request button with it', async ({ page }) => {
+    await page.goto('/portal/move-out')
+    await expect(page.getByLabel('Move-out date')).toBeVisible()
+    const url = new URL(page.url())
+    url.searchParams.set('date', '2031-01-01')
+    await page.goto(url.pathname + url.search)
+
+    // Scoped to <main>: Next renders an always-present `role="alert"` route
+    // announcer outside it, so a bare `getByRole('alert')` is a strict-mode
+    // violation on every page in the product and fails before the refusal it
+    // was looking for has rendered — which reads exactly like the refusal not
+    // firing.
+    await expect(page.getByRole('main').getByRole('alert')).toContainText('within the next 365 days')
+    // The figures are gone, and so is the button that would have committed
+    // them — hidden rather than disabled, so nothing focusable is left
+    // announcing nothing.
+    await expect(page.getByText('Current balance')).toHaveCount(0)
+    await expect(page.getByRole('button', { name: /^Request a move-out on / })).toHaveCount(0)
+    // The picker itself stays, because changing the date is the way out.
+    await expect(page.getByLabel('Move-out date')).toBeVisible()
+  })
+
+  // The refusal is a STATE, not a route, so the route-keyed scan contract never
+  // reaches it — B-184's gap, closed for this one state the way B-171 and B-172
+  // closed it for theirs.
+  test('the refused move-out preview has no WCAG 2.1 AA violations', async ({ page }) => {
+    await page.goto('/portal/move-out')
+    await expect(page.getByLabel('Move-out date')).toBeVisible()
+    const url = new URL(page.url())
+    url.searchParams.set('date', '2031-01-01')
+    await page.goto(url.pathname + url.search)
+    await expect(page.getByRole('main').getByRole('alert')).toBeVisible()
+
+    const { violations } = await new AxeBuilder({ page })
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+      .analyze()
+
+    expect(
+      violations.map((v) => `${v.id}: ${v.help}`),
+      'axe found accessibility violations',
+    ).toEqual([])
+  })
 })

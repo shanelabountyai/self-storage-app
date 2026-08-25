@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { prisma } from '../packages/db'
 import {
   cancelMoveOutRequest,
+  MAX_MOVE_OUT_DAYS_AHEAD,
   previewTenantMoveOut,
   requestMoveOut,
   tenantMoveOutLeases,
@@ -17,6 +18,15 @@ const hasDatabase = Boolean(process.env.DATABASE_URL)
 const describeDb = hasDatabase ? describe : describe.skip
 const suffix = randomUUID().slice(0, 8)
 const d = (iso: string) => new Date(`${iso}T00:00:00.000Z`)
+
+// B-174. Relative to the real clock, because the preview is now bounded by it.
+// A fixed calendar date in a test that used to be unbounded is a suite that
+// goes red on a date nobody chose — the trap CLAUDE.md records for quiet-hours
+// messaging, one module over.
+const daysFromToday = (days: number): Date => {
+  const now = new Date()
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) + days * 86_400_000)
+}
 
 let facilityId = ''
 let tenantId = ''
@@ -121,7 +131,7 @@ describeDb('portal move-out request', () => {
         data: { facilityId, leaseId, type: 'charge', amountCents: 5_000, description: 'Rent' },
       })
 
-      const result = await previewTenantMoveOut(tenantId, leaseId, d('2026-12-01'))
+      const result = await previewTenantMoveOut(tenantId, leaseId, daysFromToday(30))
       expect(result.ok).toBe(true)
       if (!result.ok) throw new Error('unreachable')
       expect(result.preview.balanceCents).toBe(5_000)
@@ -133,8 +143,36 @@ describeDb('portal move-out request', () => {
 
     it('refuses a lease that does not belong to this tenant', async () => {
       const { leaseId } = await makeLease(tenantId)
-      const result = await previewTenantMoveOut(otherTenantId, leaseId, d('2026-12-01'))
+      const result = await previewTenantMoveOut(otherTenantId, leaseId, daysFromToday(30))
       expect(result).toEqual({ ok: false, reason: 'not_found' })
+      await prisma.lease.delete({ where: { id: leaseId } })
+    })
+
+    // B-174. The preview used to price ANY date and hand back figures — the
+    // screen then dropped a refusal on the floor and rendered a blank where the
+    // money had been, with "Request this move-out" still live beside it. Both
+    // bounds are checked here now, so the screen has something to say.
+    it('refuses a date short of the required notice instead of pricing it', async () => {
+      const { leaseId } = await makeLease(tenantId)
+      const result = await previewTenantMoveOut(tenantId, leaseId, daysFromToday(1))
+      expect(result).toEqual({ ok: false, reason: 'date_too_soon' })
+      await prisma.lease.delete({ where: { id: leaseId } })
+    })
+
+    it('refuses a date past the ceiling instead of pricing it', async () => {
+      const { leaseId } = await makeLease(tenantId)
+      const result = await previewTenantMoveOut(tenantId, leaseId, daysFromToday(MAX_MOVE_OUT_DAYS_AHEAD + 1))
+      expect(result).toEqual({ ok: false, reason: 'date_too_far_out' })
+      await prisma.lease.delete({ where: { id: leaseId } })
+    })
+
+    // The boundary itself: a year out to the day is inside the window. Pinned
+    // because an off-by-one here refuses a tenant giving notice against the end
+    // of a twelve-month term, which is the exact case the ceiling was sized for.
+    it('accepts the last day of the window', async () => {
+      const { leaseId } = await makeLease(tenantId)
+      const result = await previewTenantMoveOut(tenantId, leaseId, daysFromToday(MAX_MOVE_OUT_DAYS_AHEAD))
+      expect(result.ok).toBe(true)
       await prisma.lease.delete({ where: { id: leaseId } })
     })
   })
@@ -173,6 +211,18 @@ describeDb('portal move-out request', () => {
       const { leaseId } = await makeLease(tenantId)
       const result = await requestMoveOut(tenantId, leaseId, d('2026-08-06')) // tomorrow-ish, well short of 10 days
       expect(result).toEqual({ ok: false, reason: 'date_too_soon' })
+      expect((await prisma.lease.findUniqueOrThrow({ where: { id: leaseId } })).moveOutDate).toBeNull()
+      await prisma.lease.delete({ where: { id: leaseId } })
+    })
+
+    // B-174. The picker carries a `max` now, but that is the browser's and a
+    // crafted post never renders the picker at all. This is the guard: without
+    // it a move-out in 2031 was accepted, took the unit off the board for five
+    // years and raised a staff task nobody would look at until 2031.
+    it('refuses a date past the ceiling, and writes nothing', async () => {
+      const { leaseId } = await makeLease(tenantId)
+      const result = await requestMoveOut(tenantId, leaseId, daysFromToday(MAX_MOVE_OUT_DAYS_AHEAD + 1))
+      expect(result).toEqual({ ok: false, reason: 'date_too_far_out' })
       expect((await prisma.lease.findUniqueOrThrow({ where: { id: leaseId } })).moveOutDate).toBeNull()
       await prisma.lease.delete({ where: { id: leaseId } })
     })

@@ -4,7 +4,11 @@ import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { requireTenantActor } from '@/lib/rbac/session'
 import { checkFreshAuth } from '@/lib/auth/reauth'
-import { cancelMoveOutRequest, requestMoveOut } from '@/lib/portal/move-out'
+import {
+  cancelMoveOutRequest,
+  PORTAL_MOVE_OUT_PROBLEM_COPY,
+  requestMoveOut,
+} from '@/lib/portal/move-out'
 import { fieldError, stalePreview, success, type FormState } from '@/lib/admin/form-state'
 import { formatDay } from '@/lib/format'
 
@@ -15,16 +19,18 @@ import { formatDay } from '@/lib/format'
 // cannot be imported under Vitest, so the decision logic stays in the lib
 // file and only this session-shaped wrapper is untestable there.
 
+// B-174. One copy map for this screen, shared with the preview that renders it
+// beside the picker. The four refusals here were a near-duplicate of the ones
+// the lib now owns — and a refusal worded one way when the preview says it and
+// another when the submit does is two answers to one question.
+//
+// B-164 / D-85 (`lien_pipeline`): the screen never renders the control, so
+// reaching this means a post that skipped it — and the answer is still the true
+// one rather than "that request could not be completed", which tells a tenant
+// nothing and sends them to the phone anyway, angrier.
 const REQUEST_PROBLEM_COPY: Record<string, string> = {
-  not_found: 'We couldn’t find that unit on your account.',
-  date_too_soon: 'That date is before the notice this unit requires. Pick a later date.',
+  ...PORTAL_MOVE_OUT_PROBLEM_COPY,
   already_requested: 'A move-out is already scheduled for this unit.',
-  // B-164 / D-85. The screen never renders the control, so reaching this means
-  // a post that skipped it — and the answer is still the true one rather than
-  // "that request could not be completed", which tells a tenant nothing and
-  // sends them to the phone anyway, angrier.
-  lien_pipeline:
-    'This unit is in the lien process, so a move-out has to be arranged with the office rather than online. Please ring them.',
 }
 
 const CANCEL_PROBLEM_COPY: Record<string, string> = {

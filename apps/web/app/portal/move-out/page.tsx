@@ -2,6 +2,8 @@ import Link from "next/link";
 import { requireTenantActor } from "@/lib/rbac/session";
 import {
   lienMoveOutRefusal,
+  MAX_MOVE_OUT_DAYS_AHEAD,
+  PORTAL_MOVE_OUT_PROBLEM_COPY,
   previewTenantMoveOut,
   tenantMoveOutLeases,
 } from "@/lib/portal/move-out";
@@ -18,6 +20,22 @@ export const metadata = { title: "Request a move-out" };
 
 function isoDate(date: Date): string {
   return date.toISOString().slice(0, 10);
+}
+
+// B-174. UTC day math, matching the server-side ceiling in `moveOutDateProblem`
+// — not local-time `setDate`, which can drift a day off a UTC boundary
+// depending on the server's own timezone. The same shape `portal/transfer`'s
+// `maxDateIso` already uses for its own ceiling.
+function maxMoveOutDate(): Date {
+  const today = new Date();
+  const startOfTodayUtc = Date.UTC(
+    today.getUTCFullYear(),
+    today.getUTCMonth(),
+    today.getUTCDate(),
+  );
+  return new Date(
+    startOfTodayUtc + MAX_MOVE_OUT_DAYS_AHEAD * 24 * 60 * 60 * 1000,
+  );
 }
 
 function formatDate(date: Date): string {
@@ -176,6 +194,12 @@ export default async function PortalMoveOutPage({
     requestedDate,
   );
   const preview = previewResult.ok ? previewResult.preview : null;
+  // B-174. B-142 fixed exactly this on the sibling transfer screen and the fix
+  // never crossed one file: the refused branch was dropped on the floor, so the
+  // page rendered a blank where the figures had been and stayed otherwise
+  // identical to before the request — indistinguishable from a broken picker
+  // (3.3.1).
+  const previewProblem = previewResult.ok ? null : previewResult.reason;
 
   return (
     <div className="flex flex-col gap-6">
@@ -234,6 +258,7 @@ export default async function PortalMoveOutPage({
             label="Move-out date"
             type="date"
             min={isoDate(lease.minMoveOutDate)}
+            max={isoDate(maxMoveOutDate())}
             defaultValue={isoDate(requestedDate)}
           />
           <button
@@ -245,6 +270,15 @@ export default async function PortalMoveOutPage({
             Update
           </button>
         </div>
+
+      {previewProblem && (
+        <p
+          role="alert"
+          className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-pretty text-red-900"
+        >
+          {PORTAL_MOVE_OUT_PROBLEM_COPY[previewProblem]}
+        </p>
+      )}
 
       {preview && (
         <dl className="border-input flex flex-col gap-2 rounded-lg border p-4 text-sm">
@@ -298,17 +332,27 @@ export default async function PortalMoveOutPage({
         </dl>
       )}
 
-        <p className="text-muted-foreground text-sm text-pretty">
-          Your gate code and account stay active until{" "}
-          {formatDate(requestedDate)}. Our team will verify the unit is empty
-          before your account is finally closed.
-        </p>
-        <button
-          type="submit"
-          className="bg-primary text-primary-foreground inline-flex min-h-11 items-center justify-center self-start rounded-md px-4 text-sm font-medium"
-        >
-          Request a move-out on {formatDate(requestedDate)}
-        </button>
+        {/* B-174. Hidden rather than disabled when there is nothing priced
+            behind it. A disabled button is not focusable and announces nothing,
+            so a keyboard or screen-reader user meets silence where a sighted
+            one at least sees something greyed out; the `role="alert"` above
+            already says why there are no figures. The sentence goes with it —
+            it promises a date the server has just refused. */}
+        {preview && (
+          <>
+            <p className="text-muted-foreground text-sm text-pretty">
+              Your gate code and account stay active until{" "}
+              {formatDate(requestedDate)}. Our team will verify the unit is
+              empty before your account is finally closed.
+            </p>
+            <button
+              type="submit"
+              className="bg-primary text-primary-foreground inline-flex min-h-11 items-center justify-center self-start rounded-md px-4 text-sm font-medium"
+            >
+              Request a move-out on {formatDate(requestedDate)}
+            </button>
+          </>
+        )}
       </AdminForm>
     </div>
   );

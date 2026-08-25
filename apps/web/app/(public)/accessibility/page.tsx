@@ -406,6 +406,28 @@ const LAST_REVIEWED = '19 August 2026'
 // (`e2e/admin-move-out.spec.ts`), and the two portal refusals are covered by
 // the unit tests on `stalePreview` and by nothing visual. `LAST_REVIEWED` is
 // not bumped.
+// Re-verified 2026-08-25, at B-174 (the portal move-out preview stops vanishing
+// in silence, and the date gets a ceiling). Customer-facing, on `/portal/move-
+// out`, and like B-173 it closes a 3.3.1 defect rather than adding one: the
+// page kept only the `ok` branch of the preview, so a refused date rendered a
+// blank where the settlement had been while "Request this move-out" stayed live
+// and pressable beside it. B-142 fixed exactly this on the sibling transfer
+// screen and the fix never crossed one file.
+//
+// The refusal is a `role="alert"` mounted with the branch, the figures and the
+// submit are gone together, and the submit is HIDDEN rather than disabled — a
+// disabled control is not focusable and announces nothing, so a keyboard or
+// screen-reader user meets silence where a sighted one at least sees something
+// greyed out. The picker stays, because changing the date is the way out.
+//
+// **This one DOES scan its refused state**, unlike B-173 one row up:
+// `e2e/portal-move-out.spec.ts` drives the refusal straight off the URL and
+// runs axe on it. That is one more STATE covered, not the general problem —
+// B-184 still owns route-versus-state — but the branch is no longer a promise.
+//
+// No claim below changes and none needed to. No public route added, so the
+// generated coverage claim and the route-keyed exception list are untouched.
+// `LAST_REVIEWED` is not bumped.
 export default function AccessibilityPage() {
   return (
     <ProsePage
