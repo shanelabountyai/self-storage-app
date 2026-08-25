@@ -6006,7 +6006,7 @@ Four changes, and the first is the one that matters most:
 
 ## B-172 — Checkout's unit-lost branch stops being a display
 
-`PENDING`
+`4d181cd`
 
 **What it built.** `relockAtSize` — the branch's way forward when the size itself has gone. Each alternative size is now a submit that re-points the session onto it, re-quotes the rate, re-evaluates the promotion and returns the renter to the step they were on. The branch also stopped quoting a unit the renter no longer has, stopped reading as glyph noise to a screen reader, and got the first axe scan it has ever had.
 
