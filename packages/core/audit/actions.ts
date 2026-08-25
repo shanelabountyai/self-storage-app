@@ -634,3 +634,22 @@ export const REASON_CODES = [
   "security_incident",
   "other",
 ] as const;
+
+export type ReasonCode = (typeof REASON_CODES)[number];
+
+/// What a staffer reads in the dropdown. B-178: four screens rendered the raw
+/// enum key with its underscores swapped for spaces, so a write-off reason read
+/// "collections uneconomic" — a database value shown to a person on the screen
+/// that records why a debt was forgiven. Same device as `PROOF_FIELD_LABELS`
+/// (B-170): the vocabulary is the code's, the words are the operator's.
+export const REASON_CODE_LABELS: Record<ReasonCode, string> = {
+  customer_goodwill: "Customer goodwill",
+  billing_error: "Billing error",
+  system_error: "System error",
+  management_approval: "Management approval",
+  legal_requirement: "Legal requirement",
+  duplicate: "Duplicate",
+  collections_uneconomic: "Not worth collecting",
+  security_incident: "Security incident",
+  other: "Other",
+};

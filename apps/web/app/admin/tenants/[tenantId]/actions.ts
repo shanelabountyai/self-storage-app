@@ -18,7 +18,7 @@ import { postFeeCharge } from "@/lib/billing/charges";
 import { formatCents } from "@/lib/format";
 import { liftHold, placeHold } from "@/lib/admin/holds";
 import { refundPayment } from "@/lib/billing/refunds";
-import { returnPayment } from "@/lib/billing/reversals";
+import { returnPayment, waiveFeeFromForm } from "@/lib/billing/reversals";
 import { parseScaled } from "@/lib/admin/form-state";
 import { setExtendedHours } from "@/lib/access/time-windows";
 import { requirePermission } from "@/lib/rbac/authorize";
@@ -434,7 +434,10 @@ export async function returnPaymentAction(
     {
       reasonCode: String(formData.get("reasonCode") ?? ""),
       note: String(formData.get("note") ?? "") || undefined,
-      waiveFee: formData.get("waiveFee") === "yes",
+      // B-178. `chargeFee` yes/no, read through the same table the form
+      // renders its options from — the field is no longer named for the
+      // opposite of what its answer says.
+      waiveFee: waiveFeeFromForm(formData.get("chargeFee")),
     },
   );
 

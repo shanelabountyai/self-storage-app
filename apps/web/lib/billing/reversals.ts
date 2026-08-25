@@ -74,6 +74,38 @@ export type ReturnPaymentInput = {
   waiveFee?: boolean;
 };
 
+/// B-178. The returned-payment fee question, as one table both the form and the
+/// action read.
+///
+/// It shipped as a field called `waiveFee` whose option reading "Yes — charge
+/// the configured fee" carried the value `"no"`: the displayed answer was the
+/// opposite of the stored one, and one careless edit away from waiving every
+/// returned-payment fee at the counter. Label and stored value now live in the
+/// same row, so they cannot drift apart — `tests/return-fee-choice.test.ts`
+/// asserts the charging option is the one whose label says "Charge".
+export const RETURN_FEE_CHOICES = [
+  {
+    value: "yes",
+    waiveFee: false,
+    /// `{amount}` is the facility's own configured NSF figure, substituted at
+    /// render. The amount is the decision on this screen, so it goes in the
+    /// option rather than in a hint beside it.
+    label: "Charge the {amount} returned-payment fee",
+  },
+  {
+    value: "no",
+    waiveFee: true,
+    label: "Do not charge it — the return was not the tenant’s fault",
+  },
+] as const;
+
+/// What the form said, as the domain input. An absent or unrecognised value
+/// waives: the control is not rendered at all when the facility has priced no
+/// fee, and "charge nothing" is the safe reading of a field nobody sent.
+export function waiveFeeFromForm(value: FormDataEntryValue | null): boolean {
+  return RETURN_FEE_CHOICES.find((c) => c.value === value)?.waiveFee ?? true;
+}
+
 /// Records that a settled payment was returned by the bank.
 ///
 /// One transaction for everything that must agree: the reversing ledger entry,

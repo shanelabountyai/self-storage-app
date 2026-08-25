@@ -3,7 +3,7 @@ import { getAdminActor } from "@/lib/admin/context";
 import { previewMoveOut } from "@/lib/admin/move-out";
 import { formatCents, formatDay } from "@/lib/format";
 import { AdminForm, Field } from "@/components/admin/form";
-import { REASON_CODES } from "@storage/core/audit";
+import { REASON_CODES, REASON_CODE_LABELS } from "@storage/core/audit";
 import { completeMoveOutAction } from "./actions";
 import { ChargeFeeForm } from "@/components/admin/charge-fee-form";
 import { chargeableFees } from "@/lib/billing/charges";
@@ -309,7 +309,7 @@ export default async function MoveOutPage({
               <option value="">Not being reduced</option>
               {REASON_CODES.map((code) => (
                 <option key={code} value={code}>
-                  {code.replace(/_/g, " ")}
+                  {REASON_CODE_LABELS[code]}
                 </option>
               ))}
             </Field>
@@ -338,7 +338,7 @@ export default async function MoveOutPage({
             >
               {REASON_CODES.map((code) => (
                 <option key={code} value={code}>
-                  {code.replace(/_/g, " ")}
+                  {REASON_CODE_LABELS[code]}
                 </option>
               ))}
             </Field>

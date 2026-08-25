@@ -1,8 +1,8 @@
 import Link from 'next/link'
 import { prisma } from '@storage/db'
 import { MANUAL_UNIT_STATUSES } from '@storage/core/inventory'
-import { REASON_CODES } from '@storage/core/audit'
-import { labelForStatus, unitStatusLabel } from '@storage/core/labels'
+import { REASON_CODES, REASON_CODE_LABELS } from '@storage/core/audit'
+import { unitStatusLabel } from '@storage/core/labels'
 import { Button } from '@/components/ui/button'
 import { UnitStatusBadge } from '@/components/admin/unit-status-badge'
 import { UnitsSubnav } from '@/components/admin/units-subnav'
@@ -570,7 +570,7 @@ export default async function AdminUnitsPage({
                     className="border-input bg-background h-9 rounded-md border px-2"
                   >
                     {REASON_CODES.map((code) => (
-                      <option key={code} value={code}>{labelForStatus(code)}</option>
+                      <option key={code} value={code}>{REASON_CODE_LABELS[code]}</option>
                     ))}
                   </select>
                 </label>

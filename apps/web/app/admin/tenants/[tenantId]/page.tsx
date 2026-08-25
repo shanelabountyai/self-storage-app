@@ -27,7 +27,10 @@ import { startTenantImpersonationAction } from "@/app/admin/impersonation/action
 import { IMPERSONATION_TTL_MINUTES } from "@/lib/impersonation/service";
 import { can, hasPermissionAnywhere } from "@/lib/rbac/authorize";
 import { ChargeFeeForm } from "@/components/admin/charge-fee-form";
+import { RefundMethodFields } from "@/components/admin/refund-method-fields";
 import { chargeableFees, chargeableLeases } from "@/lib/billing/charges";
+import { RETURN_FEE_CHOICES } from "@/lib/billing/reversals";
+import { scheduledFeeCents } from "@/lib/billing/fee-invoice";
 import { HOLD_TYPES, type HoldEffect } from "@storage/core/holds";
 import { leaseStatusLabel } from "@storage/core/labels";
 import {
@@ -120,6 +123,20 @@ export default async function TenantProfilePage({
       ),
     ),
   );
+  // B-178. What this facility charges for a returned payment, per facility a
+  // returnable payment sits at. `assessNsfFee` reads the same schedule when the
+  // return is recorded, so the figure on the control is the figure that posts —
+  // and a null means the facility has priced none, which is a sentence rather
+  // than a dropdown offering to charge nothing.
+  const nsfFees = new Map(
+    await Promise.all(
+      [...new Set(profile.returnable.map((p) => p.facilityId))].map(
+        async (facilityId) =>
+          [facilityId, await scheduledFeeCents(facilityId, "nsf")] as const,
+      ),
+    ),
+  );
+
   // PRD 10 §5.7 (B-101). Both sides — this tenant may be the referrer on one
   // and the referee on another.
   const referrals = await referralsForStaff(tenantId);
@@ -913,20 +930,8 @@ export default async function TenantProfilePage({
                     inputMode="decimal"
                     defaultValue={(payment.refundableCents / 100).toFixed(2)}
                   />
-                  <Field
-                    name="method"
-                    label="Back as"
-                    as="select"
-                    defaultValue={payment.method === "card" ? "card" : "cash"}
-                  >
-                    <option value="card">Card (original method)</option>
-                    <option value="cash">Cash</option>
-                    <option value="check">Cheque</option>
-                  </Field>
-                  <Field
-                    name="checkNumber"
-                    label="Cheque number"
-                    hint="Cheques only."
+                  <RefundMethodFields
+                    defaultMethod={payment.method === "card" ? "card" : "cash"}
                   />
                   <Field
                     name="reasonCode"
@@ -1029,20 +1034,36 @@ export default async function TenantProfilePage({
                       ))}
                     </Field>
                     <Field name="note" label="Note" className={FIELD_CLASS} />
-                    <Field
-                      name="waiveFee"
-                      label="Charge the fee?"
-                      as="select"
-                      defaultValue="no"
-                      className={FIELD_CLASS}
-                    >
-                      <option value="no">
-                        Yes — charge the configured fee
-                      </option>
-                      <option value="yes">
-                        No — this was not the tenant&apos;s fault
-                      </option>
-                    </Field>
+                    {/* B-178. Named after its subject rather than the
+                        action (2.4.6), and the amount is IN the option,
+                        because the amount is the decision being taken here.
+                        When the facility has priced no returned-payment fee
+                        there is no control: a dropdown offering to charge
+                        nothing is a question with no answer, and the sentence
+                        says what happens instead. */}
+                    {nsfFees.get(payment.facilityId) == null ? (
+                      <p className="text-muted-foreground max-w-prose self-end text-xs text-pretty">
+                        This facility has not priced a returned-payment fee, so
+                        none is charged.
+                      </p>
+                    ) : (
+                      <Field
+                        name="chargeFee"
+                        label="Returned-payment fee"
+                        as="select"
+                        defaultValue="yes"
+                        className={FIELD_CLASS}
+                      >
+                        {RETURN_FEE_CHOICES.map((choice) => (
+                          <option key={choice.value} value={choice.value}>
+                            {choice.label.replace(
+                              "{amount}",
+                              formatCents(nsfFees.get(payment.facilityId) ?? 0),
+                            )}
+                          </option>
+                        ))}
+                      </Field>
+                    )}
                     <button
                       type="submit"
                       className="border-input hover:bg-accent inline-flex min-h-11 items-center justify-center rounded-md border px-4 text-sm font-medium"

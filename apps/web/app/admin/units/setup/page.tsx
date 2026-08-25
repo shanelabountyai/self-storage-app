@@ -1,7 +1,6 @@
 import Link from 'next/link'
 import { prisma } from '@storage/db'
-import { REASON_CODES } from '@storage/core/audit'
-import { labelForStatus } from '@storage/core/labels'
+import { REASON_CODES, REASON_CODE_LABELS } from '@storage/core/audit'
 import { Button } from '@/components/ui/button'
 import { UnitsSubnav } from '@/components/admin/units-subnav'
 import { getSwitcherData } from '@/lib/admin/context'
@@ -158,7 +157,7 @@ export default async function AdminUnitsSetupPage({
                         className="border-input bg-background h-9 rounded-md border px-2"
                       >
                         {REASON_CODES.map((code) => (
-                          <option key={code} value={code}>{labelForStatus(code)}</option>
+                          <option key={code} value={code}>{REASON_CODE_LABELS[code]}</option>
                         ))}
                       </select>
                     </label>
