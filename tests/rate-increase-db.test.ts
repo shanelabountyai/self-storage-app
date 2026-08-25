@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { prisma } from '../packages/db'
+import { businessDateFor } from '../packages/core/jobs'
 import {
   applyDueRateIncreases,
   applyRateChange,
@@ -96,9 +97,22 @@ const day = (iso: string) => new Date(`${iso}T00:00:00.000Z`)
 
 /// Far enough out that the 30-day default never makes a test flaky as the
 /// real clock moves — every date here is relative to today, not fixed.
+/// Days from the FACILITY's business date, not from UTC's.
+///
+/// Found failing at 23:41 CDT while running B-172, and latent since the file
+/// was written. `renoticeRateIncrease` and every other date in this module read
+/// `businessDateFor(new Date(), facility.timezone)`, and this fixture read
+/// `now.getUTCDate()` — the two agree only while the UTC date and the Chicago
+/// date are the same day, which stops being true at 19:00 CDT. After that the
+/// helper is one day ahead of the code it is asserting against and the suite
+/// fails as "expected 1790121600000 to be 1790208000000", which reads like
+/// broken arithmetic rather than a fixture reading a different clock. Exactly
+/// the trap CLAUDE.md records for quiet-hours messaging, one module over.
 function daysFromNow(days: number): Date {
-  const now = new Date()
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + days))
+  const today = businessDateFor(new Date(), 'America/Chicago')
+  return new Date(
+    Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() + days),
+  )
 }
 
 let leaseCounter = 0

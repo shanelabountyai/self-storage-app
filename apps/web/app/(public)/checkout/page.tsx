@@ -46,7 +46,7 @@ import {
   type PublicFacility,
 } from '@/lib/facility/public-facility'
 import type { DayOfWeek } from '@storage/core/facility-settings'
-import { advanceAction, applyPromoCodeAction, relockAction } from './actions'
+import { advanceAction, applyPromoCodeAction, relockAction, relockAtSizeAction } from './actions'
 import { PromoCodeStep } from '@/components/checkout/promo-code-step'
 
 export const metadata = {
@@ -300,16 +300,51 @@ export default async function CheckoutPage({
   // would refuse anyway.
   // B-149. `availableCount` is the same number `relock` acts on, so the branch
   // the panel shows and the button it offers cannot disagree.
+  // B-172, found while building it. `session.lockLapsed` is derived from the
+  // clock alone, and a COMPLETED checkout's lock ages out like any other — so a
+  // renter who had paid and came back to their link half an hour later was
+  // shown "We couldn't keep that unit" and a "Find me another unit" button,
+  // while the "You are moved in" confirmation (which lives inside the
+  // `!lockLapsed` section) was hidden from them. The lock is only meaningful
+  // while there is still something to hold.
+  const lockLapsed =
+    session.lockLapsed && session.step !== 'provisioned' && session.status !== 'completed'
+
   const sizeStillAvailable = (unitType?.availableCount ?? 0) > 0
   const alternatives = alternativeSizes(inventory?.unitTypes ?? [], session.unitTypeId)
   const lostPhone = phoneFor(inventory?.facility.phone ?? null)
+
+  // B-172. Whether the branch can actually DO anything with the answers it says
+  // it has kept. `relockAtSize` refuses from the payment step onward — an intent
+  // already made for the old size comes back at the old amount for 24 hours,
+  // because Stripe's idempotency key is the session — so the copy below must not
+  // promise a move the server would refuse. Same condition, both places.
+  const canMoveSize =
+    session.step !== 'payment' && session.step !== 'provisioned' && alternatives.length > 0
+
+  /// The trade, in the renter's terms rather than ours: what this size costs
+  /// against the one they lost, and how much floor it gives them for it.
+  const tradeAgainstLost = (type: { sqFt: number; webRateCents: number }): string => {
+    const rateDiff = type.webRateCents - session.quotedRateCents
+    const money =
+      rateDiff === 0
+        ? 'the same price as the unit you had'
+        : `${formatCents(Math.abs(rateDiff))} ${rateDiff > 0 ? 'more' : 'less'} a month than the unit you had`
+    if (!unitType) return money
+    const areaDiff = type.sqFt - unitType.sqFt
+    const area =
+      areaDiff === 0
+        ? 'the same floor area'
+        : `${Math.abs(areaDiff)} sq ft ${areaDiff > 0 ? 'bigger' : 'smaller'}`
+    return `${area}, ${money}`
+  }
 
   const stepIndex = STEPS.indexOf(session.step)
   const previousStep = stepIndex > 0 ? STEPS[stepIndex - 1] : null
   const canGoBack =
     previousStep !== null &&
     session.step !== 'provisioned' &&
-    !session.lockLapsed &&
+    !lockLapsed &&
     !(session.step === 'payment' && payment?.available && payment.settling)
 
   return (
@@ -322,7 +357,10 @@ export default async function CheckoutPage({
         step={session.step}
         stepLabel={stepAnnouncement(session.step)}
         lockExpiresAt={session.lockExpiresAt.toISOString()}
-        lapsed={session.lockLapsed}
+        lapsed={lockLapsed}
+        sizeLabel={
+          unitType ? `${unitType.widthFt} foot by ${unitType.lengthFt} foot ${unitType.name}` : ''
+        }
       />
 
       <div className="mt-6">
@@ -338,7 +376,13 @@ export default async function CheckoutPage({
           follow. The branch is decided from `availableCount`, the same number
           `relock` will act on, so the screen and the button agree; a relock that
           loses the race re-renders here with the sold-out half showing. */}
-      {session.lockLapsed && (
+      {/* Every control in this panel removes the panel when it works, so the
+          outcome cannot be announced from inside it — B-170's rule. It does not
+          need a second region: `CheckoutAnnouncer` above already exists for
+          exactly this transition, survives it, announces it and moves focus to
+          the step heading. B-172 only had to teach it that the size can now
+          change as well as the unit. */}
+      {lockLapsed && (
         <section aria-labelledby="lost" className="border-input mt-6 rounded-lg border p-4">
           <h2 id="lost" className="text-xl font-medium">
             We couldn&apos;t keep that unit
@@ -348,7 +392,9 @@ export default async function CheckoutPage({
             <strong>Nothing has been charged.</strong>{' '}
             {sizeStillAvailable
               ? 'Everything you have entered is still here — we just need to put you on another unit the same size.'
-              : 'Everything you have entered is still here, but that size has gone while you were deciding.'}
+              : canMoveSize
+                ? 'That size has gone while you were deciding. Everything you have entered is still here, and we can move it onto any of the sizes below.'
+                : 'That size has gone while you were deciding. We cannot move this checkout onto another size from here, so the quickest route is a phone call — or pick a size on the facility page and start again.'}
           </p>
 
           {sizeStillAvailable ? (
@@ -373,25 +419,81 @@ export default async function CheckoutPage({
 
               {/* The facility's own ordering, smallest first. No recommender:
                   B-149 rules one out, and the list the facility page already
-                  renders is what a renter would have browsed anyway. */}
+                  renders is what a renter would have browsed anyway.
+
+                  B-172: each one is a SUBMIT, not a link. B-149 shipped this as
+                  a display — the copy said every answer was still here while
+                  the only control on the panel re-claimed the size that had
+                  just gone, so the one thing the renter could do with those
+                  answers was abandon them and start again. `relockAtSize`
+                  re-points the session's line, re-quotes the rate and
+                  re-evaluates the promotion for the new size, and returns them
+                  to the step they were on. The link to the facility page stays
+                  once, below, for reading about a size rather than taking it. */}
               {alternatives.length > 0 && inventory && (
                 <div>
-                  <h3 className="font-medium">Other sizes at {inventory.facility.name}</h3>
-                  <ul className="mt-2 grid gap-1">
+                  <h3 className="font-medium">
+                    {canMoveSize
+                      ? `Move to another size at ${inventory.facility.name}`
+                      : `Other sizes at ${inventory.facility.name}`}
+                  </h3>
+                  <ul className="mt-2 grid gap-2">
                     {alternatives.map((type) => (
-                      <li key={type.unitTypeId}>
-                        <Link
-                          href={`${facilityPath(inventory.facility)}#unit-${type.unitTypeId}`}
-                          className="underline underline-offset-4"
-                        >
-                          {type.widthFt}&prime; &times; {type.lengthFt}&prime; {type.name}
-                        </Link>{' '}
-                        <span className="text-muted-foreground text-sm">
-                          {formatCents(type.webRateCents)}/mo
+                      <li key={type.unitTypeId} className="flex flex-wrap items-baseline gap-x-2">
+                        {/* The glyphs are decoration and the words are the name.
+                            Without the pair a screen reader says "10 prime times
+                            10 prime Standard" — the whole recovery path, at the
+                            highest-intent moment in the funnel, unreadable
+                            (2.4.4, 2.4.6). The same pair is already used
+                            correctly three files over. */}
+                        <span className="font-medium">
+                          <span aria-hidden="true">
+                            {type.widthFt}&prime; &times; {type.lengthFt}&prime; {type.name}
+                          </span>
+                          <span className="sr-only">
+                            {type.widthFt} foot by {type.lengthFt} foot {type.name}
+                          </span>
                         </span>
+                        <span className="tabular-nums">{formatCents(type.webRateCents)}/mo</span>
+                        <span className="text-muted-foreground text-sm text-pretty">
+                          {tradeAgainstLost(type)}
+                        </span>
+                        {canMoveSize && (
+                          <AdminForm
+                            action={relockAtSizeAction}
+                            label={`Move me to the ${type.widthFt} foot by ${type.lengthFt} foot ${type.name}`}
+                            className="w-full"
+                          >
+                            <input type="hidden" name="sessionId" value={session.id} />
+                            <input type="hidden" name="unitTypeId" value={type.unitTypeId} />
+                            {/* Named on the BUTTON, not only on the form. No
+                                screen reader composes a form's label into its
+                                descendants' names, so a rotor listing this
+                                panel's buttons would otherwise hear "Move me to
+                                this size" once per size with nothing telling
+                                them apart (2.4.6) — the rule
+                                `task-complete-form.tsx` states in a comment on
+                                the component created to fix it. */}
+                            <button
+                              type="submit"
+                              aria-label={`Move me to the ${type.widthFt} foot by ${type.lengthFt} foot ${type.name}`}
+                              className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
+                            >
+                              Move me to this size
+                            </button>
+                          </AdminForm>
+                        )}
                       </li>
                     ))}
                   </ul>
+                  <p className="mt-2 text-sm">
+                    <Link
+                      href={facilityPath(inventory.facility)}
+                      className="underline underline-offset-4"
+                    >
+                      Read about these sizes at {inventory.facility.name}
+                    </Link>
+                  </p>
                 </div>
               )}
 
@@ -400,7 +502,12 @@ export default async function CheckoutPage({
               {unitType && (
                 <div>
                   <h3 className="font-medium">
-                    Or wait for a {unitType.widthFt}&prime; &times; {unitType.lengthFt}&prime;
+                    <span aria-hidden="true">
+                      Or wait for a {unitType.widthFt}&prime; &times; {unitType.lengthFt}&prime;
+                    </span>
+                    <span className="sr-only">
+                      Or wait for a {unitType.widthFt} foot by {unitType.lengthFt} foot
+                    </span>
                   </h3>
                   <WaitlistForm
                     facilityId={session.facilityId}
@@ -420,7 +527,7 @@ export default async function CheckoutPage({
           between T-30 and the signature, so a server-rendered verdict never
           became true and the renter's first news of the deadline was it
           passing. See lock-warning.tsx. */}
-      {!session.lockLapsed && (
+      {!lockLapsed && (
         <LockWarning
           token={token!}
           lockExpiresAt={session.lockExpiresAt.toISOString()}
@@ -429,7 +536,7 @@ export default async function CheckoutPage({
         />
       )}
 
-      {!session.lockLapsed && (
+      {!lockLapsed && (
         <section aria-labelledby="step" className="mt-8">
           {/* Each step's own form arrives with its item; what this owns is that
               the heading exists, is focusable, and names where the renter is. */}
@@ -630,7 +737,15 @@ export default async function CheckoutPage({
         </section>
       )}
 
-      {unitType && (
+      {/* B-172. Not while the lock has lapsed. `PriceSummary` and the code box
+          rendered regardless, so a renter who had just been told we could not
+          keep their unit was still being shown a sticky "Due today $187.42 …
+          then $129/mo" for it — a quote for a unit that is no longer theirs,
+          under a panel saying so. Suppressed rather than restated in the past
+          tense: the figure is void either way, and the price of every size they
+          CAN take is on the button beside it. It comes back the moment the
+          session holds a unit again, with `changeNote` naming what moved it. */}
+      {unitType && !lockLapsed && (
         <div className="mt-8">
           <PriceSummary
             // B-106 part 5. The whole basket, so the summary's arithmetic is

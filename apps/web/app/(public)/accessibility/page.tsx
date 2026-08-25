@@ -344,6 +344,38 @@ const LAST_REVIEWED = '19 August 2026'
 // states specifically rather than in general. No route added, so the generated
 // coverage claim and the route-keyed exception list are both untouched.
 // `LAST_REVIEWED` is not bumped: this is one flow re-checked, not the page.
+//
+// Re-verified 2026-08-24, at B-172 (checkout's unit-lost branch becomes usable
+// and readable). Customer-facing, on the money path, and it CLOSES a gap two
+// earlier entries declared rather than adding one.
+//
+// The B-149 entry above says the sold-out branch "does NOT get a scan" because
+// it renders only for a lapsed session whose size has since gone — a
+// post-interaction, data-dependent state that no route can be visited to reach
+// — and hands the gap to B-156, which deferred it too. It is scanned now:
+// `e2e/checkout-unit-lost.spec.ts` builds its own facility, two sizes and three
+// units, starts a real checkout, takes the size to zero and back-dates the
+// lock, then runs axe on the branch. That is one STATE covered, not the general
+// problem — B-184 still owns route-versus-state — but the sentence about this
+// particular branch is no longer a promise.
+//
+// What the branch itself gained: the sizes were raw glyphs, so a screen reader
+// read the whole recovery path as "10 prime times 15 prime Standard, link"
+// (2.4.4, 2.4.6) — fixed with the `aria-hidden`/`sr-only` pair three other
+// files in this repo already use correctly. Each size is now a control with its
+// own accessible name ("Move me to the 10 foot by 15 foot Large"), named on the
+// BUTTON rather than only on the wrapping form, because no screen reader
+// composes a form's label into its descendants' names. The outcome is announced
+// by `CheckoutAnnouncer`, which already existed for exactly this transition and
+// already moves focus to the step heading — it only had to learn that the size
+// can now change as well as the unit, since "another unit the same size" would
+// otherwise be the announcement contradicting the screen.
+//
+// No claim below changes and none needed to: this page makes no promise about
+// which states are covered beyond the sentence saying they are not all covered,
+// which is still true. No public route added, so the generated coverage claim
+// and the route-keyed exception list are untouched. `LAST_REVIEWED` is not
+// bumped, for the reason the entries above give.
 export default function AccessibilityPage() {
   return (
     <ProsePage

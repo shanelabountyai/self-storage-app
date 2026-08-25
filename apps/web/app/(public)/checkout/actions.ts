@@ -7,6 +7,7 @@ import {
   extendLock,
   goBack,
   relock,
+  relockAtSize,
   removeUnitFromBasket,
   sendCheckoutResumeLink,
   type Step,
@@ -685,5 +686,43 @@ export async function relockAction(_prev: FormState, formData: FormData): Promis
   return {
     status: 'success',
     message: 'We found you another unit the same size and kept everything you had entered.',
+  }
+}
+
+/// B-172. "Move me to this size" — the branch's only way forward when the size
+/// the renter had is genuinely gone.
+///
+/// The rate and the promotion are re-derived inside `relockAtSize` from the
+/// facility's current view, never carried from the lost size and never taken
+/// from this form: the browser names a unit TYPE and nothing else, so the worst
+/// a hand-crafted post can do is ask for a size at this facility, which is what
+/// the buttons offer anyway.
+export async function relockAtSizeAction(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const sessionId = String(formData.get('sessionId') ?? '')
+  const unitTypeId = String(formData.get('unitTypeId') ?? '')
+  const result = await relockAtSize(sessionId, unitTypeId)
+
+  // Revalidate on every path, success or not: the panel decides what it offers
+  // from `availableCount`, and a refusal is usually the moment that number
+  // moved. Leaving the renter looking at a button that has just failed is the
+  // dead end this whole branch exists to end.
+  revalidatePath('/checkout')
+
+  if (!result.ok) {
+    const message =
+      result.reason === 'too_late'
+        ? 'You have already reached payment on this checkout, so we cannot move it to another size — the total has been quoted. Call us and we will set the new one up, or start again from the facility page.'
+        : result.reason === 'sold_out'
+          ? 'That size has just gone as well. Nothing has been charged — the phone number, the sizes still free, and the waiting list are below.'
+          : 'We could not move this checkout to that size. Nothing has been charged.'
+    return { status: 'error', message, fieldErrors: {} }
+  }
+
+  return {
+    status: 'success',
+    message: `${result.changeNote} We kept everything you had entered, and the price below is the new size's.`,
   }
 }

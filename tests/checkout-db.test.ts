@@ -12,6 +12,7 @@ import {
   LOCK_MINUTES,
   nextStep,
   relock,
+  relockAtSize,
   removeUnitFromBasket,
   sendCheckoutResumeLink,
   sessionByToken,
@@ -431,6 +432,143 @@ describeDb('checkout session', () => {
     // Progress is kept; only the unit changes.
     expect(again.session.step).toBe('details')
     expect(again.session.lockLapsed).toBe(false)
+  })
+
+  // B-172. `relock` only ever re-claims the size that has gone. This is the
+  // branch's way forward when it has: a DIFFERENT size, keeping the answers.
+  describe('relockAtSize (B-172)', () => {
+    let biggerTypeId = ''
+
+    // The type is a fixture, created ONCE: a session row points at it, so
+    // dropping it between tests hits the foreign key the moment a test has
+    // moved a checkout onto it. The outer `afterAll` already clears every unit
+    // type at this facility, after the sessions.
+    beforeAll(async () => {
+      const bigger = await prisma.unitType.create({
+        data: { facilityId, name: `10x20 ${suffix}`, widthFt: 10, lengthFt: 20 },
+      })
+      biggerTypeId = bigger.id
+      await prisma.unitTypeRate.create({
+        data: {
+          facilityId,
+          unitTypeId: biggerTypeId,
+          streetRateCents: 21_900,
+          webRateCents: 18_900,
+          effectiveFrom: new Date('2020-01-01T00:00:00Z'),
+        },
+      })
+    })
+
+    // After the outer `beforeEach`, which deletes every unit at this facility.
+    beforeEach(async () => {
+      await prisma.unit.create({
+        data: { facilityId, unitTypeId: biggerTypeId, number: 'B-1', status: 'available' },
+      })
+    })
+
+    const lose = async () => {
+      const started = await start()
+      if (!started.ok) throw new Error('unreachable')
+      await expireCheckoutSessions(new Date(Date.now() + LOCK_MINUTES * 60_000 + 1000), facilityId)
+      await prisma.unit.updateMany({ where: { unitTypeId }, data: { status: 'occupied' } })
+      return started
+    }
+
+    it('re-points the session AND its basket line, at the new size own rate', async () => {
+      const started = await lose()
+
+      const moved = await relockAtSize(started.sessionId, biggerTypeId)
+      expect(moved.ok).toBe(true)
+      if (!moved.ok) throw new Error('unreachable')
+
+      // The whole point: the answers survive, only the product changes.
+      expect(moved.session.step).toBe('details')
+      expect(moved.session.lockLapsed).toBe(false)
+      expect(moved.session.unitTypeId).toBe(biggerTypeId)
+      // Re-quoted from the catalogue. Carrying the 10x10 rate would sell a
+      // 10x20 at the price of the unit that had just gone.
+      expect(moved.session.quotedRateCents).toBe(18_900)
+
+      // The BASKET is what the money path sums, so a session whose columns
+      // moved and whose line did not would summarise and charge the old size.
+      expect(moved.session.units).toHaveLength(1)
+      expect(moved.session.units[0]?.unitTypeId).toBe(biggerTypeId)
+      expect(moved.session.units[0]?.quotedRateCents).toBe(18_900)
+      expect(moved.session.units[0]?.unitId).toBe(moved.session.unitId)
+
+      const claimed = await prisma.unit.findUniqueOrThrow({
+        where: { id: moved.session.unitId ?? '' },
+        select: { number: true, unitTypeId: true },
+      })
+      expect(claimed.unitTypeId).toBe(biggerTypeId)
+      expect(moved.changeNote).toContain(claimed.number)
+    })
+
+    it('refuses a size with nothing behind it rather than moving them to it', async () => {
+      const started = await lose()
+      await prisma.unit.updateMany({ where: { unitTypeId: biggerTypeId }, data: { status: 'occupied' } })
+
+      expect(await relockAtSize(started.sessionId, biggerTypeId)).toMatchObject({
+        ok: false,
+        reason: 'sold_out',
+      })
+    })
+
+    it('refuses a unit type at another facility, however the id was posted', async () => {
+      const started = await lose()
+      const other = await prisma.facility.create({
+        data: {
+          name: `Elsewhere ${suffix}`,
+          slug: `elsewhere-${suffix}`,
+          addressLine1: '2 Storage Way',
+          city: 'Austin',
+          state: 'TX',
+          postalCode: '78704',
+          timezone: 'America/Chicago',
+        },
+      })
+      const foreign = await prisma.unitType.create({
+        data: { facilityId: other.id, name: `5x5 ${suffix}`, widthFt: 5, lengthFt: 5 },
+      })
+
+      expect(await relockAtSize(started.sessionId, foreign.id)).toMatchObject({
+        ok: false,
+        reason: 'no_such_type',
+      })
+
+      await prisma.unitType.deleteMany({ where: { facilityId: other.id } })
+      await prisma.facility.delete({ where: { id: other.id } })
+    })
+
+    it('refuses from the payment step, where the amount has already been quoted', async () => {
+      const started = await lose()
+      // Stripe's idempotency key is the SESSION, so an intent already made for
+      // the old size comes back at the old amount for 24 hours. Moving the
+      // basket under it would charge for the unit they lost.
+      await prisma.checkoutSession.update({
+        where: { id: started.sessionId },
+        data: { step: 'payment' },
+      })
+
+      expect(await relockAtSize(started.sessionId, biggerTypeId)).toMatchObject({
+        ok: false,
+        reason: 'too_late',
+      })
+    })
+
+    it('never revives a completed checkout — neither does relock', async () => {
+      const started = await lose()
+      await prisma.checkoutSession.update({
+        where: { id: started.sessionId },
+        data: { status: 'completed', step: 'provisioned' },
+      })
+
+      expect(await relockAtSize(started.sessionId, biggerTypeId)).toMatchObject({ ok: false })
+      // The same rule on the same-size path, which had no status guard at all:
+      // a completed session's lock ages out like any other, and the panel used
+      // to render its button on the confirmation page.
+      expect(await relock(started.sessionId)).toMatchObject({ ok: false, reason: 'sold_out' })
+    })
   })
 
   it('says so honestly when the fallback has nothing left to offer', async () => {

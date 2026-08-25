@@ -2,6 +2,7 @@ import { createHash, randomBytes } from 'node:crypto'
 import { type Prisma, prisma } from '@storage/db'
 import { recomputeUnitStatus } from '@/lib/admin/units'
 import { currentRateForUnitType } from '@/lib/pricing/unit-type-rates'
+import { offerFor } from '@/lib/promotions/service'
 import { sendDirectEmail } from '@/lib/comms/service'
 
 // PRD 01 FR-4.1. The server-side checkout state machine.
@@ -675,6 +676,13 @@ export type RelockResult =
 export async function relock(sessionId: string): Promise<RelockResult> {
   return prisma.$transaction(async (tx) => {
     const session = await tx.checkoutSession.findUniqueOrThrow({ where: { id: sessionId } })
+    // B-172. `expired` IS revivable and is the ordinary case — the nightly
+    // sweep marks a lapsed session expired and the renter presses the button
+    // afterwards. `completed` is not: the move-in is done, and re-claiming a
+    // unit for it would take one off the market for a checkout that has already
+    // finished. Reachable, because a completed session's lock ages out like any
+    // other and the panel used to render for it.
+    if (session.status === 'completed') return { ok: false as const, reason: 'sold_out' as const }
     const previousUnitId = session.unitId
 
     const unitId = await claimUnit(tx, session.facilityId, session.unitTypeId)
@@ -691,6 +699,149 @@ export async function relock(sessionId: string): Promise<RelockResult> {
       await recomputeUnitStatus(previousUnitId, tx)
     }
     return { ok: true as const, session: toView(updated) }
+  })
+}
+
+export type RelockAtSizeResult =
+  | { ok: true; session: CheckoutSessionView; changeNote: string }
+  | { ok: false; reason: 'sold_out' | 'no_such_type' | 'not_found' | 'not_active' | 'too_late' }
+
+/// B-172. FR-4.1's unit-lost fallback, for the case `relock` cannot serve: the
+/// size itself has gone, so the only way forward is a DIFFERENT one.
+///
+/// B-149 gave that branch a phone number, a waiting list and a list of the
+/// other sizes — and left it a display. `relock` only ever re-claims
+/// `session.unitTypeId`, so "everything you have entered is still here" was
+/// true and unusable: nothing in the branch could point the session at another
+/// size, and the renter's only route to one was to start again from the
+/// facility page and re-enter every answer.
+///
+/// Three things are re-derived rather than carried, because this is a
+/// different product and not the same one on another unit:
+///
+///  * **the rate**, from `currentRateForUnitType` — the locked one belongs to
+///    the size that is gone, and carrying it would sell a 10×15 at a 10×10's
+///    price;
+///  * **the promotion**, from `offerFor` — a promotion can be scoped to unit
+///    types (`not_for_this_size`), so carrying the snapshot across would apply
+///    an offer to a size it was never valid for. A code the renter typed rides
+///    along and is re-judged rather than trusted, exactly as `applyPromoCodeAction`
+///    re-judges it;
+///  * **the unit**, claimed with the same `FOR UPDATE SKIP LOCKED` every other
+///    path uses, so this cannot take a unit another checkout is holding.
+///
+/// Refused from the payment step onward. `createChargeIntent`'s idempotency key
+/// is `charge:v2:checkout:<sessionId>` and Stripe remembers the parameters a
+/// key was first used with for 24 hours — so an intent already made for the old
+/// size would come back at the OLD amount however the basket changed, and the
+/// renter would be charged for the unit they lost. Starting again from the
+/// facility page is the correct route once money has been quoted, and the panel
+/// says so rather than offering a button that would do this.
+export async function relockAtSize(
+  sessionId: string,
+  unitTypeId: string,
+): Promise<RelockAtSizeResult> {
+  const existing = await prisma.checkoutSession.findUnique({
+    where: { id: sessionId },
+    select: { facilityId: true, status: true, step: true, promoCodeId: true },
+  })
+  if (!existing) return { ok: false, reason: 'not_found' }
+  // `expired` is the ordinary case: the sweep marks a lapsed session expired
+  // and the renter presses the button afterwards, which is why `relock` revives
+  // it. `completed` never is.
+  if (existing.status === 'completed') return { ok: false, reason: 'not_active' }
+  if (existing.step === 'payment' || existing.step === 'provisioned') {
+    return { ok: false, reason: 'too_late' }
+  }
+
+  // Scoped to the session's own facility, so a posted id from another
+  // facility's catalogue claims nothing — the rule `addUnitToBasket` states.
+  const unitType = await prisma.unitType.findFirst({
+    where: { id: unitTypeId, facilityId: existing.facilityId },
+    select: { id: true, name: true, widthFt: true, lengthFt: true },
+  })
+  if (!unitType) return { ok: false, reason: 'no_such_type' }
+
+  // A type whose only rates start in the future has no price we can sell at
+  // today, which is `addUnitToBasket`'s rule and its reason.
+  const rate = await currentRateForUnitType(unitTypeId)
+  if (!rate) return { ok: false, reason: 'sold_out' }
+
+  const typedCode = existing.promoCodeId
+    ? ((
+        await prisma.promoCode.findUnique({
+          where: { id: existing.promoCodeId },
+          select: { code: true },
+        })
+      )?.code ?? null)
+    : null
+  const offer = await offerFor({
+    facilityId: existing.facilityId,
+    unitTypeId,
+    monthlyRateCents: rate.webRateCents,
+    isNewTenant: true,
+    code: typedCode,
+  })
+
+  return prisma.$transaction(async (tx) => {
+    const session = await tx.checkoutSession.findUniqueOrThrow({
+      where: { id: sessionId },
+      include: { units: { orderBy: { createdAt: 'asc' } } },
+    })
+    if (session.status === 'completed') {
+      return { ok: false as const, reason: 'not_active' as const }
+    }
+
+    const unitId = await claimUnit(tx, session.facilityId, unitTypeId)
+    if (!unitId) return { ok: false as const, reason: 'sold_out' as const }
+
+    // The PRIMARY line — the one the session's own columns name, which is what
+    // `leaseId` means on the way out and what reporting joins read.
+    // `removeUnitFromBasket` identifies it the same way.
+    const primary = session.units.find((line) => line.unitId === session.unitId) ?? session.units[0]
+    const previousUnitId = primary?.unitId ?? session.unitId
+    if (primary) {
+      await tx.checkoutSessionUnit.update({
+        where: { id: primary.id },
+        data: { unitTypeId, unitId, quotedRateCents: rate.webRateCents },
+      })
+    }
+
+    const unit = await tx.unit.findUniqueOrThrow({
+      where: { id: unitId },
+      select: { number: true },
+    })
+    // §6.4's rule: the note names WHICH line moved the total, because the
+    // control that moved it is not beside the figure it changed.
+    const changeNote = `Moved to Unit ${unit.number} — ${unitType.widthFt}×${unitType.lengthFt} ${unitType.name}.`
+
+    const updated = await tx.checkoutSession.update({
+      where: { id: session.id },
+      data: {
+        unitTypeId,
+        unitId,
+        quotedRateCents: rate.webRateCents,
+        status: 'active',
+        lockExpiresAt: lockUntil(),
+        promotionId: offer.offer?.promotionId ?? null,
+        promoCodeId: offer.offer?.promoCodeId ?? null,
+        data: {
+          ...((session.data ?? {}) as Record<string, unknown>),
+          promoTerms: offer.offer?.terms ?? null,
+          promoFirstPeriodCents: offer.offer?.firstPeriodCents ?? null,
+          promoSchedule: offer.offer?.schedule ?? null,
+          changeNote,
+        } as Prisma.InputJsonValue,
+      },
+      include: { units: { orderBy: { createdAt: 'asc' } } },
+    })
+
+    await recomputeUnitStatus(unitId, tx)
+    // The unit they lost goes back on the market if nothing else took it.
+    if (previousUnitId && previousUnitId !== unitId) {
+      await recomputeUnitStatus(previousUnitId, tx)
+    }
+    return { ok: true as const, session: toView(updated), changeNote }
   })
 }
 

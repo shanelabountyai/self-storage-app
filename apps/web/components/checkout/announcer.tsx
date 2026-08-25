@@ -24,6 +24,7 @@ export function CheckoutAnnouncer({
   stepLabel,
   lockExpiresAt,
   lapsed,
+  sizeLabel,
 }: {
   step: string
   /// The destination, in the words the progress indicator uses: "Your unit —
@@ -31,10 +32,20 @@ export function CheckoutAnnouncer({
   stepLabel: string
   lockExpiresAt: string
   lapsed: boolean
+  /// B-172. The size the session is on, in SPOKEN form ("10 foot by 15 foot
+  /// Large") — this lands in an announcement, where "10 × 15" is read as
+  /// "10 times 15". Recovering from a lost unit can now change it, so the
+  /// sentence below has to be able to tell which recovery happened.
+  sizeLabel: string
 }) {
   const [message, setMessage] = useState('')
   const region = useRef<HTMLParagraphElement>(null)
-  const previous = useRef<{ step: string; lockExpiresAt: string; lapsed: boolean } | null>(null)
+  const previous = useRef<{
+    step: string
+    lockExpiresAt: string
+    lapsed: boolean
+    sizeLabel: string
+  } | null>(null)
 
   useEffect(() => {
     // Marks the region live, and it is not decoration. Until this component has
@@ -48,7 +59,7 @@ export function CheckoutAnnouncer({
     region.current?.setAttribute('data-live', 'true')
 
     const prior = previous.current
-    previous.current = { step, lockExpiresAt, lapsed }
+    previous.current = { step, lockExpiresAt, lapsed, sizeLabel }
 
     // The first render is the page arriving, not a transition. Announcing here
     // would talk over the heading and the progress indicator, and moving focus
@@ -56,7 +67,15 @@ export function CheckoutAnnouncer({
     if (!prior) return
 
     if (prior.lapsed && !lapsed) {
-      setMessage('We found you another unit the same size. Nothing you entered was lost.')
+      // B-172. Two different recoveries reach here now, and saying "the same
+      // size" after `relockAtSize` has moved somebody onto a 10×15 would be the
+      // announcement contradicting the screen — on the branch whose whole
+      // problem was copy that did not match what the product could do.
+      setMessage(
+        prior.sizeLabel !== sizeLabel
+          ? `We moved you to the ${sizeLabel}. Nothing you entered was lost.`
+          : 'We found you another unit the same size. Nothing you entered was lost.',
+      )
     } else if (prior.step !== step) {
       setMessage(stepLabel)
     } else if (prior.lockExpiresAt !== lockExpiresAt) {
@@ -71,7 +90,7 @@ export function CheckoutAnnouncer({
     // 2.4.3: focus follows the change it announced, so the next Tab is into the
     // new step rather than back at the top of the document.
     document.getElementById('step')?.focus()
-  }, [step, stepLabel, lockExpiresAt, lapsed])
+  }, [step, stepLabel, lockExpiresAt, lapsed, sizeLabel])
 
   // Rendered unconditionally and empty, then written into. A live region
   // inserted already populated is unreliably announced by VoiceOver and

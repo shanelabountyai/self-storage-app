@@ -6003,3 +6003,39 @@ Four changes, and the first is the one that matters most:
 **Test verification.** Full unit suite **3,688 passed, 8 skipped of 3,696** (220 files passed, 1 skipped), exit 0. Typecheck, lint and `prisma migrate diff --exit-code` clean. `e2e/smoke.spec.ts` filtered to the four marketing-form tests plus the sold-out flow: **12 passed, exit 0**, both projects.
 
 **Left behind.** **The `type="email"` refusal is only reachable with a domain that has no dot** (`someone@localhost`), because the browser blocks anything less plausible before the server sees it — the spec says so where it does it. **Checkout's own refusals are untouched** and are not on `FormResult`; making the statement's bullet claim announced rejections everywhere waits on that. **No unit test for `FormResult`** — the repo has no component-test harness, and the e2e covers both branches on both forms. **The refused states are scanned but the route-versus-state gap is still B-184's**: two states are now covered, the general problem is not.
+
+## B-172 — Checkout's unit-lost branch stops being a display
+
+`PENDING`
+
+**What it built.** `relockAtSize` — the branch's way forward when the size itself has gone. Each alternative size is now a submit that re-points the session onto it, re-quotes the rate, re-evaluates the promotion and returns the renter to the step they were on. The branch also stopped quoting a unit the renter no longer has, stopped reading as glyph noise to a screen reader, and got the first axe scan it has ever had.
+
+**What it decided.**
+
+**Three things are re-derived, not carried, because this is a different product.** The **rate** comes from `currentRateForUnitType` — carrying the locked one would sell a 10×15 at a 10×10's price. The **promotion** is re-evaluated through `offerFor`, because a promotion can be scoped to unit types (`not_for_this_size`) and carrying the snapshot would apply an offer to a size it was never valid for; a code the renter typed rides along and is re-judged rather than trusted, exactly as `applyPromoCodeAction` re-judges it. The **unit** is claimed with the same `FOR UPDATE SKIP LOCKED` every other path uses.
+
+**Both the session columns AND the basket line move.** The basket is what the money path sums; a session whose columns moved and whose line did not would summarise and charge the size that had gone. The primary line is identified the way `removeUnitFromBasket` identifies it.
+
+**Refused from the payment step onward, in the service rather than only in the UI.** `createChargeIntent`'s idempotency key is `charge:v2:checkout:<sessionId>`, and Stripe remembers the parameters a key was first used with for 24 hours — so an intent already made for the old size comes back at the **old amount** however the basket changes. Moving a size under it would charge the renter for the unit they lost. The panel's copy and the server's guard read the same condition, so the screen never offers a button the server would refuse.
+
+**The copy only claims the answers are reusable when they are.** "Everything you have entered is still here" was true and unusable — B-149 shipped it beside a control that could only re-claim the size that had just gone. It now branches: the same-size relock, the size move, or (when neither is possible) a sentence that says so and sends them to the phone or the facility page instead.
+
+**No second live region.** The first cut added an `AnnounceRegion`, since a successful move removes the panel that would report it — B-170's failure exactly. But `CheckoutAnnouncer` already exists for this transition, already survives it and already moves focus to the step heading. It only needed to learn that the size can change as well as the unit: "we found you another unit **the same size**" would otherwise be the announcement contradicting the screen. One prop, no new mechanism.
+
+**The button is named on the button.** `aria-label` on the wrapping `AdminForm` buys nothing — no screen reader composes a form's label into its descendants' names, which is the rule `task-complete-form.tsx` states in a comment on the component created to fix it. Caught by the e2e, having made the same mistake the codebase documents.
+
+**The price summary and the code box are suppressed while the lock is lapsed**, rather than restated in the past tense. The figure is void either way, and the price of every size the renter CAN take is on the button beside it.
+
+**Deliberately out of scope:** a recommender, as B-149 already ruled. The facility's own ordering is the ordering.
+
+**Two real bugs found along the way.**
+
+**The lapsed panel rendered on a COMPLETED checkout.** `session.lockLapsed` is derived from the clock alone, so a renter who had paid and came back to their link half an hour later was shown "We couldn't keep that unit" and a "Find me another unit" button — while the "You are moved in" confirmation, which lives inside the `!lockLapsed` section, was hidden from them. The page now derives `lockLapsed` with `step !== 'provisioned' && status !== 'completed'`, and `relock` — which had no status guard at all and would have re-claimed a unit for a finished checkout — refuses a completed session.
+
+**A fixture reading a different clock from the code it asserts against.** `tests/rate-increase-db.test.ts`'s `daysFromNow` used `now.getUTCDate()` while `renoticeRateIncrease` uses `businessDateFor(new Date(), facility.timezone)`. The two agree only until 19:00 CDT; after that the helper is a day ahead and the suite fails as "expected 1790121600000 to be 1790208000000", which reads like broken arithmetic. Latent since the file was written, surfaced at 23:41. The same trap CLAUDE.md records for quiet-hours messaging, one module over.
+
+**Test verification.** Full unit suite **3,693 passed, 8 skipped of 3,701** (220 files passed, 1 skipped), exit 0. Typecheck, lint and `prisma migrate diff --exit-code` clean. Five new `relockAtSize` tests in `tests/checkout-db.test.ts` pin the re-point, the re-quote, a sold-out target, a foreign facility's unit type, the payment-step refusal and that neither relock path revives a completed checkout. New `e2e/checkout-unit-lost.spec.ts`: **6 passed, exit 0**, both projects; the whole public suite (`smoke.spec.ts` plus the new file) **148 passed, 4 skipped, exit 0**.
+
+**The new e2e builds its own facility.** Reaching this branch means taking a whole size to zero available, and doing that to shared demo inventory is exactly the unscoped mutation B-120 forbids — every other checkout spec would then fail with "sold out" for a reason unrelated to the code. Isolated, it needs none of B-120's three disciplines and is repeatable against an un-reseeded database. Three fixture traps cost it four runs and are named in the file: both browser projects race on one slug unless it is per-project; two unit types cannot share a name at one facility; and the serial tests must reset the size they just sold out.
+
+**Left behind.** **Only the primary basket line moves.** A multi-unit basket keeps its other lines pointed at their original units, which is `relock`'s existing behaviour and not a regression — but `expireCheckoutSessions` releases only `session.unitId`, so a lapsed multi-unit basket has line units nobody released. That is a pre-existing gap and wants its own row when N > 1 is real. **A renter at the payment step cannot move size** and is told to call or start again; making that possible needs the charge reference to carry the quote, which is a payments change well beyond this row. **Two live regions carry overlapping text** on a successful move — the announcer's sentence and `PriceSummary`'s change note — because explaining why the figures moved is a different job from reporting the action. **The branch is scanned in one STATE, not in general**: B-184 still owns route-versus-state.
