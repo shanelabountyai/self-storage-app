@@ -6102,7 +6102,7 @@ Four changes, and the first is the one that matters most:
 
 ## B-175 — The lease says what a broken minimum stay costs
 
-`PENDING`
+`424c30f`
 
 **What it built.** The signed agreement stated the minimum stay and stopped there. `lib/lease/build.ts`'s `termSummary` was deliberately silent on consequence — B-144's choice, and correct at the time, because nothing recovered anything and a signed promise to claw a discount back would have been a term the operator did not do. B-145 then built `recaptureFor` and the charge became real; the sentence stayed silent. The word "recovered" first reached the tenant on the move-out screen, with the amount already computed and the tenant already leaving. It now names the consequence, branched on the facility's `promoRecapturePolicy`.
 
