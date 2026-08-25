@@ -6276,7 +6276,7 @@ Four changes, and the first is the one that matters most:
 
 ## B-182 — Customer-facing copy: "ring" → "call", "cheque" → "check"
 
-`<pending>`
+`13fb9ff685b1ed6a2b53b84de6d361b0bbe2c508`
 
 **What it built.** D-15 lexicon cleanup across three unrelated defects the 2026-08-24 UX review grouped as one row. (1) British register ("ring", "cheque") on a Texas product, product-wide. (2) `date_too_far_out`'s copy arguing its own reasoning at the tenant rather than stating the rule. (3) One checkout screen able to show two different phone numbers depending on which branch rendered.
 
