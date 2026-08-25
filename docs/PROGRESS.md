@@ -6126,7 +6126,7 @@ Four changes, and the first is the one that matters most:
 
 ## B-176 — The screen that sets a minimum stay now says whether anything enforces it
 
-`PENDING`
+`cef567c`
 
 **What it built.** `minStayMonths` is set on `/admin/settings/promotions`; `promoRecapturePolicy` is set on `/admin/settings`; neither screen mentioned the other. The promotions field hinted that the minimum stay "is stated on the lease and in checkout" and said nothing about whether anything is recovered, while the policy defaults to `none` — "Nothing — the discount is theirs to keep". An operator could therefore run a six-month minimum for a year in the belief it was enforced, and it was decoration. Three things close it: the field states the facility's **current** policy with a link to the setting; submitting a minimum stay at a `none` facility returns a confirm-and-echo step naming the consequence before anything is created; and any minimum stay the facility does not recover is appended with "· not recovered on early move-out" in the list.
 
