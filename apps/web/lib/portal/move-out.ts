@@ -133,7 +133,7 @@ export type PortalMoveOutProblem =
 export const PORTAL_MOVE_OUT_PROBLEM_COPY: Record<PortalMoveOutProblem, string> = {
   not_found: "We couldn’t find that unit on your account.",
   lien_pipeline:
-    "This unit is in the lien process, so a move-out has to be arranged with the office rather than online. Please ring them.",
+    "This unit is in the lien process, so a move-out has to be arranged with the office rather than online. Please call them.",
   date_too_soon: "That date is before the notice this unit requires. Pick a later date.",
   date_too_far_out: `Pick a date within the next ${MAX_MOVE_OUT_DAYS_AHEAD} days.`,
 };

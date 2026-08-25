@@ -159,7 +159,7 @@ export default async function DelinquencyTimelinePage({
             min={0}
             max={90}
             defaultValue={String(active?.reversalGraceDays ?? 10)}
-            hint="Days before the ladder may move again once a cheque bounces or an ACH is returned. The tenant is holding a receipt; this is how long they get to make it right. 0 means no pause."
+            hint="Days before the ladder may move again once a check bounces or an ACH is returned. The tenant is holding a receipt; this is how long they get to make it right. 0 means no pause."
           />
           <Field
             name="reversalResumes"

@@ -496,7 +496,7 @@ export async function refundAction(
     "card" | "cash" | "check";
   if (method === "check" && !String(formData.get("checkNumber") ?? "").trim()) {
     return fieldError({
-      checkNumber: "Enter the cheque number so this can be reconciled.",
+      checkNumber: "Enter the check number so this can be reconciled.",
     });
   }
 
@@ -543,7 +543,7 @@ export async function refundAction(
         return {
           status: "error",
           message:
-            "Card refunds are unavailable — refund as cash or cheque and record it here.",
+            "Card refunds are unavailable — refund as cash or check and record it here.",
           fieldErrors: {},
         };
       case "provider_error":

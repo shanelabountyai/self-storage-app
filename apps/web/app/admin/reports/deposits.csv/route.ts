@@ -35,7 +35,7 @@ export async function GET(request: Request): Promise<Response> {
   ])
 
   const csv = toCsv(
-    ['Day', 'Facility', 'Cash', 'Cheques', 'Card', 'Counted cash', 'Expected cash', 'Over/short', 'Unreconciled', 'Note'],
+    ['Day', 'Facility', 'Cash', 'Checks', 'Card', 'Counted cash', 'Expected cash', 'Over/short', 'Unreconciled', 'Note'],
     rows,
   )
 

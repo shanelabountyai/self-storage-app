@@ -79,7 +79,7 @@ export default async function DepositsPage({
               <th scope="col" className="py-2 pr-4">Day</th>
               <th scope="col" className="py-2 pr-4">Facility</th>
               <th scope="col" className="py-2 pr-4 text-right">Cash</th>
-              <th scope="col" className="py-2 pr-4 text-right">Cheques</th>
+              <th scope="col" className="py-2 pr-4 text-right">Checks</th>
               <th scope="col" className="py-2 pr-4 text-right">Card</th>
               <th scope="col" className="py-2 pr-4 text-right">Counted</th>
               <th scope="col" className="py-2 pr-4 text-right">Over/short</th>

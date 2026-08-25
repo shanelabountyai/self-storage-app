@@ -56,13 +56,23 @@ export const PORTAL_TRANSFER_PROBLEM_COPY: Record<string, string> = {
   ...TRANSFER_PROBLEM_COPY,
   not_found: 'We couldn’t find that unit on your account.',
   date_in_past: 'Pick today or a later date.',
-  date_too_far_out: `Pick a date within ${MAX_MOVE_IN_DAYS_AHEAD} days — the same window the public site holds a unit for.`,
+  date_too_far_out: `Pick a date within the next ${MAX_MOVE_IN_DAYS_AHEAD} days.`,
   already_requested: 'You’ve already asked to move to another unit at this site. Cancel that first.',
   // D-85: the portal never arranges a lien-pipeline move. Named plainly rather
   // than dressed up — the tenant has had a notice about this unit, and copy
   // that talks around it helps nobody.
   lien_pipeline:
-    'This unit is in the lien process, so a move has to be arranged with the office rather than online. Please ring them.',
+    'This unit is in the lien process, so a move has to be arranged with the office rather than online. Please call them.',
+}
+
+/// B-182 (D-15: US register — "call", never "ring"). The list and full-page
+/// lien-pipeline refusals on the transfer screen, said the same way B-142
+/// says it for move-out. The phone number is deliberately NOT in here — the
+/// screen renders it through `phoneFor`/`CallLink`, which falls back to the
+/// org line when a facility has none and makes it a real `tel:` link, rather
+/// than the page building its own "on {phone}" text with no fallback.
+export function lienTransferRefusal(unitNumber: string): string {
+  return `Unit ${unitNumber} is in the lien process, so a move has to be arranged with the office rather than online. They'll go through your options with you.`
 }
 
 export type PortalTransferLease = {

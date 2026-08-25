@@ -170,11 +170,11 @@ export default async function MerchandisePage({
             <Field name="quantity" label="Qty" type="number" min={1} defaultValue={1} required />
             <Field name="method" label="Paid by" as="select" defaultValue="cash">
               <option value="cash">Cash</option>
-              <option value="check">Cheque</option>
+              <option value="check">Check</option>
               <option value="money_order">Money order</option>
             </Field>
             <Field name="tendered" label="Tendered ($)" inputMode="decimal" hint="Cash only." />
-            <Field name="checkNumber" label="Cheque #" hint="Cheque or money order only." />
+            <Field name="checkNumber" label="Check #" hint="Check or money order only." />
             <Button type="submit">Record sale</Button>
           </AdminForm>
         )}

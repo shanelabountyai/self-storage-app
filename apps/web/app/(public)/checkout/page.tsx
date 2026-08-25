@@ -667,11 +667,8 @@ export default async function CheckoutPage({
                 </div>
               ) : (
                 <p className="border-input mt-4 rounded-lg border p-4 text-pretty">
-                  Your gate code will be texted to you within 15 minutes. If it has not arrived,
-                  call{' '}
-                  <a href={`tel:${SITE.phone.href}`} className="font-medium underline underline-offset-4">
-                    {SITE.phone.display}
-                  </a>{' '}
+                  Your gate code will be texted to you within 15 minutes. If it has not arrived:{' '}
+                  <CallLink phone={lostPhone} className="font-medium underline underline-offset-4" />{' '}
                   and we will read it to you — you can move in either way.
                 </p>
               )}

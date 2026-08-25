@@ -36,7 +36,7 @@ export async function openDrawerAction(_prev: FormState, formData: FormData): Pr
 
   revalidatePath('/admin/pos')
   revalidatePath('/admin/pos/drawer')
-  return success('Drawer open. Cash and cheques taken from now on post to this session.')
+  return success('Drawer open. Cash and checks taken from now on post to this session.')
 }
 
 const CLOSE_PROBLEM_COPY: Record<string, string> = {
@@ -52,7 +52,7 @@ export async function closeDrawerAction(_prev: FormState, formData: FormData): P
   const cash = parseDollars(formData.get('countedCash'))
   if (cash === null) return fieldError({ countedCash: 'Enter the counted cash, like 412.50.' })
   const checks = parseDollars(formData.get('countedChecks'))
-  if (checks === null) return fieldError({ countedChecks: 'Enter the counted cheques, like 0.00.' })
+  if (checks === null) return fieldError({ countedChecks: 'Enter the counted checks, like 0.00.' })
 
   const result = await closeDrawer(actor, sessionId, {
     countedCashCents: cash,

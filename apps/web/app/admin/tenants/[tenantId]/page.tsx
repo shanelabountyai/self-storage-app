@@ -1288,7 +1288,7 @@ export default async function TenantProfilePage({
             <div className="mt-3 flex flex-col gap-3">
               <p className="text-muted-foreground max-w-prose text-xs text-pretty">
                 A card refund goes back to the card the tenant paid with. Cash
-                and cheque refunds are recorded as a payable — the money is not
+                and check refunds are recorded as a payable — the money is not
                 paid until someone hands it over. Refunding unwinds what the
                 payment settled, so the invoices reopen.
               </p>
@@ -1386,7 +1386,7 @@ export default async function TenantProfilePage({
               </summary>
               <div className="mt-3 flex flex-col gap-3">
                 <p className="text-muted-foreground max-w-prose text-xs text-pretty">
-                  For a cheque that bounced, an ACH return or a lost dispute —
+                  For a check that bounced, an ACH return or a lost dispute —
                   money we recorded and the bank took back.{" "}
                   <strong>This is not a refund.</strong> No money leaves the
                   drawer and the deposit slip it was banked on is unchanged;

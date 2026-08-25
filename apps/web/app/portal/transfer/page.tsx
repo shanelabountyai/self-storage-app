@@ -4,11 +4,13 @@ import {
   previewTenantTransfer,
   tenantTransferLeases,
   transferOptionsFor,
+  lienTransferRefusal,
   PORTAL_TRANSFER_PROBLEM_COPY,
 } from '@/lib/portal/transfer'
 import { MAX_MOVE_IN_DAYS_AHEAD } from '@/lib/reservations/reserve'
 import { formatRate } from '@/lib/format'
 import { AdminForm, Field } from '@/components/admin/form'
+import { CallLink, phoneFor } from '@/components/marketing/call-link'
 import { cancelTransferAction, requestTransferAction } from './actions'
 
 export const metadata = { title: 'Move to another unit' }
@@ -89,9 +91,11 @@ export default async function PortalTransferPage({
                 </Link>
               ) : (
                 <p className="text-muted-foreground text-sm text-pretty">
-                  {lease.facilityName} — Unit {lease.unitNumber} ({lease.unitTypeName}) is in the
-                  lien process. Ring the office
-                  {lease.facilityPhone ? ` on ${lease.facilityPhone}` : ''} to arrange a move.
+                  {lease.facilityName} — {lienTransferRefusal(lease.unitNumber)}{' '}
+                  <CallLink
+                    phone={phoneFor(lease.facilityPhone || null)}
+                    className="underline underline-offset-4"
+                  />
                 </p>
               )}
             </li>
@@ -121,10 +125,11 @@ export default async function PortalTransferPage({
       <Shell>
         <h1 className="text-xl font-semibold">Move to another unit</h1>
         <p className="text-sm text-pretty">
-          Unit {lease.unitNumber} at {lease.facilityName} is in the lien process, so a move has to be
-          arranged with the office rather than online. Ring them
-          {lease.facilityPhone ? ` on ${lease.facilityPhone}` : ''} and they&apos;ll go through your
-          options with you.
+          {lease.facilityName} — {lienTransferRefusal(lease.unitNumber)}{' '}
+          <CallLink
+            phone={phoneFor(lease.facilityPhone || null)}
+            className="underline underline-offset-4"
+          />
         </p>
         <Link href="/portal" className="text-sm underline underline-offset-4">
           Back to my account
@@ -150,12 +155,12 @@ export default async function PortalTransferPage({
         <p className="text-sm text-pretty">
           The hold lasts until{' '}
           <strong>{formatExpiry(lease.pending.expiresAt, lease.facilityTimezone)}</strong>. If the team
-          hasn&apos;t reached you by then, ring the office
-          {lease.facilityPhone ? ` on ${lease.facilityPhone}` : ''} to keep it.
+          hasn&apos;t reached you by then, call the office{' '}
+          <CallLink phone={phoneFor(lease.facilityPhone || null)} /> to keep it.
         </p>
         <p className="text-sm text-pretty">
-          They&apos;ll call to arrange a time. If you need it sooner, ring the office
-          {lease.facilityPhone ? ` on ${lease.facilityPhone}` : ''}.
+          They&apos;ll call to arrange a time. If you need it sooner, call the office{' '}
+          <CallLink phone={phoneFor(lease.facilityPhone || null)} />.
         </p>
         <AdminForm action={cancelTransferAction} label="Cancel transfer request">
           <input type="hidden" name="leaseId" value={lease.leaseId} />
@@ -205,8 +210,8 @@ export default async function PortalTransferPage({
 
       {options.length === 0 ? (
         <p className="text-sm text-pretty">
-          There&apos;s nothing else free at {lease.facilityName} right now. Ring the office
-          {lease.facilityPhone ? ` on ${lease.facilityPhone}` : ''} and they&apos;ll let you know when
+          There&apos;s nothing else free at {lease.facilityName} right now. Call the office{' '}
+          <CallLink phone={phoneFor(lease.facilityPhone || null)} /> and they&apos;ll let you know when
           something opens up.
         </p>
       ) : (

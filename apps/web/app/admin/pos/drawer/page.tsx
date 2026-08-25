@@ -50,7 +50,7 @@ export default async function DrawerPage() {
       <div className="print:hidden">
         <h1 className="text-lg font-semibold">Drawer — {selected.facility.name}</h1>
         <p className="text-muted-foreground mt-1 max-w-prose text-sm text-pretty">
-          Cash and cheques taken at the counter post to the open session.{' '}
+          Cash and checks taken at the counter post to the open session.{' '}
           <Link href="/admin/pos" className="underline underline-offset-2">
             Back to POS
           </Link>
@@ -111,7 +111,7 @@ export default async function DrawerPage() {
               <dd className="text-muted-foreground text-right tabular-nums">
                 {formatCents(view.slip.depositCashCents)}
               </dd>
-              <dt className="pt-2">Cheques and money orders</dt>
+              <dt className="pt-2">Checks and money orders</dt>
               <dd className="pt-2 text-right tabular-nums">{formatCents(view.slip.expectedChecksCents)}</dd>
               <dt className="text-muted-foreground">Card (never in the drawer)</dt>
               <dd className="text-muted-foreground text-right tabular-nums">{formatCents(view.slip.cardCents)}</dd>
@@ -120,12 +120,12 @@ export default async function DrawerPage() {
             {view.checks.length > 0 && (
               <div tabIndex={0} className="overflow-x-auto">
                 <table className="w-full border-collapse text-sm">
-                  <caption className="sr-only">Cheques and money orders in this drawer session</caption>
+                  <caption className="sr-only">Checks and money orders in this drawer session</caption>
                   <thead>
                     <tr className="border-input border-b text-left">
                       <th scope="col" className="py-2 pr-4">Receipt</th>
                       <th scope="col" className="py-2 pr-4">Tenant</th>
-                      <th scope="col" className="py-2 pr-4">Cheque #</th>
+                      <th scope="col" className="py-2 pr-4">Check #</th>
                       <th scope="col" className="py-2 pr-4 text-right">Amount</th>
                     </tr>
                   </thead>
@@ -157,7 +157,7 @@ export default async function DrawerPage() {
               <input type="hidden" name="sessionId" value={view.sessionId} />
               <div className="flex flex-wrap items-end gap-3">
                 <Field name="countedCash" label="Counted cash ($)" inputMode="decimal" required />
-                <Field name="countedChecks" label="Counted cheques ($)" inputMode="decimal" required defaultValue="0.00" />
+                <Field name="countedChecks" label="Counted checks ($)" inputMode="decimal" required defaultValue="0.00" />
               </div>
               <Field
                 name="note"
