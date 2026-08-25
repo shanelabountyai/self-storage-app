@@ -4,6 +4,7 @@ import { requireTenantActor } from "@/lib/rbac/session";
 import { portalDocuments, portalPayments } from "@/lib/portal/documents";
 import { formatRate } from "@/lib/format";
 import { SITE } from "@/lib/site-config";
+import { CallLink, phoneFor } from "@/components/marketing/call-link";
 
 export const metadata: Metadata = { title: "Documents and receipts" };
 
@@ -119,17 +120,78 @@ export default async function DocumentsPage() {
                     {/* B-146. In words, not a strikethrough or a colour (WCAG
                         1.4.1) — and it says what it means for the tenant,
                         because the next thing they get is a notice about a
-                        period they hold a receipt for. */}
+                        period they hold a receipt for.
+                        B-179. It used to end "please call us", which asked the
+                        tenant to queue on a phone line to do what the next
+                        screen does in three taps. The action is here now, and
+                        the fee is named because it is part of the total they
+                        are about to pay. */}
                     {payment.returned && (
                       <span className="text-muted-foreground block text-pretty">
-                        Returned unpaid by the bank. This amount is owed again —
-                        please call us.
+                        Returned unpaid by the bank, so this amount is owed
+                        again
+                        {payment.return && payment.return.feeCents > 0
+                          ? `, along with a ${formatRate(payment.return.feeCents)} returned-payment fee`
+                          : ""}
+                        .
+                      </span>
+                    )}
+                    {payment.returned && (
+                      <span className="mt-1 block text-pretty">
+                        {payment.return?.payableCents != null ? (
+                          <>
+                            <Link
+                              href={`/portal/pay?lease=${payment.return.leaseId}`}
+                              aria-label={`Pay ${formatRate(payment.return.payableCents)} now${
+                                payment.unitNumber
+                                  ? ` on unit ${payment.unitNumber}`
+                                  : ""
+                              }`}
+                              className="font-medium underline underline-offset-4"
+                            >
+                              Pay {formatRate(payment.return.payableCents)} now
+                            </Link>
+                            <span className="text-muted-foreground">
+                              {" "}
+                              or{" "}
+                              <CallLink
+                                phone={phoneFor(
+                                  payment.return.facilityPhone ?? null,
+                                )}
+                                className="underline underline-offset-4"
+                              />
+                              .
+                            </span>
+                          </>
+                        ) : (
+                          // Nothing to pay online: the lease has ended, or the
+                          // balance is already settled. A link to /portal/pay
+                          // would land on "we couldn't find that unit", so the
+                          // facility's own line is the honest route.
+                          <span className="text-muted-foreground">
+                            <CallLink
+                              phone={phoneFor(
+                                payment.return?.facilityPhone ?? null,
+                              )}
+                              className="underline underline-offset-4"
+                            />{" "}
+                            about this.
+                          </span>
+                        )}
                       </span>
                     )}
                   </td>
                   <td className="py-2">{payment.unitNumber ?? "—"}</td>
                   <td className="py-2 text-right tabular-nums">
                     {formatRate(payment.amountCents)}
+                    {/* B-179 (1.4.1). The figure said the money landed and the
+                        sentence in the other column said it did not. The state
+                        is on the number itself now, in words. */}
+                    {payment.returned && (
+                      <span className="text-muted-foreground block text-xs font-normal">
+                        returned
+                      </span>
+                    )}
                   </td>
                 </tr>
               ))}

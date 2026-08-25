@@ -1,4 +1,5 @@
 import { prisma } from "@storage/db";
+import { OCCUPYING_LEASE_STATUSES } from "@storage/core/inventory";
 
 // PRD 01 §4.7 US-705. The tenant's own paperwork.
 //
@@ -124,7 +125,107 @@ export type PortalReceipt = {
   /// that quietly drops it leaves them with a dunning notice and no explanation
   /// on the one screen that is theirs.
   returned: boolean;
+  /// B-179. What a tenant can DO about a returned payment, present only when
+  /// this row is one. Absent on every ordinary payment, and the queries behind
+  /// it do not run when the list has no returns.
+  return: ReturnedPaymentContext | null;
 };
+
+/// B-179. The screen used to tell the tenant to ring the office to do something
+/// the pay route does in three taps. This is what turns that instruction into
+/// an action.
+export type ReturnedPaymentContext = {
+  /// The lease the reversed payment was posted against, for `/portal/pay`.
+  leaseId: string;
+  /// What is now owed on that lease — the reversal and any returned-payment fee
+  /// are both in it, because `payableLease` sums the same ledger. Null when the
+  /// lease can no longer take an online payment (moved out, or nothing owed),
+  /// in which case the screen offers the facility's phone instead of a link to
+  /// a page that would say "we couldn't find that unit".
+  payableCents: number | null;
+  /// The facility's own line, so `phoneFor` can prefer it over the org number.
+  facilityPhone: string | null;
+  /// The returned-payment fee actually charged on THIS return, or 0 when it was
+  /// waived or the facility has priced none.
+  ///
+  /// Read from the `payment.returned` audit entry, which is the only record
+  /// tying the fee to the payment: `assessNsfFee` raises an ordinary fee
+  /// invoice and nothing on `Invoice` points back at the payment that caused
+  /// it. Matching on the line description instead would be guesswork, and this
+  /// figure decides whether the tenant understands their own balance.
+  feeCents: number;
+};
+
+/// Gathers the three facts a returned row needs, in one pass over the returns.
+///
+/// Runs only when there is at least one — a payment list with no returns, which
+/// is nearly all of them, costs nothing.
+async function returnedPaymentContexts(
+  tenantId: string,
+  returns: { paymentId: string; leaseId: string | null }[],
+): Promise<Map<string, ReturnedPaymentContext>> {
+  const leaseIds = [
+    ...new Set(returns.map((r) => r.leaseId).filter((id) => id !== null)),
+  ];
+  if (leaseIds.length === 0) return new Map();
+
+  const [leases, balances, audits] = await Promise.all([
+    // Scoped by `tenantId` as well as by id: these ids came from ledger entries
+    // on this tenant's payments, but the rule on this file is that a read never
+    // relies on an earlier one having been scoped.
+    prisma.lease.findMany({
+      where: { id: { in: leaseIds }, tenantId },
+      select: { id: true, status: true, facility: { select: { phone: true } } },
+    }),
+    prisma.ledgerEntry.groupBy({
+      by: ["leaseId"],
+      where: { leaseId: { in: leaseIds } },
+      _sum: { amountCents: true },
+    }),
+    prisma.auditLog.findMany({
+      where: {
+        entityType: "Payment",
+        action: "payment.returned",
+        entityId: { in: returns.map((r) => r.paymentId) },
+      },
+      select: { entityId: true, after: true },
+      orderBy: { occurredAt: "desc" },
+    }),
+  ]);
+
+  const byLease = new Map(leases.map((lease) => [lease.id, lease]));
+  const balanceFor = new Map(
+    balances.map((row) => [row.leaseId, row._sum.amountCents ?? 0]),
+  );
+  // Newest first above, so the first entry per payment wins — a payment can
+  // only be returned once, but the log is append-only and a correction would
+  // arrive as a second row rather than an edit.
+  const feeFor = new Map<string, number>();
+  for (const entry of audits) {
+    if (feeFor.has(entry.entityId)) continue;
+    const after = entry.after as Record<string, unknown> | null;
+    const cents = after?.feeCents;
+    feeFor.set(entry.entityId, typeof cents === "number" ? cents : 0);
+  }
+
+  const contexts = new Map<string, ReturnedPaymentContext>();
+  for (const item of returns) {
+    if (item.leaseId === null) continue;
+    const lease = byLease.get(item.leaseId);
+    if (!lease) continue;
+    const balance = balanceFor.get(item.leaseId) ?? 0;
+    const payable =
+      (OCCUPYING_LEASE_STATUSES as readonly string[]).includes(lease.status) &&
+      balance > 0;
+    contexts.set(item.paymentId, {
+      leaseId: item.leaseId,
+      payableCents: payable ? balance : null,
+      facilityPhone: lease.facility.phone,
+      feeCents: feeFor.get(item.paymentId) ?? 0,
+    });
+  }
+  return contexts;
+}
 
 /// Payments, as the receipt list US-705 asks for.
 ///
@@ -154,12 +255,23 @@ export async function portalPayments(
   });
 
   const leases = await leaseIdsFor(tenantId);
+  const contexts = await returnedPaymentContexts(
+    tenantId,
+    payments
+      .filter((payment) => payment.status === "returned")
+      .map((payment) => ({
+        paymentId: payment.id,
+        leaseId: payment.ledgerEntries[0]?.leaseId ?? null,
+      })),
+  );
+
   return payments.map((payment) => ({
     paymentId: payment.id,
     amountCents: payment.amountCents,
     receivedAt: payment.receivedAt,
     unitNumber: leases.get(payment.ledgerEntries[0]?.leaseId ?? "") ?? null,
     returned: payment.status === "returned",
+    return: contexts.get(payment.id) ?? null,
   }));
 }
 

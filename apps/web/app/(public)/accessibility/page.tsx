@@ -441,6 +441,26 @@ const LAST_REVIEWED = '19 August 2026'
 // Recorded rather than skipped, per the rule the B-150 entry states — a change
 // to what a customer signs is worth a line here even when it moves no pixels.
 // `LAST_REVIEWED` is not bumped.
+//
+// Re-verified 2026-08-25, at B-179 (a returned payment offers the pay route
+// instead of a phone number). Customer-facing, on `/portal/documents`, and it
+// STRENGTHENS the colour claim rather than testing it: the amount column showed
+// the full payment as though it had landed while a sentence in another column
+// said it had not, and the returned state is now on the figure itself in words.
+// It also removes a 2.4.4 problem rather than adding one — "please call us" was
+// an instruction with no link in it at all.
+//
+// The new controls are a `Link` to `/portal/pay` and a `CallLink`, both plain
+// links with visible text; the pay link carries an `aria-label` naming the unit,
+// because several returned rows would otherwise offer identically-named links.
+//
+// `/portal/documents` IS in `SCANNED_ROUTES`, so the page is scanned — but the
+// returned row is a STATE that needs a bounced payment, and the demo seed
+// creates no payments at all, so the scan reaches the ordinary rows only. That
+// is the route-versus-state gap **B-184** owns, named here rather than left to
+// be inferred from a green scan. No public route added, so the generated
+// coverage claim and the route-keyed exception list are untouched.
+// `LAST_REVIEWED` is not bumped.
 export default function AccessibilityPage() {
   return (
     <ProsePage

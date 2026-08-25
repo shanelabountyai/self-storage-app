@@ -10,6 +10,7 @@ import {
   returnPayment,
   returnablePayments,
 } from "../apps/web/lib/billing/reversals";
+import { portalPayments } from "../apps/web/lib/portal/documents";
 import { ForbiddenError } from "../apps/web/lib/rbac/authorize";
 import type { Actor } from "../apps/web/lib/rbac/actor";
 import type { PermissionKey } from "@storage/db/rbac-catalog";
@@ -879,6 +880,110 @@ describeDb("partial payments and refunds", () => {
         refundedCents: 4_000,
         refundableCents: 8_900,
       });
+    });
+  });
+  // B-179 / PRD 01 §4.7 US-705. What the TENANT sees, on the same rows the
+  // staff-side tests above create.
+  //
+  // The screen used to read "Returned unpaid by the bank. This amount is owed
+  // again — please call us" beside a figure still showing the full payment as
+  // though it had landed, with a pay route one tap away on the dashboard. These
+  // pin the three facts that turn the instruction into an action, and the one
+  // that decides whether the tenant understands their own total.
+  describe("the tenant's view of a returned payment — US-705 (B-179)", () => {
+    async function nsfFeeOf(amountCents: number) {
+      await prisma.feeSchedule.create({
+        data: {
+          facilityId,
+          feeType: "nsf",
+          amountCents,
+          effectiveFrom: d("2026-01-01"),
+        },
+      });
+    }
+
+    /// A rent charge on the ledger, so the lease has a balance to pay. The
+    /// `invoice` helper above writes invoices only — the ledger in this file
+    /// carries payments, so without this a returned payment nets to zero and
+    /// there is correctly nothing to offer.
+    async function charge(amountCents: number) {
+      await prisma.ledgerEntry.create({
+        data: {
+          facilityId,
+          leaseId,
+          type: "charge",
+          amountCents,
+          description: "Rent",
+        },
+      });
+    }
+
+    it("names the fee that was charged and offers the balance to pay", async () => {
+      await nsfFeeOf(3_000);
+      await prisma.facility.update({
+        where: { id: facilityId },
+        data: { phone: "(512) 555-0199" },
+      });
+      await charge(12_900);
+      const paymentId = await succeededPayment(12_900);
+      await returnPayment(actorWith(), paymentId, {
+        reasonCode: "insufficient_funds",
+      });
+
+      const rows = await portalPayments(tenantId);
+      const row = rows.find((r) => r.paymentId === paymentId);
+      expect(row?.returned).toBe(true);
+      // The fee is on the ledger, so it is in what the pay route will collect —
+      // and the tenant is told the figure, because a balance $30 larger than
+      // the payment they are looking at otherwise has no explanation.
+      expect(row?.return?.feeCents).toBe(3_000);
+      expect(row?.return?.payableCents).toBe(12_900 + 3_000);
+      expect(row?.return?.leaseId).toBe(leaseId);
+      // The FACILITY's line, not the org one — the whole point of routing it
+      // through `phoneFor` on the page.
+      expect(row?.return?.facilityPhone).toBe("(512) 555-0199");
+    });
+
+    it("reports no fee when the return was waived", async () => {
+      await nsfFeeOf(3_000);
+      await charge(12_900);
+      const paymentId = await succeededPayment(12_900);
+      await returnPayment(actorWith(), paymentId, {
+        reasonCode: "bank_error",
+        waiveFee: true,
+      });
+
+      const rows = await portalPayments(tenantId);
+      const row = rows.find((r) => r.paymentId === paymentId);
+      // Zero, not "the facility's configured amount" — the tenant is not shown
+      // a charge nobody made.
+      expect(row?.return?.feeCents).toBe(0);
+      expect(row?.return?.payableCents).toBe(12_900);
+    });
+
+    it("offers nothing to pay when the return left the lease settled", async () => {
+      // No charge on the ledger, so the reversal nets the lease to zero. The
+      // page falls back to the facility's phone rather than linking at a pay
+      // screen that would answer "we couldn't find that unit".
+      const paymentId = await succeededPayment(12_900);
+      await returnPayment(actorWith(), paymentId, {
+        reasonCode: "stop_payment",
+      });
+
+      const rows = await portalPayments(tenantId);
+      const row = rows.find((r) => r.paymentId === paymentId);
+      expect(row?.returned).toBe(true);
+      expect(row?.return?.payableCents).toBeNull();
+    });
+
+    it("carries no return context on an ordinary payment", async () => {
+      await charge(12_900);
+      const paymentId = await succeededPayment(12_900);
+
+      const rows = await portalPayments(tenantId);
+      const row = rows.find((r) => r.paymentId === paymentId);
+      expect(row?.returned).toBe(false);
+      expect(row?.return).toBeNull();
     });
   });
 });
