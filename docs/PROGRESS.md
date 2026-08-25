@@ -6074,7 +6074,7 @@ Four changes, and the first is the one that matters most:
 
 ## B-174 — The portal move-out preview stops vanishing in silence
 
-`PENDING`
+`00ec8a4`
 
 **What it built.** `/portal/move-out` kept only the `ok` branch of its preview, so a refused date rendered a blank where the settlement had been while "Request this move-out" stayed live and pressable beside it — a page byte-identical to a working one except for the missing money (3.3.1). B-142 fixed exactly this on the sibling transfer screen and the fix never crossed one file. The refusal is now a `role="alert"`, the figures and the submit are gone together, the picker has a ceiling on both sides of the wire, and a dead field is deleted.
 
