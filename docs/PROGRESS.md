@@ -6042,7 +6042,7 @@ Four changes, and the first is the one that matters most:
 
 ## B-173 — One form, one truth: the date you typed is the date that posts
 
-`PENDING`
+`67f874d`
 
 **What it built.** All four move-out and transfer screens — `/admin/tenants/[id]/move-out`, `/admin/tenants/[id]/transfer`, `/portal/move-out`, `/portal/transfer` — had the same shape: a `method="GET"` form whose only submit was "Recalculate", and a separate committing form carrying a hidden date built from the URL. Changing Sep 1 to Sep 5 and pressing **Complete move-out** closed the lease on Sep 1, silently, after showing the tenant a Sep 5 settlement. Nothing on any of the four screens said the picker was inert until a second button had been pressed. The preview control now lives inside the committing form, and `stalePreview` refuses the commit while it and the priced value disagree.
 
