@@ -6226,7 +6226,7 @@ Four changes, and the first is the one that matters most:
 
 ## B-180 — One email field for the whole quote table, and a confirmation that names the size
 
-`PENDING`
+`f13465a`
 
 **What it built.** The lead screen's waitlist capture rendered an email input **per size row**, labelled by nothing but a placeholder reading "Email" — which disappears the moment anything is typed, is unavailable to speech input, and asked a caller who wanted a 10x10 *and* a 10x20 for the same address twice. There is now one labelled field above the quote table, and each full size's **Join waitlist** button submits it. The confirmation names the size and the address it recorded instead of "On the waitlist."
 
