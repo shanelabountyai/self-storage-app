@@ -1,6 +1,15 @@
 import AxeBuilder from '@axe-core/playwright'
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
 import { signInAsDemoOwner } from './sign-in'
+
+// B-181. The occasional write forms live behind native <details> now — the
+// support-session form was the third thing on the page and the leases were the
+// ninth. Playwright will not fill a control inside a closed disclosure, and
+// that refusal is the point: a spec that still passed without this would mean
+// the form was never actually hidden.
+async function openDisclosure(page: Page, name: string) {
+  await page.locator('summary').filter({ hasText: name }).first().click()
+}
 
 // PRD 02 §4.4 US-13/US-16 (B-038). Search → profile, the same split as every
 // other admin surface in this suite: gate first, then a real session.
@@ -47,15 +56,62 @@ test.describe('signed in as the demo owner', () => {
     await expect(page.getByText(/Balance due/)).toBeVisible()
   })
 
+  test('the leases are the first thing under the banners, and the writes are closed (B-181)', async ({
+    page,
+  }) => {
+    await page.goto('/admin/tenants?q=dana@demo.example.com')
+    await page.getByRole('link', { name: 'Dana Delinquent' }).click()
+    // Waits for the PROFILE, not for `main` — the list has a `main` too, so
+    // `getByRole('main')` is satisfied before the navigation and the first
+    // draft of this test read the list's headings and reported none.
+    await expect(page.getByRole('heading', { name: 'Dana Delinquent', level: 1 })).toBeVisible()
+
+    // The units, rates and balances used to be the ninth section, behind three
+    // write forms. Asserted by POSITION rather than by presence, because the
+    // section was always present — being ninth was the defect.
+    // textContent, not innerText: two of the banner headings are `sr-only`,
+    // which is a rendering state, and asserting on what is RENDERED would make
+    // this pass or fail on a CSS class rather than on the order.
+    const headings = (
+      await page.getByRole('main').getByRole('heading', { level: 2 }).allTextContents()
+    ).map((h) => h.trim())
+    expect(headings).toContain('Leases')
+    expect(headings.indexOf('Leases')).toBeLessThan(headings.indexOf('Contact'))
+    expect(headings.indexOf('Leases')).toBeLessThan(headings.indexOf('Actions'))
+
+    // And the support-session form is still on the page — one disclosure away,
+    // not deleted, and reporting its own collapsed state (4.1.2).
+    const impersonate = page.locator('details').filter({
+      has: page.locator('summary', { hasText: 'View the portal as this tenant' }),
+    })
+    await expect(impersonate).toHaveCount(1)
+    await expect(impersonate).not.toHaveAttribute('open', /.*/)
+    // Scoped to this disclosure: "Reason" is also the label on Place a hold,
+    // which now sits in the same region — both are inside their own named
+    // form, so they are distinguishable to a reader and only to a bare
+    // getByLabel are they the same field.
+    await expect(impersonate.getByLabel('Reason')).toBeHidden()
+  })
+
   test('a search with no matches says so', async ({ page }) => {
     await page.goto('/admin/tenants?q=zzz-nobody-zzz')
     await expect(page.getByText(/No tenants match/)).toBeVisible()
   })
 
-  test('the tenant profile has no WCAG 2.1 AA violations', async ({ page }) => {
+  test('the tenant profile has no WCAG 2.1 AA violations, with a disclosure open', async ({
+    page,
+  }) => {
     await page.goto('/admin/tenants?q=dana@demo.example.com')
     await page.getByRole('link', { name: 'Dana Delinquent' }).click()
     await expect(page.getByRole('main')).toBeVisible()
+
+    // FR-25 (1), and B-184's whole complaint: a route in the scan list is not
+    // the same as its states being scanned. Everything behind a closed
+    // <details> is invisible to axe, so B-181's disclosures would have moved
+    // half the page's controls out of the audit rather than into it. Two are
+    // opened — one write form, one long-log "show more" — before the pass.
+    await openDisclosure(page, 'Edit contact details')
+    await openDisclosure(page, 'Place a hold')
 
     const { violations } = await new AxeBuilder({ page })
       .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
@@ -73,6 +129,7 @@ test.describe('signed in as the demo owner', () => {
     await page.goto('/admin/tenants?q=dana@demo.example.com')
     await page.getByRole('link', { name: 'Dana Delinquent' }).click()
 
+    await openDisclosure(page, 'Military service')
     const scra = page.getByRole('group', { name: /Active-duty military/ })
     await expect(scra).toBeVisible()
     // The consequence is on screen BEFORE the choice, not discovered after it:
@@ -103,6 +160,7 @@ test.describe('signed in as the demo owner', () => {
     await page.getByRole('link', { name: 'Dana Delinquent' }).click()
 
     const noteText = `Called about balance — e2e ${Date.now()}`
+    await openDisclosure(page, 'Add a note')
     await page.getByLabel('New note').fill(noteText)
     await page.getByRole('button', { name: 'Add note' }).click()
 
@@ -120,6 +178,7 @@ test.describe('signed in as the demo owner', () => {
     await page.goto('/admin/tenants?q=dana@demo.example.com')
     await page.getByRole('link', { name: 'Dana Delinquent' }).click()
 
+    await openDisclosure(page, 'Log a document')
     await page.getByLabel('Title').fill(' ')
     await page.getByRole('button', { name: 'Log document' }).click()
     // AdminForm renders the same message twice on error — once in the field

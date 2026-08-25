@@ -38,6 +38,11 @@ test.describe('support impersonation', () => {
     await page.getByRole('link', { name: 'Dana Delinquent' }).click()
     await expect(page).toHaveURL(/\/admin\/tenants\/.+/)
 
+    // B-181 put the form behind a closed <details> in the Actions region — it
+    // is used a few times a month and stood between the banner stack and the
+    // units. Opening it is what a staffer now does too.
+    await page.locator('summary').filter({ hasText: 'View the portal as this tenant' }).click()
+
     const form = page.getByRole('form', { name: 'Start a support session as this tenant' })
     await form.getByLabel('Reason').fill(reason)
     await form.getByRole('button', { name: 'Start support session' }).click()

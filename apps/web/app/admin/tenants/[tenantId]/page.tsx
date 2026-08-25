@@ -81,6 +81,11 @@ export const metadata = { title: "Tenant profile" };
 
 const FIELD_CLASS = "flex flex-col gap-1 text-sm";
 
+/// B-181. How many rows of the two long logs stand open. Five is what fits
+/// beside the rest of the page without the log becoming the page; the rest are
+/// one disclosure away, never dropped.
+const RECENT = 5;
+
 function formatDate(date: Date): string {
   return new Intl.DateTimeFormat("en-US", {
     day: "numeric",
@@ -151,6 +156,114 @@ export default async function TenantProfilePage({
     ...profile.inboundSms.map((sms) => ({ at: sms.createdAt, sms })),
     ...profile.messages.map((message) => ({ at: message.createdAt, message })),
   ].sort((a, b) => b.at.getTime() - a.at.getTime());
+
+  // B-181. Both long logs render the same row in two places — the first
+  // `RECENT`, and the disclosure holding everything older — so each row is a
+  // function rather than a block copied twice. Declared in the component
+  // rather than at module scope because both element types are inferred from
+  // data this page already loaded; naming them would mean exporting two more
+  // types for no reader's benefit.
+  const gateEvent = (event: (typeof profile.accessHistory)[number]) => (
+    <li
+      key={event.id}
+      className="border-input flex flex-wrap justify-between gap-2 rounded-lg border p-3 text-sm"
+    >
+      <span>
+        {event.result === "granted" ? "Opened" : "Denied"}
+        <span className="text-muted-foreground"> · {event.facilityName}</span>
+        {event.unitNumber && (
+          <span className="text-muted-foreground"> · {event.unitNumber}</span>
+        )}
+      </span>
+      <span className="text-muted-foreground">
+        {event.flags.length > 0 && <span>{event.flags.join(", ")} · </span>}
+        {formatWhen(event.occurredAt)}
+      </span>
+    </li>
+  );
+
+  const commsItem = (entry: (typeof comms)[number]) =>
+    entry.sms ? (
+      <li
+        key={entry.sms.id}
+        className="border-input border-l-primary rounded-lg border border-l-4 p-3 text-sm"
+      >
+        {/* No <details>: the words are the reason the staffer is here.
+                      Collapsing them behind a click is the defect B-143 fixed. */}
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <span>
+            {/* The direction in words, not only the border colour (1.4.1). */}
+            <span className="font-medium">Text from this tenant</span>{" "}
+            <span className="text-muted-foreground uppercase">sms</span>
+          </span>
+          <span className="text-muted-foreground">
+            Received · {formatWhen(entry.sms.createdAt)}
+          </span>
+        </div>
+        <dl className="text-muted-foreground mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+          <dt>From</dt>
+          <dd className="text-foreground">{entry.sms.phoneMasked}</dd>
+        </dl>
+        <pre className="bg-muted mt-2 max-h-64 overflow-auto rounded-md p-3 text-xs whitespace-pre-wrap">
+          {entry.sms.body}
+        </pre>
+      </li>
+    ) : (
+      <li
+        key={entry.message.id}
+        className="border-input rounded-lg border p-3 text-sm"
+      >
+        {/* A native <details>: the exact text that went out is what makes
+                      this a record rather than a summary, but twenty full bodies on
+                      one page is unreadable. No JS, keyboard-operable as shipped. */}
+        <details>
+          <summary className="flex cursor-pointer flex-wrap items-baseline justify-between gap-2">
+            <span>
+              <span className="font-medium">
+                {entry.message.subjectSnapshot ?? entry.message.templateKey}
+              </span>{" "}
+              <span className="text-muted-foreground uppercase">
+                {entry.message.channel}
+              </span>
+            </span>
+            <span className="text-muted-foreground capitalize">
+              {entry.message.status} · {formatWhen(entry.message.createdAt)}
+            </span>
+          </summary>
+          <dl className="text-muted-foreground mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+            <dt>To</dt>
+            <dd className="text-foreground">{entry.message.toAddressMasked}</dd>
+            <dt>Template</dt>
+            <dd className="text-foreground">
+              {entry.message.templateKey} · v{entry.message.templateVersion}
+            </dd>
+            <dt>Triggered by</dt>
+            <dd className="text-foreground">
+              {entry.message.eventType ?? "Sent directly by staff"}
+            </dd>
+            {entry.message.sentAt && (
+              <>
+                <dt>Handed to provider</dt>
+                <dd className="text-foreground">
+                  {formatWhen(entry.message.sentAt)}
+                </dd>
+              </>
+            )}
+          </dl>
+          {entry.message.problem && (
+            <p
+              role="note"
+              className="mt-2 rounded-md border border-red-300 bg-red-50 p-2 text-xs text-red-900"
+            >
+              {entry.message.problem}
+            </p>
+          )}
+          <pre className="bg-muted mt-2 max-h-64 overflow-auto rounded-md p-3 text-xs whitespace-pre-wrap">
+            {entry.message.bodySnapshot}
+          </pre>
+        </details>
+      </li>
+    );
 
   return (
     <div className="flex flex-col gap-8">
@@ -307,354 +420,6 @@ export default async function TenantProfilePage({
           ))}
         </section>
       )}
-
-      {hasPermissionAnywhere(actor, ["impersonation:tenant"]) && (
-        // PRD 09 FR-1/FR-2 (B-091 part 2). Started from the profile of somebody
-        // you are already looking at, with a reason, and never from a box you
-        // type an email into.
-        //
-        // Whether this actor may impersonate THIS tenant is decided by the
-        // escalation guard on submit, not here: `hasPermissionAnywhere` only
-        // asks whether the control is worth rendering at all, which is the
-        // distinction lib/rbac/authorize.ts draws between it and `can()`.
-        <section
-          aria-labelledby="impersonate-heading"
-          className="flex flex-col gap-3"
-        >
-          <h2 id="impersonate-heading" className="font-medium">
-            View the portal as this tenant
-          </h2>
-          <p className="text-muted-foreground max-w-prose text-sm text-pretty">
-            Opens their portal, exactly as they see it, for{" "}
-            {IMPERSONATION_TTL_MINUTES} minutes and read-only — nothing can be
-            changed, sent, or paid, and gate codes stay hidden. The tenant is
-            not notified, and the reason you give is written to the audit log
-            with your name against every screen you open.
-          </p>
-          <AdminForm
-            action={startTenantImpersonationAction}
-            label="Start a support session as this tenant"
-            className="grid max-w-2xl gap-3 sm:grid-cols-2"
-          >
-            <input type="hidden" name="subjectId" value={tenantId} />
-            <Field
-              name="reason"
-              label="Reason"
-              type="text"
-              required
-              hint="What you are trying to see, in a sentence."
-              className={FIELD_CLASS}
-            />
-            <Field
-              name="ticketRef"
-              label="Ticket reference (optional)"
-              type="text"
-              className={FIELD_CLASS}
-            />
-            <div className="sm:col-span-2">
-              <button
-                type="submit"
-                className="border-input hover:bg-accent inline-flex min-h-11 items-center justify-center rounded-md border px-4 text-sm font-medium"
-              >
-                Start support session
-              </button>
-            </div>
-          </AdminForm>
-        </section>
-      )}
-
-      <section
-        aria-labelledby="contact-heading"
-        className="flex flex-col gap-3"
-      >
-        <h2 id="contact-heading" className="font-medium">
-          Contact
-        </h2>
-        <p className="text-sm">{profile.email}</p>
-        <AdminForm
-          action={updateContactAction}
-          label="Contact details"
-          className="grid max-w-lg grid-cols-2 gap-3"
-        >
-          <input type="hidden" name="tenantId" value={tenantId} />
-          <Field
-            name="phone"
-            label="Phone"
-            type="tel"
-            defaultValue={profile.phone ?? ""}
-            className={FIELD_CLASS}
-          />
-          <Field
-            name="altContactName"
-            label="Alternate contact name"
-            defaultValue={profile.altContactName ?? ""}
-            className={FIELD_CLASS}
-          />
-          <Field
-            name="altContactPhone"
-            label="Alternate contact phone"
-            type="tel"
-            defaultValue={profile.altContactPhone ?? ""}
-            className={FIELD_CLASS}
-          />
-          <Field
-            name="altContactEmail"
-            label="Alternate contact email"
-            type="email"
-            defaultValue={profile.altContactEmail ?? ""}
-            className={FIELD_CLASS}
-          />
-          <button
-            type="submit"
-            className="border-input hover:bg-accent col-span-2 inline-flex min-h-11 items-center justify-center self-start rounded-md border px-4 text-sm font-medium"
-          >
-            Save contact details
-          </button>
-        </AdminForm>
-      </section>
-
-      {referrals.length > 0 && (
-        // PRD 10 §5.7 (B-101). "A referral record is visible on both tenants'
-        // profiles, with the reward state and, when refused, the rule that
-        // refused it." The AC behind it is the one that matters: "a tenant
-        // asking 'why didn't I get my $50' must be answerable at the counter
-        // in one screen."
-        <section
-          aria-labelledby="referrals-heading"
-          className="flex flex-col gap-3"
-        >
-          <h2 id="referrals-heading" className="font-medium">
-            Referrals
-          </h2>
-          <div tabIndex={0} className="overflow-x-auto">
-            <table className="w-full border-collapse text-sm">
-              <caption className="sr-only">
-                Referrals this tenant made or arrived on, with the reward state
-                and the rule that refused any that did not pay
-              </caption>
-              <thead>
-                <tr className="border-input border-b text-left">
-                  <th scope="col" className="py-2 pr-4">
-                    Who
-                  </th>
-                  <th scope="col" className="py-2 pr-4">
-                    State
-                  </th>
-                  <th scope="col" className="py-2 pr-4">
-                    Rewards
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {referrals.map((referral) => (
-                  <tr
-                    key={referral.id}
-                    className="border-input border-b align-top"
-                  >
-                    <th scope="row" className="py-2 pr-4 text-left font-medium">
-                      {referral.role === "referrer"
-                        ? `Referred ${referral.refereeName ?? "nobody yet"}`
-                        : `Referred by ${referral.referrerName}`}
-                    </th>
-                    <td className="py-2 pr-4">
-                      {/* In words, never a colour alone — the same 1.4.1 rule
-                          the portal table follows. */}
-                      {REFERRAL_STATE_LABELS[referral.state]}
-                      {referral.refusedReason && (
-                        <>
-                          <span className="text-muted-foreground mt-1 block text-xs text-pretty">
-                            {referral.refusedReason}
-                          </span>
-                          {/* The rule's own key beside the sentence: the
-                              staffer reads the sentence to the tenant and can
-                              match the key to the rule in the PRD. */}
-                          <span className="text-muted-foreground block font-mono text-xs">
-                            {referral.refusedRule}
-                          </span>
-                        </>
-                      )}
-                    </td>
-                    <td className="py-2 pr-4 tabular-nums">
-                      {referral.state === "earned" ? (
-                        <>
-                          {formatCents(referral.referrerRewardCents)} referrer ·{" "}
-                          {formatCents(referral.refereeRewardCents)} new tenant
-                        </>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      )}
-
-      {/* B-121 / D-49. Its own section, not a fifth box in the contact grid:
-          this is a legal-status declaration with automatic consequences on
-          every lease the tenant holds, and filing it beside "alternate contact
-          email" would read as one more optional detail. */}
-      <section aria-labelledby="scra-heading" className="flex flex-col gap-3">
-        <h2 id="scra-heading" className="font-medium">
-          Military service
-        </h2>
-        <AdminForm
-          action={updateActiveDutyAction}
-          label="Military service"
-          className="flex max-w-lg flex-col gap-3"
-        >
-          <input type="hidden" name="tenantId" value={tenantId} />
-          <FieldSet
-            name="activeDutyMilitary"
-            legend="Active-duty military (SCRA)"
-            hint={
-              profile.activeDutyMilitary === null
-                ? "Nobody has recorded an answer for this tenant. Recording yes stops collections, late fees, gate suspension, auction and marketing on every lease they hold — including at other facilities."
-                : "Recording yes stops collections, late fees, gate suspension, auction and marketing on every lease they hold — including at other facilities."
-            }
-          >
-            <div className="mt-3 flex flex-col gap-2">
-              <label className="border-input flex min-h-11 cursor-pointer items-start gap-3 rounded-lg border p-3">
-                <input
-                  type="radio"
-                  name="activeDutyMilitary"
-                  value="yes"
-                  defaultChecked={profile.activeDutyMilitary === true}
-                  className="mt-1"
-                />
-                <span>
-                  <span className="font-medium">Yes — on active duty</span>
-                  <span className="text-muted-foreground block text-sm">
-                    Places an SCRA hold on every current lease straight away.
-                  </span>
-                </span>
-              </label>
-              <label className="border-input flex min-h-11 cursor-pointer items-start gap-3 rounded-lg border p-3">
-                <input
-                  type="radio"
-                  name="activeDutyMilitary"
-                  value="no"
-                  defaultChecked={profile.activeDutyMilitary === false}
-                  className="mt-1"
-                />
-                <span>
-                  <span className="font-medium">No</span>
-                  <span className="text-muted-foreground block text-sm">
-                    Corrects the record only. A hold already in force stays
-                    until a manager lifts it on the lease below.
-                  </span>
-                </span>
-              </label>
-            </div>
-          </FieldSet>
-          <button
-            type="submit"
-            className="border-input hover:bg-accent inline-flex min-h-11 items-center justify-center self-start rounded-md border px-4 text-sm font-medium"
-          >
-            Save military service
-          </button>
-        </AdminForm>
-      </section>
-
-      <section
-        aria-labelledby="address-heading"
-        className="flex flex-col gap-3"
-      >
-        <h2 id="address-heading" className="font-medium">
-          Address of record
-        </h2>
-        {profile.address?.returnedMailAt && (
-          <p
-            role="alert"
-            className="border-input rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-900"
-          >
-            Mail sent to this address was returned on{" "}
-            {formatDate(profile.address.returnedMailAt)}. Confirm a current
-            address before relying on it.
-          </p>
-        )}
-        <AdminForm
-          action={updateAddressAction}
-          label="Address of record"
-          className="grid max-w-lg grid-cols-2 gap-3"
-        >
-          <input type="hidden" name="tenantId" value={tenantId} />
-          <Field
-            name="addressLine1"
-            label="Street address"
-            defaultValue={profile.address?.addressLine1 ?? ""}
-            required
-            className={`${FIELD_CLASS} col-span-2`}
-          />
-          <Field
-            name="addressLine2"
-            label="Apartment or unit"
-            defaultValue={profile.address?.addressLine2 ?? ""}
-            className={`${FIELD_CLASS} col-span-2`}
-          />
-          <Field
-            name="city"
-            label="City"
-            defaultValue={profile.address?.city ?? ""}
-            required
-            className={FIELD_CLASS}
-          />
-          <Field
-            name="state"
-            label="State"
-            defaultValue={profile.address?.state ?? ""}
-            maxLength={2}
-            required
-            className={FIELD_CLASS}
-          />
-          <Field
-            name="postalCode"
-            label="ZIP code"
-            defaultValue={profile.address?.postalCode ?? ""}
-            required
-            className={FIELD_CLASS}
-          />
-          <button
-            type="submit"
-            className="border-input hover:bg-accent col-span-2 inline-flex min-h-11 items-center justify-center self-start rounded-md border px-4 text-sm font-medium"
-          >
-            Save address
-          </button>
-        </AdminForm>
-
-        {profile.address && !profile.address.returnedMailAt && (
-          <form action={flagAddressReturnedAction}>
-            <input type="hidden" name="tenantId" value={tenantId} />
-            <input type="hidden" name="addressId" value={profile.address.id} />
-            <button
-              type="submit"
-              className="text-sm underline underline-offset-2"
-            >
-              Flag as returned mail
-            </button>
-          </form>
-        )}
-
-        {profile.addressHistory.length > 1 && (
-          <details className="border-input rounded-lg border p-4">
-            <summary className="cursor-pointer text-sm font-medium">
-              Address history
-            </summary>
-            <ul className="mt-3 flex flex-col gap-2 text-sm">
-              {profile.addressHistory.map((row) => (
-                <li key={row.id} className="text-muted-foreground">
-                  {row.addressLine1}
-                  {row.addressLine2 ? `, ${row.addressLine2}` : ""}, {row.city}{" "}
-                  {row.state} {row.postalCode} — {formatDate(row.createdAt)} (
-                  {row.source}){row.returnedMailAt && " · returned mail"}
-                </li>
-              ))}
-            </ul>
-          </details>
-        )}
-      </section>
 
       <section aria-labelledby="leases-heading" className="flex flex-col gap-3">
         <h2 id="leases-heading" className="font-medium">
@@ -829,322 +594,291 @@ export default async function TenantProfilePage({
         </section>
       )}
 
-      {chargeable.length > 0 && (
-        <section
-          aria-labelledby="charge-heading"
-          className="flex flex-col gap-3"
-        >
-          <h2 id="charge-heading" className="font-medium">
-            Charge a fee
-          </h2>
-          <p className="text-muted-foreground max-w-prose text-xs text-pretty">
-            Posts the fee as its own invoice, so autopay collects it and it can
-            be waived like any other. The amount starts at this facility&apos;s
-            own price — changing it is subject to your fee-waiver limit, in
-            either direction. Your name, the price and what you charged are all
-            recorded.
-          </p>
-          <ul className="flex flex-col gap-3">
-            {chargeable.map((lease) => (
-              <li
-                key={lease.leaseId}
-                className="border-input rounded-lg border p-4"
-              >
-                <p className="mb-3 text-sm font-medium">
-                  Unit {lease.unitNumber} · {lease.facilityName}
-                  {/* 1.4.1: the ended state is words, not a greyed row. */}
-                  {lease.ended && (
-                    <span className="text-muted-foreground font-normal">
-                      {" "}
-                      · moved out
-                    </span>
-                  )}
-                </p>
-                <ChargeFeeForm
-                  tenantId={profile.tenantId}
-                  leaseId={lease.leaseId}
-                  fees={feeSchedules.get(lease.facilityId) ?? []}
-                  unitLabel={`unit ${lease.unitNumber} at ${lease.facilityName}`}
-                />
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      {profile.refundable.length > 0 && (
-        <section
-          aria-labelledby="refunds-heading"
-          className="flex flex-col gap-3"
-        >
-          <h2 id="refunds-heading" className="font-medium">
-            Refund a payment
-          </h2>
-          <p className="text-muted-foreground max-w-prose text-xs text-pretty">
-            A card refund goes back to the card the tenant paid with. Cash and
-            cheque refunds are recorded as a payable — the money is not paid
-            until someone hands it over. Refunding unwinds what the payment
-            settled, so the invoices reopen.
-          </p>
-          <ul className="flex flex-col gap-3">
-            {profile.refundable.map((payment) => (
-              <li
-                key={payment.paymentId}
-                className="border-input rounded-lg border p-4"
-              >
-                <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <span className="font-medium">
-                    {formatCents(payment.refundableCents)} refundable
-                  </span>
-                  <span className="text-muted-foreground text-xs">
-                    {formatCents(payment.amountCents)} by {payment.method} on{" "}
-                    {formatWhen(payment.receivedAt)}
-                    {payment.receiptNumber
-                      ? ` · receipt #${payment.receiptNumber}`
-                      : ""}
-                    {payment.refundedCents > 0
-                      ? ` · ${formatCents(payment.refundedCents)} already refunded`
-                      : ""}
-                  </span>
-                </div>
-
-                <AdminForm
-                  action={refundAction}
-                  label={`Refund payment ${payment.paymentId}`}
-                  className="mt-3 flex flex-wrap items-end gap-2"
-                >
-                  <input
-                    type="hidden"
-                    name="tenantId"
-                    value={profile.tenantId}
-                  />
-                  <input
-                    type="hidden"
-                    name="paymentId"
-                    value={payment.paymentId}
-                  />
-                  <Field
-                    name="amountDollars"
-                    label="Amount ($)"
-                    type="text"
-                    inputMode="decimal"
-                    defaultValue={(payment.refundableCents / 100).toFixed(2)}
-                  />
-                  <RefundMethodFields
-                    defaultMethod={payment.method === "card" ? "card" : "cash"}
-                  />
-                  <Field
-                    name="reasonCode"
-                    label="Reason"
-                    as="select"
-                    defaultValue=""
-                  >
-                    <option value="">Choose a reason…</option>
-                    {WAIVER_REASONS.map((reason) => (
-                      <option key={reason.value} value={reason.value}>
-                        {reason.label}
-                      </option>
-                    ))}
-                  </Field>
-                  <Field name="note" label="Note (optional)" />
-                  <button
-                    type="submit"
-                    className="border-input hover:bg-accent inline-flex min-h-11 items-center justify-center rounded-md border px-4 text-sm font-medium"
-                  >
-                    Refund
-                    <span className="sr-only">
-                      {" "}
-                      up to {formatCents(payment.refundableCents)}
-                    </span>
-                  </button>
-                </AdminForm>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      {profile.returnable.length > 0 &&
-        // `returnPayment` re-checks per facility and throws; this only decides
-        // whether to render a form the actor could never submit — the same
-        // shape the impersonation block above uses and for the same reason.
-        hasPermissionAnywhere(actor, ["refunds:approve"]) && (
-          <section
-            aria-labelledby="returns-heading"
-            className="flex flex-col gap-3"
+      <section
+        aria-labelledby="contact-heading"
+        className="flex flex-col gap-3"
+      >
+        <h2 id="contact-heading" className="font-medium">
+          Contact
+        </h2>
+        {/* B-181. Read first. What a staffer reads down a phone line is four
+            facts, and they were four filled-in inputs — a form is a worse way
+            to read a phone number than a phone number is. The form is the same
+            form, one disclosure away. */}
+        <dl className="grid max-w-lg grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+          <dt className="text-muted-foreground">Email</dt>
+          <dd>{profile.email}</dd>
+          <dt className="text-muted-foreground">Phone</dt>
+          <dd>
+            {profile.phone ?? (
+              <span className="text-muted-foreground">Not recorded</span>
+            )}
+          </dd>
+          {(profile.altContactName ||
+            profile.altContactPhone ||
+            profile.altContactEmail) && (
+            <>
+              <dt className="text-muted-foreground">Alternate contact</dt>
+              <dd>
+                {[
+                  profile.altContactName,
+                  profile.altContactPhone,
+                  profile.altContactEmail,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </dd>
+            </>
+          )}
+        </dl>
+        <details className="border-input rounded-lg border p-4">
+          {/* Named after its content, not after the act (2.4.6): a rotor full
+              of summaries reading "Edit" tells nobody which record. */}
+          <summary className="cursor-pointer text-sm font-medium">
+            Edit contact details
+          </summary>
+          <AdminForm
+            action={updateContactAction}
+            label="Contact details"
+            className="mt-3 grid max-w-lg grid-cols-2 gap-3"
           >
-            <h2 id="returns-heading" className="font-medium">
-              Record a returned payment
-            </h2>
-            <p className="text-muted-foreground max-w-prose text-xs text-pretty">
-              For a cheque that bounced, an ACH return or a lost dispute — money
-              we recorded and the bank took back.{" "}
-              <strong>This is not a refund.</strong> No money leaves the drawer
-              and the deposit slip it was banked on is unchanged; what happens
-              is that the original entry is reversed, the invoices it settled
-              reopen with their original due dates, and the facility&apos;s
-              returned-payment fee is charged if one is configured. The tenant
-              sees it on their own payment list.
-            </p>
-            <AnnounceRegion>
-            <ul className="flex flex-col gap-3">
-              {profile.returnable.map((payment) => (
-                <li
-                  key={payment.paymentId}
-                  className="border-input rounded-lg border p-3"
-                >
-                  <p className="text-sm">
-                    <span className="font-medium">
-                      {formatCents(payment.amountCents)}
-                    </span>{" "}
-                    <span className="text-muted-foreground">
-                      {payment.method.replace("_", " ")} ·{" "}
-                      {formatWhen(payment.receivedAt)}
-                      {payment.receiptNumber !== null &&
-                        ` · receipt #${payment.receiptNumber}`}
-                    </span>
-                  </p>
-                  <AdminForm
-                    action={returnPaymentAction}
-                    label={`Record a return of ${formatCents(payment.amountCents)}`}
-                    // B-170. Recording the return removes this payment from
-                    // `profile.returnable`, so the row reporting the outcome is
-                    // the row the outcome deletes — and the message says which
-                    // invoices reopened, which is the part a staffer needs
-                    // before the tenant rings.
-                    announceOutside
-                    className="mt-3 flex flex-wrap items-end gap-3"
-                  >
-                    <input type="hidden" name="tenantId" value={tenantId} />
-                    <input
-                      type="hidden"
-                      name="paymentId"
-                      value={payment.paymentId}
-                    />
-                    <Field
-                      name="reasonCode"
-                      label="What the bank said"
-                      as="select"
-                      className={FIELD_CLASS}
-                    >
-                      {RETURN_REASONS.map((reason) => (
-                        <option key={reason.value} value={reason.value}>
-                          {reason.label}
-                        </option>
-                      ))}
-                    </Field>
-                    <Field name="note" label="Note" className={FIELD_CLASS} />
-                    {/* B-178. Named after its subject rather than the
-                        action (2.4.6), and the amount is IN the option,
-                        because the amount is the decision being taken here.
-                        When the facility has priced no returned-payment fee
-                        there is no control: a dropdown offering to charge
-                        nothing is a question with no answer, and the sentence
-                        says what happens instead. */}
-                    {nsfFees.get(payment.facilityId) == null ? (
-                      <p className="text-muted-foreground max-w-prose self-end text-xs text-pretty">
-                        This facility has not priced a returned-payment fee, so
-                        none is charged.
-                      </p>
-                    ) : (
-                      <Field
-                        name="chargeFee"
-                        label="Returned-payment fee"
-                        as="select"
-                        defaultValue="yes"
-                        className={FIELD_CLASS}
-                      >
-                        {RETURN_FEE_CHOICES.map((choice) => (
-                          <option key={choice.value} value={choice.value}>
-                            {choice.label.replace(
-                              "{amount}",
-                              formatCents(nsfFees.get(payment.facilityId) ?? 0),
-                            )}
-                          </option>
-                        ))}
-                      </Field>
-                    )}
-                    <button
-                      type="submit"
-                      className="border-input hover:bg-accent inline-flex min-h-11 items-center justify-center rounded-md border px-4 text-sm font-medium"
-                    >
-                      Record the return
-                    </button>
-                  </AdminForm>
+            <input type="hidden" name="tenantId" value={tenantId} />
+            <Field
+              name="phone"
+              label="Phone"
+              type="tel"
+              defaultValue={profile.phone ?? ""}
+              className={FIELD_CLASS}
+            />
+            <Field
+              name="altContactName"
+              label="Alternate contact name"
+              defaultValue={profile.altContactName ?? ""}
+              className={FIELD_CLASS}
+            />
+            <Field
+              name="altContactPhone"
+              label="Alternate contact phone"
+              type="tel"
+              defaultValue={profile.altContactPhone ?? ""}
+              className={FIELD_CLASS}
+            />
+            <Field
+              name="altContactEmail"
+              label="Alternate contact email"
+              type="email"
+              defaultValue={profile.altContactEmail ?? ""}
+              className={FIELD_CLASS}
+            />
+            <button
+              type="submit"
+              className="border-input hover:bg-accent col-span-2 inline-flex min-h-11 items-center justify-center self-start rounded-md border px-4 text-sm font-medium"
+            >
+              Save contact details
+            </button>
+          </AdminForm>
+        </details>
+      </section>
+
+      <section
+        aria-labelledby="address-heading"
+        className="flex flex-col gap-3"
+      >
+        <h2 id="address-heading" className="font-medium">
+          Address of record
+        </h2>
+        {profile.address?.returnedMailAt && (
+          <p
+            role="alert"
+            className="border-input rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-900"
+          >
+            Mail sent to this address was returned on{" "}
+            {formatDate(profile.address.returnedMailAt)}. Confirm a current
+            address before relying on it.
+          </p>
+        )}
+        {/* B-181. The address, as an address. Editing it is a few-times-a-month
+            act and had five inputs standing where the one line belongs. */}
+        {profile.address ? (
+          <p className="max-w-lg text-sm">
+            {profile.address.addressLine1}
+            {profile.address.addressLine2
+              ? `, ${profile.address.addressLine2}`
+              : ""}
+            <br />
+            {profile.address.city} {profile.address.state}{" "}
+            {profile.address.postalCode}
+          </p>
+        ) : (
+          <p className="text-muted-foreground text-sm">No address on record.</p>
+        )}
+        {/* Stays in the open, deliberately. It is not an edit — it is the
+            counterpart to the alert above, one click, and the thing a staffer
+            does the moment a letter comes back. Behind "Edit address of
+            record" it would be filed under the wrong verb. */}
+        {profile.address && !profile.address.returnedMailAt && (
+          <form action={flagAddressReturnedAction}>
+            <input type="hidden" name="tenantId" value={tenantId} />
+            <input type="hidden" name="addressId" value={profile.address.id} />
+            <button
+              type="submit"
+              className="text-sm underline underline-offset-2"
+            >
+              Flag as returned mail
+            </button>
+          </form>
+        )}
+        <details className="border-input rounded-lg border p-4">
+          <summary className="cursor-pointer text-sm font-medium">
+            Edit address of record
+          </summary>
+          <AdminForm
+            action={updateAddressAction}
+            label="Address of record"
+            className="mt-3 grid max-w-lg grid-cols-2 gap-3"
+          >
+            <input type="hidden" name="tenantId" value={tenantId} />
+            <Field
+              name="addressLine1"
+              label="Street address"
+              defaultValue={profile.address?.addressLine1 ?? ""}
+              required
+              className={`${FIELD_CLASS} col-span-2`}
+            />
+            <Field
+              name="addressLine2"
+              label="Apartment or unit"
+              defaultValue={profile.address?.addressLine2 ?? ""}
+              className={`${FIELD_CLASS} col-span-2`}
+            />
+            <Field
+              name="city"
+              label="City"
+              defaultValue={profile.address?.city ?? ""}
+              required
+              className={FIELD_CLASS}
+            />
+            <Field
+              name="state"
+              label="State"
+              defaultValue={profile.address?.state ?? ""}
+              maxLength={2}
+              required
+              className={FIELD_CLASS}
+            />
+            <Field
+              name="postalCode"
+              label="ZIP code"
+              defaultValue={profile.address?.postalCode ?? ""}
+              required
+              className={FIELD_CLASS}
+            />
+            <button
+              type="submit"
+              className="border-input hover:bg-accent col-span-2 inline-flex min-h-11 items-center justify-center self-start rounded-md border px-4 text-sm font-medium"
+            >
+              Save address
+            </button>
+          </AdminForm>
+        </details>
+
+        {profile.addressHistory.length > 1 && (
+          <details className="border-input rounded-lg border p-4">
+            <summary className="cursor-pointer text-sm font-medium">
+              Address history
+            </summary>
+            <ul className="mt-3 flex flex-col gap-2 text-sm">
+              {profile.addressHistory.map((row) => (
+                <li key={row.id} className="text-muted-foreground">
+                  {row.addressLine1}
+                  {row.addressLine2 ? `, ${row.addressLine2}` : ""}, {row.city}{" "}
+                  {row.state} {row.postalCode} — {formatDate(row.createdAt)} (
+                  {row.source}){row.returnedMailAt && " · returned mail"}
                 </li>
               ))}
             </ul>
-            </AnnounceRegion>
-          </section>
+          </details>
         )}
-
-      <section
-        aria-labelledby="place-hold-heading"
-        className="flex flex-col gap-3"
-      >
-        <h2 id="place-hold-heading" className="font-medium">
-          Place a hold
-        </h2>
-        <p className="text-muted-foreground max-w-prose text-xs text-pretty">
-          A hold stops automated collections on one lease from tonight. What
-          each type stops is fixed — it is shown on the banner once placed.
-          Placing and lifting are both audited.
-        </p>
-        <AdminForm
-          action={placeHoldAction}
-          label="Place a hold"
-          className="flex flex-wrap items-end gap-3"
-        >
-          <input type="hidden" name="tenantId" value={profile.tenantId} />
-          <Field
-            name="leaseId"
-            label="Unit"
-            as="select"
-            defaultValue={profile.leases[0]?.leaseId ?? ""}
-          >
-            {profile.leases.map((lease) => (
-              <option key={lease.leaseId} value={lease.leaseId}>
-                {lease.unitNumber} — {lease.facilityName}
-              </option>
-            ))}
-          </Field>
-          <Field name="type" label="Type" as="select" defaultValue="">
-            <option value="">Choose a type…</option>
-            {HOLD_TYPES.map((type) => (
-              <option key={type.type} value={type.type}>
-                {type.label}
-              </option>
-            ))}
-          </Field>
-          <Field
-            name="reason"
-            label="Reason"
-            hint="What you were told, and by whom."
-          />
-          <Field
-            name="effectiveTo"
-            label="Ends (optional)"
-            type="date"
-            hint="Leave empty for open-ended."
-          />
-          <Field
-            name="estateContactName"
-            label="Estate contact"
-            hint="Required for a deceased tenant."
-          />
-          <Field
-            name="estateContactPhone"
-            label="Estate contact phone"
-            type="tel"
-          />
-          <button
-            type="submit"
-            className="border-input hover:bg-accent inline-flex min-h-11 items-center justify-center rounded-md border px-4 text-sm font-medium"
-          >
-            Place hold
-          </button>
-        </AdminForm>
       </section>
+
+      {referrals.length > 0 && (
+        // PRD 10 §5.7 (B-101). "A referral record is visible on both tenants'
+        // profiles, with the reward state and, when refused, the rule that
+        // refused it." The AC behind it is the one that matters: "a tenant
+        // asking 'why didn't I get my $50' must be answerable at the counter
+        // in one screen."
+        <section
+          aria-labelledby="referrals-heading"
+          className="flex flex-col gap-3"
+        >
+          <h2 id="referrals-heading" className="font-medium">
+            Referrals
+          </h2>
+          <div tabIndex={0} className="overflow-x-auto">
+            <table className="w-full border-collapse text-sm">
+              <caption className="sr-only">
+                Referrals this tenant made or arrived on, with the reward state
+                and the rule that refused any that did not pay
+              </caption>
+              <thead>
+                <tr className="border-input border-b text-left">
+                  <th scope="col" className="py-2 pr-4">
+                    Who
+                  </th>
+                  <th scope="col" className="py-2 pr-4">
+                    State
+                  </th>
+                  <th scope="col" className="py-2 pr-4">
+                    Rewards
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {referrals.map((referral) => (
+                  <tr
+                    key={referral.id}
+                    className="border-input border-b align-top"
+                  >
+                    <th scope="row" className="py-2 pr-4 text-left font-medium">
+                      {referral.role === "referrer"
+                        ? `Referred ${referral.refereeName ?? "nobody yet"}`
+                        : `Referred by ${referral.referrerName}`}
+                    </th>
+                    <td className="py-2 pr-4">
+                      {/* In words, never a colour alone — the same 1.4.1 rule
+                          the portal table follows. */}
+                      {REFERRAL_STATE_LABELS[referral.state]}
+                      {referral.refusedReason && (
+                        <>
+                          <span className="text-muted-foreground mt-1 block text-xs text-pretty">
+                            {referral.refusedReason}
+                          </span>
+                          {/* The rule's own key beside the sentence: the
+                              staffer reads the sentence to the tenant and can
+                              match the key to the rule in the PRD. */}
+                          <span className="text-muted-foreground block font-mono text-xs">
+                            {referral.refusedRule}
+                          </span>
+                        </>
+                      )}
+                    </td>
+                    <td className="py-2 pr-4 tabular-nums">
+                      {referral.state === "earned" ? (
+                        <>
+                          {formatCents(referral.referrerRewardCents)} referrer ·{" "}
+                          {formatCents(referral.refereeRewardCents)} new tenant
+                        </>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
 
       <section aria-labelledby="notes-heading" className="flex flex-col gap-3">
         <h2 id="notes-heading" className="font-medium">
@@ -1190,32 +924,37 @@ export default async function TenantProfilePage({
             <li className="text-muted-foreground text-sm">No notes yet.</li>
           )}
         </ul>
-        <AdminForm
-          action={addNoteAction}
-          label="Add a note"
-          className="flex max-w-lg flex-col gap-2"
-        >
-          <input type="hidden" name="tenantId" value={tenantId} />
-          <label htmlFor="note-body" className="text-sm">
-            New note
-          </label>
-          <textarea
-            id="note-body"
-            name="body"
-            rows={3}
-            className="border-input bg-background rounded-md border p-2 text-sm"
-          />
-          <p className="text-muted-foreground text-xs">
-            Corrections are new notes — an existing note can&apos;t be edited
-            once saved.
-          </p>
-          <button
-            type="submit"
-            className="border-input hover:bg-accent inline-flex min-h-11 items-center justify-center self-start rounded-md border px-4 text-sm font-medium"
+        <details className="border-input rounded-lg border p-4">
+          <summary className="cursor-pointer text-sm font-medium">
+            Add a note
+          </summary>
+          <AdminForm
+            action={addNoteAction}
+            label="Add a note"
+            className="mt-3 flex max-w-lg flex-col gap-2"
           >
-            Add note
-          </button>
-        </AdminForm>
+            <input type="hidden" name="tenantId" value={tenantId} />
+            <label htmlFor="note-body" className="text-sm">
+              New note
+            </label>
+            <textarea
+              id="note-body"
+              name="body"
+              rows={3}
+              className="border-input bg-background rounded-md border p-2 text-sm"
+            />
+            <p className="text-muted-foreground text-xs">
+              Corrections are new notes — an existing note can&apos;t be edited
+              once saved.
+            </p>
+            <button
+              type="submit"
+              className="border-input hover:bg-accent inline-flex min-h-11 items-center justify-center self-start rounded-md border px-4 text-sm font-medium"
+            >
+              Add note
+            </button>
+          </AdminForm>
+        </details>
       </section>
 
       <section
@@ -1255,89 +994,55 @@ export default async function TenantProfilePage({
             <li className="text-muted-foreground text-sm">No documents yet.</li>
           )}
         </ul>
-        <AdminForm
-          action={logDocumentAction}
-          label="Log a document"
-          className="flex max-w-lg flex-col gap-3"
-        >
-          <input type="hidden" name="tenantId" value={tenantId} />
-          <Field
-            name="type"
-            label="Type"
-            as="select"
-            defaultValue="other"
-            className={FIELD_CLASS}
+        <details className="border-input rounded-lg border p-4">
+          <summary className="cursor-pointer text-sm font-medium">
+            Log a document
+          </summary>
+          <AdminForm
+            action={logDocumentAction}
+            label="Log a document"
+            className="mt-3 flex max-w-lg flex-col gap-3"
           >
-            <option value="id_copy">ID copy</option>
-            <option value="insurance_proof">Insurance proof</option>
-            <option value="other">Other / correspondence</option>
-          </Field>
-          <Field name="title" label="Title" required className={FIELD_CLASS} />
-          <label htmlFor="doc-note" className="text-sm">
-            Note (optional)
-          </label>
-          <textarea
-            id="doc-note"
-            name="note"
-            rows={2}
-            className="border-input bg-background rounded-md border p-2 text-sm"
-          />
-          <p className="text-muted-foreground text-xs">
-            This records that a document exists and what it says — there&apos;s
-            nowhere to attach a file yet.
-          </p>
-          <button
-            type="submit"
-            className="border-input hover:bg-accent inline-flex min-h-11 items-center justify-center self-start rounded-md border px-4 text-sm font-medium"
-          >
-            Log document
-          </button>
-        </AdminForm>
-      </section>
-
-      {profile.gateAccess.length > 0 && (
-        <section aria-labelledby="gate-heading" className="flex flex-col gap-3">
-          <h2 id="gate-heading" className="font-medium">
-            Gate access
-          </h2>
-          {profile.gateAccess.map((grant) => (
-            <form
-              key={grant.grantId}
-              action={setExtendedHoursAction}
-              className="border-input flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3 text-sm"
+            <input type="hidden" name="tenantId" value={tenantId} />
+            <Field
+              name="type"
+              label="Type"
+              as="select"
+              defaultValue="other"
+              className={FIELD_CLASS}
             >
-              <input type="hidden" name="grantId" value={grant.grantId} />
-              <input type="hidden" name="facilityId" value={grant.facilityId} />
-              <input type="hidden" name="tenantId" value={profile.tenantId} />
-              <span>
-                <span className="font-medium">{grant.facilityName}</span>
-                <span className="text-muted-foreground"> · {grant.state}</span>
-              </span>
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  name="extendedHours"
-                  defaultChecked={grant.extendedHours}
-                  className="size-4"
-                />
-                24-hour access (paid add-on)
-              </label>
-              <button
-                type="submit"
-                className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
-              >
-                Save
-              </button>
-            </form>
-          ))}
-          <p className="text-muted-foreground text-xs text-pretty">
-            Off means this tenant&apos;s code works only during the
-            facility&apos;s published gate hours. Saving queues the change to
-            the gate controller — it is not instant if the controller is
-            offline.
-          </p>
-        </section>
-      )}
+              <option value="id_copy">ID copy</option>
+              <option value="insurance_proof">Insurance proof</option>
+              <option value="other">Other / correspondence</option>
+            </Field>
+            <Field
+              name="title"
+              label="Title"
+              required
+              className={FIELD_CLASS}
+            />
+            <label htmlFor="doc-note" className="text-sm">
+              Note (optional)
+            </label>
+            <textarea
+              id="doc-note"
+              name="note"
+              rows={2}
+              className="border-input bg-background rounded-md border p-2 text-sm"
+            />
+            <p className="text-muted-foreground text-xs">
+              This records that a document exists and what it says —
+              there&apos;s nowhere to attach a file yet.
+            </p>
+            <button
+              type="submit"
+              className="border-input hover:bg-accent inline-flex min-h-11 items-center justify-center self-start rounded-md border px-4 text-sm font-medium"
+            >
+              Log document
+            </button>
+          </AdminForm>
+        </details>
+      </section>
 
       <section
         aria-labelledby="gate-history-heading"
@@ -1347,32 +1052,22 @@ export default async function TenantProfilePage({
           Recent gate activity
         </h2>
         <ul className="flex flex-col gap-2">
-          {profile.accessHistory.map((event) => (
-            <li
-              key={event.id}
-              className="border-input flex flex-wrap justify-between gap-2 rounded-lg border p-3 text-sm"
-            >
-              <span>
-                {event.result === "granted" ? "Opened" : "Denied"}
-                <span className="text-muted-foreground">
-                  {" "}
-                  · {event.facilityName}
-                </span>
-                {event.unitNumber && (
-                  <span className="text-muted-foreground">
-                    {" "}
-                    · {event.unitNumber}
-                  </span>
-                )}
-              </span>
-              <span className="text-muted-foreground">
-                {event.flags.length > 0 && (
-                  <span>{event.flags.join(", ")} · </span>
-                )}
-                {formatWhen(event.occurredAt)}
-              </span>
+          {profile.accessHistory.slice(0, RECENT).map(gateEvent)}
+          {profile.accessHistory.length > RECENT && (
+            <li>
+              <details>
+                {/* Named by what is behind it, not "Show more" (2.4.6): a
+                    rotor listing two identical "Show more" controls on one
+                    page tells nobody which list they open. */}
+                <summary className="cursor-pointer text-sm font-medium">
+                  Show {profile.accessHistory.length - RECENT} older gate events
+                </summary>
+                <ul className="mt-2 flex flex-col gap-2">
+                  {profile.accessHistory.slice(RECENT).map(gateEvent)}
+                </ul>
+              </details>
             </li>
-          ))}
+          )}
           {profile.accessHistory.length === 0 && (
             <li className="text-muted-foreground text-sm">
               No gate activity recorded.
@@ -1390,93 +1085,18 @@ export default async function TenantProfilePage({
               They have no `Message` row — D-83 keeps the words in the domain
               event — and the `inbound_sms_review` task links to this page, so
               this list is the only place the body is legible in full. */}
-          {comms.map((entry) =>
-            entry.sms ? (
-              <li
-                key={entry.sms.id}
-                className="border-input border-l-primary rounded-lg border border-l-4 p-3 text-sm"
-              >
-                {/* No <details>: the words are the reason the staffer is here.
-                  Collapsing them behind a click is the defect B-143 fixed. */}
-                <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <span>
-                    {/* The direction in words, not only the border colour (1.4.1). */}
-                    <span className="font-medium">Text from this tenant</span>{" "}
-                    <span className="text-muted-foreground uppercase">sms</span>
-                  </span>
-                  <span className="text-muted-foreground">
-                    Received · {formatWhen(entry.sms.createdAt)}
-                  </span>
-                </div>
-                <dl className="text-muted-foreground mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
-                  <dt>From</dt>
-                  <dd className="text-foreground">{entry.sms.phoneMasked}</dd>
-                </dl>
-                <pre className="bg-muted mt-2 max-h-64 overflow-auto rounded-md p-3 text-xs whitespace-pre-wrap">
-                  {entry.sms.body}
-                </pre>
-              </li>
-            ) : (
-              <li
-                key={entry.message.id}
-                className="border-input rounded-lg border p-3 text-sm"
-              >
-                {/* A native <details>: the exact text that went out is what makes
-                  this a record rather than a summary, but twenty full bodies on
-                  one page is unreadable. No JS, keyboard-operable as shipped. */}
-                <details>
-                  <summary className="flex cursor-pointer flex-wrap items-baseline justify-between gap-2">
-                    <span>
-                      <span className="font-medium">
-                        {entry.message.subjectSnapshot ??
-                          entry.message.templateKey}
-                      </span>{" "}
-                      <span className="text-muted-foreground uppercase">
-                        {entry.message.channel}
-                      </span>
-                    </span>
-                    <span className="text-muted-foreground capitalize">
-                      {entry.message.status} ·{" "}
-                      {formatWhen(entry.message.createdAt)}
-                    </span>
-                  </summary>
-                  <dl className="text-muted-foreground mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
-                    <dt>To</dt>
-                    <dd className="text-foreground">
-                      {entry.message.toAddressMasked}
-                    </dd>
-                    <dt>Template</dt>
-                    <dd className="text-foreground">
-                      {entry.message.templateKey} · v
-                      {entry.message.templateVersion}
-                    </dd>
-                    <dt>Triggered by</dt>
-                    <dd className="text-foreground">
-                      {entry.message.eventType ?? "Sent directly by staff"}
-                    </dd>
-                    {entry.message.sentAt && (
-                      <>
-                        <dt>Handed to provider</dt>
-                        <dd className="text-foreground">
-                          {formatWhen(entry.message.sentAt)}
-                        </dd>
-                      </>
-                    )}
-                  </dl>
-                  {entry.message.problem && (
-                    <p
-                      role="note"
-                      className="mt-2 rounded-md border border-red-300 bg-red-50 p-2 text-xs text-red-900"
-                    >
-                      {entry.message.problem}
-                    </p>
-                  )}
-                  <pre className="bg-muted mt-2 max-h-64 overflow-auto rounded-md p-3 text-xs whitespace-pre-wrap">
-                    {entry.message.bodySnapshot}
-                  </pre>
-                </details>
-              </li>
-            ),
+          {comms.slice(0, RECENT).map(commsItem)}
+          {comms.length > RECENT && (
+            <li>
+              <details>
+                <summary className="cursor-pointer text-sm font-medium">
+                  Show {comms.length - RECENT} older messages
+                </summary>
+                <ul className="mt-2 flex flex-col gap-2">
+                  {comms.slice(RECENT).map(commsItem)}
+                </ul>
+              </details>
+            </li>
           )}
           {profile.messages.length === 0 && profile.inboundSms.length === 0 && (
             <li className="text-muted-foreground text-sm">
@@ -1484,6 +1104,525 @@ export default async function TenantProfilePage({
             </li>
           )}
         </ul>
+      </section>
+
+      {/* B-181. One region for the writes a staffer reaches for a few times
+          a month, all closed. They used to stand between the banner stack and
+          the units — the support-session form was the THIRD thing on the page
+          and the leases were the ninth. Nothing here is new and nothing is
+          gone; a real <summary> exposes each one's state without script
+          (4.1.2) and names what it opens rather than the act (2.4.6). */}
+      <section
+        aria-labelledby="actions-heading"
+        className="flex flex-col gap-3"
+      >
+        <h2 id="actions-heading" className="font-medium">
+          Actions
+        </h2>
+        {hasPermissionAnywhere(actor, ["impersonation:tenant"]) && (
+          // PRD 09 FR-1/FR-2 (B-091 part 2). Started from the profile of somebody
+          // you are already looking at, with a reason, and never from a box you
+          // type an email into.
+          //
+          // Whether this actor may impersonate THIS tenant is decided by the
+          // escalation guard on submit, not here: `hasPermissionAnywhere` only
+          // asks whether the control is worth rendering at all, which is the
+          // distinction lib/rbac/authorize.ts draws between it and `can()`.
+          <details className="border-input rounded-lg border p-4">
+            <summary className="cursor-pointer font-medium">
+              View the portal as this tenant
+            </summary>
+            <div className="mt-3 flex flex-col gap-3">
+              <p className="text-muted-foreground max-w-prose text-sm text-pretty">
+                Opens their portal, exactly as they see it, for{" "}
+                {IMPERSONATION_TTL_MINUTES} minutes and read-only — nothing can
+                be changed, sent, or paid, and gate codes stay hidden. The
+                tenant is not notified, and the reason you give is written to
+                the audit log with your name against every screen you open.
+              </p>
+              <AdminForm
+                action={startTenantImpersonationAction}
+                label="Start a support session as this tenant"
+                className="grid max-w-2xl gap-3 sm:grid-cols-2"
+              >
+                <input type="hidden" name="subjectId" value={tenantId} />
+                <Field
+                  name="reason"
+                  label="Reason"
+                  type="text"
+                  required
+                  hint="What you are trying to see, in a sentence."
+                  className={FIELD_CLASS}
+                />
+                <Field
+                  name="ticketRef"
+                  label="Ticket reference (optional)"
+                  type="text"
+                  className={FIELD_CLASS}
+                />
+                <div className="sm:col-span-2">
+                  <button
+                    type="submit"
+                    className="border-input hover:bg-accent inline-flex min-h-11 items-center justify-center rounded-md border px-4 text-sm font-medium"
+                  >
+                    Start support session
+                  </button>
+                </div>
+              </AdminForm>
+            </div>
+          </details>
+        )}
+
+        <details className="border-input rounded-lg border p-4">
+          <summary className="cursor-pointer font-medium">Place a hold</summary>
+          <div className="mt-3 flex flex-col gap-3">
+            <p className="text-muted-foreground max-w-prose text-xs text-pretty">
+              A hold stops automated collections on one lease from tonight. What
+              each type stops is fixed — it is shown on the banner once placed.
+              Placing and lifting are both audited.
+            </p>
+            <AdminForm
+              action={placeHoldAction}
+              label="Place a hold"
+              className="flex flex-wrap items-end gap-3"
+            >
+              <input type="hidden" name="tenantId" value={profile.tenantId} />
+              <Field
+                name="leaseId"
+                label="Unit"
+                as="select"
+                defaultValue={profile.leases[0]?.leaseId ?? ""}
+              >
+                {profile.leases.map((lease) => (
+                  <option key={lease.leaseId} value={lease.leaseId}>
+                    {lease.unitNumber} — {lease.facilityName}
+                  </option>
+                ))}
+              </Field>
+              <Field name="type" label="Type" as="select" defaultValue="">
+                <option value="">Choose a type…</option>
+                {HOLD_TYPES.map((type) => (
+                  <option key={type.type} value={type.type}>
+                    {type.label}
+                  </option>
+                ))}
+              </Field>
+              <Field
+                name="reason"
+                label="Reason"
+                hint="What you were told, and by whom."
+              />
+              <Field
+                name="effectiveTo"
+                label="Ends (optional)"
+                type="date"
+                hint="Leave empty for open-ended."
+              />
+              <Field
+                name="estateContactName"
+                label="Estate contact"
+                hint="Required for a deceased tenant."
+              />
+              <Field
+                name="estateContactPhone"
+                label="Estate contact phone"
+                type="tel"
+              />
+              <button
+                type="submit"
+                className="border-input hover:bg-accent inline-flex min-h-11 items-center justify-center rounded-md border px-4 text-sm font-medium"
+              >
+                Place hold
+              </button>
+            </AdminForm>
+          </div>
+        </details>
+
+        {chargeable.length > 0 && (
+          <details className="border-input rounded-lg border p-4">
+            <summary className="cursor-pointer font-medium">
+              Charge a fee
+            </summary>
+            <div className="mt-3 flex flex-col gap-3">
+              <p className="text-muted-foreground max-w-prose text-xs text-pretty">
+                Posts the fee as its own invoice, so autopay collects it and it
+                can be waived like any other. The amount starts at this
+                facility&apos;s own price — changing it is subject to your
+                fee-waiver limit, in either direction. Your name, the price and
+                what you charged are all recorded.
+              </p>
+              <ul className="flex flex-col gap-3">
+                {chargeable.map((lease) => (
+                  <li
+                    key={lease.leaseId}
+                    className="border-input rounded-lg border p-4"
+                  >
+                    <p className="mb-3 text-sm font-medium">
+                      Unit {lease.unitNumber} · {lease.facilityName}
+                      {/* 1.4.1: the ended state is words, not a greyed row. */}
+                      {lease.ended && (
+                        <span className="text-muted-foreground font-normal">
+                          {" "}
+                          · moved out
+                        </span>
+                      )}
+                    </p>
+                    <ChargeFeeForm
+                      tenantId={profile.tenantId}
+                      leaseId={lease.leaseId}
+                      fees={feeSchedules.get(lease.facilityId) ?? []}
+                      unitLabel={`unit ${lease.unitNumber} at ${lease.facilityName}`}
+                    />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </details>
+        )}
+
+        {profile.refundable.length > 0 && (
+          <details className="border-input rounded-lg border p-4">
+            <summary className="cursor-pointer font-medium">
+              Refund a payment
+            </summary>
+            <div className="mt-3 flex flex-col gap-3">
+              <p className="text-muted-foreground max-w-prose text-xs text-pretty">
+                A card refund goes back to the card the tenant paid with. Cash
+                and cheque refunds are recorded as a payable — the money is not
+                paid until someone hands it over. Refunding unwinds what the
+                payment settled, so the invoices reopen.
+              </p>
+              <ul className="flex flex-col gap-3">
+                {profile.refundable.map((payment) => (
+                  <li
+                    key={payment.paymentId}
+                    className="border-input rounded-lg border p-4"
+                  >
+                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                      <span className="font-medium">
+                        {formatCents(payment.refundableCents)} refundable
+                      </span>
+                      <span className="text-muted-foreground text-xs">
+                        {formatCents(payment.amountCents)} by {payment.method}{" "}
+                        on {formatWhen(payment.receivedAt)}
+                        {payment.receiptNumber
+                          ? ` · receipt #${payment.receiptNumber}`
+                          : ""}
+                        {payment.refundedCents > 0
+                          ? ` · ${formatCents(payment.refundedCents)} already refunded`
+                          : ""}
+                      </span>
+                    </div>
+
+                    <AdminForm
+                      action={refundAction}
+                      label={`Refund payment ${payment.paymentId}`}
+                      className="mt-3 flex flex-wrap items-end gap-2"
+                    >
+                      <input
+                        type="hidden"
+                        name="tenantId"
+                        value={profile.tenantId}
+                      />
+                      <input
+                        type="hidden"
+                        name="paymentId"
+                        value={payment.paymentId}
+                      />
+                      <Field
+                        name="amountDollars"
+                        label="Amount ($)"
+                        type="text"
+                        inputMode="decimal"
+                        defaultValue={(payment.refundableCents / 100).toFixed(
+                          2,
+                        )}
+                      />
+                      <RefundMethodFields
+                        defaultMethod={
+                          payment.method === "card" ? "card" : "cash"
+                        }
+                      />
+                      <Field
+                        name="reasonCode"
+                        label="Reason"
+                        as="select"
+                        defaultValue=""
+                      >
+                        <option value="">Choose a reason…</option>
+                        {WAIVER_REASONS.map((reason) => (
+                          <option key={reason.value} value={reason.value}>
+                            {reason.label}
+                          </option>
+                        ))}
+                      </Field>
+                      <Field name="note" label="Note (optional)" />
+                      <button
+                        type="submit"
+                        className="border-input hover:bg-accent inline-flex min-h-11 items-center justify-center rounded-md border px-4 text-sm font-medium"
+                      >
+                        Refund
+                        <span className="sr-only">
+                          {" "}
+                          up to {formatCents(payment.refundableCents)}
+                        </span>
+                      </button>
+                    </AdminForm>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </details>
+        )}
+
+        {profile.returnable.length > 0 &&
+          // `returnPayment` re-checks per facility and throws; this only decides
+          // whether to render a form the actor could never submit — the same
+          // shape the impersonation block above uses and for the same reason.
+          hasPermissionAnywhere(actor, ["refunds:approve"]) && (
+            <details className="border-input rounded-lg border p-4">
+              <summary className="cursor-pointer font-medium">
+                Record a returned payment
+              </summary>
+              <div className="mt-3 flex flex-col gap-3">
+                <p className="text-muted-foreground max-w-prose text-xs text-pretty">
+                  For a cheque that bounced, an ACH return or a lost dispute —
+                  money we recorded and the bank took back.{" "}
+                  <strong>This is not a refund.</strong> No money leaves the
+                  drawer and the deposit slip it was banked on is unchanged;
+                  what happens is that the original entry is reversed, the
+                  invoices it settled reopen with their original due dates, and
+                  the facility&apos;s returned-payment fee is charged if one is
+                  configured. The tenant sees it on their own payment list.
+                </p>
+                <AnnounceRegion>
+                  <ul className="flex flex-col gap-3">
+                    {profile.returnable.map((payment) => (
+                      <li
+                        key={payment.paymentId}
+                        className="border-input rounded-lg border p-3"
+                      >
+                        <p className="text-sm">
+                          <span className="font-medium">
+                            {formatCents(payment.amountCents)}
+                          </span>{" "}
+                          <span className="text-muted-foreground">
+                            {payment.method.replace("_", " ")} ·{" "}
+                            {formatWhen(payment.receivedAt)}
+                            {payment.receiptNumber !== null &&
+                              ` · receipt #${payment.receiptNumber}`}
+                          </span>
+                        </p>
+                        <AdminForm
+                          action={returnPaymentAction}
+                          label={`Record a return of ${formatCents(payment.amountCents)}`}
+                          // B-170. Recording the return removes this payment from
+                          // `profile.returnable`, so the row reporting the outcome is
+                          // the row the outcome deletes — and the message says which
+                          // invoices reopened, which is the part a staffer needs
+                          // before the tenant rings.
+                          announceOutside
+                          className="mt-3 flex flex-wrap items-end gap-3"
+                        >
+                          <input
+                            type="hidden"
+                            name="tenantId"
+                            value={tenantId}
+                          />
+                          <input
+                            type="hidden"
+                            name="paymentId"
+                            value={payment.paymentId}
+                          />
+                          <Field
+                            name="reasonCode"
+                            label="What the bank said"
+                            as="select"
+                            className={FIELD_CLASS}
+                          >
+                            {RETURN_REASONS.map((reason) => (
+                              <option key={reason.value} value={reason.value}>
+                                {reason.label}
+                              </option>
+                            ))}
+                          </Field>
+                          <Field
+                            name="note"
+                            label="Note"
+                            className={FIELD_CLASS}
+                          />
+                          {/* B-178. Named after its subject rather than the
+                          action (2.4.6), and the amount is IN the option,
+                          because the amount is the decision being taken here.
+                          When the facility has priced no returned-payment fee
+                          there is no control: a dropdown offering to charge
+                          nothing is a question with no answer, and the sentence
+                          says what happens instead. */}
+                          {nsfFees.get(payment.facilityId) == null ? (
+                            <p className="text-muted-foreground max-w-prose self-end text-xs text-pretty">
+                              This facility has not priced a returned-payment
+                              fee, so none is charged.
+                            </p>
+                          ) : (
+                            <Field
+                              name="chargeFee"
+                              label="Returned-payment fee"
+                              as="select"
+                              defaultValue="yes"
+                              className={FIELD_CLASS}
+                            >
+                              {RETURN_FEE_CHOICES.map((choice) => (
+                                <option key={choice.value} value={choice.value}>
+                                  {choice.label.replace(
+                                    "{amount}",
+                                    formatCents(
+                                      nsfFees.get(payment.facilityId) ?? 0,
+                                    ),
+                                  )}
+                                </option>
+                              ))}
+                            </Field>
+                          )}
+                          <button
+                            type="submit"
+                            className="border-input hover:bg-accent inline-flex min-h-11 items-center justify-center rounded-md border px-4 text-sm font-medium"
+                          >
+                            Record the return
+                          </button>
+                        </AdminForm>
+                      </li>
+                    ))}
+                  </ul>
+                </AnnounceRegion>
+              </div>
+            </details>
+          )}
+
+        {/* B-121 / D-49. Its own section, not a fifth box in the contact grid:
+            this is a legal-status declaration with automatic consequences on
+            every lease the tenant holds, and filing it beside "alternate contact
+            email" would read as one more optional detail. */}
+        <details className="border-input rounded-lg border p-4">
+          <summary className="cursor-pointer font-medium">
+            Military service
+          </summary>
+          <div className="mt-3 flex flex-col gap-3">
+            <AdminForm
+              action={updateActiveDutyAction}
+              label="Military service"
+              className="flex max-w-lg flex-col gap-3"
+            >
+              <input type="hidden" name="tenantId" value={tenantId} />
+              <FieldSet
+                name="activeDutyMilitary"
+                legend="Active-duty military (SCRA)"
+                hint={
+                  profile.activeDutyMilitary === null
+                    ? "Nobody has recorded an answer for this tenant. Recording yes stops collections, late fees, gate suspension, auction and marketing on every lease they hold — including at other facilities."
+                    : "Recording yes stops collections, late fees, gate suspension, auction and marketing on every lease they hold — including at other facilities."
+                }
+              >
+                <div className="mt-3 flex flex-col gap-2">
+                  <label className="border-input flex min-h-11 cursor-pointer items-start gap-3 rounded-lg border p-3">
+                    <input
+                      type="radio"
+                      name="activeDutyMilitary"
+                      value="yes"
+                      defaultChecked={profile.activeDutyMilitary === true}
+                      className="mt-1"
+                    />
+                    <span>
+                      <span className="font-medium">Yes — on active duty</span>
+                      <span className="text-muted-foreground block text-sm">
+                        Places an SCRA hold on every current lease straight
+                        away.
+                      </span>
+                    </span>
+                  </label>
+                  <label className="border-input flex min-h-11 cursor-pointer items-start gap-3 rounded-lg border p-3">
+                    <input
+                      type="radio"
+                      name="activeDutyMilitary"
+                      value="no"
+                      defaultChecked={profile.activeDutyMilitary === false}
+                      className="mt-1"
+                    />
+                    <span>
+                      <span className="font-medium">No</span>
+                      <span className="text-muted-foreground block text-sm">
+                        Corrects the record only. A hold already in force stays
+                        until a manager lifts it on the lease below.
+                      </span>
+                    </span>
+                  </label>
+                </div>
+              </FieldSet>
+              <button
+                type="submit"
+                className="border-input hover:bg-accent inline-flex min-h-11 items-center justify-center self-start rounded-md border px-4 text-sm font-medium"
+              >
+                Save military service
+              </button>
+            </AdminForm>
+          </div>
+        </details>
+
+        {profile.gateAccess.length > 0 && (
+          <details className="border-input rounded-lg border p-4">
+            <summary className="cursor-pointer font-medium">
+              Gate access — 24-hour
+            </summary>
+            <div className="mt-3 flex flex-col gap-3">
+              {profile.gateAccess.map((grant) => (
+                <form
+                  key={grant.grantId}
+                  action={setExtendedHoursAction}
+                  className="border-input flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3 text-sm"
+                >
+                  <input type="hidden" name="grantId" value={grant.grantId} />
+                  <input
+                    type="hidden"
+                    name="facilityId"
+                    value={grant.facilityId}
+                  />
+                  <input
+                    type="hidden"
+                    name="tenantId"
+                    value={profile.tenantId}
+                  />
+                  <span>
+                    <span className="font-medium">{grant.facilityName}</span>
+                    <span className="text-muted-foreground">
+                      {" "}
+                      · {grant.state}
+                    </span>
+                  </span>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      name="extendedHours"
+                      defaultChecked={grant.extendedHours}
+                      className="size-4"
+                    />
+                    24-hour access (paid add-on)
+                  </label>
+                  <button
+                    type="submit"
+                    className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
+                  >
+                    Save
+                  </button>
+                </form>
+              ))}
+              <p className="text-muted-foreground text-xs text-pretty">
+                Off means this tenant&apos;s code works only during the
+                facility&apos;s published gate hours. Saving queues the change
+                to the gate controller — it is not instant if the controller is
+                offline.
+              </p>
+            </div>
+          </details>
+        )}
       </section>
     </div>
   );
