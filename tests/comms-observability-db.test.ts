@@ -113,8 +113,19 @@ describeDb('comms observability (FR-19/CN-19)', () => {
   })
 
   describe('alertOwner', () => {
+    // Scoped to this suite's own owner fixture by email, not left to the
+    // unqualified `findFirst` `ownerEmail()` does by default — a dozen other
+    // DB suites bootstrap their own transient 'owner' role assignment, and
+    // under a parallel run any of them can be live at the same moment (B-185).
+    // Real callers never pass this; production has exactly one owner.
+    //
+    // Built fresh per test, not hoisted to a `describe`-body const: the
+    // `describe` callback runs during collection, before `beforeAll` sets
+    // `ownerEmail`, so a hoisted object would have frozen in the empty string.
+    const ownerWhere = () => ({ email: ownerEmail })
+
     it('emails the owner and records the send', async () => {
-      const result = await alertOwner(`test:${randomUUID()}`, 'Subject line', 'Body text')
+      const result = await alertOwner(`test:${randomUUID()}`, 'Subject line', 'Body text', ownerWhere())
       expect(result.sent).toBe(true)
       expect(emailSends).toHaveLength(1)
       expect(emailSends[0].to).toBe(ownerEmail)
@@ -122,8 +133,8 @@ describeDb('comms observability (FR-19/CN-19)', () => {
 
     it('never sends the same alert twice — the idempotency key is the whole dedup', async () => {
       const key = `test:${randomUUID()}`
-      await alertOwner(key, 'Subject', 'Body')
-      const second = await alertOwner(key, 'Subject', 'Body')
+      await alertOwner(key, 'Subject', 'Body', ownerWhere())
+      const second = await alertOwner(key, 'Subject', 'Body', ownerWhere())
       expect(second.sent).toBe(true) // "already sent" still reports true
       expect(emailSends).toHaveLength(1) // but only one email actually went
     })

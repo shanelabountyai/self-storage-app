@@ -20,6 +20,7 @@
     "db:migrate": "dotenv -e .env.local -- prisma migrate dev --schema packages/db/prisma/schema.prisma",
     "db:seed": "dotenv -e .env.local -- node packages/db/prisma/seed.mts",
     "db:migrate:test": "dotenv -e .env.test -e .env.local -- tsx --tsconfig apps/web/tsconfig.json scripts/migrate-test-db.mts",
+    "db:reset-test": "dotenv -e .env.test -e .env.local -- tsx --tsconfig apps/web/tsconfig.json scripts/reset-test-schema.mts",
     "db:migrate:e2e": "dotenv -e .env.test -e .env.local -- npx prisma migrate deploy --schema packages/db/prisma/schema.prisma && dotenv -e .env.test -e .env.local -- node packages/db/prisma/seed.mts && dotenv -e .env.test -e .env.local -- tsx --tsconfig apps/web/tsconfig.json apps/web/scripts/seed-demo.mts",
     "db:seed:demo": "dotenv -e .env.local -- tsx --tsconfig apps/web/tsconfig.json apps/web/scripts/seed-demo.mts",
     "db:create-owner": "dotenv -e .env.local -- tsx --tsconfig apps/web/tsconfig.json apps/web/scripts/create-owner.mts",

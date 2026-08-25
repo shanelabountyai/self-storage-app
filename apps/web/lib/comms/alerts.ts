@@ -1,4 +1,4 @@
-import { prisma } from '@storage/db'
+import { prisma, type Prisma } from '@storage/db'
 import { sendDirectEmail } from './service'
 
 // PRD 05 FR-19 (B-075). "Alert to owner if..." — the three silent-failure
@@ -19,9 +19,9 @@ import { sendDirectEmail } from './service'
 /// Null when nobody has been bootstrapped into that role, which the caller
 /// treats as "nothing to alert" rather than an error: a dev/test database
 /// with no owner yet should not fail a job over it.
-async function ownerEmail(): Promise<string | null> {
+async function ownerEmail(extraWhere?: Prisma.StaffUserWhereInput): Promise<string | null> {
   const owner = await prisma.staffUser.findFirst({
-    where: { status: 'active', assignments: { some: { role: { key: 'owner' } } } },
+    where: { status: 'active', assignments: { some: { role: { key: 'owner' } } }, ...extraWhere },
     select: { email: true },
   })
   return owner?.email ?? null
@@ -33,8 +33,20 @@ export type AlertResult = { sent: boolean }
 /// DIFFERENT problem on the same day gets its own send (e.g.
 /// `sms_failure_rate:{facilityId}:{businessDate}`), and stable enough that
 /// the SAME problem checked again today does not repeat.
-export async function alertOwner(key: string, subject: string, body: string): Promise<AlertResult> {
-  const to = await ownerEmail()
+///
+/// `ownerWhere` narrows which staff row counts as "the" owner. Production
+/// never has more than one, so every real caller omits it. Tests running in
+/// parallel against a shared schema do not have that guarantee — several DB
+/// suites bootstrap their own transient owner (B-185) — so a test passes its
+/// own fixture's email to prove the wiring without asserting global
+/// uniqueness the test environment cannot promise.
+export async function alertOwner(
+  key: string,
+  subject: string,
+  body: string,
+  ownerWhere?: Prisma.StaffUserWhereInput,
+): Promise<AlertResult> {
+  const to = await ownerEmail(ownerWhere)
   if (!to) return { sent: false }
 
   const result = await sendDirectEmail({
