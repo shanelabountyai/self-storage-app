@@ -6174,7 +6174,7 @@ Four changes, and the first is the one that matters most:
 
 ## B-178 — The fee question says what it charges, and its answer matches its value
 
-`PENDING`
+`c349796`
 
 **What it built.** The returned-payment control on the tenant profile was a dropdown headed "Charge the fee?" whose first option read "Yes — charge the configured fee" and carried the value `"no"`, because the field was named `waiveFee`. The displayed answer was the opposite of the stored one on the one screen where a bank return is recorded, and it never stated the amount. It is now `chargeFee`, yes/no, rendered from one table the action reads back — and the facility's own configured figure is in the option text. Where the facility has priced no returned-payment fee there is no control at all, only a sentence. Same session, same class: the refund form's cheque-number input renders only for a cheque refund, and the four screens that printed raw reason-code keys ("collections uneconomic") read an operator label map instead.
 
