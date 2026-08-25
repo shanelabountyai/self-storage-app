@@ -62,6 +62,44 @@ export function monthsServed(startDate: Date, moveOutDate: Date): number {
   return Math.max(0, completed);
 }
 
+/// B-175. The sentence the SIGNED LEASE states the minimum stay in — including
+/// what happens if it is not served.
+///
+/// Lives here, beside the arithmetic, deliberately. B-144 wrote this sentence
+/// in `lib/lease/build.ts` and made it deliberately silent on consequence,
+/// because at the time nothing recovered anything and a signed promise to claw
+/// a discount back would have been a term the operator did not do. B-145 then
+/// built `recaptureFor` and the charge became real — and the sentence stayed
+/// silent, so the word "recovered" first reached the tenant on the move-out
+/// screen, at the moment the amount was already computed and they were already
+/// leaving. A charge whose first mention is the final statement is a chargeback
+/// with paperwork.
+///
+/// The two now move together or not at all: a test pins each policy's sentence
+/// against what `recaptureFor` actually returns under that policy. Putting the
+/// wording in the same file as the calculation is what makes that check the
+/// obvious thing to write rather than a thing somebody has to remember.
+export function minStayTermSummary(
+  policy: PromoRecapturePolicy,
+  minStayMonths: number,
+): string {
+  const minStay = Math.max(0, Math.floor(minStayMonths));
+  if (minStay < 1) return "There is no fixed term and no penalty for leaving.";
+
+  const condition = `There is no fixed term and you may leave at any time. The promotional rate on this agreement is offered on the basis that you keep this unit for at least ${minStay} ${minStay === 1 ? "month" : "months"}.`;
+
+  // `none` is left exactly as B-144 wrote it, and that is not an oversight: at
+  // a facility that recovers nothing, a sentence saying we will charge the
+  // discount back is the same defect mirrored — a signed term the operator does
+  // not do. The minimum stay is a condition with no consequence there, which is
+  // its own problem and B-176's.
+  if (policy === "none") return condition;
+
+  return policy === "full"
+    ? `${condition} If you leave before then, we will charge back the whole discount you were given.`
+    : `${condition} If you leave before then, we will charge back the share of the discount covering the months you did not stay.`;
+}
+
 /// The charge-back, under the facility's configured policy.
 export function recaptureFor(input: RecaptureInput): Recapture {
   const minStay = Math.max(0, Math.floor(input.minStayMonths));

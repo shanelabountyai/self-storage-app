@@ -5,6 +5,7 @@ import { renderTemplate } from "@/lib/documents/render";
 import { currentPlans } from "@/lib/protection/plans";
 import { billingDayFor } from "@storage/core/billing";
 import { businessDateFor } from "@storage/core/jobs";
+import { minStayTermSummary } from "@storage/core/promotions";
 import { LEASE_SUMMARY_TEMPLATE, LEASE_TEMPLATE } from "./template";
 import type { CheckoutSessionView } from "@/lib/checkout/session";
 
@@ -36,6 +37,9 @@ export async function leaseValuesFor(
       timezone: true,
       billingPolicy: true,
       prorateOnMoveIn: true,
+      // B-175. The lease has to say what happens if the minimum stay is not
+      // served, and only this column knows whether anything does.
+      promoRecapturePolicy: true,
     },
   });
   const unitType = await prisma.unitType.findUniqueOrThrow({
@@ -120,15 +124,14 @@ export async function leaseValuesFor(
       })
     : null;
   const minStayMonths = promotion?.minStayMonths ?? 0;
-  // Stated, not enforced. B-145 owns the recapture and its per-facility policy
-  // defaults to `none`, so a signed sentence promising the discount would be
-  // clawed back is a term the operator does not do — the same trap B-044's
-  // proration sentence fell into. When B-145 lands, this sentence extends to
-  // name the consequence; until then it says the condition and stops.
-  const termSummary =
-    minStayMonths > 0
-      ? `There is no fixed term and you may leave at any time. The promotional rate on this agreement is offered on the basis that you keep this unit for at least ${minStayMonths} ${minStayMonths === 1 ? "month" : "months"}.`
-      : "There is no fixed term and no penalty for leaving.";
+  // B-175. B-145 landed, so this sentence names the consequence — which is what
+  // the comment that stood here said would happen and nothing did. The wording
+  // lives beside `recaptureFor` in `@storage/core/promotions`, so the lease and
+  // the arithmetic are pinned to each other by a test rather than by intent.
+  const termSummary = minStayTermSummary(
+    facility.promoRecapturePolicy,
+    minStayMonths,
+  );
 
   const tenantName = `${data.firstName ?? ""} ${data.lastName ?? ""}`.trim();
   const tenantAddress = [

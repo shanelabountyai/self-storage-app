@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { monthsServed, recaptureFor } from "../packages/core/promotions";
+import {
+  minStayTermSummary,
+  monthsServed,
+  recaptureFor,
+} from "../packages/core/promotions";
 
 // B-145 / PRD 02 §4.3 US-10. Pure — no database, no clock.
 //
@@ -134,5 +138,59 @@ describe("recaptureFor", () => {
     expect(result.reason).toBe(
       "Promotional discount recovered for the 1 month of the 6-month minimum stay not served.",
     );
+  });
+});
+
+// B-175 / PRD 02 §4.3 US-10. The lease and the arithmetic move together.
+//
+// B-144 wrote the lease's minimum-stay sentence deliberately silent on
+// consequence, because nothing recovered anything yet. B-145 built the
+// recapture and the sentence stayed silent, so the word "recovered" first
+// reached the tenant on the move-out screen — the amount already computed, the
+// tenant already leaving. These tests are the thing that stops that drifting
+// apart again: each one asserts the SENTENCE and the NUMBER under the same
+// policy, so a change to either without the other goes red.
+describe("minStayTermSummary", () => {
+  // A tenant given $300 of discount under a 6-month minimum who leaves having
+  // served 4 — the same shape as the recaptureFor cases above.
+  const given = 30_000;
+  const input = { discountGivenCents: given, minStayMonths: 6, monthsServed: 4 };
+
+  it("promises nothing, and charges nothing, with no minimum stay", () => {
+    expect(minStayTermSummary("prorated", 0)).toBe(
+      "There is no fixed term and no penalty for leaving.",
+    );
+    expect(recaptureFor({ ...input, policy: "prorated", minStayMonths: 0 }).amountCents).toBe(0);
+  });
+
+  it("states the condition and stops where the facility recovers nothing", () => {
+    const summary = minStayTermSummary("none", 6);
+    expect(summary).toContain("at least 6 months");
+    // The half that matters: no promise of a charge, because none is made.
+    expect(summary).not.toContain("charge back");
+    expect(recaptureFor({ ...input, policy: "none" }).amountCents).toBe(0);
+  });
+
+  it("promises the WHOLE discount back under `full`, and charges exactly that", () => {
+    expect(minStayTermSummary("full", 6)).toContain(
+      "we will charge back the whole discount you were given",
+    );
+    expect(recaptureFor({ ...input, policy: "full" }).amountCents).toBe(given);
+  });
+
+  it("promises the unserved SHARE back under `prorated`, and charges exactly that", () => {
+    expect(minStayTermSummary("prorated", 6)).toContain(
+      "we will charge back the share of the discount covering the months you did not stay",
+    );
+    // 2 of the 6 months unserved: a third of what was given, and less than all
+    // of it — which is the whole difference the two sentences describe.
+    const charged = recaptureFor({ ...input, policy: "prorated" }).amountCents;
+    expect(charged).toBe(10_000);
+    expect(charged).toBeLessThan(given);
+  });
+
+  it("says months, not month, only when it means it", () => {
+    expect(minStayTermSummary("full", 1)).toContain("at least 1 month.");
+    expect(minStayTermSummary("full", 2)).toContain("at least 2 months.");
   });
 });

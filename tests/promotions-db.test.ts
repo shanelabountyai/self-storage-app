@@ -500,6 +500,64 @@ describeDb("promotions", () => {
       expect(values.termSummary).not.toContain("no penalty for leaving");
     });
 
+    // B-175. The wording is pinned to the arithmetic in
+    // `tests/promo-recapture.test.ts`; this pins the WIRING — that the
+    // facility's own policy is what reaches the signed document. Without it
+    // `minStayTermSummary` could be correct and `buildLease` could still be
+    // passing it a hardcoded `none`, which is exactly the shape of the bug this
+    // row fixed.
+    it("names the charge-back on the lease when the facility recovers (B-175)", async () => {
+      const before = await prisma.facility.findUniqueOrThrow({
+        where: { id: facilityId },
+        select: { promoRecapturePolicy: true },
+      });
+      await prisma.facility.update({
+        where: { id: facilityId },
+        data: { promoRecapturePolicy: "prorated" },
+      });
+      try {
+        await availableUnit();
+        await makePromotion({
+          type: "free_months",
+          value: 0,
+          durationPeriods: 1,
+          minStayMonths: 6,
+        });
+        const offer = await offerFor({
+          facilityId,
+          unitTypeId,
+          monthlyRateCents: RENT,
+          isNewTenant: true,
+        });
+        const started = await startCheckout({
+          facilityId,
+          unitTypeId,
+          quotedRateCents: RENT,
+          promo: {
+            promotionId: offer.offer!.promotionId,
+            promoCodeId: offer.offer!.promoCodeId,
+            terms: offer.offer!.terms,
+            firstPeriodCents: offer.offer!.firstPeriodCents,
+            schedule: offer.offer!.schedule,
+          },
+        });
+        if (!started.ok) throw new Error("no unit to start a checkout on");
+        const values = await leaseValuesFor((await sessionByToken(started.token))!);
+        expect(values.termSummary).toContain("at least 6 months");
+        expect(values.termSummary).toContain(
+          "we will charge back the share of the discount covering the months you did not stay",
+        );
+      } finally {
+        // Restored whatever the assertions did: this facility is shared with
+        // every other test in the file, and a policy left flipped would charge
+        // recaptures in suites that never asked for one.
+        await prisma.facility.update({
+          where: { id: facilityId },
+          data: { promoRecapturePolicy: before.promoRecapturePolicy },
+        });
+      }
+    });
+
     it("leaves the lease saying there is no penalty when no minimum applies (B-144)", async () => {
       // The ordinary checkout, and the reason `termSummary` is a merge field
       // rather than a conditional clause: the default wording is unchanged.

@@ -6099,3 +6099,27 @@ Four changes, and the first is the one that matters most:
 **A test bug found, mine, and the second instance of it.** Two existing preview tests passed a fixed calendar date (`2026-12-01`) to a function that had no bounds; adding bounds would have made them go red on a date nobody chose. They compute from the real clock now. And both new e2e cases first located the refusal with a bare `getByRole('alert')`, which is a strict-mode violation on **every page in the product** — Next renders an always-present `role="alert"` route announcer outside `<main>`. It fails before the refusal has rendered, which reads exactly like the refusal not firing. Scoped to `<main>`, with the reason in a comment, after making the same mistake in B-173 one hour earlier.
 
 **Left behind.** **The ceiling does not vary by facility** — a module constant, for the reason above. **The walk-in `noticeGivenAt` gap** described above is untouched and belongs to a row of its own. **B-182 still owns the wording** of the lien-pipeline refusal this screen renders ("Please ring them"), which is on its list already.
+
+## B-175 — The lease says what a broken minimum stay costs
+
+`PENDING`
+
+**What it built.** The signed agreement stated the minimum stay and stopped there. `lib/lease/build.ts`'s `termSummary` was deliberately silent on consequence — B-144's choice, and correct at the time, because nothing recovered anything and a signed promise to claw a discount back would have been a term the operator did not do. B-145 then built `recaptureFor` and the charge became real; the sentence stayed silent. The word "recovered" first reached the tenant on the move-out screen, with the amount already computed and the tenant already leaving. It now names the consequence, branched on the facility's `promoRecapturePolicy`.
+
+**What it decided.**
+
+**The wording moved to sit beside the arithmetic.** `minStayTermSummary` lives in `packages/core/promotions/recapture.ts`, not in `lib/lease/build.ts` where the sentence has always been. The row's acceptance criterion is that the lease and the arithmetic "move together or not at all", and where a function lives decides which test is the obvious one to write: sharing a file with `recaptureFor` makes "assert the sentence and the number under the same policy" the natural thing, where a sentence three modules away makes it a thing somebody has to remember. The gap this row closes is precisely a thing somebody did not remember, twice, across B-144 and B-145.
+
+**`none` is left exactly as B-144 wrote it, and that is not an oversight.** At a facility that recovers nothing, a sentence saying we will charge the discount back is the same defect mirrored — a signed term the operator does not do. The minimum stay is a condition with no consequence there, which is its own problem and B-176's, one row down.
+
+**Two tests, because they fail for different reasons.** The pure one pins each policy's sentence against the amount `recaptureFor` returns under it: `full` promises the whole discount and charges exactly `discountGivenCents`; `prorated` promises the unserved share and charges a third of it for two of six months unserved, asserted as both the exact figure and as strictly less than the whole — which is the entire difference the two sentences describe. The DB one pins the **wiring**: that the facility's own column is what reaches the signed document. `minStayTermSummary` could be correct while `buildLease` passed it a hardcoded `none`, and that is the exact shape of the bug being fixed.
+
+**The DB test restores the policy in a `finally`.** The facility is shared with every other test in that file, and a policy left flipped would charge recaptures in suites that never asked for one — B-120's discipline applied to a unit fixture rather than an e2e one.
+
+**PRD 02 US-10 gained the acceptance criterion.** It had one requiring the minimum stay be *stated* on the lease (B-144's) and none requiring the consequence, which is how the sentence stayed silent through B-145 without anything going red.
+
+**Test verification.** Full unit suite **3,707 passed, 8 skipped of 3,715** (220 files passed, 1 skipped), exit 0; the two touched files run twice, 37 passed both times. Typecheck, lint and `prisma migrate diff --exit-code` clean.
+
+**A test bug found along the way, mine.** The first cut of the DB test invented a `startCheckout({ promotion: … })` shape that does not exist — the real key is `promo`, and it carries `terms` and `promoCodeId` as well — and called `offerFor` without `isNewTenant`, so no offer was returned and it died on `null.promotionId` rather than on anything to do with leases. Mirrored on the sibling test in the same file, which had it right all along.
+
+**Left behind.** **No e2e.** Reaching the changed sentence means a facility whose recapture policy is not the `none` default, and flipping the shared demo facility is the unscoped mutation B-120 forbids; the DB test covers the wiring instead. **The `none`-with-a-minimum-stay case is untouched** — a term stated on a signed lease that nothing enforces — and is B-176's, which is the row that makes the two settings mention each other.

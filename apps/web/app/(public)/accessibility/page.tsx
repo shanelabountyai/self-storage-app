@@ -428,6 +428,19 @@ const LAST_REVIEWED = '19 August 2026'
 // No claim below changes and none needed to. No public route added, so the
 // generated coverage claim and the route-keyed exception list are untouched.
 // `LAST_REVIEWED` is not bumped.
+// Re-verified 2026-08-25, at B-175 (the signed lease states what a broken
+// minimum stay costs, not only that there is one). Customer-facing — it is the
+// document a renter signs at checkout — but nothing about it is a UI change:
+// one merge field's wording branches on the facility's recapture policy, on a
+// page this statement makes no claims about beyond the checkout it is reached
+// through, which is already scanned at every reachable step. No route added, no
+// control added, no new state. The change is a plain-language one, and it makes
+// the agreement say the thing a tenant would otherwise first meet on a final
+// invoice.
+//
+// Recorded rather than skipped, per the rule the B-150 entry states — a change
+// to what a customer signs is worth a line here even when it moves no pixels.
+// `LAST_REVIEWED` is not bumped.
 export default function AccessibilityPage() {
   return (
     <ProsePage
