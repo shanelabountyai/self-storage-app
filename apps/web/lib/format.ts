@@ -21,3 +21,19 @@ export function formatRate(cents: number): string {
   const dollars = Math.abs(cents) / 100
   return `${cents < 0 ? '-' : ''}$${dollars % 1 === 0 ? dollars.toFixed(0) : dollars.toFixed(2)}`
 }
+
+/// B-173. A `yyyy-mm-dd` calendar day written the way a person reads it.
+///
+/// UTC on purpose: these are `@db.Date` days, and `new Date('2026-09-05')`
+/// rendered in a US timezone is Sep 4 — which, in a refusal whose whole job is
+/// to name the date about to post, would name the wrong one.
+export function formatDay(iso: string): string {
+  const date = new Date(`${iso}T00:00:00.000Z`)
+  if (Number.isNaN(date.getTime())) return iso
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(date)
+}

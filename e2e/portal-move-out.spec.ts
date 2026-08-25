@@ -39,6 +39,6 @@ test.describe('signed in as the demo tenant', () => {
     await expect(page.getByRole('heading', { name: /Request a move-out/ })).toBeVisible()
     await expect(page.getByLabel('Move-out date')).toBeVisible()
     await expect(page.getByText('Current balance')).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Request this move-out' })).toBeVisible()
+    await expect(page.getByRole('button', { name: /^Request a move-out on / })).toBeVisible()
   })
 })

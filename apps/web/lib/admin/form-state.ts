@@ -44,6 +44,33 @@ export function success(message: string, details?: string[]): FormState {
   return { status: 'success', message, ...(details ? { details } : {}) }
 }
 
+/// B-173. Refuses a commit whose control no longer matches the preview it was
+/// shown beside.
+///
+/// All four move-out and transfer screens price a settlement server-side from
+/// the URL and commit through a server action. While the date picker sat in a
+/// separate `method="GET"` form whose only submit was "Recalculate", the action
+/// read a hidden copy of the URL instead — so changing Sep 1 to Sep 5 and
+/// pressing Complete closed the lease on Sep 1, silently, after showing the
+/// tenant Sep 5's figures (3.3.4). The four screens now keep the control INSIDE
+/// the committing form, so what posts is what is on screen; this is the other
+/// half, because that swap alone only mirrors the defect — committing the typed
+/// date against figures worked out for a different one is the same lie with the
+/// operands the other way round. While the two disagree, nothing posts.
+///
+/// `message` is the caller's because each screen names its own recalculate
+/// control ("Recalculate", "Update", "Show me what it costs") and a refusal
+/// that points at a button by the wrong name is a refusal with no way out.
+export function stalePreview(
+  formData: FormData,
+  name: string,
+  message: (typed: string) => string,
+): FormState | null {
+  const typed = String(formData.get(name) ?? '')
+  if (typed === String(formData.get(`previewed_${name}`) ?? '')) return null
+  return fieldError({ [name]: message(typed) })
+}
+
 /// Parses a decimal entered by a human into an integer of the smallest unit
 /// (cents, or basis points), rejecting the things a bare `Number()` accepts
 /// silently. Returns a message rather than a value on failure so the caller can

@@ -376,6 +376,36 @@ const LAST_REVIEWED = '19 August 2026'
 // which is still true. No public route added, so the generated coverage claim
 // and the route-keyed exception list are untouched. `LAST_REVIEWED` is not
 // bumped, for the reason the entries above give.
+// Re-verified 2026-08-25, at B-173 (the date you typed is the date that posts,
+// on all four move-out and transfer screens). Two of the four are
+// customer-facing — `/portal/move-out` and `/portal/transfer` — and this is a
+// 3.3.4 Error Prevention (Financial) defect being closed, not one being
+// introduced. The date picker sat in a separate `method="GET"` form; the
+// requesting form carried a hidden copy of the URL, so a tenant who changed the
+// date and pressed Request asked for the OLD one, having just been shown what
+// the NEW one settles to. Nothing on the screen said the picker was inert until
+// a second button had been pressed (3.3.2).
+//
+// The picker is a field of the requesting form now, and the request refuses
+// while it and the priced date disagree, naming the date now in the control.
+// Two smaller things came with it: each portal picker is a `Field`, so a
+// refusal carries `aria-invalid` and `aria-describedby` rather than only
+// appearing in the summary; and the submit restates the day it acts on in its
+// own accessible name ("Request a move-out on September 5, 2026"), which is
+// 2.4.6 for a button whose subject was several fields further up the page.
+//
+// No claim below changes and none needed to — this page has never made a
+// statement about error prevention on the money path, which is itself worth
+// noticing rather than quietly fixing: what it says about forms is that a
+// rejection is tied to its field and a save is announced, and both are still
+// true. No public route added, so the generated coverage claim and the
+// route-keyed exception list are untouched. **The refusal is a STATE, not a
+// route**, so no axe scan reaches it — the same route-versus-state gap B-184
+// owns, and unlike B-171 and B-172 this item does NOT close it for its own
+// states: the guard is asserted on the admin screen only
+// (`e2e/admin-move-out.spec.ts`), and the two portal refusals are covered by
+// the unit tests on `stalePreview` and by nothing visual. `LAST_REVIEWED` is
+// not bumped.
 export default function AccessibilityPage() {
   return (
     <ProsePage

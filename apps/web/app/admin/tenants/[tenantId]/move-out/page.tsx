@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { getAdminActor } from "@/lib/admin/context";
 import { previewMoveOut } from "@/lib/admin/move-out";
-import { formatCents } from "@/lib/format";
+import { formatCents, formatDay } from "@/lib/format";
 import { AdminForm, Field } from "@/components/admin/form";
 import { REASON_CODES } from "@storage/core/audit";
 import { completeMoveOutAction } from "./actions";
@@ -101,28 +101,86 @@ export default async function MoveOutPage({
         </p>
       )}
 
-      {/* Changing the date re-runs the whole settlement server-side, as a GET,
-          so the page is linkable and the arithmetic never happens in the
-          browser. */}
-      <form method="GET" className="flex flex-wrap items-end gap-2">
+      {/* B-167. The charge control ON the move-out screen, which is where a
+          cleaning or damage fee is actually discovered — somebody has just
+          walked the unit. Above the Complete button rather than below it: post
+          the fee first and the settlement below re-reads with it in, which is
+          the whole reason it is on this screen and not only on the profile.
+          Charging after completing still works; it just means the tenant gets a
+          second statement.
+
+          B-173 moved it ABOVE the date picker rather than below the figures,
+          because the committing form now starts at the picker and a <form>
+          cannot be nested inside another one. What B-167 wanted is unchanged:
+          it is still above the settlement, so posting a fee and reloading shows
+          it in the figures underneath. */}
+      {can(actor, "fees:charge", preview.facilityId) && (
+        <details className="border-input rounded-lg border p-4">
+          <summary className="cursor-pointer text-sm font-medium">
+            Charge a fee for this unit
+          </summary>
+          <p className="text-muted-foreground mt-2 mb-3 max-w-prose text-xs text-pretty">
+            Cleaning, damage, a cut lock. Posts as its own invoice and lands in
+            the settlement below — reload the page after charging to see it in
+            the figures.
+          </p>
+          <ChargeFeeForm
+            tenantId={tenantId}
+            leaseId={leaseId}
+            fees={await chargeableFees(preview.facilityId)}
+            unitLabel={`unit ${preview.unitNumber}`}
+          />
+        </details>
+      )}
+
+      {/* B-173. One form, one truth.
+
+          The date used to sit in its own `method="GET"` form whose only submit
+          was "Recalculate", while this form carried a hidden `moveOutDate` built
+          from the URL — so changing Sep 1 to Sep 5 and pressing Complete
+          move-out closed the lease on Sep 1, silently, after showing the tenant
+          a Sep 5 settlement. Nothing on the screen said the picker was inert
+          until a second button was pressed: a 3.3.4 failure on a screen that
+          ends a tenancy.
+
+          The picker is a field OF the committing form now, so what posts is what
+          is on screen, and `stalePreview` refuses while the picker and the
+          priced date disagree — without that half the defect only mirrors, and
+          commits a date the figures above were never worked out for.
+          "Recalculate" is a native GET submit of this same form: a submit button
+          whose `formAction` is a STRING is the one case React hands back to the
+          browser, so there is still exactly one date control on the page.
+
+          The form starts here, above the figures, because everything below the
+          picker is priced from it. `max-w-lg` moved to the tail group so the
+          settlement keeps its full width. */}
+      <AdminForm
+        action={completeMoveOutAction}
+        label="Complete move-out"
+        className="flex flex-col gap-6"
+      >
+        <input type="hidden" name="tenantId" value={tenantId} />
+        <input type="hidden" name="leaseId" value={leaseId} />
         <input type="hidden" name="lease" value={leaseId} />
-        <label htmlFor="date" className="flex flex-col gap-1 text-sm">
-          Move-out date
-          <input
-            id="date"
+        <input type="hidden" name="previewed_date" value={moveOutDate} />
+
+        <div className="flex flex-wrap items-end gap-2">
+          <Field
             name="date"
+            label="Move-out date"
             type="date"
             defaultValue={moveOutDate}
-            className="border-input bg-background h-9 rounded-md border px-2"
+            className={FIELD_CLASS}
           />
-        </label>
-        <button
-          type="submit"
-          className="border-input hover:bg-accent inline-flex h-9 items-center rounded-md border px-4 text-sm font-medium"
-        >
-          Recalculate
-        </button>
-      </form>
+          <button
+            type="submit"
+            formMethod="get"
+            formAction={`/admin/tenants/${tenantId}/move-out`}
+            className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
+          >
+            Recalculate
+          </button>
+        </div>
 
       {preview.noticeShortfallDays > 0 && (
         <p
@@ -191,32 +249,6 @@ export default async function MoveOutPage({
         </div>
       </dl>
 
-      {/* B-167. The charge control ON the move-out screen, which is where a
-          cleaning or damage fee is actually discovered — somebody has just
-          walked the unit. Above the Complete button rather than below it: post
-          the fee first and the settlement below re-reads with it in, which is
-          the whole reason it is on this screen and not only on the profile.
-          Charging after completing still works; it just means the tenant gets a
-          second statement. */}
-      {can(actor, "fees:charge", preview.facilityId) && (
-        <details className="border-input rounded-lg border p-4">
-          <summary className="cursor-pointer text-sm font-medium">
-            Charge a fee for this unit
-          </summary>
-          <p className="text-muted-foreground mt-2 mb-3 max-w-prose text-xs text-pretty">
-            Cleaning, damage, a cut lock. Posts as its own invoice and lands in
-            the settlement below — reload the page after charging to see it in
-            the figures.
-          </p>
-          <ChargeFeeForm
-            tenantId={tenantId}
-            leaseId={leaseId}
-            fees={await chargeableFees(preview.facilityId)}
-            unitLabel={`unit ${preview.unitNumber}`}
-          />
-        </details>
-      )}
-
       {settlement.needsManagerOverride && (
         <p
           role="alert"
@@ -228,15 +260,7 @@ export default async function MoveOutPage({
         </p>
       )}
 
-      <AdminForm
-        action={completeMoveOutAction}
-        label="Complete move-out"
-        className="flex max-w-lg flex-col gap-3"
-      >
-        <input type="hidden" name="tenantId" value={tenantId} />
-        <input type="hidden" name="leaseId" value={leaseId} />
-        <input type="hidden" name="moveOutDate" value={moveOutDate} />
-
+        <div className="flex max-w-lg flex-col gap-3">
         <Field
           name="reason"
           label="Reason"
@@ -326,12 +350,16 @@ export default async function MoveOutPage({
           to confirm it is empty and clean before it can be rented again.
         </p>
 
+        {/* B-173. The button restates the day it is about to act on, so the
+            date is in its own accessible name rather than only in a control the
+            reader passed several fields ago. */}
         <button
           type="submit"
           className="bg-primary text-primary-foreground inline-flex min-h-11 items-center justify-center self-start rounded-md px-4 text-sm font-medium"
         >
-          Complete move-out
+          Complete move-out on {formatDay(moveOutDate)}
         </button>
+        </div>
       </AdminForm>
     </div>
   );

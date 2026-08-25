@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { fieldError, parseDate, parseScaled } from '../apps/web/lib/admin/form-state'
+import { fieldError, parseDate, parseScaled, stalePreview } from '../apps/web/lib/admin/form-state'
 
 // B-094 / WCAG 3.3.4 Error Prevention (Legal, Financial, Data).
 //
@@ -73,5 +73,54 @@ describe('fieldError', () => {
     const two = fieldError({ state: 'bad', name: 'bad' })
     if (two.status !== 'error') throw new Error('unreachable')
     expect(two.message).toContain('2 fields')
+  })
+})
+
+// B-173 / WCAG 3.3.4. The move-out and transfer screens price a settlement from
+// the URL and commit through a server action. The date now lives IN the
+// committing form, so what posts is what is on screen — and this is the half
+// that stops the defect simply mirroring: a date typed after the figures were
+// worked out must not commit against them either.
+//
+// Server-side and tested here rather than through the UI for `parseScaled`'s
+// reason: the screens also refuse in the browser, and a crafted POST skips that
+// entirely. This is the guard that actually holds.
+describe('stalePreview', () => {
+  const form = (typed: string, previewed: string): FormData => {
+    const data = new FormData()
+    data.set('date', typed)
+    data.set('previewed_date', previewed)
+    return data
+  }
+
+  const message = (typed: string) => `Press Recalculate to see what a ${typed} move-out settles to.`
+
+  it('passes the control that still matches the figures beside it', () => {
+    expect(stalePreview(form('2026-09-05', '2026-09-05'), 'date', message)).toBeNull()
+  })
+
+  it('refuses a control moved since the preview, naming the value now in it', () => {
+    const stale = stalePreview(form('2026-09-05', '2026-09-01'), 'date', message)
+    if (stale?.status !== 'error') throw new Error('a moved date must refuse')
+    expect(stale.fieldErrors.date).toContain('2026-09-05')
+  })
+
+  // A screen whose picker is empty has nothing to disagree with; the action's
+  // own date parse is what refuses that, with a message about the date rather
+  // than about a preview the reader never saw move.
+  it('leaves an empty control to the action that parses it', () => {
+    expect(stalePreview(form('', ''), 'date', message)).toBeNull()
+  })
+
+  // The whole point: absent both fields, this cannot pass by accident. A form
+  // that forgets its `previewed_` twin gets the same treatment as one that
+  // matches — which is why the four screens render it as a hidden input beside
+  // the control rather than deriving it anywhere else.
+  it('treats a missing previewed twin as agreement, not as a pass to skip', () => {
+    const data = new FormData()
+    data.set('date', '2026-09-05')
+    const stale = stalePreview(data, 'date', message)
+    if (stale?.status !== 'error') throw new Error('a control with no previewed twin must refuse')
+    expect(stale.fieldErrors.date).toContain('2026-09-05')
   })
 })

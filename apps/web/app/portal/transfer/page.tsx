@@ -8,7 +8,7 @@ import {
 } from '@/lib/portal/transfer'
 import { MAX_MOVE_IN_DAYS_AHEAD } from '@/lib/reservations/reserve'
 import { formatRate } from '@/lib/format'
-import { AdminForm } from '@/components/admin/form'
+import { AdminForm, Field } from '@/components/admin/form'
 import { cancelTransferAction, requestTransferAction } from './actions'
 
 export const metadata = { title: 'Move to another unit' }
@@ -211,8 +211,29 @@ export default async function PortalTransferPage({
         </p>
       ) : (
         <>
-          <form method="GET" className="flex flex-col gap-4">
+          {/* B-173. One form, one truth.
+
+              The unit and the date used to sit in their own `method="GET"` form
+              whose only submit was "Show me what it costs", while the request
+              form below carried hidden copies built from the URL — so changing
+              either and pressing Request this transfer asked for the PREVIOUS
+              one, after showing the tenant what the new one costs. Nothing said
+              the controls were inert until a second button was pressed.
+
+              They are fields of the requesting form now, so what posts is what
+              is on screen, and `stalePreview` refuses while a control and the
+              priced value disagree. The pricing button is a native GET submit of
+              this same form: a submit button whose `formAction` is a STRING is
+              the one case React hands back to the browser. */}
+          <AdminForm
+            action={requestTransferAction}
+            label="Request this transfer"
+            className="flex flex-col gap-4"
+          >
+            <input type="hidden" name="leaseId" value={lease.leaseId} />
             <input type="hidden" name="lease" value={lease.leaseId} />
+            <input type="hidden" name="previewed_unit" value={toUnitId ?? ''} />
+            <input type="hidden" name="previewed_date" value={isoDate(transferDate)} />
             <fieldset className="flex flex-col gap-2">
               <legend className="text-sm font-medium">Which unit would you like?</legend>
               {options.map((option) => (
@@ -250,94 +271,89 @@ export default async function PortalTransferPage({
               ))}
             </fieldset>
 
-            <label htmlFor="date" className="flex flex-col gap-1 text-sm">
-              When would you like to move?
-              <input
-                id="date"
-                name="date"
-                type="date"
-                min={isoDate(new Date())}
-                max={maxDateIso()}
-                defaultValue={isoDate(transferDate)}
-                className="border-input bg-background h-11 max-w-xs rounded-md border px-2"
-              />
-            </label>
+            <Field
+              name="date"
+              label="When would you like to move?"
+              type="date"
+              min={isoDate(new Date())}
+              max={maxDateIso()}
+              defaultValue={isoDate(transferDate)}
+              className="flex max-w-xs flex-col gap-1 text-sm"
+            />
 
             <button
               type="submit"
+              formMethod="get"
+              formAction="/portal/transfer"
               className="border-input hover:bg-accent inline-flex min-h-11 items-center self-start rounded-md border px-4 text-sm font-medium"
             >
               Show me what it costs
             </button>
-          </form>
 
-          {previewProblem && (
-            <p role="alert" className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-900">
-              {PORTAL_TRANSFER_PROBLEM_COPY[previewProblem] ?? 'That preview could not be completed.'}
-            </p>
-          )}
+            {previewProblem && (
+              <p role="alert" className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-900">
+                {PORTAL_TRANSFER_PROBLEM_COPY[previewProblem] ?? 'That preview could not be completed.'}
+              </p>
+            )}
 
-          {preview && (
-            <>
-              <dl className="border-input flex flex-col gap-2 rounded-lg border p-4 text-sm">
-                <div className="flex justify-between gap-4">
-                  <dt>New monthly rent for Unit {preview.toUnitNumber}</dt>
-                  <dd className="tabular-nums">{formatRate(preview.newRateCents)}</dd>
+            {preview && (
+              <>
+                <dl className="border-input flex flex-col gap-2 rounded-lg border p-4 text-sm">
+                  <div className="flex justify-between gap-4">
+                    <dt>New monthly rent for Unit {preview.toUnitNumber}</dt>
+                    <dd className="tabular-nums">{formatRate(preview.newRateCents)}</dd>
+                  </div>
+                  {preview.refundCents > 0 && (
+                    <div className="flex justify-between gap-4">
+                      <dt>Credit for the days left on Unit {preview.fromUnitNumber}</dt>
+                      <dd className="tabular-nums">−{formatRate(preview.refundCents)}</dd>
+                    </div>
+                  )}
+                  {preview.chargeCents > 0 && (
+                    <div className="flex justify-between gap-4">
+                      <dt>Unit {preview.toUnitNumber} for {preview.dayRange}</dt>
+                      <dd className="tabular-nums">{formatRate(preview.chargeCents)}</dd>
+                    </div>
+                  )}
+                  {preview.transferFeeCents > 0 && (
+                    <div className="flex justify-between gap-4">
+                      <dt>Transfer fee</dt>
+                      <dd className="tabular-nums">{formatRate(preview.transferFeeCents)}</dd>
+                    </div>
+                  )}
+                  <div className="flex justify-between gap-4 border-t pt-2 font-medium">
+                    <dt>
+                      {preview.totalDueTodayCents > 0
+                        ? 'To pay on the day'
+                        : preview.totalDueTodayCents < 0
+                          ? 'Credited to your account'
+                          : 'Nothing to pay on the day'}
+                    </dt>
+                    <dd className="tabular-nums">
+                      {formatRate(Math.abs(preview.totalDueTodayCents))}
+                    </dd>
+                  </div>
+                </dl>
+
+                <div className="flex flex-col gap-3">
+                  <p className="text-muted-foreground text-sm text-pretty">
+                    We&apos;ll hold Unit {preview.toUnitNumber} for you and the team will call to arrange
+                    the move. Your current unit, gate code and rent stay exactly as they are until you
+                    and the team have actually done the swap — you can cancel any time before that.
+                  </p>
+                  {/* B-173. The unit and the day are in the button's own
+                      accessible name, not only in controls the reader passed
+                      several fields ago. */}
+                  <button
+                    type="submit"
+                    className="bg-primary text-primary-foreground inline-flex min-h-11 items-center justify-center self-start rounded-md px-4 text-sm font-medium"
+                  >
+                    Request Unit {preview.toUnitNumber} from {formatDate(transferDate)}
+                  </button>
                 </div>
-                {preview.refundCents > 0 && (
-                  <div className="flex justify-between gap-4">
-                    <dt>Credit for the days left on Unit {preview.fromUnitNumber}</dt>
-                    <dd className="tabular-nums">−{formatRate(preview.refundCents)}</dd>
-                  </div>
-                )}
-                {preview.chargeCents > 0 && (
-                  <div className="flex justify-between gap-4">
-                    <dt>Unit {preview.toUnitNumber} for {preview.dayRange}</dt>
-                    <dd className="tabular-nums">{formatRate(preview.chargeCents)}</dd>
-                  </div>
-                )}
-                {preview.transferFeeCents > 0 && (
-                  <div className="flex justify-between gap-4">
-                    <dt>Transfer fee</dt>
-                    <dd className="tabular-nums">{formatRate(preview.transferFeeCents)}</dd>
-                  </div>
-                )}
-                <div className="flex justify-between gap-4 border-t pt-2 font-medium">
-                  <dt>
-                    {preview.totalDueTodayCents > 0
-                      ? 'To pay on the day'
-                      : preview.totalDueTodayCents < 0
-                        ? 'Credited to your account'
-                        : 'Nothing to pay on the day'}
-                  </dt>
-                  <dd className="tabular-nums">
-                    {formatRate(Math.abs(preview.totalDueTodayCents))}
-                  </dd>
-                </div>
-              </dl>
-
-              <AdminForm
-                action={requestTransferAction}
-                label="Request this transfer"
-                className="flex flex-col gap-3"
-              >
-                <input type="hidden" name="leaseId" value={lease.leaseId} />
-                <input type="hidden" name="toUnitId" value={preview.toUnitId} />
-                <input type="hidden" name="transferDate" value={isoDate(transferDate)} />
-                <p className="text-muted-foreground text-sm text-pretty">
-                  We&apos;ll hold Unit {preview.toUnitNumber} for you and the team will call to arrange
-                  the move. Your current unit, gate code and rent stay exactly as they are until you
-                  and the team have actually done the swap — you can cancel any time before that.
-                </p>
-                <button
-                  type="submit"
-                  className="bg-primary text-primary-foreground inline-flex min-h-11 items-center justify-center self-start rounded-md px-4 text-sm font-medium"
-                >
-                  Request this transfer
-                </button>
-              </AdminForm>
-            </>
-          )}
+              </>
+            )}
+          </AdminForm>
         </>
       )}
 

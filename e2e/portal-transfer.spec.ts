@@ -71,7 +71,7 @@ test.describe('signed in as the demo tenant', () => {
     // A GET round trip, so the figures come from the same module the staff
     // wizard posts from rather than from arithmetic in the browser.
     await expect(page.getByText(/New monthly rent for Unit/)).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Request this transfer' })).toBeVisible()
+    await expect(page.getByRole('button', { name: /^Request Unit / })).toBeVisible()
   })
 
   test('the accessible name of the picker survives text zoom to 200%', async ({ page }) => {

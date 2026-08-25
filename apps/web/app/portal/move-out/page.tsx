@@ -6,7 +6,7 @@ import {
   tenantMoveOutLeases,
 } from "@/lib/portal/move-out";
 import { formatRate } from "@/lib/format";
-import { AdminForm } from "@/components/admin/form";
+import { AdminForm, Field } from "@/components/admin/form";
 import { CallLink, phoneFor } from "@/components/marketing/call-link";
 import { cancelMoveOutAction, requestMoveOutAction } from "./actions";
 
@@ -199,26 +199,52 @@ export default async function PortalMoveOutPage({
         </p>
       )}
 
-      <form method="GET" className="flex flex-wrap items-end gap-2">
+      {/* B-173. One form, one truth.
+
+          The picker used to sit in its own `method="GET"` form whose only submit
+          was "Update", while the request form below carried a hidden
+          `moveOutDate` built from the URL — so changing the date and pressing
+          Request this move-out asked for the OLD one, after showing the tenant
+          what the new one settles to. Nothing said the picker was inert until a
+          second button was pressed.
+
+          It is a field of the requesting form now, so what posts is what is on
+          screen, and `stalePreview` refuses while the picker and the priced date
+          disagree — without that half the defect only mirrors, and asks for a
+          date the figures above were never worked out for. "Update" is a native
+          GET submit of this same form: a submit button whose `formAction` is a
+          STRING is the one case React hands back to the browser, so there is
+          still exactly one date control on the page. */}
+      <AdminForm
+        action={requestMoveOutAction}
+        label="Request a move-out"
+        className="flex flex-col gap-6"
+      >
+        <input type="hidden" name="leaseId" value={lease.leaseId} />
         <input type="hidden" name="lease" value={lease.leaseId} />
-        <label htmlFor="date" className="flex flex-col gap-1 text-sm">
-          Move-out date
-          <input
-            id="date"
+        <input
+          type="hidden"
+          name="previewed_date"
+          value={isoDate(requestedDate)}
+        />
+
+        <div className="flex flex-wrap items-end gap-2">
+          <Field
             name="date"
+            label="Move-out date"
             type="date"
             min={isoDate(lease.minMoveOutDate)}
             defaultValue={isoDate(requestedDate)}
-            className="border-input bg-background h-9 rounded-md border px-2"
           />
-        </label>
-        <button
-          type="submit"
-          className="border-input hover:bg-accent inline-flex h-9 items-center rounded-md border px-4 text-sm font-medium"
-        >
-          Update
-        </button>
-      </form>
+          <button
+            type="submit"
+            formMethod="get"
+            formAction="/portal/move-out"
+            className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
+          >
+            Update
+          </button>
+        </div>
 
       {preview && (
         <dl className="border-input flex flex-col gap-2 rounded-lg border p-4 text-sm">
@@ -272,17 +298,6 @@ export default async function PortalMoveOutPage({
         </dl>
       )}
 
-      <AdminForm
-        action={requestMoveOutAction}
-        label="Request a move-out"
-        className="flex flex-col gap-3"
-      >
-        <input type="hidden" name="leaseId" value={lease.leaseId} />
-        <input
-          type="hidden"
-          name="moveOutDate"
-          value={isoDate(requestedDate)}
-        />
         <p className="text-muted-foreground text-sm text-pretty">
           Your gate code and account stay active until{" "}
           {formatDate(requestedDate)}. Our team will verify the unit is empty
@@ -292,7 +307,7 @@ export default async function PortalMoveOutPage({
           type="submit"
           className="bg-primary text-primary-foreground inline-flex min-h-11 items-center justify-center self-start rounded-md px-4 text-sm font-medium"
         >
-          Request this move-out
+          Request a move-out on {formatDate(requestedDate)}
         </button>
       </AdminForm>
     </div>

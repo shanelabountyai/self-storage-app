@@ -5,7 +5,8 @@ import { revalidatePath } from 'next/cache'
 import { requireTenantActor } from '@/lib/rbac/session'
 import { checkFreshAuth } from '@/lib/auth/reauth'
 import { cancelMoveOutRequest, requestMoveOut } from '@/lib/portal/move-out'
-import { fieldError, success, type FormState } from '@/lib/admin/form-state'
+import { fieldError, stalePreview, success, type FormState } from '@/lib/admin/form-state'
+import { formatDay } from '@/lib/format'
 
 // PRD 01 US-707, gated by US-701's re-auth rule — US-701's own examples of a
 // "sensitive action" name move-out explicitly. Split from
@@ -41,13 +42,22 @@ async function requireFresh(returnTo: string): Promise<void> {
 export async function requestMoveOutAction(_prev: FormState, formData: FormData): Promise<FormState> {
   const actor = await requireTenantActor()
   const leaseId = String(formData.get('leaseId') ?? '')
-  const moveOutDate = String(formData.get('moveOutDate') ?? '')
+  const moveOutDate = String(formData.get('date') ?? '')
+
+  // B-173. Checked before the re-auth redirect, so a tenant is not sent through
+  // a password prompt only to be told the date had moved. See `stalePreview`.
+  const stale = stalePreview(
+    formData,
+    'date',
+    (typed) => `You changed the date. Press Update to see what a ${formatDay(typed)} move-out settles to.`,
+  )
+  if (stale) return stale
 
   await requireFresh(`/portal/move-out?lease=${leaseId}`)
 
   const result = await requestMoveOut(actor.tenantId, leaseId, new Date(`${moveOutDate}T00:00:00.000Z`))
   if (!result.ok) {
-    return fieldError({ moveOutDate: REQUEST_PROBLEM_COPY[result.reason] ?? 'That request could not be completed.' })
+    return fieldError({ date: REQUEST_PROBLEM_COPY[result.reason] ?? 'That request could not be completed.' })
   }
 
   revalidatePath('/portal/move-out')

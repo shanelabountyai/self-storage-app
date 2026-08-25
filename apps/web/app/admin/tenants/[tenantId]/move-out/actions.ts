@@ -5,8 +5,8 @@ import { revalidatePath } from 'next/cache'
 import type { MoveOutReason } from '@storage/db'
 import { requireStaffActor } from '@/lib/rbac/session'
 import { completeMoveOut } from '@/lib/admin/move-out'
-import { fieldError, parseScaled, type FormState } from '@/lib/admin/form-state'
-import { formatCents } from '@/lib/format'
+import { fieldError, parseScaled, stalePreview, type FormState } from '@/lib/admin/form-state'
+import { formatCents, formatDay } from '@/lib/format'
 
 // PRD 02 US-14. Thin session wrapper; lib/admin/move-out.ts holds the rules.
 
@@ -20,6 +20,16 @@ const PROBLEM_COPY: Record<string, string> = {
 export async function completeMoveOutAction(_prev: FormState, formData: FormData): Promise<FormState> {
   const actor = await requireStaffActor()
   const tenantId = String(formData.get('tenantId') ?? '')
+
+  // B-173. Before anything else, and before any of it is charged: the date on
+  // screen is the date that posts, or nothing posts. See `stalePreview`.
+  const stale = stalePreview(
+    formData,
+    'date',
+    (typed) =>
+      `You changed the date. Press Recalculate to see what a ${formatDay(typed)} move-out settles to.`,
+  )
+  if (stale) return stale
 
   // B-168. Blank means "charge what the rule says" — an untouched field must
   // not read as a waiver down to zero.
@@ -37,7 +47,7 @@ export async function completeMoveOutAction(_prev: FormState, formData: FormData
     recaptureReasonCode: String(formData.get('recaptureReason') ?? ''),
     // Parsed as a UTC calendar date, matching how `Lease.moveOutDate` is
     // stored (@db.Date) — a move-out is a day, not an instant.
-    moveOutDate: new Date(`${String(formData.get('moveOutDate') ?? '')}T00:00:00.000Z`),
+    moveOutDate: new Date(`${String(formData.get('date') ?? '')}T00:00:00.000Z`),
     reason: String(formData.get('reason') ?? 'tenant_request') as MoveOutReason,
     writeOff: formData.get('writeOff') === 'yes',
     reasonCode: String(formData.get('reasonCode') ?? ''),
