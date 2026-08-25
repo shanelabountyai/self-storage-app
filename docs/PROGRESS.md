@@ -6148,7 +6148,7 @@ Four changes, and the first is the one that matters most:
 
 ## B-177 — The rate screen names the tenant instead of asking for a cuid
 
-`PENDING`
+`2fca73d`
 
 **What it built.** Both money forms on `/admin/rate-increases` took a free-text **"Lease ID"** with the hint "From the tenant's lease page", while the eligible table directly above them already listed every tenant, unit and current rate and offered no action at all. So the workflow was copy a cuid, paste a cuid — and a mistyped one permanently reduced a **different** tenant's rate, with a reason code recorded against them and nothing between the paste and the commit. B-153 shipped that as its own named left-behind and B-166's re-notice made it worse by requiring the same paste again. Both forms now take a picker of the facility's occupying leases, the eligible rows carry links that prefill it, and both return a confirm step before anything is written.
 
