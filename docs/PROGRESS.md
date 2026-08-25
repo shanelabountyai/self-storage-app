@@ -6202,7 +6202,7 @@ Four changes, and the first is the one that matters most:
 
 ## B-179 — A returned payment offers the pay route, not a phone number
 
-`PENDING`
+`646e34e`
 
 **What it built.** `/portal/documents` listed a bounced payment with the sentence "Returned unpaid by the bank. This amount is owed again — please call us" beside an amount column still showing the full payment as though it had landed, while `PayNowButton` sat one tap away on the dashboard. The tenant was asked to queue on a phone line to do what the next screen does in three taps, and the only signal the money was owed again was a sentence contradicting the figure next to it. The row now names the returned-payment fee if one was charged, marks the amount **in words** as returned, and offers the same `/portal/pay` route the dashboard uses — with the **facility's** line via `phoneFor` as the secondary route rather than the org number.
 
