@@ -6296,7 +6296,7 @@ Four changes, and the first is the one that matters most:
 
 ## B-183 — AR aging sits under a month picker that does not govern it
 
-<!-- SHA recorded in follow-up commit -->
+`157cb68d02fc57ae7babdce6a9715037b9cbb1f5`
 
 **What it built.** B-150 answered "does the AR aging table obey the month picker above it?" in prose — a paragraph explaining the range does not apply, reasoning included. Two problems with that: the reasoning argued where a reader needed a fact, and the same "this ignores the picker" idea had no consistent visual treatment, so a reader who skipped the paragraph read four wrong numbers with nothing to stop them. `arAgingNote()` dropped its "because how old a debt is describes one instant rather than a range" clause — it now states the fact and stops. Both the AR aging section and the occupancy section (`admin/reports/page.tsx`) got an "As of right now" `<h3>` immediately above their as-at paragraph, visually detaching the caveat from the period-scoped sections around it — unconditional for AR aging (D-65: it never answers for the period), conditional on `reason !== 'as-at-period-end'` for occupancy (a table that DOES answer for the month picked gets no caveat heading).
 
