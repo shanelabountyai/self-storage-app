@@ -6250,7 +6250,7 @@ Four changes, and the first is the one that matters most:
 
 ## B-181 — The tenant profile reads before it writes
 
-`PENDING`
+`686b3cc`
 
 **What it built.** `admin/tenants/[tenantId]/page.tsx` was seventeen stacked sections in a single scroll with nothing collapsible, and the units, rates and balances a staffer is being asked about were the **ninth** thing down — behind a support-session form, a contact form and an address form, none of which is touched more than a few times a month. The banner stack is unchanged. Under it now: **Leases**, Outstanding fees, Contact, Address of record, Referrals, Notes, Documents, Recent gate activity, Communication history — then one **Actions** region holding every occasional write, all closed. Contact and address render as text with an Edit disclosure. The two long logs show five with the rest behind a named disclosure. No new data and no new queries: the same seventeen sections, reordered and disclosed.
 
