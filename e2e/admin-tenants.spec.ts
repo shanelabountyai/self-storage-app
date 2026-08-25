@@ -1,6 +1,6 @@
-import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
 import { signInAsDemoOwner } from './sign-in'
+import { assertNoAxeViolations } from './a11y-helpers'
 
 // B-181. The occasional write forms live behind native <details> now — the
 // support-session form was the third thing on the page and the leases were the
@@ -30,14 +30,7 @@ test.describe('signed in as the demo owner', () => {
     await page.goto('/admin/tenants')
     await expect(page.getByRole('main')).toBeVisible()
 
-    const { violations } = await new AxeBuilder({ page })
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-      .analyze()
-
-    expect(
-      violations.map((v) => `${v.id}: ${v.help}`),
-      'axe found accessibility violations',
-    ).toEqual([])
+    await assertNoAxeViolations(page)
   })
 
   test('searching by a demo tenant’s name finds them and links to their profile', async ({ page }) => {
@@ -98,6 +91,7 @@ test.describe('signed in as the demo owner', () => {
     await expect(page.getByText(/No tenants match/)).toBeVisible()
   })
 
+  // a11y-state: /admin/tenants/[tenantId] | disclosure open
   test('the tenant profile has no WCAG 2.1 AA violations, with a disclosure open', async ({
     page,
   }) => {
@@ -113,14 +107,7 @@ test.describe('signed in as the demo owner', () => {
     await openDisclosure(page, 'Edit contact details')
     await openDisclosure(page, 'Place a hold')
 
-    const { violations } = await new AxeBuilder({ page })
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-      .analyze()
-
-    expect(
-      violations.map((v) => `${v.id}: ${v.help}`),
-      'axe found accessibility violations',
-    ).toEqual([])
+    await assertNoAxeViolations(page)
   })
 
   test('the military-service control states its consequences before it is used (B-121)', async ({
@@ -230,14 +217,7 @@ test.describe('the tenant ledger (B-049)', () => {
     await page.getByRole('link', { name: /^Ledger/ }).first().click()
     await expect(page.getByRole('main')).toBeVisible()
 
-    const { violations } = await new AxeBuilder({ page })
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-      .analyze()
-
-    expect(
-      violations.map((v) => `${v.id}: ${v.help}`),
-      'axe found accessibility violations',
-    ).toEqual([])
+    await assertNoAxeViolations(page)
   })
 })
 
@@ -311,14 +291,7 @@ test.describe('lien notices for a lease', () => {
   })
 
   test('has no WCAG 2.1 AA violations', async ({ page }) => {
-    const { violations } = await new AxeBuilder({ page })
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-      .analyze()
-
-    expect(
-      violations.map((v) => `${v.id}: ${v.help}`),
-      'axe found accessibility violations',
-    ).toEqual([])
+    await assertNoAxeViolations(page)
   })
 
   test('names the variable to set rather than offering a button that would fail', async ({

@@ -1,7 +1,7 @@
-import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from '@playwright/test'
 import { signInAsDemoOwner } from './sign-in'
 import { DEMO_POS_TENANT_EMAIL } from '../apps/web/scripts/demo-credentials'
+import { assertNoAxeViolations } from './a11y-helpers'
 
 // PRD 02 §4.8 US-32 (B-039). The counter: take a payment, or start a walk-in
 // move-in. Drawer sessions are B-078 and deliberately absent.
@@ -28,14 +28,7 @@ test.describe('signed in as the demo owner', () => {
       await page.goto(route)
       await expect(page.getByRole('main')).toBeVisible()
 
-      const { violations } = await new AxeBuilder({ page })
-        .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-        .analyze()
-
-      expect(
-        violations.map((v) => `${v.id}: ${v.help}`),
-        'axe found accessibility violations',
-      ).toEqual([])
+      await assertNoAxeViolations(page)
     })
   }
 

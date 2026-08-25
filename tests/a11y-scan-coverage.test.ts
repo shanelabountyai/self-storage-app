@@ -4,10 +4,13 @@ import { describe, expect, it } from 'vitest'
 import {
   ADMIN_SCAN_ROUTES,
   customerFacingExceptions,
+  customerFacingStateExceptions,
   PORTAL_SCAN_ROUTES,
   PUBLIC_SCAN_ROUTES,
   SCAN_EXCEPTIONS,
   SCANNED_BY_OWN_SPEC,
+  SCANNED_STATES,
+  STATE_EXCEPTIONS,
 } from '../apps/web/lib/a11y/scan-coverage'
 
 // B-139 / PRD 01 §6.8, PRD 02 §5.5 FR-24. The check that stops the public
@@ -111,10 +114,13 @@ describe('the accessibility scan contract (B-139)', () => {
 
   it('keeps every SCANNED_BY_OWN_SPEC claim true', () => {
     // The claim is "this file runs axe on that route". A spec that stopped
-    // scanning would otherwise leave the route counted as covered by a comment.
+    // scanning would otherwise leave the route counted as covered by a
+    // comment. B-184 (T2) moved the actual `new AxeBuilder(...)` call into the
+    // shared `assertNoAxeViolations` helper, so a spec now runs axe by
+    // importing and calling that rather than by naming the library directly.
     for (const { route, spec } of SCANNED_BY_OWN_SPEC) {
       const source = readFileSync(join(process.cwd(), spec), 'utf8')
-      expect(source, `${spec} no longer runs axe`).toContain('AxeBuilder')
+      expect(source, `${spec} no longer runs axe`).toMatch(/AxeBuilder|assertNoAxeViolations/)
       const literal = route.split('/[')[0]
       expect(source, `${spec} no longer visits ${route}`).toContain(literal)
     }
@@ -126,5 +132,53 @@ describe('the accessibility scan contract (B-139)', () => {
     expect(shown.every((row) => row.audience !== 'admin')).toBe(true)
     // Every reason has to read as a sentence on a public page, not as a route.
     expect(shown.every((row) => row.reason.length > 20 && !row.reason.includes('['))).toBe(true)
+  })
+
+  // B-184 (T1). The same contract, one level down: a STATE is not a route, so
+  // it cannot appear in the checks above no matter how thorough they are.
+  describe('the state scan contract (B-184)', () => {
+    it('keeps every SCANNED_STATES claim true', () => {
+      for (const { route, state, spec } of SCANNED_STATES) {
+        const source = readFileSync(join(process.cwd(), spec), 'utf8')
+        expect(source, `${spec} no longer runs axe`).toMatch(/AxeBuilder|assertNoAxeViolations/)
+        expect(
+          source,
+          `${spec} carries no "// a11y-state: ${route} | ${state}" comment beside its scan`,
+        ).toContain(`a11y-state: ${route} | ${state}`)
+      }
+    })
+
+    it('has a list entry for every a11y-state comment under e2e/, and vice versa', () => {
+      // The symmetric check `SCANNED_BY_OWN_SPEC` cannot make: a spec can gain
+      // a new `// a11y-state:` comment nobody added to the list above, which
+      // is the same "coverage grew by accident" failure B-119 closed for whole
+      // routes. Walked directly rather than through the list, so a NEW file
+      // with the comment is caught too, not just the ones already named.
+      const claimed = new Set(SCANNED_STATES.map((s) => `${s.route} | ${s.state}`))
+      const e2eDir = join(process.cwd(), 'e2e')
+      const specFiles = readdirSync(e2eDir).filter((f) => f.endsWith('.spec.ts'))
+      const found: string[] = []
+      for (const file of specFiles) {
+        const source = readFileSync(join(e2eDir, file), 'utf8')
+        for (const m of source.matchAll(/a11y-state:\s*(.+)/g)) found.push(m[1].trim())
+      }
+      expect(found.length, 'no a11y-state comment found anywhere — did the convention move?').toBeGreaterThan(0)
+      const orphaned = found.filter((line) => !claimed.has(line))
+      expect(orphaned, 'a spec claims a state SCANNED_STATES does not list').toEqual([])
+    })
+
+    it('states no STATE_EXCEPTIONS for a route that no longer exists', () => {
+      const stale = [...new Set(STATE_EXCEPTIONS.map((e) => e.route))].filter(
+        (route) => !ROUTES.includes(route),
+      )
+      expect(stale).toEqual([])
+    })
+
+    it('tells a visitor about customer-facing state gaps only', () => {
+      const shown = customerFacingStateExceptions()
+      expect(shown.length).toBeGreaterThan(0)
+      expect(shown.every((row) => row.audience !== 'admin')).toBe(true)
+      expect(shown.every((row) => row.reason.length > 20)).toBe(true)
+    })
   })
 })

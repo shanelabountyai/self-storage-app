@@ -316,3 +316,180 @@ export const SCAN_EXCEPTIONS: readonly ScanException[] = [
 export function customerFacingExceptions(): readonly ScanException[] {
   return SCAN_EXCEPTIONS.filter((row) => row.audience !== 'admin')
 }
+
+// B-184 (T1) / PRD 02 §5.5 FR-25, FR-24. Everything above is keyed by ROUTE,
+// so a page reached by `goto` alone is either scanned or excepted — but a
+// route's real markup often depends on what you DID on it: a refusal, a
+// disclosure opened, a confirm-and-echo step. B-159 finding 3 named the
+// consequence: the exception list is route-keyed by construction, so a state
+// gap could never appear in it while the page kept claiming to name every gap.
+//
+// This pair is the same contract, one level down. `SCANNED_STATES` is a
+// promise the unit test below can check: the named spec actually runs axe on
+// that route in that state, via a `// a11y-state: <route> | <state>` comment
+// next to the scan, the same way `SCANNED_BY_OWN_SPEC` checks a route claim.
+// `STATE_EXCEPTIONS` is for a state that is genuinely blocked rather than
+// merely unscanned — needs live data nothing seeds, or a mismatch the UI no
+// longer lets a real visitor reach at all.
+//
+// Neither list is exhaustive. A route can have states nobody has named here
+// yet; that is a true gap, not one this pair claims to close. What it stops is
+// the OVERSTATEMENT — a state named in a review, in a comment, in a test title
+// — going unrecorded on the page that promises to name every gap.
+export type ScannedState = {
+  /// The route this is a state OF, not a URL of its own — `[param]` segments
+  /// kept, same as `route` above.
+  route: string
+  /// A short name for the state, printed on the page and matched against the
+  /// spec's `// a11y-state:` comment.
+  state: string
+  spec: string
+}
+
+export const SCANNED_STATES: readonly ScannedState[] = [
+  // B-090 part 1's waitlist form, opened. The route loop scans the closed
+  // disclosure; nothing inside it is in the accessibility tree until a click.
+  {
+    route: '/storage/tx/austin/demo-austin-south',
+    state: 'waitlist form opened',
+    spec: 'e2e/a11y.spec.ts',
+  },
+  // B-171. Both public marketing forms, refused.
+  {
+    route: '/storage/tx/austin/demo-austin-south',
+    state: 'waitlist form refused',
+    spec: 'e2e/smoke.spec.ts',
+  },
+  {
+    route: '/storage/tx/austin/demo-austin-south',
+    state: 'lead form refused',
+    spec: 'e2e/smoke.spec.ts',
+  },
+  // A settings form refused (3.3.1/3.3.3/4.1.3) — axe only ever sees a
+  // freshly-loaded page unless a spec drives it into the error branch itself.
+  {
+    route: '/admin/settings',
+    state: 'settings submit refused',
+    spec: 'e2e/admin.spec.ts',
+  },
+  // B-184 (T5). The confirm-and-echo step 3.3.4 depends on — the one place in
+  // the product where an append-only row is agreed to before it publishes.
+  {
+    route: '/admin/settings',
+    state: 'tax rate confirm-and-echo',
+    spec: 'e2e/admin.spec.ts',
+  },
+  // The transfer wizard's priced settlement, which only renders after picking
+  // a unit and recalculating — the base wizard is SCANNED_BY_OWN_SPEC, this is
+  // the state one step past it.
+  {
+    route: '/admin/tenants/[tenantId]/transfer',
+    state: 'settlement recalculated',
+    spec: 'e2e/admin-transfer.spec.ts',
+  },
+  // The tenant profile with a disclosure open — everything behind a closed
+  // <details> is invisible to axe, so the base scan alone would have missed
+  // half the page's controls.
+  {
+    route: '/admin/tenants/[tenantId]',
+    state: 'disclosure open',
+    spec: 'e2e/admin-tenants.spec.ts',
+  },
+  // B-184 (T3). A refused task completion, added alongside the invalid-submit
+  // scan this row required.
+  {
+    route: '/admin/tasks',
+    state: 'completion refused',
+    spec: 'e2e/admin-tasks.spec.ts',
+  },
+  // B-174. The one portal refusal that IS scanned — the sibling stale-preview
+  // mismatch below is not (see STATE_EXCEPTIONS).
+  {
+    route: '/portal/move-out',
+    state: 'date past the ceiling (refused)',
+    spec: 'e2e/portal-move-out.spec.ts',
+  },
+  // B-173's stale-preview guard, on all three screens it protects — type a
+  // new value, skip the explicit recalculate control ("Recalculate",
+  // "Update", "Show me what it costs"), submit directly. `stalePreview`
+  // returns before anything is written on any of the three, which is what
+  // makes the portal two safe against B-120's rule for shared demo state.
+  {
+    route: '/admin/tenants/[tenantId]/move-out',
+    state: 'stale-preview refusal',
+    spec: 'e2e/admin-move-out.spec.ts',
+  },
+  {
+    route: '/portal/move-out',
+    state: 'stale-preview refusal',
+    spec: 'e2e/portal-move-out.spec.ts',
+  },
+  {
+    route: '/portal/transfer',
+    state: 'stale-preview refusal',
+    spec: 'e2e/portal-transfer.spec.ts',
+  },
+] as const
+
+export type StateException = {
+  route: string
+  state: string
+  audience: ScanAudience
+  reason: string
+}
+
+/// The states a route can be in that no scan reaches, and why — the same bar
+/// as `SCAN_EXCEPTIONS`: genuinely blocked, not merely unscanned yet.
+export const STATE_EXCEPTIONS: readonly StateException[] = [
+  // B-139 named `/portal/pay/done`'s not-found state as scanned; the four
+  // outcomes below are what a real payment settles to, and the demo seed
+  // creates none to settle.
+  {
+    route: '/portal/pay/done',
+    state: 'succeeded',
+    audience: 'portal',
+    reason: 'the receipt for a payment that actually succeeded, which needs a real one on a real account',
+  },
+  {
+    route: '/portal/pay/done',
+    state: 'failed',
+    audience: 'portal',
+    reason: 'the receipt for a payment that was actually declined, for the same reason',
+  },
+  {
+    route: '/portal/pay/done',
+    state: 'processing',
+    audience: 'portal',
+    reason: 'the receipt for a payment still mid-flight, for the same reason',
+  },
+  {
+    route: '/portal/pay/done',
+    state: 'pending',
+    audience: 'portal',
+    reason: 'the receipt for a payment awaiting settlement, for the same reason',
+  },
+  // B-179. Named in the accessibility statement's own history as the
+  // route-versus-state gap this pair exists to close, rather than infer from
+  // a green scan.
+  {
+    route: '/portal/documents',
+    state: 'returned payment row',
+    audience: 'portal',
+    reason: 'the row a bounced payment renders, which needs one and the demo seed creates none',
+  },
+  // B-137. Considered and deliberately not built: the demo seed's one
+  // pending_auction lease belongs to a tenant with no portal credential, and
+  // minting one to scan a paragraph and a link is a fixture nobody else needs.
+  {
+    route: '/portal/transfer',
+    state: 'pending_auction refusal',
+    audience: 'portal',
+    reason:
+      'the refusal shown to a tenant in the lien pipeline, which needs a lease in that state paired with a portal credential — the one demo lease that qualifies has none',
+  },
+] as const
+
+/// The state exceptions a visitor is owed, same rule as `customerFacingExceptions`.
+export function customerFacingStateExceptions(): readonly StateException[] {
+  return STATE_EXCEPTIONS.filter((row) => row.audience !== 'admin')
+}

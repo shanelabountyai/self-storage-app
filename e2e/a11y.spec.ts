@@ -1,6 +1,6 @@
-import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from '@playwright/test'
 import { PUBLIC_SCAN_ROUTES as PUBLIC_ROUTES } from '../apps/web/lib/a11y/scan-coverage'
+import { assertNoAxeViolations } from './a11y-helpers'
 
 // B-139. The list itself lives in `apps/web/lib/a11y/scan-coverage.ts`, beside
 // the exception list the public accessibility page renders, so the two cannot
@@ -20,55 +20,12 @@ for (const route of PUBLIC_ROUTES) {
     // teaches people to re-run the suite.
     await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible()
 
-    const { violations, incomplete } = await new AxeBuilder({ page })
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-      .analyze()
-
-    expect(
-      violations.map((v) => `${v.id}: ${v.help}`),
-      'axe found accessibility violations',
-    ).toEqual([])
-
-    // Incompletes are the checks axe could not decide. Asserting only on
-    // violations quietly reads "we didn't test that" as "that passed", so they
-    // are asserted too.
-    //
-    // Two exemptions, both checked by hand rather than assumed.
-    //
-    // Content inside a third-party iframe. Playwright does inject axe into
-    // cross-origin frames — worth knowing, because the usual assumption is
-    // that it cannot. The facility page's OpenStreetMap embed sits behind a
-    // collapsed <details>, so it is not in the DOM for this scan at all; when
-    // expanded it returns undecidable colour-contrast results for its own
-    // attribution text over map tiles, which we cannot restyle in someone
-    // else's document. A node inside a frame has a target path of length > 1,
-    // which is how those are identified here.
-    //
-    // B-118's sticky "Rent now" bar (facility page, below `sm`). `position:
-    // sticky; bottom: 0` means it deliberately overlaps whatever the visitor
-    // has scrolled to underneath it — that is the whole point of a persistent
-    // CTA — and axe's contrast checker cannot compute an effective background
-    // for an element it detects spatially overlapping another, regardless of
-    // what that background actually is. Checked by hand: `bg-background` is
-    // fully opaque (no `bg-background/NN`) and pairs `text-foreground`-weight
-    // text at 14px/500 the same way every other card on this page does, which
-    // `contrast-tokens.test.ts` already asserts meets AA. Identified by axe's
-    // own phrasing for this specific limitation ("partially overlaps other
-    // elements") rather than a CSS target path, which shifts if the bar's
-    // classes ever do.
-    const ownPage = incomplete
-      .map((i) => ({
-        ...i,
-        nodes: i.nodes.filter(
-          (n) => n.target.length === 1 && !/partially overlaps other elements/i.test(n.failureSummary ?? ''),
-        ),
-      }))
-      .filter((i) => i.nodes.length > 0)
-
-    expect(
-      ownPage.map((i) => `${i.id}: ${i.help}`),
-      'axe could not decide these — check them by hand, then fix or exempt',
-    ).toEqual([])
+    // B-184 (T2). This call, and the incomplete-filtering it does (a third-
+    // party iframe's undecidable contrast, the sticky "Rent now" bar's
+    // by-design overlap — both checked by hand rather than assumed), used to
+    // live only here; every other spec file destructured `violations` on its
+    // own and never checked `incomplete` at all.
+    await assertNoAxeViolations(page)
   })
 }
 
@@ -165,6 +122,7 @@ test('the search page live region exists before it has anything to say', async (
 // that reads as that passed" problem the incomplete assertions above exist to
 // stop, and the accessibility statement makes a public claim about which pages
 // are scanned. So it gets opened first.
+// a11y-state: /storage/tx/austin/demo-austin-south | waitlist form opened
 test('the waitlist form has no WCAG 2.1 AA violations once opened', async ({ page }) => {
   await page.goto('/storage/tx/austin/demo-austin-south')
   await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible()
@@ -177,12 +135,5 @@ test('the waitlist form has no WCAG 2.1 AA violations once opened', async ({ pag
   expect(count, 'no sold-out size on the demo facility page to scan').toBeGreaterThan(0)
   for (let i = 0; i < count; i += 1) await disclosures.nth(i).locator('summary').click()
 
-  const { violations } = await new AxeBuilder({ page })
-    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-    .analyze()
-
-  expect(
-    violations.map((v) => `${v.id}: ${v.help}`),
-    'axe found accessibility violations in the opened waitlist form',
-  ).toEqual([])
+  await assertNoAxeViolations(page, 'axe found accessibility violations in the opened waitlist form')
 })

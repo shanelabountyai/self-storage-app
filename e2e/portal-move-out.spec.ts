@@ -1,6 +1,6 @@
-import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from '@playwright/test'
 import { signInAsDemoTenant } from './sign-in'
+import { assertNoAxeViolations } from './a11y-helpers'
 
 // PRD 01 US-707 (B-041). Pick a unit → pick a date → see what it settles to
 // → confirm. Nothing here finalizes anything — that stays B-040's, gated
@@ -22,14 +22,7 @@ test.describe('signed in as the demo tenant', () => {
     await page.goto('/portal/move-out')
     await expect(page.getByRole('main')).toBeVisible()
 
-    const { violations } = await new AxeBuilder({ page })
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-      .analyze()
-
-    expect(
-      violations.map((v) => `${v.id}: ${v.help}`),
-      'axe found accessibility violations',
-    ).toEqual([])
+    await assertNoAxeViolations(page)
   })
 
   test('shows the notice-policy floor and a settlement preview before confirming', async ({ page }) => {
@@ -76,6 +69,7 @@ test.describe('signed in as the demo tenant', () => {
   // The refusal is a STATE, not a route, so the route-keyed scan contract never
   // reaches it — B-184's gap, closed for this one state the way B-171 and B-172
   // closed it for theirs.
+  // a11y-state: /portal/move-out | date past the ceiling (refused)
   test('the refused move-out preview has no WCAG 2.1 AA violations', async ({ page }) => {
     await page.goto('/portal/move-out')
     await expect(page.getByLabel('Move-out date')).toBeVisible()
@@ -84,13 +78,32 @@ test.describe('signed in as the demo tenant', () => {
     await page.goto(url.pathname + url.search)
     await expect(page.getByRole('main').getByRole('alert')).toBeVisible()
 
-    const { violations } = await new AxeBuilder({ page })
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-      .analyze()
+    await assertNoAxeViolations(page)
+  })
 
-    expect(
-      violations.map((v) => `${v.id}: ${v.help}`),
-      'axe found accessibility violations',
-    ).toEqual([])
+  // B-184 (T1). B-173's `stalePreview` guard, reachable the ordinary way — this
+  // page has an explicit "Update" button beside the picker (a native GET
+  // submit of the same form), so typing a new date and pressing "Request a
+  // move-out on …" directly, without pressing Update first, is not a
+  // contrived path. Safe against the shared demo database for the reason the
+  // ceiling test above is: `stalePreview` returns before anything is written.
+  // a11y-state: /portal/move-out | stale-preview refusal
+  test('a date changed since Update refuses rather than committing either one', async ({ page }) => {
+    await page.goto('/portal/move-out')
+    const dateField = page.getByLabel('Move-out date')
+    const original = await dateField.inputValue()
+    const changed = new Date(`${original}T00:00:00.000Z`)
+    changed.setUTCDate(changed.getUTCDate() + 1)
+    await dateField.fill(changed.toISOString().slice(0, 10))
+
+    await page.getByRole('button', { name: /^Request a move-out on / }).click()
+
+    const alert = page.getByRole('main').getByRole('alert')
+    await expect(alert).toContainText('You changed the date')
+    await expect(alert).toBeFocused()
+    // Nothing posted: still on the request screen.
+    await expect(page).toHaveURL(/\/move-out(\?|$)/)
+
+    await assertNoAxeViolations(page)
   })
 })

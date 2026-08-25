@@ -1,7 +1,7 @@
-import AxeBuilder from '@axe-core/playwright'
 import { ADMIN_SCAN_ROUTES as ADMIN_ROUTES } from '../apps/web/lib/a11y/scan-coverage'
 import { expect, test } from '@playwright/test'
 import { signInAsDemoOwner } from './sign-in'
+import { assertNoAxeViolations, expectPreexisting } from './a11y-helpers'
 
 // Proves the edge-level gate (apps/web/proxy.ts) actually redirects, which is
 // the security-critical property of "role-gated routes" (PRD 02 FR-1-3).
@@ -67,14 +67,7 @@ test.describe('signed in as the demo owner', () => {
       await page.goto(route)
       await expect(page.getByRole('main')).toBeVisible()
 
-      const { violations } = await new AxeBuilder({ page })
-        .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-        .analyze()
-
-      expect(
-        violations.map((v) => `${v.id}: ${v.help}`),
-        'axe found accessibility violations',
-      ).toEqual([])
+      await assertNoAxeViolations(page)
     })
   }
 
@@ -161,6 +154,7 @@ test.describe('signed in as the demo owner', () => {
     await expect(page).toHaveURL(/\/admin\/units/)
   })
 
+  // a11y-state: /admin/settings | settings submit refused
   test('an invalid settings submit reports the error next to the field', async ({ page }) => {
     // 3.3.1/3.3.3/4.1.3, and the scan that matters: axe only ever sees a
     // freshly loaded page, so the error state was never checked by anything.
@@ -177,26 +171,34 @@ test.describe('signed in as the demo owner', () => {
     await expect(alert).toContainText('2-letter code')
     await expect(page.getByLabel('State')).toHaveAttribute('aria-invalid', 'true')
 
-    const { violations } = await new AxeBuilder({ page })
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-      .analyze()
-    expect(violations.map((v) => `${v.id}: ${v.help}`)).toEqual([])
+    await assertNoAxeViolations(page)
   })
 
+  // a11y-state: /admin/settings | tax rate confirm-and-echo
   test('an append-only tax rate is confirmed before it publishes', async ({ page }) => {
     // 3.3.4 Error Prevention (Financial). Tax components cannot be edited or
     // deleted, so "Add rate" used to be one click from a rate every future
     // invoice applies.
     await page.goto('/admin/settings')
-    await page.getByLabel('Jurisdiction').fill('e2e-check')
-    await page.getByLabel('Rate (%)').fill('8.25')
-    await page.getByRole('button', { name: 'Add rate' }).click()
+
+    // B-184 (T5). Pre-mounted and empty before the submit — the confirm
+    // sentence is announced from THIS region rather than from the bordered box
+    // that arrives with it, which is what makes it reliable for VoiceOver/NVDA
+    // rather than merely present for anyone reading the screen.
+    const form = page.getByRole('form', { name: 'Add a tax component' })
+    const status = form.getByRole('status')
+    await expectPreexisting(status)
+
+    await form.getByLabel('Jurisdiction').fill('e2e-check')
+    await form.getByLabel('Rate (%)').fill('8.25')
+    await form.getByRole('button', { name: 'Add rate' }).click()
 
     // Echoes back what it parsed, in the user's terms, and waits.
-    const confirm = page.getByText('cannot be edited or deleted')
-    await expect(confirm).toBeVisible()
+    await expect(status).toHaveText(/cannot be edited or deleted/)
     await expect(page.getByRole('button', { name: 'Yes, add it' })).toBeVisible()
     await expect(page.getByText('8.25%')).toBeVisible()
+
+    await assertNoAxeViolations(page)
   })
 
   // The fat-finger case — 825 typed into a percent field — cannot be driven
@@ -307,14 +309,7 @@ test.describe('template editor (B-053)', () => {
     await page.goto('/admin/settings/templates')
     await expect(page.getByRole('main')).toBeVisible()
 
-    const { violations } = await new AxeBuilder({ page })
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-      .analyze()
-
-    expect(
-      violations.map((v) => `${v.id}: ${v.help}`),
-      'axe found accessibility violations',
-    ).toEqual([])
+    await assertNoAxeViolations(page)
   })
 
   test('blocks publishing a field the event cannot supply', async ({ page }) => {
@@ -425,14 +420,7 @@ test.describe('units (B-116)', () => {
     await page.goto('/admin/units/setup')
     await expect(page.getByRole('main')).toBeVisible()
 
-    const { violations } = await new AxeBuilder({ page })
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-      .analyze()
-
-    expect(
-      violations.map((v) => `${v.id}: ${v.help}`),
-      'axe found accessibility violations',
-    ).toEqual([])
+    await assertNoAxeViolations(page)
   })
 
   test('an occupied unit names the tenant and links to their profile', async ({ page }) => {

@@ -149,8 +149,29 @@ export function AdminForm({
             `gate-code-panel.tsx` diagnosed this in B-105 and named this file;
             nothing changed it. An empty <p> has no visible footprint, so the
             class bought nothing. */}
-        <p role="status" className="col-span-full text-sm font-medium text-green-700">
-          {state.status === 'success' && !announceOutside ? state.message : ''}
+        {/* B-184 (T5) / PRD 02 §5.5 FR-25(2), 3.3.4 adds the CONFIRM branch to
+            this same region rather than mounting a second one: a form can
+            never be in both `success` and `confirm` at once, so one
+            pre-existing `role="status"` covers both without a second locator
+            match breaking every `form.getByRole('status')` in the suite. The
+            bordered box below still renders the echo table and the button —
+            this paragraph only owns the announcement, which is why the box's
+            own role is dropped for `confirm` a few lines down: `role="alert"`
+            announces fine on fresh insertion (that is what distinguishes an
+            alert from a status region), but `role="status"` does not, so the
+            box never got to carry both without the same "arrives already
+            populated" failure FR-20 exists to avoid. */}
+        <p
+          role="status"
+          className={
+            state.status === 'confirm'
+              ? 'col-span-full text-sm font-medium text-pretty'
+              : 'col-span-full text-sm font-medium text-green-700'
+          }
+        >
+          {(state.status === 'success' && !announceOutside) || state.status === 'confirm'
+            ? state.message
+            : ''}
         </p>
 
         {/* Outside the live region on purpose. A list the user has to read,
@@ -179,9 +200,13 @@ export function AdminForm({
           <div
             ref={summaryRef}
             tabIndex={-1}
-            // `alert` for a genuine failure; a confirm step is not an error and
-            // must not be announced as one.
-            role={state.status === 'error' ? 'alert' : 'status'}
+            // `alert` for a genuine failure, which announces fine even though
+            // it is inserted fresh (that is what an alert is for). A confirm
+            // step is not an error and gets no live-region role here at all —
+            // its text is announced by the pre-mounted paragraph above, and a
+            // second `role="status"` on this box would announce the same
+            // sentence twice.
+            role={state.status === 'error' ? 'alert' : undefined}
             className="border-input col-span-full rounded-md border p-3 text-sm"
           >
             <p className="font-medium">{state.message}</p>

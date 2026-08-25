@@ -1,10 +1,9 @@
 import { randomUUID } from 'node:crypto'
-import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from '@playwright/test'
 import { LEGAL_PAGES } from '../apps/web/lib/site-config'
 import { DEMO_PROMO_CODE } from '../apps/web/scripts/demo-credentials'
 import { GUIDES } from '../apps/web/lib/guides/catalog'
-import { expectAnnounced, expectPreexisting } from './a11y-helpers'
+import { assertNoAxeViolations, expectAnnounced, expectPreexisting } from './a11y-helpers'
 
 test('home page renders its search hero', async ({ page }) => {
   await page.goto('/')
@@ -129,10 +128,7 @@ test('the opened map introduces no accessibility violations', async ({ page }) =
   await page.locator('summary', { hasText: 'Show map' }).click()
   await expect(page.getByText('The map could not be loaded')).toBeVisible()
 
-  const results = await new AxeBuilder({ page })
-    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-    .analyze()
-  expect(results.violations).toEqual([])
+  await assertNoAxeViolations(page)
 })
 
 // B-082 part 1. The marketplace surface, asserted through real HTTP rather
@@ -1275,15 +1271,10 @@ test('the lease shows a summary first and signs with a typed name', async ({ pag
 // Called after each `advance` in the walk below, not folded into a
 // PUBLIC_ROUTES-style list: every step needs the PREVIOUS steps' real data
 // already filled in to reach it at all, so there is no bare URL to `goto`.
-async function assertNoAxeViolations(page: import('@playwright/test').Page): Promise<void> {
-  const { violations } = await new AxeBuilder({ page })
-    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-    .analyze()
-  expect(
-    violations.map((v) => `${v.id}: ${v.help}`),
-    'axe found accessibility violations',
-  ).toEqual([])
-}
+//
+// B-184 (T2). `assertNoAxeViolations` moved to `e2e/a11y-helpers.ts` — it now
+// also asserts the `incomplete` checks this file never had, the same fix
+// applied to the seven other spec files that had their own ad hoc version.
 
 test('the payment step itemises before it charges and discloses autopay', async ({ page }) => {
   await page.goto('/storage/tx/houston/demo-e2e')
@@ -1603,6 +1594,7 @@ test('the lead form announces and keeps focus when it succeeds', async ({ page }
   await expect(status).toBeFocused()
 })
 
+// a11y-state: /storage/tx/austin/demo-austin-south | waitlist form refused
 test('the waitlist form announces and takes focus when it REFUSES', async ({ page }) => {
   // B-171. The other half of B-148, and the half that mattered more: the region
   // was written into on success only, so a refusal left it EMPTY while focus
@@ -1638,15 +1630,10 @@ test('the waitlist form announces and takes focus when it REFUSES', async ({ pag
   // field itself (3.3.1) rather than only floating above it.
   await expect(card.getByLabel('Your email')).toHaveAttribute('aria-invalid', 'true')
 
-  const { violations } = await new AxeBuilder({ page })
-    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-    .analyze()
-  expect(
-    violations.map((v) => `${v.id}: ${v.help}`),
-    'axe found accessibility violations on the refused state',
-  ).toEqual([])
+  await assertNoAxeViolations(page, 'axe found accessibility violations on the refused state')
 })
 
+// a11y-state: /storage/tx/austin/demo-austin-south | lead form refused
 test('the lead form announces and takes focus when it REFUSES', async ({ page }) => {
   // B-171, same defect and same fix on the other public form. Refused before
   // any `Lead` row is written, so it neither grows the table nor walks toward
@@ -1666,13 +1653,7 @@ test('the lead form announces and takes focus when it REFUSES', async ({ page })
   await expect(status).toBeFocused()
   await expect(form.getByLabel('Email', { exact: true })).toHaveAttribute('aria-invalid', 'true')
 
-  const { violations } = await new AxeBuilder({ page })
-    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-    .analyze()
-  expect(
-    violations.map((v) => `${v.id}: ${v.help}`),
-    'axe found accessibility violations on the refused state',
-  ).toEqual([])
+  await assertNoAxeViolations(page, 'axe found accessibility violations on the refused state')
 })
 
 test('a waitlist cancel link that is not ours says so without failing', async ({ page }) => {

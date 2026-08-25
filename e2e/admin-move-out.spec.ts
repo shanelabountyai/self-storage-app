@@ -1,6 +1,6 @@
-import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from '@playwright/test'
 import { signInAsDemoOwner } from './sign-in'
+import { assertNoAxeViolations } from './a11y-helpers'
 
 // PRD 02 US-14 (move-out) (B-040). The settlement is previewed before it
 // posts, and the unit never goes straight back on sale.
@@ -22,14 +22,7 @@ test.describe('signed in as the demo owner', () => {
       await page.goto(route)
       await expect(page.getByRole('main')).toBeVisible()
 
-      const { violations } = await new AxeBuilder({ page })
-        .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-        .analyze()
-
-      expect(
-        violations.map((v) => `${v.id}: ${v.help}`),
-        'axe found accessibility violations',
-      ).toEqual([])
+      await assertNoAxeViolations(page)
     })
   }
 
@@ -55,14 +48,7 @@ test.describe('signed in as the demo owner', () => {
     await page.getByRole('link', { name: 'Move out' }).first().click()
     await expect(page.getByRole('main')).toBeVisible()
 
-    const { violations } = await new AxeBuilder({ page })
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-      .analyze()
-
-    expect(
-      violations.map((v) => `${v.id}: ${v.help}`),
-      'axe found accessibility violations',
-    ).toEqual([])
+    await assertNoAxeViolations(page)
   })
 
   // B-173. The defect this replaces: the picker sat in a separate GET form, the
@@ -73,6 +59,7 @@ test.describe('signed in as the demo owner', () => {
   // under test is the REFUSAL — Dana's lease is not closed, nothing is written,
   // and the assertion holds on a re-run for the same reason it holds the first
   // time.
+  // a11y-state: /admin/tenants/[tenantId]/move-out | stale-preview refusal
   test('a date changed since the preview refuses rather than committing either one', async ({
     page,
   }) => {
@@ -96,6 +83,12 @@ test.describe('signed in as the demo owner', () => {
     await expect(alert).toBeFocused()
     // Nothing posted: still on the move-out screen, not the profile.
     await expect(page).toHaveURL(/\/move-out\?lease=/)
+
+    // B-184 (T1). The one stale-preview refusal that IS on an admin screen —
+    // its portal siblings are STATE_EXCEPTIONS because the requesting form no
+    // longer lets a visitor reach them; this one is reached the ordinary way
+    // (type, don't recalculate, submit), so there is no excuse not to scan it.
+    await assertNoAxeViolations(page)
   })
 
   test('recalculating for a different date re-runs the settlement server-side', async ({ page }) => {

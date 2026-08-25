@@ -1,5 +1,5 @@
-import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from '@playwright/test'
+import { assertNoAxeViolations } from './a11y-helpers'
 
 // PRD 05 CN-4 (B-051). The pay link's boundaries, from the outside.
 //
@@ -41,12 +41,5 @@ test('the login it lands on has no WCAG 2.1 AA violations', async ({ page }) => 
   await page.goto('/pay/not-a-real-token-at-all')
   await expect(page.getByRole('main')).toBeVisible()
 
-  const { violations } = await new AxeBuilder({ page })
-    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-    .analyze()
-
-  expect(
-    violations.map((v) => `${v.id}: ${v.help}`),
-    'axe found accessibility violations',
-  ).toEqual([])
+  await assertNoAxeViolations(page)
 })

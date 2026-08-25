@@ -1,6 +1,6 @@
-import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from '@playwright/test'
 import { signInAsDemoTenant } from './sign-in'
+import { assertNoAxeViolations } from './a11y-helpers'
 
 // PRD 01 §9 / US-14 (B-090 part 2). Pick a unit → pick a date → see what the
 // swap settles to → ask. Nothing here commits a transfer: that stays B-077's,
@@ -37,14 +37,7 @@ test.describe('signed in as the demo tenant', () => {
     await page.goto('/portal/transfer')
     await expect(page.getByRole('main')).toBeVisible()
 
-    const { violations } = await new AxeBuilder({ page })
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-      .analyze()
-
-    expect(
-      violations.map((v) => `${v.id}: ${v.help}`),
-      'axe found accessibility violations',
-    ).toEqual([])
+    await assertNoAxeViolations(page)
   })
 
   test('offers other units priced against what the tenant pays now', async ({ page }) => {
@@ -72,6 +65,36 @@ test.describe('signed in as the demo tenant', () => {
     // wizard posts from rather than from arithmetic in the browser.
     await expect(page.getByText(/New monthly rent for Unit/)).toBeVisible()
     await expect(page.getByRole('button', { name: /^Request Unit / })).toBeVisible()
+  })
+
+  // B-184 (T1). B-173's `stalePreview` guard, reachable the ordinary way: this
+  // page has an explicit "Show me what it costs" GET button beside the
+  // picker, so pricing a unit, then changing the date without pricing again,
+  // then pressing "Request Unit …" directly is not a contrived path. Safe
+  // against B-120's rule the same way the header comment says the rest of
+  // this file is: `stalePreview` returns before `requestTransfer` is ever
+  // called, so nothing here holds a unit or raises a task.
+  // a11y-state: /portal/transfer | stale-preview refusal
+  test('a date changed since pricing refuses rather than requesting either one', async ({ page }) => {
+    await page.goto('/portal/transfer')
+    await page.getByRole('radio').first().check()
+    await page.getByRole('button', { name: 'Show me what it costs' }).click()
+    await expect(page.getByRole('button', { name: /^Request Unit / })).toBeVisible()
+
+    const dateField = page.getByLabel('When would you like to move?')
+    const original = await dateField.inputValue()
+    const changed = new Date(`${original}T00:00:00.000Z`)
+    changed.setUTCDate(changed.getUTCDate() + 1)
+    await dateField.fill(changed.toISOString().slice(0, 10))
+
+    await page.getByRole('button', { name: /^Request Unit / }).click()
+
+    const alert = page.getByRole('main').getByRole('alert')
+    await expect(alert).toContainText('You changed the date')
+    await expect(alert).toBeFocused()
+    await expect(page).toHaveURL(/\/transfer(\?|$)/)
+
+    await assertNoAxeViolations(page)
   })
 
   test('the accessible name of the picker survives text zoom to 200%', async ({ page }) => {

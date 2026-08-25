@@ -1,6 +1,6 @@
-import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from '@playwright/test'
 import { signInAsDemoOwner } from './sign-in'
+import { assertNoAxeViolations } from './a11y-helpers'
 
 // PRD 02 §4.3 US-14 (B-077). B-156 / PRD 02 §5.5 FR-25(2): this route was in
 // `SCAN_EXCEPTIONS` claiming it "needs a live tenant and an available unit" —
@@ -23,16 +23,10 @@ test.describe('signed in as the demo owner', () => {
     await expect(page).toHaveURL(/\/transfer\?lease=/)
     await expect(page.getByRole('main')).toBeVisible()
 
-    const { violations } = await new AxeBuilder({ page })
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-      .analyze()
-
-    expect(
-      violations.map((v) => `${v.id}: ${v.help}`),
-      'axe found accessibility violations',
-    ).toEqual([])
+    await assertNoAxeViolations(page)
   })
 
+  // a11y-state: /admin/tenants/[tenantId]/transfer | settlement recalculated
   test('picking a unit and recalculating scans the priced settlement too', async ({ page }) => {
     await page.goto('/admin/tenants?q=dana@demo.example.com')
     await page.getByRole('link', { name: 'Dana Delinquent' }).click()
@@ -54,13 +48,6 @@ test.describe('signed in as the demo owner', () => {
     // round-tripped rather than silently doing nothing.
     await expect(page.getByRole('heading', { level: 2 }).or(page.getByRole('alert'))).toBeVisible()
 
-    const { violations } = await new AxeBuilder({ page })
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-      .analyze()
-
-    expect(
-      violations.map((v) => `${v.id}: ${v.help}`),
-      'axe found accessibility violations',
-    ).toEqual([])
+    await assertNoAxeViolations(page)
   })
 })

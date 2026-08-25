@@ -1,6 +1,6 @@
 import { ProsePage, Section, metadataFor } from '@/components/site/prose-page'
 import { SITE } from '@/lib/site-config'
-import { customerFacingExceptions } from '@/lib/a11y/scan-coverage'
+import { customerFacingExceptions, customerFacingStateExceptions } from '@/lib/a11y/scan-coverage'
 
 export const metadata = metadataFor(
   'Accessibility',
@@ -461,6 +461,33 @@ const LAST_REVIEWED = '19 August 2026'
 // be inferred from a green scan. No public route added, so the generated
 // coverage claim and the route-keyed exception list are untouched.
 // `LAST_REVIEWED` is not bumped.
+//
+// Corrected 2026-08-25 by B-184, closing two of the four B-159 findings above
+// that said "B-184 makes this true" rather than building it in the same row.
+//
+// (3) The route-keyed exception list could never hold a STATE, and the page
+// said so without saying what the states were — "not all covered" named a
+// SHAPE of gap, not the gap. `SCANNED_STATES` / `STATE_EXCEPTIONS` in
+// `lib/a11y/scan-coverage.ts` are the same contract one level down: a state a
+// spec actually scans, tied to a `// a11y-state:` comment a unit test checks
+// is still true, or a state genuinely blocked with a stated reason. The
+// paragraph below now renders the second list instead of asserting a shape of
+// gap exists. Not exhaustive — a route can have a state nobody has named yet,
+// which is a real gap this pair does not close — but a name given IS checked,
+// the same promise the route list already kept.
+//
+// (4) "Those undecided checks are collected but not yet enforced" inside your
+// account and in checkout was true when written and is not any more:
+// `assertNoAxeViolations` in `e2e/a11y-helpers.ts` is now the one function
+// every axe scan in the suite calls, and it checks `incomplete` the same way
+// everywhere rather than only in the public route loop that originated it.
+// Eight spec files were destructuring `violations` on their own and asserting
+// nothing about `incomplete` — the exact thing this sentence disclaimed, but
+// stated as scoped rather than named as a gap. The carve-out is deleted
+// rather than narrowed further, because there is nothing left for it to name.
+//
+// `LAST_REVIEWED` is not bumped: these two corrections were checked against
+// the code that closes them, not the "Where we fall short" list below.
 export default function AccessibilityPage() {
   return (
     <ProsePage
@@ -513,10 +540,9 @@ export default function AccessibilityPage() {
           Automated accessibility tests run at both phone and desktop widths on every
           push to our main branch, and on every pull request that is open for review.
           They are not a release gate: a failing run tells us, it does not stop the
-          deploy. On the public pages they also fail on checks the tool could not decide,
-          so &ldquo;we did not test that&rdquo; cannot quietly read as &ldquo;that
-          passed&rdquo; — inside your account and in checkout those undecided checks are
-          collected but not yet enforced.
+          deploy. They also fail on checks the tool could not decide, everywhere they
+          run, so &ldquo;we did not test that&rdquo; cannot quietly read as &ldquo;that
+          passed&rdquo;.
         </p>
         <p>
           They do not yet cover everything. These are the pages outside that run, and the
@@ -533,9 +559,19 @@ export default function AccessibilityPage() {
           appears here rather than quietly disappearing from both.
         </p>
         <p>
-          It names pages. Some screens have states — an error message, a hold that has
-          expired, a size that sold out while you were deciding — that only appear once
-          you have done something, and those are not all covered.
+          That list names pages. Some screens also have states — an error message, a
+          hold that has expired, a size that sold out while you were deciding — that only
+          appear once you have done something on them. These are the ones we know are not
+          covered, and why:
+        </p>
+        <ul className="list-disc space-y-1 pl-5">
+          {customerFacingStateExceptions().map((exception) => (
+            <li key={`${exception.route}-${exception.state}`}>{exception.reason}</li>
+          ))}
+        </ul>
+        <p>
+          More states than these probably exist that we have not found and named yet —
+          unlike the page list above, this one cannot claim to be complete.
         </p>
         <p>
           Automated testing is a floor, not a ceiling — it catches roughly a third of real

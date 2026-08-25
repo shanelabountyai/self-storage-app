@@ -1,8 +1,7 @@
-import AxeBuilder from '@axe-core/playwright'
 import { PORTAL_SCAN_ROUTES as PORTAL_ROUTES } from '../apps/web/lib/a11y/scan-coverage'
 import { expect, test } from '@playwright/test'
 import { signInAsDemoTenant } from './sign-in'
-import { expectAnnounced, expectPreexisting } from './a11y-helpers'
+import { assertNoAxeViolations, expectAnnounced, expectPreexisting } from './a11y-helpers'
 
 // PRD 01 §4.7 US-701/US-702, §6.8.1. Mirrors e2e/admin.spec.ts's split: an
 // unauthenticated gating check, then a real session against the demo tenant
@@ -34,14 +33,7 @@ test.describe('signed in as the demo tenant', () => {
       await page.goto(route)
       await expect(page.getByRole('main')).toBeVisible()
 
-      const { violations } = await new AxeBuilder({ page })
-        .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-        .analyze()
-
-      expect(
-        violations.map((v) => `${v.id}: ${v.help}`),
-        'axe found accessibility violations',
-      ).toEqual([])
+      await assertNoAxeViolations(page)
     })
   }
 
@@ -122,14 +114,7 @@ test.describe('signed in as the demo tenant', () => {
     await page.getByRole('link', { name: /pay \$.* now/i }).first().click()
     await expect(page.getByRole('main')).toBeVisible()
 
-    const { violations } = await new AxeBuilder({ page })
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-      .analyze()
-
-    expect(
-      violations.map((v) => `${v.id}: ${v.help}`),
-      'axe found accessibility violations',
-    ).toEqual([])
+    await assertNoAxeViolations(page)
   })
 
   test('an over-payment is refused server-side and falls back to the balance', async ({ page }) => {
@@ -160,14 +145,7 @@ test.describe('signed in as the demo tenant', () => {
     await expect(page.getByRole('heading', { name: 'Automatic payments' })).toBeVisible()
     await expect(page.getByText(/day 1 of each month/i).first()).toBeVisible()
 
-    const { violations } = await new AxeBuilder({ page })
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-      .analyze()
-
-    expect(
-      violations.map((v) => `${v.id}: ${v.help}`),
-      'axe found accessibility violations',
-    ).toEqual([])
+    await assertNoAxeViolations(page)
   })
 
   test('autopay cannot be turned on with no card to charge', async ({ page }) => {

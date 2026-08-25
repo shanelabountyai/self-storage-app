@@ -1,6 +1,6 @@
-import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from '@playwright/test'
 import { signInAsDemoOwner } from './sign-in'
+import { assertNoAxeViolations, expectAnnounced, expectPreexisting } from './a11y-helpers'
 
 // PRD 02 §4.9 US-41 (B-095). "My day": the shared task queue every future
 // admin queue (delinquency, field ops, failed payments) will read and write
@@ -22,14 +22,7 @@ test.describe('signed in as the demo owner', () => {
     await page.goto('/admin/tasks')
     await expect(page.getByRole('main')).toBeVisible()
 
-    const { violations } = await new AxeBuilder({ page })
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-      .analyze()
-
-    expect(
-      violations.map((v) => `${v.id}: ${v.help}`),
-      'axe found accessibility violations',
-    ).toEqual([])
+    await assertNoAxeViolations(page)
   })
 
   test('flagging returned mail creates a task, and completing it clears the list', async ({ page }, testInfo) => {
@@ -105,6 +98,13 @@ test.describe('signed in as the demo owner', () => {
     // where a task card is guaranteed to exist.
     await expect(card.getByLabel('Note')).toBeVisible()
 
+    // B-184 (T4). Captured and checked BEFORE the submit, the same discipline
+    // `expectPreexisting` applies everywhere else — this is the page-level
+    // `AnnounceRegion` B-170 built, above the list, which is what survives the
+    // `<li>` the completion removes.
+    const region = page.locator('p[role="status"][tabindex="-1"]')
+    await expectPreexisting(region)
+
     await card.getByPlaceholder('What did you do?').fill('Confirmed a current address on file.')
     await card.getByRole('button', { name: 'Complete' }).click()
 
@@ -113,16 +113,13 @@ test.describe('signed in as the demo owner', () => {
     // string is still on the page — in the announcement, which is the point.
     await expect(card).toHaveCount(0)
 
-    // B-170. The outcome has to survive the card it reports on. This message
-    // used to be written into a `role="status"` INSIDE the `<li>` that the
-    // completion removes, in the same commit — so it was never an observable
-    // mutation and nothing was announced, and focus, which was on the submit
-    // inside that `<li>`, fell to `<body>`. Both halves asserted here, on the
-    // one completion this suite can safely drive against shared demo data.
-    await expect(
-      page.getByRole('status').filter({ hasText: 'Task completed' }),
-    ).toContainText('Returned mail')
-    await expect(page.locator('body')).not.toBeFocused()
+    // B-170. The outcome has to survive the card it reports on, and the focus
+    // has to follow it there rather than fall to `<body>` — this message used
+    // to be written into a `role="status"` INSIDE the `<li>` that the
+    // completion removes, in the same commit, so it was never an observable
+    // mutation and nothing was announced. B-184 (T4) is the one line that
+    // would have caught that: the region isn't just present, it took focus.
+    await expectAnnounced(region, /Task completed.*Returned mail/s, { focused: true })
   })
 
   // B-170. All four queues share `TaskCompleteForm`, and all four had the same
@@ -151,6 +148,7 @@ test.describe('signed in as the demo owner', () => {
   // re-rendered identically, and the task stayed open with no explanation —
   // indistinguishable from a broken control. This is safe to run against any
   // open task and any number of times: a refused submission changes nothing.
+  // a11y-state: /admin/tasks | completion refused
   test('a refused completion says why, rather than re-rendering identically', async ({ page }) => {
     await page.goto('/admin/tasks')
     const cards = page.locator('li').filter({ has: page.getByRole('button', { name: /^Complete/ }) })
@@ -167,7 +165,10 @@ test.describe('signed in as the demo owner', () => {
     await card.getByPlaceholder('What did you do?').fill('   ')
     await card.getByRole('button', { name: /^Complete/ }).click()
 
-    const alert = page.getByRole('alert')
+    // Scoped to <main>: Next ships its own empty role="alert" route announcer
+    // in the document, and an unscoped query matches that instead once it has
+    // mounted (admin.spec.ts's settings test hit the same thing first).
+    const alert = page.getByRole('main').getByRole('alert')
     await expect(alert).toBeVisible()
     await expect(alert).toContainText(/note is required/i)
     // The summary receives focus (PRD 02 FR-19) rather than leaving the user
@@ -176,5 +177,10 @@ test.describe('signed in as the demo owner', () => {
 
     // The task is still open — nothing was silently completed.
     await expect(page.getByText(subject)).toBeVisible()
+
+    // B-184 (T3). FR-24 in as many words: no axe scan ran after an invalid
+    // submit on any admin or portal form, `AdminForm`'s error summary
+    // included, until this row.
+    await assertNoAxeViolations(page)
   })
 })
