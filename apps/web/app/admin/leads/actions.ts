@@ -60,20 +60,28 @@ export async function joinWaitlistForLeadAction(_prev: FormState, formData: Form
   const actor = await requireStaffActor()
   const leadId = String(formData.get('leadId') ?? '')
 
-  const result = await joinWaitlistForLead(
-    actor,
-    leadId,
-    String(formData.get('unitTypeId') ?? ''),
-    String(formData.get('email') ?? ''),
-  )
+  // B-180. The size is the SUBMITTER's value — one email field above the quote
+  // table, one button per full size — so pressing Enter in the email box
+  // submits with no size at all. Refused by name rather than passed on as an
+  // empty id, which `joinWaitlist` would report as "that unit is no longer
+  // listed" and send a staffer looking for a delisted size.
+  const unitTypeId = String(formData.get('unitTypeId') ?? '')
+  if (!unitTypeId) {
+    return fieldError({ unitTypeId: 'Press "Join waitlist" on the row for the size they want.' })
+  }
+
+  const result = await joinWaitlistForLead(actor, leadId, unitTypeId, String(formData.get('email') ?? ''))
   if (!result.ok) return fieldError({ email: result.problem })
 
   revalidatePath(`/admin/leads/${leadId}`)
   revalidatePath('/admin/leads')
+  // Names the size and the address it recorded. D-87: the notification is a
+  // race, so the sentence says what a waitlist is rather than letting "added"
+  // read as a unit set aside.
   return success(
     result.alreadyOn
-      ? 'Already on the waitlist for that size.'
-      : "On the waitlist. We'll email as soon as one is free.",
+      ? `${result.email} is already on the waitlist for the ${result.unitTypeName}.`
+      : `Added to the waitlist for the ${result.unitTypeName}. We'll email ${result.email} as soon as one is free — it is not a hold, and the first to complete a rental gets it.`,
   )
 }
 

@@ -25,6 +25,12 @@ type AdminFormProps = {
   className?: string
   /// Names the form for screen readers, and heads the error summary.
   label: string
+  /// B-180. Lets submit buttons OUTSIDE the form drive it, via the native
+  /// `form=` owner attribute — one email field above a table whose every row
+  /// has its own "Join waitlist" button carrying that row's id. React's
+  /// `createFormDataWithSubmitter` copies the submitter's name/value into the
+  /// submission only when the form has an id, so this is not optional dressing.
+  id?: string
   /// B-108. How to render `state.details` on success. The default is a plain
   /// list; `recovery-codes` is the one case where the list is a credential the
   /// user has to keep, and it gets copy/download/print and an
@@ -45,6 +51,7 @@ export function AdminForm({
   children,
   className,
   label,
+  id,
   detailsAs = 'list',
   announceOutside = false,
 }: AdminFormProps) {
@@ -128,7 +135,7 @@ export function AdminForm({
 
   return (
     <FormStateContext.Provider value={state}>
-      <form ref={formRef} action={formAction} className={className} aria-label={label}>
+      <form ref={formRef} id={id} action={formAction} className={className} aria-label={label}>
         {/* Rendered unconditionally and empty, then written into. A live region
             inserted into the DOM already populated is unreliably announced by
             VoiceOver and routinely missed by NVDA — the region has to pre-exist

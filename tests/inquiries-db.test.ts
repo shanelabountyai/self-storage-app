@@ -272,6 +272,14 @@ describeDb('inquiry capture', () => {
       const result = await joinWaitlistForLead(actor(), created.leadId, unitTypeId, email)
       expect(result).toMatchObject({ ok: true, alreadyOn: false })
 
+      // B-180. The size and the address the confirmation names come from what
+      // was RECORDED, not from what was typed — the success sentence on the
+      // lead screen is built out of these two.
+      const unitType = await prisma.unitType.findUniqueOrThrow({ where: { id: unitTypeId } })
+      if (!result.ok) throw new Error('unreachable')
+      expect(result.unitTypeName).toBe(unitType.name)
+      expect(result.email).toBe(email)
+
       const entry = await prisma.waitlistEntry.findFirstOrThrow({ where: { unitTypeId, email } })
       expect(entry.phone).toBe('512-555-0177')
     })

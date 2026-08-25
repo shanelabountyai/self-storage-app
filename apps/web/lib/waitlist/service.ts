@@ -31,7 +31,10 @@ function isUniqueConstraintError(error: unknown): boolean {
 }
 
 export type JoinResult =
-  | { ok: true; alreadyOn: boolean }
+  /// B-180. `unitTypeName` and the NORMALISED `email` come back so a caller can
+  /// confirm what it actually recorded — the size and the address the mail will
+  /// go to — rather than echoing whatever was typed into the box.
+  | { ok: true; alreadyOn: boolean; unitTypeName: string; email: string }
   | { ok: false; problem: string }
 
 /// Adds somebody to the list for one unit type.
@@ -59,7 +62,7 @@ export async function joinWaitlist(input: {
   // get names a facility they never asked about.
   const unitType = await prisma.unitType.findFirst({
     where: { id: input.unitTypeId, facilityId: input.facilityId, facility: { status: 'active' } },
-    select: { id: true },
+    select: { id: true, name: true },
   })
   if (!unitType) return { ok: false, problem: 'That unit is no longer listed.' }
 
@@ -77,13 +80,15 @@ export async function joinWaitlist(input: {
         cancelToken: randomBytes(32).toString('base64url'),
       },
     })
-    return { ok: true, alreadyOn: false }
+    return { ok: true, alreadyOn: false, unitTypeName: unitType.name, email }
   } catch (error) {
     // `waitlist_one_live_entry_per_email_per_type`. The read-then-write race
     // this catches is a double-submitted form, which is common enough that the
     // constraint is the real guard and there is deliberately no findFirst
     // fast path above it.
-    if (isUniqueConstraintError(error)) return { ok: true, alreadyOn: true }
+    if (isUniqueConstraintError(error)) {
+      return { ok: true, alreadyOn: true, unitTypeName: unitType.name, email }
+    }
     throw error
   }
 }

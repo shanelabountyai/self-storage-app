@@ -11,6 +11,9 @@ import { holdForLeadAction, joinWaitlistForLeadAction, setLeadStatusAction } fro
 
 export const metadata = { title: 'Inquiry' }
 
+/// The form owner for every "Join waitlist" button in the quote table (B-180).
+const WAITLIST_FORM_ID = 'lead-waitlist'
+
 // PRD 02 US-43 (B-097). The quote and the hold, on the screen the capture form
 // lands on — "one click to quote... and one click to place a free hold".
 //
@@ -95,6 +98,34 @@ export default async function LeadPage({ params }: { params: Promise<{ leadId: s
             ? 'First-period prices below include the promotion the website is currently advertising, so this screen and the website agree.'
             : 'No promotion is running at this facility right now, so nothing here is discounted. If one is running off-system, say so on the call — this screen only knows about promotions set up in Settings.'}
         </p>
+        {/* B-180. ONE email field for every size, above the table, with a real
+            visible label. It used to be a field per row labelled by nothing but
+            a placeholder — which disappears the moment anything is typed, is
+            unavailable to speech input, and asked a caller who wanted a 10x10
+            and a 10x20 for the same address twice. The buttons that submit it
+            live in the rows (native `form=` owner attribute), so the size is
+            still one press from where the staffer is reading. */}
+        {quote.lines.some((line) => line.availableCount === 0) && (
+          <AdminForm
+            id={WAITLIST_FORM_ID}
+            action={joinWaitlistForLeadAction}
+            label="Join a waitlist"
+            className="border-input grid gap-1 rounded-md border p-3 sm:max-w-sm"
+          >
+            <input type="hidden" name="leadId" value={leadId} />
+            <Field
+              name="email"
+              label="Email for waitlist alerts"
+              type="email"
+              required
+              autoComplete="email"
+              defaultValue={row.email ?? ''}
+              hint="Typed once. Press Join waitlist on any size with none free."
+              className="flex flex-col gap-1 text-sm"
+            />
+          </AdminForm>
+        )}
+
         <div tabIndex={0} className="overflow-x-auto">
           <table className="w-full min-w-2xl border-collapse text-sm">
             <caption className="sr-only">Sizes, prices and what today would cost</caption>
@@ -148,26 +179,22 @@ export default async function LeadPage({ params }: { params: Promise<{ leadId: s
                       // used to capture nothing — notify-me only existed on the
                       // public facility page. Not gated on `held`: a caller can
                       // hold one size and still wait for a better one.
-                      <AdminForm
-                        action={joinWaitlistForLeadAction}
-                        label={`Join the waitlist for a ${line.name}`}
-                        className="flex flex-wrap items-end gap-2"
+                      //
+                      // B-180: the submitter for the one form above the table.
+                      // `name`/`value` carry this row's size; the accessible
+                      // name adds it too, so a control-by-control reader gets
+                      // more than the fifth "Join waitlist" on the page (2.5.3
+                      // holds — the visible text is contained in it).
+                      <Button
+                        type="submit"
+                        variant="outline"
+                        form={WAITLIST_FORM_ID}
+                        name="unitTypeId"
+                        value={line.unitTypeId}
+                        aria-label={`Join waitlist for a ${line.name}`}
                       >
-                        <input type="hidden" name="leadId" value={leadId} />
-                        <input type="hidden" name="unitTypeId" value={line.unitTypeId} />
-                        <Field
-                          name="email"
-                          label={<span className="sr-only">Email for the waitlist</span>}
-                          type="email"
-                          required
-                          defaultValue={row.email ?? ''}
-                          placeholder="Email"
-                          className="flex flex-col gap-1 text-sm"
-                        />
-                        <Button type="submit" variant="outline">
-                          Join waitlist
-                        </Button>
-                      </AdminForm>
+                        Join waitlist
+                      </Button>
                     )}
                   </td>
                 </tr>

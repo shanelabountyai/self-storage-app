@@ -133,13 +133,13 @@ describeDb('joining a waitlist', () => {
 
   it('treats a double submit as already-on rather than a second entry', async () => {
     const email = `ada-${suffix}@example.com`
-    expect(await join(email)).toEqual({ ok: true, alreadyOn: false })
+    expect(await join(email)).toMatchObject({ ok: true, alreadyOn: false })
     // The partial unique index is the real guard — the service has no
     // read-then-write fast path in front of it, precisely so this is the code
     // path a double-clicked form takes.
-    expect(await join(email)).toEqual({ ok: true, alreadyOn: true })
+    expect(await join(email)).toMatchObject({ ok: true, alreadyOn: true })
     // And the same address spelled differently is the same person.
-    expect(await join(`ADA-${suffix}@Example.com`)).toEqual({ ok: true, alreadyOn: true })
+    expect(await join(`ADA-${suffix}@Example.com`)).toMatchObject({ ok: true, alreadyOn: true, email })
 
     expect(
       await prisma.waitlistEntry.count({ where: { unitTypeId: state.unitTypeId, email } }),
@@ -149,7 +149,7 @@ describeDb('joining a waitlist', () => {
   it('lets the same person wait for two different sizes', async () => {
     const email = `two-sizes-${suffix}@example.com`
     expect((await join(email, state.unitTypeId)).ok).toBe(true)
-    expect(await join(email, state.otherTypeId)).toEqual({ ok: true, alreadyOn: false })
+    expect(await join(email, state.otherTypeId)).toMatchObject({ ok: true, alreadyOn: false })
   })
 })
 
