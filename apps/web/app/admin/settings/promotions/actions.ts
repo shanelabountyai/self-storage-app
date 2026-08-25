@@ -14,6 +14,8 @@ import {
   createPromotion,
   setPromotionStatus,
 } from "@/lib/admin/promotions";
+import { prisma } from "@storage/db";
+import { minStayEnforcementSummary } from "@storage/core/promotions";
 
 // PRD 02 US-10 / PRD 04 FR-PROMO-1/2 (B-070). Every gate lives in
 // lib/admin/promotions.ts; these turn a refusal into a sentence.
@@ -85,6 +87,40 @@ export async function createPromotionAction(
       maxRedemptions:
         "A whole number of redemptions, or leave it empty for no cap.",
     });
+  }
+
+  // B-176. 3.3.4 Error Prevention. A minimum stay at a facility whose
+  // `promoRecapturePolicy` is `none` is a term nothing enforces: the lease
+  // states it (B-175 keeps that sentence silent on consequence for exactly this
+  // reason) and no money is ever recovered. A promotion cannot be edited after
+  // it is created, so the operator finds out at the first early move-out that
+  // gives a discount away — a year of them, at a six-month minimum.
+  const promoName = String(formData.get("name") ?? "").trim();
+  // A nameless promotion is refused by `createPromotion` anyway, and echoing
+  // "(unnamed)" back is a confirmation of nothing — let that refusal go first.
+  if (promoName && minStay.value > 0 && formData.get("confirmed") !== "yes") {
+    const { promoRecapturePolicy } = await prisma.facility.findUniqueOrThrow({
+      where: { id: facilityId },
+      select: { promoRecapturePolicy: true },
+    });
+    if (promoRecapturePolicy === "none") {
+      return {
+        status: "confirm",
+        message:
+          "This minimum stay will not be enforced, and a promotion cannot be edited once created.",
+        echo: [
+          { label: "Promotion", value: promoName },
+          {
+            label: "Minimum stay",
+            value: `${minStay.value} ${minStay.value === 1 ? "month" : "months"}`,
+          },
+          {
+            label: "If they leave inside it",
+            value: `${minStayEnforcementSummary("none")} Change that under Settings → “If a tenant leaves inside a promotion’s minimum stay”.`,
+          },
+        ],
+      };
+    }
   }
 
   const result = await createPromotion(actor, facilityId, {

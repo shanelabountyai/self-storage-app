@@ -239,7 +239,9 @@ export function Field({
   /// A node rather than a string, because a checkbox or radio label is often a
   /// sentence with emphasis in it — a consent disclosure, a plan and its price.
   label: React.ReactNode
-  hint?: string
+  /// A node for the same reason `label` is: a hint whose whole job is to point
+  /// at the setting it depends on has to be able to carry the link there.
+  hint?: React.ReactNode
   className?: string
   as?: 'input' | 'select' | 'checkbox' | 'radio'
   children?: React.ReactNode

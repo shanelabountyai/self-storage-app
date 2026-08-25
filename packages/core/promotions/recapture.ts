@@ -100,6 +100,23 @@ export function minStayTermSummary(
     : `${condition} If you leave before then, we will charge back the share of the discount covering the months you did not stay.`;
 }
 
+/// B-176. The same fact as `minStayTermSummary`, addressed to the OPERATOR
+/// setting a minimum stay rather than to the tenant signing under one.
+///
+/// Here for the same reason: the promotions screen sets `minStayMonths` and the
+/// facility settings screen sets the policy, on two screens neither of which
+/// mentioned the other — so an operator could run a six-month minimum for a
+/// year believing it enforced, and a promotion cannot be edited once created.
+/// One sentence, pinned by the same test to what `recaptureFor` actually does,
+/// is what stops the screen and the charge drifting apart a third time.
+export function minStayEnforcementSummary(policy: PromoRecapturePolicy): string {
+  if (policy === "none")
+    return "Nothing is recovered — the discount is theirs to keep, so a minimum stay here is a statement and not a charge.";
+  return policy === "full"
+    ? "The whole discount they were given is charged back."
+    : "The share of the discount covering the months they did not stay is charged back.";
+}
+
 /// The charge-back, under the facility's configured policy.
 export function recaptureFor(input: RecaptureInput): Recapture {
   const minStay = Math.max(0, Math.floor(input.minStayMonths));

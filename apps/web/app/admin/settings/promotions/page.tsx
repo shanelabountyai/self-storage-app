@@ -1,9 +1,12 @@
+import Link from "next/link";
+import { prisma } from "@storage/db";
 import { AdminForm, Field } from "@/components/admin/form";
 import { Button } from "@/components/ui/button";
 import { getSwitcherData } from "@/lib/admin/context";
 import { resolveSelectedFacility } from "@/lib/admin/facility-selection-logic";
 import { hasPermissionAnywhere } from "@/lib/rbac/authorize";
 import { promotionsFor } from "@/lib/admin/promotions";
+import { minStayEnforcementSummary } from "@storage/core/promotions";
 import { AnnounceRegion } from "@/components/admin/announce";
 import { formatCents } from "@/lib/format";
 import {
@@ -24,6 +27,21 @@ const STATUS_LABELS: Record<string, string> = {
   paused: "Paused — hidden, redemptions kept",
   ended: "Ended",
 };
+
+// B-176. One place decides both the visible text and the accessible name.
+// Three of these render per promotion, so a rotor listing the page's buttons
+// heard "Make live, Pause, End, Make live, Pause, End…" with nothing saying
+// which promotion (2.4.6). The `aria-label` on the wrapping AdminForm bought
+// nothing — no screen reader composes a form's label into its descendants'
+// names, which is the rule task-complete-form.tsx was created to state.
+function statusAction(
+  status: "active" | "paused" | "ended",
+  name: string,
+): { button: string; label: string } {
+  if (status === "active") return { button: "Make live", label: `Make ${name} live` };
+  if (status === "paused") return { button: "Pause", label: `Pause ${name}` };
+  return { button: "End", label: `End ${name}` };
+}
 
 function formatDate(value: Date | null): string {
   return value
@@ -55,7 +73,18 @@ export default async function PromotionsPage() {
   }
 
   const facilityId = selected.facility.id;
-  const promotions = await promotionsFor(actor, facilityId);
+  const [promotions, facility] = await Promise.all([
+    promotionsFor(actor, facilityId),
+    // B-176. A minimum stay is a condition; whether anything is recovered when
+    // it is broken is a setting on a different screen. An operator could run a
+    // six-month minimum for a year believing it enforced, because neither
+    // screen mentioned the other.
+    prisma.facility.findUniqueOrThrow({
+      where: { id: facilityId },
+      select: { promoRecapturePolicy: true },
+    }),
+  ]);
+  const recoversNothing = facility.promoRecapturePolicy === "none";
 
   return (
     <div className="flex max-w-4xl flex-col gap-8">
@@ -106,7 +135,9 @@ export default async function PromotionsPage() {
                 : "Shown automatically"}
               {promotion.newTenantOnly && " · new customers only"}
               {promotion.minStayMonths > 0 &&
-                ` · ${promotion.minStayMonths}-month minimum stay`}
+                ` · ${promotion.minStayMonths}-month minimum stay${
+                  recoversNothing ? " · not recovered on early move-out" : ""
+                }`}
               {` · ${formatDate(promotion.startsAt)} to ${formatDate(promotion.endsAt)}`}
             </p>
 
@@ -138,7 +169,7 @@ export default async function PromotionsPage() {
                   <AdminForm
                     key={status}
                     action={setStatusAction}
-                    label={`${status} ${promotion.name}`}
+                    label={statusAction(status, promotion.name).label}
                     // B-170. The row reporting the outcome is the row the
                     // outcome removes: changing the status filters this very
                     // form out of the list, so a region inside it is unmounted
@@ -157,12 +188,12 @@ export default async function PromotionsPage() {
                       value={promotion.id}
                     />
                     <input type="hidden" name="status" value={status} />
-                    <Button type="submit" variant="outline">
-                      {status === "active"
-                        ? "Make live"
-                        : status === "paused"
-                          ? "Pause"
-                          : "End"}
+                    <Button
+                      type="submit"
+                      variant="outline"
+                      aria-label={statusAction(status, promotion.name).label}
+                    >
+                      {statusAction(status, promotion.name).button}
                     </Button>
                   </AdminForm>
                 ))}
@@ -214,6 +245,14 @@ export default async function PromotionsPage() {
         className="border-input flex flex-col gap-3 rounded-lg border p-4"
       >
         <h2 className="font-medium">New promotion</h2>
+        {/* B-176. There is no edit — createPromotion, setPromotionStatus and
+            addPromoCode are the only writers, so everything below is fixed the
+            moment it is created. A form that does not say so reads as a draft
+            you can come back and correct. */}
+        <p className="text-muted-foreground max-w-prose text-sm text-pretty">
+          Nothing here can be changed after you create it — a promotion can only
+          be paused or ended. To alter any of it, create a new one.
+        </p>
         <input type="hidden" name="facilityId" value={facilityId} />
 
         <Field
@@ -262,7 +301,17 @@ export default async function PromotionsPage() {
           max={24}
           defaultValue="0"
           className="sm:w-64"
-          hint="Months the tenant must keep the unit to keep this offer. 0 for no minimum. It is stated on the lease and in checkout."
+          hint={
+            <>
+              Months the tenant must keep the unit to keep this offer. 0 for no
+              minimum. It is stated on the lease and in checkout. If they leave
+              inside it: {minStayEnforcementSummary(facility.promoRecapturePolicy)}{" "}
+              <Link href="/admin/settings" className="underline">
+                Change what an early move-out costs
+              </Link>
+              .
+            </>
+          }
         />
 
         <div className="grid gap-3 sm:grid-cols-3">

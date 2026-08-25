@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  minStayEnforcementSummary,
   minStayTermSummary,
   monthsServed,
   recaptureFor,
@@ -192,5 +193,38 @@ describe("minStayTermSummary", () => {
   it("says months, not month, only when it means it", () => {
     expect(minStayTermSummary("full", 1)).toContain("at least 1 month.");
     expect(minStayTermSummary("full", 2)).toContain("at least 2 months.");
+  });
+});
+
+describe("minStayEnforcementSummary", () => {
+  // B-176. The operator's half of the same sentence, on the screen that sets
+  // the minimum stay — pinned here rather than in the page because a promotion
+  // cannot be edited after creation, so a hint that overstates what a minimum
+  // stay does is not correctable by the person who believed it.
+  const input = { discountGivenCents: 30_000, minStayMonths: 6, monthsServed: 4 };
+
+  it("promises nothing under `none`, and charges nothing", () => {
+    expect(minStayEnforcementSummary("none")).toContain("Nothing is recovered");
+    expect(recaptureFor({ ...input, policy: "none" }).amountCents).toBe(0);
+  });
+
+  it("promises the whole discount under `full`, and charges exactly that", () => {
+    expect(minStayEnforcementSummary("full")).toContain("whole discount");
+    expect(recaptureFor({ ...input, policy: "full" }).amountCents).toBe(30_000);
+  });
+
+  it("promises only the unserved share under `prorated`, and charges less", () => {
+    expect(minStayEnforcementSummary("prorated")).toContain("months they did not stay");
+    const charged = recaptureFor({ ...input, policy: "prorated" }).amountCents;
+    expect(charged).toBe(10_000);
+    expect(charged).toBeLessThan(30_000);
+  });
+
+  it("never tells an operator a charge happens where none does", () => {
+    // The defect this row exists for, stated as an assertion: the `none`
+    // sentence is the only one that must not read as an enforcement.
+    expect(minStayEnforcementSummary("none")).not.toContain("charged back");
+    expect(minStayEnforcementSummary("full")).toContain("charged back");
+    expect(minStayEnforcementSummary("prorated")).toContain("charged back");
   });
 });
