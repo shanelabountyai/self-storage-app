@@ -12,6 +12,7 @@ import {
   addNoteAction,
   flagAddressReturnedAction,
   logDocumentAction,
+  setNoticeGivenAction,
   setNotePinnedAction,
   updateActiveDutyAction,
   updateAddressAction,
@@ -85,6 +86,12 @@ const FIELD_CLASS = "flex flex-col gap-1 text-sm";
 /// beside the rest of the page without the log becoming the page; the rest are
 /// one disclosure away, never dropped.
 const RECENT = 5;
+
+/// B-186. `<input type="date">` needs `YYYY-MM-DD`; `formatDate` below is for
+/// reading, not for a form control's `value`/`max`.
+function isoDate(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
 
 function formatDate(date: Date): string {
   return new Intl.DateTimeFormat("en-US", {
@@ -448,6 +455,9 @@ export default async function TenantProfilePage({
                   Started
                 </th>
                 <th scope="col" className="py-2 font-medium">
+                  Notice given
+                </th>
+                <th scope="col" className="py-2 font-medium">
                   <span className="sr-only">Actions</span>
                 </th>
               </tr>
@@ -470,6 +480,56 @@ export default async function TenantProfilePage({
                     {formatCents(lease.balanceCents)}
                   </td>
                   <td className="py-2">{formatDate(lease.startDate)}</td>
+                  <td className="py-2">
+                    {/* B-186. Off-platform notice, recorded rather than
+                        inferred. A walk-in who gave notice at the counter has
+                        no other way onto this field, and a blank date must
+                        stay blank until someone actually confirms one — never
+                        defaulted to today. */}
+                    {lease.status === "ended" ? (
+                      lease.noticeGivenAt ? (
+                        formatDate(lease.noticeGivenAt)
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )
+                    ) : (
+                      <form
+                        action={setNoticeGivenAction}
+                        className="flex items-center gap-1"
+                      >
+                        <input type="hidden" name="tenantId" value={tenantId} />
+                        <input
+                          type="hidden"
+                          name="leaseId"
+                          value={lease.leaseId}
+                        />
+                        <label
+                          className="sr-only"
+                          htmlFor={`noticeGivenAt-${lease.leaseId}`}
+                        >
+                          Notice given on, unit {lease.unitNumber}
+                        </label>
+                        <input
+                          id={`noticeGivenAt-${lease.leaseId}`}
+                          type="date"
+                          name="noticeGivenAt"
+                          max={isoDate(new Date())}
+                          defaultValue={
+                            lease.noticeGivenAt
+                              ? isoDate(lease.noticeGivenAt)
+                              : ""
+                          }
+                          className="border-input rounded-md border px-2 py-1 text-xs"
+                        />
+                        <button
+                          type="submit"
+                          className="text-xs underline underline-offset-2"
+                        >
+                          Save
+                        </button>
+                      </form>
+                    )}
+                  </td>
                   <td className="py-2">
                     {lease.status !== "ended" && (
                       <>

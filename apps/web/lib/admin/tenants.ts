@@ -174,6 +174,11 @@ export type TenantLeaseSummary = {
   balanceCents: number;
   startDate: Date;
   endDate: Date | null;
+  /// B-186. When the tenant told the facility they were leaving — off-platform
+  /// notice, recorded by staff. Null means nobody has recorded it, which is a
+  /// real, distinct state from "gave none": the move-out screen's shortfall
+  /// figure treats them the same until this is set.
+  noticeGivenAt: Date | null;
 };
 
 export type TenantNoteRow = {
@@ -347,6 +352,7 @@ export async function tenantProfile(
           monthlyRateCents: true,
           startDate: true,
           endDate: true,
+          noticeGivenAt: true,
           facility: { select: { name: true } },
           unit: { select: { number: true } },
         },
@@ -432,6 +438,7 @@ export async function tenantProfile(
     balanceCents: leaseBalances[index]._sum.amountCents ?? 0,
     startDate: lease.startDate,
     endDate: lease.endDate,
+    noticeGivenAt: lease.noticeGivenAt,
   }));
 
   const documents = await prisma.document.findMany({

@@ -39,6 +39,9 @@ export type MoveOutPreview = {
   balanceCents: number;
   settlement: MoveOutSettlement;
   noticeShortfallDays: number;
+  /// B-186. What the shortfall above was computed from — null means nobody
+  /// has recorded notice for this lease yet, not that none was given.
+  noticeGivenAt: Date | null;
   prorateOnMoveOut: boolean;
   writeOffThresholdCents: number;
   /// B-145. The promotional discount being charged back, and the sentence
@@ -221,6 +224,7 @@ export async function previewMoveOut(
       moveOutDate,
       lease.facility.moveOutNoticeDays,
     ),
+    noticeGivenAt: lease.noticeGivenAt,
     prorateOnMoveOut: lease.facility.prorateOnMoveOut,
     writeOffThresholdCents: lease.facility.writeOffThresholdCents,
     recapture,
@@ -601,6 +605,56 @@ async function revokeAccessIfLastLease(
     select: { id: true },
   });
   if (grant) await transitionGrant(grant.id, "revoked", "system:move_out");
+}
+
+export type RecordNoticeGivenResult =
+  | { ok: true }
+  | { ok: false; problem: "not_occupying" | "future_date" };
+
+/// B-186. Records notice given off-platform — at the counter, by phone, by
+/// mail. `Lease.noticeGivenAt` previously had exactly one writer, the
+/// tenant's own portal request, so every walk-in read as having given no
+/// notice at all and the move-out screen said so to staff as if it were a
+/// measurement. `noticeGivenAt: null` clears it back to unset rather than
+/// stamping "today" — a date nobody actually confirmed must stay
+/// distinguishable from one that was.
+export async function recordNoticeGiven(
+  actor: Actor,
+  leaseId: string,
+  noticeGivenAt: Date | null,
+): Promise<RecordNoticeGivenResult> {
+  const lease = await loadLeaseForMoveOut(actor, leaseId);
+  if (!can(actor, "leases:move_out", lease.facilityId)) {
+    throw new ForbiddenError(
+      "Missing permission leases:move_out",
+      "leases:move_out",
+      lease.facilityId,
+    );
+  }
+  if (lease.status === "ended") return { ok: false, problem: "not_occupying" };
+  if (noticeGivenAt && noticeGivenAt.getTime() > Date.now()) {
+    return { ok: false, problem: "future_date" };
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.lease.update({ where: { id: lease.id }, data: { noticeGivenAt } });
+    await recordAudit(
+      {
+        actor: toAuditActor(actor),
+        facilityId: lease.facilityId,
+        action: "lease.edited",
+        entityType: "Lease",
+        entityId: lease.id,
+        context: {
+          field: "noticeGivenAt",
+          value: noticeGivenAt ? noticeGivenAt.toISOString().slice(0, 10) : null,
+        },
+      },
+      tx,
+    );
+  });
+
+  return { ok: true };
 }
 
 /// US-14's "verified empty and clean" — the confirmation that makes a unit

@@ -22,6 +22,7 @@ import { returnPayment, waiveFeeFromForm } from "@/lib/billing/reversals";
 import { parseScaled } from "@/lib/admin/form-state";
 import { setExtendedHours } from "@/lib/access/time-windows";
 import { requirePermission } from "@/lib/rbac/authorize";
+import { recordNoticeGiven } from "@/lib/admin/move-out";
 
 // PRD 02 §4.4 US-13/US-16. Thin session wrappers; every real decision lives
 // in lib/admin/tenants.ts (and lib/portal/contact.ts underneath it), which
@@ -109,6 +110,25 @@ export async function flagAddressReturnedAction(
   const addressId = String(formData.get("addressId") ?? "");
 
   await flagTenantAddressReturned(actor, tenantId, addressId);
+  revalidateProfile(tenantId);
+}
+
+// B-186. Off-platform notice: staff record the date the tenant actually gave
+// notice (at the counter, by phone, by mail), so the move-out screen's
+// shortfall figure is computed from something a person confirmed rather than
+// silently reading every walk-in as having given none. Blank clears it back
+// to unset — a native `type="date"` field submits "" for empty, not a date.
+export async function setNoticeGivenAction(formData: FormData): Promise<void> {
+  const actor = await requireStaffActor();
+  const tenantId = String(formData.get("tenantId") ?? "");
+  const leaseId = String(formData.get("leaseId") ?? "");
+  const raw = String(formData.get("noticeGivenAt") ?? "").trim();
+
+  await recordNoticeGiven(
+    actor,
+    leaseId,
+    raw ? new Date(`${raw}T00:00:00.000Z`) : null,
+  );
   revalidateProfile(tenantId);
 }
 

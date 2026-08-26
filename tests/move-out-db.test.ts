@@ -14,6 +14,7 @@ import {
   formerTenantDebts,
   markUnitReadyToRent,
   previewMoveOut,
+  recordNoticeGiven,
 } from "../apps/web/lib/admin/move-out";
 import {
   confirmOverlockApplied,
@@ -262,6 +263,77 @@ describeDb("move-out", () => {
     });
     expect(unit.operationalStatus).toBe("maintenance");
     expect(unit.status).toBe("maintenance");
+  });
+
+  describe("off-platform notice (B-186)", () => {
+    it("a walk-in reads as full shortfall until someone records the date they actually gave notice", async () => {
+      const lease = await makeLease(unitAId, 0);
+      const before = await previewMoveOut(
+        actorOf(counterId, 10),
+        lease.id,
+        d("2026-08-15"),
+      );
+      expect(before.noticeGivenAt).toBeNull();
+      expect(before.noticeShortfallDays).toBe(10);
+
+      const result = await recordNoticeGiven(
+        actorOf(counterId, 10),
+        lease.id,
+        d("2026-08-01"),
+      );
+      expect(result.ok).toBe(true);
+
+      const after = await previewMoveOut(
+        actorOf(counterId, 10),
+        lease.id,
+        d("2026-08-15"),
+      );
+      expect(after.noticeGivenAt?.toISOString().slice(0, 10)).toBe(
+        "2026-08-01",
+      );
+      expect(after.noticeShortfallDays).toBe(0);
+    });
+
+    it("clears back to unset rather than defaulting to today", async () => {
+      const lease = await makeLease(unitAId, 0);
+      await recordNoticeGiven(actorOf(counterId, 10), lease.id, d("2026-08-01"));
+      const cleared = await recordNoticeGiven(
+        actorOf(counterId, 10),
+        lease.id,
+        null,
+      );
+      expect(cleared.ok).toBe(true);
+
+      const stored = await prisma.lease.findUniqueOrThrow({
+        where: { id: lease.id },
+      });
+      expect(stored.noticeGivenAt).toBeNull();
+    });
+
+    it("refuses a date in the future", async () => {
+      const lease = await makeLease(unitAId, 0);
+      const result = await recordNoticeGiven(
+        actorOf(counterId, 10),
+        lease.id,
+        new Date(Date.now() + 24 * 60 * 60 * 1000),
+      );
+      expect(result).toEqual({ ok: false, problem: "future_date" });
+    });
+
+    it("refuses to record notice on a lease that already ended", async () => {
+      const lease = await makeLease(unitAId, 0);
+      await completeMoveOut(actorOf(counterId, 10), {
+        leaseId: lease.id,
+        moveOutDate: d("2026-08-15"),
+        reason: "tenant_request",
+      });
+      const result = await recordNoticeGiven(
+        actorOf(counterId, 10),
+        lease.id,
+        d("2026-08-01"),
+      );
+      expect(result).toEqual({ ok: false, problem: "not_occupying" });
+    });
   });
 
   describe("an overlock does not outlive the lease (B-151)", () => {

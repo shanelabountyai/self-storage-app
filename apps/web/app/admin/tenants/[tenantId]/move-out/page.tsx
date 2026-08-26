@@ -4,7 +4,7 @@ import { previewMoveOut } from "@/lib/admin/move-out";
 import { formatCents, formatDay } from "@/lib/format";
 import { AdminForm, Field } from "@/components/admin/form";
 import { REASON_CODES, REASON_CODE_LABELS } from "@storage/core/audit";
-import { completeMoveOutAction } from "./actions";
+import { completeMoveOutAction, setNoticeGivenOnMoveOutAction } from "./actions";
 import { ChargeFeeForm } from "@/components/admin/charge-fee-form";
 import { chargeableFees } from "@/lib/billing/charges";
 import { can } from "@/lib/rbac/authorize";
@@ -132,6 +132,45 @@ export default async function MoveOutPage({
           />
         </details>
       )}
+
+      {/* B-186. Off-platform notice, recorded right where the shortfall
+          below reads it — a sibling of the completion form, not nested in
+          it (B-173's form-in-a-form defect), so recording it here is its own
+          submit and doesn't also try to close the lease. Redirects back to
+          this same preview, which is what makes the figure below update. */}
+      <form
+        action={setNoticeGivenOnMoveOutAction}
+        className="border-input flex flex-wrap items-end gap-2 rounded-lg border p-4"
+      >
+        <input type="hidden" name="tenantId" value={tenantId} />
+        <input type="hidden" name="leaseId" value={leaseId} />
+        <input type="hidden" name="date" value={moveOutDate} />
+        <div className={FIELD_CLASS}>
+          <label htmlFor="noticeGivenAt">
+            Notice given on
+            <span className="text-muted-foreground block text-xs font-normal">
+              Off-platform notice — at the counter, by phone, by mail. Leave
+              blank if nobody has confirmed one.
+            </span>
+          </label>
+          <input
+            id="noticeGivenAt"
+            type="date"
+            name="noticeGivenAt"
+            max={todayIso()}
+            defaultValue={
+              preview.noticeGivenAt ? isoDate(preview.noticeGivenAt) : ""
+            }
+            className="border-input rounded-md border px-2 py-1.5 text-sm"
+          />
+        </div>
+        <button
+          type="submit"
+          className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
+        >
+          Save notice date
+        </button>
+      </form>
 
       {/* B-173. One form, one truth.
 

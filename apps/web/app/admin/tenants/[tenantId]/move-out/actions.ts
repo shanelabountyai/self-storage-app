@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import type { MoveOutReason } from '@storage/db'
 import { requireStaffActor } from '@/lib/rbac/session'
-import { completeMoveOut } from '@/lib/admin/move-out'
+import { completeMoveOut, recordNoticeGiven } from '@/lib/admin/move-out'
 import { fieldError, parseScaled, stalePreview, type FormState } from '@/lib/admin/form-state'
 import { formatCents, formatDay } from '@/lib/format'
 
@@ -77,4 +77,21 @@ export async function completeMoveOutAction(_prev: FormState, formData: FormData
   revalidatePath(`/admin/tenants/${tenantId}`)
   revalidatePath('/admin/units')
   redirect(`/admin/tenants/${tenantId}?movedOut=1`)
+}
+
+// B-186. Off-platform notice, recorded right where the shortfall shows so
+// staff don't have to leave this screen to fix a figure it just told them
+// was wrong. Redirects back to the same preview so it recomputes.
+export async function setNoticeGivenOnMoveOutAction(formData: FormData): Promise<void> {
+  const actor = await requireStaffActor()
+  const tenantId = String(formData.get('tenantId') ?? '')
+  const leaseId = String(formData.get('leaseId') ?? '')
+  const date = String(formData.get('date') ?? '')
+  const raw = String(formData.get('noticeGivenAt') ?? '').trim()
+
+  await recordNoticeGiven(actor, leaseId, raw ? new Date(`${raw}T00:00:00.000Z`) : null)
+
+  const qs = new URLSearchParams({ lease: leaseId })
+  if (date) qs.set('date', date)
+  redirect(`/admin/tenants/${tenantId}/move-out?${qs.toString()}`)
 }
