@@ -38,8 +38,12 @@ export function validateSchedule(
   if (installments.length > MAX_INSTALLMENTS) {
     problems.push({ index: null, problem: `A plan can have at most ${MAX_INSTALLMENTS} installments.` })
   }
+  // Alone, not pushed alongside the sum mismatch below: "nothing is past due"
+  // and "your installments total $300 against $0 past due" are the same fact
+  // said twice, and the second reads as arithmetic advice on a plan that
+  // should not exist.
   if (totalCents <= 0) {
-    problems.push({ index: null, problem: 'There is nothing owed to put on a plan.' })
+    return [{ index: null, problem: 'There is nothing past due on this lease to put on a plan.' }]
   }
 
   let sum = 0
@@ -58,14 +62,25 @@ export function validateSchedule(
     sum += installment.amountCents
   })
 
+  // Reachable since B-188, and the check the whole feature rests on. Until
+  // then `totalCents` was the sum of these same installments, so this could
+  // not fire from the only production caller and a $50 plan against an $1,800
+  // arrear validated. `totalCents` is now the lease's actual arrears, which is
+  // what makes the comparison mean something — and the message is in dollars
+  // because a staffer reads it on the form (it said "cents" while it was
+  // unreachable).
   if (sum !== totalCents) {
     problems.push({
       index: null,
-      problem: `The installments total ${sum} cents against ${totalCents} cents owed. They must add up exactly — round the last installment to make up the difference.`,
+      problem: `The installments total ${dollars(sum)} against ${dollars(totalCents)} past due on this lease. They must add up exactly — round the last installment to make up the difference.`,
     })
   }
 
   return problems
+}
+
+function dollars(cents: number): string {
+  return `$${(cents / 100).toFixed(2)}`
 }
 
 export type InstallmentStatus = 'paid' | 'upcoming' | 'missed'

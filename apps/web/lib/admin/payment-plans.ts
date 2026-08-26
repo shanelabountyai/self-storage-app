@@ -59,9 +59,18 @@ export async function createPaymentPlan(
   })
   if (existing) return { ok: false, reason: 'already_active' }
 
-  const totalCents = input.installments.reduce((sum, installment) => sum + installment.amountCents, 0)
+  // **The plan is measured against what is owed, not against its own sum.**
+  // Before B-188 `totalCents` was the sum of the installments and was then
+  // handed to `validateSchedule` as the figure to check that sum against, so
+  // the one branch that exists to catch a plan not adding up to the arrears
+  // was unreachable from the only caller: a $50 plan against an $1,800 arrear
+  // validated, halted the ladder and completed itself.
   const now = new Date()
+  const arrears = await arrearsForLease(leaseId, now)
+  const totalCents = arrears.outstandingCents
   const problems = validateSchedule(input.installments, totalCents, now)
+  // The refusal names the arrears figure itself — `validateSchedule` builds it
+  // into the message — so there is nothing extra for the caller to render.
   if (problems.length > 0) return { ok: false, reason: 'invalid_schedule', problems }
 
   const planId = await prisma.$transaction(async (tx) => {
@@ -85,6 +94,7 @@ export async function createPaymentPlan(
         leaseId,
         holdId: holdResult.holdId,
         totalCents,
+        invoiceIds: arrears.invoiceIds,
         note: input.note?.trim() || null,
         createdByStaffId: actor.staffUserId,
         installments: {
@@ -196,6 +206,7 @@ export async function paymentPlanForLease(leaseId: string, asOf: Date = new Date
       id: true,
       status: true,
       totalCents: true,
+      invoiceIds: true,
       note: true,
       createdAt: true,
       installments: { select: { dueDate: true, amountCents: true } },
@@ -203,7 +214,7 @@ export async function paymentPlanForLease(leaseId: string, asOf: Date = new Date
   })
   if (!plan) return null
 
-  const paidSinceCents = await paidSincePlanStart(leaseId, plan.createdAt)
+  const paidSinceCents = await planProgressCents(plan.totalCents, plan.invoiceIds)
 
   return {
     id: plan.id,
@@ -215,15 +226,63 @@ export async function paymentPlanForLease(leaseId: string, asOf: Date = new Date
   }
 }
 
-/// Total paid against the lease since a plan started. Reads `LedgerEntry`
-/// directly rather than `Payment`, matching how the delinquency engine and
-/// the portal dashboard both read balance — one source of "what has this
-/// lease paid," not a second definition living in this file.
-export async function paidSincePlanStart(leaseId: string, since: Date): Promise<number> {
-  const paid = await prisma.ledgerEntry.aggregate({
-    where: { leaseId, type: 'payment', occurredAt: { gte: since } },
-    _sum: { amountCents: true },
+/// The lease's arrears: every invoice already due, net of what has settled it.
+/// This is both what a plan may be agreed over and the set its progress is
+/// measured against for the rest of its life — see `PaymentPlan.invoiceIds`.
+///
+/// `void` is excluded rather than counted at zero: a waived fee is a charge a
+/// manager deliberately forgave, and a plan should neither promise to collect
+/// it nor be held short by it.
+export async function arrearsForLease(
+  leaseId: string,
+  asOf: Date,
+): Promise<{ invoiceIds: string[]; outstandingCents: number }> {
+  const invoices = await prisma.invoice.findMany({
+    where: { leaseId, status: { not: 'void' }, dueDate: { lte: asOf } },
+    select: { id: true, totalCents: true, amountPaidCents: true },
   })
-  // Payments are negative in the signed ledger (they decrease the balance).
-  return -(paid._sum.amountCents ?? 0)
+  const unsettled = invoices.filter((invoice) => invoice.totalCents > invoice.amountPaidCents)
+  return {
+    invoiceIds: unsettled.map((invoice) => invoice.id),
+    outstandingCents: unsettled.reduce(
+      (sum, invoice) => sum + (invoice.totalCents - invoice.amountPaidCents),
+      0,
+    ),
+  }
+}
+
+/// How much of the arrears a plan has actually retired (D-96, B-188).
+///
+/// The frozen total less what is still outstanding on the invoices the plan
+/// covers — NOT a sum of `type: 'payment'` ledger entries since the plan
+/// started, which is what this replaced and which was wrong in two directions
+/// at once. It counted money that came straight back out (a returned ACH, a
+/// chargeback and a refund each leave the original `payment` row standing by
+/// design, so every installment they had covered kept reading `paid` and a
+/// plan could complete itself and lift its own hold on money the bank had
+/// taken), and it counted money that was never meant for the arrears at all
+/// (a tenant on a plan for $1,800 who paid only next month's $150 rent had
+/// installment 1 marked paid while the plan collected nothing).
+///
+/// Reading the invoices fixes both without knowing about either: a reversal or
+/// a refund unwinds its allocations and `recomputeInvoices` re-opens the
+/// invoice, and a rent invoice raised after the plan started is not in the
+/// covered set at all.
+///
+/// Clamped at both ends. Below zero because outstanding CAN exceed the frozen
+/// total — a payment that had part-settled one of these invoices before the
+/// plan was agreed can bounce afterwards — and a negative progress figure
+/// would read as a credit in `installmentViews`. Above `totalCents` it cannot
+/// go, since outstanding never falls below zero.
+export async function planProgressCents(totalCents: number, invoiceIds: string[]): Promise<number> {
+  if (invoiceIds.length === 0) return 0
+  const invoices = await prisma.invoice.findMany({
+    where: { id: { in: invoiceIds }, status: { not: 'void' } },
+    select: { totalCents: true, amountPaidCents: true },
+  })
+  const outstandingCents = invoices.reduce(
+    (sum, invoice) => sum + Math.max(0, invoice.totalCents - invoice.amountPaidCents),
+    0,
+  )
+  return Math.max(0, totalCents - outstandingCents)
 }

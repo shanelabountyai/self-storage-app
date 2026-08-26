@@ -28,9 +28,16 @@ export default async function PortalPaymentPlanPage() {
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-xl font-semibold">Payment plan</h1>
+        {/* D-96 (B-188). "Paying keeps you on track" was true of the code and
+            not of the plan: only money that goes to the overdue balance the
+            plan was set up over moves these installments, so a tenant paying
+            just this month's rent could read that sentence and believe they
+            were current. The rule a tenant is held to has to be on the page
+            they read before they pay (D-15 — their words, not ours). */}
         <p className="text-muted-foreground mt-1 max-w-prose text-sm text-pretty">
-          What was agreed and what&apos;s left. Paying keeps you on track — nothing here needs staff
-          to update it.
+          What was agreed and what&apos;s left. Your plan covers the amount that was already overdue
+          when it was set up — your regular rent is still due on its own date each month, on top of
+          the payments below. This page updates itself as your payments come in.
         </p>
       </div>
 

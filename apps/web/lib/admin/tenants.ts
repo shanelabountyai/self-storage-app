@@ -27,6 +27,7 @@ import { logManualDocument, type DocumentType } from "@/lib/documents/store";
 import { createTask } from "@/lib/admin/tasks";
 import { activeHolds, type ActiveHold } from "@/lib/admin/holds";
 import {
+  arrearsForLease,
   paymentPlanForLease,
   type PaymentPlanView,
 } from "@/lib/admin/payment-plans";
@@ -176,6 +177,12 @@ export type TenantLeaseSummary = {
   status: string;
   monthlyRateCents: number;
   balanceCents: number;
+  /// B-188. What is PAST DUE, which is a smaller figure than `balanceCents`
+  /// whenever this month's rent has been invoiced and is not yet due — and it
+  /// is the figure a payment plan's installments must add up to exactly, so
+  /// the plan form has to show it rather than let a staffer guess from the
+  /// balance beside it.
+  arrearsCents: number;
   startDate: Date;
   endDate: Date | null;
   /// B-186. When the tenant told the facility they were leaving — off-platform
@@ -436,6 +443,10 @@ export async function tenantProfile(
     ),
   );
 
+  const leaseArrears = await Promise.all(
+    leases.map((lease) => arrearsForLease(lease.id, new Date())),
+  );
+
   const leaseSummaries: TenantLeaseSummary[] = leases.map((lease, index) => ({
     leaseId: lease.id,
     facilityId: lease.facilityId,
@@ -444,6 +455,7 @@ export async function tenantProfile(
     status: lease.status,
     monthlyRateCents: lease.monthlyRateCents,
     balanceCents: leaseBalances[index]._sum.amountCents ?? 0,
+    arrearsCents: leaseArrears[index].outstandingCents,
     startDate: lease.startDate,
     endDate: lease.endDate,
     noticeGivenAt: lease.noticeGivenAt,

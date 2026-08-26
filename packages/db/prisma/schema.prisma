@@ -4061,11 +4061,27 @@ model PaymentPlan {
   /// happens to the plan record referencing it.
   holdId    String            @unique
   status    PaymentPlanStatus @default(active)
-  /// The arrears the plan promises to clear, frozen at creation — the sum of
-  /// `installments` at the moment a person agreed to it. Never recomputed:
-  /// a rate change or a new month's rent afterward does not retroactively
-  /// change what was promised.
+  /// The arrears the plan promises to clear, frozen at creation — the lease's
+  /// outstanding balance on every invoice already due at the moment a person
+  /// agreed to it, which `validateSchedule` requires the installments to add
+  /// up to exactly (B-188). Never recomputed: a rate change or a new month's
+  /// rent afterward does not retroactively change what was promised.
   totalCents Int
+  /// The invoices this plan covers, frozen at creation — every invoice already
+  /// due and not fully settled when the plan was agreed. **Progress is
+  /// `totalCents` less what is still outstanding on THESE invoices** (D-96),
+  /// which is what makes rent invoiced after the plan started incapable of
+  /// satisfying an installment, and what makes a returned payment, a
+  /// chargeback or a refund take its progress back: each of those re-opens the
+  /// invoice through `recomputeInvoices`, so the arithmetic nets them without
+  /// knowing they happened.
+  ///
+  /// Frozen as a list rather than re-derived from `dueDate <= createdAt`
+  /// because a fee invoice raised later the same day carries that day's due
+  /// date and would silently join the covered set, making progress fall for a
+  /// charge the plan never promised to clear. No FK: an invoice is voided,
+  /// never deleted.
+  invoiceIds String[] @default([])
   /// Free text a staffer can leave about the conversation. Not the record of
   /// WHAT was agreed — the installments are that — only anything about HOW.
   note       String?

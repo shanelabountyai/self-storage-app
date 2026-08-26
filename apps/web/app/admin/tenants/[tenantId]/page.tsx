@@ -690,12 +690,20 @@ export default async function TenantProfilePage({
                 Set up a payment plan — unit {lease.unitNumber}
               </summary>
               <div className="mt-3 flex flex-col gap-3">
+                <p className="max-w-prose text-xs text-pretty">
+                  <span className="font-medium">
+                    {formatCents(lease.arrearsCents)} is past due on this lease.
+                  </span>{" "}
+                  The installments must add up to exactly that. Fill in as many
+                  as the plan needs and leave the rest blank.
+                </p>
                 <p className="text-muted-foreground max-w-prose text-xs text-pretty">
-                  Fill in as many installments as the plan needs — leave the rest
-                  blank. The amounts must add up exactly to what is being put on
-                  the plan. Agreeing one places a hold that stops dunning, late
-                  fees and access suspension on this lease tonight; missing an
+                  Agreeing one places a hold that stops dunning, late fees and
+                  access suspension on this lease tonight; missing an
                   installment lifts it automatically and collections resume.
+                  Rent invoiced from here on is still due on its own date — a
+                  plan covers what is already past due, so paying next month&rsquo;s
+                  rent does not count towards an installment.
                 </p>
                 <AdminForm
                   action={createPaymentPlanAction}

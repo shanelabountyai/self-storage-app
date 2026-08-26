@@ -2,7 +2,7 @@ import { prisma } from '@storage/db'
 import { isBreached, isFullyPaid } from '@storage/core/payment-plans'
 import { systemLiftHold } from '@/lib/admin/holds'
 import { createTask } from '@/lib/admin/tasks'
-import { paidSincePlanStart } from '@/lib/admin/payment-plans'
+import { planProgressCents } from '@/lib/admin/payment-plans'
 import type { RecordItem } from '@/lib/delinquency/engine'
 
 // PRD 02 §4.6 US-25 / PRD 01 §9 (B-090 part 3). The nightly check a payment
@@ -28,14 +28,20 @@ export async function evaluatePaymentPlanBreaches(
       id: true,
       leaseId: true,
       holdId: true,
-      createdAt: true,
+      totalCents: true,
+      invoiceIds: true,
       installments: { select: { dueDate: true, amountCents: true } },
     },
   })
   if (plans.length === 0) return
 
   for (const plan of plans) {
-    const paidSinceCents = await paidSincePlanStart(plan.leaseId, plan.createdAt)
+    // Recomputed from the covered invoices every night, not accumulated — so
+    // a plan whose progress goes BACKWARDS (an ACH returned, a chargeback, a
+    // refund; B-188) is re-evaluated tonight rather than at the next
+    // installment date, and an installment that was covered by money the bank
+    // has since taken back goes back to `missed`.
+    const paidSinceCents = await planProgressCents(plan.totalCents, plan.invoiceIds)
 
     if (isBreached(plan.installments, paidSinceCents, businessDate)) {
       await prisma.paymentPlan.update({

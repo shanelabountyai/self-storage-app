@@ -33,9 +33,21 @@ describe('validateSchedule', () => {
     expect(problems.some((p) => p.problem.includes('at most'))).toBe(true)
   })
 
-  it('refuses a total that does not match the installments', () => {
-    const problems = validateSchedule(schedule(['2026-09-01', 5000]), 6000, d('2026-08-01'))
+  it('refuses installments that do not add up to the arrears, in dollars', () => {
+    // B-188 made this branch reachable: `totalCents` is now the lease's actual
+    // past-due balance, not the sum of these same installments, so the message
+    // is one a staffer reads on the form.
+    const problems = validateSchedule(schedule(['2026-09-01', 5000]), 180_000, d('2026-08-01'))
     expect(problems.some((p) => p.problem.includes('add up exactly'))).toBe(true)
+    expect(problems.some((p) => p.problem.includes('$50.00') && p.problem.includes('$1800.00'))).toBe(
+      true,
+    )
+  })
+
+  it('refuses a plan when nothing is past due, and says only that', () => {
+    expect(validateSchedule(schedule(['2026-09-01', 5000]), 0, d('2026-08-01'))).toEqual([
+      { index: null, problem: 'There is nothing past due on this lease to put on a plan.' },
+    ])
   })
 
   it('refuses a due date on or before the day the plan is created', () => {
@@ -53,7 +65,7 @@ describe('validateSchedule', () => {
   })
 
   it('refuses a non-positive installment amount', () => {
-    const problems = validateSchedule(schedule(['2026-09-01', 0]), 0, d('2026-08-01'))
+    const problems = validateSchedule(schedule(['2026-09-01', 0]), 5000, d('2026-08-01'))
     expect(problems.some((p) => p.problem.includes('positive amount'))).toBe(true)
   })
 
