@@ -6390,7 +6390,7 @@ Four changes, and the first is the one that matters most:
 
 ## B-086 part 1 — Time-boxed shared access, and the scope column that was never enforced
 
-`PENDING`
+`f78f280`
 
 **What it built.** PRD 03 US-8 ("smart-entry shared access") turned out to be roughly 80% already shipped, and reading it against the code before writing any was the useful part of the session: **AC2** (individual revocation, suspension cascaded with the primary on delinquency) and **AC3** (per-credential event attribution) are US-9's, built in B-029 and completed in B-105, and needed nothing. **AC1's "which unit(s)"** was likewise already answered — an `AuthorizedAccessPerson` hangs off exactly one lease, which is one unit. What was genuinely missing was AC1's other two words, **schedule** and **expiry**, and one of them turned out to be a live defect rather than a gap.
 
