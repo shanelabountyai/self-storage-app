@@ -6434,7 +6434,7 @@ Four changes, and the first is the one that matters most:
 
 ## B-189 — Autopay did not know a payment plan existed, in either direction
 
-`PENDING`
+`733d444`
 
 **What it built.** Two halves of one defect, both in the money path. **The arrears half:** `packages/core/holds/catalog.ts` gives the `payment_plan` hold `halt_dunning`, `halt_late_fees` and `halt_access_suspension` — not `halt_autopay`, the only effect `runAutopay` checks — so autopay selected every `open`/`partially_paid` invoice with `dueDate <= businessDate` and charged the **full outstanding**, on the retry ladder, for as long as the card authorised. A tenant who agreed to clear $1,800 over six months had their card taken for $1,800 the same night the plan was agreed. **The installment half:** an installment due date was a date on which nothing was charged at all, so a tenant with a saved card had to remember to pay by hand or the hour-4 breach job broke their plan for them.
 
