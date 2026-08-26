@@ -6344,7 +6344,7 @@ Four changes, and the first is the one that matters most:
 
 ## B-186 — Every walk-in tenant is recorded as having given no notice at all
 
-`(pending)`
+`f59f6a18ce70e14f49374f5425e9aec21ba6d719`
 
 **What it built.** `Lease.noticeGivenAt` gained its second writer. Before this row it had exactly one — `requestMoveOut`/`cancelMoveOutRequest` in `lib/portal/move-out.ts`, the tenant's own portal request — so `noticeShortfallDays(null, …)` returned the full required notice for every walk-in, and the move-out screen told staff that constant as if it were a measurement. `recordNoticeGiven` in `lib/admin/move-out.ts` is the admin-side writer: gated on `leases:move_out`, refuses a future date, refuses on a lease that has already ended, audits as `lease.edited` with the old/new value in context. Two entry points call it, each a self-contained `<form>` with its own visible submit rather than a field folded into an existing one — neither the move-out screen's completion form nor the profile's other forms can take a second nested `<form>` (illegal HTML, and B-173's own comment already says so), so notice recording is its own act, not a side effect of a different one. On the move-out screen it sits directly above the shortfall message it feeds and redirects back to the same preview URL, so saving it is what makes the figure below recompute. On the tenant profile it is a new "Notice given" column on the leases table, settable per active lease, so notice given at the counter can be recorded the moment it's given rather than only once someone opens a move-out.
 
