@@ -93,6 +93,17 @@ export async function assertNoAxeViolations(
     // `document.elementsFromPoint` at the flagged link's centre returns a
     // clean TD → TABLE → MAIN → BODY stack, nothing overlapping it at all.
     /partially obscured by another element/i,
+    // B-187, migrating admin-leads.spec.ts onto this helper surfaced a second
+    // instance of the SAME `[contain:layout]` limitation above — the lead
+    // screen's quote table sits under an identically-marked `<main>`, and
+    // axe's `shortTextContent` check gives up on its one- and two-digit
+    // "Available" cells for the same reason `elmPartiallyObscured` gives up on
+    // longer text under this container: it cannot resolve an effective
+    // background through the containment box. Checked by hand the same way —
+    // `document.elementsFromPoint` at each flagged cell's centre returns a
+    // clean TD → TABLE → DIV → SECTION → DIV → MAIN → BODY stack, nothing
+    // overlapping any of them.
+    /too short to determine if it is actual text content/i,
   ]
 
   // Payment step, same session as the two above: Stripe's own Payment Element

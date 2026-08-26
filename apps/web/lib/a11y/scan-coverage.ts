@@ -435,6 +435,16 @@ export const SCANNED_STATES: readonly ScannedState[] = [
     state: 'stale-preview refusal',
     spec: 'e2e/portal-transfer.spec.ts',
   },
+  // B-187. Reachable only for a lapsed checkout session whose size has since
+  // sold out — no route can be visited to reach it, the same reason the
+  // waitlist-opened and stale-preview states above are states rather than
+  // routes. `/checkout?token=not-a-real-session` in PUBLIC_SCAN_ROUTES scans
+  // the bad-token state, not this one.
+  {
+    route: '/checkout',
+    state: 'unit lost',
+    spec: 'e2e/checkout-unit-lost.spec.ts',
+  },
 ] as const
 
 export type StateException = {

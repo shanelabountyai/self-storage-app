@@ -1,7 +1,7 @@
-import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from '@playwright/test'
 import { prisma } from '../packages/db'
 import { startCheckout } from '../apps/web/lib/checkout/session'
+import { assertNoAxeViolations } from './a11y-helpers'
 
 // B-172 / PRD 01 FR-4.1. The unit-lost branch, when the size itself has gone.
 //
@@ -162,13 +162,8 @@ test('the unit-lost branch is readable, and its sizes are controls rather than a
   // B-172: no sticky total for a unit the renter has just been told they lost.
   await expect(page.getByText('Due today')).toHaveCount(0)
 
-  const { violations } = await new AxeBuilder({ page })
-    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-    .analyze()
-  expect(
-    violations.map((v) => `${v.id}: ${v.help}`),
-    'axe found accessibility violations on the unit-lost branch',
-  ).toEqual([])
+  // a11y-state: /checkout | unit lost
+  await assertNoAxeViolations(page, 'axe found accessibility violations on the unit-lost branch')
 })
 
 test('moving to another size keeps the answers and re-prices to that size', async ({

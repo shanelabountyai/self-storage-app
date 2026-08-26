@@ -1,5 +1,5 @@
-import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
+import { assertNoAxeViolations } from './a11y-helpers'
 import { OWNER_STATE, signInAsDemoOwner } from './sign-in'
 
 // PRD 09 §5 (B-091 part 2). The arc the feature is judged on: an owner answers
@@ -100,13 +100,7 @@ test.describe('support impersonation', () => {
     // screen-reader user actually meets — a scan of the portal without it would
     // assert nothing about the one element this item adds.
     await expect(page.getByRole('main')).toBeVisible()
-    const { violations } = await new AxeBuilder({ page })
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-      .analyze()
-    expect(
-      violations.map((v) => `${v.id}: ${v.help}`),
-      'axe found accessibility violations',
-    ).toEqual([])
+    await assertNoAxeViolations(page)
 
     // FR-11/FR-13/SR-2. Posted directly rather than by clicking a button,
     // because the whole point of the control is that it does not depend on the

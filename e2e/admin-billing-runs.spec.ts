@@ -1,5 +1,5 @@
-import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from '@playwright/test'
+import { assertNoAxeViolations } from './a11y-helpers'
 import { signInAsDemoOwner } from './sign-in'
 
 // PRD 02 FR-4 (B-043). The Billing Runs screen.
@@ -25,14 +25,7 @@ test.describe('signed in as the demo owner', () => {
     await page.goto('/admin/billing')
     await expect(page.getByRole('main')).toBeVisible()
 
-    const { violations } = await new AxeBuilder({ page })
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-      .analyze()
-
-    expect(
-      violations.map((v) => `${v.id}: ${v.help}`),
-      'axe found accessibility violations',
-    ).toEqual([])
+    await assertNoAxeViolations(page)
   })
 
   test('replaces the placeholder section with the real screen', async ({ page }) => {

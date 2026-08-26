@@ -1,5 +1,5 @@
-import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from '@playwright/test'
+import { assertNoAxeViolations } from './a11y-helpers'
 import { signInAsDemoOwner } from './sign-in'
 
 // PRD 02 §4.8 US-43 (B-180). The waitlist capture on the lead screen.
@@ -20,14 +20,7 @@ test.describe('signed in as the demo owner', () => {
   })
 
   test('the lead screen has no WCAG 2.1 AA violations', async ({ page }) => {
-    const { violations } = await new AxeBuilder({ page })
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-      .analyze()
-
-    expect(
-      violations.map((v) => `${v.id}: ${v.help}`),
-      'axe found accessibility violations on the lead screen',
-    ).toEqual([])
+    await assertNoAxeViolations(page, 'axe found accessibility violations on the lead screen')
   })
 
   test('one email field above the table joins the waitlist for the size whose button was pressed', async ({
