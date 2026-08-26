@@ -6412,7 +6412,7 @@ Four changes, and the first is the one that matters most:
 
 ## B-188 — A payment plan counted money that came back, and money that was never meant for it
 
-`PENDING`
+`0da24f8`
 
 **What it built.** Three defects in one function, and it was the function the whole feature rested on. `paidSincePlanStart` summed `LedgerEntry` where `type: 'payment'` and `occurredAt >= plan.createdAt`, and that sum WAS progress — `installmentViews` allocated it oldest-first, `isFullyPaid` closed the plan, and `payment-plan-breach.ts` lifted the hold on the strength of it. It is gone, replaced by `planProgressCents(totalCents, invoiceIds)`: **the frozen arrears less what is still outstanding on the invoices the plan covers.** One new column, `PaymentPlan.invoiceIds String[]` (additive migration `20260826204550_payment_plan_covered_invoices`), frozen at creation from the new `arrearsForLease` — every invoice already due and not fully settled at the moment a person agreed to the plan.
 
