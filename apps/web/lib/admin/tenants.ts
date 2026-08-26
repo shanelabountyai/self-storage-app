@@ -26,6 +26,10 @@ import { tenantAccessHistory } from "@/lib/access/event-log";
 import { logManualDocument, type DocumentType } from "@/lib/documents/store";
 import { createTask } from "@/lib/admin/tasks";
 import { activeHolds, type ActiveHold } from "@/lib/admin/holds";
+import {
+  paymentPlanForLease,
+  type PaymentPlanView,
+} from "@/lib/admin/payment-plans";
 import { syncActiveDutyHolds } from "@/lib/tenants/active-duty";
 import { refundablePayments } from "@/lib/billing/refunds";
 import { returnablePayments } from "@/lib/billing/reversals";
@@ -277,6 +281,10 @@ export type TenantProfile = {
   /// On the profile rather than only the lease row because a staffer opening
   /// the tenant must see it before they do anything at all.
   holds: (ActiveHold & { leaseId: string; unitNumber: string })[];
+  /// B-090 part 3. Each lease's current or most recent payment plan (`null`
+  /// if it has never had one), for the "Set up a plan" / "On a plan" section
+  /// the profile shows beside each lease.
+  paymentPlans: (PaymentPlanView & { leaseId: string; unitNumber: string })[];
   /// US-45's plain-English line: "Access suspended, 12 days past due,
   /// 2026-07-18". Read from the audit entry the rule wrote rather than
   /// recomputed, so the screen says what actually happened and when.
@@ -492,6 +500,17 @@ export async function tenantProfile(
     ),
   );
 
+  const paymentPlansByLease = (
+    await Promise.all(
+      leases.map(async (lease) => {
+        const plan = await paymentPlanForLease(lease.id);
+        return plan
+          ? [{ ...plan, leaseId: lease.id, unitNumber: lease.unit.number }]
+          : [];
+      }),
+    )
+  ).flat();
+
   const grants = await prisma.accessGrant.findMany({
     where: {
       tenantId,
@@ -551,6 +570,7 @@ export async function tenantProfile(
       }))
       .filter((fee) => fee.outstandingCents > 0),
     holds: holdsByLease.flat(),
+    paymentPlans: paymentPlansByLease,
     refundable: await refundablePayments(tenantId),
     gateAccess: grants.map((grant) => ({
       grantId: grant.id,

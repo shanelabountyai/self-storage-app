@@ -1337,6 +1337,7 @@ model Lease {
   authorizedAccessPeople AuthorizedAccessPerson[]
   payLinks               PayLink[]
   holds                  LeaseHold[]
+  paymentPlans           PaymentPlan[]
   delinquencyTimeline    DelinquencyTimeline?     @relation(fields: [delinquencyTimelineId], references: [id], onDelete: SetNull)
   transferredFrom        Lease?                   @relation("LeaseTransfer", fields: [transferredFromLeaseId], references: [id], onDelete: Restrict)
   transferredTo          Lease[]                  @relation("LeaseTransfer")
@@ -4009,12 +4010,94 @@ model LeaseHold {
   estateContactEmail String?
   createdAt          DateTime  @default(now()) @db.Timestamptz(6)
 
-  lease         Lease      @relation(fields: [leaseId], references: [id], onDelete: Restrict)
-  placedByStaff StaffUser? @relation("HoldPlacedBy", fields: [placedByStaffId], references: [id], onDelete: Restrict)
-  liftedByStaff StaffUser? @relation("HoldLiftedBy", fields: [liftedByStaffId], references: [id], onDelete: Restrict)
+  lease         Lease        @relation(fields: [leaseId], references: [id], onDelete: Restrict)
+  placedByStaff StaffUser?   @relation("HoldPlacedBy", fields: [placedByStaffId], references: [id], onDelete: Restrict)
+  liftedByStaff StaffUser?   @relation("HoldLiftedBy", fields: [liftedByStaffId], references: [id], onDelete: Restrict)
+  paymentPlan   PaymentPlan?
 
   @@index([leaseId, liftedAt])
   @@map("lease_hold")
+}
+
+/// B-090 part (delinquency payment plans + self-cure). A `payment_plan` hold
+/// (above) is the switch that halts dunning/late fees/access suspension —
+/// unchanged since B-096. This is what that hold was always missing: a
+/// schedule, in dollar amounts, that says what "keeping to it" actually
+/// means, so the pipeline can tell a kept promise from a broken one instead
+/// of pausing forever on a staff member's say-so.
+///
+/// One PaymentPlan per hold (`holdId` unique) rather than a field ON the
+/// hold: `LeaseHold` is a generic mechanism seven other types also use, and a
+/// schedule of dated installments has no meaning for `bankruptcy` or
+/// `dispute`. Placing and lifting the hold stays exactly the machinery
+/// `lib/admin/holds.ts` already has and already audits; this model only adds
+/// what a payment plan needs on top of it.
+model PaymentPlan {
+  id        String            @id @default(cuid())
+  leaseId   String
+  /// The hold that actually stops collections. Restrict, not Cascade: the
+  /// hold is evidence in its own right (US-42) and must outlive whatever
+  /// happens to the plan record referencing it.
+  holdId    String            @unique
+  status    PaymentPlanStatus @default(active)
+  /// The arrears the plan promises to clear, frozen at creation — the sum of
+  /// `installments` at the moment a person agreed to it. Never recomputed:
+  /// a rate change or a new month's rent afterward does not retroactively
+  /// change what was promised.
+  totalCents Int
+  /// Free text a staffer can leave about the conversation. Not the record of
+  /// WHAT was agreed — the installments are that — only anything about HOW.
+  note       String?
+  createdByStaffId   String
+  createdAt          DateTime  @default(now()) @db.Timestamptz(6)
+  completedAt        DateTime? @db.Timestamptz(6)
+  brokenAt           DateTime? @db.Timestamptz(6)
+  cancelledAt        DateTime? @db.Timestamptz(6)
+  cancelledByStaffId String?
+  cancelReason       String?
+
+  lease           Lease                   @relation(fields: [leaseId], references: [id], onDelete: Restrict)
+  hold            LeaseHold               @relation(fields: [holdId], references: [id], onDelete: Restrict)
+  createdByStaff  StaffUser               @relation("PaymentPlanCreatedBy", fields: [createdByStaffId], references: [id], onDelete: Restrict)
+  cancelledByStaff StaffUser?             @relation("PaymentPlanCancelledBy", fields: [cancelledByStaffId], references: [id], onDelete: Restrict)
+  installments    PaymentPlanInstallment[]
+
+  // A lease can have at most one ACTIVE plan at a time — enforced in
+  // `lib/admin/payment-plans.ts` rather than here, because a partial unique
+  // index on `status = 'active'` would refuse the very rows that record a
+  // history (completed, broken, cancelled) of a lease that has been on more
+  // than one plan over its life.
+  @@index([leaseId, status])
+  @@map("payment_plan")
+}
+
+enum PaymentPlanStatus {
+  active
+  completed
+  broken
+  cancelled
+}
+
+/// A single promised payment, in date order. No `paidCents`/`status` column
+/// on this row: whether one is paid, missed or still ahead is derived from
+/// the lease's own ledger against the schedule (`installmentViews` in
+/// `packages/core/payment-plans`) every time it is read, the same reason
+/// D-65's occupancy figures are recomputed rather than stored — a payment
+/// applied to the lease through any path (autopay, a counter payment, a
+/// waived fee freeing up room) must be reflected here without a second write
+/// having to remember to update this row too.
+model PaymentPlanInstallment {
+  id          String   @id @default(cuid())
+  planId      String
+  /// 1-based, in schedule order — display only, `dueDate` is what's compared.
+  position    Int
+  dueDate     DateTime @db.Timestamptz(6)
+  amountCents Int
+
+  plan PaymentPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@index([planId])
+  @@map("payment_plan_installment")
 }
 
 model LoginAttempt {
@@ -4069,6 +4152,8 @@ model StaffUser {
   paymentsTaken              Payment[]
   holdsPlaced                LeaseHold[]               @relation("HoldPlacedBy")
   holdsLifted                LeaseHold[]               @relation("HoldLiftedBy")
+  paymentPlansCreated        PaymentPlan[]             @relation("PaymentPlanCreatedBy")
+  paymentPlansCancelled      PaymentPlan[]             @relation("PaymentPlanCancelledBy")
   tasksAssigned              Task[]                    @relation("TaskAssignee")
   tasksCompleted             Task[]                    @relation("TaskCompletedBy")
   maintenanceTicketsAssigned MaintenanceTicket[]       @relation("MaintenanceTicketAssignee")

@@ -16,6 +16,7 @@ import { runDunning } from '@/lib/billing/dunning'
 import { createTask } from '@/lib/admin/tasks'
 import { raiseLeadFollowUps } from '@/lib/admin/lead-follow-up'
 import { runDelinquencyTimeline } from '@/lib/delinquency/engine'
+import { evaluatePaymentPlanBreaches } from '@/lib/delinquency/payment-plan-breach'
 import { releaseStuckOverlocks } from '@/lib/delinquency/overlock'
 import { raiseDailyWalkthrough } from '@/lib/field-ops/walkthrough'
 import { raiseReviewRequests } from '@/lib/reviews/request-job'
@@ -391,6 +392,22 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
       // job — checked with the result already in hand, not a second query
       // re-deriving "delinquent" by a different definition.
       await detectSilentDunning(facilityId!, businessDate, result)
+    },
+  },
+  {
+    // PRD 02 §4.6 US-25 / PRD 01 §9 (B-090 part 3). Payment plans that missed
+    // their own schedule.
+    //
+    // At 4am local — after autopay at 3am, so tonight's payments have already
+    // settled onto the ledger this reads, and BEFORE the dunning ladder at
+    // 5am and the delinquency timeline at 6am, both of which read `onHold`:
+    // a plan broken here resumes collections the same night rather than one
+    // run late.
+    name: 'delinquency.payment-plan-breach',
+    localHour: 4,
+    scope: 'per_facility',
+    handler: async ({ facilityId, businessDate, recordItem }) => {
+      await evaluatePaymentPlanBreaches(facilityId!, businessDate, recordItem)
     },
   },
   {

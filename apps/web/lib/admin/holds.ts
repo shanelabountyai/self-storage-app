@@ -149,6 +149,11 @@ export async function placeHold(
   actor: Actor,
   leaseId: string,
   input: PlaceHoldInput,
+  // B-090 part 3. Optional so a caller building a bigger transaction around
+  // this — payment-plan creation places the hold and the schedule together —
+  // can pass its own `tx` and get one atomic write instead of two. Same
+  // parameter shape as `leaseHasEffect` above, for the same reason.
+  client: Prisma.TransactionClient | typeof prisma = prisma,
 ): Promise<HoldResult> {
   if (actor.kind !== 'staff') return { ok: false, reason: 'forbidden' }
 
@@ -162,7 +167,7 @@ export async function placeHold(
     return { ok: false, reason: 'missing_estate_contact' }
   }
 
-  const lease = await prisma.lease.findUnique({
+  const lease = await client.lease.findUnique({
     where: { id: leaseId },
     select: { facilityId: true },
   })
@@ -173,7 +178,7 @@ export async function placeHold(
     throw new ForbiddenError('Missing permission to place a hold', 'tenants:edit', lease.facilityId)
   }
 
-  const hold = await prisma.$transaction(async (tx) => {
+  const write = async (tx: Prisma.TransactionClient | typeof prisma) => {
     const created = await tx.leaseHold.create({
       data: {
         leaseId,
@@ -209,7 +214,12 @@ export async function placeHold(
     )
 
     return created
-  })
+  }
+
+  // Prisma cannot nest an interactive transaction inside another — if the
+  // caller already handed us one, write directly in it rather than opening a
+  // second.
+  const hold = client === prisma ? await prisma.$transaction((tx) => write(tx)) : await write(client)
 
   return { ok: true, holdId: hold.id }
 }
@@ -273,4 +283,43 @@ export async function liftHold(
   })
 
   return { ok: true, holdId }
+}
+
+/// Lifts a hold as the automatic consequence of something else, not a staff
+/// decision — a payment plan breaking its own schedule, or finishing it. No
+/// actor, no permission check and no manager gate: nobody is exercising
+/// discretion, a fact about the schedule already happened and the hold is
+/// just catching up to it. `reasonCode` still records WHICH fact, the same
+/// way `placeHold` uses the hold type — `payment_plan_broken` reads
+/// differently from `payment_plan_completed` on the same audit action.
+///
+/// A no-op, not an error, on an already-lifted hold: the nightly job that
+/// calls this can be re-run over a catch-up range, and a hold a person lifted
+/// in between must not spring back with a fresh `liftedAt`.
+export async function systemLiftHold(holdId: string, label: string, reasonCode: string): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    const hold = await tx.leaseHold.findUnique({
+      where: { id: holdId },
+      select: { leaseId: true, type: true, liftedAt: true, lease: { select: { facilityId: true } } },
+    })
+    if (!hold || hold.liftedAt) return
+
+    await tx.leaseHold.update({
+      where: { id: holdId },
+      data: { liftedAt: new Date(), liftedByStaffId: null, liftReason: reasonCode },
+    })
+
+    await recordAudit(
+      {
+        actor: { type: 'system', label },
+        action: 'hold.lifted',
+        entityType: 'Lease',
+        entityId: hold.leaseId,
+        facilityId: hold.lease.facilityId,
+        reasonCode,
+        context: { holdId, type: hold.type },
+      },
+      tx,
+    )
+  })
 }

@@ -488,6 +488,20 @@ const LAST_REVIEWED = '19 August 2026'
 //
 // `LAST_REVIEWED` is not bumped: these two corrections were checked against
 // the code that closes them, not the "Where we fall short" list below.
+//
+// Re-verified 2026-08-26, at B-090c (delinquency payment plans and
+// self-cure). Ships one new customer-facing page, `/portal/payment-plan`, and
+// the same discipline B-090b's entry above applied: the route is in
+// `PORTAL_SCAN_ROUTES` (its "you're not on a plan" empty state is what any
+// logged-in tenant without one actually sees, and needs no fixture to reach),
+// so the coverage sentence does not go false in the OVERSTATING direction by
+// silently merging in an unscanned page. What IS a state gap — the schedule
+// TABLE, which only renders for a tenant with a real active plan, and the
+// demo seed creates none — is named in `STATE_EXCEPTIONS` rather than left
+// for the generic route scan to quietly not reach, the same shape B-179's
+// entry above uses for a bounced-payment row. `LAST_REVIEWED` is not bumped:
+// the coverage claim was re-checked against the build, the rest of the page
+// was not.
 export default function AccessibilityPage() {
   return (
     <ProsePage

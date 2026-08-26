@@ -300,6 +300,25 @@ export const TASK_TYPES = [
     sensitive: true,
   },
   {
+    // PRD 02 §4.6 US-25 / PRD 01 §9 (B-090 part 3). A payment plan's own
+    // schedule went unmet — an installment's due date passed without enough
+    // paid against it since the plan started.
+    //
+    // `high` at creation, the same tier as `inbound_sms_review` and
+    // `rate_increase_notice_undelivered`: the hold that was pausing
+    // collections has just been lifted automatically, and the pipeline
+    // resumes against this tenant tonight whether or not anyone reads this
+    // card.
+    //
+    // Sensitive: this is the record of WHY collections resumed against a
+    // tenant who was told they were on a plan — exactly the question a
+    // dispute over the ladder restarting asks.
+    type: "payment_plan_broken",
+    label: "Payment plan broken — collections have resumed",
+    requiredProofFields: ["note"],
+    sensitive: true,
+  },
+  {
     // PRD 02 §4.9 US-35 (B-060). "Space-by-space verification items" — the one
     // task raised per facility per day that stands for the walk itself, rather
     // than one row per unit. Its own screen (`/admin/walkthrough`) lists the

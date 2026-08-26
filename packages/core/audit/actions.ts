@@ -158,6 +158,18 @@ export const AUDIT_ACTIONS = [
     label: "Hold lifted from lease",
     requiresReason: true,
   },
+  /// B-090 part 3. The `payment_plan` hold that halts the pipeline is placed
+  /// through the same `hold.placed` entry above — this is the second entry
+  /// that records what was actually agreed, since a hold's own reason field
+  /// is one sentence and a schedule is not. `requiresReason: false`: the
+  /// installments in `context` ARE the record, the same posture
+  /// `lease.transferred` takes — there is no discretion here to explain, only
+  /// a schedule to write down.
+  {
+    action: "payment_plan.created",
+    label: "Payment plan agreed",
+    requiresReason: false,
+  },
   /// D-17. The system, not a person, put a recurring charge on a lease because
   /// the tenant's own cover lapsed. `requiresReason: false` because the reason
   /// is structural rather than discretionary — the entry carries the waiver,

@@ -1,0 +1,123 @@
+import { describe, expect, it } from 'vitest'
+import {
+  MAX_INSTALLMENTS,
+  installmentViews,
+  isBreached,
+  isFullyPaid,
+  validateSchedule,
+  type PlannedInstallment,
+} from '../packages/core/payment-plans'
+
+// PRD 02 §4.6 US-25 / PRD 01 §9 (B-090 part 3). The schedule and the breach
+// rule, pure.
+
+const d = (iso: string) => new Date(`${iso}T00:00:00.000Z`)
+
+function schedule(...pairs: [string, number][]): PlannedInstallment[] {
+  return pairs.map(([iso, amountCents]) => ({ dueDate: d(iso), amountCents }))
+}
+
+describe('validateSchedule', () => {
+  it('refuses an empty schedule', () => {
+    expect(validateSchedule([], 0, d('2026-08-01'))).toEqual([
+      { index: null, problem: 'A payment plan needs at least one installment.' },
+    ])
+  })
+
+  it('refuses more than MAX_INSTALLMENTS rows', () => {
+    const rows = Array.from({ length: MAX_INSTALLMENTS + 1 }, (_, i) => [
+      `2026-0${(i % 9) + 1}-01`,
+      100,
+    ]) as [string, number][]
+    const problems = validateSchedule(schedule(...rows), rows.length * 100, d('2026-01-01'))
+    expect(problems.some((p) => p.problem.includes('at most'))).toBe(true)
+  })
+
+  it('refuses a total that does not match the installments', () => {
+    const problems = validateSchedule(schedule(['2026-09-01', 5000]), 6000, d('2026-08-01'))
+    expect(problems.some((p) => p.problem.includes('add up exactly'))).toBe(true)
+  })
+
+  it('refuses a due date on or before the day the plan is created', () => {
+    const problems = validateSchedule(schedule(['2026-08-01', 5000]), 5000, d('2026-08-01'))
+    expect(problems.some((p) => p.problem.includes('must be in the future'))).toBe(true)
+  })
+
+  it('refuses two installments on the same date', () => {
+    const installments = [
+      { dueDate: d('2026-09-01'), amountCents: 5000 },
+      { dueDate: d('2026-09-01'), amountCents: 5000 },
+    ]
+    const problems = validateSchedule(installments, 10000, d('2026-08-01'))
+    expect(problems.some((p) => p.problem.includes('date order'))).toBe(true)
+  })
+
+  it('refuses a non-positive installment amount', () => {
+    const problems = validateSchedule(schedule(['2026-09-01', 0]), 0, d('2026-08-01'))
+    expect(problems.some((p) => p.problem.includes('positive amount'))).toBe(true)
+  })
+
+  it('accepts a schedule that adds up, in order, all in the future', () => {
+    const installments = schedule(['2026-09-01', 5000], ['2026-10-01', 5000])
+    expect(validateSchedule(installments, 10000, d('2026-08-01'))).toEqual([])
+  })
+})
+
+describe('installmentViews', () => {
+  const installments = schedule(['2026-09-01', 5000], ['2026-10-01', 5000], ['2026-11-01', 5000])
+
+  it('allocates cumulative payments oldest-first', () => {
+    const views = installmentViews(installments, 7000, d('2026-09-15'))
+    expect(views.map((v) => v.status)).toEqual(['paid', 'upcoming', 'upcoming'])
+  })
+
+  it('marks an installment missed once its due date has passed unpaid', () => {
+    const views = installmentViews(installments, 0, d('2026-09-02'))
+    expect(views[0].status).toBe('missed')
+    expect(views[1].status).toBe('upcoming')
+  })
+
+  it('gives the due date itself, not the moment after, to pay', () => {
+    // asOf strictly equal to the due date has not yet passed it.
+    const views = installmentViews(installments, 0, d('2026-09-01'))
+    expect(views[0].status).toBe('upcoming')
+  })
+
+  it('a partial payment does not cover the installment it falls short of', () => {
+    const views = installmentViews(installments, 4999, d('2026-09-15'))
+    expect(views[0].status).toBe('missed')
+  })
+
+  it('numbers installments by schedule order, not input order', () => {
+    const outOfOrder = [installments[2], installments[0], installments[1]]
+    const views = installmentViews(outOfOrder, 0, d('2026-08-15'))
+    expect(views.map((v) => v.position)).toEqual([1, 2, 3])
+    expect(views[0].dueDate).toEqual(d('2026-09-01'))
+  })
+})
+
+describe('isBreached / isFullyPaid', () => {
+  const installments = schedule(['2026-09-01', 5000], ['2026-10-01', 5000])
+
+  it('is not breached while every passed installment is covered', () => {
+    expect(isBreached(installments, 5000, d('2026-09-15'))).toBe(false)
+  })
+
+  it('is breached once a due date passes uncovered', () => {
+    expect(isBreached(installments, 0, d('2026-09-02'))).toBe(true)
+  })
+
+  it('is not breached on the due date itself', () => {
+    expect(isBreached(installments, 0, d('2026-09-01'))).toBe(false)
+  })
+
+  it('is fully paid once cumulative payments reach the total', () => {
+    expect(isFullyPaid(installments, 9999)).toBe(false)
+    expect(isFullyPaid(installments, 10000)).toBe(true)
+    expect(isFullyPaid(installments, 20000)).toBe(true)
+  })
+
+  it('an empty schedule is never fully paid', () => {
+    expect(isFullyPaid([], 100)).toBe(false)
+  })
+})

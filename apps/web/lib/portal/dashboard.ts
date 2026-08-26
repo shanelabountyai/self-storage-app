@@ -1,6 +1,7 @@
 import { prisma } from '@storage/db'
 import { OCCUPYING_LEASE_STATUSES, TRANSFER_HOLD_SOURCE } from '@storage/core/inventory'
 import { codeForLease } from '@/lib/access/provision'
+import { paymentPlanForLease } from '@/lib/admin/payment-plans'
 import { SITE } from '@/lib/site-config'
 
 // PRD 01 §4.7 US-702 / §6.5. "What do I owe, when is it due, what's my gate
@@ -62,6 +63,12 @@ export type PortalLeaseSummary = {
   /// comment makes the same point).
   pendingMoveOutDate: Date | null
   pendingTransfer: { toUnitNumber: string; transferDate: Date; expiresAt: Date } | null
+  /// B-090 part 3 / PRD 01 §9's "self-cure UX beyond banner". Null unless
+  /// there is an active plan AND it still has an unpaid installment ahead —
+  /// a fully-paid plan closes itself out (the nightly job marks it
+  /// `completed`) before this would ever fire, but the check stays explicit
+  /// rather than assumed.
+  activePaymentPlan: { nextDueDate: Date; nextAmountCents: number } | null
 }
 
 export async function portalDashboardForTenant(
@@ -89,7 +96,7 @@ export async function portalDashboardForTenant(
 
   return Promise.all(
     leases.map(async (lease) => {
-      const [balance, grant, gateCode, settling, transferHold] = await Promise.all([
+      const [balance, grant, gateCode, settling, transferHold, plan] = await Promise.all([
         prisma.ledgerEntry.aggregate({ where: { leaseId: lease.id }, _sum: { amountCents: true } }),
         prisma.accessGrant.findUnique({
           where: { facilityId_tenantId: { facilityId: lease.facilityId, tenantId } },
@@ -116,6 +123,7 @@ export async function portalDashboardForTenant(
           },
           select: { moveInDate: true, expiresAt: true, unit: { select: { number: true } } },
         }),
+        paymentPlanForLease(lease.id, now),
       ])
 
       return {
@@ -143,6 +151,13 @@ export async function portalDashboardForTenant(
                 transferDate: transferHold.moveInDate,
                 expiresAt: transferHold.expiresAt,
               }
+            : null,
+        activePaymentPlan:
+          plan?.status === 'active'
+            ? (() => {
+                const next = plan.installments.find((installment) => installment.status !== 'paid')
+                return next ? { nextDueDate: next.dueDate, nextAmountCents: next.amountCents } : null
+              })()
             : null,
       }
     }),

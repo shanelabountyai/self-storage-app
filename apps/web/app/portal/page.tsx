@@ -116,6 +116,22 @@ function LeaseCard({ lease, impersonated }: { lease: PortalLeaseSummary; imperso
           </p>
         </div>
       )}
+      {/* B-090 part 3 / PRD 01 §9. "Delinquency self-cure UX beyond banner
+          (payment plans)" — before this a tenant on a plan had no way to see
+          it existed short of calling the office. */}
+      {lease.activePaymentPlan && (
+        <div role="status" className="border-input rounded-md border p-3 text-sm text-pretty">
+          <p>
+            You&apos;re on a payment plan. Your next installment is{' '}
+            <strong>{formatRate(lease.activePaymentPlan.nextAmountCents)}</strong> on{' '}
+            {formatDueDate(lease.activePaymentPlan.nextDueDate, lease.facilityTimezone)}.{' '}
+            <Link href="/portal/payment-plan" className="underline underline-offset-4">
+              See the full schedule
+            </Link>
+            .
+          </p>
+        </div>
+      )}
       {lease.pendingMoveOutDate && (
         <div role="status" className="border-input rounded-md border p-3 text-sm text-pretty">
           <p>

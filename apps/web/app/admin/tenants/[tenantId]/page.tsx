@@ -18,6 +18,8 @@ import {
   updateAddressAction,
   liftHoldAction,
   placeHoldAction,
+  createPaymentPlanAction,
+  cancelPaymentPlanAction,
   refundAction,
   returnPaymentAction,
   setExtendedHoursAction,
@@ -33,6 +35,7 @@ import { chargeableFees, chargeableLeases } from "@/lib/billing/charges";
 import { RETURN_FEE_CHOICES } from "@/lib/billing/reversals";
 import { scheduledFeeCents } from "@/lib/billing/fee-invoice";
 import { HOLD_TYPES, type HoldEffect } from "@storage/core/holds";
+import { MAX_INSTALLMENTS } from "@storage/core/payment-plans";
 import { leaseStatusLabel } from "@storage/core/labels";
 import {
   referralsForStaff,
@@ -581,6 +584,148 @@ export default async function TenantProfilePage({
             </tbody>
           </table>
         )}
+      </section>
+
+      {/* PRD 02 §4.6 US-25 / PRD 01 §9 (B-090 part 3). The `payment_plan`
+          hold has halted collections since B-096 with no schedule behind
+          it — this is the schedule, per lease. */}
+      <section aria-labelledby="payment-plans-heading" className="flex flex-col gap-3">
+        <h2 id="payment-plans-heading" className="font-medium">
+          Payment plans
+        </h2>
+
+        {profile.paymentPlans.map((plan) => (
+          <div
+            key={plan.id}
+            role="note"
+            className={`rounded-lg border-2 p-4 ${
+              plan.status === "active"
+                ? "border-blue-500 bg-blue-50 text-blue-950"
+                : "border-input bg-muted"
+            }`}
+          >
+            <p className="font-semibold">
+              {plan.status === "active"
+                ? "On a payment plan"
+                : plan.status === "completed"
+                  ? "Payment plan completed"
+                  : plan.status === "broken"
+                    ? "Payment plan broken — collections resumed"
+                    : "Payment plan cancelled"}{" "}
+              · Unit {plan.unitNumber}
+            </p>
+            <table className="mt-2 w-full text-sm">
+              <caption className="sr-only">
+                Installment schedule for unit {plan.unitNumber}
+              </caption>
+              <thead>
+                <tr className="border-b text-left">
+                  <th scope="col" className="py-1 font-medium">
+                    Due
+                  </th>
+                  <th scope="col" className="py-1 text-right font-medium">
+                    Amount
+                  </th>
+                  <th scope="col" className="py-1 font-medium">
+                    Status
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {plan.installments.map((installment) => (
+                  <tr key={installment.position} className="border-b last:border-0">
+                    <td className="py-1">{formatDate(installment.dueDate)}</td>
+                    <td className="py-1 text-right tabular-nums">
+                      {formatCents(installment.amountCents)}
+                    </td>
+                    <td className="py-1 capitalize">
+                      {installment.status === "missed" ? (
+                        <span className="font-medium text-red-800">Missed</span>
+                      ) : (
+                        installment.status
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {plan.note && (
+              <p className="mt-2 text-xs">
+                <span className="font-medium">Note:</span> {plan.note}
+              </p>
+            )}
+            {plan.status === "active" &&
+              can(actor, "delinquency:execute_step", profile.leases.find((l) => l.leaseId === plan.leaseId)?.facilityId ?? "") && (
+                <AdminForm
+                  action={cancelPaymentPlanAction}
+                  label={`Cancel the payment plan on unit ${plan.unitNumber}`}
+                  className="mt-3 flex flex-wrap items-end gap-2"
+                >
+                  <input type="hidden" name="tenantId" value={profile.tenantId} />
+                  <input type="hidden" name="planId" value={plan.id} />
+                  <Field name="cancelReason" label="Reason for cancelling" className={FIELD_CLASS} />
+                  <button
+                    type="submit"
+                    className="border-input hover:bg-accent inline-flex min-h-11 items-center justify-center rounded-md border bg-white px-4 text-sm font-medium"
+                  >
+                    Cancel plan
+                  </button>
+                </AdminForm>
+              )}
+          </div>
+        ))}
+
+        {profile.leases
+          .filter((lease) => lease.status !== "ended")
+          .filter(
+            (lease) =>
+              !profile.paymentPlans.some(
+                (plan) => plan.leaseId === lease.leaseId && plan.status === "active",
+              ),
+          )
+          .filter((lease) => can(actor, "delinquency:execute_step", lease.facilityId))
+          .map((lease) => (
+            <details key={lease.leaseId} className="border-input rounded-lg border p-4">
+              <summary className="cursor-pointer font-medium">
+                Set up a payment plan — unit {lease.unitNumber}
+              </summary>
+              <div className="mt-3 flex flex-col gap-3">
+                <p className="text-muted-foreground max-w-prose text-xs text-pretty">
+                  Fill in as many installments as the plan needs — leave the rest
+                  blank. The amounts must add up exactly to what is being put on
+                  the plan. Agreeing one places a hold that stops dunning, late
+                  fees and access suspension on this lease tonight; missing an
+                  installment lifts it automatically and collections resume.
+                </p>
+                <AdminForm
+                  action={createPaymentPlanAction}
+                  label={`Agree a payment plan for unit ${lease.unitNumber}`}
+                  className="flex flex-col gap-3"
+                >
+                  <input type="hidden" name="tenantId" value={profile.tenantId} />
+                  <input type="hidden" name="leaseId" value={lease.leaseId} />
+                  <div className="grid gap-2 sm:grid-cols-3">
+                    {Array.from({ length: MAX_INSTALLMENTS }, (_, i) => i + 1).map((n) => (
+                      <div key={n} className="border-input flex flex-col gap-1 rounded-md border p-2">
+                        <span className="text-xs font-medium">Installment {n}</span>
+                        <Field name={`dueDate_${n}`} label="Due" type="date" className={FIELD_CLASS} />
+                        <Field name={`amount_${n}`} label="Amount ($)" type="text" inputMode="decimal" className={FIELD_CLASS} />
+                      </div>
+                    ))}
+                  </div>
+                  <Field name="note" label="Note (optional)" className={FIELD_CLASS} />
+                  <div>
+                    <button
+                      type="submit"
+                      className="border-input hover:bg-accent inline-flex min-h-11 items-center justify-center rounded-md border px-4 text-sm font-medium"
+                    >
+                      Agree plan
+                    </button>
+                  </div>
+                </AdminForm>
+              </div>
+            </details>
+          ))}
       </section>
 
       {profile.waivableFees.length > 0 && (

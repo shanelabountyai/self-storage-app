@@ -12,7 +12,17 @@ import {
   updateTenantContact,
   type LoggableDocumentType,
 } from "@/lib/admin/tenants";
-import { fieldError, success, type FormState } from "@/lib/admin/form-state";
+import {
+  fieldError,
+  parseDate,
+  success,
+  type FormState,
+} from "@/lib/admin/form-state";
+import {
+  cancelPaymentPlan,
+  createPaymentPlan,
+} from "@/lib/admin/payment-plans";
+import { MAX_INSTALLMENTS } from "@storage/core/payment-plans";
 import { waiveFeeInvoice } from "@/lib/billing/late-fees";
 import { postFeeCharge } from "@/lib/billing/charges";
 import { formatCents } from "@/lib/format";
@@ -429,6 +439,137 @@ export async function liftHoldAction(
 
   revalidateProfile(tenantId);
   return success("Hold lifted. Automated collections resume on this lease.");
+}
+
+/// PRD 02 §4.6 US-25 / PRD 01 §9 (B-090 part 3). Agreeing a payment plan.
+///
+/// The form renders `MAX_INSTALLMENTS` fixed date/amount rows rather than a
+/// dynamic list (see the ponytail note on that constant); a blank row is
+/// dropped here rather than refused, so a plan of two installments does not
+/// need the reader to know which unused rows to leave untouched.
+export async function createPaymentPlanAction(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const actor = await requireStaffActor();
+  const tenantId = String(formData.get("tenantId") ?? "");
+  const leaseId = String(formData.get("leaseId") ?? "");
+
+  const installments: { dueDate: Date; amountCents: number }[] = [];
+  for (let i = 1; i <= MAX_INSTALLMENTS; i++) {
+    const dueDateRaw = formData.get(`dueDate_${i}`);
+    const amountRaw = formData.get(`amount_${i}`);
+    if (!String(dueDateRaw ?? "").trim() && !String(amountRaw ?? "").trim()) {
+      continue; // an unused row
+    }
+
+    const date = parseDate(dueDateRaw);
+    if ("error" in date) {
+      return fieldError({ [`dueDate_${i}`]: date.error });
+    }
+    const amount = parseScaled(amountRaw, {
+      scale: 100,
+      min: 0.01,
+      max: 100_000,
+      unit: "dollars",
+    });
+    if ("error" in amount) {
+      return fieldError({ [`amount_${i}`]: amount.error });
+    }
+    installments.push({ dueDate: date.value, amountCents: amount.value });
+  }
+
+  const result = await createPaymentPlan(actor, leaseId, {
+    installments,
+    note: String(formData.get("note") ?? "") || null,
+  });
+
+  if (!result.ok) {
+    switch (result.reason) {
+      case "invalid_schedule":
+        return {
+          status: "error",
+          message: result.problems.map((p) => p.problem).join(" "),
+          fieldErrors: {},
+        };
+      case "already_active":
+        return {
+          status: "error",
+          message:
+            "This lease already has an active payment plan. Cancel it before starting another.",
+          fieldErrors: {},
+        };
+      case "forbidden":
+        return {
+          status: "error",
+          message: "You cannot set up a payment plan on this lease.",
+          fieldErrors: {},
+        };
+      default:
+        return {
+          status: "error",
+          message: "That lease could not be found.",
+          fieldErrors: {},
+        };
+    }
+  }
+
+  revalidateProfile(tenantId);
+  return success(
+    "Payment plan agreed. Automated collections stop on this lease tonight.",
+  );
+}
+
+export async function cancelPaymentPlanAction(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const actor = await requireStaffActor();
+  const tenantId = String(formData.get("tenantId") ?? "");
+
+  const result = await cancelPaymentPlan(
+    actor,
+    String(formData.get("planId") ?? ""),
+    String(formData.get("cancelReason") ?? ""),
+  );
+
+  if (!result.ok) {
+    switch (result.reason) {
+      case "missing_reason":
+        return fieldError({
+          cancelReason: "Say why this payment plan is being cancelled.",
+        });
+      case "not_active":
+        return {
+          status: "error",
+          message: "That payment plan is no longer active.",
+          fieldErrors: {},
+        };
+      case "needs_manager":
+        return {
+          status: "error",
+          message: "Cancelling this plan needs a manager or above.",
+          fieldErrors: {},
+        };
+      case "forbidden":
+        return {
+          status: "error",
+          message: "You cannot cancel a payment plan on this lease.",
+          fieldErrors: {},
+        };
+      default:
+        return {
+          status: "error",
+          message: "That payment plan could not be found.",
+          fieldErrors: {},
+        };
+    }
+  }
+
+  revalidateProfile(tenantId);
+  return success(
+    "Payment plan cancelled. Automated collections resume on this lease.",
+  );
 }
 
 /// US-23's refund, from the profile.

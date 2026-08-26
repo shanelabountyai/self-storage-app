@@ -121,6 +121,12 @@ export const PORTAL_SCAN_ROUTES = [
   // same posture as the bad-token public routes. The receipt's four outcome
   // states are a STATE gap, and B-156 owns those.
   '/portal/pay/done',
+  // B-090 part 3. The "you're not on a plan" empty state is real, renderable
+  // content for any logged-in tenant — unlike `/portal/pay`, nothing here
+  // needs a real fixture to reach it, so the generic loop is enough. The
+  // ACTIVE-plan state needs a real plan and is a STATE gap, in
+  // `SCANNED_STATES` below.
+  '/portal/payment-plan',
 ]
 
 /// B-119 (accessibility review 2026-08-12, test gap 2). "Coverage grew by
@@ -486,6 +492,16 @@ export const STATE_EXCEPTIONS: readonly StateException[] = [
     audience: 'portal',
     reason:
       'the refusal shown to a tenant in the lien pipeline, which needs a lease in that state paired with a portal credential — the one demo lease that qualifies has none',
+  },
+  // B-90 part 3. The base route loop scans the "you're not on a plan" empty
+  // state (the common case); the schedule TABLE only renders once a lease
+  // actually has an active plan, which the demo seed does not create.
+  {
+    route: '/portal/payment-plan',
+    state: 'active plan schedule',
+    audience: 'portal',
+    reason:
+      'the installment table a tenant on a plan sees, which needs a real PaymentPlan on a demo lease paired with a portal credential — none exists in the seed',
   },
 ] as const
 

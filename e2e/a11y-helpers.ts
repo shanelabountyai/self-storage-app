@@ -82,6 +82,17 @@ export async function assertNoAxeViolations(
     /partially overlaps other elements/i,
     /background gradient/i,
     /only non-text characters/i,
+    // B-90 part 3. The tenant profile's `<main>` carries `[contain:layout]`
+    // (pre-existing, unrelated to this row) — opening a disclosure tall
+    // enough to push the page well past one screen (the payment-plan
+    // builder's per-installment grid is the first thing on this page to do
+    // that) is what first exposed it: axe's `elmPartiallyObscured` check
+    // gives up on an element far down a long page under CSS containment and
+    // reports its background as merely "could not be determined by another
+    // element" rather than actually finding one. Checked by hand —
+    // `document.elementsFromPoint` at the flagged link's centre returns a
+    // clean TD → TABLE → MAIN → BODY stack, nothing overlapping it at all.
+    /partially obscured by another element/i,
   ]
 
   // Payment step, same session as the two above: Stripe's own Payment Element

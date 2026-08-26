@@ -37,7 +37,8 @@
     "./org": "./org/index.ts",
     "./documents": "./documents/index.ts",
     "./labels": "./labels/index.ts",
-    "./waitlist": "./waitlist/index.ts"
+    "./waitlist": "./waitlist/index.ts",
+    "./payment-plans": "./payment-plans/index.ts"
   },
   "dependencies": {
     "@storage/db": "*"

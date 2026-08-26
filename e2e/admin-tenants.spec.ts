@@ -106,6 +106,9 @@ test.describe('signed in as the demo owner', () => {
     // opened — one write form, one long-log "show more" — before the pass.
     await openDisclosure(page, 'Edit contact details')
     await openDisclosure(page, 'Place a hold')
+    // B-90 part 3. The plan builder's per-installment grid is its own
+    // disclosure, same reasoning as the two above.
+    await openDisclosure(page, 'Set up a payment plan')
 
     await assertNoAxeViolations(page)
   })
