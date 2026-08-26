@@ -1,5 +1,8 @@
 import { prisma } from '@storage/db'
 import { OCCUPYING_LEASE_STATUSES } from '@storage/core/inventory'
+import { presetFor, SHARED_ACCESS_PRESETS } from '@storage/core/access'
+import { parseWeeklySchedule } from '@storage/core/facility-settings'
+import { businessDateFor } from '@storage/core/jobs'
 import { accessCodeEncryptionKey, decryptCode } from '@/lib/access/secret'
 
 // PRD 03 US-9 AC4 (B-105). What the tenant sees on their own authorized-access
@@ -23,6 +26,17 @@ export type AuthorizedPersonView = {
   /// True when this person's access is off because the TENANT'S is — the
   /// delinquency cascade (AC2), not something they did.
   suspended: boolean
+  /// US-8 AC1's scope, rendered back. A control whose value never appears on
+  /// the screen again is one a tenant cannot check, correct, or trust.
+  hoursLabel: string
+  /// The last day they can get in, as a facility-local `YYYY-MM-DD`, or null
+  /// for no limit.
+  ///
+  /// An absolute date, never a countdown — PRD 01 §6.8.1's standing rule, and
+  /// the one B-142 applied to the transfer hold: "3 days left" is a value a
+  /// screen-reader user has to re-poll to read, and it is wrong the moment the
+  /// page has been open for a day.
+  expiresOn: string | null
 }
 
 export type LeaseAccessView = {
@@ -30,6 +44,9 @@ export type LeaseAccessView = {
   unitNumber: string
   facilityName: string
   cap: number
+  /// Facility-local today, as `YYYY-MM-DD`. The date field's `min`: a browser
+  /// would otherwise offer yesterday at a site five hours behind the server.
+  today: string
   people: AuthorizedPersonView[]
   /// True when the tenant's own access is suspended. Anyone added now starts
   /// suspended too, and saying so up front is better than letting somebody hand
@@ -45,7 +62,7 @@ export async function authorizedAccessForTenant(tenantId: string): Promise<Lease
       id: true,
       facilityId: true,
       unit: { select: { number: true } },
-      facility: { select: { name: true, authorizedAccessCap: true } },
+      facility: { select: { name: true, authorizedAccessCap: true, timezone: true } },
     },
   })
 
@@ -64,6 +81,8 @@ export async function authorizedAccessForTenant(tenantId: string): Promise<Lease
             relationship: true,
             createdAt: true,
             createdByTenantId: true,
+            accessHours: true,
+            expiresAt: true,
             grant: {
               select: {
                 state: true,
@@ -88,6 +107,7 @@ export async function authorizedAccessForTenant(tenantId: string): Promise<Lease
         unitNumber: lease.unit.number,
         facilityName: lease.facility.name,
         cap: lease.facility.authorizedAccessCap,
+        today: localDate(new Date(), lease.facility.timezone),
         tenantSuspended: tenantGrant?.state === 'suspended',
         people: people.map((person) => ({
           id: person.id,
@@ -103,6 +123,15 @@ export async function authorizedAccessForTenant(tenantId: string): Promise<Lease
           // worse than one that says "call us" for that row.
           code: readCode(person.grant?.credentials[0]?.valueRef ?? null, key),
           suspended: person.grant?.state === 'suspended',
+          hoursLabel: hoursLabel(person.accessHours),
+          // Stored as the local midnight that ENDS the last day, so the day a
+          // person reads back is the day before the stored instant.
+          expiresOn: person.expiresAt
+            ? localDate(
+                new Date(person.expiresAt.getTime() - 1),
+                lease.facility.timezone,
+              )
+            : null,
         })),
       }
     }),
@@ -116,4 +145,19 @@ function readCode(valueRef: string | null, key: Buffer | null): string | null {
   } catch {
     return null
   }
+}
+
+function localDate(instant: Date, timezone: string): string {
+  return businessDateFor(instant, timezone).toISOString().slice(0, 10)
+}
+
+/// A preset's own words where the schedule is one of them, and a deliberately
+/// vague "limited hours" where it is not — a manager's custom window has no
+/// short honest name, and inventing one that is subtly wrong about when
+/// somebody can reach their own belongings is worse than saying to ring.
+function hoursLabel(accessHours: unknown): string {
+  const preset = presetFor(parseWeeklySchedule(accessHours ?? null))
+  return preset === 'custom'
+    ? 'Limited hours — call the office'
+    : SHARED_ACCESS_PRESETS[preset].label
 }

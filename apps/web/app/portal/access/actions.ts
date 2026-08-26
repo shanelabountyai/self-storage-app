@@ -5,9 +5,11 @@ import { requireTenantActor } from '@/lib/rbac/session'
 import {
   AuthorizedAccessCapError,
   createAuthorizedPerson,
+  ExpiryInThePastError,
   NotYourLeaseError,
   revokeAuthorizedPerson,
 } from '@/lib/access/authorized-persons'
+import { isSharedAccessPreset, SHARED_ACCESS_PRESETS } from '@storage/core/access'
 import { fieldError, success, type FormState } from '@/lib/admin/form-state'
 
 // PRD 03 US-9 AC4 (B-105). Tenant self-service for the authorized-access list.
@@ -21,6 +23,11 @@ export async function addPersonAction(_prev: FormState, formData: FormData): Pro
   const name = String(formData.get('name') ?? '').trim()
   const phone = String(formData.get('phone') ?? '').trim()
   const relationship = String(formData.get('relationship') ?? '').trim()
+  // US-8 AC1's scope. Both optional: the common case is still "my brother, no
+  // limits", and requiring an answer to two questions nobody asked is how a
+  // tenant goes back to texting their own code instead.
+  const preset = String(formData.get('accessHours') ?? 'anytime')
+  const expiresOn = String(formData.get('expiresOn') ?? '').trim() || null
 
   const errors: Record<string, string> = {}
   if (!name) errors.name = 'Enter their full name, as it appears on their ID.'
@@ -28,19 +35,29 @@ export async function addPersonAction(_prev: FormState, formData: FormData): Pro
   if (!relationship) {
     errors.relationship = 'Say who they are to you — for example "spouse" or "employee".'
   }
+  if (!isSharedAccessPreset(preset)) errors.accessHours = 'Choose when they can get in.'
   if (Object.keys(errors).length > 0) return fieldError(errors)
 
   try {
     const created = await createAuthorizedPerson(
       { kind: 'tenant', tenantId: actor.tenantId },
       leaseId,
-      { name, phone, relationship },
+      {
+        name,
+        phone,
+        relationship,
+        accessHours: isSharedAccessPreset(preset) ? SHARED_ACCESS_PRESETS[preset].schedule : null,
+        expiresOn,
+      },
     )
     revalidatePath('/portal/access')
     return success(
       `${name} can now get in with their own code: ${created.code}. It is theirs alone — you can withdraw it at any time without changing yours.`,
     )
   } catch (error) {
+    if (error instanceof ExpiryInThePastError) {
+      return fieldError({ expiresOn: error.message })
+    }
     if (error instanceof AuthorizedAccessCapError) {
       return fieldError({
         name: `You can have ${error.cap} named people on this unit. Withdraw somebody first, or call the office if you need more.`,

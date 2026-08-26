@@ -4,6 +4,7 @@ import { expireCheckoutSessions } from '@/lib/checkout/session'
 import { drainGateCommands } from '@/lib/access/service'
 import { reconcileFacility } from '@/lib/access/reconciliation'
 import { pruneRetiredSecrets } from '@/lib/access/webhook-secrets'
+import { expireSharedAccess } from '@/lib/access/authorized-persons'
 import { provisionAccessForLease } from '@/lib/access/provision'
 import { processCommsEvent } from '@/lib/comms/service'
 import { scanExpiringCards, scanExpiringProtectionProofs } from '@/lib/billing/scans'
@@ -173,6 +174,32 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
         itemId: facilityId ?? 'global',
         ok: true,
         message: `expired ${expired} reservation${expired === 1 ? '' : 's'}`,
+      })
+    },
+  },
+  {
+    // PRD 03 US-8 AC1 (B-086). Time-boxed shared access reaching its date.
+    //
+    // Per-facility at hour 0 local, the same shape and the same reason as
+    // `reservation.expire` directly above: an expiry runs to the end of a
+    // facility-local day, so a single UTC hour would cut a Texas tenant's
+    // guest off five hours early or nineteen hours late depending on the
+    // season. `expiresAt` is STORED as that local midnight, so the sweep
+    // boundary and the stored instant are the same moment rather than two
+    // approximations of it.
+    //
+    // Missing a run means somebody keeps access slightly too long, never that
+    // an expired person is silently permanent — the row stays due and the next
+    // run takes it.
+    name: 'access.expire-shared',
+    localHour: 0,
+    scope: 'per_facility',
+    handler: async ({ facilityId, recordItem }) => {
+      const { expired } = await expireSharedAccess(new Date(), facilityId ?? undefined)
+      recordItem({
+        itemId: facilityId ?? 'global',
+        ok: true,
+        message: `expired ${expired} shared-access code${expired === 1 ? '' : 's'}`,
       })
     },
   },

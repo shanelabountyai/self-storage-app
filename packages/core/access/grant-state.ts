@@ -57,6 +57,14 @@ export type GrantCause =
   | 'system:move_out'
   | 'system:delinquency'
   | 'system:delinquency_cleared'
+  /// B-086 / US-8 AC1. A time-boxed shared-access grant reaching its expiry.
+  ///
+  /// `system:`, not `tenant:`, and the distinction is the same evidentiary one
+  /// the `tenant:` prefix exists for: the tenant set a date, but nobody was
+  /// present when it came round. A log that reads "the tenant withdrew this
+  /// person" on a Tuesday the tenant did nothing is a false statement about
+  /// who did what.
+  | 'system:shared_access_expired'
   | `staff:${string}`
   /// B-105. A tenant acting on their own lease from the portal — adding or
   /// withdrawing somebody on their authorized-access list.

@@ -37,6 +37,41 @@ test.describe('signed in as the demo tenant', () => {
     })
   }
 
+  // a11y-state: /portal/access | add-someone disclosure open
+  //
+  // B-086 part 1. Everything behind a closed <details> is invisible to axe
+  // (D-95), and this row put two new controls inside one — the schedule select
+  // and the "Last day" date field. Without this the base loop above would have
+  // moved them out of the audit rather than into it.
+  test('the shared-access form has no WCAG 2.1 AA violations, with the disclosure open', async ({
+    page,
+  }) => {
+    await page.goto('/portal/access')
+    await expect(page.getByRole('main')).toBeVisible()
+
+    // The demo tenant may already be at the facility's cap, in which case the
+    // form is deliberately not rendered at all — the same self-skip discipline
+    // B-120 requires of any spec touching shared demo fixtures, rather than a
+    // failure that reads as a broken page.
+    //
+    // Located by `summary` rather than by role: Chromium's mapping of
+    // <details> to `group`, and of <summary> to that group's accessible name,
+    // is not something to bet a scan on — and a locator that quietly matches
+    // nothing turns this test into a permanent skip that audits nothing, which
+    // is the exact failure it exists to prevent.
+    const summary = page.locator('summary', { hasText: 'Add someone' })
+    test.skip(
+      (await summary.count()) === 0,
+      'this tenant is at the authorized-access cap; no form to scan',
+    )
+
+    await summary.first().click()
+    await expect(page.getByLabel('When they can get in').first()).toBeVisible()
+    await expect(page.getByLabel('Last day (optional)').first()).toBeVisible()
+
+    await assertNoAxeViolations(page)
+  })
+
   for (const route of PORTAL_ROUTES) {
     test(`${route} reflows to 320px without horizontal scroll`, async ({ page }) => {
       await page.setViewportSize({ width: 320, height: 800 })

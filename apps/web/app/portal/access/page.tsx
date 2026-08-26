@@ -3,6 +3,7 @@ import { AdminForm, Field } from '@/components/admin/form'
 import { requireTenantActor } from '@/lib/rbac/session'
 import { authorizedAccessForTenant } from '@/lib/portal/authorized-access'
 import { currentImpersonation } from '@/lib/impersonation/context'
+import { SHARED_ACCESS_PRESETS } from '@storage/core/access'
 import { addPersonAction, revokePersonAction } from './actions'
 
 export const metadata: Metadata = { title: 'Who can get in' }
@@ -83,6 +84,10 @@ export default async function AccessPage() {
                     <p className="text-muted-foreground">
                       {person.relationship} · {person.phone}
                     </p>
+                    <p className="text-muted-foreground">
+                      {person.hoursLabel}
+                      {person.expiresOn && ` · until ${formatDay(person.expiresOn)}`}
+                    </p>
                     {person.code ? (
                       <p className="mt-1">
                         Their code: <span className="font-mono font-medium">{person.code}</span>
@@ -159,6 +164,32 @@ export default async function AccessPage() {
                   hint="For example: spouse, employee, brother."
                   className="flex flex-col gap-1 text-sm"
                 />
+                {/* US-8 AC1's scope. Both optional and both defaulted to the
+                    unrestricted answer: the common case is still "my brother,
+                    no limits", and a tenant made to answer two questions they
+                    did not ask goes back to texting their own code. */}
+                <Field
+                  name="accessHours"
+                  label="When they can get in"
+                  as="select"
+                  defaultValue="anytime"
+                  className="flex flex-col gap-1 text-sm"
+                >
+                  {Object.entries(SHARED_ACCESS_PRESETS).map(([value, preset]) => (
+                    <option key={value} value={value}>
+                      {preset.label}
+                    </option>
+                  ))}
+                </Field>
+                <Field
+                  name="expiresOn"
+                  label="Last day (optional)"
+                  type="date"
+                  min={unit.today}
+                  autoComplete="off"
+                  hint="Leave blank and their code works until you withdraw it."
+                  className="flex flex-col gap-1 text-sm"
+                />
                 <div className="sm:col-span-3">
                   <button
                     type="submit"
@@ -174,4 +205,17 @@ export default async function AccessPage() {
       ))}
     </div>
   )
+}
+
+/// An absolute facility-local day, spelled out. Never a countdown — PRD 01
+/// §6.8.1.
+function formatDay(isoDate: string): string {
+  const [year, month, day] = isoDate.split('-').map(Number)
+  return new Date(Date.UTC(year, month - 1, day)).toLocaleDateString('en-US', {
+    timeZone: 'UTC',
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  })
 }

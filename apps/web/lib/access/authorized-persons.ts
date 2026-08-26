@@ -2,8 +2,9 @@ import { type Prisma, prisma } from '@storage/db'
 import { recordAudit } from '@storage/core/audit'
 import type { WeeklySchedule } from '@storage/core/facility-settings'
 import type { GrantCause } from '@storage/core/access'
+import { zonedMidnight } from '@storage/core/jobs'
 import { requirePermission } from '@/lib/rbac/authorize'
-import type { Actor } from '@/lib/rbac/actor'
+import { systemActor, type Actor } from '@/lib/rbac/actor'
 import { toAuditActor } from '@/lib/rbac/audit-actor'
 import { drainGateCommands, ensureGrantForHolder, issueCredential, transitionGrant } from './service'
 
@@ -19,6 +20,22 @@ import { drainGateCommands, ensureGrantForHolder, issueCredential, transitionGra
 // a gate is a second place for the cap, the audit entry and the suspension
 // state to be wrong.
 
+export class ExpiryInThePastError extends Error {
+  constructor() {
+    super('Pick a date in the future — their code has to work for at least today.')
+    this.name = 'ExpiryInThePastError'
+  }
+}
+
+/// The instant a facility-local calendar day ENDS: local midnight beginning the
+/// following day. "Until the 14th" includes the 14th, which is what a person
+/// filling in a date field means and what `access.expire-shared`'s hour-0 sweep
+/// then matches exactly.
+function endOfLocalDay(isoDate: string, timezone: string): Date {
+  const [year, month, day] = isoDate.split('-').map(Number)
+  return zonedMidnight(year, month, day + 1, timezone)
+}
+
 export class AuthorizedAccessCapError extends Error {
   readonly cap: number
 
@@ -33,10 +50,20 @@ export type CreateAuthorizedPersonInput = {
   name: string
   phone: string
   relationship: string
-  /// AC1: optional. Nothing enforces it yet — gate-hours enforcement
-  /// including per-grant overrides is FR-5 / B-064's — it is captured and
-  /// unread until that item exists.
+  /// AC1: optional. Enforced from B-086 — narrowed against the facility's own
+  /// gate hours and pushed to the controller by `scheduleForGrant`. Before that
+  /// it was written and read by nothing, so a manager who set "weekends only"
+  /// had configured precisely nothing.
   accessHours?: WeeklySchedule | null
+  /// US-8 AC1's time-boxing, as a facility-local calendar date (`YYYY-MM-DD`)
+  /// — the last day this person may enter, inclusive. Null means "until
+  /// somebody withdraws it", which is what the counter case usually wants and
+  /// what every row predating B-086 is.
+  ///
+  /// A date rather than an instant because that is the promise a portal makes;
+  /// it is resolved here to the local midnight that ENDS it, so the stored
+  /// value and `access.expire-shared`'s hour-0 sweep are the same moment.
+  expiresOn?: string | null
 }
 
 export type CreatedAuthorizedPerson = { personId: string; credentialId: string; code: string }
@@ -48,7 +75,14 @@ export type CreatedAuthorizedPerson = { personId: string; credentialId: string; 
 /// WHICH kind of actor did it — AC1 asks for "the actor who changed it", and
 /// after a theft claim "the tenant added their own brother" and "a manager
 /// added somebody at the counter" are different answers.
-type ActingParty = { staffUserId: string; tenantId: null } | { staffUserId: null; tenantId: string }
+type ActingParty =
+  | { staffUserId: string; tenantId: null }
+  | { staffUserId: null; tenantId: string }
+  /// B-086. The expiry sweep, which revokes on a date the tenant chose earlier.
+  /// It goes through the same function a person does rather than getting its
+  /// own copy — a second way to stop a gate code working is a second place for
+  /// the grant transition and the audit entry to be wrong.
+  | { staffUserId: null; tenantId: null }
 
 export class NotYourLeaseError extends Error {
   constructor() {
@@ -63,8 +97,12 @@ async function actingParty(actor: Actor, leaseId: string, facilityId: string): P
     return { staffUserId: actor.staffUserId, tenantId: null }
   }
 
-  // The `system` actor has no business on this list: every path that reaches
-  // here is a person deciding who may walk through a gate.
+  // B-086: `system` is admitted for exactly one caller, the expiry sweep, and
+  // it is admitted with no lease check because there is no session to check it
+  // against — the authority is the `expiresAt` the tenant set. Every other
+  // path that reaches here is a person deciding who may walk through a gate,
+  // and creation refuses `system` outright below.
+  if (actor.kind === 'system') return { staffUserId: null, tenantId: null }
   if (actor.kind !== 'tenant') throw new NotYourLeaseError()
 
   // A lease id in a portal form. Checked here rather than at the screen so
@@ -85,15 +123,26 @@ export async function createAuthorizedPerson(
   leaseId: string,
   input: CreateAuthorizedPersonInput,
 ): Promise<CreatedAuthorizedPerson> {
+  // The sweep revokes; it never adds. Refused here rather than relying on
+  // `actingParty`, which admits `system` for that one caller.
+  if (actor.kind === 'system') throw new NotYourLeaseError()
+
   const lease = await prisma.lease.findUniqueOrThrow({
     where: { id: leaseId },
     select: {
       facilityId: true,
       tenantId: true,
-      facility: { select: { authorizedAccessCap: true } },
+      facility: { select: { authorizedAccessCap: true, timezone: true } },
     },
   })
   const party: ActingParty = await actingParty(actor, leaseId, lease.facilityId)
+  const expiresAt = input.expiresOn
+    ? endOfLocalDay(input.expiresOn, lease.facility.timezone)
+    : null
+  // A date already past would issue a working code and revoke it on the next
+  // sweep — a code handed out that stops within hours, which reads as a broken
+  // gate rather than as the form having accepted something it should not have.
+  if (expiresAt && expiresAt <= new Date()) throw new ExpiryInThePastError()
 
   // AC4: tenant self-service "inherits the same cap". One check for both
   // actors, which is most of why they share this function.
@@ -110,6 +159,7 @@ export async function createAuthorizedPerson(
       phone: input.phone,
       relationship: input.relationship,
       accessHours: (input.accessHours ?? undefined) as Prisma.InputJsonValue | undefined,
+      expiresAt,
       createdByStaffId: party.staffUserId,
       createdByTenantId: party.tenantId,
     },
@@ -160,7 +210,12 @@ export async function createAuthorizedPerson(
     entityType: 'AuthorizedAccessPerson',
     entityId: person.id,
     facilityId: lease.facilityId,
-    context: { leaseId, name: input.name, relationship: input.relationship },
+    context: {
+      leaseId,
+      name: input.name,
+      relationship: input.relationship,
+      expiresOn: input.expiresOn ?? null,
+    },
   })
 
   return { personId: person.id, credentialId: credential.credentialId, code: credential.code }
@@ -198,11 +253,16 @@ export async function revokeAuthorizedPerson(
     // unit; the point of the list is that the tenant controls who gets in, and
     // making them ring the office to withdraw access is how a person keeps
     // access they should not have over a weekend.
-    await transitionGrant(
-      person.grant.id,
-      'revoked',
-      party.tenantId ? 'tenant:authorized_person_removed' : 'staff:authorized_person_removed',
-    )
+    // Three causes, not two (B-086). A system revoke is the expiry sweep, and
+    // labelling it `staff:` — which the old two-way ternary did for anything
+    // without a tenantId — would put a manager's name on a gate log entry
+    // nobody was present for.
+    const cause: GrantCause = party.tenantId
+      ? 'tenant:authorized_person_removed'
+      : party.staffUserId
+        ? 'staff:authorized_person_removed'
+        : 'system:shared_access_expired'
+    await transitionGrant(person.grant.id, 'revoked', cause)
   }
 
   await recordAudit({
@@ -236,4 +296,47 @@ export async function cascadeAuthorizedAccess(
   for (const person of people) {
     if (person.grant) await transitionGrant(person.grant.id, to, cause)
   }
+}
+
+/// PRD 03 US-8 AC1 (B-086). The time-boxed half: revokes every shared-access
+/// person whose date has passed, at the facility whose local day has just
+/// turned over.
+///
+/// **Revokes rather than filters, and that is the whole point.** A keypad
+/// decides from the codes it was last told about — it does not stop working
+/// because our server is down, and a real standalone controller does not ask
+/// us anything at entry time. So an expired person we merely hide from our own
+/// reads still opens the gate. Going through `revokeAuthorizedPerson` puts the
+/// revoke command in the outbox, which is what eventually reaches the
+/// hardware.
+///
+/// Idempotent: `revokeAuthorizedPerson` returns `already_revoked` rather than
+/// throwing, so a catch-up run over missed business dates is a no-op per row.
+export async function expireSharedAccess(
+  at: Date,
+  facilityId?: string,
+): Promise<{ expired: number }> {
+  const due = await prisma.authorizedAccessPerson.findMany({
+    where: { active: true, expiresAt: { lte: at }, ...(facilityId ? { facilityId } : {}) },
+    select: { id: true, facilityId: true },
+  })
+
+  let expired = 0
+  for (const person of due) {
+    const result = await revokeAuthorizedPerson(
+      systemActor('access.expire-shared'),
+      person.id,
+      'shared_access_expired',
+    )
+    if (result.ok) expired += 1
+  }
+
+  // One drain per facility rather than per person: the outbox is FIFO per
+  // facility (FR-3) and draining inside the loop would be N passes over the
+  // same queue.
+  for (const id of new Set(due.map((person) => person.facilityId))) {
+    await drainGateCommands(at, id)
+  }
+
+  return { expired }
 }

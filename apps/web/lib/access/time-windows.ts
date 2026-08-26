@@ -1,6 +1,6 @@
 import { prisma } from '@storage/db'
-import { isAlwaysOpen } from '@storage/core/access'
-import { parseWeeklySchedule } from '@storage/core/facility-settings'
+import { isAlwaysOpen, narrowSchedule } from '@storage/core/access'
+import { parseWeeklySchedule, type WeeklySchedule } from '@storage/core/facility-settings'
 import { enqueueCommand } from '@/lib/access/service'
 
 // PRD 03 US-4 AC1 (B-064): "changes propagate to all active grants via
@@ -24,18 +24,19 @@ export async function propagateGateHours(facilityId: string): Promise<{ enqueued
     where: { id: facilityId },
     select: { gateHours: true },
   })
-  const schedule = parseWeeklySchedule(facility.gateHours)
+  const facilitySchedule = parseWeeklySchedule(facility.gateHours)
 
   const grants = await prisma.accessGrant.findMany({
     // `pending` included deliberately: a grant provisioned moments ago has its
     // credential arriving next, and skipping it here would leave exactly one
     // tenant on no window until the next settings edit.
     where: { facilityId, state: { in: ['pending', 'active', 'suspended'] } },
-    select: { id: true, extendedHours: true },
+    select: { id: true, extendedHours: true, authorizedPerson: { select: { accessHours: true } } },
   })
 
   let enqueued = 0
   for (const grant of grants) {
+    const schedule = scheduleForGrant(facilitySchedule, grant.authorizedPerson?.accessHours)
     await enqueueCommand({
       type: 'set_time_window',
       facilityId,
@@ -50,12 +51,36 @@ export async function propagateGateHours(facilityId: string): Promise<{ enqueued
       // Versioned by the schedule itself, so re-saving identical hours is one
       // command rather than a fresh one per click — and genuinely changing them
       // is always a new key. The outbox dedupes on it.
-      idempotencyKey: `window:${grant.id}:${scheduleVersion(facility.gateHours, grant.extendedHours)}`,
+      //
+      // Versioned on the NARROWED schedule (B-086), not the facility's: two
+      // authorized people on one site have different windows now, so keying on
+      // the facility's hours alone would give them the same idempotency key and
+      // the outbox would dedupe one of their windows away.
+      idempotencyKey: `window:${grant.id}:${scheduleVersion(schedule, grant.extendedHours)}`,
     })
     enqueued += 1
   }
 
   return { enqueued }
+}
+
+/// PRD 03 US-8 AC1 (B-086). The one place that decides which window a grant
+/// gets pushed, so provisioning, a settings save and a per-grant push cannot
+/// disagree.
+///
+/// A tenant's grant gets the facility's hours. An authorized person's gets
+/// theirs narrowed against the facility's — see `narrowSchedule` for why
+/// narrowing rather than replacing.
+///
+/// A person's `accessHours` that fails to parse is treated as unset rather
+/// than throwing, matching `parseWeeklySchedule`'s own contract. The cost of
+/// the other choice is a settings save that 500s for every tenant at a site
+/// because one row holds malformed JSON.
+export function scheduleForGrant(
+  facilitySchedule: WeeklySchedule | null,
+  personAccessHours: unknown,
+): WeeklySchedule | null {
+  return narrowSchedule(facilitySchedule, parseWeeklySchedule(personAccessHours ?? null))
 }
 
 /// A short stable digest of what is being pushed. Not a security boundary —
@@ -78,13 +103,20 @@ function scheduleVersion(schedule: unknown, extendedHours: boolean): string {
 export async function pushGateHoursForGrant(grantId: string): Promise<void> {
   const grant = await prisma.accessGrant.findUniqueOrThrow({
     where: { id: grantId },
-    select: { facilityId: true, extendedHours: true },
+    select: {
+      facilityId: true,
+      extendedHours: true,
+      authorizedPerson: { select: { accessHours: true } },
+    },
   })
   const facility = await prisma.facility.findUniqueOrThrow({
     where: { id: grant.facilityId },
     select: { gateHours: true },
   })
-  const schedule = parseWeeklySchedule(facility.gateHours)
+  const schedule = scheduleForGrant(
+    parseWeeklySchedule(facility.gateHours),
+    grant.authorizedPerson?.accessHours,
+  )
 
   await enqueueCommand({
     type: 'set_time_window',
@@ -94,7 +126,7 @@ export async function pushGateHoursForGrant(grantId: string): Promise<void> {
       schedule: schedule && !isAlwaysOpen(schedule) ? schedule : null,
       extendedHours: grant.extendedHours,
     },
-    idempotencyKey: `window:${grantId}:${scheduleVersion(facility.gateHours, grant.extendedHours)}`,
+    idempotencyKey: `window:${grantId}:${scheduleVersion(schedule, grant.extendedHours)}`,
   })
 }
 

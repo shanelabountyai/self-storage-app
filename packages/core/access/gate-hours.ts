@@ -164,3 +164,39 @@ export function isAlwaysOpen(schedule: WeeklySchedule | null): boolean {
     return !entry.closed && entry.open === '00:00' && entry.close === '23:59'
   })
 }
+
+/// PRD 03 US-8 AC1 (B-086). The intersection of two weekly schedules: the
+/// hours a person may enter when the facility allows one window and their own
+/// authorisation allows another.
+///
+/// **Intersection, never replacement.** A tenant granting shared access is
+/// narrowing their own access, not issuing a wider one — and a per-person
+/// schedule that could widen would be free `extendedHours`, an add-on the
+/// facility sells, obtained by typing 00:00–23:59 into a portal form. So a day
+/// is open only where both are, and closed if either is.
+///
+/// `null` on either side means "no restriction from that side" (the same rule
+/// `gateHoursDecision` uses), so the result is the other one.
+export function narrowSchedule(
+  facility: WeeklySchedule | null,
+  person: WeeklySchedule | null,
+): WeeklySchedule | null {
+  if (!facility) return person
+  if (!person) return facility
+
+  return Object.fromEntries(
+    DAYS_OF_WEEK.map((day) => {
+      const a = facility[day]
+      const b = person[day]
+      if (a.closed || b.closed) return [day, { closed: true }]
+
+      const open = a.open > b.open ? a.open : b.open
+      const close = a.close < b.close ? a.close : b.close
+      // Non-overlapping windows — facility 06:00–12:00, person 14:00–18:00 —
+      // leave no minute in common. Closed, rather than an inverted range the
+      // half-open comparison in `gateHoursDecision` would read as always-shut
+      // anyway but that `parseWeeklySchedule` would reject on the way back in.
+      return [day, open < close ? { closed: false, open, close } : { closed: true }]
+    }),
+  ) as WeeklySchedule
+}

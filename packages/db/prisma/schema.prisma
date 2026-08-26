@@ -3125,10 +3125,31 @@ model AuthorizedAccessPerson {
   relationship      String
   /// Optional per AC1. A `WeeklySchedule`-shaped JSON when set, reusing the
   /// validated shape facility hours already use (`parseWeeklySchedule`) rather
-  /// than inventing a second one. Nothing enforces it yet — gate-hours
-  /// enforcement including per-grant overrides is FR-5 / B-064's — so this is
-  /// captured and unread until that item exists.
+  /// than inventing a second one.
+  ///
+  /// **Enforced from B-086**, and for two years of this column's life it was
+  /// not: written by US-9's service since B-029, read by nothing, so a manager
+  /// who set "weekends only" at the counter had configured precisely nothing.
+  /// It now reaches the controller through `scheduleForGrant`, NARROWED
+  /// against the facility's own gate hours (`narrowSchedule`) — a per-person
+  /// window that could widen would be `extendedHours`, which the facility
+  /// sells, obtained by typing 00:00–23:59 into a form.
   accessHours       Json?
+  /// PRD 03 US-8 AC1 (B-086). Time-boxed shared access: the instant this
+  /// person's code stops working, or null for "until somebody withdraws it"
+  /// — which is what every row created before B-086 is, and what the counter
+  /// case usually wants.
+  ///
+  /// Stored as the END of a facility-local day, because that is the promise
+  /// the portal makes ("until the 14th" includes the 14th). `access.expire-
+  /// shared` sweeps at hour 0 facility-local, so the sweep boundary and the
+  /// stored instant are the same moment rather than two approximations of it
+  /// — the same shape `reservation.expire` uses for holds.
+  ///
+  /// Expiry REVOKES rather than filtering: a keypad decides from the codes it
+  /// was last told about and does not stop working because our server is down,
+  /// so a row we merely hide still opens the gate.
+  expiresAt         DateTime? @db.Timestamptz(6)
   active            Boolean   @default(true)
   /// AC1 wants "the actor who changed it", and from B-105 that actor may be the
   /// TENANT rather than a staff member — self-service from the portal is

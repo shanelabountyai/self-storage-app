@@ -401,6 +401,16 @@ export const SCANNED_STATES: readonly ScannedState[] = [
     state: 'disclosure open',
     spec: 'e2e/admin-tenants.spec.ts',
   },
+  // B-086 part 1. The "Add someone" disclosure on the tenant's shared-access
+  // list, opened. Same reason as the tenant profile above and the same rule
+  // D-95 settled: this row put two new controls (a schedule select and a date
+  // field) inside a closed <details>, and the base scan would have moved them
+  // OUT of the audit rather than into it.
+  {
+    route: '/portal/access',
+    state: 'add-someone disclosure open',
+    spec: 'e2e/portal.spec.ts',
+  },
   // B-184 (T3). A refused task completion, added alongside the invalid-submit
   // scan this row required.
   {
