@@ -55,6 +55,23 @@ export default async function PortalPaymentPlanPage() {
               </p>
             </div>
 
+            {/* B-189/D-97. Whether the tenant has to do anything on each date
+                is the first thing they need from this page, and it is now two
+                different answers. Stated per plan rather than in the intro,
+                because a tenant with two units can have one of each.
+                `autoCollectEffective` is deliberate: a plan agreed as
+                automatic against a card that has since been removed will not
+                collect, and telling someone their payment is taken care of
+                when it is not is how they end up in collections believing
+                they kept to the plan. */}
+            {plan.status === 'active' && (
+              <p className="max-w-prose text-sm text-pretty">
+                {plan.autoCollectEffective
+                  ? "We'll charge your card on file for each payment on the date it's due — you don't need to do anything."
+                  : "You'll need to make each payment yourself by the date it's due. We won't charge your card automatically for these."}
+              </p>
+            )}
+
             <table className="w-full text-sm">
               <caption className="sr-only">
                 Installment schedule for unit {plan.unitNumber}

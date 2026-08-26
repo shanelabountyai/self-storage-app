@@ -24,6 +24,11 @@ import { liftHold, placeHold } from './holds'
 export type CreatePaymentPlanInput = {
   installments: PlannedInstallment[]
   note?: string | null
+  /// D-97. Whether the installments are charged from the tenant's saved card
+  /// on their due dates. Defaults to true where the caller says nothing —
+  /// auto-collection is the default the owner chose, and a plan agreed by a
+  /// caller that predates this field should behave the way the policy says.
+  autoCollect?: boolean
 }
 
 export type CreatePaymentPlanResult =
@@ -95,6 +100,7 @@ export async function createPaymentPlan(
         holdId: holdResult.holdId,
         totalCents,
         invoiceIds: arrears.invoiceIds,
+        autoCollect: input.autoCollect ?? true,
         note: input.note?.trim() || null,
         createdByStaffId: actor.staffUserId,
         installments: {
@@ -119,6 +125,7 @@ export async function createPaymentPlan(
           planId: plan.id,
           holdId: holdResult.holdId,
           totalCents,
+          autoCollect: input.autoCollect ?? true,
           installments: input.installments.map((installment) => ({
             dueDate: installment.dueDate.toISOString(),
             amountCents: installment.amountCents,
@@ -192,6 +199,17 @@ export type PaymentPlanView = {
   totalCents: number
   note: string | null
   createdAt: Date
+  /// D-97. Whether installments are charged automatically. Reported alongside
+  /// the schedule because "what happens on the 15th" is a different answer for
+  /// the two kinds of plan, and a staffer reading the schedule to a tenant on
+  /// the phone needs to know which one they are looking at.
+  autoCollect: boolean
+  /// Whether auto-collection can actually happen — the plan says yes AND the
+  /// lease has autopay on AND the tenant has a saved card. A plan agreed as
+  /// auto-collect against a tenant who later removed their card is manual-pay
+  /// in fact, and a screen that says otherwise is telling a staffer a payment
+  /// is taken care of when nothing will take it.
+  autoCollectEffective: boolean
   installments: InstallmentView[]
 }
 
@@ -207,9 +225,16 @@ export async function paymentPlanForLease(leaseId: string, asOf: Date = new Date
       status: true,
       totalCents: true,
       invoiceIds: true,
+      autoCollect: true,
       note: true,
       createdAt: true,
-      installments: { select: { dueDate: true, amountCents: true } },
+      installments: { orderBy: { dueDate: 'asc' }, select: { dueDate: true, amountCents: true } },
+      lease: {
+        select: {
+          autopayEnabled: true,
+          tenant: { select: { stripeDefaultPaymentMethodId: true } },
+        },
+      },
     },
   })
   if (!plan) return null
@@ -222,6 +247,11 @@ export async function paymentPlanForLease(leaseId: string, asOf: Date = new Date
     totalCents: plan.totalCents,
     note: plan.note,
     createdAt: plan.createdAt,
+    autoCollect: plan.autoCollect,
+    autoCollectEffective:
+      plan.autoCollect &&
+      plan.lease.autopayEnabled &&
+      Boolean(plan.lease.tenant.stripeDefaultPaymentMethodId),
     installments: installmentViews(plan.installments, paidSinceCents, asOf),
   }
 }

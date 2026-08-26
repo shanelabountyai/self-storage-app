@@ -482,6 +482,11 @@ export async function createPaymentPlanAction(
   const result = await createPaymentPlan(actor, leaseId, {
     installments,
     note: String(formData.get("note") ?? "") || null,
+    // D-97. A ticked box is the default, so an absent value means the staffer
+    // deliberately untucked it — the tenant asked to pay each installment
+    // themselves. An unchecked checkbox posts nothing at all, which is exactly
+    // why this reads presence rather than a value.
+    autoCollect: formData.get("autoCollect") !== null,
   });
 
   if (!result.ok) {

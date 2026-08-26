@@ -1503,6 +1503,17 @@ model Payment {
   /// for a counter payment taken with no session open, which is legal and
   /// is exactly what the deposits report flags as unreconciled.
   drawerSessionId       String?
+  /// B-189. The plan installment this charge was raised to collect, for the
+  /// auto-collected half of a payment plan. Null for every other payment.
+  ///
+  /// It exists because the retry ladder has to be countable. An installment
+  /// charge names no single invoice — it is allocated across the whole covered
+  /// set — so it writes no `PaymentAllocation` until it succeeds, and B-045's
+  /// `declineHistory` (which counts failed allocations per invoice) can see
+  /// nothing at all. Without this column a declined installment has no
+  /// attempt history, which means no US-20 ladder and no way for the breach
+  /// job to tell a decline from a decision not to pay (CN-6).
+  paymentPlanInstallmentId String?
   createdAt             DateTime      @default(now()) @db.Timestamptz(6)
   updatedAt             DateTime      @updatedAt @db.Timestamptz(6)
 
@@ -1516,10 +1527,15 @@ model Payment {
   ledgerEntries   LedgerEntry[]
   payLink         PayLink?
   merchandiseSale MerchandiseSale?
+  /// SetNull, not Restrict: the installment is a line in a schedule, and a
+  /// plan that is deleted must not take the record of a real card charge with
+  /// it — the money moved whatever happened to the schedule afterwards.
+  paymentPlanInstallment PaymentPlanInstallment? @relation(fields: [paymentPlanInstallmentId], references: [id], onDelete: SetNull)
 
   @@unique([facilityId, receiptNumber])
   @@index([facilityId, receivedAt])
   @@index([tenantId])
+  @@index([paymentPlanInstallmentId])
   @@map("payment")
 }
 
@@ -4085,6 +4101,18 @@ model PaymentPlan {
   /// Free text a staffer can leave about the conversation. Not the record of
   /// WHAT was agreed — the installments are that — only anything about HOW.
   note       String?
+  /// Whether an installment is charged from the tenant's saved card on its due
+  /// date (D-97). Default true and un-tickable at agreement: auto-collection
+  /// is kinder and collects more, but a tenant who wants "I kept to the plan"
+  /// to be a statement about themselves rather than about their card can say
+  /// so, and a plan agreed with a tenant who has no saved method is manual-pay
+  /// whatever this says.
+  ///
+  /// It does NOT stand autopay down on rent invoiced after the plan started.
+  /// A plan is forbearance on the arrears it froze into `invoiceIds`, not a
+  /// rent holiday, so `runAutopay` skips exactly those invoices and collects
+  /// current rent as usual.
+  autoCollect Boolean @default(true)
   createdByStaffId   String
   createdAt          DateTime  @default(now()) @db.Timestamptz(6)
   completedAt        DateTime? @db.Timestamptz(6)
@@ -4131,7 +4159,8 @@ model PaymentPlanInstallment {
   dueDate     DateTime @db.Timestamptz(6)
   amountCents Int
 
-  plan PaymentPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  plan     PaymentPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  payments Payment[]
 
   @@index([planId])
   @@map("payment_plan_installment")

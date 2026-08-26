@@ -1,0 +1,443 @@
+import { randomUUID } from 'node:crypto'
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { prisma } from '../packages/db'
+import { applyPayment } from '../apps/web/lib/billing/allocation'
+
+// B-189 / PRD 02 §4.6 US-25, §4.5 US-20 (CN-6). Autopay and a payment plan,
+// in both directions.
+//
+// The defect this file exists to keep fixed had two halves and one shape.
+// Autopay did not know a plan existed, so it charged the FULL arrears the same
+// night the plan was agreed — the exact outcome the plan is for. And nothing
+// ever charged an installment, so a tenant with a saved card had to remember
+// to pay by hand or the hour-4 breach job broke their plan for them.
+//
+// `createChargeIntent` is mocked at the module the run imports, the same way
+// B-045's own suite does it, so what is under test is the run's selection: WHICH
+// invoices it defers, WHICH installment it collects, for how much, and what it
+// does when the card says no. A real off-session charge is the wall every
+// Stripe-touching suite in this repo hits — there is no key outside production.
+
+const hasDatabase = Boolean(process.env.DATABASE_URL)
+const describeDb = hasDatabase ? describe : describe.skip
+const suffix = randomUUID().slice(0, 8)
+
+type Charge = {
+  reference: string
+  amountCents: number
+  invoiceId?: string
+  paymentPlanId?: string
+  paymentPlanInstallmentId?: string
+}
+
+const charges: Charge[] = []
+let nextChargeBehaviour: 'succeed' | 'decline' = 'succeed'
+let nextDeclineCode = 'card_declined'
+
+vi.mock('../apps/web/lib/payments/intents', () => ({
+  createChargeIntent: vi.fn(async (input: Charge & { tenantId: string; facilityId: string }) => {
+    charges.push({
+      reference: input.reference,
+      amountCents: input.amountCents,
+      invoiceId: input.invoiceId,
+      paymentPlanId: input.paymentPlanId,
+      paymentPlanInstallmentId: input.paymentPlanInstallmentId,
+    })
+
+    // The real function writes its Payment row BEFORE calling Stripe and marks
+    // it failed on a decline. The mock has to leave the same evidence — the
+    // installment's retry ladder and the breach job both count those rows, so
+    // a mock that skipped them would be testing a fiction.
+    const payment = await prisma.payment.create({
+      data: {
+        facilityId: input.facilityId,
+        tenantId: input.tenantId,
+        amountCents: input.amountCents,
+        method: 'card',
+        status: nextChargeBehaviour === 'decline' ? 'failed' : 'pending',
+        paymentPlanInstallmentId: input.paymentPlanInstallmentId ?? null,
+        ...(nextChargeBehaviour === 'decline'
+          ? { failureReason: 'Your card was declined.', failureCode: nextDeclineCode }
+          : { stripePaymentIntentId: `pi_${randomUUID().slice(0, 12)}` }),
+      },
+    })
+    if (input.invoiceId) {
+      await prisma.paymentAllocation.create({
+        data: { paymentId: payment.id, invoiceId: input.invoiceId, amountCents: input.amountCents },
+      })
+    }
+    if (nextChargeBehaviour === 'decline') {
+      throw Object.assign(new Error('Your card was declined.'), { code: nextDeclineCode })
+    }
+    return {
+      paymentId: payment.id,
+      paymentIntentId: payment.stripePaymentIntentId!,
+      clientSecret: 'cs_test',
+      deduplicated: false,
+    }
+  }),
+}))
+
+vi.mock('../apps/web/lib/payments/stripe', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../apps/web/lib/payments/stripe')>()
+  return { ...actual, stripeClient: () => ({}) as never }
+})
+
+const { runAutopay } = await import('../apps/web/lib/billing/autopay')
+const { evaluatePaymentPlanBreaches } = await import(
+  '../apps/web/lib/delinquency/payment-plan-breach'
+)
+
+const d = (iso: string) => new Date(`${iso}T00:00:00.000Z`)
+
+let facilityId = ''
+let tenantId = ''
+let unitTypeId = ''
+let staffId = ''
+let counter = 0
+
+const collected: { itemId: string; ok: boolean; message?: string }[] = []
+const recordItem = (outcome: { itemId: string; ok: boolean; message?: string }) => {
+  collected.push(outcome)
+}
+
+async function newLease(): Promise<string> {
+  counter += 1
+  const unit = await prisma.unit.create({
+    data: { facilityId, unitTypeId, number: `PPA-${counter}-${suffix}` },
+  })
+  const lease = await prisma.lease.create({
+    data: {
+      facilityId,
+      tenantId,
+      unitId: unit.id,
+      status: 'active',
+      startDate: d('2026-06-01'),
+      billingDay: 1,
+      monthlyRateCents: 12_900,
+      autopayEnabled: true,
+    },
+  })
+  return lease.id
+}
+
+async function invoice(leaseId: string, amountCents: number, dueDate: Date): Promise<string> {
+  counter += 1
+  const row = await prisma.invoice.create({
+    data: {
+      facilityId,
+      leaseId,
+      number: `PPA${String(counter).padStart(5, '0')}-${suffix}`,
+      status: 'open',
+      issueDate: dueDate,
+      dueDate,
+      periodStart: dueDate,
+      periodEnd: new Date(dueDate.getTime() + 30 * 86_400_000),
+      subtotalCents: amountCents,
+      totalCents: amountCents,
+    },
+  })
+  return row.id
+}
+
+/// A plan built from rows rather than through `createPaymentPlan`, so the
+/// fixture can say exactly what autopay is meant to read — the covered set,
+/// the schedule and the auto-collect flag — without also exercising the
+/// permission gate `payment-plans-db.test.ts` already covers.
+async function plan(options: {
+  leaseId: string
+  invoiceIds: string[]
+  totalCents: number
+  installments: { dueDate: Date; amountCents: number }[]
+  autoCollect?: boolean
+}): Promise<string> {
+  const hold = await prisma.leaseHold.create({
+    data: {
+      leaseId: options.leaseId,
+      type: 'payment_plan',
+      reason: 'Plan agreed',
+      effectiveFrom: d('2026-08-01'),
+      placedByStaffId: staffId,
+    },
+  })
+  const row = await prisma.paymentPlan.create({
+    data: {
+      leaseId: options.leaseId,
+      holdId: hold.id,
+      totalCents: options.totalCents,
+      invoiceIds: options.invoiceIds,
+      autoCollect: options.autoCollect ?? true,
+      createdByStaffId: staffId,
+      createdAt: d('2026-08-01'),
+      installments: {
+        create: options.installments.map((installment, index) => ({
+          position: index + 1,
+          dueDate: installment.dueDate,
+          amountCents: installment.amountCents,
+        })),
+      },
+    },
+  })
+  return row.id
+}
+
+const installmentCharges = () => charges.filter((charge) => charge.paymentPlanInstallmentId)
+
+describeDb('payment plans and autopay', () => {
+  beforeAll(async () => {
+    const facility = await prisma.facility.create({
+      data: {
+        name: `Plan Autopay ${suffix}`,
+        slug: `plan-autopay-${suffix}`,
+        addressLine1: '1 Storage Way',
+        city: 'Austin',
+        state: 'TX',
+        postalCode: '78704',
+        timezone: 'America/Chicago',
+      },
+    })
+    facilityId = facility.id
+
+    const tenant = await prisma.tenant.create({
+      data: {
+        email: `plan-autopay-${suffix}@example.com`,
+        firstName: 'Ada',
+        lastName: 'Renter',
+        stripeCustomerId: `cus_${suffix}`,
+        stripeDefaultPaymentMethodId: `pm_${suffix}`,
+      },
+    })
+    tenantId = tenant.id
+
+    const staff = await prisma.staffUser.create({
+      data: { email: `plan-autopay-staff-${suffix}@example.com`, firstName: 'Mo', lastName: 'Manager' },
+    })
+    staffId = staff.id
+
+    const unitType = await prisma.unitType.create({
+      data: { facilityId, name: `10x10 ${suffix}`, widthFt: 10, lengthFt: 10 },
+    })
+    unitTypeId = unitType.id
+  })
+
+  afterEach(() => {
+    charges.length = 0
+    collected.length = 0
+    nextChargeBehaviour = 'succeed'
+    nextDeclineCode = 'card_declined'
+  })
+
+  it('defers the arrears the plan froze and still collects rent invoiced after it', async () => {
+    const leaseId = await newLease()
+    const arrears = await invoice(leaseId, 180_000, d('2026-07-01'))
+    const septemberRent = await invoice(leaseId, 12_900, d('2026-09-01'))
+    await plan({
+      leaseId,
+      invoiceIds: [arrears],
+      totalCents: 180_000,
+      installments: [
+        { dueDate: d('2026-10-01'), amountCents: 90_000 },
+        { dueDate: d('2026-11-01'), amountCents: 90_000 },
+      ],
+    })
+
+    await runAutopay(facilityId, d('2026-09-01'), recordItem)
+
+    // The whole point: $1,800 was NOT taken the night the plan started, and
+    // September's $129 rent still was. A plan is forbearance on what is owed,
+    // not a rent holiday.
+    expect(charges.map((charge) => charge.invoiceId)).toEqual([septemberRent])
+    expect(collected.some((item) => item.message?.includes('deferred under an agreed payment plan'))).toBe(true)
+  })
+
+  it('charges one installment on its due date, naming the plan and not an invoice', async () => {
+    const leaseId = await newLease()
+    const arrears = await invoice(leaseId, 180_000, d('2026-07-01'))
+    const planId = await plan({
+      leaseId,
+      invoiceIds: [arrears],
+      totalCents: 180_000,
+      installments: [
+        { dueDate: d('2026-09-01'), amountCents: 60_000 },
+        { dueDate: d('2026-10-01'), amountCents: 60_000 },
+        { dueDate: d('2026-11-01'), amountCents: 60_000 },
+      ],
+    })
+
+    await runAutopay(facilityId, d('2026-09-01'), recordItem)
+
+    const installments = installmentCharges()
+    expect(installments).toHaveLength(1)
+    expect(installments[0].amountCents).toBe(60_000)
+    expect(installments[0].paymentPlanId).toBe(planId)
+    // No invoice is named: the allocation is narrowed to the covered set by
+    // the plan id, so naming one would strand the remainder as unapplied.
+    expect(installments[0].invoiceId).toBeUndefined()
+  })
+
+  it('charges nothing on a manual-pay plan', async () => {
+    const leaseId = await newLease()
+    const arrears = await invoice(leaseId, 60_000, d('2026-07-01'))
+    await plan({
+      leaseId,
+      invoiceIds: [arrears],
+      totalCents: 60_000,
+      autoCollect: false,
+      installments: [{ dueDate: d('2026-09-01'), amountCents: 60_000 }],
+    })
+
+    await runAutopay(facilityId, d('2026-09-01'), recordItem)
+
+    expect(installmentCharges()).toHaveLength(0)
+    // And the arrears are still deferred rather than swept up by the ordinary
+    // path — manual-pay is not "collect it the old way".
+    expect(charges).toHaveLength(0)
+  })
+
+  it('charges only what is left of an installment the tenant part-paid', async () => {
+    const leaseId = await newLease()
+    const arrears = await invoice(leaseId, 60_000, d('2026-07-01'))
+    await prisma.invoice.update({
+      where: { id: arrears },
+      data: { amountPaidCents: 25_000, status: 'partially_paid' },
+    })
+    await plan({
+      leaseId,
+      invoiceIds: [arrears],
+      totalCents: 60_000,
+      installments: [
+        { dueDate: d('2026-09-01'), amountCents: 30_000 },
+        { dueDate: d('2026-10-01'), amountCents: 30_000 },
+      ],
+    })
+
+    await runAutopay(facilityId, d('2026-09-01'), recordItem)
+
+    // $250 of the first $300 is already retired, so $50 is what is owed — the
+    // face value would take the same $250 twice.
+    expect(installmentCharges().map((charge) => charge.amountCents)).toEqual([5_000])
+  })
+
+  it('does not charge an installment while an earlier attempt is still in flight', async () => {
+    const leaseId = await newLease()
+    const arrears = await invoice(leaseId, 60_000, d('2026-07-01'))
+    await plan({
+      leaseId,
+      invoiceIds: [arrears],
+      totalCents: 60_000,
+      installments: [{ dueDate: d('2026-09-01'), amountCents: 60_000 }],
+    })
+
+    await runAutopay(facilityId, d('2026-09-01'), recordItem)
+    expect(installmentCharges()).toHaveLength(1)
+
+    charges.length = 0
+    // The next night, with the first charge still `pending` — a webhook that
+    // has not landed must never become a second charge on a real card.
+    await runAutopay(facilityId, d('2026-09-02'), recordItem)
+    expect(installmentCharges()).toHaveLength(0)
+  })
+
+  it('does not break a plan for a decline while the retry ladder is still running', async () => {
+    const leaseId = await newLease()
+    const arrears = await invoice(leaseId, 60_000, d('2026-07-01'))
+    const planId = await plan({
+      leaseId,
+      invoiceIds: [arrears],
+      totalCents: 60_000,
+      installments: [{ dueDate: d('2026-09-01'), amountCents: 60_000 }],
+    })
+
+    nextChargeBehaviour = 'decline'
+    await runAutopay(facilityId, d('2026-09-01'), recordItem)
+    expect(installmentCharges()).toHaveLength(1)
+
+    // CN-6, on the first night the installment actually reads `missed` — the
+    // due date itself is never a breach, and asserting there would pass for a
+    // reason that has nothing to do with the ladder. It is uncovered and its
+    // date has passed, which is all `isBreached` looked at, but the retry
+    // schedule still has attempts left.
+    await evaluatePaymentPlanBreaches(facilityId, d('2026-09-02'), recordItem)
+    expect((await prisma.paymentPlan.findUniqueOrThrow({ where: { id: planId } })).status).toBe('active')
+
+    // Once the schedule's last offset (+5) has passed, waiting is no longer
+    // waiting for anything.
+    await evaluatePaymentPlanBreaches(facilityId, d('2026-09-08'), recordItem)
+    expect((await prisma.paymentPlan.findUniqueOrThrow({ where: { id: planId } })).status).toBe('broken')
+  })
+
+  it('breaks a plan on a terminal decline without waiting out the ladder', async () => {
+    const leaseId = await newLease()
+    const arrears = await invoice(leaseId, 60_000, d('2026-07-01'))
+    const planId = await plan({
+      leaseId,
+      invoiceIds: [arrears],
+      totalCents: 60_000,
+      installments: [{ dueDate: d('2026-09-01'), amountCents: 60_000 }],
+    })
+
+    nextChargeBehaviour = 'decline'
+    nextDeclineCode = 'expired_card'
+    await runAutopay(facilityId, d('2026-09-01'), recordItem)
+
+    // There is no next attempt to wait for, so the grace would be a week of
+    // silence for a card nobody is going to fix on its own.
+    await evaluatePaymentPlanBreaches(facilityId, d('2026-09-02'), recordItem)
+    expect((await prisma.paymentPlan.findUniqueOrThrow({ where: { id: planId } })).status).toBe('broken')
+  })
+
+  it('lands an installment on the arrears the plan covers, never on later rent', async () => {
+    const leaseId = await newLease()
+    const arrears = await invoice(leaseId, 60_000, d('2026-07-01'))
+    const septemberRent = await invoice(leaseId, 12_900, d('2026-09-01'))
+    const planId = await plan({
+      leaseId,
+      invoiceIds: [arrears],
+      totalCents: 60_000,
+      installments: [{ dueDate: d('2026-09-01'), amountCents: 30_000 }],
+    })
+
+    const payment = await prisma.payment.create({
+      data: { facilityId, tenantId, amountCents: 30_000, method: 'card', status: 'succeeded' },
+    })
+    await prisma.$transaction(async (tx) => {
+      const plan = await tx.paymentPlan.findUniqueOrThrow({
+        where: { id: planId },
+        select: { invoiceIds: true },
+      })
+      await applyPayment(
+        tx,
+        { id: payment.id, tenantId, facilityId, amountCents: 30_000 },
+        { restrictToInvoiceIds: plan.invoiceIds },
+      )
+    })
+
+    // Every cent on the arrears. Without the narrowing the facility's ordinary
+    // allocation order is free to settle September's rent instead — which
+    // moves the plan's progress by nothing, so the tenant would be broken for
+    // a payment they actually made.
+    const [covered, rent] = await Promise.all([
+      prisma.invoice.findUniqueOrThrow({ where: { id: arrears }, select: { amountPaidCents: true } }),
+      prisma.invoice.findUniqueOrThrow({ where: { id: septemberRent }, select: { amountPaidCents: true } }),
+    ])
+    expect(covered.amountPaidCents).toBe(30_000)
+    expect(rent.amountPaidCents).toBe(0)
+  })
+
+  it('breaks a manual-pay plan the night the installment is missed', async () => {
+    const leaseId = await newLease()
+    const arrears = await invoice(leaseId, 60_000, d('2026-07-01'))
+    const planId = await plan({
+      leaseId,
+      invoiceIds: [arrears],
+      totalCents: 60_000,
+      autoCollect: false,
+      installments: [{ dueDate: d('2026-09-01'), amountCents: 60_000 }],
+    })
+
+    // No ladder is running, because nothing was ever going to charge — so the
+    // grace must not apply and this behaves exactly as it did before B-189.
+    await evaluatePaymentPlanBreaches(facilityId, d('2026-09-02'), recordItem)
+    expect((await prisma.paymentPlan.findUniqueOrThrow({ where: { id: planId } })).status).toBe('broken')
+  })
+})

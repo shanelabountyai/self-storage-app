@@ -502,6 +502,19 @@ const LAST_REVIEWED = '19 August 2026'
 // entry above uses for a bounced-payment row. `LAST_REVIEWED` is not bumped:
 // the coverage claim was re-checked against the build, the rest of the page
 // was not.
+//
+// Re-verified 2026-08-26, at B-189 (autopay and payment plans). **No change is
+// needed, and that is the finding rather than the absence of one.** The item
+// ships no new customer-facing route: what it adds to `/portal/payment-plan`
+// is one sentence telling the tenant whether their card will be charged on
+// each date, and it renders only for a tenant with an active plan — which is
+// the exact state `STATE_EXCEPTIONS` already names as unscanned, for the
+// reason it already gives (no demo `PaymentPlan` exists). So the coverage
+// claim goes false in neither direction: nothing unscanned is silently
+// swallowed by the route list, and nothing already covered is disclaimed. The
+// seed row that would close that exception is B-196's, not this row's.
+// `LAST_REVIEWED` is not bumped: the coverage claim was re-checked against the
+// build, the rest of the page was not.
 export default function AccessibilityPage() {
   return (
     <ProsePage

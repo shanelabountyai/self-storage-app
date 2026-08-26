@@ -649,6 +649,21 @@ export default async function TenantProfilePage({
                 ))}
               </tbody>
             </table>
+            {/* D-97. Which of the two kinds of plan this is, in words rather
+                than an icon — a staffer reading the schedule to a tenant on
+                the phone is answering "what happens on the 15th", and the
+                answer is different for each. `autoCollectEffective` rather
+                than `autoCollect` because a plan agreed as auto-collect
+                against a tenant who has since removed their card will not
+                collect anything, and saying it will is worse than saying
+                nothing. */}
+            <p className="mt-2 text-xs text-pretty">
+              {plan.autoCollectEffective
+                ? "Each installment is charged to the card on file on its due date."
+                : plan.autoCollect
+                  ? "Agreed as automatic, but nothing will be charged — this lease has autopay off or no card on file. The tenant has to pay each installment themselves."
+                  : "The tenant pays each installment themselves — nothing is charged automatically."}
+            </p>
             {plan.note && (
               <p className="mt-2 text-xs">
                 <span className="font-medium">Note:</span> {plan.note}
@@ -703,7 +718,8 @@ export default async function TenantProfilePage({
                   installment lifts it automatically and collections resume.
                   Rent invoiced from here on is still due on its own date — a
                   plan covers what is already past due, so paying next month&rsquo;s
-                  rent does not count towards an installment.
+                  rent does not count towards an installment, and that rent is
+                  still collected on its own due date.
                 </p>
                 <AdminForm
                   action={createPaymentPlanAction}
@@ -721,6 +737,24 @@ export default async function TenantProfilePage({
                       </div>
                     ))}
                   </div>
+                  {/* D-97. Auto-collection is the default and the box is
+                      ticked; untucking it is the tenant asking to pay each
+                      installment themselves. Present at agreement rather than
+                      as a setting somewhere else, because it is a term of the
+                      conversation being had at that moment. */}
+                  <label className="flex max-w-prose items-start gap-2 text-sm">
+                    <input type="checkbox" name="autoCollect" defaultChecked className="mt-1 size-4" />
+                    <span>
+                      Charge each installment to the card on file on its due
+                      date.{" "}
+                      <span className="text-muted-foreground">
+                        Untick if the tenant would rather pay each one
+                        themselves. Either way this lease keeps paying its
+                        ordinary rent automatically if it already does — a plan
+                        defers what is past due, not what comes next.
+                      </span>
+                    </span>
+                  </label>
                   <Field name="note" label="Note (optional)" className={FIELD_CLASS} />
                   <div>
                     <button

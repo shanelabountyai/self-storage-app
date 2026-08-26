@@ -2,6 +2,7 @@ import { prisma } from '@storage/db'
 import { emitEvent } from '@storage/core/events'
 import { OCCUPYING_LEASE_STATUSES } from '@storage/core/inventory'
 import { retryDecision } from '@storage/core/billing'
+import { planProgressCents } from '@/lib/admin/payment-plans'
 import { daysBetween } from '@storage/core/jobs'
 import { createTask } from '@/lib/admin/tasks'
 import { effectsByLease } from '@/lib/admin/holds'
@@ -81,6 +82,7 @@ type SkipReason =
   | 'retries_exhausted'
   | 'terminal_decline'
   | 'lease_on_hold'
+  | 'on_payment_plan'
 
 const SKIP_MESSAGE: Record<SkipReason, string> = {
   autopay_off: 'autopay is off for this lease',
@@ -91,6 +93,7 @@ const SKIP_MESSAGE: Record<SkipReason, string> = {
   retries_exhausted: 'the retry schedule is finished — staff task raised',
   terminal_decline: 'the card cannot be retried — staff task raised',
   lease_on_hold: 'the lease is on hold',
+  on_payment_plan: 'deferred under an agreed payment plan',
 }
 
 /// Charges every invoice due at this facility on or before the business date.
@@ -153,7 +156,34 @@ export async function runAutopay(
     businessDate,
   )
 
+  // B-189. The arrears half of autopay stands down for a lease on an active
+  // plan, and ONLY the arrears half.
+  //
+  // The `payment_plan` hold deliberately does not declare `halt_autopay`, and
+  // adding it would be the wrong fix: that effect is all-or-nothing per lease,
+  // so it would stop collecting current rent too and turn forbearance on what
+  // is owed into a rent holiday nobody agreed to. What the plan defers is the
+  // exact set of invoices it froze into `invoiceIds` at creation (D-96) — so
+  // that is exactly what is skipped here, and September's rent, invoiced after
+  // the plan started, is charged tonight like any other month's.
+  //
+  // Without this, `runAutopay` charged the FULL outstanding on every one of
+  // those invoices the same night the plan was agreed: the precise outcome the
+  // plan exists to prevent, executed by the system that was told about it.
+  const plans = await activePlansFor(facilityId)
+  const deferredInvoiceIds = new Set(plans.flatMap((plan) => plan.invoiceIds))
+
   for (const invoice of invoices) {
+    if (deferredInvoiceIds.has(invoice.id)) {
+      result.skipped += 1
+      recordItem({
+        itemId: invoice.id,
+        ok: true,
+        message: `${invoice.number} skipped — ${SKIP_MESSAGE.on_payment_plan}`,
+      })
+      continue
+    }
+
     if (onHold.has(invoice.leaseId)) {
       result.skipped += 1
       recordItem({
@@ -271,7 +301,202 @@ export async function runAutopay(
     }
   }
 
+  // The other direction of the same defect: before B-189 an installment due
+  // date was a date on which nothing was charged at all, so a tenant with a
+  // saved card had to remember to pay by hand or the hour-4 breach job broke
+  // their plan for them.
+  //
+  // Run inside this job step rather than as its own so it lands between autopay
+  // (hour 3) and the breach evaluation (hour 4) by construction — an
+  // installment collected tonight must be visible to the job that decides
+  // whether the plan survives the night, and a separate registry entry is one
+  // reordering away from being wrong.
+  await collectInstallments(facilityId, plans, businessDate, facility.paymentRetryDays, result, recordItem)
+
   return result
+}
+
+/// Every active plan at this facility, with what it needs to be collected.
+///
+/// Read once per run and shared by both halves — the stand-down above and the
+/// collection below — so the two can never disagree about which invoices are
+/// deferred and which plan deferred them.
+async function activePlansFor(facilityId: string) {
+  return prisma.paymentPlan.findMany({
+    where: { status: 'active', lease: { facilityId } },
+    select: {
+      id: true,
+      leaseId: true,
+      totalCents: true,
+      invoiceIds: true,
+      autoCollect: true,
+      installments: {
+        orderBy: { dueDate: 'asc' },
+        select: { id: true, dueDate: true, amountCents: true },
+      },
+      lease: {
+        select: {
+          autopayEnabled: true,
+          tenantId: true,
+          tenant: { select: { stripeDefaultPaymentMethodId: true } },
+        },
+      },
+    },
+  })
+}
+
+type ActivePlan = Awaited<ReturnType<typeof activePlansFor>>[number]
+
+/// Charges tonight's installment on every plan that is auto-collected (D-97).
+///
+/// One installment at a time, and one charge for it — never one charge per
+/// covered invoice. Two card charges for one agreed payment is how a tenant
+/// who is already in collections reads their statement as a mistake, and a
+/// disputed charge is the exact outcome B-147 had to build handling for.
+///
+/// The charge names no invoice. It carries the PLAN, and `applyPayment`
+/// narrows the allocation to the invoices the plan froze — so the money lands
+/// on the arrears in the facility's own allocation order and can never drift
+/// onto rent the plan never deferred.
+async function collectInstallments(
+  facilityId: string,
+  plans: readonly ActivePlan[],
+  businessDate: Date,
+  retryDays: readonly number[],
+  result: AutopayResult,
+  recordItem: RecordItem,
+): Promise<void> {
+  for (const plan of plans) {
+    // Three separate ways to be manual-pay, and they are different facts.
+    // D-97's per-plan opt-out is the tenant choosing it at agreement; autopay
+    // being off on the lease is the tenant having chosen it earlier and more
+    // broadly; no saved method is nothing to charge. None of them is a
+    // failure, and none of them breaks the plan — B-191's reminder is what
+    // reaches a manual-pay tenant.
+    if (!plan.autoCollect || !plan.lease.autopayEnabled) continue
+    const paymentMethodId = plan.lease.tenant.stripeDefaultPaymentMethodId
+    if (!paymentMethodId) continue
+
+    const due = await installmentDueNow(plan, businessDate)
+    if (!due) continue
+
+    // A charge already raised for this installment and not yet resolved —
+    // the same window B-045's `attempt_in_flight` guard covers, and the same
+    // reason: a catch-up run walking several business dates in one tick passes
+    // through it deliberately.
+    const inFlight = await prisma.payment.findFirst({
+      where: { paymentPlanInstallmentId: due.installment.id, status: { in: ['pending', 'succeeded'] } },
+      select: { id: true },
+    })
+    if (inFlight) {
+      result.skipped += 1
+      recordItem({ itemId: plan.id, ok: true, message: `installment skipped — ${SKIP_MESSAGE.attempt_in_flight}` })
+      continue
+    }
+
+    // US-20's ladder, anchored on the INSTALLMENT's due date rather than on
+    // any invoice's. That is the date the tenant agreed to, and it is the date
+    // the breach job measures against, so the two must not drift apart.
+    const failures = await installmentDeclines(due.installment.id)
+    const decision = retryDecision({
+      dueDate: due.installment.dueDate,
+      businessDate,
+      failedAttempts: failures.length,
+      retryDays,
+      lastDeclineCode: failures[0]?.failureCode ?? null,
+    })
+    if (!decision.attempt) {
+      result.skipped += 1
+      recordItem({ itemId: plan.id, ok: true, message: `installment skipped — ${SKIP_MESSAGE[decision.reason]}` })
+      continue
+    }
+
+    try {
+      const charge = await createChargeIntent({
+        facilityId,
+        tenantId: plan.lease.tenantId,
+        leaseId: plan.leaseId,
+        amountCents: due.amountCents,
+        paymentPlanId: plan.id,
+        paymentPlanInstallmentId: due.installment.id,
+        reference: `plan-installment:${due.installment.id}:${iso(businessDate)}`,
+        description: `Payment plan installment ${due.position} — ${formatCents(due.amountCents)}`,
+        offSession: true,
+        paymentMethodId,
+      })
+
+      if (charge.deduplicated) {
+        result.skipped += 1
+        recordItem({ itemId: plan.id, ok: true, message: 'installment skipped — already charged on this date' })
+        continue
+      }
+
+      result.charged += 1
+      recordItem({
+        itemId: plan.id,
+        ok: true,
+        message: `installment ${due.position} charged ${formatCents(due.amountCents)}`,
+      })
+    } catch (error) {
+      // Same synchronous-decline shape as the invoice loop above: an
+      // off-session charge throws rather than sending a webhook, so the
+      // failure has to be recorded here. `createChargeIntent` has already
+      // marked its own Payment row failed with the code, which is what the
+      // ladder and the breach job both read.
+      //
+      // **No task is raised and the plan is NOT broken here.** A decline and a
+      // decision not to pay are different facts (CN-6): the ladder keeps
+      // running, and only when it is exhausted does the breach job treat the
+      // installment as missed — at which point `payment_plan_broken` is the
+      // task that reaches a person.
+      result.failed += 1
+      const message = error instanceof Error ? error.message : String(error)
+      recordItem({
+        itemId: plan.id,
+        ok: false,
+        message: `installment ${due.position} declined — ${message.slice(0, 200)}`,
+      })
+    }
+  }
+}
+
+/// The installment to collect tonight, and what is actually left on it.
+///
+/// The amount is the CUMULATIVE schedule through that installment less what
+/// the plan has retired, not the installment's face value: a tenant who paid
+/// half of it at the counter must be charged the half that remains, and
+/// `installmentViews` deliberately reports partial coverage as uncovered
+/// rather than as a part-payment, so the face value would take the same money
+/// twice.
+async function installmentDueNow(
+  plan: ActivePlan,
+  businessDate: Date,
+): Promise<{ installment: ActivePlan['installments'][number]; position: number; amountCents: number } | null> {
+  if (plan.installments.length === 0) return null
+  const progress = await planProgressCents(plan.totalCents, plan.invoiceIds)
+
+  let cumulative = 0
+  for (const [index, installment] of plan.installments.entries()) {
+    cumulative += installment.amountCents
+    if (cumulative <= progress) continue
+    // The earliest installment the money has not reached. Anything after it is
+    // a later date's problem, and if this one is not due yet nothing is.
+    if (installment.dueDate.getTime() > businessDate.getTime()) return null
+    return { installment, position: index + 1, amountCents: cumulative - progress }
+  }
+  return null
+}
+
+/// Failed charges against one installment, newest first — the count the retry
+/// ladder branches on, and the code that decides whether there is a next try.
+async function installmentDeclines(
+  installmentId: string,
+): Promise<{ failureCode: string | null }[]> {
+  return prisma.payment.findMany({
+    where: { paymentPlanInstallmentId: installmentId, status: 'failed' },
+    orderBy: { createdAt: 'desc' },
+    select: { failureCode: true },
+  })
 }
 
 /// Every failed charge on an invoice, newest first. One query, read by the

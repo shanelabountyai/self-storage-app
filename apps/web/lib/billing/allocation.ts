@@ -128,7 +128,7 @@ export type AppliedPayment = {
 export async function applyPayment(
   tx: Prisma.TransactionClient,
   payment: { id: string; tenantId: string; facilityId: string; amountCents: number },
-  options: { explicitInvoiceId?: string | null } = {},
+  options: { explicitInvoiceId?: string | null; restrictToInvoiceIds?: readonly string[] | null } = {},
 ): Promise<AppliedPayment> {
   const facility = await tx.facility.findUniqueOrThrow({
     where: { id: payment.facilityId },
@@ -136,6 +136,27 @@ export async function applyPayment(
   })
 
   let targets = await claimsFor(payment.tenantId, payment.facilityId, tx)
+
+  // B-189. A payment plan installment settles a SLICE of the arrears the plan
+  // froze, so it narrows to that set rather than naming one invoice — and the
+  // facility's own allocation order still decides which of them it lands on.
+  //
+  // The narrowing is what stops an installment paying current rent. A plan is
+  // forbearance on what was already owed, not a rent holiday; rent invoiced
+  // after the plan started is collected by ordinary autopay, and if an
+  // installment could settle it the plan's own progress (measured as
+  // outstanding on the covered invoices, D-96) would not move at all and the
+  // tenant would be broken for a payment they made.
+  //
+  // Not applied when it would leave nothing to allocate against: the covered
+  // invoices can all be settled by the time a redelivered webhook arrives, and
+  // an empty target list would strand real money as unapplied rather than
+  // crediting the tenant. That case falls back to the ordinary order.
+  if (options.restrictToInvoiceIds && options.restrictToInvoiceIds.length > 0) {
+    const covered = new Set(options.restrictToInvoiceIds)
+    const narrowed = targets.filter((target) => covered.has(target.invoiceId))
+    if (narrowed.length > 0) targets = narrowed
+  }
 
   // An explicitly named invoice (autopay, B-045) wins outright. The charge was
   // raised for that invoice and settling a different one would leave the

@@ -80,6 +80,12 @@ function referenceInvoiceId(intent: Stripe.PaymentIntent): string | null {
   return intent.metadata?.invoiceId ?? null
 }
 
+/// The payment plan an installment charge belongs to, when there is one
+/// (B-189). What it buys is the allocation narrowing in `applyPayment`.
+function referencePlanId(intent: Stripe.PaymentIntent): string | null {
+  return intent.metadata?.paymentPlanId ?? null
+}
+
 /// Posts a payment to the ledger, if it belongs to a lease.
 ///
 /// Ledger entries require a lease, and at B-019 nothing creates one yet —
@@ -155,6 +161,7 @@ async function settlePayment(
   tx: Prisma.TransactionClient,
   payment: { id: string; facilityId: string; tenantId: string; amountCents: number },
   explicitInvoiceId: string | null,
+  explicitPlanId: string | null = null,
 ): Promise<void> {
   // The named invoice is checked against this payment's own tenant and
   // facility before it is trusted: it arrives through Stripe metadata, and
@@ -171,7 +178,24 @@ async function settlePayment(
       })
     : null
 
-  const applied = await applyPayment(tx, payment, { explicitInvoiceId: named?.id ?? null })
+  // B-189. Same caution as the named invoice above, for the same reason: the
+  // plan id arrives through Stripe metadata, so the plan's lease is checked
+  // against this payment's own tenant and facility before its covered invoices
+  // are allowed to steer where the money lands.
+  const plan = explicitPlanId
+    ? await tx.paymentPlan.findFirst({
+        where: {
+          id: explicitPlanId,
+          lease: { facilityId: payment.facilityId, tenantId: payment.tenantId },
+        },
+        select: { invoiceIds: true },
+      })
+    : null
+
+  const applied = await applyPayment(tx, payment, {
+    explicitInvoiceId: named?.id ?? null,
+    restrictToInvoiceIds: plan?.invoiceIds ?? null,
+  })
 
   for (const line of applied.lines) {
     const invoice = await tx.invoice.findUnique({
@@ -212,7 +236,7 @@ export async function applyStripeEvent(event: Stripe.Event): Promise<void> {
         await postPaymentToLedger(tx, payment, referenceLeaseId(intent))
         // Order matters: the allocation sums only SUCCEEDED payments, and the
         // status update above is what makes this one count.
-        await settlePayment(tx, payment, referenceInvoiceId(intent))
+        await settlePayment(tx, payment, referenceInvoiceId(intent), referencePlanId(intent))
         settled.push({ tenantId: payment.tenantId, facilityId: payment.facilityId })
         // FR-4.4: finalisation is webhook-driven. The reference carries which
         // checkout this was, so a renter who closed the tab still gets moved in.

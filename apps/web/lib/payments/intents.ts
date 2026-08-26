@@ -49,6 +49,21 @@ export type ChargeIntentInput = {
   /// default, because that default and `Tenant.stripeDefaultPaymentMethodId`
   /// are two fields that can disagree, and the tenant chose ours (B-036).
   paymentMethodId?: string
+  /// B-189. The payment plan installment this charge collects, and the plan it
+  /// belongs to. Set together or not at all.
+  ///
+  /// An installment is deliberately NOT an `invoiceId` charge even though it is
+  /// paying invoices: it settles a slice of the plan's whole covered set rather
+  /// than one named invoice, so naming one would strand the remainder as
+  /// unapplied. The plan id travels to Stripe as metadata and comes back on the
+  /// webhook, where `applyPayment` narrows the allocation to exactly the
+  /// invoices the plan froze — so an installment can never wander off and
+  /// settle next month's rent, which is the charge the plan does not defer.
+  ///
+  /// The installment id stays local, on the `Payment` row, because what reads
+  /// it is our own retry ladder rather than anything Stripe sends back.
+  paymentPlanId?: string
+  paymentPlanInstallmentId?: string
   /// B-103. Which surface is asking, which decides whether bank debit is on
   /// offer (`@storage/core/billing`'s `methodsFor`). Defaults to `portal` —
   /// the permissive case — because every existing caller is one, and a default
@@ -117,6 +132,7 @@ export async function createChargeIntent(input: ChargeIntentInput): Promise<Char
         amountCents: input.amountCents,
         method: 'card',
         status: 'pending',
+        paymentPlanInstallmentId: input.paymentPlanInstallmentId ?? null,
       },
     })
     if (input.invoiceId) {
@@ -174,6 +190,7 @@ export async function createChargeIntent(input: ChargeIntentInput): Promise<Char
           reference: input.reference,
           ...(input.leaseId ? { leaseId: input.leaseId } : {}),
           ...(input.invoiceId ? { invoiceId: input.invoiceId } : {}),
+          ...(input.paymentPlanId ? { paymentPlanId: input.paymentPlanId } : {}),
         },
       },
       // `v2` namespaces the key. Stripe remembers the PARAMETERS a key was
