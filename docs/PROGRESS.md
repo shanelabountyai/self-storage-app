@@ -6604,7 +6604,7 @@ Four new events (`payment_plan.agreed`, `.installment_due_soon`, `.broken`, `.co
 
 ## B-195 — The aging report's arithmetic was right and said nothing about what was being done
 
-`PENDING`
+`0ebc3ff`
 
 **What it built.** The one fact the delinquency reports had never carried: whether anybody is chasing the money.
 
