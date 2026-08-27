@@ -25,6 +25,32 @@ test.describe('signed in as the demo owner', () => {
     })
   }
 
+  // B-196 (gap 3). B-195 shipped this report and declared its populated state
+  // as a STATE_EXCEPTION in the same breath: nothing in the demo seed placed a
+  // hold or agreed a plan, so the route loop scanned the headings, the month
+  // picker and two empty tables, and the halted table — the reason the page
+  // exists — had never been rendered under axe. The seed now places one, and
+  // the table sits behind a per-facility <details>, so this opens it.
+  //
+  // Read-only: nothing here writes, so the shared plan fixture is unchanged by
+  // a sweep (B-120). Self-skips rather than fails if nothing is halted, for the
+  // same reason.
+  // a11y-state: /admin/reports/plans-holds | a facility with halted leases
+  test('the halted table has no WCAG 2.1 AA violations, with a facility open', async ({ page }) => {
+    await page.goto('/admin/reports/plans-holds')
+    await expect(page.getByRole('main')).toBeVisible()
+
+    const summary = page.locator('summary', { hasText: /leases? halted/ })
+    test.skip((await summary.count()) === 0, 'nothing halted at any visible facility to scan')
+
+    await summary.first().click()
+    // The table itself, not the disclosure that holds it — a scan that passed
+    // on a closed <details> would prove nothing (D-95).
+    await expect(page.getByRole('columnheader', { name: 'Deferred' }).first()).toBeVisible()
+
+    await assertNoAxeViolations(page, { state: 'a facility with halted leases' })
+  })
+
   test('shows a per-facility row and an all-facilities roll-up', async ({ page }) => {
     await page.goto('/admin/reports')
     await expect(page.getByRole('heading', { name: /^Reports/ })).toBeVisible()

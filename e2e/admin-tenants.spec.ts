@@ -110,7 +110,11 @@ test.describe('signed in as the demo owner', () => {
     // disclosure, same reasoning as the two above.
     await openDisclosure(page, 'Set up a payment plan')
 
-    await assertNoAxeViolations(page)
+    // B-196. The state is passed, not only commented: the `[contain:layout]`
+    // obscuring exemption is scoped to this route IN THIS STATE, because the
+    // limitation needs a page taller than one screen and the open disclosure is
+    // what makes it one.
+    await assertNoAxeViolations(page, { state: 'disclosure open' })
   })
 
   test('the military-service control states its consequences before it is used (B-121)', async ({
@@ -270,6 +274,65 @@ test.describe('the tenant list (B-114)', () => {
     await page.goto('/admin/tenants?q=demo.example.com')
     await expect(page.getByText(/Showing the first 25 matches/)).toHaveCount(0)
     await expect(page.getByRole('row').nth(1)).toBeVisible()
+  })
+})
+
+// B-196 (gap 4). The two payment-plan states on the tenant profile that nothing
+// reached: the READ half, which renders only for a lease that has a plan, and a
+// REFUSED submit of the builder — the densest new form in the product, twelve
+// fields called "Due" and "Amount ($)", scanned until now only in its pristine
+// state.
+//
+// Split across two tenants on purpose. The schedule needs a lease with a plan,
+// which is Pia's; the refusal has to happen where the builder still renders,
+// and the builder is deliberately hidden on a lease that already has an active
+// plan — so it has to be Dana's. A refused submit writes nothing, which is what
+// makes it safe to point at the lease four other suites depend on (B-120).
+
+test.describe('payment plans on the tenant profile', () => {
+  test.beforeEach(async ({ page }) => {
+    await signInAsDemoOwner(page)
+  })
+
+  // a11y-state: /admin/tenants/[tenantId] | payment plan schedule
+  test('the agreed schedule has no WCAG 2.1 AA violations', async ({ page }) => {
+    await page.goto('/admin/tenants?q=pia@demo.example.com')
+    await page.getByRole('link', { name: 'Pia Planned' }).click()
+    await expect(page.getByRole('main')).toBeVisible()
+
+    // The schedule itself, not an empty heading: this whole row exists because
+    // a scan of the surrounding furniture read as coverage of the table.
+    const section = page.getByRole('region', { name: 'Payment plans' })
+    await expect(section).toContainText('On a payment plan')
+    await expect(section.getByRole('columnheader', { name: 'Left after' })).toBeVisible()
+
+    await assertNoAxeViolations(page, { state: 'payment plan schedule' })
+  })
+
+  // a11y-state: /admin/tenants/[tenantId] | payment plan builder refused
+  test('a refused plan says why, and the refusal has no WCAG 2.1 AA violations', async ({
+    page,
+  }) => {
+    await page.goto('/admin/tenants?q=dana@demo.example.com')
+    await page.getByRole('link', { name: 'Dana Delinquent' }).click()
+    await openDisclosure(page, 'Set up a payment plan')
+
+    // Submitted empty. `validateSchedule` refuses a plan with no installments
+    // by name, the server round trip happens, and nothing is written — so this
+    // is repeatable against the shared fixture for ever, unlike a valid plan,
+    // which would halt collections on the one lease the dunning specs need
+    // chased.
+    await page.getByRole('button', { name: /^Agree the plan for unit/ }).click()
+
+    // Scoped to the Actions region: the profile also renders a `role="alert"`
+    // for the balance due, so an unscoped query is a strict-mode violation
+    // rather than a missing summary.
+    const alert = page.getByRole('region', { name: 'Actions' }).getByRole('alert')
+    await expect(alert).toBeVisible()
+    await expect(alert).toContainText(/at least one installment/i)
+    await expect(alert).toBeFocused()
+
+    await assertNoAxeViolations(page, { state: 'payment plan builder refused' })
   })
 })
 

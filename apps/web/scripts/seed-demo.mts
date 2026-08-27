@@ -16,6 +16,7 @@ import {
   DEMO_TENANT_EMAIL,
   DEMO_TENANT_PASSWORD,
   DEMO_POS_TENANT_EMAIL,
+  DEMO_PLAN_TENANT_EMAIL,
   DEMO_PROMO_CODE,
 } from './demo-credentials.ts'
 
@@ -54,7 +55,7 @@ export const DEMO_PREFIX = 'demo-'
 /// `npm run db:reset-link -- --email dana@demo.example.com --tenant` mints a
 /// password-reset link for a demo tenant without sending mail anywhere.
 const NO_LOGINS = process.argv.includes('--no-logins')
-export { DEMO_EMAIL_DOMAIN, DEMO_STAFF_EMAIL, DEMO_STAFF_PASSWORD, DEMO_TENANT_EMAIL, DEMO_TENANT_PASSWORD, DEMO_POS_TENANT_EMAIL }
+export { DEMO_EMAIL_DOMAIN, DEMO_STAFF_EMAIL, DEMO_STAFF_PASSWORD, DEMO_TENANT_EMAIL, DEMO_TENANT_PASSWORD, DEMO_POS_TENANT_EMAIL, DEMO_PLAN_TENANT_EMAIL }
 
 /// A signed-in staff account for the e2e suite.
 ///
@@ -152,6 +153,14 @@ async function teardown() {
   // re-seed fail on a foreign key rather than reset. Advertisements cascade
   // with it.
   await prisma.auctionCase.deleteMany({ where })
+  // B-196. `PaymentPlan` restricts its lease, its hold AND the staff user who
+  // agreed it, and `LeaseHold` restricts its lease in turn — so the plan this
+  // script now seeds would make the NEXT re-seed fail on a foreign key rather
+  // than reset, exactly the way B-132's auction case did. Installments cascade
+  // with their plan. Not scoped to the seeded plan alone: a hold placed by the
+  // e2e suite against a demo lease has the same effect and the same fix.
+  await prisma.paymentPlan.deleteMany({ where: { lease: { facilityId: { in: facilityIds } } } })
+  await prisma.leaseHold.deleteMany({ where: { lease: { facilityId: { in: facilityIds } } } })
   await prisma.lease.deleteMany({ where })
   await prisma.unit.deleteMany({ where })
   await prisma.unitTypeRate.deleteMany({ where })
@@ -639,7 +648,12 @@ async function seedUnpaidRent(
   return firstNumber + months
 }
 
-async function seedLifecycleStates(seeded: SeededFacility, startIndex: number, isPrimaryFacility: boolean) {
+async function seedLifecycleStates(
+  seeded: SeededFacility,
+  startIndex: number,
+  isPrimaryFacility: boolean,
+  staffUserId: string,
+) {
   const { facility, unitTypes } = seeded
   const pool = unitTypes.flatMap((t) => t.units.map((u) => ({ unit: u, rate: t.spec.street })))
   let cursor = 0
@@ -806,6 +820,105 @@ async function seedLifecycleStates(seeded: SeededFacility, startIndex: number, i
     }
   }
   note('delinquent')
+
+  // --- on an agreed payment plan (B-196) ---------------------------------
+  //
+  // Its own tenant, not Dana. See the note beside DEMO_PLAN_TENANT_EMAIL: an
+  // active plan places a `payment_plan` hold, the hold halts dunning, late fees
+  // and access suspension, and Dana is the one lease four suites depend on
+  // being chased.
+  //
+  // Four surfaces render only for a lease under a hold — `/portal/payment-plan`'s
+  // schedule, the portal dashboard's plan card, `/admin/reports/plans-holds`'s
+  // halted table and `/admin/delinquency`'s halted section — and every one of
+  // them was scanned in its empty state and declared a STATE_EXCEPTION for want
+  // of this fixture. B-132 set the precedent: seed exactly enough state to make
+  // the arc walkable, and no more.
+  //
+  // Written directly rather than through `createPaymentPlan`, like every other
+  // row here — that function records two audit entries and emits
+  // `payment_plan.agreed`, and this script's contract is that it writes neither.
+  // What it DOES reproduce faithfully is the shape that function creates: the
+  // same `payment_plan` hold type, `totalCents` equal to the arrears the plan
+  // covers, and `invoiceIds` frozen to exactly the invoices it was agreed over
+  // (D-96), so the progress arithmetic every screen reads is honest rather than
+  // merely non-empty.
+  if (isPrimaryFacility) {
+    const planTenant = await prisma.tenant.create({
+      data: {
+        email: DEMO_PLAN_TENANT_EMAIL,
+        firstName: 'Pia',
+        lastName: 'Planned',
+        phone: `512-555-${String(1000 + index).slice(-4)}`,
+        addressLine1: `${100 + index} Demo Street`,
+        city: 'Austin',
+        state: 'TX',
+        postalCode: '78701',
+      },
+    })
+    await recordSeedAddress(planTenant.id, index)
+    index++
+    const planSlot = next()
+    const planLease = await makeLease(
+      facility.id,
+      planSlot.unit.id,
+      planTenant.id,
+      'delinquent',
+      planSlot.rate,
+      150,
+    )
+    invoiceNumber = await seedUnpaidRent(facility, planLease, 2, invoiceNumber)
+    const covered = await prisma.invoice.findMany({
+      where: { leaseId: planLease.id },
+      select: { id: true, totalCents: true, amountPaidCents: true },
+    })
+    const totalCents = covered.reduce((sum, i) => sum + i.totalCents - i.amountPaidCents, 0)
+
+    if (!NO_LOGINS) await setPassword(planTenant.id, 'tenant', DEMO_TENANT_PASSWORD)
+
+    const planHold = await prisma.leaseHold.create({
+      data: {
+        leaseId: planLease.id,
+        type: 'payment_plan',
+        effectiveFrom: daysAgo(20),
+        reason: 'Payment plan agreed: 3 installment(s).',
+        placedByStaffId: staffUserId,
+      },
+    })
+    // Every installment in the FUTURE, deliberately. A missed one would be
+    // broken by `payment-plan-breach.ts` the first time the delinquency job ran
+    // over this database, so the fixture would demonstrate a broken plan on
+    // Tuesday and an active one on Monday — a seed that changes what it shows
+    // depending on when the jobs last ran is worse than no seed. The last one
+    // falls 80 days after agreement, inside the 90-day `planMaxDays` default.
+    //
+    // The remainder goes on the FIRST installment so the three add up to the
+    // arrears exactly, which is what `validateSchedule` demands of a real one.
+    const share = Math.floor(totalCents / 3)
+    const amounts = [totalCents - share * 2, share, share]
+    await prisma.paymentPlan.create({
+      data: {
+        leaseId: planLease.id,
+        holdId: planHold.id,
+        status: 'active',
+        totalCents,
+        invoiceIds: covered.map((i) => i.id),
+        // D-97: manual, so nothing in this fixture depends on a saved card and
+        // no autopay run can quietly retire an installment between sweeps.
+        autoCollect: false,
+        note: 'Agreed over the phone; paying in three.',
+        createdByStaffId: staffUserId,
+        createdAt: daysAgo(20),
+        installments: {
+          create: amounts.map((amountCents, i) => ({
+            position: i + 1,
+            dueDate: daysFromNow(10 + i * 25),
+            amountCents,
+          })),
+        },
+      },
+    })
+  }
 
   // --- pending_auction: far enough along to demo the lien arc -------------
   //
@@ -996,11 +1109,11 @@ async function main() {
 
   // Every lifecycle state exists at BOTH facilities, so facility scoping is
   // demonstrable — a manager assigned to one must not see the other's tenants.
-  await seedStaffOwner([austin.facility.id, dallas.facility.id])
+  const staffUser = await seedStaffOwner([austin.facility.id, dallas.facility.id])
 
-  const first = await seedLifecycleStates(austin, 1, true)
+  const first = await seedLifecycleStates(austin, 1, true, staffUser.id)
   // Indices continue from the first facility so tenant emails stay unique.
-  await seedLifecycleStates(dallas, first.nextIndex, false)
+  await seedLifecycleStates(dallas, first.nextIndex, false, staffUser.id)
 
   // B-082 part 4. One redeemed promotion, so `/admin/reports/promotions` has a
   // populated table rather than only its empty state — the two-column split

@@ -583,6 +583,46 @@ const LAST_REVIEWED = '19 August 2026'
 // what happened. The schedule stays a real `<table>` with a `<caption>` naming
 // the unit and the date agreed, and `<th scope="col">` on all four columns.
 // `LAST_REVIEWED` is not bumped: one flow re-checked, not the page.
+//
+// Corrected 2026-08-27 by B-196 (the scan contract IV), and this is the
+// OVERSTATING direction caught before a customer read it rather than after.
+//
+// **One sentence on this page was not true.** "They also fail on checks the
+// tool could not decide, everywhere they run" — added by B-184 (finding 4)
+// and correct about the eight spec files it was written for — was false about
+// four checks. `e2e/a11y-helpers.ts` held four regexes matched against axe's
+// `failureSummary` on EVERY route in the suite, each earned by a hand check of
+// ONE element on ONE screen: B-118's sticky Rent-now bar, the unrentable
+// badge's hatch pattern, the checkout stepper's glyph, the tenant profile
+// under `[contain:layout]`. Every one of those hand checks was done properly
+// and none is re-litigated here — but a waiver scoped to nothing suppressed
+// its whole check product-wide, including over a genuine overlap on a page
+// nobody had looked at. They are keyed to the route (and, for the one that
+// needs it, the state) they were checked on now, the same way `SCANNED_STATES`
+// keys everything else, and the page says so in a sentence of its own rather
+// than leaving the earlier claim to carry a hole.
+//
+// **Four state exceptions become scanned states, and two are narrowed rather
+// than deleted.** Every payment-plan surface in the product — the portal
+// schedule and the nav entry that reaches it, the dashboard card, the staff
+// halted table and the delinquency queue's halted section — rendered only for
+// a lease under a hold, and the demo seed placed none, so four of them were
+// scanned in their empty state and declared. The answer named in every one of
+// those declarations was a SEED, not another exception, and it is here: an
+// agreed plan on its own demo tenant (`pia@demo.example.com`, deliberately not
+// Dana, whose lease four suites need chased). What that fixture cannot hold
+// still is a plan that has BROKEN — a missed installment moves the moment the
+// nightly jobs run — so the two ended-plan states stay declared, narrowed to
+// what is actually unreached instead of being quietly folded into the merge.
+//
+// **The two new admin states are not on this page** and are not meant to be:
+// the profile's plan schedule and a refused submit of the six-installment
+// builder are staff screens, and this is a statement about the site a customer
+// uses. They are in `SCANNED_STATES` where the unit test can check them.
+//
+// `LAST_REVIEWED` is not bumped: the coverage claim and one sentence about how
+// the run works were re-checked against the build, the rest of the page was
+// not.
 export default function AccessibilityPage() {
   return (
     <ProsePage
@@ -638,6 +678,13 @@ export default function AccessibilityPage() {
           deploy. They also fail on checks the tool could not decide, everywhere they
           run, so &ldquo;we did not test that&rdquo; cannot quietly read as &ldquo;that
           passed&rdquo;.
+        </p>
+        <p>
+          A few of those undecided checks are ones we have looked at by hand and found to
+          be a limit of the tool rather than a real problem &mdash; a bar that overlaps the
+          page on purpose so it stays in reach, a striped background the checker cannot see
+          through. Each of those is waived only on the page it was checked on, so the same
+          check still has to pass everywhere else.
         </p>
         <p>
           They do not yet cover everything. These are the pages outside that run, and the

@@ -71,6 +71,30 @@ test.describe('signed in as the demo owner', () => {
     })
   }
 
+  // B-196 (gap 3). The delinquency queue's halted section, which renders only
+  // for a lease under a `halt_dunning` hold — and until this row's seed placed
+  // one, no demo lease carried any hold at all, so the route loop above scanned
+  // the queue and the halted half of it was never in an audit. It was declared
+  // as a STATE_EXCEPTION rather than left to be inferred from a green scan;
+  // this replaces the declaration with the scan.
+  //
+  // Read-only, and self-skipping rather than failing if the section is absent
+  // (B-120): the fixture is shared, and a suite that has just lifted the hold
+  // somewhere else should say so rather than report a broken page.
+  // a11y-state: /admin/delinquency | the halted-leases section
+  test('the halted section of the delinquency queue has no WCAG 2.1 AA violations', async ({
+    page,
+  }) => {
+    await page.goto('/admin/delinquency')
+    await expect(page.getByRole('main')).toBeVisible()
+
+    const halted = page.getByRole('region', { name: /^Halted/ })
+    test.skip((await halted.count()) === 0, 'nothing halted at this facility to scan')
+    await expect(halted).toContainText('Payment plan')
+
+    await assertNoAxeViolations(page, { state: 'the halted-leases section' })
+  })
+
   // 1.4.10 Reflow, which PRD 02 FR-16 applies to admin as well as the customer
   // site. B-094 fixed the shell — a fixed 192px side nav beside the content, a
   // header that could not wrap, an unbreakable JSON example, and two unwrapped
@@ -358,10 +382,30 @@ test.describe('the dashboard (B-113)', () => {
 
     const facilityName = await page.getByRole('heading', { level: 1 }).innerText()
     await page.goto('/admin/reports/delinquency')
-    // `.first()` is the aging table's own row for this facility; the detail
+
+    // B-195 split every facility into a "Being chased" row and a "Halted" row
+    // under one `scope="rowgroup"` header, and there is no combined row per
+    // facility — the tile is the whole receivable, so it equals the two added
+    // together and neither one alone.
+    //
+    // This assertion used to read the FIRST matching row and pass, because
+    // nothing in the demo data had ever been halted, so chased always WAS the
+    // total. B-196's payment plan is the first fixture to make that false, and
+    // summing is the assertion that was meant all along: a tile that quietly
+    // stopped counting money behind a hold would now fail here rather than
+    // agreeing with half a report.
+    //
+    // `.first()` is the aging table's own group for this facility; the detail
     // table below it repeats the name once per delinquent tenant.
-    const row = page.getByRole('row').filter({ hasText: facilityName }).first()
-    await expect(row).toContainText(shown!)
+    const group = page.locator('tbody').filter({ hasText: facilityName }).first()
+    const totals = await group
+      .locator('tr')
+      .evaluateAll((rows) =>
+        rows.map((row) => row.querySelector('td:last-child')?.textContent?.trim() ?? ''),
+      )
+    const cents = (text: string) => Math.round(Number(text.replace(/[$,]/g, '')) * 100)
+    expect(totals.length, 'the facility group renders a chased row and a halted row').toBe(2)
+    expect(totals.reduce((sum, text) => sum + cents(text), 0)).toBe(cents(shown!))
   })
 
   test('All facilities rolls up instead of sending the owner away', async ({ page }) => {

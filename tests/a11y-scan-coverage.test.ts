@@ -167,6 +167,30 @@ describe('the accessibility scan contract (B-139)', () => {
       expect(orphaned, 'a spec claims a state SCANNED_STATES does not list').toEqual([])
     })
 
+    // B-196 (gap 2). B-187 migrated the last five raw scans onto the shared
+    // helper; this is what makes the sixth fail rather than quietly reopening
+    // the hole. A spec that builds its own `AxeBuilder` asserts nothing about
+    // `incomplete`, inherits none of the route-scoped hand checks, and reads as
+    // coverage on every screen that lists it — which is precisely the
+    // "we did not test that" silently meaning "that passed" failure B-184 (T2)
+    // closed once already. Same shape as the route-coverage and state checks
+    // above: walk the directory, do not trust a list.
+    it('runs axe through the shared helper and nowhere else', () => {
+      const e2eDir = join(process.cwd(), 'e2e')
+      const offenders = readdirSync(e2eDir)
+        .filter((file) => file.endsWith('.ts') && file !== 'a11y-helpers.ts')
+        .filter((file) => /new\s+AxeBuilder/.test(readFileSync(join(e2eDir, file), 'utf8')))
+      expect(
+        offenders,
+        'build the scan through assertNoAxeViolations in e2e/a11y-helpers.ts — a raw AxeBuilder checks no `incomplete` results and inherits none of the hand-checked exemptions',
+      ).toEqual([])
+
+      // And the helper still does it, so the rule above cannot be satisfied by
+      // the suite having stopped scanning altogether.
+      const helper = readFileSync(join(e2eDir, 'a11y-helpers.ts'), 'utf8')
+      expect(helper, 'e2e/a11y-helpers.ts no longer builds a scan').toMatch(/new\s+AxeBuilder/)
+    })
+
     it('states no STATE_EXCEPTIONS for a route that no longer exists', () => {
       const stale = [...new Set(STATE_EXCEPTIONS.map((e) => e.route))].filter(
         (route) => !ROUTES.includes(route),

@@ -163,7 +163,7 @@ test('the unit-lost branch is readable, and its sizes are controls rather than a
   await expect(page.getByText('Due today')).toHaveCount(0)
 
   // a11y-state: /checkout | unit lost
-  await assertNoAxeViolations(page, 'axe found accessibility violations on the unit-lost branch')
+  await assertNoAxeViolations(page, { message: 'axe found accessibility violations on the unit-lost branch' })
 })
 
 test('moving to another size keeps the answers and re-prices to that size', async ({

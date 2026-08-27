@@ -4,6 +4,7 @@ import type { Page } from '@playwright/test'
 import { SESSION_COOKIE } from '../apps/web/auth.config'
 import { base32Decode, TOTP_STEP_SECONDS, totpCode } from '../packages/core/auth/totp'
 import {
+  DEMO_PLAN_TENANT_EMAIL,
   DEMO_STAFF_EMAIL,
   DEMO_STAFF_PASSWORD,
   DEMO_STAFF_TOTP_SECRET,
@@ -134,4 +135,19 @@ export async function signInAsDemoOwner(page: Page): Promise<void> {
 
 export async function signInAsDemoTenant(page: Page): Promise<void> {
   await replay(page, TENANT_STATE, 'tenant')
+}
+
+/// B-196. The tenant whose lease is on an agreed payment plan.
+///
+/// A live sign-in rather than a third replayed `storageState`, deliberately.
+/// The owner session is established once and replayed because a TOTP code may
+/// be spent exactly once; a tenant password carries no second factor, so the
+/// only thing a setup project would buy here is a third stored jar for the two
+/// screens this account exists to reach.
+export async function signInAsPlanTenant(page: Page): Promise<void> {
+  await signInWithPassword(
+    page,
+    { email: DEMO_PLAN_TENANT_EMAIL, password: DEMO_TENANT_PASSWORD, audience: 'tenant' },
+    '/portal',
+  )
 }

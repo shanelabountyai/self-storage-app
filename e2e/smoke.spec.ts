@@ -1630,7 +1630,7 @@ test('the waitlist form announces and takes focus when it REFUSES', async ({ pag
   // field itself (3.3.1) rather than only floating above it.
   await expect(card.getByLabel('Your email')).toHaveAttribute('aria-invalid', 'true')
 
-  await assertNoAxeViolations(page, 'axe found accessibility violations on the refused state')
+  await assertNoAxeViolations(page, { message: 'axe found accessibility violations on the refused state' })
 })
 
 // a11y-state: /storage/tx/austin/demo-austin-south | lead form refused
@@ -1653,7 +1653,7 @@ test('the lead form announces and takes focus when it REFUSES', async ({ page })
   await expect(status).toBeFocused()
   await expect(form.getByLabel('Email', { exact: true })).toHaveAttribute('aria-invalid', 'true')
 
-  await assertNoAxeViolations(page, 'axe found accessibility violations on the refused state')
+  await assertNoAxeViolations(page, { message: 'axe found accessibility violations on the refused state' })
 })
 
 test('a waitlist cancel link that is not ours says so without failing', async ({ page }) => {

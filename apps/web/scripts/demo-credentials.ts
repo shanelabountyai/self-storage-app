@@ -54,3 +54,22 @@ export const DEMO_STAFF_TOTP_SECRET = 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP'
 // Austin's and Dallas's advertised prices stay exactly as every other suite
 // expects them.
 export const DEMO_PROMO_CODE = 'E2ESAVE'
+
+// B-196. A tenant whose lease is on an agreed payment plan.
+//
+// Its own tenant rather than the plan being put on Dana, for the reason the POS
+// tenant above is its own: an active plan places a `payment_plan` hold, and that
+// hold halts dunning, late fees and access suspension on the lease it sits on.
+// Dana is the lease the portal past-due banner, the suspended gate-code panel,
+// the delinquency queue and the dunning specs all depend on being CHASED —
+// `admin-tenants.spec.ts` says so in as many words, and the plan builder's own
+// disclosure disappears from a lease that already has an active plan, which
+// would take the scan of that form with it.
+//
+// What this one exists for: `/portal/payment-plan`'s schedule, the dashboard's
+// plan card, `/admin/reports/plans-holds`'s halted table and `/admin/delinquency`'s
+// halted section all render only for a lease under a hold, and the demo seed
+// placed none — four surfaces scanned in their empty state and declared as
+// STATE_EXCEPTIONS. The published tenant password is reused; there is nothing
+// this account can do that Dana's cannot.
+export const DEMO_PLAN_TENANT_EMAIL = `pia@${DEMO_EMAIL_DOMAIN}`

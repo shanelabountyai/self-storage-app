@@ -1,6 +1,6 @@
 import { PORTAL_SCAN_ROUTES as PORTAL_ROUTES } from '../apps/web/lib/a11y/scan-coverage'
 import { expect, test } from '@playwright/test'
-import { signInAsDemoTenant } from './sign-in'
+import { signInAsDemoTenant, signInAsPlanTenant } from './sign-in'
 import { assertNoAxeViolations, expectAnnounced, expectPreexisting } from './a11y-helpers'
 
 // PRD 01 §4.7 US-701/US-702, §6.8.1. Mirrors e2e/admin.spec.ts's split: an
@@ -301,5 +301,58 @@ test.describe('the account nav (B-117)', () => {
     await page.goto('/portal')
     const nav = page.getByRole('navigation', { name: 'Your account' })
     await expect(nav.getByRole('link', { name: 'Move out' })).toBeVisible()
+  })
+})
+
+// B-196 (gaps 3 and 4). The plan surfaces, which until this row rendered for no
+// demo tenant at all — `/portal/payment-plan` was listed as scanned while only
+// its "you're not on a plan" empty state was ever reached, and the dashboard's
+// plan card, live since B-090c, had never been in an audit on any run.
+//
+// A SEPARATE tenant from Dana, and that is the whole design (see the note beside
+// DEMO_PLAN_TENANT_EMAIL). An active plan places a `payment_plan` hold, which
+// halts dunning, late fees and access suspension — put it on Dana and the past-due
+// banner, the delinquency queue, the dunning specs and the builder form's own
+// scan all lose the thing they assert on.
+//
+// Read-only, both of them: nothing here submits anything, so the shared plan
+// fixture comes out of a sweep exactly as it went in (B-120).
+test.describe('signed in as the tenant on a payment plan', () => {
+  test.beforeEach(async ({ page }) => {
+    await signInAsPlanTenant(page)
+  })
+
+  // a11y-state: /portal/payment-plan | active plan schedule
+  test('the installment schedule has no WCAG 2.1 AA violations', async ({ page }) => {
+    await page.goto('/portal/payment-plan')
+    await expect(page.getByRole('main')).toBeVisible()
+
+    // The TABLE, not the empty state — a scan that passed because there was
+    // nothing on the page is the failure this row exists to end, so assert the
+    // schedule is really rendered before believing the result.
+    await expect(page.getByRole('columnheader', { name: 'Left after' })).toBeVisible()
+    await expect(page.getByRole('row')).toHaveCount(4) // header + three installments
+
+    // B-193's nav entry, which renders on every portal route for a tenant with
+    // a plan and is reached by nothing else in the suite.
+    await expect(
+      page.getByRole('navigation', { name: 'Your account' }).getByRole('link', { name: 'Payment plan' }),
+    ).toBeVisible()
+
+    await assertNoAxeViolations(page, { state: 'active plan schedule' })
+  })
+
+  // a11y-state: /portal | payment plan card
+  test('the dashboard plan card has no WCAG 2.1 AA violations', async ({ page }) => {
+    await page.goto('/portal')
+    await expect(page.getByRole('main')).toBeVisible()
+
+    // The card itself, not the nav entry that shares its words.
+    const card = page.getByRole('main').getByRole('status').filter({ hasText: 'payment plan' })
+    await expect(card).toContainText("You're on a payment plan")
+    await expect(card).toContainText('Your next payment is')
+    await expect(card.getByRole('link', { name: 'See the full schedule' })).toBeVisible()
+
+    await assertNoAxeViolations(page, { state: 'payment plan card' })
   })
 })

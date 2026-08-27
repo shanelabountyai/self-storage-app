@@ -461,6 +461,47 @@ export const SCANNED_STATES: readonly ScannedState[] = [
     state: 'unit lost',
     spec: 'e2e/checkout-unit-lost.spec.ts',
   },
+  // B-196. Six states behind ONE missing fixture. Every surface below renders
+  // only for a lease under a hold or on a plan, and the demo seed placed
+  // neither — so four of them were scanned in their empty state and declared as
+  // STATE_EXCEPTIONS (three by B-090c/B-191/B-193, a third pair by B-195 the day
+  // before this row), and two had never been scanned in any state at all. The
+  // answer was a seed row rather than another exception: an agreed plan on its
+  // own demo tenant, which reaches all six.
+  {
+    route: '/portal/payment-plan',
+    state: 'active plan schedule',
+    spec: 'e2e/portal.spec.ts',
+  },
+  {
+    route: '/portal',
+    state: 'payment plan card',
+    spec: 'e2e/portal.spec.ts',
+  },
+  {
+    route: '/admin/delinquency',
+    state: 'the halted-leases section',
+    spec: 'e2e/admin.spec.ts',
+  },
+  {
+    route: '/admin/reports/plans-holds',
+    state: 'a facility with halted leases',
+    spec: 'e2e/admin-reports.spec.ts',
+  },
+  // The READ half of the profile's plan section, and a refused submit of the
+  // builder — twelve fields called "Due" and "Amount ($)", scanned until now
+  // only pristine. Two tenants: the schedule needs a lease WITH a plan, and the
+  // builder is deliberately hidden on one, so the refusal happens on Dana's.
+  {
+    route: '/admin/tenants/[tenantId]',
+    state: 'payment plan schedule',
+    spec: 'e2e/admin-tenants.spec.ts',
+  },
+  {
+    route: '/admin/tenants/[tenantId]',
+    state: 'payment plan builder refused',
+    spec: 'e2e/admin-tenants.spec.ts',
+  },
 ] as const
 
 export type StateException = {
@@ -514,28 +555,6 @@ export const STATE_EXCEPTIONS: readonly StateException[] = [
     reason:
       "unreachable from a browser: the input's own `max` blocks a future date before submit, and an ended lease needs it to end in another tab mid-page",
   },
-  // B-195. Both new surfaces render for a lease under a hold, and NOTHING in
-  // the demo seed places one or agrees a plan — so the route loop scans the
-  // furniture (headings, both tables' headers, the month picker) and reaches
-  // neither populated table. Declared rather than left to be inferred from a
-  // green scan, and honest about the remedy: this is a missing SEED, not an
-  // unreachable state, and **B-196 owns the row that closes it** along with
-  // `/portal/payment-plan`'s schedule and the admin plan builder. When that
-  // lands these two exceptions become `SCANNED_STATES` entries, not deletions.
-  {
-    route: '/admin/reports/plans-holds',
-    state: 'a facility with halted leases',
-    audience: 'admin',
-    reason:
-      'no demo lease carries a hold or a payment plan, so the halted table and its per-facility disclosure never render — B-196 seeds the plan that reaches them',
-  },
-  {
-    route: '/admin/delinquency',
-    state: 'the halted-leases section',
-    audience: 'admin',
-    reason:
-      'renders only for a lease under a `halt_dunning` hold, and the demo seed places none — the same missing seed, closed by the same B-196 row',
-  },
   // B-179. Named in the accessibility statement's own history as the
   // route-versus-state gap this pair exists to close, rather than infer from
   // a green scan.
@@ -555,32 +574,36 @@ export const STATE_EXCEPTIONS: readonly StateException[] = [
     reason:
       'the refusal shown to a tenant in the lien pipeline, which needs a lease in that state paired with a portal credential — the one demo lease that qualifies has none',
   },
-  // B-90 part 3. The base route loop scans the "you're not on a plan" empty
-  // state (the common case); the schedule TABLE only renders once a lease
-  // actually has a plan, which the demo seed does not create.
+  // B-90 part 3 / B-193. The route loop scans the "you're not on a plan" empty
+  // state; B-196's seed reaches the ACTIVE schedule, the "Left after" column and
+  // the portal nav entry that renders alongside it (all now in SCANNED_STATES).
   //
-  // B-193 widened this from "active plan" to any plan: the page now renders
-  // broken, cancelled and completed schedules too, and the portal nav's
-  // Payment plan entry renders on EVERY portal route in the same state. All of
-  // it is behind the one missing fixture, so it is one exception and not four.
+  // What is left is what the seed deliberately does not create: a plan the
+  // tenant has finished with. The page renders broken, cancelled and completed
+  // schedules with their own status copy, and each needs a plan that reached
+  // that end — a broken one needs a missed installment, which the delinquency
+  // job would then produce on a schedule nobody controls, so the fixture would
+  // show a different thing depending on when the jobs last ran. Narrowed rather
+  // than deleted: the states are real and unscanned, and the page says so.
   {
     route: '/portal/payment-plan',
-    state: 'any plan schedule, and the nav entry that reaches it',
+    state: 'a broken, cancelled or completed plan',
     audience: 'portal',
     reason:
-      'the installment table a tenant with a plan sees in any state, plus the portal nav entry that appears alongside it, which need a real PaymentPlan on a demo lease paired with a portal credential — none exists in the seed',
+      'the schedule of a plan the tenant has finished with, in any of its three ended states, which needs a plan that actually reached one — the demo plan is live and stays that way',
   },
   // B-191. The twin of the row above, and an omission B-090c left behind: the
   // dashboard has carried a payment-plan card since that item, in a state no
-  // scan has ever reached, and it was never declared. Three states now (on a
-  // plan, a payment missed, the plan broken), all behind the same missing
-  // fixture. B-196's seed row closes both.
+  // scan reached. B-196 closed the common one — "you're on a plan", with the
+  // next payment named — and these two remain for the same reason as the row
+  // above: both need a payment to have been missed, which no fixture can hold
+  // still.
   {
     route: '/portal',
-    state: 'payment plan card',
+    state: 'payment plan card, after a missed payment or a break',
     audience: 'portal',
     reason:
-      'the plan card on the dashboard, which needs the same real PaymentPlan on a demo lease the row above does — none exists in the seed',
+      'the two warning states of the plan card — a payment missed, and the plan ended because one was — which need a plan that has actually missed one, and a missed installment moves on its own the moment the nightly jobs run',
   },
 ] as const
 

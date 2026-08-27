@@ -135,5 +135,5 @@ test('the waitlist form has no WCAG 2.1 AA violations once opened', async ({ pag
   expect(count, 'no sold-out size on the demo facility page to scan').toBeGreaterThan(0)
   for (let i = 0; i < count; i += 1) await disclosures.nth(i).locator('summary').click()
 
-  await assertNoAxeViolations(page, 'axe found accessibility violations in the opened waitlist form')
+  await assertNoAxeViolations(page, { message: 'axe found accessibility violations in the opened waitlist form' })
 })
