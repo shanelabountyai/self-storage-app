@@ -11,6 +11,7 @@ import {
   paymentPlansForLease,
 } from '../apps/web/lib/admin/payment-plans'
 import { evaluatePaymentPlanBreaches } from '../apps/web/lib/delinquency/payment-plan-breach'
+import { hasAnyPaymentPlan, paymentPlansForTenant } from '../apps/web/lib/portal/payment-plan'
 import type { Actor } from '../apps/web/lib/rbac/actor'
 import type { PermissionKey } from '@storage/db/rbac-catalog'
 
@@ -474,6 +475,15 @@ describeDb('payment plans', () => {
       expect(chain[0].collectedCents).toBe(0)
       expect(chain[1].totalCents).toBe(5000)
       expect(chain[1].collectedCents).toBe(2000)
+
+      // B-193. The tenant sees the same chain. Filtered to this lease because
+      // every test in this file shares one tenant — what is being asserted is
+      // that the portal reads ALL of a lease's plans, not just the live one.
+      const portal = await paymentPlansForTenant(tenantId)
+      expect(portal.filter((plan) => plan.leaseId === leaseId).map((plan) => plan.totalCents)).toEqual([
+        3000, 5000,
+      ])
+      expect(await hasAnyPaymentPlan(tenantId)).toBe(true)
     })
   })
 

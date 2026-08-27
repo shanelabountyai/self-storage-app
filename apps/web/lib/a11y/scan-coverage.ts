@@ -515,13 +515,18 @@ export const STATE_EXCEPTIONS: readonly StateException[] = [
   },
   // B-90 part 3. The base route loop scans the "you're not on a plan" empty
   // state (the common case); the schedule TABLE only renders once a lease
-  // actually has an active plan, which the demo seed does not create.
+  // actually has a plan, which the demo seed does not create.
+  //
+  // B-193 widened this from "active plan" to any plan: the page now renders
+  // broken, cancelled and completed schedules too, and the portal nav's
+  // Payment plan entry renders on EVERY portal route in the same state. All of
+  // it is behind the one missing fixture, so it is one exception and not four.
   {
     route: '/portal/payment-plan',
-    state: 'active plan schedule',
+    state: 'any plan schedule, and the nav entry that reaches it',
     audience: 'portal',
     reason:
-      'the installment table a tenant on a plan sees, which needs a real PaymentPlan on a demo lease paired with a portal credential — none exists in the seed',
+      'the installment table a tenant with a plan sees in any state, plus the portal nav entry that appears alongside it, which need a real PaymentPlan on a demo lease paired with a portal credential — none exists in the seed',
   },
   // B-191. The twin of the row above, and an omission B-090c left behind: the
   // dashboard has carried a payment-plan card since that item, in a state no

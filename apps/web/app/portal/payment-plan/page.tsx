@@ -13,11 +13,18 @@ function formatDate(date: Date): string {
   return new Intl.DateTimeFormat('en-US', { month: 'long', day: 'numeric', year: 'numeric' }).format(date)
 }
 
+// B-193. Every plan is shown now, live or not, so each one has to say what
+// happened to it AND what that costs today — a tenant reading "Broken" wants
+// to know what they now owe and what to do, not only that it ended. All of it
+// is words: nothing on this page is carried by colour (WCAG 1.4.1 A), and the
+// language is the tenant's, not the ledger's (D-15).
 const STATUS_COPY: Record<string, string> = {
-  active: 'Active',
-  completed: 'Completed — thank you for keeping to it.',
-  broken: 'Broken — an installment was missed, so collections have resumed.',
-  cancelled: 'Cancelled',
+  active: 'Active — keep to the dates below and collections stay paused.',
+  completed: 'Completed — this plan is paid off. Thank you for keeping to it.',
+  broken:
+    'Ended because a payment was missed. The whole balance on this unit is due now, and late fees and gate access have gone back to normal.',
+  cancelled:
+    'Cancelled, so it is no longer running. The balance on this unit is due under your normal terms.',
 }
 
 export default async function PortalPaymentPlanPage() {
@@ -37,85 +44,136 @@ export default async function PortalPaymentPlanPage() {
         <p className="text-muted-foreground mt-1 max-w-prose text-sm text-pretty">
           What was agreed and what&apos;s left. Your plan covers the amount that was already overdue
           when it was set up — your regular rent is still due on its own date each month, on top of
-          the payments below. This page updates itself as your payments come in.
+          the payments below. This page updates itself as your payments come in. Plans you have
+          finished with stay here so you can see what you paid.
         </p>
       </div>
 
       {plans.length === 0 ? (
         <p className="text-muted-foreground text-sm">You&apos;re not on a payment plan right now.</p>
       ) : (
-        plans.map((plan) => (
-          <section key={plan.id} className="border-input flex flex-col gap-3 rounded-lg border p-4">
-            <div>
-              <h2 className="font-medium">
-                {plan.facilityName} — Unit {plan.unitNumber}
-              </h2>
-              <p className="text-muted-foreground text-sm">
-                {STATUS_COPY[plan.status] ?? plan.status} · {formatRate(plan.totalCents)} total
-              </p>
-            </div>
+        plans.map((plan) => {
+          // The installment to pay next: the first one not yet covered, which
+          // is a missed one where there is one. That is the figure the plan
+          // exists to replace, and until B-193 the button below asked for the
+          // whole arrears instead.
+          const due = plan.installments.find((installment) => installment.status !== 'paid')
+          return (
+            <section key={plan.id} className="border-input flex flex-col gap-3 rounded-lg border p-4">
+              <div>
+                <h2 className="font-medium">
+                  {plan.facilityName} — Unit {plan.unitNumber} · agreed {formatDate(plan.createdAt)}
+                </h2>
+                <p className="text-sm text-pretty">{STATUS_COPY[plan.status] ?? plan.status}</p>
+                {/* D-98 (B-190), tenant side. A replacement plan is agreed over
+                    the arrears that were LEFT, so its own progress restarts at
+                    zero — without this line the money the previous plan
+                    collected is invisible and a chain of three reads as three
+                    failures. */}
+                <p className="text-muted-foreground text-sm">
+                  {formatRate(plan.collectedCents)} paid of {formatRate(plan.totalCents)}.
+                </p>
+              </div>
 
-            {/* B-189/D-97. Whether the tenant has to do anything on each date
-                is the first thing they need from this page, and it is now two
-                different answers. Stated per plan rather than in the intro,
-                because a tenant with two units can have one of each.
-                `autoCollectEffective` is deliberate: a plan agreed as
-                automatic against a card that has since been removed will not
-                collect, and telling someone their payment is taken care of
-                when it is not is how they end up in collections believing
-                they kept to the plan. */}
-            {plan.status === 'active' && (
-              <p className="max-w-prose text-sm text-pretty">
-                {plan.autoCollectEffective
-                  ? "We'll charge your card on file for each payment on the date it's due — you don't need to do anything."
-                  : "You'll need to make each payment yourself by the date it's due. We won't charge your card automatically for these."}
-              </p>
-            )}
+              {/* B-189/D-97. Whether the tenant has to do anything on each date
+                  is the first thing they need from this page, and it is now two
+                  different answers. Stated per plan rather than in the intro,
+                  because a tenant with two units can have one of each.
+                  `autoCollectEffective` is deliberate: a plan agreed as
+                  automatic against a card that has since been removed will not
+                  collect, and telling someone their payment is taken care of
+                  when it is not is how they end up in collections believing
+                  they kept to the plan. */}
+              {plan.status === 'active' && (
+                <p className="max-w-prose text-sm text-pretty">
+                  {plan.autoCollectEffective
+                    ? "We'll charge your card on file for each payment on the date it's due — you don't need to do anything."
+                    : "You'll need to make each payment yourself by the date it's due. We won't charge your card automatically for these."}
+                </p>
+              )}
 
-            <table className="w-full text-sm">
-              <caption className="sr-only">
-                Installment schedule for unit {plan.unitNumber}
-              </caption>
-              <thead>
-                <tr className="border-b text-left">
-                  <th scope="col" className="py-1 font-medium">
-                    Due
-                  </th>
-                  <th scope="col" className="py-1 text-right font-medium">
-                    Amount
-                  </th>
-                  <th scope="col" className="py-1 font-medium">
-                    Status
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {plan.installments.map((installment) => (
-                  <tr key={installment.position} className="border-b last:border-0">
-                    <td className="py-1">{formatDate(installment.dueDate)}</td>
-                    <td className="py-1 text-right tabular-nums">{formatRate(installment.amountCents)}</td>
-                    <td className="py-1 capitalize">
-                      {installment.status === 'missed' ? (
-                        <span className="font-medium text-red-800">Missed</span>
-                      ) : (
-                        installment.status
-                      )}
-                    </td>
+              <table className="w-full text-sm">
+                <caption className="sr-only">
+                  Installment schedule for unit {plan.unitNumber}, agreed {formatDate(plan.createdAt)}
+                </caption>
+                <thead>
+                  <tr className="border-b text-left">
+                    <th scope="col" className="py-1 font-medium">
+                      Due
+                    </th>
+                    <th scope="col" className="py-1 text-right font-medium">
+                      Amount
+                    </th>
+                    {/* B-192. What a tenant reads a schedule for is "how much is
+                        left after this one", and the subtraction was left to
+                        them. Same column as the staff schedule, so the two
+                        never disagree over the phone. */}
+                    <th scope="col" className="py-1 text-right font-medium">
+                      Left after
+                    </th>
+                    <th scope="col" className="py-1 font-medium">
+                      Status
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {plan.installments.map((installment, index) => (
+                    <tr key={installment.position} className="border-b last:border-0">
+                      <td className="py-1">{formatDate(installment.dueDate)}</td>
+                      <td className="py-1 text-right tabular-nums">{formatRate(installment.amountCents)}</td>
+                      <td className="py-1 text-right tabular-nums">
+                        {formatRate(
+                          plan.totalCents -
+                            plan.installments
+                              .slice(0, index + 1)
+                              .reduce((sum, i) => sum + i.amountCents, 0),
+                        )}
+                      </td>
+                      <td className="py-1 capitalize">
+                        {installment.status === 'missed' ? (
+                          <span className="font-medium text-red-800">Missed</span>
+                        ) : (
+                          installment.status
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
 
-            {plan.status === 'active' && (
-              <Link
-                href={`/portal/pay?lease=${plan.leaseId}`}
-                className="bg-primary text-primary-foreground inline-flex min-h-11 w-fit items-center justify-center rounded-md px-4 text-sm font-medium"
-              >
-                Make a payment
-              </Link>
-            )}
-          </section>
-        ))
+              {/* B-193. The pay link used to carry no amount, and /portal/pay
+                  defaults to the WHOLE balance — so a tenant tapping through
+                  from an installment schedule was quoted the arrears the plan
+                  exists to replace. Both amounts are offered and both are
+                  labelled with the figure, because either can be the right one
+                  and neither should be a guess. */}
+              {plan.status === 'active' && due && (
+                <div className="flex flex-wrap items-center gap-4">
+                  <Link
+                    href={`/portal/pay?lease=${plan.leaseId}&amount=${due.amountCents / 100}`}
+                    className="bg-primary text-primary-foreground inline-flex min-h-11 w-fit items-center justify-center rounded-md px-4 text-sm font-medium"
+                  >
+                    Pay {formatRate(due.amountCents)} due {formatDate(due.dueDate)}
+                  </Link>
+                  <Link
+                    href={`/portal/pay?lease=${plan.leaseId}`}
+                    className="inline-flex min-h-11 items-center text-sm underline underline-offset-4"
+                  >
+                    Pay my whole balance on this unit instead
+                  </Link>
+                </div>
+              )}
+              {(plan.status === 'broken' || plan.status === 'cancelled') && (
+                <Link
+                  href={`/portal/pay?lease=${plan.leaseId}`}
+                  className="inline-flex min-h-11 w-fit items-center text-sm underline underline-offset-4"
+                >
+                  Pay my balance on this unit
+                </Link>
+              )}
+            </section>
+          )
+        })
       )}
     </div>
   )

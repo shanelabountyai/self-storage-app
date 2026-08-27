@@ -561,6 +561,28 @@ const LAST_REVIEWED = '19 August 2026'
 // screen changing does not put any sentence on it in either direction. The
 // exception B-191 added for `/portal`'s payment-plan card still stands and is
 // still B-196's to close. `LAST_REVIEWED` does not move.
+// Re-read 2026-08-27, at B-193 (the tenant's plan page has more than one way
+// in). Customer-facing: a portal nav entry, and the plan page itself now
+// rendering broken, cancelled and completed schedules rather than only the
+// live one.
+//
+// **No route is added and no claim on this page moves — but one exception's
+// WORDING was going false in the overstating direction, so it is widened
+// rather than left.** `STATE_EXCEPTIONS` declared the unscanned state as the
+// "active plan schedule"; the page now renders a schedule for every plan a
+// tenant has ever had, and the nav entry that reaches it renders on EVERY
+// portal route. All of that sits behind the one fixture that does not exist
+// (no demo `PaymentPlan`), so it stays one exception — but "active plan"
+// would have implied the other three states were covered when nothing scans
+// them. B-196's seed row closes it, along with its `/portal` twin.
+//
+// **What the page is built to.** Two routes in satisfies 2.4.5 Multiple Ways
+// (AA) — the dashboard card while a plan is live, the nav entry whenever the
+// tenant has any plan at all. Every status is a sentence and never a colour
+// (1.4.1 A), and each one says what it costs the tenant today rather than only
+// what happened. The schedule stays a real `<table>` with a `<caption>` naming
+// the unit and the date agreed, and `<th scope="col">` on all four columns.
+// `LAST_REVIEWED` is not bumped: one flow re-checked, not the page.
 export default function AccessibilityPage() {
   return (
     <ProsePage

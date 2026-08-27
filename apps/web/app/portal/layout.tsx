@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { auth, signOut } from '@/auth'
 import { requireTenantActor } from '@/lib/rbac/session'
+import { hasAnyPaymentPlan } from '@/lib/portal/payment-plan'
 import { ForbiddenError } from '@/lib/rbac/authorize'
 import { currentImpersonation, hasStaleImpersonationCookie } from '@/lib/impersonation/context'
 import { ImpersonationBanner } from '@/components/impersonation/banner'
@@ -20,8 +21,9 @@ export default async function PortalLayout({ children }: { children: React.React
   // `currentActor()` has already swapped in the subject.
   const impersonation = await currentImpersonation()
 
+  let tenantId: string
   try {
-    await requireTenantActor()
+    tenantId = (await requireTenantActor()).tenantId
   } catch (error) {
     if (error instanceof ForbiddenError) {
       // Sending a staff member to /login would be a lie and a dead end — they
@@ -33,6 +35,14 @@ export default async function PortalLayout({ children }: { children: React.React
   }
 
   const session = await auth()
+  // B-193 / SC 2.4.5 Multiple Ways (AA). /portal/payment-plan was reachable
+  // from the dashboard card alone, and that card renders only while a plan is
+  // live — so a tenant whose plan broke last night had no route to the
+  // schedule stating what they agreed, at the moment they most need to read
+  // it. Conditional rather than permanent for everyone: B-117 cut this row
+  // down to four links because nine wrapped to four lines at 360px, and a
+  // fifth belongs there only for the tenants it is about.
+  const showPaymentPlan = await hasAnyPaymentPlan(tenantId)
   const userName = impersonation?.subjectName ?? session?.user?.name ?? 'your account'
 
   return (
@@ -68,6 +78,11 @@ export default async function PortalLayout({ children }: { children: React.React
             <Link href="/portal/documents" className="underline underline-offset-2">
               Documents
             </Link>
+            {showPaymentPlan && (
+              <Link href="/portal/payment-plan" className="underline underline-offset-2">
+                Payment plan
+              </Link>
+            )}
             <details className="text-sm">
               <summary className="inline-flex min-h-11 cursor-pointer items-center underline underline-offset-2">
                 Manage
