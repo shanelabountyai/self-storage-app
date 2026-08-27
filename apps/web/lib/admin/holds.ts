@@ -6,7 +6,6 @@ import {
   holdIsActive,
   holdTypeSpec,
   type HoldEffect,
-  type HoldLike,
 } from '@storage/core/holds'
 import { assertFacilityAccess, can, ForbiddenError } from '@/lib/rbac/authorize'
 import { toAuditActor } from '@/lib/rbac/audit-actor'
@@ -44,6 +43,60 @@ export async function leaseHasEffect(
   return effectsOf(holds, asOf).has(effect)
 }
 
+/// B-195. Every hold in force on each of many leases, keyed by lease.
+///
+/// `activeHolds` answers this for ONE lease and joins the staff row for the
+/// banner; a report over a portfolio needs the same facts for hundreds of
+/// leases and none of the banner ones, so this is one query returning only
+/// what a roll-up reads — including the TYPE, which `effectsByLease` throws
+/// away. Naming the halting reason is the whole point of B-195: "halted" with
+/// no reason beside it is the same dead end as no split at all.
+///
+/// Leases with no hold in force are absent rather than present with an empty
+/// list — the callers both ask "is there one", and a map of mostly-empty
+/// arrays over a portfolio is a lot of nothing.
+export type HoldInForce = {
+  id: string
+  type: string
+  /// The catalog's operator-facing name, falling back to the raw type so an
+  /// unknown one is visible rather than blank.
+  label: string
+  effects: readonly HoldEffect[]
+  effectiveFrom: Date
+  effectiveTo: Date | null
+  reason: string
+}
+
+export async function activeHoldsByLease(
+  leaseIds: readonly string[],
+  asOf: Date = new Date(),
+): Promise<Map<string, HoldInForce[]>> {
+  if (leaseIds.length === 0) return new Map()
+  const rows = await prisma.leaseHold.findMany({
+    where: { leaseId: { in: [...leaseIds] }, liftedAt: null },
+    select: { ...HOLD_SELECT, leaseId: true, reason: true },
+    orderBy: { effectiveFrom: 'asc' },
+  })
+
+  const byLease = new Map<string, HoldInForce[]>()
+  for (const row of rows) {
+    if (!holdIsActive(row, asOf)) continue
+    const spec = holdTypeSpec(row.type)
+    const list = byLease.get(row.leaseId) ?? []
+    list.push({
+      id: row.id,
+      type: row.type,
+      label: spec?.label ?? row.type,
+      effects: spec?.effects ?? [],
+      effectiveFrom: row.effectiveFrom,
+      effectiveTo: row.effectiveTo,
+      reason: row.reason,
+    })
+    byLease.set(row.leaseId, list)
+  }
+  return byLease
+}
+
 /// The same question for many leases at once, so a nightly run over 800 leases
 /// is one query rather than 800.
 export async function effectsByLease(
@@ -51,22 +104,10 @@ export async function effectsByLease(
   effect: HoldEffect,
   asOf: Date = new Date(),
 ): Promise<Set<string>> {
-  if (leaseIds.length === 0) return new Set()
-  const holds = await prisma.leaseHold.findMany({
-    where: { leaseId: { in: [...leaseIds] }, liftedAt: null },
-    select: { ...HOLD_SELECT, leaseId: true },
-  })
-
-  const byLease = new Map<string, HoldLike[]>()
-  for (const hold of holds) {
-    const list = byLease.get(hold.leaseId) ?? []
-    list.push(hold)
-    byLease.set(hold.leaseId, list)
-  }
-
+  const byLease = await activeHoldsByLease(leaseIds, asOf)
   const held = new Set<string>()
-  for (const [leaseId, list] of byLease) {
-    if (effectsOf(list, asOf).has(effect)) held.add(leaseId)
+  for (const [leaseId, holds] of byLease) {
+    if (holds.some((hold) => hold.effects.includes(effect))) held.add(leaseId)
   }
   return held
 }

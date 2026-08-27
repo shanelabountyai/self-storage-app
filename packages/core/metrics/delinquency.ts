@@ -108,3 +108,46 @@ export function sumArAging(agings: readonly ArAging[]): ArAging {
     { d0to10: 0, d11to30: 0, d31to60: 0, d61to90: 0, over90: 0, totalCents: 0 },
   )
 }
+
+// ── B-195. Aging that says whether anyone is chasing it ─────────────────────
+//
+// A bucket total answers "how much" and never "what is being done about it",
+// and the two leases behind one figure can be in opposite situations: one is
+// working its way up the dunning ladder, the other has been halted behind a
+// bankruptcy hold nobody has opened in four months. Summed together the
+// number means neither, and a regional looking at $40,000 in the 90+ bucket
+// cannot tell which one they are looking at.
+//
+// Split, never replaced: `total` is still reported, still equals the old
+// figure, and is still what ties out against the ledger. `chased + halted`
+// equals it in every bucket by construction — the same guarantee `arAging`
+// gives for buckets summing to `totalCents`, and for the same reason.
+
+export type HaltableBalance = AgedBalance & {
+  /// Whether a hold declaring `halt_dunning` is in force on this lease. The
+  /// caller decides that (it is a database question); this only partitions.
+  halted: boolean
+}
+
+export type ArAgingSplit = {
+  /// Money the delinquency ladder is still working.
+  chased: ArAging
+  /// Money behind a hold — a plan, a bankruptcy, a deployment, a death.
+  halted: ArAging
+  /// The two together. Equal to `arAging` over the same balances.
+  total: ArAging
+}
+
+export function arAgingSplit(balances: readonly HaltableBalance[]): ArAgingSplit {
+  const chased = arAging(balances.filter((balance) => !balance.halted))
+  const halted = arAging(balances.filter((balance) => balance.halted))
+  return { chased, halted, total: sumArAging([chased, halted]) }
+}
+
+export function sumArAgingSplit(splits: readonly ArAgingSplit[]): ArAgingSplit {
+  return {
+    chased: sumArAging(splits.map((split) => split.chased)),
+    halted: sumArAging(splits.map((split) => split.halted)),
+    total: sumArAging(splits.map((split) => split.total)),
+  }
+}

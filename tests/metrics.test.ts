@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   arAging,
+  arAgingSplit,
   arBucketFor,
   attachRate,
   daysPastDue,
@@ -16,6 +17,7 @@ import {
   rateVariance,
   reservationConversion,
   sumArAging,
+  sumArAgingSplit,
   sumAttachRate,
   sumEconomicOccupancy,
   sumMoveCounts,
@@ -148,6 +150,51 @@ describe('roll-up equals the sum of the facilities', () => {
     expect(moves.net).toBe(2)
     expect(moves.bySource.web).toBe(2)
     expect(moves.bySource.phone).toBe(1)
+  })
+})
+
+// B-195. The split exists so that "$40,000 in the 90+ bucket" cannot mean two
+// opposite things at once. What must never drift is the invariant: chased plus
+// halted is the total, in every bucket, or the screen is showing three figures
+// of which one is wrong.
+describe('arAgingSplit', () => {
+  const balances = [
+    { daysPastDue: 5, outstandingCents: 1_000, halted: false },
+    { daysPastDue: 45, outstandingCents: 2_000, halted: true },
+    { daysPastDue: 45, outstandingCents: 500, halted: false },
+    { daysPastDue: 120, outstandingCents: 4_000, halted: true },
+  ]
+
+  it('puts each balance in exactly one half', () => {
+    const split = arAgingSplit(balances)
+    expect(split.chased.d0to10).toBe(1_000)
+    expect(split.chased.d31to60).toBe(500)
+    expect(split.halted.d31to60).toBe(2_000)
+    expect(split.halted.over90).toBe(4_000)
+    expect(split.chased.over90).toBe(0)
+  })
+
+  it('adds back up to the unsplit aging, bucket by bucket', () => {
+    const split = arAgingSplit(balances)
+    expect(split.total).toEqual(arAging(balances))
+    for (const bucket of ['d0to10', 'd11to30', 'd31to60', 'd61to90', 'over90'] as const) {
+      expect(split.chased[bucket] + split.halted[bucket]).toBe(split.total[bucket])
+    }
+    expect(split.total.totalCents).toBe(7_500)
+  })
+
+  it('rolls up by summation, like every other metric here', () => {
+    const rolled = sumArAgingSplit([
+      arAgingSplit(balances.slice(0, 2)),
+      arAgingSplit(balances.slice(2)),
+    ])
+    expect(rolled).toEqual(arAgingSplit(balances))
+  })
+
+  it('is all-chased when nothing is halted, and never invents a halted figure', () => {
+    const split = arAgingSplit([{ daysPastDue: 200, outstandingCents: 900, halted: false }])
+    expect(split.halted.totalCents).toBe(0)
+    expect(split.chased.over90).toBe(900)
   })
 })
 

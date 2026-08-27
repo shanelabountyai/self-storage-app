@@ -193,6 +193,12 @@ export const ADMIN_SCAN_ROUTES = [
   '/admin/reports/structured-data',
   // B-090 part 1.
   '/admin/reports/waitlist',
+  // B-195. A money screen nobody scans is a money screen nobody has checked.
+  // Against demo data this renders its EMPTY state — nothing in the demo seed
+  // places a hold or agrees a plan — so what is covered here is the page
+  // furniture, the two tables' headers and the month picker. The populated
+  // state needs the demo `PaymentPlan` and hold that B-196 owns.
+  '/admin/reports/plans-holds',
   // B-163.
   '/admin/reports/protection',
   '/admin/reports/rent-roll',
@@ -507,6 +513,28 @@ export const STATE_EXCEPTIONS: readonly StateException[] = [
     audience: 'admin',
     reason:
       "unreachable from a browser: the input's own `max` blocks a future date before submit, and an ended lease needs it to end in another tab mid-page",
+  },
+  // B-195. Both new surfaces render for a lease under a hold, and NOTHING in
+  // the demo seed places one or agrees a plan — so the route loop scans the
+  // furniture (headings, both tables' headers, the month picker) and reaches
+  // neither populated table. Declared rather than left to be inferred from a
+  // green scan, and honest about the remedy: this is a missing SEED, not an
+  // unreachable state, and **B-196 owns the row that closes it** along with
+  // `/portal/payment-plan`'s schedule and the admin plan builder. When that
+  // lands these two exceptions become `SCANNED_STATES` entries, not deletions.
+  {
+    route: '/admin/reports/plans-holds',
+    state: 'a facility with halted leases',
+    audience: 'admin',
+    reason:
+      'no demo lease carries a hold or a payment plan, so the halted table and its per-facility disclosure never render — B-196 seeds the plan that reaches them',
+  },
+  {
+    route: '/admin/delinquency',
+    state: 'the halted-leases section',
+    audience: 'admin',
+    reason:
+      'renders only for a lease under a `halt_dunning` hold, and the demo seed places none — the same missing seed, closed by the same B-196 row',
   },
   // B-179. Named in the accessibility statement's own history as the
   // route-versus-state gap this pair exists to close, rather than infer from

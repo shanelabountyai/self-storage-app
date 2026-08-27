@@ -24,6 +24,13 @@ export async function GET(): Promise<Response> {
     row.bucket,
     row.dunningStep === 0 ? '' : row.dunningStep,
     row.nextStepDay ?? '',
+    // B-195. The step column alone reads the same for a lease the ladder is
+    // working and one halted behind a bankruptcy hold four months ago — a
+    // halted lease keeps whatever rung it had reached. The file that gets
+    // handed to a collections agency must not imply the second is the first.
+    row.halted ? 'Halted' : 'Being chased',
+    row.haltReasons.join('; '),
+    row.daysHalted ?? '',
     csvCents(row.outstandingCents),
   ])
 
@@ -37,6 +44,9 @@ export async function GET(): Promise<Response> {
       'Aging bucket',
       'Dunning step',
       'Next step at (days)',
+      'Collections',
+      'Halted by',
+      'Days halted',
       'Outstanding',
     ],
     rows,

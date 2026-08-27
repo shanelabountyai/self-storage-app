@@ -350,9 +350,13 @@ export async function paymentPlansForLease(
     },
   })
 
+  // One progress query for the whole chain rather than one per plan — a lease
+  // on its fifth plan (D-98) renders five rows on the tenant profile.
+  const progress = await planProgressByPlan(plans)
+
   return Promise.all(
     plans.map(async (plan) => {
-      const paidSinceCents = await planProgressCents(plan.totalCents, plan.invoiceIds)
+      const paidSinceCents = progress.get(plan.id) ?? 0
       return {
         id: plan.id,
         status: plan.status,
@@ -431,14 +435,45 @@ export async function arrearsForLease(
 /// would read as a credit in `installmentViews`. Above `totalCents` it cannot
 /// go, since outstanding never falls below zero.
 export async function planProgressCents(totalCents: number, invoiceIds: string[]): Promise<number> {
-  if (invoiceIds.length === 0) return 0
-  const invoices = await prisma.invoice.findMany({
-    where: { id: { in: invoiceIds }, status: { not: 'void' } },
-    select: { totalCents: true, amountPaidCents: true },
-  })
-  const outstandingCents = invoices.reduce(
-    (sum, invoice) => sum + Math.max(0, invoice.totalCents - invoice.amountPaidCents),
-    0,
+  const byPlan = await planProgressByPlan([{ id: 'one', totalCents, invoiceIds }])
+  return byPlan.get('one') ?? 0
+}
+
+/// The same figure for many plans in one query (B-195).
+///
+/// A portfolio report reads every plan at every facility, and `planProgressCents`
+/// per plan is one round trip each. The arithmetic lives here, once, and the
+/// single-plan helper above calls this rather than keeping a second copy —
+/// §4.11's "no screen, tile, or export computes any of these inline" is only
+/// true while there is one implementation to point at.
+export async function planProgressByPlan(
+  plans: readonly { id: string; totalCents: number; invoiceIds: string[] }[],
+): Promise<Map<string, number>> {
+  const allInvoiceIds = [...new Set(plans.flatMap((plan) => plan.invoiceIds))]
+  const invoices =
+    allInvoiceIds.length === 0
+      ? []
+      : await prisma.invoice.findMany({
+          where: { id: { in: allInvoiceIds }, status: { not: 'void' } },
+          select: { id: true, totalCents: true, amountPaidCents: true },
+        })
+  // A voided invoice is absent from this map, which is what makes it drop out
+  // of the outstanding sum entirely — the same behaviour the per-plan query
+  // had, where `status: { not: 'void' }` simply did not return the row.
+  const outstandingByInvoice = new Map(
+    invoices.map((invoice) => [
+      invoice.id,
+      Math.max(0, invoice.totalCents - invoice.amountPaidCents),
+    ]),
   )
-  return Math.max(0, totalCents - outstandingCents)
+
+  return new Map(
+    plans.map((plan) => {
+      const outstandingCents = plan.invoiceIds.reduce(
+        (sum, invoiceId) => sum + (outstandingByInvoice.get(invoiceId) ?? 0),
+        0,
+      )
+      return [plan.id, plan.invoiceIds.length === 0 ? 0 : Math.max(0, plan.totalCents - outstandingCents)]
+    }),
+  )
 }

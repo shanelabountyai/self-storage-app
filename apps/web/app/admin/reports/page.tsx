@@ -259,6 +259,15 @@ export default async function ReportsPage({
         >
           Delinquency aging — tenant detail
         </Link>
+        {/* B-195. The half of the aging report that has no answer inside it:
+            which of the receivable is halted, behind what, and whether the
+            plans that halted it are being kept. */}
+        <Link
+          href="/admin/reports/plans-holds"
+          className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
+        >
+          Plans &amp; holds — what is not being chased
+        </Link>
         <Link
           href="/admin/reports/funnel"
           className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"

@@ -3,6 +3,7 @@ import { getSwitcherData } from '@/lib/admin/context'
 import { resolveSelectedFacility } from '@/lib/admin/facility-selection-logic'
 import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
 import { delinquencyQueue } from '@/lib/admin/delinquency-queue'
+import { haltedLeases } from '@/lib/admin/plans-holds-report'
 import { moneyOwedRollup } from '@/lib/admin/rollups'
 import { FacilityRollup } from '@/components/admin/facility-rollup'
 import { AnnounceRegion } from '@/components/admin/announce'
@@ -16,6 +17,12 @@ export const metadata = { title: 'Delinquency queue' }
 //
 // Every row is a `Task` (US-41) — this is a filtered, grouped view of the same
 // list `/admin/tasks` renders, not a table of its own.
+//
+// B-195: and the leases that are NOT here. The engine halts a lease under a
+// `halt_dunning` hold, which correctly stops the steps and — until this row —
+// also removed the lease from the only screen that exists to show it. An
+// account with collections switched off is not the same as an account with
+// nothing to do, and the difference was visible from nowhere.
 
 function formatDate(date: Date): string {
   return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(date)
@@ -55,7 +62,10 @@ export default async function DelinquencyQueuePage({
     )
   }
 
-  const groups = await delinquencyQueue(actor, selected.facility.id)
+  const [groups, halted] = await Promise.all([
+    delinquencyQueue(actor, selected.facility.id),
+    haltedLeases([selected.facility.id]),
+  ])
   const overdueCount = groups.reduce((sum, group) => sum + group.tasks.filter((t) => t.overdue).length, 0)
 
   return (
@@ -151,6 +161,45 @@ export default async function DelinquencyQueuePage({
         ))
       )}
       </AnnounceRegion>
+
+      {halted.length > 0 && (
+        <section aria-labelledby="halted-heading" className="flex flex-col gap-3">
+          <h2 id="halted-heading" className="text-sm font-medium">
+            Halted — no steps will be raised ({halted.length})
+          </h2>
+          <p className="text-muted-foreground max-w-prose text-sm text-pretty">
+            These leases are under a hold that stops collections, so the ladder raises nothing for
+            them and they are not in the list above. Longest halted first.
+          </p>
+          {/* No money here, deliberately. This queue is gated on
+              `delinquency:execute_step` and a balance is `reports:financial`
+              (B-055) — a counter agent working the steps needs to know an
+              account is halted and why, not what it owes. The figures are on
+              the plans & holds report, behind that key. */}
+          <ul className="flex flex-col gap-2">
+            {halted.map((lease) => (
+              <li key={lease.leaseId} className="border-input rounded-lg border p-3 text-sm">
+                <Link
+                  href={`/admin/tenants/${lease.tenantId}`}
+                  className="font-medium underline underline-offset-2"
+                >
+                  {lease.tenantName}
+                </Link>{' '}
+                · Unit {lease.unitNumber}
+                <span className="text-muted-foreground block text-xs">
+                  {lease.holdLabels.join(', ')} · {lease.daysHalted} day
+                  {lease.daysHalted === 1 ? '' : 's'}
+                  {lease.plan
+                    ? lease.plan.status === 'active'
+                      ? ' · on a live payment plan'
+                      : ` · payment plan ${lease.plan.status}`
+                    : ' · no payment plan'}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
     </div>
   )
 }
