@@ -380,9 +380,15 @@ describeDb('payment plans and autopay', () => {
     nextDeclineCode = 'expired_card'
     await runAutopay(facilityId, d('2026-09-01'), recordItem)
 
-    // There is no next attempt to wait for, so the grace would be a week of
-    // silence for a card nobody is going to fix on its own.
+    // There is no next attempt to wait for, so the RETRY grace would be a week
+    // of silence for a card nobody is going to fix on its own. D-98's three
+    // days still stand on top of it, and they are a different window for a
+    // different reason: the ladder asks whether a charge is still coming, the
+    // grace asks whether the TENANT still has time to pay some other way.
     await evaluatePaymentPlanBreaches(facilityId, d('2026-09-02'), recordItem)
+    expect((await prisma.paymentPlan.findUniqueOrThrow({ where: { id: planId } })).status).toBe('active')
+
+    await evaluatePaymentPlanBreaches(facilityId, d('2026-09-05'), recordItem)
     expect((await prisma.paymentPlan.findUniqueOrThrow({ where: { id: planId } })).status).toBe('broken')
   })
 
@@ -424,7 +430,7 @@ describeDb('payment plans and autopay', () => {
     expect(rent.amountPaidCents).toBe(0)
   })
 
-  it('breaks a manual-pay plan the night the installment is missed', async () => {
+  it('breaks a manual-pay plan once its grace has run, with no ladder to wait for', async () => {
     const leaseId = await newLease()
     const arrears = await invoice(leaseId, 60_000, d('2026-07-01'))
     const planId = await plan({
@@ -435,9 +441,14 @@ describeDb('payment plans and autopay', () => {
       installments: [{ dueDate: d('2026-09-01'), amountCents: 60_000 }],
     })
 
-    // No ladder is running, because nothing was ever going to charge — so the
-    // grace must not apply and this behaves exactly as it did before B-189.
+    // No RETRY ladder is running, because nothing was ever going to charge —
+    // B-189's window does not apply here at all. D-98's does: this is exactly
+    // the plan that used to break at 00:01 over money handed across the
+    // counter that afternoon.
     await evaluatePaymentPlanBreaches(facilityId, d('2026-09-02'), recordItem)
+    expect((await prisma.paymentPlan.findUniqueOrThrow({ where: { id: planId } })).status).toBe('active')
+
+    await evaluatePaymentPlanBreaches(facilityId, d('2026-09-05'), recordItem)
     expect((await prisma.paymentPlan.findUniqueOrThrow({ where: { id: planId } })).status).toBe('broken')
   })
 })

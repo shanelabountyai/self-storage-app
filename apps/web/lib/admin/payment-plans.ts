@@ -7,7 +7,15 @@ import {
   type PlanProblem,
   type PlannedInstallment,
 } from '@storage/core/payment-plans'
-import { assertFacilityAccess, can, ForbiddenError } from '@/lib/rbac/authorize'
+import {
+  actorRank,
+  assertFacilityAccess,
+  can,
+  checkMonetaryAuthority,
+  ForbiddenError,
+  lowestRankWith,
+  nextApproverRole,
+} from '@/lib/rbac/authorize'
 import { toAuditActor } from '@/lib/rbac/audit-actor'
 import type { Actor } from '@/lib/rbac/actor'
 import { liftHold, placeHold } from './holds'
@@ -35,6 +43,17 @@ export type CreatePaymentPlanResult =
   | { ok: true; planId: string }
   | { ok: false; reason: 'forbidden' | 'not_found' | 'already_active' }
   | { ok: false; reason: 'invalid_schedule'; problems: PlanProblem[] }
+  /// D-98. The deferral is larger than this actor may commit to. Same shape
+  /// and same posture as a fee waiver over limit: it names who can carry it
+  /// rather than simply refusing, and there is no approval queue behind it —
+  /// that is still `waiveFeeInvoice`'s open gap and this does not invent a
+  /// second one.
+  | { ok: false; reason: 'over_limit'; limitCents: number; escalateTo: string | null }
+  /// D-98. The lease has already had `limit` plans inside a rolling year.
+  | { ok: false; reason: 'too_many_plans'; priorCount: number; limit: number }
+  /// D-98. A repeat plan inside the rolling year, attempted by somebody at the
+  /// lowest rank that may agree one at all. The second gets seen a level up.
+  | { ok: false; reason: 'needs_escalation'; priorCount: number; escalateTo: string | null }
 
 export async function createPaymentPlan(
   actor: Actor,
@@ -73,7 +92,63 @@ export async function createPaymentPlan(
   const now = new Date()
   const arrears = await arrearsForLease(leaseId, now)
   const totalCents = arrears.outstandingCents
-  const problems = validateSchedule(input.installments, totalCents, now)
+
+  // ── D-98. What this plan may commit to, and whether this lease may have it ──
+  //
+  // Order matters: the caps are checked BEFORE the schedule so that a staffer
+  // told "this lease cannot have another plan this year" is not first made to
+  // fix six dates on a form that was never going to be accepted.
+  const facility = await prisma.facility.findUniqueOrThrow({
+    where: { id: lease.facilityId },
+    select: { planMaxDays: true, planMaxPerRollingYear: true },
+  })
+
+  // Every plan on this lease in the last rolling year, whatever became of it.
+  // Cancelled and broken ones COUNT — the whole defect was that a plan broken
+  // last night was replaceable this morning, for ever, each replacement
+  // re-halting dunning, late fees and access suspension while the lien clock
+  // never ran.
+  const yearAgo = new Date(now.getTime() - 365 * 86_400_000)
+  const priorCount = await prisma.paymentPlan.count({
+    where: { leaseId, createdAt: { gte: yearAgo } },
+  })
+  if (priorCount >= facility.planMaxPerRollingYear) {
+    return { ok: false, reason: 'too_many_plans', priorCount, limit: facility.planMaxPerRollingYear }
+  }
+  if (priorCount > 0) {
+    // The second plan is agreed a rank up. Derived from the role table rather
+    // than compared against a hardcoded 'manager', so a new role between the
+    // existing two slots in without a code change.
+    const floor = await lowestRankWith('delinquency:execute_step')
+    const rank = actorRank(actor, lease.facilityId)
+    if (floor !== null && rank !== null && rank <= floor) {
+      return {
+        ok: false,
+        reason: 'needs_escalation',
+        priorCount,
+        escalateTo: (await nextApproverRole('payment_plan', totalCents, rank))?.name ?? null,
+      }
+    }
+  }
+
+  // The amount DEFERRED, which is the whole arrears — a plan is a decision not
+  // to collect it now, made by one person, on a lease already in collections.
+  const authority = checkMonetaryAuthority(actor, 'payment_plan', totalCents, lease.facilityId)
+  if (!authority.allowed) {
+    if (authority.reason === 'forbidden') return { ok: false, reason: 'forbidden' }
+    return {
+      ok: false,
+      reason: 'over_limit',
+      limitCents: authority.limitCents,
+      escalateTo:
+        authority.escalateToRank === null
+          ? null
+          : ((await nextApproverRole('payment_plan', totalCents, authority.escalateToRank))?.name ??
+            null),
+    }
+  }
+
+  const problems = validateSchedule(input.installments, totalCents, now, facility.planMaxDays)
   // The refusal names the arrears figure itself — `validateSchedule` builds it
   // into the message — so there is nothing extra for the caller to render.
   if (problems.length > 0) return { ok: false, reason: 'invalid_schedule', problems }
@@ -210,14 +285,30 @@ export type PaymentPlanView = {
   /// in fact, and a screen that says otherwise is telling a staffer a payment
   /// is taken care of when nothing will take it.
   autoCollectEffective: boolean
+  /// D-98 (B-190). What this plan actually retired of the arrears it was
+  /// agreed over. Exposed so that a CHAIN of plans reads as a chain: a
+  /// replacement plan's own total is the arrears that were left, so its
+  /// progress correctly restarts at zero, and without this figure beside it
+  /// the money the previous plan collected is invisible on every screen.
+  collectedCents: number
   installments: InstallmentView[]
 }
 
 /// The lease's current or most recent plan, with per-installment status
 /// derived live against the ledger — never a stored flag (see the schema
 /// comment on `PaymentPlanInstallment`).
-export async function paymentPlanForLease(leaseId: string, asOf: Date = new Date()): Promise<PaymentPlanView | null> {
-  const plan = await prisma.paymentPlan.findFirst({
+/// Every plan this lease has ever had, newest first.
+///
+/// D-98 (B-190). This was a `findFirst` ordered `createdAt desc`, so a lease on
+/// its fifth plan read on every screen as a lease on one plan and the pattern
+/// — a broken plan replaced the next morning, indefinitely — was visible from
+/// nothing. The cap in `createPaymentPlan` is what stops the chain; this is
+/// what makes an existing one legible.
+export async function paymentPlansForLease(
+  leaseId: string,
+  asOf: Date = new Date(),
+): Promise<PaymentPlanView[]> {
+  const plans = await prisma.paymentPlan.findMany({
     where: { leaseId },
     orderBy: { createdAt: 'desc' },
     select: {
@@ -237,23 +328,36 @@ export async function paymentPlanForLease(leaseId: string, asOf: Date = new Date
       },
     },
   })
-  if (!plan) return null
 
-  const paidSinceCents = await planProgressCents(plan.totalCents, plan.invoiceIds)
+  return Promise.all(
+    plans.map(async (plan) => {
+      const paidSinceCents = await planProgressCents(plan.totalCents, plan.invoiceIds)
+      return {
+        id: plan.id,
+        status: plan.status,
+        totalCents: plan.totalCents,
+        note: plan.note,
+        createdAt: plan.createdAt,
+        autoCollect: plan.autoCollect,
+        autoCollectEffective:
+          plan.autoCollect &&
+          plan.lease.autopayEnabled &&
+          Boolean(plan.lease.tenant.stripeDefaultPaymentMethodId),
+        collectedCents: paidSinceCents,
+        installments: installmentViews(plan.installments, paidSinceCents, asOf),
+      }
+    }),
+  )
+}
 
-  return {
-    id: plan.id,
-    status: plan.status,
-    totalCents: plan.totalCents,
-    note: plan.note,
-    createdAt: plan.createdAt,
-    autoCollect: plan.autoCollect,
-    autoCollectEffective:
-      plan.autoCollect &&
-      plan.lease.autopayEnabled &&
-      Boolean(plan.lease.tenant.stripeDefaultPaymentMethodId),
-    installments: installmentViews(plan.installments, paidSinceCents, asOf),
-  }
+/// The lease's current or most recent plan. Kept for the callers that only
+/// ever want the live one — the portal dashboard card and the breach job's
+/// siblings — so that adding the history did not turn every read into a list.
+export async function paymentPlanForLease(
+  leaseId: string,
+  asOf: Date = new Date(),
+): Promise<PaymentPlanView | null> {
+  return (await paymentPlansForLease(leaseId, asOf))[0] ?? null
 }
 
 /// The lease's arrears: every invoice already due, net of what has settled it.

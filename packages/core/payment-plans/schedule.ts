@@ -29,6 +29,12 @@ export function validateSchedule(
   installments: readonly PlannedInstallment[],
   totalCents: number,
   createdAt: Date,
+  /// D-98 (B-190). How far from agreement the LAST installment may fall.
+  /// `MAX_INSTALLMENTS` caps the count and on its own caps nothing that
+  /// matters: six installments spaced sixty days apart halt dunning, late fees
+  /// and access suspension for a year while the lien clock does not run.
+  /// Omitted means no day cap, which is what every pre-D-98 caller had.
+  maxDays?: number,
 ): PlanProblem[] {
   const problems: PlanProblem[] = []
 
@@ -44,6 +50,23 @@ export function validateSchedule(
   // should not exist.
   if (totalCents <= 0) {
     return [{ index: null, problem: 'There is nothing past due on this lease to put on a plan.' }]
+  }
+
+  // D-98's day cap, checked before the per-installment loop so that a plan
+  // stretched too far is refused once rather than once per late row.
+  if (maxDays !== undefined && maxDays > 0) {
+    const last = installments.reduce(
+      (latest, installment) =>
+        installment.dueDate.getTime() > latest ? installment.dueDate.getTime() : latest,
+      0,
+    )
+    const limit = createdAt.getTime() + maxDays * 86_400_000
+    if (last > limit) {
+      problems.push({
+        index: null,
+        problem: `A payment plan at this facility has to finish within ${maxDays} days — the last installment here is later than that. Bring the dates in, or ask for the limit to be changed in settings.`,
+      })
+    }
   }
 
   let sum = 0

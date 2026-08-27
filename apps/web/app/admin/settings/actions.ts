@@ -461,6 +461,32 @@ export async function updateBillingPolicyAction(
     max: 3_650,
     unit: "days",
   });
+  // D-98 (B-190). Three numbers that together decide whether a payment plan is
+  // forbearance or a lien clock that never runs. Bounds are wide because they
+  // are configuration, not law (D-10) — but each has a floor that means
+  // something: a plan finishing in zero days is not a plan, and a facility
+  // allowing zero plans per year should turn the feature off, not set it here.
+  const planMaxDays = parseScaled(formData.get("planMaxDays"), {
+    scale: 1,
+    min: 1,
+    max: 730,
+    unit: "days",
+  });
+  const planMaxPerRollingYear = parseScaled(formData.get("planMaxPerRollingYear"), {
+    scale: 1,
+    min: 1,
+    max: 12,
+    unit: "plans",
+  });
+  // Zero is legitimate and means the plan breaks the night the date passes,
+  // which is what shipped before this — a real operator choice, so the floor
+  // is 0 rather than 1.
+  const planGraceDays = parseScaled(formData.get("planGraceDays"), {
+    scale: 1,
+    min: 0,
+    max: 30,
+    unit: "days",
+  });
   const restoreAtOrBelow = parseScaled(
     formData.get("accessRestoreAtOrBelowDollars"),
     {
@@ -490,6 +516,10 @@ export async function updateBillingPolicyAction(
     errors.surplusHoldDays = surplusHoldDays.error;
   if ("error" in restoreAtOrBelow)
     errors.accessRestoreAtOrBelowDollars = restoreAtOrBelow.error;
+  if ("error" in planMaxDays) errors.planMaxDays = planMaxDays.error;
+  if ("error" in planMaxPerRollingYear)
+    errors.planMaxPerRollingYear = planMaxPerRollingYear.error;
+  if ("error" in planGraceDays) errors.planGraceDays = planGraceDays.error;
 
   let retryDays: number[] = [];
   try {
@@ -516,7 +546,10 @@ export async function updateBillingPolicyAction(
     "error" in leadDays ||
     "error" in suspendDays ||
     "error" in surplusHoldDays ||
-    "error" in restoreAtOrBelow
+    "error" in restoreAtOrBelow ||
+    "error" in planMaxDays ||
+    "error" in planMaxPerRollingYear ||
+    "error" in planGraceDays
   ) {
     return fieldError(errors);
   }
@@ -531,6 +564,9 @@ export async function updateBillingPolicyAction(
       accessSuspendDaysPastDue: suspendDays.value,
       surplusHoldDays: surplusHoldDays.value,
       accessRestoreAtOrBelowCents: restoreAtOrBelow.value,
+      planMaxDays: planMaxDays.value,
+      planMaxPerRollingYear: planMaxPerRollingYear.value,
+      planGraceDays: planGraceDays.value,
       paymentAllocationOrder: allocationOrder,
       dunningDays,
       achAtCheckoutEnabled: formData.get("achAtCheckoutEnabled") === "yes",

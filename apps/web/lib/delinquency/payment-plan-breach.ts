@@ -49,8 +49,18 @@ export async function evaluatePaymentPlanBreaches(
 
   const facility = await prisma.facility.findUniqueOrThrow({
     where: { id: facilityId },
-    select: { paymentRetryDays: true },
+    select: { paymentRetryDays: true, planGraceDays: true },
   })
+
+  // D-98 (B-190). An installment is not missed for BREACH purposes until its
+  // grace has run out. Applied by moving the clock back rather than by
+  // filtering the result, so it lands identically on every path below —
+  // manual-pay plans included, which is where it matters most: those broke the
+  // same night the date passed, over money that arrived that afternoon.
+  //
+  // Deliberately NOT applied to `isFullyPaid`, which asks a different question
+  // (has everything been collected) and has no date in it at all.
+  const breachDate = new Date(businessDate.getTime() - facility.planGraceDays * 86_400_000)
 
   for (const plan of plans) {
     // Recomputed from the covered invoices every night, not accumulated — so
@@ -60,7 +70,7 @@ export async function evaluatePaymentPlanBreaches(
     // has since taken back goes back to `missed`.
     const paidSinceCents = await planProgressCents(plan.totalCents, plan.invoiceIds)
 
-    if (await isBroken(plan, paidSinceCents, businessDate, facility.paymentRetryDays)) {
+    if (await isBroken(plan, paidSinceCents, breachDate, businessDate, facility.paymentRetryDays)) {
       await prisma.paymentPlan.update({
         where: { id: plan.id },
         data: { status: 'broken', brokenAt: businessDate },
@@ -118,10 +128,15 @@ async function isBroken(
     lease: { autopayEnabled: boolean; tenant: { stripeDefaultPaymentMethodId: string | null } }
   },
   paidSinceCents: number,
+  /// D-98's grace window, already subtracted. What counts as missed.
+  breachDate: Date,
+  /// Tonight. What the retry ladder is measured against — grace and the
+  /// ladder are two separate windows and must not be netted against one
+  /// another, or a facility running both would get their sum.
   businessDate: Date,
   retryDays: readonly number[],
 ): Promise<boolean> {
-  const missed = installmentViews(plan.installments, paidSinceCents, businessDate).filter(
+  const missed = installmentViews(plan.installments, paidSinceCents, breachDate).filter(
     (view) => view.status === 'missed',
   )
   if (missed.length === 0) return false

@@ -594,6 +594,23 @@ export default async function TenantProfilePage({
           Payment plans
         </h2>
 
+        {/* D-98 (B-190). Repeats are the thing worth seeing, so they are said
+            in words at the top rather than left to be counted off the cards.
+            Not colour-carried (WCAG 1.4.1) and not a badge: it is a sentence. */}
+        {profile.planChains.map((chain) => (
+          <p key={chain.leaseId} role="note" className="border-input rounded-lg border p-3 text-sm text-pretty">
+            Unit {chain.unitNumber} has had{" "}
+            <strong>
+              {chain.count} payment {chain.count === 1 ? "plan" : "plans"}
+            </strong>{" "}
+            in the last twelve months
+            {chain.count > 1 &&
+              ", and each one halted dunning, late fees and access suspension while it ran"}
+            . {formatCents(chain.collectedCents)} has been collected across{" "}
+            {chain.count === 1 ? "it" : "them"}.
+          </p>
+        ))}
+
         {profile.paymentPlans.map((plan) => (
           <div
             key={plan.id}
@@ -612,7 +629,16 @@ export default async function TenantProfilePage({
                   : plan.status === "broken"
                     ? "Payment plan broken — collections resumed"
                     : "Payment plan cancelled"}{" "}
-              · Unit {plan.unitNumber}
+              · Unit {plan.unitNumber} · agreed {formatDate(plan.createdAt)}
+            </p>
+            {/* D-98 (B-190). What this plan actually retired, beside what it
+                promised. A replacement plan is agreed over the arrears that
+                were LEFT, so its own progress restarts at zero and is right to
+                — but without this line the money the previous plan collected
+                is invisible, and a chain of five reads as five failures. */}
+            <p className="mt-1 text-xs">
+              {formatCents(plan.collectedCents)} collected of{" "}
+              {formatCents(plan.totalCents)} deferred.
             </p>
             <table className="mt-2 w-full text-sm">
               <caption className="sr-only">

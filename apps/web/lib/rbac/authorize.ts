@@ -145,18 +145,44 @@ export function resolveFacilityFilter(
 
 // ---------------------------------------------------- monetary authority ----
 
-export type MonetaryAction = 'fee_waiver' | 'refund' | 'credit'
+export type MonetaryAction = 'fee_waiver' | 'refund' | 'credit' | 'payment_plan'
 
 const LIMIT_FIELD = {
   fee_waiver: 'maxFeeWaiverCents',
   refund: 'maxRefundCents',
   credit: 'maxCreditCents',
+  payment_plan: 'maxPlanDeferralCents',
 } as const
 
 const REQUIRED_PERMISSION: Record<MonetaryAction, PermissionKey> = {
   fee_waiver: 'fees:waive',
   refund: 'refunds:approve',
   credit: 'credits:manual',
+  // D-98 (B-190). The same permission that already gates agreeing a plan —
+  // this adds an AMOUNT to it, it does not mint a second gate.
+  payment_plan: 'delinquency:execute_step',
+}
+
+/// The highest rank this actor holds at a facility, or null where they hold
+/// none. Exported for D-98's repeat-plan rule, which needs "is this person a
+/// level above the floor" and cannot ask `can()` — every role that may agree a
+/// plan holds the same permission, and the whole point is to tell them apart.
+export function actorRank(actor: Actor, facilityId: string): number | null {
+  const assignments = assignmentsFor(actor, facilityId)
+  if (assignments.length === 0) return null
+  return Math.max(...assignments.map((assignment) => assignment.rank))
+}
+
+/// The lowest staff rank that holds a permission anywhere in the role table.
+/// Data-driven so a new role slots into the ladder without a code change, the
+/// same rule `nextApproverRole` follows.
+export async function lowestRankWith(permission: PermissionKey): Promise<number | null> {
+  const role = await prisma.role.findFirst({
+    where: { isStaffRole: true, permissions: { some: { permissionKey: permission } } },
+    orderBy: { rank: 'asc' },
+    select: { rank: true },
+  })
+  return role?.rank ?? null
 }
 
 export type MonetaryDecision =
@@ -184,7 +210,15 @@ export function checkMonetaryAuthority(
 
   // A user with several assignments gets the most generous limit they hold for
   // this facility; null (unlimited) wins outright.
-  const limits = relevant.map((assignment) => assignment.limits[LIMIT_FIELD[action]])
+  // `undefined` is NOT `null` here, and the difference decides whether an
+  // owner is unlimited: `null` means unlimited by design, while a field an
+  // assignment does not carry at all is no authority (see
+  // `MonetaryLimits.maxPlanDeferralCents`). `?? 0` would collapse the two and
+  // cap every owner at zero.
+  const limits = relevant.map((assignment) => {
+    const limit = assignment.limits[LIMIT_FIELD[action]]
+    return limit === undefined ? 0 : limit
+  })
   if (limits.some((limit) => limit === null)) return { allowed: true }
 
   const best = Math.max(...limits.map((limit) => limit ?? 0))

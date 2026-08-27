@@ -118,6 +118,8 @@ type RoleSeed = {
   maxFeeWaiverCents: number | null
   maxRefundCents: number | null
   maxCreditCents: number | null
+  /// D-98 (B-190). The most arrears this role may defer onto a payment plan.
+  maxPlanDeferralCents: number | null
   permissions: readonly PermissionKey[]
 }
 
@@ -133,6 +135,7 @@ export const ROLES: readonly RoleSeed[] = [
     maxFeeWaiverCents: 0,
     maxRefundCents: 0,
     maxCreditCents: 0,
+    maxPlanDeferralCents: 0,
     permissions: [],
   },
   {
@@ -144,6 +147,7 @@ export const ROLES: readonly RoleSeed[] = [
     maxFeeWaiverCents: 0,
     maxRefundCents: 0,
     maxCreditCents: 0,
+    maxPlanDeferralCents: 0,
     permissions: [
       'tenants:view',
       'tenants:edit',
@@ -170,6 +174,7 @@ export const ROLES: readonly RoleSeed[] = [
     maxFeeWaiverCents: 0,
     maxRefundCents: 0,
     maxCreditCents: 0,
+    maxPlanDeferralCents: 0,
     permissions: ['tenants:view', 'reports:financial', 'reports:rollup'],
   },
   {
@@ -181,6 +186,7 @@ export const ROLES: readonly RoleSeed[] = [
     maxFeeWaiverCents: 5_000,
     maxRefundCents: 0,
     maxCreditCents: 5_000,
+    maxPlanDeferralCents: 200_000,
     permissions: [
       'tenants:view',
       'tenants:edit',
@@ -213,6 +219,7 @@ export const ROLES: readonly RoleSeed[] = [
     maxFeeWaiverCents: 25_000,
     maxRefundCents: 25_000,
     maxCreditCents: 25_000,
+    maxPlanDeferralCents: 1_000_000,
     permissions: [
       'tenants:view',
       'tenants:edit',
@@ -255,6 +262,7 @@ export const ROLES: readonly RoleSeed[] = [
     maxFeeWaiverCents: null,
     maxRefundCents: null,
     maxCreditCents: null,
+    maxPlanDeferralCents: null,
     permissions: PERMISSIONS.map((p) => p.key),
   },
   {
@@ -266,6 +274,7 @@ export const ROLES: readonly RoleSeed[] = [
     maxFeeWaiverCents: 0,
     maxRefundCents: 0,
     maxCreditCents: 0,
+    maxPlanDeferralCents: 0,
     // Deliberately narrow: jobs that need more must be granted it explicitly
     // rather than inheriting owner-level authority.
     permissions: ['tenants:view', 'delinquency:execute_step'],

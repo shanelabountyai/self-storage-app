@@ -28,6 +28,7 @@ function assignmentFor(roleKey: string, facilityId: string | null): Assignment {
       maxFeeWaiverCents: role.maxFeeWaiverCents,
       maxRefundCents: role.maxRefundCents,
       maxCreditCents: role.maxCreditCents,
+      maxPlanDeferralCents: role.maxPlanDeferralCents,
     },
   }
 }
@@ -209,6 +210,40 @@ describe('monetary authority', () => {
 
   it('rejects negative amounts rather than treating them as a credit', () => {
     expect(() => checkMonetaryAuthority(owner, 'refund', -1, FACILITY_A)).toThrow()
+  })
+
+  it('gives a payment plan its own limit, not the fee-waiver one (D-98)', () => {
+    // The reason it is a separate column: a deferral is not a waiver — the
+    // money is still owed. Against the waiver limit a manager could not agree
+    // a plan on a typical $1,800 arrear at all, since their waiver limit is
+    // $50, and every real plan would have escalated to the owner.
+    expect(checkMonetaryAuthority(manager, 'payment_plan', 180_000, FACILITY_A)).toEqual({
+      allowed: true,
+    })
+    expect(checkMonetaryAuthority(manager, 'payment_plan', 200_001, FACILITY_A)).toMatchObject({
+      allowed: false,
+      reason: 'over_limit',
+      limitCents: 200_000,
+    })
+    expect(checkMonetaryAuthority(owner, 'payment_plan', 99_999_999, FACILITY_A)).toEqual({
+      allowed: true,
+    })
+    // Counter staff hold neither the permission nor an amount.
+    expect(
+      checkMonetaryAuthority(staff(assignmentFor('counter', FACILITY_A)), 'payment_plan', 1, FACILITY_A),
+    ).toEqual({ allowed: false, reason: 'forbidden' })
+  })
+
+  it('treats a limit an assignment does not carry as zero, never as unlimited', () => {
+    // `undefined` is not `null`. A fixture or an actor built before a limit
+    // existed must get NO authority, while `null` keeps meaning unlimited.
+    const legacy = assignmentFor('manager', FACILITY_A)
+    delete (legacy.limits as { maxPlanDeferralCents?: number | null }).maxPlanDeferralCents
+    expect(checkMonetaryAuthority(staff(legacy), 'payment_plan', 1, FACILITY_A)).toMatchObject({
+      allowed: false,
+      reason: 'over_limit',
+      limitCents: 0,
+    })
   })
 
   it('gives a tenant no monetary authority', () => {

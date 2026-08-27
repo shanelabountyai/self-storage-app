@@ -659,6 +659,51 @@ export default async function AdminSettingsPage() {
             )}
             hint="0.00 means the balance must be fully paid."
           />
+          {/* D-98 (B-190). A payment plan is what STOPS everything above it —
+              dunning, late fees, access suspension — so its three limits sit
+              directly under them. Their own fieldset because a group of three
+              numbers about one subject, each labelled with a bare noun, is
+              otherwise three unrelated fields (WCAG 1.3.1). */}
+          <fieldset className="border-input w-full rounded-lg border p-3">
+            <legend className="px-1 text-sm font-medium">
+              What a payment plan may commit to
+            </legend>
+            <p className="text-muted-foreground mt-1 max-w-prose text-xs text-pretty">
+              Agreeing a plan halts everything above for as long as it runs.
+              Without a limit, a plan broken last night can be replaced this
+              morning, indefinitely, and the lien clock never runs. How much a
+              member of staff may defer is set by their role, not here.
+            </p>
+            <div className="mt-2 flex flex-wrap gap-3">
+              <Field
+                name="planMaxDays"
+                label="Longest plan (days)"
+                type="number"
+                min={1}
+                max={730}
+                defaultValue={facility.planMaxDays}
+                hint="How far out the last installment may fall. A plan is capped at six installments whatever this says; six spaced sixty days apart is a year on hold."
+              />
+              <Field
+                name="planMaxPerRollingYear"
+                label="Plans per lease per year"
+                type="number"
+                min={1}
+                max={12}
+                defaultValue={facility.planMaxPerRollingYear}
+                hint="Counted over the last twelve months, including plans that broke or were cancelled. The second one has to be agreed a level up; the one past this limit is refused."
+              />
+              <Field
+                name="planGraceDays"
+                label="Grace on a missed installment (days)"
+                type="number"
+                min={0}
+                max={30}
+                defaultValue={facility.planGraceDays}
+                hint="Days after the due date before the plan breaks and collections resume. 0 breaks it that night, including over a payment made that afternoon."
+              />
+            </div>
+          </fieldset>
           <p className="text-muted-foreground w-full max-w-prose text-xs text-pretty">
             Suspending stops a tenant reaching their own unit, so it is the
             setting on this page worth being sure about. It never applies to a

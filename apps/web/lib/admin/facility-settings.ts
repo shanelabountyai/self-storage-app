@@ -314,6 +314,13 @@ export type BillingPolicyInput = {
   /// policy" for the same reason.
   accessSuspendDaysPastDue: number;
   accessRestoreAtOrBelowCents: number;
+  /// D-98 (B-190). The three limits on what a payment plan may commit to. In
+  /// this form because a plan is the thing that STOPS everything else in it —
+  /// dunning, late fees, access suspension — and a limit on the brake belongs
+  /// beside the brake.
+  planMaxDays: number;
+  planMaxPerRollingYear: number;
+  planGraceDays: number;
   /// US-28 (B-062). How long an auction surplus is held before it must be
   /// dispositioned. Configuration, not law — the durations need an attorney
   /// pass under D-10, which is why it is a field and not a constant.
@@ -423,6 +430,9 @@ export async function updateBillingPolicy(
       accessSuspendDaysPastDue: before.accessSuspendDaysPastDue,
       surplusHoldDays: before.surplusHoldDays,
       accessRestoreAtOrBelowCents: before.accessRestoreAtOrBelowCents,
+      planMaxDays: before.planMaxDays,
+      planMaxPerRollingYear: before.planMaxPerRollingYear,
+      planGraceDays: before.planGraceDays,
       paymentAllocationOrder: before.paymentAllocationOrder,
       dunningDays: before.dunningDays,
       achAtCheckoutEnabled: before.achAtCheckoutEnabled,
@@ -438,6 +448,9 @@ export async function updateBillingPolicy(
       accessSuspendDaysPastDue: after.accessSuspendDaysPastDue,
       surplusHoldDays: after.surplusHoldDays,
       accessRestoreAtOrBelowCents: after.accessRestoreAtOrBelowCents,
+      planMaxDays: after.planMaxDays,
+      planMaxPerRollingYear: after.planMaxPerRollingYear,
+      planGraceDays: after.planGraceDays,
       paymentAllocationOrder: after.paymentAllocationOrder,
       dunningDays: after.dunningDays,
       achAtCheckoutEnabled: after.achAtCheckoutEnabled,

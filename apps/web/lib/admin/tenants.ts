@@ -28,7 +28,7 @@ import { createTask } from "@/lib/admin/tasks";
 import { activeHolds, type ActiveHold } from "@/lib/admin/holds";
 import {
   arrearsForLease,
-  paymentPlanForLease,
+  paymentPlansForLease,
   type PaymentPlanView,
 } from "@/lib/admin/payment-plans";
 import { syncActiveDutyHolds } from "@/lib/tenants/active-duty";
@@ -292,6 +292,18 @@ export type TenantProfile = {
   /// if it has never had one), for the "Set up a plan" / "On a plan" section
   /// the profile shows beside each lease.
   paymentPlans: (PaymentPlanView & { leaseId: string; unitNumber: string })[];
+  /// D-98 (B-190). One row per lease that has had a plan in the last rolling
+  /// twelve months — the same window `createPaymentPlan` counts against, so
+  /// the sentence on screen and the refusal from the server cannot disagree.
+  /// Derived here rather than in the page because it is data, and because
+  /// reading the clock during render is not something a server component may
+  /// do.
+  planChains: {
+    leaseId: string;
+    unitNumber: string;
+    count: number;
+    collectedCents: number;
+  }[];
   /// US-45's plain-English line: "Access suspended, 12 days past due,
   /// 2026-07-18". Read from the audit entry the rule wrote rather than
   /// recomputed, so the screen says what actually happened and when.
@@ -512,14 +524,18 @@ export async function tenantProfile(
     ),
   );
 
+  // D-98 (B-190). EVERY plan this lease has had, newest first — not just the
+  // live one. A chain of replacements read as a single plan on this screen,
+  // which is exactly how the pattern stayed invisible.
   const paymentPlansByLease = (
     await Promise.all(
-      leases.map(async (lease) => {
-        const plan = await paymentPlanForLease(lease.id);
-        return plan
-          ? [{ ...plan, leaseId: lease.id, unitNumber: lease.unit.number }]
-          : [];
-      }),
+      leases.map(async (lease) =>
+        (await paymentPlansForLease(lease.id)).map((plan) => ({
+          ...plan,
+          leaseId: lease.id,
+          unitNumber: lease.unit.number,
+        })),
+      ),
     )
   ).flat();
 
@@ -583,6 +599,7 @@ export async function tenantProfile(
       .filter((fee) => fee.outstandingCents > 0),
     holds: holdsByLease.flat(),
     paymentPlans: paymentPlansByLease,
+    planChains: planChainsFor(paymentPlansByLease),
     refundable: await refundablePayments(tenantId),
     gateAccess: grants.map((grant) => ({
       grantId: grant.id,
@@ -856,4 +873,24 @@ export async function logTenantDocument(
     actor: toAuditActor(actor),
   });
   return {};
+}
+
+
+/// D-98 (B-190). The plans each lease has been given in the last rolling year,
+/// collapsed to one row per lease. A chain of replacements read on every screen
+/// as a single plan, which is exactly how the pattern stayed invisible.
+function planChainsFor(
+  plans: (PaymentPlanView & { leaseId: string; unitNumber: string })[],
+): TenantProfile["planChains"] {
+  const yearAgo = new Date(Date.now() - 365 * 86_400_000);
+  const recent = plans.filter((plan) => plan.createdAt >= yearAgo);
+  return [...new Set(recent.map((plan) => plan.leaseId))].map((leaseId) => {
+    const chain = recent.filter((plan) => plan.leaseId === leaseId);
+    return {
+      leaseId,
+      unitNumber: chain[0].unitNumber,
+      count: chain.length,
+      collectedCents: chain.reduce((sum, plan) => sum + plan.collectedCents, 0),
+    };
+  });
 }

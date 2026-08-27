@@ -628,6 +628,27 @@ model Facility {
   /// suspended. Texas practice is around 6; configuration, not law (D-10).
   /// Zero or less disables the rule entirely, which is a real operator choice.
   accessSuspendDaysPastDue     Int                  @default(6)
+  /// D-98 (B-190). The three limits on what a payment plan may commit to.
+  /// Configuration, not law (D-10) — but each one is the difference between
+  /// forbearance and a lien clock that never runs.
+  ///
+  /// `planMaxDays`: how far from agreement the LAST installment may fall.
+  /// `MAX_INSTALLMENTS = 6` already caps the count, and on its own it caps
+  /// nothing that matters — six installments spaced sixty days apart halt
+  /// dunning, late fees and access suspension for a year.
+  planMaxDays                  Int                  @default(90)
+  /// How many plans one lease may be given in a rolling twelve months. The
+  /// SECOND is agreed a rank up (see `createPaymentPlan`); the one after the
+  /// limit is refused outright, with the count named. Before this, a plan
+  /// broken last night was replaceable this morning, for ever.
+  planMaxPerRollingYear        Int                  @default(2)
+  /// Days after an installment's due date before the plan is broken. A plan
+  /// that breaks at 00:01 over money that arrives at 2pm is technically right
+  /// and commercially wrong; three days covers a weekend and a cheque in the
+  /// post. Shorter than D-92's ten for a returned payment, deliberately — a
+  /// plan is a date the tenant chose, not a bank error done to them. Zero
+  /// restores the break-that-night behaviour, which is a real operator choice.
+  planGraceDays                Int                  @default(3)
   /// US-28 (B-062). How long an auction surplus is held before it must be
   /// dispositioned — paid to the former tenant, or remitted to the state.
   ///
@@ -3882,6 +3903,13 @@ model Role {
   maxFeeWaiverCents Int?
   maxRefundCents    Int?
   maxCreditCents    Int?
+  /// D-98 (B-190). The most ARREARS this role may agree to defer onto a
+  /// payment plan. Its own limit and not `maxFeeWaiverCents`, because a
+  /// deferral is not a waiver: the money is still owed and the tenant is
+  /// still on the hook for all of it. Reusing the waiver limit would have
+  /// made every real plan escalate to the owner — a manager's waiver limit is
+  /// $50 and a typical arrear is $1,800.
+  maxPlanDeferralCents Int?
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)

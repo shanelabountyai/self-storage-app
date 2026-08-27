@@ -33,6 +33,24 @@ describe('validateSchedule', () => {
     expect(problems.some((p) => p.problem.includes('at most'))).toBe(true)
   })
 
+  it('refuses a schedule that finishes past the facility ceiling (D-98)', () => {
+    // The count cap alone caps nothing that matters: six installments spaced
+    // sixty days apart halt dunning, late fees and access suspension for a
+    // year while the lien clock never runs.
+    const problems = validateSchedule(
+      schedule(['2026-09-01', 5000]),
+      5000,
+      d('2026-08-01'),
+      15,
+    )
+    expect(problems.some((p) => p.problem.includes('15 days'))).toBe(true)
+
+    // Inside the window, and unlimited when no ceiling is passed — which is
+    // what every pre-D-98 caller has.
+    expect(validateSchedule(schedule(['2026-09-01', 5000]), 5000, d('2026-08-01'), 90)).toEqual([])
+    expect(validateSchedule(schedule(['2028-09-01', 5000]), 5000, d('2026-08-01'))).toEqual([])
+  })
+
   it('refuses installments that do not add up to the arrears, in dollars', () => {
     // B-188 made this branch reachable: `totalCents` is now the lease's actual
     // past-due balance, not the sum of these same installments, so the message

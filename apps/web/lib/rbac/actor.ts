@@ -5,6 +5,13 @@ export type MonetaryLimits = {
   maxFeeWaiverCents: number | null
   maxRefundCents: number | null
   maxCreditCents: number | null
+  /// D-98 (B-190). The most arrears this role may defer onto a payment plan.
+  ///
+  /// **Optional, and absent means zero rather than unlimited.** Every actor
+  /// built by `loadStaffActor` carries it; the optionality is for the test
+  /// fixtures that predate it, and the safe direction for a limit nobody has
+  /// set is "no authority", never "any amount".
+  maxPlanDeferralCents?: number | null
 }
 
 export type Assignment = {
@@ -54,6 +61,7 @@ export async function loadStaffActor(staffUserId: string): Promise<Actor | null>
         maxFeeWaiverCents: assignment.role.maxFeeWaiverCents,
         maxRefundCents: assignment.role.maxRefundCents,
         maxCreditCents: assignment.role.maxCreditCents,
+        maxPlanDeferralCents: assignment.role.maxPlanDeferralCents,
       },
     })),
   }

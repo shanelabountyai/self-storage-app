@@ -8,6 +8,7 @@ import {
   cancelPaymentPlan,
   createPaymentPlan,
   paymentPlanForLease,
+  paymentPlansForLease,
 } from '../apps/web/lib/admin/payment-plans'
 import { evaluatePaymentPlanBreaches } from '../apps/web/lib/delinquency/payment-plan-breach'
 import type { Actor } from '../apps/web/lib/rbac/actor'
@@ -57,7 +58,17 @@ function actor(staffUserId: string, rank: number): Actor {
         roleKey: rank >= 20 ? 'manager' : 'counter',
         rank,
         permissions: new Set(permissions),
-        limits: { maxFeeWaiverCents: 0, maxRefundCents: 0, maxCreditCents: 0 },
+        // D-98 (B-190). A plan defers the whole arrears, so a manager needs
+        // real plan authority to agree one at all — $2,000, matching the
+        // seeded `manager` role. Counter staff keep zero of everything, which
+        // is what makes the forbidden case below still a permission failure
+        // rather than an amount one.
+        limits: {
+          maxFeeWaiverCents: 0,
+          maxRefundCents: 0,
+          maxCreditCents: 0,
+          maxPlanDeferralCents: rank >= 20 ? 200_000 : 0,
+        },
       },
     ],
   }
@@ -370,7 +381,123 @@ describeDb('payment plans', () => {
     })
   })
 
+  // ── D-98 (B-190). What a plan may commit to, and how many a lease may have ──
+  describe('what a plan may commit to', () => {
+    it('refuses a deferral larger than the actor may commit to, and names who can', async () => {
+      // A manager's plan-deferral limit is $2,000. The defect this closes is
+      // that there was NO amount check at all — `delinquency:execute_step` and
+      // nothing else, so a manager could defer any balance over any schedule.
+      const leaseId = await newLease(300_000)
+      const result = await createPaymentPlan(actor(managerId, 20), leaseId, {
+        installments: [{ dueDate: d('2026-09-01'), amountCents: 300_000 }],
+      })
+      expect(result).toMatchObject({ ok: false, reason: 'over_limit', limitCents: 200_000 })
+      // Named from the role table rather than hardcoded — the seeded
+      // `regional` carries $10,000 and the permission.
+      if (result.ok || result.reason !== 'over_limit') throw new Error('unreachable')
+      expect(result.escalateTo).toBe('Regional Manager')
+    })
+
+    it('refuses a plan whose last installment is past the facility ceiling', async () => {
+      const leaseId = await newLease()
+      const far = new Date(Date.now() + 200 * 86_400_000)
+      const result = await createPaymentPlan(actor(managerId, 20), leaseId, {
+        installments: [{ dueDate: far, amountCents: 5000 }],
+      })
+      expect(result).toMatchObject({ ok: false, reason: 'invalid_schedule' })
+      if (result.ok || result.reason !== 'invalid_schedule') throw new Error('unreachable')
+      expect(result.problems[0].problem).toContain('90 days')
+    })
+
+    it('sends the SECOND plan in a rolling year a rank up, and refuses the third', async () => {
+      // The chain is what the whole row is about: a plan broken last night was
+      // replaceable this morning, indefinitely, each replacement re-halting
+      // dunning, late fees and access suspension while the lien clock never
+      // ran. Cancelled plans count — the count is of plans AGREED.
+      const leaseId = await newLease()
+      const first = await createPaymentPlan(actor(managerId, 20), leaseId, {
+        installments: [{ dueDate: d('2026-09-01'), amountCents: 5000 }],
+      })
+      if (!first.ok) throw new Error('setup failed')
+      expect(
+        await cancelPaymentPlan(actor(managerId, 20), first.planId, 'tenant changed their mind'),
+      ).toMatchObject({ ok: true })
+
+      // Manager is the LOWEST rank that may agree one at all, so the second is
+      // not theirs to agree.
+      const second = await createPaymentPlan(actor(managerId, 20), leaseId, {
+        installments: [{ dueDate: d('2026-09-02'), amountCents: 5000 }],
+      })
+      expect(second).toMatchObject({ ok: false, reason: 'needs_escalation', priorCount: 1 })
+
+      // A regional agrees it, and then the facility's limit of two is reached.
+      const asRegional = actor(managerId, 30)
+      const agreed = await createPaymentPlan(asRegional, leaseId, {
+        installments: [{ dueDate: d('2026-09-02'), amountCents: 5000 }],
+      })
+      expect(agreed).toMatchObject({ ok: true })
+      if (!agreed.ok) throw new Error('unreachable')
+      expect(
+        await cancelPaymentPlan(asRegional, agreed.planId, 'broke it again'),
+      ).toMatchObject({ ok: true })
+
+      const third = await createPaymentPlan(asRegional, leaseId, {
+        installments: [{ dueDate: d('2026-09-03'), amountCents: 5000 }],
+      })
+      expect(third).toMatchObject({ ok: false, reason: 'too_many_plans', priorCount: 2, limit: 2 })
+    })
+
+    it('reads a chain of plans as a chain, with what each one collected', async () => {
+      // `paymentPlanForLease` was a `findFirst` ordered `createdAt desc`, so a
+      // lease on its second plan read on every screen as a lease on one.
+      const leaseId = await newLease()
+      const first = await createPaymentPlan(actor(managerId, 20), leaseId, {
+        installments: [{ dueDate: d('2026-09-01'), amountCents: 5000 }],
+      })
+      if (!first.ok) throw new Error('setup failed')
+      await pay(leaseId, 2000)
+      expect(
+        await cancelPaymentPlan(actor(managerId, 20), first.planId, 'renegotiated'),
+      ).toMatchObject({ ok: true })
+
+      const second = await createPaymentPlan(actor(managerId, 30), leaseId, {
+        installments: [{ dueDate: d('2026-09-15'), amountCents: 3000 }],
+      })
+      expect(second).toMatchObject({ ok: true })
+
+      const chain = await paymentPlansForLease(leaseId)
+      expect(chain).toHaveLength(2)
+      // Newest first, and the money the FIRST one collected is still readable
+      // beside the second — the second is agreed over what was left, so its
+      // own progress correctly restarts at zero.
+      expect(chain[0].totalCents).toBe(3000)
+      expect(chain[0].collectedCents).toBe(0)
+      expect(chain[1].totalCents).toBe(5000)
+      expect(chain[1].collectedCents).toBe(2000)
+    })
+  })
+
   describe('the nightly breach check', () => {
+    it('leaves a plan standing inside D-98\u2019s grace window, and breaks it after', async () => {
+      // A plan that breaks at 00:01 over money that arrives at 2pm is
+      // technically right and commercially wrong. This is a MANUAL-pay plan,
+      // which is the case that broke the same night the date passed — the
+      // auto-collect path already had B-189's retry ladder holding it open.
+      const leaseId = await newLease()
+      const created = await createPaymentPlan(actor(managerId, 20), leaseId, {
+        installments: [{ dueDate: d('2026-09-01'), amountCents: 5000 }],
+        autoCollect: false,
+      })
+      if (!created.ok) throw new Error('setup failed')
+
+      await evaluatePaymentPlanBreaches(facilityId, d('2026-09-03'), recordItem)
+      expect((await paymentPlanForLease(leaseId))?.status).toBe('active')
+      expect(await leaseHasEffect(leaseId, 'halt_dunning')).toBe(true)
+
+      await evaluatePaymentPlanBreaches(facilityId, d('2026-09-05'), recordItem)
+      expect((await paymentPlanForLease(leaseId))?.status).toBe('broken')
+    })
+
     it('breaks a plan whose installment passed unpaid, lifts the hold, and raises a task', async () => {
       const leaseId = await newLease()
       const created = await createPaymentPlan(actor(managerId, 20), leaseId, {
@@ -378,7 +505,9 @@ describeDb('payment plans', () => {
       })
       if (!created.ok) throw new Error('setup failed')
 
-      await evaluatePaymentPlanBreaches(facilityId, d('2026-09-02'), recordItem)
+      // D-98 (B-190). Four days after the due date, not one: the facility's
+      // three days of grace have to have run out before a plan is broken.
+      await evaluatePaymentPlanBreaches(facilityId, d('2026-09-05'), recordItem)
 
       const plan = await paymentPlanForLease(leaseId)
       expect(plan?.status).toBe('broken')
@@ -459,7 +588,9 @@ describeDb('payment plans', () => {
 
       // ...and the nightly job breaks it, rather than leaving the ladder
       // halted on a payment that never touched the arrears.
-      await evaluatePaymentPlanBreaches(facilityId, new Date(now.getTime() + 2 * day), recordItem)
+      // Past D-98's three days of grace — the view above is `missed` at +2,
+      // and the BREAK is a separate window.
+      await evaluatePaymentPlanBreaches(facilityId, new Date(now.getTime() + 5 * day), recordItem)
       expect((await paymentPlanForLease(leaseId))?.status).toBe('broken')
       expect(await leaseHasEffect(leaseId, 'halt_dunning')).toBe(false)
     })
@@ -491,7 +622,9 @@ describeDb('payment plans', () => {
       expect(plan?.status).toBe('active')
       expect(plan?.installments[0].status).toBe('missed')
 
-      await evaluatePaymentPlanBreaches(facilityId, new Date(now.getTime() + 2 * day), recordItem)
+      // Past D-98's three days of grace — the view above is `missed` at +2,
+      // and the BREAK is a separate window.
+      await evaluatePaymentPlanBreaches(facilityId, new Date(now.getTime() + 5 * day), recordItem)
       expect((await paymentPlanForLease(leaseId))?.status).toBe('broken')
       expect(await leaseHasEffect(leaseId, 'halt_dunning')).toBe(false)
     })

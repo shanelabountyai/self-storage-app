@@ -510,6 +510,33 @@ export async function createPaymentPlanAction(
           message: "You cannot set up a payment plan on this lease.",
           fieldErrors: {},
         };
+      // D-98 (B-190). Three refusals that each name the number they were
+      // measured against, because a staffer standing in front of a tenant has
+      // to be able to say what happens next rather than only that it did not.
+      case "over_limit":
+        return {
+          status: "error",
+          message: `A payment plan defers everything past due on this lease, and that is more than you can agree to on your own — your limit is ${formatCents(result.limitCents)}.${
+            result.escalateTo
+              ? ` A ${result.escalateTo} can agree this one.`
+              : " Nobody above you has a large enough limit either; the amount has to come down first."
+          }`,
+          fieldErrors: {},
+        };
+      case "too_many_plans":
+        return {
+          status: "error",
+          message: `This lease has already had ${result.priorCount} payment ${result.priorCount === 1 ? "plan" : "plans"} in the last twelve months, and this facility allows ${result.limit}. Another one would halt collections again with nothing new agreed — the limit is in facility settings if it is wrong.`,
+          fieldErrors: {},
+        };
+      case "needs_escalation":
+        return {
+          status: "error",
+          message: `This lease has already had ${result.priorCount} payment ${result.priorCount === 1 ? "plan" : "plans"} in the last twelve months, so a second one is agreed a level up.${
+            result.escalateTo ? ` Ask a ${result.escalateTo}.` : ""
+          }`,
+          fieldErrors: {},
+        };
       default:
         return {
           status: "error",
