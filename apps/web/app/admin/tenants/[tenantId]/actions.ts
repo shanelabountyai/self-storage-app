@@ -22,7 +22,7 @@ import {
   cancelPaymentPlan,
   createPaymentPlan,
 } from "@/lib/admin/payment-plans";
-import { MAX_INSTALLMENTS } from "@storage/core/payment-plans";
+import { MAX_INSTALLMENTS, problemsByRow } from "@storage/core/payment-plans";
 import { waiveFeeInvoice } from "@/lib/billing/late-fees";
 import { postFeeCharge } from "@/lib/billing/charges";
 import { formatCents } from "@/lib/format";
@@ -456,6 +456,14 @@ export async function createPaymentPlanAction(
   const leaseId = String(formData.get("leaseId") ?? "");
 
   const installments: { dueDate: Date; amountCents: number }[] = [];
+  // B-192. Which FORM ROW each installment came from. `validateSchedule`
+  // numbers its problems by position in the array it was handed, and that
+  // array is compacted — a staffer who fills rows 1, 2 and 5 sends three
+  // installments, so problem index 2 is row 5. Reporting it against
+  // `installment_3` would put the message on an empty group two rows above
+  // the field that caused it, which is worse than the page-level sentence it
+  // replaces.
+  const formRow: number[] = [];
   for (let i = 1; i <= MAX_INSTALLMENTS; i++) {
     const dueDateRaw = formData.get(`dueDate_${i}`);
     const amountRaw = formData.get(`amount_${i}`);
@@ -477,6 +485,7 @@ export async function createPaymentPlanAction(
       return fieldError({ [`amount_${i}`]: amount.error });
     }
     installments.push({ dueDate: date.value, amountCents: amount.value });
+    formRow.push(i);
   }
 
   const result = await createPaymentPlan(actor, leaseId, {
@@ -491,12 +500,33 @@ export async function createPaymentPlanAction(
 
   if (!result.ok) {
     switch (result.reason) {
-      case "invalid_schedule":
+      case "invalid_schedule": {
+        // B-192 / WCAG 3.3.1, 3.3.3. Each `PlanProblem` already carries the
+        // installment it is about; this used to join all of them into one
+        // page-level sentence and send `fieldErrors: {}`, so a staffer whose
+        // fourth date was out of order was told so at the top of a form with
+        // twelve identically-named fields and no way to find the one at
+        // fault. Problems with no installment (the total mismatch, the day
+        // cap, an empty schedule) have no field to land on and stay the
+        // summary message — which is right: they are about the plan.
+        const fieldErrors = Object.fromEntries(
+          [...problemsByRow(result.problems, formRow)].map(([row, problem]) => [
+            `installment_${row}`,
+            problem,
+          ]),
+        );
+        const summary = result.problems
+          .filter((p) => p.index === null)
+          .map((p) => p.problem)
+          .join(" ");
         return {
           status: "error",
-          message: result.problems.map((p) => p.problem).join(" "),
-          fieldErrors: {},
+          message:
+            summary ||
+            "That schedule cannot be agreed — see the installments marked below.",
+          fieldErrors,
         };
+      }
       case "already_active":
         return {
           status: "error",

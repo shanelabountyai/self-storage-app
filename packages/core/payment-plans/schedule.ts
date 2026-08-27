@@ -102,6 +102,36 @@ export function validateSchedule(
   return problems
 }
 
+/// B-192 / WCAG 3.3.1. Re-key the problems that belong to an installment onto
+/// the FORM ROW each one came from, so a refusal can land on the field that
+/// caused it instead of being joined into one page-level sentence.
+///
+/// The re-keying is the whole point and is not cosmetic: `validateSchedule`
+/// numbers its problems by position in the array it was handed, and the
+/// builder compacts that array — a staffer who fills rows 1, 2 and 5 sends
+/// three installments, so problem index 2 is row 5. Reporting it against the
+/// third row would put the message on an empty group two rows above the field
+/// at fault, which is worse than the summary it replaces.
+///
+/// `rows[i]` is the form row installment `i` came from. Problems with a null
+/// index are about the PLAN — the total mismatch, the day cap, an empty
+/// schedule — and have no field to land on; they are left to the caller's
+/// summary line rather than attached to an arbitrary row.
+export function problemsByRow(
+  problems: readonly PlanProblem[],
+  rows: readonly number[],
+): Map<number, string> {
+  const byRow = new Map<number, string>()
+  for (const { index, problem } of problems) {
+    if (index === null) continue
+    const row = rows[index]
+    if (row === undefined) continue
+    const existing = byRow.get(row)
+    byRow.set(row, existing ? `${existing} ${problem}` : problem)
+  }
+  return byRow
+}
+
 function dollars(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`
 }

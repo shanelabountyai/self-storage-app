@@ -589,6 +589,11 @@ export default async function TenantProfilePage({
       {/* PRD 02 §4.6 US-25 / PRD 01 §9 (B-090 part 3). The `payment_plan`
           hold has halted collections since B-096 with no schedule behind
           it — this is the schedule, per lease. */}
+      {/* B-192. Gated on there being a plan, now that the builder has moved
+          into `Actions`: what is left here is the READ half, and a heading
+          with nothing under it is one more of the seventeen D-95 counted.
+          Every chain comes from a plan, so `paymentPlans` is the whole test. */}
+      {profile.paymentPlans.length > 0 && (
       <section aria-labelledby="payment-plans-heading" className="flex flex-col gap-3">
         <h2 id="payment-plans-heading" className="font-medium">
           Payment plans
@@ -652,17 +657,32 @@ export default async function TenantProfilePage({
                   <th scope="col" className="py-1 text-right font-medium">
                     Amount
                   </th>
+                  {/* B-192. What a staffer and a tenant both read a schedule
+                      for is "how much is left after this one", and neither
+                      table showed it — six amounts and a total, with the
+                      subtraction left to the reader on the phone. */}
+                  <th scope="col" className="py-1 text-right font-medium">
+                    Left after
+                  </th>
                   <th scope="col" className="py-1 font-medium">
                     Status
                   </th>
                 </tr>
               </thead>
               <tbody>
-                {plan.installments.map((installment) => (
+                {plan.installments.map((installment, index) => (
                   <tr key={installment.position} className="border-b last:border-0">
                     <td className="py-1">{formatDate(installment.dueDate)}</td>
                     <td className="py-1 text-right tabular-nums">
                       {formatCents(installment.amountCents)}
+                    </td>
+                    <td className="py-1 text-right tabular-nums">
+                      {formatCents(
+                        plan.totalCents -
+                          plan.installments
+                            .slice(0, index + 1)
+                            .reduce((sum, i) => sum + i.amountCents, 0),
+                      )}
                     </td>
                     <td className="py-1 capitalize">
                       {installment.status === "missed" ? (
@@ -695,106 +715,10 @@ export default async function TenantProfilePage({
                 <span className="font-medium">Note:</span> {plan.note}
               </p>
             )}
-            {plan.status === "active" &&
-              can(actor, "delinquency:execute_step", profile.leases.find((l) => l.leaseId === plan.leaseId)?.facilityId ?? "") && (
-                <AdminForm
-                  action={cancelPaymentPlanAction}
-                  label={`Cancel the payment plan on unit ${plan.unitNumber}`}
-                  className="mt-3 flex flex-wrap items-end gap-2"
-                >
-                  <input type="hidden" name="tenantId" value={profile.tenantId} />
-                  <input type="hidden" name="planId" value={plan.id} />
-                  <Field name="cancelReason" label="Reason for cancelling" className={FIELD_CLASS} />
-                  <button
-                    type="submit"
-                    className="border-input hover:bg-accent inline-flex min-h-11 items-center justify-center rounded-md border bg-white px-4 text-sm font-medium"
-                  >
-                    Cancel plan
-                  </button>
-                </AdminForm>
-              )}
           </div>
         ))}
-
-        {profile.leases
-          .filter((lease) => lease.status !== "ended")
-          .filter(
-            (lease) =>
-              !profile.paymentPlans.some(
-                (plan) => plan.leaseId === lease.leaseId && plan.status === "active",
-              ),
-          )
-          .filter((lease) => can(actor, "delinquency:execute_step", lease.facilityId))
-          .map((lease) => (
-            <details key={lease.leaseId} className="border-input rounded-lg border p-4">
-              <summary className="cursor-pointer font-medium">
-                Set up a payment plan — unit {lease.unitNumber}
-              </summary>
-              <div className="mt-3 flex flex-col gap-3">
-                <p className="max-w-prose text-xs text-pretty">
-                  <span className="font-medium">
-                    {formatCents(lease.arrearsCents)} is past due on this lease.
-                  </span>{" "}
-                  The installments must add up to exactly that. Fill in as many
-                  as the plan needs and leave the rest blank.
-                </p>
-                <p className="text-muted-foreground max-w-prose text-xs text-pretty">
-                  Agreeing one places a hold that stops dunning, late fees and
-                  access suspension on this lease tonight; missing an
-                  installment lifts it automatically and collections resume.
-                  Rent invoiced from here on is still due on its own date — a
-                  plan covers what is already past due, so paying next month&rsquo;s
-                  rent does not count towards an installment, and that rent is
-                  still collected on its own due date.
-                </p>
-                <AdminForm
-                  action={createPaymentPlanAction}
-                  label={`Agree a payment plan for unit ${lease.unitNumber}`}
-                  className="flex flex-col gap-3"
-                >
-                  <input type="hidden" name="tenantId" value={profile.tenantId} />
-                  <input type="hidden" name="leaseId" value={lease.leaseId} />
-                  <div className="grid gap-2 sm:grid-cols-3">
-                    {Array.from({ length: MAX_INSTALLMENTS }, (_, i) => i + 1).map((n) => (
-                      <div key={n} className="border-input flex flex-col gap-1 rounded-md border p-2">
-                        <span className="text-xs font-medium">Installment {n}</span>
-                        <Field name={`dueDate_${n}`} label="Due" type="date" className={FIELD_CLASS} />
-                        <Field name={`amount_${n}`} label="Amount ($)" type="text" inputMode="decimal" className={FIELD_CLASS} />
-                      </div>
-                    ))}
-                  </div>
-                  {/* D-97. Auto-collection is the default and the box is
-                      ticked; untucking it is the tenant asking to pay each
-                      installment themselves. Present at agreement rather than
-                      as a setting somewhere else, because it is a term of the
-                      conversation being had at that moment. */}
-                  <label className="flex max-w-prose items-start gap-2 text-sm">
-                    <input type="checkbox" name="autoCollect" defaultChecked className="mt-1 size-4" />
-                    <span>
-                      Charge each installment to the card on file on its due
-                      date.{" "}
-                      <span className="text-muted-foreground">
-                        Untick if the tenant would rather pay each one
-                        themselves. Either way this lease keeps paying its
-                        ordinary rent automatically if it already does — a plan
-                        defers what is past due, not what comes next.
-                      </span>
-                    </span>
-                  </label>
-                  <Field name="note" label="Note (optional)" className={FIELD_CLASS} />
-                  <div>
-                    <button
-                      type="submit"
-                      className="border-input hover:bg-accent inline-flex min-h-11 items-center justify-center rounded-md border px-4 text-sm font-medium"
-                    >
-                      Agree plan
-                    </button>
-                  </div>
-                </AdminForm>
-              </div>
-            </details>
-          ))}
       </section>
+      )}
 
       {profile.waivableFees.length > 0 && (
         <section aria-labelledby="fees-heading" className="flex flex-col gap-3">
@@ -1770,6 +1694,176 @@ export default async function TenantProfilePage({
               </div>
             </details>
           )}
+
+
+        {/* B-192 / D-95. The payment-plan WRITES belong here, not beside the
+            schedule they act on. D-95 settled — the day before B-090c shipped
+            — that the read stack runs uninterrupted and every occasional
+            write sits in this one closed region; a builder and a cancel form
+            inserted between Leases and Outstanding fees is exactly the
+            reversal that decision exists to stop. The plan's status, its
+            chain and its schedule stay up there, where they are read.
+
+            The `AnnounceRegion` is mounted unconditionally around both, and
+            that is the point (B-170): each of these forms is REMOVED by its
+            own success — cancelling unmounts the cancel disclosure, agreeing
+            filters the builder out — so a `role="status"` inside either one
+            is populated in the same commit React unmounts it, announcing
+            nothing and dropping focus to <body> (4.1.3, 2.4.3). */}
+        <AnnounceRegion>
+          {profile.paymentPlans
+            .filter((plan) => plan.status === "active")
+            .filter((plan) =>
+              can(
+                actor,
+                "delinquency:execute_step",
+                profile.leases.find((l) => l.leaseId === plan.leaseId)?.facilityId ?? "",
+              ),
+            )
+            .map((plan) => (
+              <details key={plan.id} className="border-input rounded-lg border p-4">
+                <summary className="cursor-pointer font-medium">
+                  Cancel the payment plan on unit {plan.unitNumber}
+                </summary>
+                <div className="mt-3 flex flex-col gap-3">
+                  <p className="text-muted-foreground max-w-prose text-xs text-pretty">
+                    Cancelling lifts the hold tonight — dunning, late fees and
+                    access suspension resume on this lease, and everything the
+                    plan deferred is past due again in full. It counts towards
+                    the number of plans this lease may have in a year, so
+                    agreeing a replacement may need a manager.
+                  </p>
+                  <AdminForm
+                    action={cancelPaymentPlanAction}
+                    label={`Cancel the payment plan on unit ${plan.unitNumber}`}
+                    className="flex flex-wrap items-end gap-2"
+                    announceOutside
+                  >
+                    <input type="hidden" name="tenantId" value={profile.tenantId} />
+                    <input type="hidden" name="planId" value={plan.id} />
+                    {/* B-192. Named after its subject, not after the act: a
+                        multi-unit tenant renders one of these per plan, and
+                        "Reason for cancelling" beside "Cancel plan" is
+                        indistinguishable from its neighbour out of context
+                        (2.4.6). The server refuses `missing_reason`, so the
+                        field says so and carries `required` rather than
+                        letting the refusal be the first the staffer hears of
+                        it (3.3.2). */}
+                    <Field
+                      name="cancelReason"
+                      label={`Reason for cancelling the plan on unit ${plan.unitNumber}`}
+                      hint="Required. It is written to the audit log with your name."
+                      required
+                      className={FIELD_CLASS}
+                    />
+                    <button
+                      type="submit"
+                      className="border-input hover:bg-accent inline-flex min-h-11 items-center justify-center rounded-md border bg-white px-4 text-sm font-medium"
+                    >
+                      Cancel the plan on unit {plan.unitNumber}
+                    </button>
+                  </AdminForm>
+                </div>
+              </details>
+            ))}
+
+          {profile.leases
+            .filter((lease) => lease.status !== "ended")
+            .filter(
+              (lease) =>
+                !profile.paymentPlans.some(
+                  (plan) => plan.leaseId === lease.leaseId && plan.status === "active",
+                ),
+            )
+            .filter((lease) => can(actor, "delinquency:execute_step", lease.facilityId))
+            .map((lease) => (
+              <details key={lease.leaseId} className="border-input rounded-lg border p-4">
+                <summary className="cursor-pointer font-medium">
+                  Set up a payment plan — unit {lease.unitNumber}
+                </summary>
+                <div className="mt-3 flex flex-col gap-3">
+                  <p className="max-w-prose text-xs text-pretty">
+                    <span className="font-medium">
+                      {formatCents(lease.arrearsCents)} is past due on this lease.
+                    </span>{" "}
+                    The installments must add up to exactly that. Fill in as many
+                    as the plan needs and leave the rest blank.
+                  </p>
+                  <p className="text-muted-foreground max-w-prose text-xs text-pretty">
+                    Agreeing one places a hold that stops dunning, late fees and
+                    access suspension on this lease tonight; missing an
+                    installment lifts it automatically and collections resume.
+                    Rent invoiced from here on is still due on its own date — a
+                    plan covers what is already past due, so paying next month&rsquo;s
+                    rent does not count towards an installment, and that rent is
+                    still collected on its own due date.
+                  </p>
+                  <AdminForm
+                    action={createPaymentPlanAction}
+                    label={`Agree a payment plan for unit ${lease.unitNumber}`}
+                    className="flex flex-col gap-3"
+                    announceOutside
+                  >
+                    <input type="hidden" name="tenantId" value={profile.tenantId} />
+                    <input type="hidden" name="leaseId" value={lease.leaseId} />
+                    <div className="grid gap-2 sm:grid-cols-3">
+                      {Array.from({ length: MAX_INSTALLMENTS }, (_, i) => i + 1).map((n) => (
+                        // B-192. A real <fieldset>/<legend>, not a <div> with a
+                        // <span> in it. Six of these render twelve controls
+                        // called "Due" and "Amount ($)", and without the group
+                        // name nothing ties any of them to an ordinal — a
+                        // screen-reader user meets twelve identically-named
+                        // fields (1.3.1, 3.3.2).
+                        //
+                        // `FieldSet` rather than a bare <fieldset> because the
+                        // schedule's refusals are about an INSTALLMENT, not
+                        // about one of its two fields: "must be in date order"
+                        // belongs to the pair. `validateSchedule` numbers its
+                        // problems by installment, and `createPaymentPlanAction`
+                        // now reports each under this key (3.3.1, 3.3.3).
+                        <FieldSet
+                          key={n}
+                          name={`installment_${n}`}
+                          legend={<span className="text-xs">Installment {n}</span>}
+                          className="border-input flex flex-col gap-1 rounded-md border p-2"
+                        >
+                          <Field name={`dueDate_${n}`} label="Due" type="date" className={FIELD_CLASS} />
+                          <Field name={`amount_${n}`} label="Amount ($)" type="text" inputMode="decimal" className={FIELD_CLASS} />
+                        </FieldSet>
+                      ))}
+                    </div>
+                    {/* D-97. Auto-collection is the default and the box is
+                        ticked; untucking it is the tenant asking to pay each
+                        installment themselves. Present at agreement rather than
+                        as a setting somewhere else, because it is a term of the
+                        conversation being had at that moment. */}
+                    <label className="flex max-w-prose items-start gap-2 text-sm">
+                      <input type="checkbox" name="autoCollect" defaultChecked className="mt-1 size-4" />
+                      <span>
+                        Charge each installment to the card on file on its due
+                        date.{" "}
+                        <span className="text-muted-foreground">
+                          Untick if the tenant would rather pay each one
+                          themselves. Either way this lease keeps paying its
+                          ordinary rent automatically if it already does — a plan
+                          defers what is past due, not what comes next.
+                        </span>
+                      </span>
+                    </label>
+                    <Field name="note" label="Note (optional)" className={FIELD_CLASS} />
+                    <div>
+                      <button
+                        type="submit"
+                        className="border-input hover:bg-accent inline-flex min-h-11 items-center justify-center rounded-md border px-4 text-sm font-medium"
+                      >
+                        Agree the plan for unit {lease.unitNumber}
+                      </button>
+                    </div>
+                  </AdminForm>
+                </div>
+              </details>
+            ))}
+        </AnnounceRegion>
 
         {/* B-121 / D-49. Its own section, not a fifth box in the contact grid:
             this is a legal-status declaration with automatic consequences on

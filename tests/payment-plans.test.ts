@@ -4,6 +4,7 @@ import {
   installmentViews,
   isBreached,
   isFullyPaid,
+  problemsByRow,
   validateSchedule,
   type PlannedInstallment,
 } from '../packages/core/payment-plans'
@@ -149,5 +150,42 @@ describe('isBreached / isFullyPaid', () => {
 
   it('an empty schedule is never fully paid', () => {
     expect(isFullyPaid([], 100)).toBe(false)
+  })
+})
+
+// B-192 / WCAG 3.3.1. The builder sends a COMPACTED array — blank rows are
+// dropped — so a problem's index is not the form row it came from, and the
+// whole value of this function is that it does not assume they are.
+describe('problemsByRow', () => {
+  it('maps an installment problem back to the form row it came from', () => {
+    // Rows 1, 2 and 5 filled: problem index 2 is form row 5, not row 3.
+    const byRow = problemsByRow(
+      [{ index: 2, problem: 'Installments must be in date order, one per date.' }],
+      [1, 2, 5],
+    )
+    expect([...byRow]).toEqual([
+      [5, 'Installments must be in date order, one per date.'],
+    ])
+  })
+
+  it('drops the problems that are about the plan rather than an installment', () => {
+    expect(problemsByRow([{ index: null, problem: 'The installments total …' }], [1]).size).toBe(0)
+  })
+
+  it('joins two problems on one installment rather than losing the first', () => {
+    const byRow = problemsByRow(
+      [
+        { index: 0, problem: 'Each installment needs a positive amount.' },
+        { index: 0, problem: 'Each installment date must be in the future.' },
+      ],
+      [3],
+    )
+    expect(byRow.get(3)).toBe(
+      'Each installment needs a positive amount. Each installment date must be in the future.',
+    )
+  })
+
+  it('ignores an index with no row behind it rather than keying on undefined', () => {
+    expect(problemsByRow([{ index: 4, problem: 'x' }], [1, 2]).size).toBe(0)
   })
 })

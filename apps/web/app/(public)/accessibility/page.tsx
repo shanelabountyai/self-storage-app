@@ -552,6 +552,15 @@ const LAST_REVIEWED = '19 August 2026'
 // worth noticing rather than quietly fixing — it is a statement about the site.
 // `LAST_REVIEWED` is not bumped: the coverage claim was re-checked against the
 // build, the rest of the page was not.
+// Re-read 2026-08-27, at B-192 (the payment-plan builder). **No change, and
+// the reason is that nothing this row touched is customer-facing**: the whole
+// item is the staff tenant profile — the builder and cancel control moved into
+// `Actions` per D-95, six installment groups given real `<fieldset>`/`<legend>`
+// names, and the schedule's refusals re-keyed onto the installment that caused
+// them. This page is a statement about the SITE a customer uses, so a staff
+// screen changing does not put any sentence on it in either direction. The
+// exception B-191 added for `/portal`'s payment-plan card still stands and is
+// still B-196's to close. `LAST_REVIEWED` does not move.
 export default function AccessibilityPage() {
   return (
     <ProsePage
