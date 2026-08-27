@@ -25,14 +25,18 @@ import {
 import { MAX_INSTALLMENTS, problemsByRow } from "@storage/core/payment-plans";
 import { waiveFeeInvoice } from "@/lib/billing/late-fees";
 import { postFeeCharge } from "@/lib/billing/charges";
-import { formatCents } from "@/lib/format";
+import { formatCents, formatDay } from "@/lib/format";
 import { liftHold, placeHold } from "@/lib/admin/holds";
 import { refundPayment } from "@/lib/billing/refunds";
 import { returnPayment, waiveFeeFromForm } from "@/lib/billing/reversals";
 import { parseScaled } from "@/lib/admin/form-state";
 import { setExtendedHours } from "@/lib/access/time-windows";
 import { requirePermission } from "@/lib/rbac/authorize";
-import { recordNoticeGiven } from "@/lib/admin/move-out";
+import {
+  NOTICE_PROBLEM_COPY,
+  parseNoticeGivenAt,
+  recordNoticeGiven,
+} from "@/lib/admin/move-out";
 
 // PRD 02 §4.4 US-13/US-16. Thin session wrappers; every real decision lives
 // in lib/admin/tenants.ts (and lib/portal/contact.ts underneath it), which
@@ -128,18 +132,35 @@ export async function flagAddressReturnedAction(
 // shortfall figure is computed from something a person confirmed rather than
 // silently reading every walk-in as having given none. Blank clears it back
 // to unset — a native `type="date"` field submits "" for empty, not a date.
-export async function setNoticeGivenAction(formData: FormData): Promise<void> {
+//
+// B-194. It was a void action that awaited `recordNoticeGiven` and then
+// revalidated whatever came back, so a future date and an ended lease both
+// reloaded the page identically to a save — a staffer could not tell a refusal
+// from a success, and nothing announced either (3.3.1 A, 4.1.3 AA). The `max`
+// on the input is a client-side courtesy, not the check that failed.
+export async function setNoticeGivenAction(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
   const actor = await requireStaffActor();
   const tenantId = String(formData.get("tenantId") ?? "");
   const leaseId = String(formData.get("leaseId") ?? "");
-  const raw = String(formData.get("noticeGivenAt") ?? "").trim();
+  const noticeGivenAt = parseNoticeGivenAt(formData.get("noticeGivenAt"));
+  if ("error" in noticeGivenAt) {
+    return fieldError({ noticeGivenAt: noticeGivenAt.error });
+  }
 
-  await recordNoticeGiven(
-    actor,
-    leaseId,
-    raw ? new Date(`${raw}T00:00:00.000Z`) : null,
-  );
+  const result = await recordNoticeGiven(actor, leaseId, noticeGivenAt.value);
+  if (!result.ok) {
+    return fieldError({ noticeGivenAt: NOTICE_PROBLEM_COPY[result.problem] });
+  }
+
   revalidateProfile(tenantId);
+  return success(
+    noticeGivenAt.value
+      ? `Notice recorded as given on ${formatDay(noticeGivenAt.value.toISOString().slice(0, 10))}.`
+      : "Notice date cleared — this lease is back to no confirmed notice.",
+  );
 }
 
 export async function addNoteAction(

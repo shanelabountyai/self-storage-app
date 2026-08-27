@@ -494,6 +494,20 @@ export const STATE_EXCEPTIONS: readonly StateException[] = [
     audience: 'portal',
     reason: 'the receipt for a payment awaiting settlement, for the same reason',
   },
+  // B-194. `recordNoticeGiven`'s two refusals now land on the field instead of
+  // being discarded — but neither is reachable from a browser. `future_date`
+  // is blocked first by the input's own `max`, which stops the submit before a
+  // request leaves; `not_occupying` needs the lease to end in another tab
+  // between this page rendering and its save. They are defence against a
+  // crafted POST rather than states a scan can visit, and the copy behind them
+  // is asserted by unit test instead (`tests/move-out-db.test.ts`).
+  {
+    route: '/admin/tenants/[tenantId]/move-out',
+    state: 'notice-date refusal',
+    audience: 'admin',
+    reason:
+      "unreachable from a browser: the input's own `max` blocks a future date before submit, and an ended lease needs it to end in another tab mid-page",
+  },
   // B-179. Named in the accessibility statement's own history as the
   // route-versus-state gap this pair exists to close, rather than infer from
   // a green scan.

@@ -4,8 +4,13 @@ import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import type { MoveOutReason } from '@storage/db'
 import { requireStaffActor } from '@/lib/rbac/session'
-import { completeMoveOut, recordNoticeGiven } from '@/lib/admin/move-out'
-import { fieldError, parseScaled, stalePreview, type FormState } from '@/lib/admin/form-state'
+import {
+  NOTICE_PROBLEM_COPY,
+  completeMoveOut,
+  parseNoticeGivenAt,
+  recordNoticeGiven,
+} from '@/lib/admin/move-out'
+import { fieldError, parseScaled, stalePreview, success, type FormState } from '@/lib/admin/form-state'
 import { formatCents, formatDay } from '@/lib/format'
 
 // PRD 02 US-14. Thin session wrapper; lib/admin/move-out.ts holds the rules.
@@ -81,17 +86,33 @@ export async function completeMoveOutAction(_prev: FormState, formData: FormData
 
 // B-186. Off-platform notice, recorded right where the shortfall shows so
 // staff don't have to leave this screen to fix a figure it just told them
-// was wrong. Redirects back to the same preview so it recomputes.
-export async function setNoticeGivenOnMoveOutAction(formData: FormData): Promise<void> {
+// was wrong.
+//
+// B-194. It redirected back to this same URL on every outcome, discarding
+// `recordNoticeGiven`'s refusal — so a future date or an ended lease reloaded
+// the screen with the shortfall unchanged and nothing saying why (3.3.1 A,
+// 4.1.3 AA). Returning `FormState` replaces the redirect entirely: the URL
+// already carries `lease` and `date`, so revalidating re-runs `previewMoveOut`
+// against the same date and the shortfall below updates just as it did — with
+// a success message this time, which the redirect could never carry.
+export async function setNoticeGivenOnMoveOutAction(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
   const actor = await requireStaffActor()
   const tenantId = String(formData.get('tenantId') ?? '')
   const leaseId = String(formData.get('leaseId') ?? '')
-  const date = String(formData.get('date') ?? '')
-  const raw = String(formData.get('noticeGivenAt') ?? '').trim()
+  const noticeGivenAt = parseNoticeGivenAt(formData.get('noticeGivenAt'))
+  if ('error' in noticeGivenAt) return fieldError({ noticeGivenAt: noticeGivenAt.error })
 
-  await recordNoticeGiven(actor, leaseId, raw ? new Date(`${raw}T00:00:00.000Z`) : null)
+  const result = await recordNoticeGiven(actor, leaseId, noticeGivenAt.value)
+  if (!result.ok) return fieldError({ noticeGivenAt: NOTICE_PROBLEM_COPY[result.problem] })
 
-  const qs = new URLSearchParams({ lease: leaseId })
-  if (date) qs.set('date', date)
-  redirect(`/admin/tenants/${tenantId}/move-out?${qs.toString()}`)
+  revalidatePath(`/admin/tenants/${tenantId}/move-out`)
+  revalidatePath(`/admin/tenants/${tenantId}`)
+  return success(
+    noticeGivenAt.value
+      ? `Notice recorded as given on ${formatDay(noticeGivenAt.value.toISOString().slice(0, 10))}. The shortfall below is recalculated from it.`
+      : 'Notice date cleared — the shortfall below now reads as no confirmed notice.',
+  )
 }

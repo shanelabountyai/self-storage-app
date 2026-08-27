@@ -607,9 +607,39 @@ async function revokeAccessIfLastLease(
   if (grant) await transitionGrant(grant.id, "revoked", "system:move_out");
 }
 
+export type NoticeProblem = "not_occupying" | "future_date";
+
 export type RecordNoticeGivenResult =
   | { ok: true }
-  | { ok: false; problem: "not_occupying" | "future_date" };
+  | { ok: false; problem: NoticeProblem };
+
+/// B-194. One message per refusal, next to the field that caused it (3.3.1,
+/// 3.3.3). Here rather than in either action file because BOTH notice forms —
+/// the profile's table cell and the move-out screen's — call the same function
+/// and must not describe the same refusal two different ways over the phone.
+export const NOTICE_PROBLEM_COPY: Record<NoticeProblem, string> = {
+  not_occupying:
+    "That lease has already ended, so its notice date can no longer be changed.",
+  future_date:
+    "Notice cannot have been given in the future — choose today or an earlier date.",
+};
+
+/// B-194. Blank is a VALUE here and not a missing one — it clears the field
+/// back to "nobody has confirmed a notice", which `recordNoticeGiven` has
+/// always distinguished from a date. So this cannot be `parseDate`, which
+/// refuses the empty string. Anything else that is not a date is refused
+/// rather than silently landing as `Invalid Date` in the column.
+export function parseNoticeGivenAt(
+  raw: FormDataEntryValue | null,
+): { value: Date | null } | { error: string } {
+  const text = String(raw ?? "").trim();
+  if (text === "") return { value: null };
+  const date = new Date(`${text}T00:00:00.000Z`);
+  if (Number.isNaN(date.getTime())) {
+    return { error: "Enter the notice date as yyyy-mm-dd, or leave it blank." };
+  }
+  return { value: date };
+}
 
 /// B-186. Records notice given off-platform — at the counter, by phone, by
 /// mail. `Lease.noticeGivenAt` previously had exactly one writer, the

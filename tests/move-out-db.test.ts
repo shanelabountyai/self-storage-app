@@ -14,6 +14,8 @@ import {
   formerTenantDebts,
   markUnitReadyToRent,
   previewMoveOut,
+  NOTICE_PROBLEM_COPY,
+  parseNoticeGivenAt,
   recordNoticeGiven,
 } from "../apps/web/lib/admin/move-out";
 import {
@@ -333,6 +335,43 @@ describeDb("move-out", () => {
         d("2026-08-01"),
       );
       expect(result).toEqual({ ok: false, problem: "not_occupying" });
+    });
+
+    // B-194. Both notice forms now report these refusals on the field, so
+    // every problem the function can return must have copy behind it —
+    // `NOTICE_PROBLEM_COPY[problem]` rendering `undefined` is an error summary
+    // that says nothing, which is the defect this item exists to fix.
+    it("has field copy for every refusal recordNoticeGiven can return", () => {
+      expect(Object.keys(NOTICE_PROBLEM_COPY).sort()).toEqual([
+        "future_date",
+        "not_occupying",
+      ]);
+      for (const message of Object.values(NOTICE_PROBLEM_COPY)) {
+        expect(message.length).toBeGreaterThan(0);
+      }
+    });
+
+    // B-194. Blank is a value, not a missing one: it clears the date back to
+    // "nobody has confirmed a notice", which the two tests above prove is a
+    // distinct state. `parseDate` refuses the empty string, so the forms
+    // cannot use it.
+    describe("parseNoticeGivenAt", () => {
+      it("reads blank as a deliberate clear, not an error", () => {
+        expect(parseNoticeGivenAt("")).toEqual({ value: null });
+        expect(parseNoticeGivenAt("   ")).toEqual({ value: null });
+        expect(parseNoticeGivenAt(null)).toEqual({ value: null });
+      });
+
+      it("reads a date field's value as UTC midnight", () => {
+        expect(parseNoticeGivenAt("2026-08-01")).toEqual({
+          value: d("2026-08-01"),
+        });
+      });
+
+      it("refuses anything else rather than storing an Invalid Date", () => {
+        const result = parseNoticeGivenAt("last Tuesday");
+        expect("error" in result).toBe(true);
+      });
     });
   });
 

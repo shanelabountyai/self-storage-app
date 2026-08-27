@@ -91,6 +91,29 @@ test.describe('signed in as the demo owner', () => {
     await assertNoAxeViolations(page)
   })
 
+  // B-194. The date field announced as "Notice given on Off-platform notice —
+  // at the counter, by phone, by mail. Leave blank if nobody has confirmed
+  // one." — the whole hint paragraph was nested INSIDE the <label>, so the
+  // field's accessible name was a sentence about where notice can be given
+  // rather than what the field is (2.4.6 AA, 3.3.2 A). Reads only; nothing is
+  // filled and nothing is submitted, so this is safe against the shared demo
+  // database however many times it runs.
+  test('the notice-date field is named by its label and described by its hint', async ({
+    page,
+  }) => {
+    await page.goto('/admin/tenants?q=dana@demo.example.com')
+    await page.getByRole('link', { name: 'Dana Delinquent' }).click()
+    await page.getByRole('link', { name: 'Move out' }).first().click()
+
+    const notice = page.locator('input[name="noticeGivenAt"]')
+    await expect(notice).toHaveAccessibleName('Notice given on')
+    await expect(notice).toHaveAccessibleDescription(/at the counter, by phone, by mail/)
+
+    // And the two date fields on this screen say which is which, because the
+    // gap between them is the whole point (US-14's three dates).
+    await expect(page.getByText(/This screen has two dates/)).toBeVisible()
+  })
+
   test('recalculating for a different date re-runs the settlement server-side', async ({ page }) => {
     await page.goto('/admin/tenants?q=dana@demo.example.com')
     await page.getByRole('link', { name: 'Dana Delinquent' }).click()

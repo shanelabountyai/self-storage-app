@@ -496,9 +496,24 @@ export default async function TenantProfilePage({
                         <span className="text-muted-foreground">—</span>
                       )
                     ) : (
-                      <form
+                      /* B-194. `AdminForm` rather than a bare void `<form>`:
+                         `recordNoticeGiven` refuses a future date and an ended
+                         lease, and this caller used to discard both and
+                         revalidate regardless, so the row re-rendered
+                         identically whether it saved or not (3.3.1 A, 4.1.3
+                         AA). One form per row, so one row's refusal cannot
+                         appear against another's date.
+
+                         Named by FACILITY and unit, not unit alone: an
+                         `aria-label` makes each of these a `form` landmark,
+                         and a tenant renting unit 101 at two sites would
+                         otherwise give the page two landmarks with one name
+                         (axe `landmark-unique`). The first column of this
+                         table already reads the same pair. */
+                      <AdminForm
                         action={setNoticeGivenAction}
-                        className="flex items-center gap-1"
+                        label={`Notice given on, ${lease.facilityName} unit ${lease.unitNumber}`}
+                        className="flex flex-wrap items-center gap-1"
                       >
                         <input type="hidden" name="tenantId" value={tenantId} />
                         <input
@@ -506,23 +521,22 @@ export default async function TenantProfilePage({
                           name="leaseId"
                           value={lease.leaseId}
                         />
-                        <label
-                          className="sr-only"
-                          htmlFor={`noticeGivenAt-${lease.leaseId}`}
-                        >
-                          Notice given on, unit {lease.unitNumber}
-                        </label>
-                        <input
-                          id={`noticeGivenAt-${lease.leaseId}`}
-                          type="date"
+                        <Field
                           name="noticeGivenAt"
+                          label={
+                            <span className="sr-only">
+                              Notice given on, {lease.facilityName} unit{" "}
+                              {lease.unitNumber}
+                            </span>
+                          }
+                          type="date"
                           max={isoDate(new Date())}
                           defaultValue={
                             lease.noticeGivenAt
                               ? isoDate(lease.noticeGivenAt)
                               : ""
                           }
-                          className="border-input rounded-md border px-2 py-1 text-xs"
+                          className="flex flex-col gap-1 text-xs"
                         />
                         <button
                           type="submit"
@@ -530,7 +544,7 @@ export default async function TenantProfilePage({
                         >
                           Save
                         </button>
-                      </form>
+                      </AdminForm>
                     )}
                   </td>
                   <td className="py-2">

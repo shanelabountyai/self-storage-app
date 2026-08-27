@@ -136,41 +136,45 @@ export default async function MoveOutPage({
       {/* B-186. Off-platform notice, recorded right where the shortfall
           below reads it — a sibling of the completion form, not nested in
           it (B-173's form-in-a-form defect), so recording it here is its own
-          submit and doesn't also try to close the lease. Redirects back to
-          this same preview, which is what makes the figure below update. */}
-      <form
+          submit and doesn't also try to close the lease. B-194 replaced its
+          redirect with an `AdminForm`: revalidating re-runs `previewMoveOut`
+          against the same URL, so the figure below still updates, and the
+          server's refusal now has somewhere to land. */}
+      <AdminForm
         action={setNoticeGivenOnMoveOutAction}
+        label="Record the notice date"
         className="border-input flex flex-wrap items-end gap-2 rounded-lg border p-4"
       >
         <input type="hidden" name="tenantId" value={tenantId} />
         <input type="hidden" name="leaseId" value={leaseId} />
-        <input type="hidden" name="date" value={moveOutDate} />
-        <div className={FIELD_CLASS}>
-          <label htmlFor="noticeGivenAt">
-            Notice given on
-            <span className="text-muted-foreground block text-xs font-normal">
-              Off-platform notice — at the counter, by phone, by mail. Leave
-              blank if nobody has confirmed one.
-            </span>
-          </label>
-          <input
-            id="noticeGivenAt"
-            type="date"
-            name="noticeGivenAt"
-            max={todayIso()}
-            defaultValue={
-              preview.noticeGivenAt ? isoDate(preview.noticeGivenAt) : ""
-            }
-            className="border-input rounded-md border px-2 py-1.5 text-sm"
-          />
-        </div>
+        {/* B-194. Two date fields on one screen, and the gap between them is
+            the whole point of US-14's "three dates never collapsed into one".
+            Said once, above the first of them, rather than left for the reader
+            to infer from two similar-looking pickers. */}
+        <p className="text-muted-foreground w-full max-w-prose text-xs text-pretty">
+          This screen has two dates. <strong>Notice given on</strong> is when
+          the tenant told you they were leaving; <strong>Move-out date</strong>,
+          below, is the day the tenancy ends and the day everything settles to.
+          The distance between them is what the shortfall is measured over.
+        </p>
+        <Field
+          name="noticeGivenAt"
+          label="Notice given on"
+          hint="Off-platform notice — at the counter, by phone, by mail. Leave blank if nobody has confirmed one."
+          type="date"
+          max={todayIso()}
+          defaultValue={
+            preview.noticeGivenAt ? isoDate(preview.noticeGivenAt) : ""
+          }
+          className={FIELD_CLASS}
+        />
         <button
           type="submit"
           className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
         >
           Save notice date
         </button>
-      </form>
+      </AdminForm>
 
       {/* B-173. One form, one truth.
 
@@ -221,6 +225,16 @@ export default async function MoveOutPage({
           </button>
         </div>
 
+      {/* B-194 / D-99. It read "the lease's remedy is a charge, not a
+          refusal" — and `settleMoveOut` posts nothing: no shortfall input, no
+          ledger entry, no fee. A screen naming a consequence the product never
+          applies is worse than one naming none, so the copy now states what
+          actually happens and points at the control that CAN charge. Whether a
+          short-notice move-out is charged at all, and on what basis, is D-99 —
+          OPEN, a lease-terms and per-state question (D-10, Texas default,
+          draft-only, not legal advice). Revisit this sentence when D-99
+          settles; it is written to be true under option A and to be replaced
+          under option B. */}
       {preview.noticeShortfallDays > 0 && (
         <p
           role="status"
@@ -228,8 +242,14 @@ export default async function MoveOutPage({
         >
           This is {preview.noticeShortfallDays} day
           {preview.noticeShortfallDays === 1 ? "" : "s"} short of the notice the
-          lease asks for. Recorded, not blocked — the lease&apos;s remedy is a
-          charge, not a refusal.
+          lease asks for. Recorded, not blocked, and{" "}
+          <strong>nothing is charged for it</strong> — completing the move-out
+          settles the same figures it would have on full notice. If the lease
+          provides for a charge, post it yourself with{" "}
+          {can(actor, "fees:charge", preview.facilityId)
+            ? "“Charge a fee for this unit” above"
+            : "a fee, which needs a colleague with fee-charging access"}
+          .
         </p>
       )}
 
