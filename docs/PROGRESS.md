@@ -6516,7 +6516,7 @@ Four new events (`payment_plan.agreed`, `.installment_due_soon`, `.broken`, `.co
 
 ## B-192 — The payment-plan builder announced nothing, named nothing, and sat where D-95 says it must not
 
-`SHA_PLACEHOLDER`
+`97491e2`
 
 **What it built.** Six defects on one screen, all in the section B-090c added to `app/admin/tenants/[tenantId]/page.tsx`, plus the schedule column both this row and B-193 asked for.
 
