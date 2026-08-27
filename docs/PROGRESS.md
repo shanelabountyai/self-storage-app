@@ -6546,7 +6546,7 @@ Four new events (`payment_plan.agreed`, `.installment_due_soon`, `.broken`, `.co
 
 ## B-193 — The tenant's plan page had one way in, and it vanished the moment the plan broke
 
-`PENDING`
+`88f066a`
 
 **What it built.** Four defects on `/portal/payment-plan` and the shell around it, merged from accessibility review finding 8 and UX review findings 4 and 9.
 
