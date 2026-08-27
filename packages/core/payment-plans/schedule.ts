@@ -106,6 +106,25 @@ function dollars(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`
 }
 
+/// D-97. Whether a plan's installments will ACTUALLY be charged — which is
+/// three separate facts, and no screen or message may conflate them: the plan
+/// was agreed as auto-collect, the lease has autopay on, and the tenant has a
+/// card saved. A plan agreed as automatic against a card since removed will
+/// collect nothing, and telling somebody their payment is taken care of when it
+/// is not is how they end up in collections believing they kept to the plan.
+///
+/// Here rather than in each caller because there are now four of them — the
+/// plan view, the breach job, the autopay run and (B-191) the message that
+/// tells the tenant which kind of plan they are on — and three of them had
+/// their own copy of the expression.
+export function isAutoCollecting(input: {
+  autoCollect: boolean
+  autopayEnabled: boolean
+  hasSavedCard: boolean
+}): boolean {
+  return input.autoCollect && input.autopayEnabled && input.hasSavedCard
+}
+
 export type InstallmentStatus = 'paid' | 'upcoming' | 'missed'
 
 export type InstallmentView = PlannedInstallment & {

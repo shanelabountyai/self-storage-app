@@ -63,12 +63,29 @@ export type PortalLeaseSummary = {
   /// comment makes the same point).
   pendingMoveOutDate: Date | null
   pendingTransfer: { toUnitNumber: string; transferDate: Date; expiresAt: Date } | null
-  /// B-090 part 3 / PRD 01 §9's "self-cure UX beyond banner". Null unless
-  /// there is an active plan AND it still has an unpaid installment ahead —
-  /// a fully-paid plan closes itself out (the nightly job marks it
-  /// `completed`) before this would ever fire, but the check stays explicit
-  /// rather than assumed.
-  activePaymentPlan: { nextDueDate: Date; nextAmountCents: number } | null
+  /// B-090 part 3 / PRD 01 §9's "self-cure UX beyond banner", corrected by
+  /// B-191.
+  ///
+  /// It used to be populated only while `status === 'active'`, and to call the
+  /// first not-yet-paid installment "your next installment". Both were wrong in
+  /// the same direction — towards a tenant being told less the worse things
+  /// got. The card **unmounted the night the plan broke**, which is the hour
+  /// the hold lifts, dunning resumes, late fees re-arm and access suspension
+  /// re-arms; and a past-due uncovered installment is `missed`, not `paid`, so
+  /// "your next installment" named a payment already failed on a date already
+  /// gone.
+  ///
+  /// So: present for a `broken` plan as well as an active one, with the two
+  /// facts kept apart. `completed` and `cancelled` are still null — a permanent
+  /// route to the plan's history is B-193's.
+  paymentPlan: {
+    status: 'active' | 'broken'
+    /// The next installment still ahead, if any.
+    next: { dueDate: Date; amountCents: number } | null
+    /// The OLDEST installment whose date has passed uncovered. Never merged
+    /// with `next`: they are different facts and one of them is an alarm.
+    missed: { dueDate: Date; amountCents: number } | null
+  } | null
 }
 
 export async function portalDashboardForTenant(
@@ -152,14 +169,26 @@ export async function portalDashboardForTenant(
                 expiresAt: transferHold.expiresAt,
               }
             : null,
-        activePaymentPlan:
-          plan?.status === 'active'
-            ? (() => {
-                const next = plan.installments.find((installment) => installment.status !== 'paid')
-                return next ? { nextDueDate: next.dueDate, nextAmountCents: next.amountCents } : null
-              })()
+        paymentPlan:
+          plan && (plan.status === 'active' || plan.status === 'broken')
+            ? {
+                status: plan.status,
+                next: installmentFact(plan.installments, 'upcoming'),
+                missed: installmentFact(plan.installments, 'missed'),
+              }
             : null,
       }
     }),
   )
+}
+
+/// The first installment in a given state, as the two figures the card states.
+/// Ordered by date already (`paymentPlanForLease` sorts them), so "first" is
+/// the soonest upcoming one and the oldest missed one.
+function installmentFact(
+  installments: readonly { dueDate: Date; amountCents: number; status: string }[],
+  status: 'upcoming' | 'missed',
+): { dueDate: Date; amountCents: number } | null {
+  const found = installments.find((installment) => installment.status === status)
+  return found ? { dueDate: found.dueDate, amountCents: found.amountCents } : null
 }

@@ -219,4 +219,77 @@ describeDb('portalDashboardForTenant', () => {
     await prisma.unitType.delete({ where: { id: toUnitType.id } })
     await prisma.lease.delete({ where: { id: lease.id } })
   })
+
+  // B-191 / PRD 05 CN-24. The card used to be populated only while the plan
+  // was `active`, and to call the first not-yet-paid installment "your next
+  // installment". Both were wrong in the same direction: a tenant was told
+  // LESS the worse things got.
+  it('keeps reporting a plan that has broken, and never calls a missed payment the next one', async () => {
+    const staff = await prisma.staffUser.create({
+      data: { email: `portal-dash-staff-${suffix}@example.com`, firstName: 'Mo', lastName: 'Manager' },
+    })
+    const lease = await prisma.lease.create({
+      data: {
+        facilityId,
+        tenantId,
+        unitId,
+        status: 'active',
+        startDate: new Date(Date.UTC(2026, 5, 1)),
+        billingDay: 1,
+        monthlyRateCents: 12_900,
+      },
+    })
+    const hold = await prisma.leaseHold.create({
+      data: {
+        leaseId: lease.id,
+        type: 'payment_plan',
+        reason: 'Plan agreed',
+        effectiveFrom: new Date(Date.UTC(2026, 7, 1)),
+        placedByStaffId: staff.id,
+      },
+    })
+    const plan = await prisma.paymentPlan.create({
+      data: {
+        leaseId: lease.id,
+        holdId: hold.id,
+        totalCents: 120_000,
+        invoiceIds: [],
+        createdByStaffId: staff.id,
+        installments: {
+          create: [
+            { position: 1, dueDate: new Date(Date.UTC(2026, 8, 15)), amountCents: 60_000 },
+            { position: 2, dueDate: new Date(Date.UTC(2026, 9, 15)), amountCents: 60_000 },
+          ],
+        },
+      },
+    })
+
+    // Nothing paid, and the first installment's date has gone: it is MISSED,
+    // and the second is what is actually next.
+    const asOf = new Date(Date.UTC(2026, 8, 20))
+    const [active] = await portalDashboardForTenant(tenantId, asOf)
+    expect(active.paymentPlan).toEqual({
+      status: 'active',
+      next: { dueDate: new Date(Date.UTC(2026, 9, 15)), amountCents: 60_000 },
+      missed: { dueDate: new Date(Date.UTC(2026, 8, 15)), amountCents: 60_000 },
+    })
+
+    await prisma.paymentPlan.update({
+      where: { id: plan.id },
+      data: { status: 'broken', brokenAt: asOf },
+    })
+    const [broken] = await portalDashboardForTenant(tenantId, asOf)
+    expect(broken.paymentPlan?.status).toBe('broken')
+
+    // A plan that closed out cleanly does go quiet here — a permanent route to
+    // its history is B-193's, not this card's.
+    await prisma.paymentPlan.update({ where: { id: plan.id }, data: { status: 'completed' } })
+    const [completed] = await portalDashboardForTenant(tenantId, asOf)
+    expect(completed.paymentPlan).toBeNull()
+
+    await prisma.paymentPlan.delete({ where: { id: plan.id } })
+    await prisma.leaseHold.delete({ where: { id: hold.id } })
+    await prisma.lease.delete({ where: { id: lease.id } })
+    await prisma.staffUser.delete({ where: { id: staff.id } })
+  })
 })

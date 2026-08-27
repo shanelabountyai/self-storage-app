@@ -118,18 +118,56 @@ function LeaseCard({ lease, impersonated }: { lease: PortalLeaseSummary; imperso
       )}
       {/* B-090 part 3 / PRD 01 §9. "Delinquency self-cure UX beyond banner
           (payment plans)" — before this a tenant on a plan had no way to see
-          it existed short of calling the office. */}
-      {lease.activePaymentPlan && (
+          it existed short of calling the office.
+
+          B-191 / PRD 05 CN-24. Two corrections, both towards saying more when
+          things go wrong rather than less. The card used to VANISH the night
+          the plan broke — the same hour collections resumed — and it called
+          the first not-yet-paid installment "your next", which for a past-due
+          one named a payment already failed on a date already gone.
+
+          Everything that distinguishes the three states is a WORD (1.4.1 A);
+          nothing here is carried by colour. The region is server-rendered and
+          present at page load rather than inserted on change (4.1.3 AA). */}
+      {lease.paymentPlan && (
         <div role="status" className="border-input rounded-md border p-3 text-sm text-pretty">
-          <p>
-            You&apos;re on a payment plan. Your next installment is{' '}
-            <strong>{formatRate(lease.activePaymentPlan.nextAmountCents)}</strong> on{' '}
-            {formatDueDate(lease.activePaymentPlan.nextDueDate, lease.facilityTimezone)}.{' '}
-            <Link href="/portal/payment-plan" className="underline underline-offset-4">
-              See the full schedule
-            </Link>
-            .
-          </p>
+          {lease.paymentPlan.status === 'broken' ? (
+            <p>
+              <strong>Your payment plan has ended</strong> because a payment was missed. The full
+              balance above is due now, and late fees and gate access go back to normal.{' '}
+              <Link href="/portal/payment-plan" className="underline underline-offset-4">
+                See the plan and what happened
+              </Link>
+              , or call {lease.facilityPhone}.
+            </p>
+          ) : (
+            <>
+              {lease.paymentPlan.missed && (
+                <p>
+                  <strong>A payment on your plan was missed.</strong>{' '}
+                  {formatRate(lease.paymentPlan.missed.amountCents)} was due on{' '}
+                  {formatDueDate(lease.paymentPlan.missed.dueDate, lease.facilityTimezone)}. Pay it
+                  to keep the plan, or call {lease.facilityPhone}.
+                </p>
+              )}
+              <p>
+                You&apos;re on a payment plan.{' '}
+                {lease.paymentPlan.next ? (
+                  <>
+                    Your next payment is{' '}
+                    <strong>{formatRate(lease.paymentPlan.next.amountCents)}</strong> on{' '}
+                    {formatDueDate(lease.paymentPlan.next.dueDate, lease.facilityTimezone)}.{' '}
+                  </>
+                ) : (
+                  <>There are no payments left to make on it. </>
+                )}
+                <Link href="/portal/payment-plan" className="underline underline-offset-4">
+                  See the full schedule
+                </Link>
+                .
+              </p>
+            </>
+          )}
         </div>
       )}
       {lease.pendingMoveOutDate && (

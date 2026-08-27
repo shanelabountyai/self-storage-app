@@ -12,6 +12,7 @@ import { mintPayLink, payLinkUrl } from '@/lib/portal/pay-links'
 import { leaseHasEffect } from '@/lib/admin/holds'
 import { REFERRAL_REFUSAL_MESSAGES, type ReferralRefusal } from '@storage/core/referrals'
 import { daysPastDue } from '@storage/core/metrics'
+import { isAutoCollecting } from '@storage/core/payment-plans'
 import { formatCents } from '@/lib/format'
 import { facilityPath } from '@/lib/facility/public-facility'
 import { absoluteUrl } from '@storage/core/marketing'
@@ -1062,6 +1063,109 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
       'protection.premium': formatCents(payload.premiumCents ?? 0),
     }
   },
+
+  // ── PRD 05 CN-24 (B-191). The payment plan's four messages. ────────────────
+
+  'payment_plan.agreed': async (event) => {
+    const plan = await planForEvent(event)
+    if (!plan) return {} as MergeContext
+    return {
+      'plan.total': formatCents(plan.totalCents),
+      'plan.schedule': plan.installments
+        .map(
+          (installment, index) =>
+            `${index + 1}. ${formatPlanDate(installment.dueDate)} — ${formatCents(installment.amountCents)}`,
+        )
+        .join('\n'),
+      'plan.collection_line': collectionLine(plan, 'each payment'),
+      'links.plan': `${baseUrl()}/portal/payment-plan`,
+    }
+  },
+
+  'payment_plan.installment_due_soon': async (event, recipient) => {
+    const plan = await planForEvent(event)
+    const payload = (event.payload ?? {}) as { installmentId?: string }
+    const installment = plan?.installments.find((one) => one.id === payload.installmentId)
+    if (!plan || !installment) return {} as MergeContext
+    return {
+      'plan.installment_amount': formatCents(installment.amountCents),
+      'plan.installment_due_date': formatPlanDate(installment.dueDate, {
+        weekday: 'long',
+        month: 'long',
+        day: 'numeric',
+      }),
+      'plan.collection_line': collectionLine(plan, 'this payment'),
+      'links.pay_now': await payNowLink(recipient, event),
+    }
+  },
+
+  // The balance is read HERE, at send time (FR-18), not carried on the event:
+  // the whole point of the message is what is owed now that the plan has
+  // ended, and a tenant who paid something between the job and the dispatch
+  // must be quoted the figure that is true.
+  'payment_plan.broken': async (event, recipient) => ({
+    'plan.balance': formatCents(await leaseBalanceCents(recipient.lease?.id ?? null)),
+    'links.pay_now': await payNowLink(recipient, event),
+  }),
+
+  'payment_plan.completed': async (event) => {
+    const plan = await planForEvent(event)
+    return plan ? { 'plan.total': formatCents(plan.totalCents) } : ({} as MergeContext)
+  },
+}
+
+/// The plan an event names, with everything the four templates read.
+///
+/// `payload.planId` rather than the event's own entity, which is the LEASE: a
+/// lease can have a chain of plans (D-98) and the message is about one of them.
+async function planForEvent(event: DomainEvent) {
+  const planId = (event.payload as { planId?: string } | null)?.planId
+  if (!planId) return null
+  return prisma.paymentPlan.findUnique({
+    where: { id: planId },
+    select: {
+      totalCents: true,
+      autoCollect: true,
+      installments: {
+        orderBy: { dueDate: 'asc' },
+        select: { id: true, dueDate: true, amountCents: true },
+      },
+      lease: {
+        select: { autopayEnabled: true, tenant: { select: { stripeDefaultPaymentMethodId: true } } },
+      },
+    },
+  })
+}
+
+/// An installment date is a calendar date the staffer typed, stored as UTC
+/// midnight — formatted in a facility timezone it would read a day early, the
+/// same trap `notice.generated`'s deadline names above.
+function formatPlanDate(
+  date: Date,
+  options: Intl.DateTimeFormatOptions = { month: 'long', day: 'numeric', year: 'numeric' },
+): string {
+  return new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', ...options }).format(date)
+}
+
+/// D-97, in the tenant's words. Says whether the card will actually be charged
+/// — all three halves of it (`isAutoCollecting`), read fresh at send time, so a
+/// plan agreed as automatic against a card since removed says the true thing
+/// rather than the agreed one.
+function collectionLine(
+  plan: {
+    autoCollect: boolean
+    lease: { autopayEnabled: boolean; tenant: { stripeDefaultPaymentMethodId: string | null } }
+  },
+  subject: 'each payment' | 'this payment',
+): string {
+  const automatic = isAutoCollecting({
+    autoCollect: plan.autoCollect,
+    autopayEnabled: plan.lease.autopayEnabled,
+    hasSavedCard: Boolean(plan.lease.tenant.stripeDefaultPaymentMethodId),
+  })
+  return automatic
+    ? `We will take ${subject} from your card on file on the date shown — you do not need to do anything.`
+    : `${subject === 'each payment' ? 'These payments are' : 'This payment is'} not taken automatically. Pay online, over the phone, or at the office on or before the date shown.`
 }
 
 /// What the lease owes right now, from the ledger — PRD 01 §7.3 makes the
@@ -1253,6 +1357,24 @@ const SKIP_PREDICATES: Record<
   // device `applicableRules` already uses for multiple templates on one event.
   notice_type_not_pre_lien: (_recipient, event) => (event.payload as { type?: string })?.type !== 'pre_lien',
   notice_type_not_lien: (_recipient, event) => (event.payload as { type?: string })?.type !== 'lien',
+
+  // PRD 05 CN-24 (B-191). FR-18 staleness for the installment reminder: the
+  // plan was cancelled, completed or broken in the gap between the nightly job
+  // raising this and the dispatcher reaching it. "Your next installment is
+  // due" about a plan that no longer exists is worse than silence, and the
+  // break notice has already said what is actually true.
+  //
+  // The other three CN-24 messages have no equivalent: each states something
+  // that HAPPENED, and none of them stops being true afterwards.
+  payment_plan_not_active: async (_recipient, event) => {
+    const planId = (event.payload as { planId?: string } | null)?.planId
+    if (!planId) return true
+    const plan = await prisma.paymentPlan.findUnique({
+      where: { id: planId },
+      select: { status: true },
+    })
+    return plan?.status !== 'active'
+  },
 
   // B-072 / PRD 04 US-14. One event (`lead.drip_step`), three templates —
   // same device `notice.generated` uses for pre-lien vs lien.

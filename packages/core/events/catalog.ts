@@ -124,6 +124,30 @@ export const EVENT_NAMES = [
   "delinquency.day_reached",
   "delinquency.stage_changed",
 
+  // Payment plans (PRD 02 §4.6 US-25 / PRD 05 CN-24, B-191). Four facts in a
+  // plan's life, each of which the tenant used to learn from nothing at all.
+  //
+  // Entity is the LEASE on all four — that is what the comms recipient
+  // resolver already reaches a tenant through, and a plan has no contact
+  // details of its own. `payload.planId` says which plan; a lease can have a
+  // chain of them (D-98).
+  /// A schedule was agreed. Carries the installments so the message can state
+  /// them without a second read (the schedule is frozen at agreement; the only
+  /// thing that moves afterwards is what has been PAID against it).
+  "payment_plan.agreed",
+  /// One installment falls due in `invoiceLeadDays` days. Raised by the
+  /// nightly payment-plan job, once per installment, and deliberately NOT
+  /// skipped when auto-collection will take it (CN-24, D-11a): a tenant who
+  /// believes a payment is automatic and is wrong loses the plan over a
+  /// misunderstanding.
+  "payment_plan.installment_due_soon",
+  /// The plan broke and the hold has been lifted — emitted from the same job
+  /// step that lifts it, so the tenant is told the same night collections
+  /// resume rather than by the next dunning letter or the keypad.
+  "payment_plan.broken",
+  /// Every installment collected. The only one of the four that is good news.
+  "payment_plan.completed",
+
   // Inbound messages (PRD 05 CN-14, §8 Phase 3)
   /// B-135 / D-78. A text arrived that is not STOP, HELP, START or YES — a
   /// tenant asking a question rather than working a keyword.

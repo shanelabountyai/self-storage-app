@@ -17,7 +17,7 @@ import { runDunning } from '@/lib/billing/dunning'
 import { createTask } from '@/lib/admin/tasks'
 import { raiseLeadFollowUps } from '@/lib/admin/lead-follow-up'
 import { runDelinquencyTimeline } from '@/lib/delinquency/engine'
-import { evaluatePaymentPlanBreaches } from '@/lib/delinquency/payment-plan-breach'
+import { emitInstallmentReminders, evaluatePaymentPlanBreaches } from '@/lib/delinquency/payment-plan-breach'
 import { releaseStuckOverlocks } from '@/lib/delinquency/overlock'
 import { raiseDailyWalkthrough } from '@/lib/field-ops/walkthrough'
 import { raiseReviewRequests } from '@/lib/reviews/request-job'
@@ -130,6 +130,11 @@ export const CONSUMERS: readonly Consumer[] = [
       'lease.rate_increase_scheduled',
       // PRD 02 US-14 (B-077). The transfer confirmation.
       'lease.transferred',
+      // PRD 05 CN-24 (B-191). A payment plan's four messages.
+      'payment_plan.agreed',
+      'payment_plan.installment_due_soon',
+      'payment_plan.broken',
+      'payment_plan.completed',
     ],
     handle: async ({ event }) => {
       await processCommsEvent(event)
@@ -435,6 +440,9 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
     scope: 'per_facility',
     handler: async ({ facilityId, businessDate, recordItem }) => {
       await evaluatePaymentPlanBreaches(facilityId!, businessDate, recordItem)
+      // PRD 05 CN-24 (B-191). Same job, same reason `emitRetryReminders` rides
+      // with the autopay run — see the function's own comment.
+      await emitInstallmentReminders(facilityId!, businessDate, recordItem)
     },
   },
   {

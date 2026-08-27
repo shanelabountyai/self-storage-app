@@ -523,6 +523,18 @@ export const STATE_EXCEPTIONS: readonly StateException[] = [
     reason:
       'the installment table a tenant on a plan sees, which needs a real PaymentPlan on a demo lease paired with a portal credential — none exists in the seed',
   },
+  // B-191. The twin of the row above, and an omission B-090c left behind: the
+  // dashboard has carried a payment-plan card since that item, in a state no
+  // scan has ever reached, and it was never declared. Three states now (on a
+  // plan, a payment missed, the plan broken), all behind the same missing
+  // fixture. B-196's seed row closes both.
+  {
+    route: '/portal',
+    state: 'payment plan card',
+    audience: 'portal',
+    reason:
+      'the plan card on the dashboard, which needs the same real PaymentPlan on a demo lease the row above does — none exists in the seed',
+  },
 ] as const
 
 /// The state exceptions a visitor is owed, same rule as `customerFacingExceptions`.

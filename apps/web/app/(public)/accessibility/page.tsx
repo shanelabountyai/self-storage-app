@@ -515,6 +515,43 @@ const LAST_REVIEWED = '19 August 2026'
 // seed row that would close that exception is B-196's, not this row's.
 // `LAST_REVIEWED` is not bumped: the coverage claim was re-checked against the
 // build, the rest of the page was not.
+// Re-verified 2026-08-27, at B-191 (a payment plan tells the tenant what is
+// happening to it). Customer-facing twice over: the portal dashboard card, and
+// four emails a tenant receives about money they owe.
+//
+// **One exception is ADDED, and it is a pre-existing gap being declared rather
+// than a new one being created.** `/portal` has carried a payment-plan card
+// since B-090c, in a state no scan has ever reached — the card renders only for
+// a tenant with a plan, and the demo seed creates none — and unlike the
+// schedule table on `/portal/payment-plan`, that state was never named in
+// `STATE_EXCEPTIONS`. This item changes that card (it now also renders for a
+// BROKEN plan, and it distinguishes a missed payment from the next one in
+// words), so leaving the gap undeclared while editing it would be the
+// overstating direction. It is declared now; B-196's seed row is what closes
+// both it and its twin.
+//
+// **What the card itself is built to.** The three states are told apart by
+// words, never by colour (1.4.1 A) — "Your payment plan has ended", "A payment
+// on your plan was missed" — and the region is server-rendered and present at
+// page load rather than inserted on change (4.1.3 AA), which is why it stays a
+// `role="status"` and not an alert.
+//
+// **The emails.** FR-9a's criteria now hold for every templated message this
+// product sends, not only the generated report kind B-084 part 3 built them
+// for: `renderEmail`'s text-only fallback was one `<p>` of the whole body with
+// `<br>`s in it and the merged values interpolated raw, and it is now a
+// language-declared wrapper with the subject as a single `<h1>`, one `<p>` per
+// block, and every value escaped. What is NOT met is the one criterion that
+// needs an HTML body of its own: the agreed-plan schedule is a numbered list
+// rather than a `<table>` with a `<caption>` and `<th scope>`, because a
+// seeded `bodyHtml` would be erased by the first save through CN-16's editor,
+// which writes `bodyHtml: null` unconditionally. That is written down in
+// PROGRESS and raised as its own row rather than half-built here.
+//
+// **No claim below changes.** This page says nothing about email, which is
+// worth noticing rather than quietly fixing — it is a statement about the site.
+// `LAST_REVIEWED` is not bumped: the coverage claim was re-checked against the
+// build, the rest of the page was not.
 export default function AccessibilityPage() {
   return (
     <ProsePage

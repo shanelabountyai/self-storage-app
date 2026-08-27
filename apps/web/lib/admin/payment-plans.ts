@@ -1,7 +1,9 @@
 import { prisma } from '@storage/db'
 import { recordAudit } from '@storage/core/audit'
+import { emitEvent } from '@storage/core/events'
 import {
   installmentViews,
+  isAutoCollecting,
   validateSchedule,
   type InstallmentView,
   type PlanProblem,
@@ -210,6 +212,25 @@ export async function createPaymentPlan(
       tx,
     )
 
+    // PRD 05 CN-24 (B-191). Inside the transaction, like every other emit in
+    // this codebase: a plan that exists and was never announced is the exact
+    // silence this rule exists to end, and the outbox is what makes "agreed"
+    // and "told" one fact rather than two.
+    //
+    // Entity is the LEASE — that is what the comms recipient resolver reaches
+    // a tenant through — with `planId` in the payload, because a lease can
+    // have a chain of plans (D-98) and the message is about this one.
+    await emitEvent(
+      {
+        name: 'payment_plan.agreed',
+        entityType: 'Lease',
+        entityId: leaseId,
+        facilityId: lease.facilityId,
+        payload: { planId: plan.id, totalCents },
+      },
+      tx,
+    )
+
     return plan.id
   })
 
@@ -339,10 +360,11 @@ export async function paymentPlansForLease(
         note: plan.note,
         createdAt: plan.createdAt,
         autoCollect: plan.autoCollect,
-        autoCollectEffective:
-          plan.autoCollect &&
-          plan.lease.autopayEnabled &&
-          Boolean(plan.lease.tenant.stripeDefaultPaymentMethodId),
+        autoCollectEffective: isAutoCollecting({
+          autoCollect: plan.autoCollect,
+          autopayEnabled: plan.lease.autopayEnabled,
+          hasSavedCard: Boolean(plan.lease.tenant.stripeDefaultPaymentMethodId),
+        }),
         collectedCents: paidSinceCents,
         installments: installmentViews(plan.installments, paidSinceCents, asOf),
       }

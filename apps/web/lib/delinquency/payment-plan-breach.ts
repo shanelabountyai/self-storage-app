@@ -1,7 +1,8 @@
 import { prisma } from '@storage/db'
+import { emitEvent } from '@storage/core/events'
 import { DEFAULT_RETRY_DAYS, isTerminalDecline } from '@storage/core/billing'
 import { daysBetween } from '@storage/core/jobs'
-import { installmentViews, isFullyPaid } from '@storage/core/payment-plans'
+import { installmentViews, isAutoCollecting, isFullyPaid } from '@storage/core/payment-plans'
 import { systemLiftHold } from '@/lib/admin/holds'
 import { createTask } from '@/lib/admin/tasks'
 import { planProgressCents } from '@/lib/admin/payment-plans'
@@ -76,6 +77,17 @@ export async function evaluatePaymentPlanBreaches(
         data: { status: 'broken', brokenAt: businessDate },
       })
       await systemLiftHold(plan.holdId, 'delinquency:payment-plan-breach', 'payment_plan_broken')
+      // PRD 05 CN-24 (B-191). The same beat that lifts the hold. This job runs
+      // at hour 4, the dunning ladder at 5 and the timeline at 6 — so the
+      // tenant hears it from us before they hear it from the ladder, or from
+      // the keypad.
+      await emitEvent({
+        name: 'payment_plan.broken',
+        entityType: 'Lease',
+        entityId: plan.leaseId,
+        facilityId,
+        payload: { planId: plan.id },
+      })
       await createTask({
         facilityId,
         type: 'payment_plan_broken',
@@ -91,8 +103,80 @@ export async function evaluatePaymentPlanBreaches(
         data: { status: 'completed', completedAt: businessDate },
       })
       await systemLiftHold(plan.holdId, 'delinquency:payment-plan-breach', 'payment_plan_completed')
+      await emitEvent({
+        name: 'payment_plan.completed',
+        entityType: 'Lease',
+        entityId: plan.leaseId,
+        facilityId,
+        payload: { planId: plan.id },
+      })
       recordItem({ itemId: plan.leaseId, ok: true, message: 'payment plan completed' })
     }
+  }
+}
+
+
+// PRD 05 CN-24 (B-191). The installment reminder.
+//
+// Same job step as the breach check above, for the reason `emitRetryReminders`
+// rides with the autopay run: whether the tenant was warned and whether the
+// plan survived are one night's work, and splitting them into two `JobRun`s
+// would make "did we tell them" depend on which of two jobs ran first.
+//
+// **Once per installment comes from the JobRun, not from a stamp.** The
+// scheduler holds a unique (jobName, facilityId, businessDate), so a catch-up
+// tick walking five business dates emits each installment's reminder on the one
+// date it is due — exactly the guarantee `emitDueReminders` relies on for
+// invoices, and the reason neither needed a `reminderSentAt` column.
+//
+// **The lead time is the facility's own `invoiceLeadDays`.** CN-24 asks for
+// "a per-facility configurable number of days ahead", and this facility
+// already has a setting whose meaning is precisely that — how many days before
+// money is due the tenant hears about it — with a control on `/admin/settings`
+// and an operator who has already chosen a value. A second number beside it
+// would be a new column configuring the same intent, which is the accumulation
+// this repo's own first rule is about.
+//
+// **No autopay skip**, deliberately, and the opposite of CN-1's rule for an
+// ordinary invoice: a tenant who believes an installment is automatic and is
+// wrong loses the plan over a misunderstanding. The message says which kind of
+// plan it is instead (`plan.collection_line`).
+export async function emitInstallmentReminders(
+  facilityId: string,
+  businessDate: Date,
+  recordItem: RecordItem,
+): Promise<void> {
+  const facility = await prisma.facility.findUniqueOrThrow({
+    where: { id: facilityId },
+    select: { invoiceLeadDays: true },
+  })
+  const soon = new Date(businessDate.getTime() + facility.invoiceLeadDays * 86_400_000)
+
+  const due = await prisma.paymentPlanInstallment.findMany({
+    where: {
+      dueDate: soon,
+      plan: { status: 'active', lease: { facilityId } },
+    },
+    select: { id: true, amountCents: true, plan: { select: { id: true, leaseId: true } } },
+  })
+
+  for (const installment of due) {
+    await emitEvent({
+      name: 'payment_plan.installment_due_soon',
+      entityType: 'Lease',
+      entityId: installment.plan.leaseId,
+      facilityId,
+      payload: {
+        planId: installment.plan.id,
+        installmentId: installment.id,
+        amountCents: installment.amountCents,
+      },
+    })
+    recordItem({
+      itemId: installment.plan.leaseId,
+      ok: true,
+      message: 'payment plan installment due soon',
+    })
   }
 }
 
@@ -141,10 +225,11 @@ async function isBroken(
   )
   if (missed.length === 0) return false
 
-  const autoCollected =
-    plan.autoCollect &&
-    plan.lease.autopayEnabled &&
-    Boolean(plan.lease.tenant.stripeDefaultPaymentMethodId)
+  const autoCollected = isAutoCollecting({
+    autoCollect: plan.autoCollect,
+    autopayEnabled: plan.lease.autopayEnabled,
+    hasSavedCard: Boolean(plan.lease.tenant.stripeDefaultPaymentMethodId),
+  })
   if (!autoCollected) return true
 
   // `installmentViews` re-derives `position` from date order, which is the same

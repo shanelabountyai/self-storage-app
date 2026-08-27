@@ -1007,6 +1007,134 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
       'facility.phone',
     ],
   },
+
+  // ── PRD 05 CN-24 (B-191). A payment plan's four messages. ──────────────────
+  //
+  // Copy is customer language throughout (D-15): no "installment status", no
+  // "hold lifted", no "delinquency stage". The tenant needs the amount, the
+  // date, and what happens if it is missed.
+  //
+  // None of the four carries `tenant_moved_out`, unlike almost every rule
+  // above it, and that is deliberate: a plan is about ARREARS, which outlive
+  // the tenancy. Suppressing the break notice because the lease had ended
+  // would reproduce, on the one lease most likely to have one, exactly the
+  // silence this rule exists to end.
+  {
+    key: 'payment_plan_agreed',
+    classification: 'transactional',
+    subject: 'Your payment plan at {{facility.name}}',
+    bodyText: [
+      'Hi {{tenant.first_name}},',
+      '',
+      'This is the payment plan we agreed for unit {{unit.number}} at {{facility.name}}. The total is {{plan.total}}.',
+      '',
+      '{{plan.schedule}}',
+      '',
+      '{{plan.collection_line}}',
+      '',
+      'While you keep to these dates we hold off on late fees, payment notices and turning off your gate access. If a payment is missed, the plan ends, all three start again, and the full amount becomes due.',
+      '',
+      'Rent for each new month is separate from this plan and is still due on its usual date.',
+      '',
+      'See your plan any time: {{links.plan}}',
+      '',
+      'Questions? Call {{facility.phone}}.',
+    ].join('\n'),
+    requiredMergeFields: [
+      'tenant.first_name',
+      'unit.number',
+      'facility.name',
+      'plan.total',
+      'plan.schedule',
+      'plan.collection_line',
+      'links.plan',
+      'facility.phone',
+    ],
+  },
+  {
+    // Sent whether or not the card will be charged (CN-24, and D-11a's
+    // pre-charge notice precedent) — `plan.collection_line` is what makes one
+    // template serve both, and a tenant who believes a payment is automatic
+    // and is wrong is precisely who this exists for.
+    key: 'payment_plan_installment_due_soon',
+    classification: 'transactional',
+    subject: 'Your payment plan installment is due {{plan.installment_due_date}}',
+    bodyText: [
+      'Hi {{tenant.first_name}},',
+      '',
+      'Your next payment plan installment for unit {{unit.number}} at {{facility.name}} is {{plan.installment_amount}}, due {{plan.installment_due_date}}.',
+      '',
+      '{{plan.collection_line}}',
+      '',
+      'If it is missed, the plan ends: the full amount you owe becomes due, late fees start again and your gate access can be turned off.',
+      '',
+      'Pay now: {{links.pay_now}}',
+      '',
+      'Questions? Call {{facility.phone}}.',
+    ].join('\n'),
+    requiredMergeFields: [
+      'tenant.first_name',
+      'unit.number',
+      'facility.name',
+      'plan.installment_amount',
+      'plan.installment_due_date',
+      'plan.collection_line',
+      'links.pay_now',
+      'facility.phone',
+    ],
+  },
+  {
+    // The message the whole rule exists for. It states what is owed NOW, what
+    // has started again, and what it costs to put right — a plan that breaks
+    // in silence is worse than no plan, because the tenant stopped watching
+    // the balance on the strength of an agreement.
+    key: 'payment_plan_broken',
+    classification: 'transactional',
+    subject: 'Your payment plan at {{facility.name}} has ended',
+    bodyText: [
+      'Hi {{tenant.first_name}},',
+      '',
+      'A payment on your plan for unit {{unit.number}} at {{facility.name}} was not made, so the plan has ended.',
+      '',
+      '{{plan.balance}} is now owed in full. Late fees start again from today, payment notices resume, and your gate access can be turned off.',
+      '',
+      'To put it right, pay {{plan.balance}} — or call {{facility.phone}} today and we will go through it with you. Talking to us is always better than leaving it.',
+      '',
+      'Pay now: {{links.pay_now}}',
+    ].join('\n'),
+    requiredMergeFields: [
+      'tenant.first_name',
+      'unit.number',
+      'facility.name',
+      'plan.balance',
+      'links.pay_now',
+      'facility.phone',
+    ],
+  },
+  {
+    key: 'payment_plan_completed',
+    classification: 'transactional',
+    subject: 'Your payment plan at {{facility.name}} is paid off',
+    bodyText: [
+      'Hi {{tenant.first_name}},',
+      '',
+      'You have paid off your payment plan for unit {{unit.number}} at {{facility.name}} — {{plan.total}} in total. Thank you for keeping to it.',
+      '',
+      'There is nothing left on the plan. Rent for each new month carries on as usual, due on its usual date.',
+      '',
+      'See your account: {{links.portal}}',
+      '',
+      'Questions? Call {{facility.phone}}.',
+    ].join('\n'),
+    requiredMergeFields: [
+      'tenant.first_name',
+      'unit.number',
+      'facility.name',
+      'plan.total',
+      'links.portal',
+      'facility.phone',
+    ],
+  },
 ]
 
 export const COMMS_RULES: readonly CommsRuleSeed[] = [
@@ -1298,4 +1426,26 @@ export const COMMS_RULES: readonly CommsRuleSeed[] = [
     classification: 'marketing',
     skipConditions: ['abandonment_step_not_3', 'checkout_session_exited', 'checkout_no_consent'],
   },
+
+  // ── PRD 05 CN-24 (B-191). ───────────────────────────────────────────────────
+  //
+  // Email only. CN-13's `payment_reminders` category governs the one message
+  // of the four that is a reminder; the other three are a record of a
+  // financial agreement and its end, which is not a preference to switch off.
+  { event: 'payment_plan.agreed', templateKey: 'payment_plan_agreed', classification: 'transactional' },
+  {
+    event: 'payment_plan.installment_due_soon',
+    templateKey: 'payment_plan_installment_due_soon',
+    classification: 'transactional',
+    // Deliberately NOT `autopay_covers_it` — CN-24 requires this one to go
+    // whether or not the card will be charged, which is the opposite of
+    // CN-1's rule for an ordinary invoice and is why it says so in as many
+    // words. `payment_plan_not_active` is the staleness check instead: a plan
+    // cancelled or broken between the raise and the send has no installment
+    // due.
+    skipConditions: ['payment_plan_not_active'],
+    category: 'payment_reminders',
+  },
+  { event: 'payment_plan.broken', templateKey: 'payment_plan_broken', classification: 'transactional' },
+  { event: 'payment_plan.completed', templateKey: 'payment_plan_completed', classification: 'transactional' },
 ]

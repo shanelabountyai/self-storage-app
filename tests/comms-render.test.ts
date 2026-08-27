@@ -46,6 +46,47 @@ describe('merge-field rendering', () => {
     expect(email.text).toBe('Unit B-12 is ready')
     expect(email.html).toContain('Unit B-12 is ready')
   })
+
+  // PRD 05 FR-9a (B-191 / CN-24). Every seeded template in this product ships
+  // text-only, so this fallback IS the HTML body of essentially every message
+  // it sends — and it used to be one `<p>` with `<br>`s in it.
+  describe('the text-only HTML fallback', () => {
+    const email = () =>
+      renderEmail(
+        {
+          subject: 'Your payment plan at {{facility.name}}',
+          bodyHtml: null,
+          bodyText: 'Hi Ada,\n\nLine one.\nLine two.\n\nCall {{facility.phone}}.',
+          requiredMergeFields: [],
+        },
+        { ...context, 'facility.name': 'Bob & Sons <Storage>', 'facility.phone': '512-555-0100' },
+      )
+
+    it('declares a language and gives the message one real heading', () => {
+      expect(email().html).toContain('<div lang="en">')
+      expect(email().html).toContain('<h1>Your payment plan at Bob &amp; Sons &lt;Storage&gt;</h1>')
+    })
+
+    it('makes each block a paragraph, keeping single line breaks inside one', () => {
+      expect(email().html).toContain('<p>Line one.<br>Line two.</p>')
+      expect(email().html).toContain('<p>Hi Ada,</p>')
+    })
+
+    it('escapes the merged values rather than emitting them as markup', () => {
+      // A facility genuinely called "Bob & Sons <Storage>" used to emit broken
+      // HTML into every message it sent.
+      expect(email().html).not.toContain('<Storage>')
+      expect(email().subject).toBe('Your payment plan at Bob & Sons <Storage>')
+    })
+
+    it('leaves an explicit HTML body alone', () => {
+      const explicit = renderEmail(
+        { subject: 'S', bodyHtml: '<article>{{unit.number}}</article>', bodyText: 'x', requiredMergeFields: [] },
+        context,
+      )
+      expect(explicit.html).toBe('<article>B-12</article>')
+    })
+  })
 })
 
 describe('idempotency key', () => {

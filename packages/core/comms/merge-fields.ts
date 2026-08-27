@@ -238,6 +238,49 @@ export const EVENT_MERGE_FIELDS: Record<string, readonly MergeFieldSpec[]> = {
     { field: 'protection.plan_name', description: 'The plan they were enrolled in', sample: 'Standard cover' },
     { field: 'protection.premium', description: 'What it costs per month', sample: '$14.00' },
   ],
+
+  // ── PRD 05 CN-24 (B-191). The payment plan's four messages. ────────────────
+  //
+  // `plan.collection_line` is on two of them and says the same thing in both:
+  // whether the card will actually be charged. It reports what D-97 calls the
+  // EFFECTIVE answer — the plan's own opt-in AND autopay on AND a card saved —
+  // because telling a tenant a payment is taken care of when nothing will take
+  // it is how somebody ends up in collections believing they kept to the plan.
+  'payment_plan.agreed': [
+    { field: 'unit.number', description: 'Unit number', sample: 'A-12' },
+    { field: 'plan.total', description: 'What the whole plan covers', sample: '$1,800.00' },
+    {
+      field: 'plan.schedule',
+      description: 'Every installment, one per line, with its date and amount',
+      sample: '1. September 15, 2026 — $600.00\n2. October 15, 2026 — $600.00\n3. November 15, 2026 — $600.00',
+    },
+    {
+      field: 'plan.collection_line',
+      description: 'Whether each payment is taken from their card automatically',
+      sample: 'We will take each payment from your card on file on the date shown.',
+    },
+    { field: 'links.plan', description: 'Link to the plan in their account', sample: 'https://example.com/portal/payment-plan' },
+  ],
+  'payment_plan.installment_due_soon': [
+    { field: 'unit.number', description: 'Unit number', sample: 'A-12' },
+    { field: 'plan.installment_amount', description: 'What this installment is', sample: '$600.00' },
+    { field: 'plan.installment_due_date', description: 'When it is due', sample: 'Tuesday, September 15' },
+    {
+      field: 'plan.collection_line',
+      description: 'Whether this payment is taken from their card automatically',
+      sample: 'We will take this payment from your card on file on the due date.',
+    },
+    { field: 'links.pay_now', description: 'One-tap link to pay', sample: 'https://example.com/pay/abc123' },
+  ],
+  'payment_plan.broken': [
+    { field: 'unit.number', description: 'Unit number', sample: 'A-12' },
+    { field: 'plan.balance', description: 'What is owed now the plan has ended', sample: '$1,200.00' },
+    { field: 'links.pay_now', description: 'One-tap link to pay', sample: 'https://example.com/pay/abc123' },
+  ],
+  'payment_plan.completed': [
+    { field: 'unit.number', description: 'Unit number', sample: 'A-12' },
+    { field: 'plan.total', description: 'What the plan covered in total', sample: '$1,800.00' },
+  ],
 }
 
 /// Every field a template for this event may use.
