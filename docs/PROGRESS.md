@@ -6636,7 +6636,7 @@ Four new events (`payment_plan.agreed`, `.installment_due_soon`, `.broken`, `.co
 
 ## B-196 — The scan contract IV: a waiver earned on one page stopped covering the whole product
 
-`PENDING`
+`9f7c722`
 
 **What it built.** Four gaps in the accessibility scan contract, and one finding nobody had written down.
 
