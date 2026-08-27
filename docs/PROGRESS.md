@@ -6458,7 +6458,7 @@ Four changes, and the first is the one that matters most:
 
 ## B-190 — Nothing capped what a payment plan could defer, or how many times a lease could defer it
 
-`PENDING`
+`b4f2ee0`
 
 **What it built.** Two holes with one shape, and D-98 answered to close them. **(1) There was no monetary authority anywhere.** `createPaymentPlan` gated on `delinquency:execute_step` and nothing else — no `checkMonetaryAuthority` call existed in the file — so a manager whose fee-waiver limit is $50 could commit the business to deferring any balance over any schedule. **(2) Nothing capped the chain.** A second plan was refused only while one was `active`, so a plan broken last night was replaceable this morning, indefinitely; each replacement re-halted dunning, late fees and access suspension, and the lien clock never ran.
 
