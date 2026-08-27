@@ -6486,7 +6486,7 @@ Now: the deferral passes `checkMonetaryAuthority(actor, 'payment_plan', arrears,
 
 ## B-191 — A payment plan told the tenant nothing, and went quietest at the moment it broke
 
-`PENDING`
+`6e3c9aa`
 
 **What it built.** PRD 05 **CN-24**, in full: four messages, plus the dashboard card that was the entire tenant-facing signal before them and was wrong in two ways.
 
