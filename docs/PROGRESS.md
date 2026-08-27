@@ -6576,7 +6576,7 @@ Four new events (`payment_plan.agreed`, `.installment_due_soon`, `.broken`, `.co
 
 ## B-194 — Two notice forms discarded the server's refusal, and the screen promised a charge nothing charges
 
-`PENDING`
+`be9c24b`
 
 **What it built.** Four defects on the off-platform notice B-186 shipped, merged from accessibility review finding 3 and UX review findings 6, 7 and 8.
 
