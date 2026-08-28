@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
 import { assertNoAxeViolations } from './a11y-helpers'
 import { signInAsDemoOwner } from './sign-in'
 
@@ -67,14 +67,21 @@ test.describe('signed in as the demo owner', () => {
   test('the CSV export matches the screen exactly', async ({ page }) => {
     // US-39's own AC. Same figures, same rounding — the export is generated
     // from the identical call, so this asserts they have not diverged.
+    //
+    // B-200: this compared ONE screen cell against one CSV field, by position,
+    // and had the position wrong — the facility name is a `<th scope="row">`,
+    // so `td` 3 is sq-ft occupancy while CSV field 3 is unit occupancy. It
+    // passed for as long as the two ratios happened to round the same, which
+    // means the column US-39's AC actually names had never been asserted. Every
+    // screen column is mapped to its field now rather than one: the export can
+    // no longer drift on a column nobody is looking at, and a mapping that goes
+    // wrong fails loudly instead of coinciding.
     await page.goto('/admin/reports')
-    const rolledUnitOcc = await page
+    const cells = page
       .getByRole('row')
       .filter({ hasText: 'All facilities' })
       .first()
       .locator('td')
-      .nth(3)
-      .innerText()
 
     const response = await page.request.get('/admin/reports/occupancy.csv')
     expect(response.headers()['content-type']).toContain('text/csv')
@@ -82,8 +89,27 @@ test.describe('signed in as the demo owner', () => {
 
     const totalLine = csv.split('\r\n').find((line) => line.startsWith('All facilities'))
     expect(totalLine, 'the export has no roll-up row').toBeTruthy()
-    // The screen renders "50.2%"; the CSV carries "50.2".
-    expect(totalLine!.split(',')[3]).toBe(rolledUnitOcc.replace('%', ''))
+    const fields = totalLine!.split(',')
+
+    // [screen `td` index, CSV field index, column name]. The CSV carries three
+    // columns the table does not show (rentable/occupied sq ft, gross
+    // potential), which is why this is a map and not a zip.
+    const COLUMNS: readonly [number, number, string][] = [
+      [0, 1, 'Occupied'],
+      [1, 2, 'Rentable'],
+      [2, 3, 'Unit occ.'],
+      [3, 6, 'Sq-ft occ.'],
+      [4, 7, 'Collected'],
+      [5, 9, 'Economic occ.'],
+    ]
+
+    for (const [td, field, name] of COLUMNS) {
+      // The screen renders "50.2%" and "$1,234.56"; the CSV carries "50.2" and
+      // "1234.56" so a spreadsheet reads them as numbers. Same figure, and the
+      // rounding is asserted with it.
+      const onScreen = (await cells.nth(td).innerText()).replace(/[%$,]/g, '')
+      expect(fields[field], `${name} differs between the screen and the export`).toBe(onScreen)
+    }
   })
 
   test('the rent roll is sorted by the biggest rate gap', async ({ page }) => {
@@ -251,6 +277,21 @@ test.describe('indexation monitoring', () => {
 
 // B-082 part 6 / PRD 04 §7 Phase 2. Site-wide duplicate content.
 
+// B-200. `.filter({ hasText: 'Austin, TX' }).first()` used to be the city-intro
+// row, and B-089 took that away: the per-city/size intros score higher against
+// each other (~0.94 against 0.82–0.85), the report sorts most-alike first, and
+// their labels read "10×10 — Austin, TX" so they match the same text filter. A
+// positional `.first()` cannot say which kind it meant; the rowheader can, and
+// it stays correct however the pairs re-sort.
+const kindRow = (page: Page, kind: string) =>
+  page
+    .getByRole('row')
+    .filter({ hasText: 'Austin, TX' })
+    .filter({ has: page.getByRole('rowheader', { name: kind, exact: true }) })
+    .first()
+
+const cityIntroRow = (page: Page) => kindRow(page, 'City page intros')
+
 test.describe('duplicate content', () => {
   test.beforeEach(async ({ page }) => {
     await signInAsDemoOwner(page)
@@ -267,9 +308,8 @@ test.describe('duplicate content', () => {
     await page.goto('/admin/reports/duplicate-content')
     await expect(page.getByRole('heading', { level: 1 })).toContainText('Duplicate content')
 
-    const row = page.getByRole('row').filter({ hasText: 'Austin, TX' }).first()
+    const row = cityIntroRow(page)
     await expect(row).toBeVisible()
-    await expect(row.getByRole('rowheader')).toHaveText('City page intros')
 
     // The guidance for a generated pair is not "rewrite the weaker one" — that
     // is the advice for two pasted descriptions, and until B-128 there was no
@@ -285,11 +325,29 @@ test.describe('duplicate content', () => {
 
   test('links both sides of a pair to the pages themselves', async ({ page }) => {
     await page.goto('/admin/reports/duplicate-content')
-    const row = page.getByRole('row').filter({ hasText: 'Austin, TX' }).first()
+    const row = cityIntroRow(page)
     // A report that names a problem without a route to it makes somebody go
     // and find the page by hand.
-    await row.getByRole('link', { name: 'Austin, TX' }).click()
+    await row.getByRole('link', { name: 'Austin, TX', exact: true }).click()
     await expect(page).toHaveURL('/storage/tx/austin')
+  })
+
+  test('does not offer the cities box as the fix for a city/size pair', async ({ page }) => {
+    // B-200. Both kinds are generated, and the row treated that as one case —
+    // so a City/size pair carried "Write copy for one of these cities", which
+    // cannot fix it: `citySizeIntro` takes no authored override, so writing the
+    // city copy changes the city page and leaves this pair exactly as it was.
+    // An operator following that link does the work and watches nothing happen.
+    // Self-skips rather than fails if the demo portfolio has no size pair
+    // above the threshold — the assertion is about what the row SAYS, and a
+    // report with nothing to say is not the failure (B-120).
+    await page.goto('/admin/reports/duplicate-content')
+    const row = kindRow(page, 'City/size page intros')
+    test.skip((await row.count()) === 0, 'no city/size pair above the threshold to advise on')
+
+    await expect(row).not.toContainText('Write copy for one of these cities')
+    await expect(row.getByRole('link')).toHaveCount(2) // the two pages, and no fix link
+    await expect(row).toContainText('noindex')
   })
 
   test('says how much it compared, so a clean result means something', async ({ page }) => {

@@ -25,7 +25,7 @@ import { GUIDES, guidePath } from '@/lib/guides/catalog'
 /// Only items sharing a kind are compared. A 155-character meta description and
 /// a 600-word long description would score low against each other for reasons of
 /// length rather than content.
-const KIND = {
+export const KIND = {
   meta: 'Search-result descriptions',
   hero: 'Facility page opening lines',
   long: 'Facility page long descriptions',

@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { getAdminActor } from '@/lib/admin/context'
 import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
 import { DUPLICATE_THRESHOLD, duplicateReport } from '@storage/core/marketing'
-import { contentCorpus } from '@/lib/marketing/content-corpus'
+import { KIND, contentCorpus } from '@/lib/marketing/content-corpus'
 
 export const metadata = { title: 'Duplicate content' }
 
@@ -103,7 +103,21 @@ export default async function DuplicateContentPage() {
                           instruction. There is now a box. The advice points at
                           it rather than at "write better copy", because which
                           screen is different from the facility one. */}
-                      {pair.bothGenerated ? (
+                      {/* A city/size pair is generated too, but the cities box
+                          does NOT fix it: `citySizeIntro` takes no authored
+                          override, so following that link changes the city
+                          page and leaves this pair exactly where it is. Saying
+                          so is the point — B-200 found this row advertising a
+                          fix that cannot work. What it can honestly report is
+                          what D-77 already did about it. */}
+                      {pair.bothGenerated && pair.kind === KIND.sizeIntro ? (
+                        <>
+                          Generated from the facility records, and alike because the records are
+                          alike — so this page is served <code>noindex</code> rather than being
+                          advertised. There is nowhere to write copy for a size page yet; until
+                          there is, this changes only when the units behind it do.
+                        </>
+                      ) : pair.bothGenerated ? (
                         <>
                           Generated from the facility records, and alike because the records are
                           alike.{' '}
