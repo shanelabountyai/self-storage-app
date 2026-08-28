@@ -6768,7 +6768,7 @@ Six e2e tests had recorded it as a `mobile-chrome` flake for four items running.
 
 ## B-198 — The template's second HTML body is deleted, and the schedule became a real table anyway
 
-`PENDING`
+`cb4e6f1`
 
 **What it built.** `MessageTemplate.bodyHtml` is gone — the column, the schema field, the `checkPublishable` input, both of the unconditional `bodyHtml: null` writes in the editor, and the branch in `renderEmail` that would have used it. Migration `20260828175542_drop_message_template_body_html`, verified beforehand against the dev database: 40 template rows, **0** with a non-null value, so nothing was lost.
 
