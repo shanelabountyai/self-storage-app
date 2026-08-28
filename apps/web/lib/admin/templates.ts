@@ -116,7 +116,7 @@ export async function previewTemplate(
 
   try {
     const rendered = renderEmail(
-      { subject: draft.subject, bodyHtml: null, bodyText: draft.bodyText, requiredMergeFields: draft.requiredMergeFields },
+      { subject: draft.subject, bodyText: draft.bodyText, requiredMergeFields: draft.requiredMergeFields },
       sampleContextFor(event),
     )
     return {
@@ -203,7 +203,6 @@ export async function saveTemplateVersion(
         version,
         active: true,
         subject: draft.subject,
-        bodyHtml: null,
         bodyText: draft.bodyText,
         requiredMergeFields: draft.requiredMergeFields,
       },

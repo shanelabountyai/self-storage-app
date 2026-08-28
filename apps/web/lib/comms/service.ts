@@ -18,7 +18,7 @@ import { facilityPath } from '@/lib/facility/public-facility'
 import { absoluteUrl } from '@storage/core/marketing'
 import { currentRateForUnitType } from '@/lib/pricing/unit-type-rates'
 import { offerFor } from '@/lib/promotions/service'
-import { defaultNotificationPreference, isMarketingQuietHours, isSmsQuietHours, normalizePhoneE164 } from '@storage/core/comms'
+import { defaultNotificationPreference, isMarketingQuietHours, isSmsQuietHours, normalizePhoneE164, tableHtml } from '@storage/core/comms'
 import { currentConsent } from '@storage/core/consent'
 import { mintUnsubscribeToken, unsubscribeUrl } from './unsubscribe-token'
 import { mintCheckoutResumeToken, checkoutResumeUrl } from '@/lib/checkout/resume-token'
@@ -31,7 +31,7 @@ import {
   selectSmsProvider,
   withPostalFooter,
 } from './provider'
-import { type MergeContext, messageIdempotencyKey, RenderError, renderEmail, renderString } from './render'
+import { type MergeContext, type MergeValue, messageIdempotencyKey, RenderError, renderEmail, renderString } from './render'
 
 // PRD 05 FR-1. The pipeline: event → rule(s) → recipient → suppression/consent
 // → render → provider → Message log, idempotent by construction. Producers emit
@@ -505,6 +505,31 @@ function mergeContextFor(recipient: Recipient): MergeContext {
 /// reservation's hold time). Keyed by event name so an event with no extender
 /// just gets the standard context — most events (payment, delinquency) will
 /// add their own entry here without touching the pipeline itself.
+/// CN-24's schedule, in both parts of the message from the one array (B-198).
+///
+/// The text part stays the numbered list a tenant reads in a proportional font;
+/// the HTML part is a real table with a caption and scoped headers, which is
+/// the criterion CN-24 named and the one a flattened string cannot meet. Not
+/// two authored bodies — two renderings of the same installments, so they
+/// cannot disagree about a date or an amount.
+function scheduleValue(
+  installments: readonly { dueDate: Date; amountCents: number }[],
+): MergeValue {
+  const rows = installments.map((installment, index) => [
+    `${index + 1}`,
+    formatPlanDate(installment.dueDate),
+    formatCents(installment.amountCents),
+  ])
+  return {
+    text: rows.map(([number, date, amount]) => `${number}. ${date} — ${amount}`).join('\n'),
+    html: tableHtml({
+      caption: 'Your payment plan',
+      columns: ['Payment', 'Date', 'Amount'],
+      rows,
+    }),
+  }
+}
+
 type ContextExtender = (event: DomainEvent, recipient: Recipient) => Promise<MergeContext>
 
 /// B-051. A one-tap pay link for this message, or the portal login as a
@@ -1071,12 +1096,7 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
     if (!plan) return {} as MergeContext
     return {
       'plan.total': formatCents(plan.totalCents),
-      'plan.schedule': plan.installments
-        .map(
-          (installment, index) =>
-            `${index + 1}. ${formatPlanDate(installment.dueDate)} — ${formatCents(installment.amountCents)}`,
-        )
-        .join('\n'),
+      'plan.schedule': scheduleValue(plan.installments),
       'plan.collection_line': collectionLine(plan, 'each payment'),
       'links.plan': `${baseUrl()}/portal/payment-plan`,
     }

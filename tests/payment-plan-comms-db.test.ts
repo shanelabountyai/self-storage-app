@@ -44,7 +44,7 @@ let unitTypeId = ''
 let staffId = ''
 let counter = 0
 
-const sends: { to: string; subject: string; body: string }[] = []
+const sends: { to: string; subject: string; body: string; html: string }[] = []
 const collected: { itemId: string; ok: boolean; message?: string }[] = []
 const recordItem = (outcome: { itemId: string; ok: boolean; message?: string }) => {
   collected.push(outcome)
@@ -54,7 +54,7 @@ function fakeProvider(): provider.MessageProvider {
   return {
     name: 'test',
     async sendEmail(email) {
-      sends.push({ to: email.to, subject: email.subject ?? '', body: email.text ?? '' })
+      sends.push({ to: email.to, subject: email.subject ?? '', body: email.text ?? '', html: email.html ?? '' })
       return { ok: true, providerMessageId: `test_${sends.length}` }
     },
   }
@@ -269,6 +269,19 @@ describeDb('payment plan notifications (CN-24)', () => {
       // D-15: what the tenant loses if a payment is missed, in their words.
       expect(sends[0].body).toContain('the plan ends')
       expect(sends[0].body).not.toMatch(/installment status|hold lifted|dunning|delinquen/i)
+
+      // CN-24 / B-198: the same schedule as a real table in the HTML part —
+      // one caption, column headers, and the installment number as the row
+      // header. The list above and this come from the one array, so a table
+      // that goes stale is a test failure rather than a message nobody reads.
+      expect(sends[0].html).toContain('<caption')
+      expect(sends[0].html).toContain('Your payment plan</caption>')
+      expect(sends[0].html).toContain('<th scope="col" align="left">Amount</th>')
+      expect(sends[0].html).toContain('<th scope="row" align="left">2</th>')
+      expect(sends[0].html).toContain('<td align="right">October 15, 2026</td>')
+      // A <table> inside a <p> is invalid markup, and it is what the schedule
+      // would land in if it stopped owning its own paragraph.
+      expect(sends[0].html).not.toContain('<p><table')
     })
 
     it('says the payments are NOT automatic when the card is gone, whatever was agreed', async () => {

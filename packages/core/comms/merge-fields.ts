@@ -328,11 +328,10 @@ export function checkPublishable(input: {
   event: string
   subject?: string | null
   bodyText: string
-  bodyHtml?: string | null
   requiredMergeFields: readonly string[]
 }): PublishCheck {
   const available = new Set(availableFieldsFor(input.event).map((spec) => spec.field))
-  const used = fieldsUsedIn(input.subject, input.bodyText, input.bodyHtml)
+  const used = fieldsUsedIn(input.subject, input.bodyText)
 
   const unknown = used.filter((field) => !available.has(field))
   // A required field that the event cannot supply is unknown too, and worse:

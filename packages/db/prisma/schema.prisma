@@ -3519,9 +3519,10 @@ model MessageTemplate {
   active              Boolean               @default(true)
   /// Email subject; null for SMS.
   subject             String?
-  /// Email HTML body; null for SMS (which uses `bodyText` only).
-  bodyHtml            String?
-  /// Email plaintext part or the SMS body. Always present.
+  /// The message body, and the only one — the HTML part of an email is this
+  /// document rendered as markup (B-198 dropped `bodyHtml`, which was null on
+  /// every row that ever existed and which the editor wrote null to on every
+  /// save). A tabular figure carries its own structure as a `MergeValue`.
   bodyText            String
   /// Merge fields the render must have a non-empty value for, or it fails loudly
   /// and blocks the send (FR-9, inherits PRD 02 FR-6).

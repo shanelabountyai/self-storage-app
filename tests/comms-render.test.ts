@@ -37,9 +37,9 @@ describe('merge-field rendering', () => {
     )
   })
 
-  it('renders an email with a plaintext fallback body when only text is given', () => {
+  it('renders both parts of an email from the one body', () => {
     const email = renderEmail(
-      { subject: 'Welcome {{tenant.first_name}}', bodyHtml: null, bodyText: 'Unit {{unit.number}} is ready', requiredMergeFields: [] },
+      { subject: 'Welcome {{tenant.first_name}}', bodyText: 'Unit {{unit.number}} is ready', requiredMergeFields: [] },
       context,
     )
     expect(email.subject).toBe('Welcome Ada')
@@ -47,15 +47,15 @@ describe('merge-field rendering', () => {
     expect(email.html).toContain('Unit B-12 is ready')
   })
 
-  // PRD 05 FR-9a (B-191 / CN-24). Every seeded template in this product ships
-  // text-only, so this fallback IS the HTML body of essentially every message
-  // it sends — and it used to be one `<p>` with `<br>`s in it.
-  describe('the text-only HTML fallback', () => {
+  // PRD 05 FR-9a (B-191 / CN-24 / B-198). A template is ONE document; the HTML
+  // part is that document rendered as markup. It used to be one `<p>` with
+  // `<br>`s in it, and there used to be a second `bodyHtml` body that could
+  // disagree with this one.
+  describe('the HTML part', () => {
     const email = () =>
       renderEmail(
         {
           subject: 'Your payment plan at {{facility.name}}',
-          bodyHtml: null,
           bodyText: 'Hi Ada,\n\nLine one.\nLine two.\n\nCall {{facility.phone}}.',
           requiredMergeFields: [],
         },
@@ -79,12 +79,46 @@ describe('merge-field rendering', () => {
       expect(email().subject).toBe('Your payment plan at Bob & Sons <Storage>')
     })
 
-    it('leaves an explicit HTML body alone', () => {
-      const explicit = renderEmail(
-        { subject: 'S', bodyHtml: '<article>{{unit.number}}</article>', bodyText: 'x', requiredMergeFields: [] },
-        context,
-      )
-      expect(explicit.html).toBe('<article>B-12</article>')
+    // B-198 / CN-24. The one criterion the old string-only context could not
+    // meet: a schedule as a real table. The structured value carries its own
+    // markup; the text part still reads as a list.
+    describe('a structured merge value', () => {
+      const schedule = {
+        text: '1. September 15, 2026 — $600.00\n2. October 15, 2026 — $600.00',
+        html: '<table><caption>Your payment plan</caption><tr><th scope="row">1</th></tr></table>',
+      }
+      const planEmail = (body: string) =>
+        renderEmail({ subject: 'Your plan', bodyText: body, requiredMergeFields: ['plan.schedule'] }, {
+          ...context,
+          'plan.schedule': schedule,
+        })
+
+      it('contributes its own markup, unwrapped, when it owns its paragraph', () => {
+        // A <table> inside a <p> is invalid: the browser closes the paragraph
+        // early and strands the caption.
+        const html = planEmail('Here it is:\n\n{{plan.schedule}}\n\nCall us.').html
+        expect(html).toContain(`<caption>Your payment plan</caption>`)
+        expect(html).toContain('<th scope="row">1</th>')
+        expect(html).not.toContain('<p><table')
+      })
+
+      it('gives the text part the list, not the markup', () => {
+        const text = planEmail('Here it is:\n\n{{plan.schedule}}').text
+        expect(text).toContain('1. September 15, 2026 — $600.00')
+        expect(text).not.toContain('<table>')
+      })
+
+      it('still renders, escaped-free but inline, when a staffer moves it into a sentence', () => {
+        expect(planEmail('Your plan: {{plan.schedule}}').html).toContain('<table>')
+      })
+
+      it('counts as missing when it has no installments', () => {
+        expect(() =>
+          renderEmail({ subject: 'S', bodyText: '{{plan.schedule}}', requiredMergeFields: ['plan.schedule'] }, {
+            'plan.schedule': { text: '', html: '' },
+          }),
+        ).toThrow(RenderError)
+      })
     })
   })
 })

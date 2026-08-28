@@ -658,6 +658,32 @@ const LAST_REVIEWED = '19 August 2026'
 //
 // `LAST_REVIEWED` does not move. The reflow claim was re-checked against the
 // build; the rest of the page was not.
+//
+// Re-read 2026-08-28, at B-198 (the email template's second body is deleted).
+// Nothing a customer touches on this SITE changes — but the B-191 entry above
+// is a statement about what this product's emails do and do not meet, and this
+// item makes half of it false, so it is corrected here rather than left to
+// read as current.
+//
+// **What that entry said, and what is now true.** It said the agreed-plan
+// schedule is a numbered list rather than a `<table>` with a `<caption>` and
+// `<th scope>`, "because a seeded `bodyHtml` would be erased by the first save
+// through CN-16's editor". `MessageTemplate.bodyHtml` no longer exists. The
+// schedule is a real table with a caption and both header scopes, rendered
+// through the same `tableHtml` a generated report email uses, and the text
+// part is still the numbered list — both built from the one array of
+// installments rather than either being derived from the other, which is the
+// half of FR-9a that a hand-maintained HTML twin loses first. CN-24's email
+// criteria are met in full.
+//
+// **The claim that is NOT made.** These are still emails, and this page says
+// nothing about email in either direction — no sentence below is added,
+// because a client's rendering of a message is not the site, and a page that
+// starts certifying outbound mail acquires a claim nobody re-checks. The
+// record lives in PROGRESS and in `render.ts`.
+//
+// `LAST_REVIEWED` does not move: no claim on this page was re-checked against
+// the build, and none changed.
 export default function AccessibilityPage() {
   return (
     <ProsePage

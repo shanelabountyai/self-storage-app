@@ -95,7 +95,11 @@ function tableText(table: EmailTable): string[] {
   ]
 }
 
-function tableHtml(table: EmailTable): string {
+/// Exported for B-198: a templated email's tabular merge value (CN-24's payment
+/// plan schedule) renders through the SAME table as a generated report, so
+/// `<caption>`, `<th scope="col">` and `<th scope="row">` are one implementation
+/// that was reviewed once rather than a second one written by hand.
+export function tableHtml(table: EmailTable): string {
   const head = table.columns
     .map((column) => `<th scope="col" align="left">${escapeHtml(column)}</th>`)
     .join('')
