@@ -6742,7 +6742,7 @@ The test uses `vi.stubEnv` rather than assigning `process.env.NODE_ENV`, which i
 
 ## B-199 — Seven wide staff tables clipped their own action links on a phone, and the reflow test could not see it
 
-`PENDING`
+`f9a9823`
 
 **What it built.** The `overflow-x-auto` wrapper this codebase already uses for a wide table, on the seven admin tables that did not have one: the tenant profile's leases table (the one the row was about), the billing runs table, the POS deposit-slip table, two report tables, the rent roll, and the tenant search results. On a 375px phone the leases table's last column holds up to four action links — Ledger, Notices, Move out, Transfer — and they sat outside the document, untappable and unreachable by scrolling.
 
