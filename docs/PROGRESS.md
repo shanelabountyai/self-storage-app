@@ -6679,7 +6679,7 @@ The route this took is worth recording, because the first sweep is what produced
 
 ## B-197 — The four limits that decide who may give money away were reachable only from a database client
 
-`PENDING`
+`0be870b`
 
 **What it built.** `/admin/settings/roles` — one org-level screen showing every staff role against the four monetary limits on it (`maxFeeWaiverCents`, `maxRefundCents`, `maxCreditCents` and D-98's `maxPlanDeferralCents`), and the forms that change them. Until this row those four columns were seeded by `packages/db/rbac-catalog.ts` and written by **nothing anywhere in the product**, which made PRD 02 RBAC-2 — "starting values the owner can change in configuration; they are not hardcoded policy" — false in as many words. An operator who wanted their managers to waive $100 rather than $50 had to ring somebody.
 
