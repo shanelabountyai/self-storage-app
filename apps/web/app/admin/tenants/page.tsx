@@ -181,70 +181,72 @@ export default async function TenantsPage({
             Showing {from}–{to} of {list.total}
           </p>
 
-          <table className="w-full text-sm">
-            <caption className="sr-only">
-              Tenants, newest lease first, filtered to {TENANT_FILTER_LABELS[filter]}
-            </caption>
-            <thead>
-              <tr className="border-b text-left">
-                <th scope="col" className="py-2 font-medium">
-                  Name
-                </th>
-                <th scope="col" className="py-2 font-medium">
-                  Facility &amp; unit
-                </th>
-                <th scope="col" className="py-2 font-medium">
-                  Lease
-                </th>
-                <th scope="col" className="py-2 text-right font-medium">
-                  Balance
-                </th>
-                <th scope="col" className="py-2 text-right font-medium">
-                  Days past due
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {list.rows.map((row) => {
-                const late = row.daysPastDue > 0 && row.balanceCents > 0
-                return (
-                  <tr key={row.tenantId} className="border-b">
-                    <th scope="row" className="py-2 text-left font-normal">
-                      <Link
-                        href={`/admin/tenants/${row.tenantId}`}
-                        className="font-medium underline underline-offset-2"
-                      >
-                        {row.name}
-                      </Link>
-                    </th>
-                    <td className="py-2">
-                      {row.units.length === 0
-                        ? '—'
-                        : row.units
-                            .map((unit) => `${unit.facilityName} — ${unit.unitNumber}`)
-                            .join(', ')}
-                    </td>
-                    <td className="py-2">{row.statusLabel}</td>
-                    <td className="py-2 text-right tabular-nums">
-                      {formatCents(row.balanceCents)}
-                    </td>
-                    {/* 1.4.1: the state is in words. A row tinted amber and
-                        nothing else is invisible to anyone who cannot see the
-                        tint, and this is the column somebody acts on. */}
-                    <td className="py-2 text-right tabular-nums">
-                      {late ? (
-                        <span className="font-medium text-amber-800">
-                          {row.daysPastDue} days past due
-                        </span>
-                      ) : (
-                        <span className="text-muted-foreground">Current</span>
-                      )}
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
+          <div tabIndex={0} className="overflow-x-auto">
+            <table className="w-full min-w-2xl text-sm">
+              <caption className="sr-only">
+                Tenants, newest lease first, filtered to {TENANT_FILTER_LABELS[filter]}
+              </caption>
+              <thead>
+                <tr className="border-b text-left">
+                  <th scope="col" className="py-2 font-medium">
+                    Name
+                  </th>
+                  <th scope="col" className="py-2 font-medium">
+                    Facility &amp; unit
+                  </th>
+                  <th scope="col" className="py-2 font-medium">
+                    Lease
+                  </th>
+                  <th scope="col" className="py-2 text-right font-medium">
+                    Balance
+                  </th>
+                  <th scope="col" className="py-2 text-right font-medium">
+                    Days past due
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {list.rows.map((row) => {
+                  const late = row.daysPastDue > 0 && row.balanceCents > 0
+                  return (
+                    <tr key={row.tenantId} className="border-b">
+                      <th scope="row" className="py-2 text-left font-normal">
+                        <Link
+                          href={`/admin/tenants/${row.tenantId}`}
+                          className="font-medium underline underline-offset-2"
+                        >
+                          {row.name}
+                        </Link>
+                      </th>
+                      <td className="py-2">
+                        {row.units.length === 0
+                          ? '—'
+                          : row.units
+                              .map((unit) => `${unit.facilityName} — ${unit.unitNumber}`)
+                              .join(', ')}
+                      </td>
+                      <td className="py-2">{row.statusLabel}</td>
+                      <td className="py-2 text-right tabular-nums">
+                        {formatCents(row.balanceCents)}
+                      </td>
+                      {/* 1.4.1: the state is in words. A row tinted amber and
+                          nothing else is invisible to anyone who cannot see the
+                          tint, and this is the column somebody acts on. */}
+                      <td className="py-2 text-right tabular-nums">
+                        {late ? (
+                          <span className="font-medium text-amber-800">
+                            {row.daysPastDue} days past due
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">Current</span>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
 
           {lastPage > 1 && (
             <nav aria-label="Pages" className="flex flex-wrap items-center gap-3 text-sm">

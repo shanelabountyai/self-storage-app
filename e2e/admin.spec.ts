@@ -102,6 +102,21 @@ test.describe('signed in as the demo owner', () => {
   // unit-type list and the settings forms. All three shared one real cause,
   // not three — see `[contain:layout]` on `<main>` in `admin/layout.tsx`.
 
+  // B-199. Two limits of this loop, both found by a defect it did not catch.
+  //
+  // (1) `[contain:layout]` on `<main>` — added by B-116 so a correctly-wrapped
+  // table's own scroll region stops Chromium's root-level scrollWidth walk —
+  // also hides an INCORRECTLY-wrapped one. A wide table with no
+  // `overflow-x-auto` overflows inside a containing block the document cannot
+  // see past, so `documentElement.scrollWidth` stays at 320 and this assertion
+  // passes while the overflowing columns are unreachable by any means. The
+  // check is still right; it just cannot be the only one. Seven tables across
+  // five admin screens were in that state.
+  //
+  // (2) It runs over ADMIN_SCAN_ROUTES only, so every route in
+  // `SCANNED_BY_OWN_SPEC` — the dynamic ones needing a live fixture, the
+  // tenant profile among them — has never been reflow-checked at all. That
+  // gap is B-201; this row fixes the tables and pins the one route it is about.
   for (const route of ADMIN_ROUTES) {
     test(`${route} reflows to 320px without horizontal scroll`, async ({ page }) => {
       await page.setViewportSize({ width: 320, height: 800 })

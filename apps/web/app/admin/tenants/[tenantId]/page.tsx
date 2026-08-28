@@ -438,165 +438,179 @@ export default async function TenantProfilePage({
         {profile.leases.length === 0 ? (
           <p className="text-muted-foreground text-sm">No leases on file.</p>
         ) : (
-          <table className="w-full text-sm">
-            <caption className="sr-only">Leases held by this tenant</caption>
-            <thead>
-              <tr className="border-b text-left">
-                <th scope="col" className="py-2 font-medium">
-                  Facility / Unit
-                </th>
-                <th scope="col" className="py-2 font-medium">
-                  Status
-                </th>
-                <th scope="col" className="py-2 font-medium">
-                  Rate
-                </th>
-                <th scope="col" className="py-2 text-right font-medium">
-                  Balance
-                </th>
-                <th scope="col" className="py-2 font-medium">
-                  Started
-                </th>
-                <th scope="col" className="py-2 font-medium">
-                  Notice given
-                </th>
-                <th scope="col" className="py-2 font-medium">
-                  <span className="sr-only">Actions</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {profile.leases.map((lease) => (
-                <tr key={lease.leaseId} className="border-b">
-                  <td className="py-2">
-                    {lease.facilityName} — {lease.unitNumber}
-                  </td>
-                  <td className="py-2 capitalize">
-                    {leaseStatusLabel(lease.status)}
-                  </td>
-                  <td className="py-2">
-                    {formatCents(lease.monthlyRateCents)}/mo
-                  </td>
-                  <td
-                    className={`py-2 text-right tabular-nums ${lease.balanceCents > 0 ? "font-medium text-red-800" : ""}`}
-                  >
-                    {formatCents(lease.balanceCents)}
-                  </td>
-                  <td className="py-2">{formatDate(lease.startDate)}</td>
-                  <td className="py-2">
-                    {/* B-186. Off-platform notice, recorded rather than
-                        inferred. A walk-in who gave notice at the counter has
-                        no other way onto this field, and a blank date must
-                        stay blank until someone actually confirms one — never
-                        defaulted to today. */}
-                    {lease.status === "ended" ? (
-                      lease.noticeGivenAt ? (
-                        formatDate(lease.noticeGivenAt)
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )
-                    ) : (
-                      /* B-194. `AdminForm` rather than a bare void `<form>`:
-                         `recordNoticeGiven` refuses a future date and an ended
-                         lease, and this caller used to discard both and
-                         revalidate regardless, so the row re-rendered
-                         identically whether it saved or not (3.3.1 A, 4.1.3
-                         AA). One form per row, so one row's refusal cannot
-                         appear against another's date.
+          /* B-199. Seven columns, the last holding up to four action links, in
+             a bare `w-full` table with no scroll wrapper: at 375px the Ledger,
+             Notices, Move out and Transfer links sat outside the document,
+             untappable and unreachable by scrolling. Six e2e tests recorded it
+             as a `mobile-chrome` flake for four items running.
 
-                         Named by FACILITY and unit, not unit alone: an
-                         `aria-label` makes each of these a `form` landmark,
-                         and a tenant renting unit 101 at two sites would
-                         otherwise give the page two landmarks with one name
-                         (axe `landmark-unique`). The first column of this
-                         table already reads the same pair. */
-                      <AdminForm
-                        action={setNoticeGivenAction}
-                        label={`Notice given on, ${lease.facilityName} unit ${lease.unitNumber}`}
-                        className="flex flex-wrap items-center gap-1"
-                      >
-                        <input type="hidden" name="tenantId" value={tenantId} />
-                        <input
-                          type="hidden"
-                          name="leaseId"
-                          value={lease.leaseId}
-                        />
-                        <Field
-                          name="noticeGivenAt"
-                          label={
-                            <span className="sr-only">
-                              Notice given on, {lease.facilityName} unit{" "}
-                              {lease.unitNumber}
-                            </span>
-                          }
-                          type="date"
-                          max={isoDate(new Date())}
-                          defaultValue={
-                            lease.noticeGivenAt
-                              ? isoDate(lease.noticeGivenAt)
-                              : ""
-                          }
-                          className="flex flex-col gap-1 text-xs"
-                        />
-                        <button
-                          type="submit"
-                          className="text-xs underline underline-offset-2"
-                        >
-                          Save
-                        </button>
-                      </AdminForm>
-                    )}
-                  </td>
-                  <td className="py-2">
-                    {lease.status !== "ended" && (
-                      <>
-                        <Link
-                          href={`/admin/tenants/${tenantId}/move-out?lease=${lease.leaseId}`}
-                          className="underline underline-offset-2"
-                        >
-                          Move out
-                          <span className="sr-only">
-                            {" "}
-                            from unit {lease.unitNumber}
-                          </span>
-                        </Link>
-                        <Link
-                          href={`/admin/tenants/${tenantId}/transfer?lease=${lease.leaseId}`}
-                          className="ml-3 underline underline-offset-2"
-                        >
-                          Transfer
-                          <span className="sr-only">
-                            {" "}
-                            out of unit {lease.unitNumber}
-                          </span>
-                        </Link>
-                      </>
-                    )}
-                    <Link
-                      href={`/admin/tenants/${profile.tenantId}/ledger/${lease.leaseId}`}
-                      className="ml-3 underline underline-offset-2"
-                    >
-                      Ledger
-                      <span className="sr-only">
-                        {" "}
-                        for unit {lease.unitNumber}
-                      </span>
-                    </Link>
-                    <Link
-                      href={`/admin/tenants/${profile.tenantId}/notices/${lease.leaseId}`}
-                      className="ml-3 underline underline-offset-2"
-                    >
-                      Notices
-                      <span className="sr-only">
-                        {" "}
-                        for unit {lease.unitNumber}
-                      </span>
-                    </Link>
-                  </td>
+             `min-w-2xl` alongside `w-full` is the load-bearing half. `w-full`
+             on its own makes the table exactly as wide as the wrapper, so the
+             wrapper never scrolls and the columns are crushed instead — the
+             links become reachable but unusable. The floor is what gives the
+             wrapper something to scroll, and it is the pairing every other
+             wrapped table here already uses. */
+          <div tabIndex={0} className="overflow-x-auto">
+            <table className="w-full min-w-2xl text-sm">
+              <caption className="sr-only">Leases held by this tenant</caption>
+              <thead>
+                <tr className="border-b text-left">
+                  <th scope="col" className="py-2 font-medium">
+                    Facility / Unit
+                  </th>
+                  <th scope="col" className="py-2 font-medium">
+                    Status
+                  </th>
+                  <th scope="col" className="py-2 font-medium">
+                    Rate
+                  </th>
+                  <th scope="col" className="py-2 text-right font-medium">
+                    Balance
+                  </th>
+                  <th scope="col" className="py-2 font-medium">
+                    Started
+                  </th>
+                  <th scope="col" className="py-2 font-medium">
+                    Notice given
+                  </th>
+                  <th scope="col" className="py-2 font-medium">
+                    <span className="sr-only">Actions</span>
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {profile.leases.map((lease) => (
+                  <tr key={lease.leaseId} className="border-b">
+                    <td className="py-2">
+                      {lease.facilityName} — {lease.unitNumber}
+                    </td>
+                    <td className="py-2 capitalize">
+                      {leaseStatusLabel(lease.status)}
+                    </td>
+                    <td className="py-2">
+                      {formatCents(lease.monthlyRateCents)}/mo
+                    </td>
+                    <td
+                      className={`py-2 text-right tabular-nums ${lease.balanceCents > 0 ? "font-medium text-red-800" : ""}`}
+                    >
+                      {formatCents(lease.balanceCents)}
+                    </td>
+                    <td className="py-2">{formatDate(lease.startDate)}</td>
+                    <td className="py-2">
+                      {/* B-186. Off-platform notice, recorded rather than
+                          inferred. A walk-in who gave notice at the counter has
+                          no other way onto this field, and a blank date must
+                          stay blank until someone actually confirms one — never
+                          defaulted to today. */}
+                      {lease.status === "ended" ? (
+                        lease.noticeGivenAt ? (
+                          formatDate(lease.noticeGivenAt)
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )
+                      ) : (
+                        /* B-194. `AdminForm` rather than a bare void `<form>`:
+                           `recordNoticeGiven` refuses a future date and an ended
+                           lease, and this caller used to discard both and
+                           revalidate regardless, so the row re-rendered
+                           identically whether it saved or not (3.3.1 A, 4.1.3
+                           AA). One form per row, so one row's refusal cannot
+                           appear against another's date.
+
+                           Named by FACILITY and unit, not unit alone: an
+                           `aria-label` makes each of these a `form` landmark,
+                           and a tenant renting unit 101 at two sites would
+                           otherwise give the page two landmarks with one name
+                           (axe `landmark-unique`). The first column of this
+                           table already reads the same pair. */
+                        <AdminForm
+                          action={setNoticeGivenAction}
+                          label={`Notice given on, ${lease.facilityName} unit ${lease.unitNumber}`}
+                          className="flex flex-wrap items-center gap-1"
+                        >
+                          <input type="hidden" name="tenantId" value={tenantId} />
+                          <input
+                            type="hidden"
+                            name="leaseId"
+                            value={lease.leaseId}
+                          />
+                          <Field
+                            name="noticeGivenAt"
+                            label={
+                              <span className="sr-only">
+                                Notice given on, {lease.facilityName} unit{" "}
+                                {lease.unitNumber}
+                              </span>
+                            }
+                            type="date"
+                            max={isoDate(new Date())}
+                            defaultValue={
+                              lease.noticeGivenAt
+                                ? isoDate(lease.noticeGivenAt)
+                                : ""
+                            }
+                            className="flex flex-col gap-1 text-xs"
+                          />
+                          <button
+                            type="submit"
+                            className="text-xs underline underline-offset-2"
+                          >
+                            Save
+                          </button>
+                        </AdminForm>
+                      )}
+                    </td>
+                    <td className="py-2">
+                      {lease.status !== "ended" && (
+                        <>
+                          <Link
+                            href={`/admin/tenants/${tenantId}/move-out?lease=${lease.leaseId}`}
+                            className="underline underline-offset-2"
+                          >
+                            Move out
+                            <span className="sr-only">
+                              {" "}
+                              from unit {lease.unitNumber}
+                            </span>
+                          </Link>
+                          <Link
+                            href={`/admin/tenants/${tenantId}/transfer?lease=${lease.leaseId}`}
+                            className="ml-3 underline underline-offset-2"
+                          >
+                            Transfer
+                            <span className="sr-only">
+                              {" "}
+                              out of unit {lease.unitNumber}
+                            </span>
+                          </Link>
+                        </>
+                      )}
+                      <Link
+                        href={`/admin/tenants/${profile.tenantId}/ledger/${lease.leaseId}`}
+                        className="ml-3 underline underline-offset-2"
+                      >
+                        Ledger
+                        <span className="sr-only">
+                          {" "}
+                          for unit {lease.unitNumber}
+                        </span>
+                      </Link>
+                      <Link
+                        href={`/admin/tenants/${profile.tenantId}/notices/${lease.leaseId}`}
+                        className="ml-3 underline underline-offset-2"
+                      >
+                        Notices
+                        <span className="sr-only">
+                          {" "}
+                          for unit {lease.unitNumber}
+                        </span>
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </section>
 

@@ -353,6 +353,15 @@ test.describe('lien notices for a lease', () => {
     await page.goto('/admin/tenants?q=dana@demo.example.com')
     await page.getByRole('link', { name: 'Dana Delinquent' }).click()
     await page.getByRole('link', { name: 'Notices' }).first().click()
+    // B-199. `waitForURL`, not just a visible `<main>`: the profile's own
+    // `<main>` is already visible, so without this the axe scan below can win
+    // the race against the client-side transition and scan the PREVIOUS page.
+    // It presented as a `color-contrast` incomplete on this route naming two
+    // nodes that do not exist on it — the profile's Balance column — because
+    // axe read the old DOM while `page.url()` already reported the new path,
+    // and the hit test then looked for those nodes on the page that had since
+    // rendered. Diagnosed by scanning with the wait in place: zero incompletes.
+    await page.waitForURL(/\/notices\//)
     await expect(page.getByRole('main')).toBeVisible()
   })
 
@@ -415,5 +424,48 @@ test.describe('lien notices for a lease', () => {
     const served = main.getByRole('listitem').filter({ hasText: /Lien notice|Pre-lien notice/ }).first()
     await expect(served).toContainText('9407-B130-TEST')
     await expect(served).not.toContainText('Not yet served')
+  })
+})
+
+// B-199. The leases table is seven columns wide with up to four action links
+// in the last one, and it shipped with no scroll wrapper — so at 375px those
+// links sat outside the document, untappable. Six tests in this file and
+// `admin-notices` recorded it as a `mobile-chrome` flake for four items before
+// anybody looked underneath.
+//
+// Those six going green is most of the proof, but not all of it: they would
+// also pass against a `w-full` table with no `min-w`, which crushes seven
+// columns into 327px rather than overflowing. This asserts the half they
+// cannot — that the wrapper has something to scroll, and that the last
+// column's links are reachable once it does.
+test.describe('the leases table on a phone', () => {
+  test.use({ viewport: { width: 375, height: 800 } })
+
+  test('scrolls itself rather than clipping its action links', async ({ page }) => {
+    await signInAsDemoOwner(page)
+    await page.goto('/admin/tenants?q=dana@demo.example.com')
+    await page.getByRole('link', { name: 'Dana Delinquent' }).click()
+
+    const ledger = page.getByRole('link', { name: /^Ledger/ }).first()
+    await expect(ledger).toBeVisible()
+
+    // The wrapper is a real scroll region, not a squashed table.
+    const overflows = await ledger.evaluate((el) => {
+      const wrapper = el.closest('div.overflow-x-auto')
+      if (!wrapper) return null
+      return wrapper.scrollWidth > wrapper.clientWidth
+    })
+    expect(overflows, 'the leases table has no overflow-x-auto wrapper').not.toBeNull()
+    expect(overflows, 'the wrapper does not scroll, so the columns are crushed instead').toBe(true)
+
+    // And the document still does not scroll sideways because of it.
+    const documentScrolls = await page.evaluate(
+      () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+    )
+    expect(documentScrolls, 'the page scrolls horizontally at 375px').toBe(false)
+
+    // The click the six failing tests could not make.
+    await ledger.click()
+    await expect(page).toHaveURL(/\/ledger\//)
   })
 })

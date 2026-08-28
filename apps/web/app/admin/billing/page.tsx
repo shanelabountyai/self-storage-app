@@ -49,80 +49,82 @@ export default async function BillingRunsPage() {
       {runs.length === 0 ? (
         <p className="text-muted-foreground text-sm">No runs recorded yet.</p>
       ) : (
-        <table className="w-full text-sm">
-          <caption className="sr-only">Recent nightly job runs with their per-item outcomes</caption>
-          <thead>
-            <tr className="border-b text-left">
-              <th scope="col" className="py-2 font-medium">Job</th>
-              <th scope="col" className="py-2 font-medium">Facility</th>
-              <th scope="col" className="py-2 font-medium">Business date</th>
-              <th scope="col" className="py-2 font-medium">Status</th>
-              <th scope="col" className="py-2 text-right font-medium">OK</th>
-              <th scope="col" className="py-2 text-right font-medium">Failed</th>
-              <th scope="col" className="py-2 font-medium">Finished</th>
-              {canRerun && <th scope="col" className="py-2 font-medium">Re-run</th>}
-            </tr>
-          </thead>
-          <tbody>
-            {runs.map((run) => (
-              <tr key={run.id} className="border-b align-top">
-                <td className="py-2">
-                  <span className="font-medium">{run.jobName}</span>
-                  {(run.items.length > 0 || run.lastError) && (
-                    <details className="mt-1">
-                      <summary className="cursor-pointer text-xs underline underline-offset-2">
-                        {run.items.length} item{run.items.length === 1 ? '' : 's'}
-                        {run.lastError ? ' and an error' : ''}
-                      </summary>
-                      {run.lastError && (
-                        <p className="mt-1 text-xs">
-                          <span className="font-medium">Error:</span> {run.lastError}
-                        </p>
-                      )}
-                      <ul className="mt-1 flex flex-col gap-0.5 text-xs">
-                        {run.items.map((item, index) => (
-                          <li key={`${item.itemId}-${index}`}>
-                            {/* 1.4.1: the outcome is a word, never a colour. */}
-                            <span className="font-medium">{item.ok ? 'OK' : 'Failed'}</span> ·{' '}
-                            {item.itemId}
-                            {item.message ? ` — ${item.message}` : ''}
-                          </li>
-                        ))}
-                      </ul>
-                    </details>
-                  )}
-                </td>
-                <td className="py-2">{run.facilityName}</td>
-                <td className="py-2 tabular-nums">{formatBusinessDate(run.businessDate)}</td>
-                <td className="py-2">{STATUS_LABEL[run.status] ?? run.status}</td>
-                <td className="py-2 text-right tabular-nums">{run.itemsOk}</td>
-                <td className="py-2 text-right tabular-nums">{run.itemsFailed}</td>
-                <td className="py-2">{formatInstant(run.finishedAt)}</td>
-                {canRerun && (
+        <div tabIndex={0} className="overflow-x-auto">
+          <table className="w-full min-w-2xl text-sm">
+            <caption className="sr-only">Recent nightly job runs with their per-item outcomes</caption>
+            <thead>
+              <tr className="border-b text-left">
+                <th scope="col" className="py-2 font-medium">Job</th>
+                <th scope="col" className="py-2 font-medium">Facility</th>
+                <th scope="col" className="py-2 font-medium">Business date</th>
+                <th scope="col" className="py-2 font-medium">Status</th>
+                <th scope="col" className="py-2 text-right font-medium">OK</th>
+                <th scope="col" className="py-2 text-right font-medium">Failed</th>
+                <th scope="col" className="py-2 font-medium">Finished</th>
+                {canRerun && <th scope="col" className="py-2 font-medium">Re-run</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {runs.map((run) => (
+                <tr key={run.id} className="border-b align-top">
                   <td className="py-2">
-                    {run.rerunnable ? (
-                      <form action={rerunAction}>
-                        <input type="hidden" name="runId" value={run.id} />
-                        <button
-                          type="submit"
-                          className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-3 text-sm font-medium"
-                        >
-                          Re-run
-                          <span className="sr-only">
-                            {' '}
-                            {run.jobName} for {run.facilityName} on {formatBusinessDate(run.businessDate)}
-                          </span>
-                        </button>
-                      </form>
-                    ) : (
-                      <span className="text-muted-foreground text-xs">Job no longer registered</span>
+                    <span className="font-medium">{run.jobName}</span>
+                    {(run.items.length > 0 || run.lastError) && (
+                      <details className="mt-1">
+                        <summary className="cursor-pointer text-xs underline underline-offset-2">
+                          {run.items.length} item{run.items.length === 1 ? '' : 's'}
+                          {run.lastError ? ' and an error' : ''}
+                        </summary>
+                        {run.lastError && (
+                          <p className="mt-1 text-xs">
+                            <span className="font-medium">Error:</span> {run.lastError}
+                          </p>
+                        )}
+                        <ul className="mt-1 flex flex-col gap-0.5 text-xs">
+                          {run.items.map((item, index) => (
+                            <li key={`${item.itemId}-${index}`}>
+                              {/* 1.4.1: the outcome is a word, never a colour. */}
+                              <span className="font-medium">{item.ok ? 'OK' : 'Failed'}</span> ·{' '}
+                              {item.itemId}
+                              {item.message ? ` — ${item.message}` : ''}
+                            </li>
+                          ))}
+                        </ul>
+                      </details>
                     )}
                   </td>
-                )}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                  <td className="py-2">{run.facilityName}</td>
+                  <td className="py-2 tabular-nums">{formatBusinessDate(run.businessDate)}</td>
+                  <td className="py-2">{STATUS_LABEL[run.status] ?? run.status}</td>
+                  <td className="py-2 text-right tabular-nums">{run.itemsOk}</td>
+                  <td className="py-2 text-right tabular-nums">{run.itemsFailed}</td>
+                  <td className="py-2">{formatInstant(run.finishedAt)}</td>
+                  {canRerun && (
+                    <td className="py-2">
+                      {run.rerunnable ? (
+                        <form action={rerunAction}>
+                          <input type="hidden" name="runId" value={run.id} />
+                          <button
+                            type="submit"
+                            className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-3 text-sm font-medium"
+                          >
+                            Re-run
+                            <span className="sr-only">
+                              {' '}
+                              {run.jobName} for {run.facilityName} on {formatBusinessDate(run.businessDate)}
+                            </span>
+                          </button>
+                        </form>
+                      ) : (
+                        <span className="text-muted-foreground text-xs">Job no longer registered</span>
+                      )}
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   )

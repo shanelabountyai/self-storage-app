@@ -115,37 +115,39 @@ export default async function DailyPaymentsPage({
               </tbody>
             </table>
 
-            <table className="w-full text-sm">
-              <caption className="sr-only">
-                Every payment taken on {summary.businessDate}, with who took it
-              </caption>
-              <thead>
-                <tr className="border-b text-left">
-                  <th scope="col" className="py-2 font-medium">Receipt</th>
-                  <th scope="col" className="py-2 font-medium">Time</th>
-                  <th scope="col" className="py-2 font-medium">Tenant</th>
-                  <th scope="col" className="py-2 font-medium">Method</th>
-                  <th scope="col" className="py-2 font-medium">Check #</th>
-                  <th scope="col" className="py-2 font-medium">Taken by</th>
-                  <th scope="col" className="py-2 text-right font-medium">Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                {summary.rows.map((row) => (
-                  <tr key={row.paymentId} className="border-b">
-                    <td className="py-2 tabular-nums">{row.receiptNumber ?? '—'}</td>
-                    <td className="py-2">{formatTime(row.receivedAt, facility.timezone)}</td>
-                    <td className="py-2">{row.tenantName}</td>
-                    <td className="py-2 capitalize">{row.method.replace('_', ' ')}</td>
-                    <td className="py-2">{row.checkNumber ?? '—'}</td>
-                    {/* Blank for an online card payment, which had no one
-                        behind a counter — not a missing attribution. */}
-                    <td className="py-2">{row.staffName ?? 'Online'}</td>
-                    <td className="py-2 text-right tabular-nums">{formatCents(row.amountCents)}</td>
+            <div tabIndex={0} className="overflow-x-auto">
+              <table className="w-full min-w-2xl text-sm">
+                <caption className="sr-only">
+                  Every payment taken on {summary.businessDate}, with who took it
+                </caption>
+                <thead>
+                  <tr className="border-b text-left">
+                    <th scope="col" className="py-2 font-medium">Receipt</th>
+                    <th scope="col" className="py-2 font-medium">Time</th>
+                    <th scope="col" className="py-2 font-medium">Tenant</th>
+                    <th scope="col" className="py-2 font-medium">Method</th>
+                    <th scope="col" className="py-2 font-medium">Check #</th>
+                    <th scope="col" className="py-2 font-medium">Taken by</th>
+                    <th scope="col" className="py-2 text-right font-medium">Amount</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {summary.rows.map((row) => (
+                    <tr key={row.paymentId} className="border-b">
+                      <td className="py-2 tabular-nums">{row.receiptNumber ?? '—'}</td>
+                      <td className="py-2">{formatTime(row.receivedAt, facility.timezone)}</td>
+                      <td className="py-2">{row.tenantName}</td>
+                      <td className="py-2 capitalize">{row.method.replace('_', ' ')}</td>
+                      <td className="py-2">{row.checkNumber ?? '—'}</td>
+                      {/* Blank for an online card payment, which had no one
+                          behind a counter — not a missing attribution. */}
+                      <td className="py-2">{row.staffName ?? 'Online'}</td>
+                      <td className="py-2 text-right tabular-nums">{formatCents(row.amountCents)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </>
         )}
       </section>

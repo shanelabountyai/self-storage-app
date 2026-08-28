@@ -159,6 +159,11 @@ const VERIFIED_BY_HIT_TEST = [
 async function nothingOverlaps(page: Page, selector: string): Promise<boolean> {
   return page.evaluate((sel) => {
     const el = document.querySelector(sel)
+    // Not found is deliberately NOT waived — a node axe flagged that has since
+    // vanished means the DOM moved under the scan, and waiving it would hide
+    // that. But it is not an overlap either, so the caller says which it is
+    // (B-199): the failure it produces otherwise sends you hunting for an
+    // overlay that never existed, on a page the node was never on.
     if (!el) return false
     const rect = el.getBoundingClientRect()
     const stack = document.elementsFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)
@@ -236,6 +241,15 @@ export async function assertNoAxeViolations(
     return true
   }
 
+  // Targets axe flagged that no longer resolve — see `nothingOverlaps`.
+  const absent = new Set<string>()
+  for (const item of incomplete) {
+    for (const n of item.nodes) {
+      const sel = String(n.target[0])
+      if (n.target.length === 1 && !(await page.locator(sel).count())) absent.add(sel)
+    }
+  }
+
   const ownPage: typeof incomplete = []
   for (const item of incomplete) {
     const nodes = []
@@ -247,12 +261,21 @@ export async function assertNoAxeViolations(
   // that could not decide. That phrasing is what an exemption is keyed on, so a
   // message without it tells you a hand check is needed and not what to look
   // for — which is most of the work (B-196).
+  //
+  // B-199 adds the target selectors for the same reason one level down. The
+  // phrasing says what kind of limitation it is; the selector says which node
+  // to go and look at. Without it a hand check starts by re-running the scan
+  // with a debugger attached, which is the work the message exists to save.
   expect(
     ownPage.map((i) => {
       const summaries = [
         ...new Set(i.nodes.map((n) => (n.failureSummary ?? '').split('\n').at(-1)?.trim() ?? '')),
       ].filter(Boolean)
-      return `${i.id}: ${i.help} — ${summaries.join(' | ')}`
+      const targets = [...new Set(i.nodes.flatMap((n) => n.target.map(String)))]
+      const note = i.nodes.some((n) => absent.has(String(n.target[0])))
+        ? ' — NOTE: some of these are no longer in the DOM, so this scan probably raced a navigation; await the URL before scanning'
+        : ''
+      return `${i.id}: ${i.help} — ${summaries.join(' | ')} [${targets.join(', ')}]${note}`
     }),
     `axe could not decide these on ${pathname}${options.state ? ` (${options.state})` : ''} — check them by hand, then add a route-scoped entry to HAND_CHECKED_INCOMPLETE`,
   ).toEqual([])

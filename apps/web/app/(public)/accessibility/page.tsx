@@ -634,6 +634,30 @@ const LAST_REVIEWED = '19 August 2026'
 // about `/admin` to keep true here. The route IS added to `ADMIN_SCAN_ROUTES`,
 // so `admin.spec.ts` scans it like every other admin page and the B-139
 // contract still refuses a route that appears in neither list.
+// ── B-199 (2026-08-28) ──────────────────────────────────────────────────────
+//
+// **No sentence changes, but this row came closer to one than any admin-only
+// item so far, and the reason it does not is worth stating.** The claim above
+// — "the page reflows to 320px wide without sideways scrolling" — is the exact
+// criterion B-199 found broken, and it was broken on seven staff tables whose
+// action links sat outside a 375px document. This page is a statement about
+// the SITE a customer uses, so an admin table is out of its scope in the
+// ordinary way.
+//
+// What had to be checked before leaving the sentence alone is the MECHANISM,
+// not the scope. B-199's real finding is that the 320px assertion can pass for
+// the wrong reason: `[contain:layout]` stops Chromium's root-level
+// `scrollWidth` walk at the containing block, so an unwrapped wide table
+// overflows somewhere `document.documentElement.scrollWidth` cannot see, and
+// the check reports 320 while the columns are unreachable. If that containment
+// were anywhere on the public site, this sentence would be resting on a check
+// that cannot fail — which is worse than an untested claim, because it reads
+// as evidence. It is not: `[contain:layout]` appears on `admin/layout.tsx` and
+// nowhere else in the product, verified by grep. The public reflow claim is
+// still carried by an assertion that can genuinely go red, so it stands.
+//
+// `LAST_REVIEWED` does not move. The reflow claim was re-checked against the
+// build; the rest of the page was not.
 export default function AccessibilityPage() {
   return (
     <ProsePage
