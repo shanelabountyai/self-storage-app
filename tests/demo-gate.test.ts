@@ -88,5 +88,32 @@ describe('demo access gate', () => {
         expect(get('/api/public/facilities/austin-south/inventory')?.status).toBe(401)
       })
     })
+
+    // A prefix match instead of a path match would exempt this, and the name is
+    // close enough to a real exempt route that nobody would spot it had.
+    it('does not exempt a path that merely starts like an exempt one', () => {
+      withPassword(() => {
+        expect(get('/api/cronjobs-admin')?.status).toBe(401)
+      })
+    })
+
+    // The challenge is served on every gated path. Without this header, a
+    // crawler that reaches one indexes the 401 itself.
+    it('tells crawlers not to index the challenge', () => {
+      withPassword(() => {
+        expect(get('/storage/search')?.headers.get('x-robots-tag')).toBe('noindex, nofollow')
+      })
+    })
+
+    it('treats a malformed header as a failed attempt rather than a crash', () => {
+      withPassword(() => {
+        const response = demoGate(
+          new NextRequest('https://example.com/storage/search', {
+            headers: { authorization: 'Basic !!!not-base64!!!' },
+          }),
+        )
+        expect(response?.status).toBe(401)
+      })
+    })
   })
 })
