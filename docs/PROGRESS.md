@@ -6707,7 +6707,7 @@ Beside role and permission management rather than in facility settings, because 
 
 ## Demo readiness — the preview-deploy safety net was inert on the only platform this deploys to
 
-`PENDING`
+`f859549`
 
 Not a backlog row. The session was scoped to demo configuration — a real org phone number, outbound email, the shared password gate — and the second of those turned up a defect that had to be fixed before the configuration it blocked could be applied safely.
 
