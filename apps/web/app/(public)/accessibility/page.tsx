@@ -623,6 +623,17 @@ const LAST_REVIEWED = '19 August 2026'
 // `LAST_REVIEWED` is not bumped: the coverage claim and one sentence about how
 // the run works were re-checked against the build, the rest of the page was
 // not.
+//
+// ── B-197 (2026-08-28) ──────────────────────────────────────────────────────
+//
+// **Nothing on this page changes, and that is the finding rather than the
+// omission.** `/admin/settings/roles` is where an owner sets how much each
+// staff role may waive, refund, credit or defer — five forms and a table, every
+// one of them behind `users:manage`, and no customer reaches any of it. This
+// page is a statement about the site a customer uses, so it makes no claim
+// about `/admin` to keep true here. The route IS added to `ADMIN_SCAN_ROUTES`,
+// so `admin.spec.ts` scans it like every other admin page and the B-139
+// contract still refuses a route that appears in neither list.
 export default function AccessibilityPage() {
   return (
     <ProsePage

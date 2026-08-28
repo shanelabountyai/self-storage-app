@@ -934,6 +934,12 @@ export default async function AdminSettingsPage() {
             portfolio
           </Link>
           <Link
+            href="/admin/settings/roles"
+            className="underline underline-offset-2"
+          >
+            Role limits — the most each role may waive, refund, credit or defer
+          </Link>
+          <Link
             href="/admin/settings/staff"
             className="underline underline-offset-2"
           >

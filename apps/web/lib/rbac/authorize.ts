@@ -147,14 +147,17 @@ export function resolveFacilityFilter(
 
 export type MonetaryAction = 'fee_waiver' | 'refund' | 'credit' | 'payment_plan'
 
-const LIMIT_FIELD = {
+/// Which column on `Role` carries each action's limit. Exported so the screen
+/// that EDITS those limits (B-197) reads the mapping from here rather than
+/// keeping a second copy of it.
+export const LIMIT_FIELD = {
   fee_waiver: 'maxFeeWaiverCents',
   refund: 'maxRefundCents',
   credit: 'maxCreditCents',
   payment_plan: 'maxPlanDeferralCents',
 } as const
 
-const REQUIRED_PERMISSION: Record<MonetaryAction, PermissionKey> = {
+export const REQUIRED_PERMISSION: Record<MonetaryAction, PermissionKey> = {
   fee_waiver: 'fees:waive',
   refund: 'refunds:approve',
   credit: 'credits:manual',

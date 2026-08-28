@@ -216,6 +216,9 @@ export const ADMIN_SCAN_ROUTES = [
   '/admin/settings/org',
   '/admin/settings/promotions',
   '/admin/settings/reviews',
+  // B-197. Four money limits and five forms — the screen that decides who may
+  // give money away is not one to leave unscanned.
+  '/admin/settings/roles',
   '/admin/settings/staff',
   '/admin/settings/suppressions',
   '/admin/settings/templates',

@@ -595,6 +595,17 @@ export const AUDIT_ACTIONS = [
     requiresReason: false,
   },
 
+  /// B-197. The four monetary authority limits on a role, changed at the org
+  /// level. Not `requiresReason`: the before/after IS the record here, and the
+  /// question this row gets asked is "when did a manager's waiver limit become
+  /// $100, and who moved it" — which the snapshot answers and a reason code
+  /// does not. Every SPEND against the limit already carries its own reason.
+  {
+    action: "role.limits_changed",
+    label: "Role monetary limits changed",
+    requiresReason: false,
+  },
+
   // Support impersonation (PRD 09 FR-25, B-091). Both require a reason.
   //
   // On the STARTED entry the reason is the human's stated why, captured before
