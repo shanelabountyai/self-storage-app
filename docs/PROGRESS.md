@@ -6704,3 +6704,38 @@ Beside role and permission management rather than in facility settings, because 
 **A shared-table trap the fixtures had to dodge.** `role` is global to the whole test schema, so a fixture role holding a real permission *and* a real limit is visible to every other suite's `nextApproverRole` for as long as the file runs. Both fixtures therefore sit at $0 throughout — an escalation only ever considers a role whose limit covers the amount, so a $0 rung can never be picked — and the one test that raises a limit above $0 on a role holding `fees:waive` is the test that is **refused**, which writes nothing. The staff fixture is not reclaimed and cannot be: `audit_log`'s RESTRICT foreign key pins its author forever (B-185), and `npm run db:reset-test` is the only cleanup.
 
 **Left behind.** **The ladder is checked on save and never again**, so inserting a role *below* an existing one with a bigger limit still produces a crooked chain that only the next edit of that action reports — creating and ranking roles is not built and **B-004** still owns it. **There is no approval queue for an over-limit action**, which is the same posture `waiveFeeInvoice`, B-167's charge control and B-190's plan builder all already take; B-048 owns it. **Nothing warns that lowering a limit has no effect on what is already approved** beyond the sentence at the top of the screen — no in-flight approval is revisited, by design.
+
+## Demo readiness — the preview-deploy safety net was inert on the only platform this deploys to
+
+`PENDING`
+
+Not a backlog row. The session was scoped to demo configuration — a real org phone number, outbound email, the shared password gate — and the second of those turned up a defect that had to be fixed before the configuration it blocked could be applied safely.
+
+**What it built.** One line of behaviour: `isProductionEnv()` in [apps/web/lib/comms/provider.ts](../apps/web/lib/comms/provider.ts) now reads **`VERCEL_ENV`** where Vercel sets it, and falls back to `NODE_ENV` only off-platform.
+
+**The defect.** Four guards exist so a non-production deployment cannot mail or text a real person: the email sandbox redirect (`effectiveRecipient`), the SMS sandbox redirect, and the log-only provider fallback on each (`selectProvider`, `selectSmsProvider`). All four asked `NODE_ENV === 'production'`. **Vercel builds every deployment with `NODE_ENV=production`, previews included**, so on Vercel all four answered "this is production" from a preview, and all four were inert. `RESEND_API_KEY` set at Vercel's default all-environments scope — which is the default, and which is exactly what "add a Resend key so mail sends" would have done — would have sent real mail to real recipients from every preview deploy. `COMMS_SANDBOX_INBOX` would have been read and ignored, because `effectiveRecipient` returns the real address before it looks.
+
+Both `.env.example` and this file asserted the opposite in as many words: "no preview deploy can reach a real tenant" (the B-030 entry). The claim was true off Vercel and false on it, and Vercel is where this deploys. `VERCEL_ENV` appeared nowhere in the codebase.
+
+**What it decided.**
+
+- **The fix is in the shared predicate, not at the four call sites.** All four guards already route through one function; a guard added per-caller would be four things to keep true and would leave the next caller unprotected by default.
+- **`NODE_ENV` stays the fallback rather than being replaced.** `VERCEL_ENV` is unset off-platform, where `NODE_ENV` is the correct and only answer — local dev, the CI container, a self-hosted build. Reading `VERCEL_ENV` unconditionally would have made every non-Vercel environment non-production, which is a different bug in the same place.
+
+**What was decided about the configuration itself** (owner, 2026-08-28):
+
+- **`SITE.phone` stays `(512) 555-0100`.** There is no org-level office line to point it at yet, and 555-01xx is the range reserved precisely so it cannot dial a real person. A plausible-looking substitute would be strictly worse — it can ring somebody. The reasoning is now a comment on the field so a later session does not "tidy" it into a fake.
+- **`DEMO_ACCESS_PASSWORD` on** for the demo deployment. No code change: the gate, its six exemptions and its production verification have been in place and documented since it was built.
+- **Resend goes live, scoped per environment.** `RESEND_API_KEY`, `RESEND_WEBHOOK_SECRET` and `COMMS_EMAIL_DOMAIN` at **production scope only**; `COMMS_SANDBOX_INBOX` on **preview**. `docs/DEPLOYMENT.md` gains an "Email go-live" section stating that scoping as a table and saying why it matters, beside the Twilio one that already existed. This is the step the defect above would have silently undone.
+
+**Twilio was evaluated and deliberately not touched.** It is built and dormant — webhook, signature verification, double opt-in, STOP/HELP, quiet hours, per-facility Messaging Service SID — and blocked on A2P 10DLC campaign approval, which is a carrier wait measured in days to weeks. There is no code to write, and the one step that would prove it works (a round trip from a real handset) cannot run before approval. With `TWILIO_*` unset every SMS rule falls back to email, which is the designed behaviour.
+
+**A real bug found along the way:** the one above, and it is the entry. Nothing else.
+
+**Test verification.** Typecheck (including `tsconfig.tests.json`) clean; `prisma migrate diff --exit-code` reports **no difference**. Full unit suite **3,869 passed, 8 skipped of 3,877** (230 files passed, 1 skipped), exit 0 — reconciled, and +4 over B-197 exactly matching the four added here. `tests/comms-provider-env.test.ts` pins the predicate at all four corners: a Vercel preview with `NODE_ENV=production` redirects to the sandbox and falls back to log-only when there is no sandbox; a Vercel production deployment sends to the real address; and off Vercel `NODE_ENV` still decides. **Verified failing before the fix** by stashing `provider.ts` alone — the two preview tests go red, the two controls stay green, which is what shows they are testing the predicate and not the environment.
+
+The test uses `vi.stubEnv` rather than assigning `process.env.NODE_ENV`, which is read-only on `ProcessEnv`. The first draft assigned it, and `npm run typecheck` caught all four lines — the check CLAUDE.md records as having been off for most of this repo's life, doing exactly the job it was turned on for.
+
+**The public accessibility statement was re-read and no claim changes.** It says nothing about email, which its own header already notes deliberately; nothing customer-facing shipped here. `LAST_REVIEWED` is not bumped.
+
+**Left behind.** **`COMMS_SANDBOX_SMS` has the same shape and no test**, because SMS cannot be exercised end to end until the campaign is approved — the predicate it depends on is now pinned, but the SMS side of the redirect is covered only by the shared function. **The three MVP rows are still open**: B-199 (the tenant profile's leases table is unreachable at 375px — a real reflow defect, and the demo will be shown on a phone at some point), B-200 (three stale report-spec assertions, one of which means the occupancy CSV export has never been checked) and B-198 (every email is one `<p>`). None was touched here.

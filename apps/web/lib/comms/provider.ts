@@ -192,7 +192,17 @@ export function selectSmsProvider(): SmsProvider {
   return logOnlySmsProvider()
 }
 
+/// The four guards above exist so a preview deploy cannot mail or text a real
+/// person. `NODE_ENV` alone could not tell them apart: Vercel builds EVERY
+/// deployment with `NODE_ENV=production`, previews included, so on Vercel all
+/// four were inert and `RESEND_API_KEY` set at project scope would have reached
+/// real recipients from any preview — the opposite of what `.env.example` and
+/// PROGRESS.md both claim. `VERCEL_ENV` is the platform's own distinction
+/// ('production' | 'preview' | 'development'); it is unset off Vercel, where
+/// `NODE_ENV` remains the right answer (local dev, CI, a self-hosted build).
 function isProductionEnv(): boolean {
+  const vercelEnv = process.env.VERCEL_ENV
+  if (vercelEnv) return vercelEnv === 'production'
   return process.env.NODE_ENV === 'production'
 }
 

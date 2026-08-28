@@ -7,6 +7,10 @@ export const SITE = {
   name: 'Lab Intelligence LLC',
   tagline: 'Simple self-storage, rented online in minutes.',
   /// E.164 for the `tel:` href, formatted separately for display.
+  /// Deliberately still the reserved 555 range (2026-08-28, owner): there is no
+  /// org-level office line to point it at yet, and the reserved range cannot
+  /// dial a real person by accident the way a plausible-looking number can.
+  /// Replace it when a real line exists — not with a better-looking fake.
   phone: { href: '+15125550100', display: '(512) 555-0100' },
   supportEmail: 'help@labintelligence.co',
   /// The number tenants text to opt in, and the one the messaging policy

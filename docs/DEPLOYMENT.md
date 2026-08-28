@@ -198,6 +198,42 @@ the `CRON_SECRET` check, distinguishable because it sends no
 
 Remove the variable to make the site public.
 
+## Email go-live
+
+Unlike Twilio, nothing external gates this — a verified sending domain is the
+only prerequisite, and it is DNS you control.
+
+**Scope every variable deliberately. `RESEND_API_KEY` at Vercel's default
+"all environments" scope is the mistake to avoid**, because every preview
+deployment would then hold a live sending credential.
+
+| Variable | Vercel scope | Why that scope |
+| --- | --- | --- |
+| `RESEND_API_KEY` | **Production only** | The credential that actually sends. |
+| `RESEND_WEBHOOK_SECRET` | Production only | Svix signing secret for `/api/comms/webhook`. Without it that route fails closed with 503, which is correct — a forged `email.bounced` would suppress a real tenant's address. |
+| `COMMS_EMAIL_DOMAIN` | Production only | The From domain. Needs SPF, DKIM and DMARC in DNS before Resend will send as it. |
+| `COMMS_SANDBOX_INBOX` | **Preview only** | An inbox you own. If a key ever does reach a preview, every recipient is rewritten to this address instead of the real one. |
+
+**Why the scoping matters more than it looks.** Vercel builds *every*
+deployment with `NODE_ENV=production`, previews included, so `NODE_ENV` cannot
+distinguish a preview from production. `isProductionEnv()` in
+[apps/web/lib/comms/provider.ts](../apps/web/lib/comms/provider.ts) therefore
+reads **`VERCEL_ENV`** where Vercel sets it and falls back to `NODE_ENV` only
+off-platform (local, CI, self-hosted). Before that fix all four non-production
+guards — the email sandbox redirect, the SMS sandbox redirect, and the
+log-only fallback on each — were inert on Vercel, and a project-scoped key
+would have mailed real recipients from any preview. `tests/comms-provider-env.test.ts`
+pins it.
+
+**After setting them**, send one real message and confirm the round trip:
+trigger a transactional send, then check the `Message` row reaches `delivered`
+rather than sitting at `sent` — a webhook that was never configured looks
+exactly like a provider that is slow.
+
+**Note the demo seed is safe either way.** Demo tenants use
+`@demo.example.com` and `512-555-xxxx`, both reserved by RFC for exactly this,
+so a demo send can never reach a real person even in production.
+
 ## Twilio go-live (PENDING — campaign not yet approved)
 
 SMS is built and dormant. Nothing here is a code change; it is all
