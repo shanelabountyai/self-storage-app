@@ -6792,7 +6792,7 @@ The HTML part of a templated email is now built from the **template body**, not 
 
 ## B-200 — Three stale report assertions, one of which was never checking the column it named
 
-`PENDING`
+`4ce99da`
 
 **What it built.** Nothing new on any screen except a corrected sentence. Three e2e tests in `e2e/admin-reports.spec.ts` were failing against unmodified `main` on both projects, and B-195 verified that by stashing its own diff. Each one is the only check on the fact it names, so none was closed by deleting it.
 
