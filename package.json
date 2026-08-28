@@ -2,11 +2,16 @@
   "name": "storage-platform",
   "version": "0.1.0",
   "private": true,
+  "engines": { "node": ">=24" },
   "workspaces": [
     "apps/*",
     "packages/*"
   ],
   "scripts": {
+    "preflight": "if [ -x \"$HOME/.claude/bin/swapcheck\" ]; then \"$HOME/.claude/bin/swapcheck\" --quiet; fi",
+    "predev": "npm run preflight",
+    "predev:test": "npm run preflight",
+    "pretest:e2e": "npm run preflight",
     "dev": "dotenv -e .env.local -- npm run dev -w web",
     "build": "dotenv -e .env.local -- npm run build -w web",
     "start": "dotenv -e .env.local -- npm run start -w web",
