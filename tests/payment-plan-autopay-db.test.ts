@@ -234,6 +234,19 @@ async function plan(options: {
 
 const installmentCharges = () => charges.filter((charge) => charge.paymentPlanInstallmentId)
 
+/// A hold that declares `halt_autopay` — bankruptcy, SCRA and deceased all do.
+async function bankruptcyHold(leaseId: string): Promise<void> {
+  await prisma.leaseHold.create({
+    data: {
+      leaseId,
+      type: 'bankruptcy',
+      reason: 'Chapter 7 filed',
+      effectiveFrom: d('2026-08-15'),
+      placedByStaffId: staffId,
+    },
+  })
+}
+
 describeDb('payment plans and autopay', () => {
   beforeAll(async () => {
     const facility = await prisma.facility.create({
@@ -561,6 +574,46 @@ describeDb('payment plans and autopay', () => {
     expect(covered.amountPaidCents).toBe(60_000)
     expect(rent.amountPaidCents).toBe(5_000)
     expect(applied.unappliedCents).toBe(0)
+  })
+
+  it('charges no installment on a lease held for bankruptcy (B-204)', async () => {
+    const leaseId = await newLease()
+    const arrears = await invoice(leaseId, 60_000, d('2026-07-01'))
+    await plan({
+      leaseId,
+      invoiceIds: [arrears],
+      totalCents: 60_000,
+      installments: [{ dueDate: d('2026-09-01'), amountCents: 60_000 }],
+    })
+    await bankruptcyHold(leaseId)
+
+    await runAutopay(facilityId, d('2026-09-01'), recordItem)
+
+    // The lease has no invoice due tonight that autopay would have selected —
+    // the arrears are frozen into the plan — so the hold set derived from the
+    // invoice query alone did not contain it, which is exactly how the charge
+    // got through.
+    expect(installmentCharges()).toHaveLength(0)
+    expect(collected.some((item) => item.message === 'installment skipped — the lease is on hold')).toBe(true)
+  })
+
+  it('does not break a plan over an installment the hold stopped us collecting (B-204)', async () => {
+    const leaseId = await newLease()
+    const arrears = await invoice(leaseId, 60_000, d('2026-07-01'))
+    const planId = await plan({
+      leaseId,
+      invoiceIds: [arrears],
+      totalCents: 60_000,
+      installments: [{ dueDate: d('2026-09-01'), amountCents: 60_000 }],
+    })
+    await bankruptcyHold(leaseId)
+
+    await runAutopay(facilityId, d('2026-09-01'), recordItem)
+
+    // Well past the retry ladder's last offset, which is what breaks an
+    // uncollected auto-pay plan on any other lease.
+    await evaluatePaymentPlanBreaches(facilityId, d('2026-09-20'), recordItem)
+    expect((await prisma.paymentPlan.findUniqueOrThrow({ where: { id: planId } })).status).toBe('active')
   })
 
   it('breaks a manual-pay plan once its grace has run, with no ladder to wait for', async () => {

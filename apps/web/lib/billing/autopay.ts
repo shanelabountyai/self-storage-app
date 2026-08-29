@@ -146,16 +146,6 @@ export async function runAutopay(
     },
   })
 
-  // US-42. A hold declaring `halt_autopay` stops us taking money at all — an
-  // automatic stay under Chapter 7 makes a charge against a debtor a violation,
-  // and halting the chasing while still helping ourselves to the balance would
-  // be the worst of both.
-  const onHold = await effectsByLease(
-    invoices.map((invoice) => invoice.leaseId),
-    'halt_autopay',
-    businessDate,
-  )
-
   // B-189. The arrears half of autopay stands down for a lease on an active
   // plan, and ONLY the arrears half.
   //
@@ -172,6 +162,22 @@ export async function runAutopay(
   // plan exists to prevent, executed by the system that was told about it.
   const plans = await activePlansFor(facilityId)
   const deferredInvoiceIds = new Set(plans.flatMap((plan) => plan.invoiceIds))
+
+  // US-42. A hold declaring `halt_autopay` stops us taking money at all — an
+  // automatic stay under Chapter 7 makes a charge against a debtor a violation,
+  // and halting the chasing while still helping ourselves to the balance would
+  // be the worst of both.
+  //
+  // B-204: the plans' leases are in the set too, not just the invoices'. An
+  // installment charge is a charge, and a lease whose arrears are all frozen
+  // into a plan may have no invoice due tonight at all — so deriving the set
+  // from the invoice query alone left exactly the leases `collectInstallments`
+  // was about to charge outside it.
+  const onHold = await effectsByLease(
+    [...invoices.map((invoice) => invoice.leaseId), ...plans.map((plan) => plan.leaseId)],
+    'halt_autopay',
+    businessDate,
+  )
 
   for (const invoice of invoices) {
     if (deferredInvoiceIds.has(invoice.id)) {
@@ -311,7 +317,7 @@ export async function runAutopay(
   // installment collected tonight must be visible to the job that decides
   // whether the plan survives the night, and a separate registry entry is one
   // reordering away from being wrong.
-  await collectInstallments(facilityId, plans, businessDate, facility.paymentRetryDays, result, recordItem)
+  await collectInstallments(facilityId, plans, onHold, businessDate, facility.paymentRetryDays, result, recordItem)
 
   return result
 }
@@ -361,12 +367,22 @@ type ActivePlan = Awaited<ReturnType<typeof activePlansFor>>[number]
 async function collectInstallments(
   facilityId: string,
   plans: readonly ActivePlan[],
+  onHold: ReadonlySet<string>,
   businessDate: Date,
   retryDays: readonly number[],
   result: AutopayResult,
   recordItem: RecordItem,
 ): Promise<void> {
   for (const plan of plans) {
+    // US-42 again, and recorded rather than skipped silently: a bankruptcy or
+    // SCRA hold placed between two installment dates has to be visible in the
+    // run that honoured it.
+    if (onHold.has(plan.leaseId)) {
+      result.skipped += 1
+      recordItem({ itemId: plan.id, ok: true, message: `installment skipped — ${SKIP_MESSAGE.lease_on_hold}` })
+      continue
+    }
+
     // Three separate ways to be manual-pay, and they are different facts.
     // D-97's per-plan opt-out is the tenant choosing it at agreement; autopay
     // being off on the lease is the tenant having chosen it earlier and more
