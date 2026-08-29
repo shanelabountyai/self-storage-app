@@ -6846,7 +6846,7 @@ The fix went past the index. The test now maps **all six** screen columns to the
 
 ## B-129 (part) — The auction lot sheet, and the readiness check that decides what may be advertised
 
-`PENDING`
+`1350aa8`
 
 **What it built.** The half of US-30's advertising story that does not depend on an unanswered question. **B-129 stays open**; both of its blockers are still blockers.
 
