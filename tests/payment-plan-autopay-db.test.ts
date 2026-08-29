@@ -275,6 +275,38 @@ describeDb('payment plans and autopay', () => {
     expect(installments[0].invoiceId).toBeUndefined()
   })
 
+  it('charges no installment while a hold halts autopay (B-204)', async () => {
+    // US-42. `bankruptcy`, `military_scra` and `deceased` all declare
+    // halt_autopay, and runAutopay has honoured it on the invoice path since
+    // B-096. collectInstallments consulted it nowhere: a bankruptcy hold
+    // placed on the 10th did not stop the charge on the 15th, which is a stay
+    // violation committed by the system AFTER a person told it not to.
+    const leaseId = await newLease()
+    const arrears = await invoice(leaseId, 60_000, d('2026-07-01'))
+    await plan({
+      leaseId,
+      invoiceIds: [arrears],
+      totalCents: 60_000,
+      installments: [{ dueDate: d('2026-09-01'), amountCents: 60_000 }],
+    })
+    await prisma.leaseHold.create({
+      data: {
+        leaseId,
+        type: 'bankruptcy',
+        effectiveFrom: d('2026-08-10'),
+        reason: 'Chapter 7 filed — automatic stay.',
+      },
+    })
+
+    await runAutopay(facilityId, d('2026-09-01'), recordItem)
+
+    expect(installmentCharges()).toHaveLength(0)
+    expect(charges).toHaveLength(0)
+    // The reason recorded is the hold, not a manual-pay preference — the guard
+    // runs before autoCollect so an operator reading the run log sees why.
+    expect(collected.some((one) => one.message?.includes('the lease is on hold'))).toBe(true)
+  })
+
   it('charges nothing on a manual-pay plan', async () => {
     const leaseId = await newLease()
     const arrears = await invoice(leaseId, 60_000, d('2026-07-01'))
