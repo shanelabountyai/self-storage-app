@@ -6872,7 +6872,9 @@ The fix went past the index. The test now maps **all six** screen columns to the
 
 ## B-218 — `gh pr ready` now runs the e2e lane, which it never has
 
-`94d49de`
+`6371f1f`
+
+*(Recorded as `94d49de` when built. That commit, and B-202's, were squash-merged into `6371f1f` via PR #17 — the squash collapsed five commits and orphaned every SHA on the branch, which is the same defect the "record the SHA in a follow-up commit, never by amending" rule exists to prevent. Merge with `--rebase`, not `--squash`.)*
 
 **What it built.** One line in `.github/workflows/ci.yml`: `types: [opened, synchronize, reopened, ready_for_review]` on the `pull_request` trigger.
 
@@ -6888,7 +6890,9 @@ The fix went past the index. The test now maps **all six** screen columns to the
 
 ## B-202 — a payment plan now blocks the auction it always should have
 
-`b06b9b5`
+`6371f1f`
+
+*(Recorded as `b06b9b5` when built; squash-merged into `6371f1f` via PR #17 — see the note on B-218.)*
 
 **What it built.** One array element: `block_auction` added to the `payment_plan` entry in `packages/core/holds/catalog.ts`. Plus the two operator-facing refusal sentences that enumerate which holds stop a sale — `auctionReadiness`'s `on_hold` blocker and `approveAuction`'s refusal in `apps/web/lib/auctions/service.ts` — which now name payment-plan holds alongside SCRA, bankruptcy, deceased and litigation.
 
