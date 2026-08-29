@@ -12,6 +12,13 @@ on:
       - '**.md'
       - 'docs/**'
   pull_request:
+    # `ready_for_review` is NOT one of the default activity types (those are
+    # opened, synchronize, reopened), so clearing draft fired no event at all
+    # and the `e2e` job below kept the `skipping` conclusion it earned while
+    # the PR still WAS a draft. A re-run cannot fix that either — it replays
+    # the original payload, where `draft: true`. The gate the split lanes
+    # exist to spend Actions minutes on had therefore never run on a PR.
+    types: [opened, synchronize, reopened, ready_for_review]
     paths-ignore:
       - '**.md'
       - 'docs/**'
