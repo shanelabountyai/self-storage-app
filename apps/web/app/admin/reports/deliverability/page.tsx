@@ -170,6 +170,17 @@ export default async function DeliverabilityPage({
               </tr>
             </thead>
             <tbody>
+              {/* The same colSpan row the templates table above carries. Without
+                  it a range with no sends renders four column headers over an
+                  empty tbody, which axe flags as `th-has-data-cells` and a
+                  screen reader reads as a table that is simply missing. */}
+              {report.daily.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="text-muted-foreground py-4 text-center">
+                    Nothing sent in this range.
+                  </td>
+                </tr>
+              )}
               {report.daily.map((row) => (
                 <tr key={row.day} className="border-input border-b">
                   <th scope="row" className="py-2 pr-4 text-left font-normal">{row.day}</th>

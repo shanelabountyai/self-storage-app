@@ -436,8 +436,8 @@ export async function approveAuction(
     return {
       ok: false,
       reason:
-        'A hold on this lease blocks sale — Military (SCRA), bankruptcy, deceased and litigation ' +
-        'holds all do. It has to be lifted on the tenant profile before this can be approved.',
+        'A hold on this lease blocks sale — Military (SCRA), bankruptcy, deceased, litigation and ' +
+        'payment-plan holds all do. It has to be lifted on the tenant profile before this can be approved.',
     }
   }
   if (row.containsVehicle) {
