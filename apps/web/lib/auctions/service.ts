@@ -13,7 +13,7 @@ import {
   type Readiness,
   type StepEvidence,
 } from '@storage/core/auctions'
-import { selectListableLots, type LotRefusal } from '@storage/core/auctions'
+import { selectListableLots, withUnitSizes, type LotRefusal } from '@storage/core/auctions'
 import { orderedSteps, type TimelineStep } from '@storage/core/delinquency'
 import { requirePermission } from '@/lib/rbac/authorize'
 import { toAuditActor } from '@/lib/rbac/audit-actor'
@@ -992,6 +992,9 @@ export async function outstandingSurpluses(actor: Actor, facilityId: string) {
 export type ListingLot = {
   caseId: string
   unitNumber: string
+  /// The person on whose account the sale is held — a required element of the
+  /// advertisement, not a convenience (B-205).
+  tenantName: string
   unitTypeName: string
   widthFt: number
   lengthFt: number
@@ -1002,6 +1005,7 @@ export type ListingLot = {
 export type LotSheet = {
   facility: {
     name: string
+    slug: string
     addressLine1: string
     addressLine2: string | null
     city: string
@@ -1010,6 +1014,9 @@ export type LotSheet = {
     /// Null when nobody has set the terms of sale. Rendered as a blank column
     /// and said out loud on screen — see the note on `Facility.auctionSaleTerms`.
     saleTerms: string | null
+    /// Null when nobody has set the time of sale. Same posture as the terms:
+    /// blank column, said out loud on screen, nothing invented (B-205).
+    saleTime: string | null
   }
   lots: ListingLot[]
   refused: LotRefusal[]
@@ -1030,6 +1037,10 @@ export async function auctionLotSheet(actor: Actor, facilityId: string): Promise
       scheduledSaleDate: one.scheduledSaleDate,
       readiness: one.readiness,
       unitId: one.unitId,
+      // B-205. The name of the person on whose account the sale is held is one
+      // of the three things a lien advertisement has to carry, and the sheet
+      // did not have it. Already on the case view; it rides along.
+      tenantName: one.tenantName,
     })),
   )
 
@@ -1038,12 +1049,14 @@ export async function auctionLotSheet(actor: Actor, facilityId: string): Promise
       where: { id: facilityId },
       select: {
         name: true,
+        slug: true,
         addressLine1: true,
         addressLine2: true,
         city: true,
         state: true,
         postalCode: true,
         auctionSaleTerms: true,
+        auctionSaleTime: true,
       },
     }),
     // The unit the goods are in NOW, which is what `unitId` on the view already
@@ -1062,34 +1075,32 @@ export async function auctionLotSheet(actor: Actor, facilityId: string): Promise
   if (!facility) return null
 
   const typeByUnit = new Map(units.map((unit) => [unit.id, unit.unitType]))
+  const { sized, refused: unsizeable } = withUnitSizes(listable, (unitId) => typeByUnit.get(unitId))
 
   return {
     facility: {
       name: facility.name,
+      slug: facility.slug,
       addressLine1: facility.addressLine1,
       addressLine2: facility.addressLine2,
       city: facility.city,
       state: facility.state,
       postalCode: facility.postalCode,
       saleTerms: facility.auctionSaleTerms,
+      saleTime: facility.auctionSaleTime,
     },
-    lots: listable.flatMap((one) => {
-      const type = typeByUnit.get(one.unitId)
-      // A unit with no type cannot happen through the schema, and a lot sheet
-      // that silently invents "0x0" would be worse than one row short.
-      if (!type) return []
-      return [
-        {
-          caseId: one.caseId,
-          unitNumber: one.unitNumber,
-          unitTypeName: type.name,
-          widthFt: type.widthFt,
-          lengthFt: type.lengthFt,
-          squareFeet: type.widthFt * type.lengthFt,
-          scheduledSaleDate: one.scheduledSaleDate!,
-        },
-      ]
-    }),
-    refused,
+    lots: sized.map((one) => ({
+      caseId: one.caseId,
+      unitNumber: one.unitNumber,
+      tenantName: one.tenantName,
+      unitTypeName: one.size.name,
+      widthFt: one.size.widthFt,
+      lengthFt: one.size.lengthFt,
+      squareFeet: one.size.widthFt * one.size.lengthFt,
+      scheduledSaleDate: one.scheduledSaleDate!,
+    })),
+    // A lot that cannot be sized is named here rather than vanishing from both
+    // lists — see `withUnitSizes`.
+    refused: [...refused, ...unsizeable],
   }
 }

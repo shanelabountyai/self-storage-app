@@ -30,31 +30,49 @@ export async function GET(request: Request): Promise<Response> {
   const { facility } = sheet
   const address = [facility.addressLine1, facility.addressLine2].filter(Boolean).join(', ')
 
+  // B-205. No generated `Lot` column.
+  //
+  // It used to be `index + 1` over whatever passed readiness at that moment,
+  // and readiness is deliberately live — a tenant paying, a hold landing or a
+  // vehicle being recorded all drop a lot between one download and the next.
+  // So "Lot 3" meant a different unit on Wednesday than it did on Monday, on a
+  // document whose entire purpose is to be the public advertisement in a lien
+  // sale. `Unit` and `Case reference` each identify a lot for its whole life
+  // and neither is invented here. A sequential number an auctioneer can call
+  // out has to be assigned once and stored on the case; that is a decision, not
+  // a default, and it is not this.
+  // The earliest sale on the sheet. Lots for one facility are normally one
+  // sale; where they are not, the first date is the one the file is about.
+  const saleDate = sheet.lots
+    .map((lot) => lot.scheduledSaleDate.toISOString().slice(0, 10))
+    .sort()[0]
+
   const csv = toCsv(
     [
-      'Lot',
       'Facility',
       'Address',
       'City',
       'State',
       'ZIP',
       'Unit',
+      'Tenant',
       'Size',
       'Width ft',
       'Length ft',
       'Sq ft',
       'Sale date',
+      'Sale time',
       'Terms',
       'Case reference',
     ],
-    sheet.lots.map((lot, index) => [
-      index + 1,
+    sheet.lots.map((lot) => [
       facility.name,
       address,
       facility.city,
       facility.state,
       facility.postalCode,
       lot.unitNumber,
+      lot.tenantName,
       lot.unitTypeName,
       lot.widthFt,
       lot.lengthFt,
@@ -63,6 +81,9 @@ export async function GET(request: Request): Promise<Response> {
       // DATE. `toISOString` is safe for exactly that reason and would not be
       // for a timestamp.
       lot.scheduledSaleDate.toISOString().slice(0, 10),
+      // Blank when unset, same as the terms — a sale time nobody chose is a
+      // worse thing to print than an empty column somebody has to fill in.
+      facility.saleTime ?? '',
       // Blank when nobody has set them. The screen says so; the file does not
       // invent a term the operator never agreed to.
       facility.saleTerms ?? '',
@@ -73,7 +94,12 @@ export async function GET(request: Request): Promise<Response> {
   return new Response(csv, {
     headers: {
       'content-type': 'text/csv; charset=utf-8',
-      'content-disposition': `attachment; filename="auction-lots-${facilityId}.csv"`,
+      // B-205. Named the way every other export here is: a person who
+      // downloads three facilities' sheets in one afternoon needs to tell them
+      // apart in Downloads, and an opaque cuid does not do that. Dated by the
+      // sale the sheet is for, not by today — two downloads for the same sale
+      // are the same document.
+      'content-disposition': `attachment; filename="auction-lots-${facility.slug}-${saleDate}.csv"`,
       'cache-control': 'private, no-store',
     },
   })

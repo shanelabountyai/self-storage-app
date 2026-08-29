@@ -133,17 +133,39 @@ export default async function AuctionsPage() {
                 {sheet.lots.length === 1 ? '' : 's'})
               </a>{' '}
               <span className="text-muted-foreground">
-                — lot, address, size, sale date and terms, as a CSV you upload or hand over.
-                Downloading it is not a record that an advertisement ran; add that on the case once
-                it has.
+                — unit, tenant, address, size, sale date, time and terms, as a CSV you upload or
+                hand over. Downloading it is not a record that an advertisement ran; add that on the
+                case once it has.
               </span>
             </p>
           )}
 
-          {sheet.facility.saleTerms === null && (
+          {/* B-205. The sheet is NOT a complete advertisement, and saying so
+              here is the honest-degradation posture D-63 and D-104 already take
+              on the blank Terms column. A general description of the goods is
+              the third required element and this product has nowhere to hold
+              one — inventory photo references live inside the hashed evidence
+              document `recordLockCut` renders, and a second copy that can
+              disagree with the original is worse than an absent column. So the
+              operator is told, on the screen where they are about to hand the
+              file over, rather than finding out when the sale is challenged. */}
+          <p role="note" className="border-input rounded-lg border p-3 text-sm text-pretty">
+            <strong className="font-medium">This sheet is not a complete advertisement.</strong> It
+            carries the unit, the tenant&apos;s name, the address, the sale date and the time and
+            terms — but not a description of the goods, which Texas also requires and this system
+            does not hold. Add that yourself before the advertisement runs.
+          </p>
+
+          {(sheet.facility.saleTerms === null || sheet.facility.saleTime === null) && (
             <p role="note" className="border-input rounded-lg border p-3 text-sm text-pretty">
-              <strong className="font-medium">No terms of sale are set for this facility</strong>,
-              so the Terms column is blank. Set them in{' '}
+              <strong className="font-medium">
+                {sheet.facility.saleTerms === null && sheet.facility.saleTime === null
+                  ? 'No time or terms of sale are set for this facility'
+                  : sheet.facility.saleTerms === null
+                    ? 'No terms of sale are set for this facility'
+                    : 'No time of sale is set for this facility'}
+              </strong>
+              , so that column is blank on every lot. Set it in{' '}
               <Link
                 href="/admin/settings/delinquency"
                 className="underline underline-offset-2"
@@ -152,6 +174,26 @@ export default async function AuctionsPage() {
               </Link>
               .
             </p>
+          )}
+
+          {/* Echoed here, where the operator is about to read it to an
+              auctioneer or a classifieds clerk. Seeing the sentence is the
+              preview the settings form cannot give. */}
+          {(sheet.facility.saleTime !== null || sheet.facility.saleTerms !== null) && (
+            <dl className="border-input flex flex-col gap-2 rounded-lg border p-3 text-sm">
+              {sheet.facility.saleTime !== null && (
+                <div className="flex flex-wrap gap-x-2">
+                  <dt className="font-medium">Time of sale</dt>
+                  <dd className="text-muted-foreground text-pretty">{sheet.facility.saleTime}</dd>
+                </div>
+              )}
+              {sheet.facility.saleTerms !== null && (
+                <div className="flex flex-wrap gap-x-2">
+                  <dt className="font-medium">Terms of sale</dt>
+                  <dd className="text-muted-foreground text-pretty">{sheet.facility.saleTerms}</dd>
+                </div>
+              )}
+            </dl>
           )}
 
           {sheet.refused.length > 0 && (

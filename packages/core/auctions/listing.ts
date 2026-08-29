@@ -40,7 +40,7 @@ export type LotCandidate = {
 
 /// Named rather than free text so the screen can group and the tests can assert
 /// on something other than a sentence.
-export type LotRefusalKind = 'not_scheduled' | 'no_sale_date' | 'not_ready'
+export type LotRefusalKind = 'not_scheduled' | 'no_sale_date' | 'not_ready' | 'no_unit_type'
 
 export type LotRefusal = {
   caseId: string
@@ -61,6 +61,38 @@ export type LotSelection<T extends LotCandidate> = {
 /// Generic in the row type so a caller can carry the address, size and terms
 /// alongside without this module knowing about any of them — the rule here is
 /// only about whether a sale may be advertised at all.
+/// Attach each lot's size, refusing — by name — any the lookup cannot size.
+///
+/// B-205. This was a `flatMap ... return []` inside the database function: a
+/// listable lot whose unit had no type vanished from the sheet and appeared in
+/// neither list. The state cannot arise through the schema, which is why it was
+/// written that way and why it is here now rather than in a database test —
+/// the rule it broke is this module's own, that every dropped case is named
+/// with its reason, and a short file nobody realises is short is the whole
+/// failure mode the refusal list exists to prevent.
+export function withUnitSizes<T extends { caseId: string; unitNumber: string; unitId: string }, S>(
+  lots: readonly T[],
+  sizeOf: (unitId: string) => S | undefined,
+): { sized: (T & { size: S })[]; refused: LotRefusal[] } {
+  const sized: (T & { size: S })[] = []
+  const refused: LotRefusal[] = []
+  for (const lot of lots) {
+    const size = sizeOf(lot.unitId)
+    if (size === undefined) {
+      refused.push({
+        caseId: lot.caseId,
+        unitNumber: lot.unitNumber,
+        kind: 'no_unit_type',
+        reason:
+          'This unit has no size on record, so the sheet cannot state the dimensions a buyer bids on. Set the unit type before advertising.',
+      })
+      continue
+    }
+    sized.push({ ...lot, size })
+  }
+  return { sized, refused }
+}
+
 export function selectListableLots<T extends LotCandidate>(cases: readonly T[]): LotSelection<T> {
   const lots: T[] = []
   const refused: LotRefusal[] = []
