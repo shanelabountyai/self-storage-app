@@ -3,7 +3,7 @@ import { emitEvent } from '@storage/core/events'
 import { DEFAULT_RETRY_DAYS, isTerminalDecline } from '@storage/core/billing'
 import { daysBetween } from '@storage/core/jobs'
 import { installmentViews, isAutoCollecting, isFullyPaid } from '@storage/core/payment-plans'
-import { systemLiftHold } from '@/lib/admin/holds'
+import { effectsByLease, systemLiftHold } from '@/lib/admin/holds'
 import { createTask } from '@/lib/admin/tasks'
 import { planProgressCents } from '@/lib/admin/payment-plans'
 import type { RecordItem } from '@/lib/delinquency/engine'
@@ -63,6 +63,19 @@ export async function evaluatePaymentPlanBreaches(
   // (has everything been collected) and has no date in it at all.
   const breachDate = new Date(businessDate.getTime() - facility.planGraceDays * 86_400_000)
 
+  // B-204. `collectInstallments` stands down for a `halt_autopay` hold, so on
+  // these leases a missed installment is our doing and not the tenant's.
+  // Breaking the plan for it would lift the plan hold, restart the ladder and
+  // email a bankrupt tenant that collections have resumed — the system
+  // punishing them for the stay it correctly honoured. The plan waits for the
+  // hold to lift. Completion below is deliberately still reachable: money that
+  // arrived anyway finishes the plan.
+  const onHold = await effectsByLease(
+    plans.map((plan) => plan.leaseId),
+    'halt_autopay',
+    businessDate,
+  )
+
   for (const plan of plans) {
     // Recomputed from the covered invoices every night, not accumulated — so
     // a plan whose progress goes BACKWARDS (an ACH returned, a chargeback, a
@@ -71,7 +84,7 @@ export async function evaluatePaymentPlanBreaches(
     // has since taken back goes back to `missed`.
     const paidSinceCents = await planProgressCents(plan.totalCents, plan.invoiceIds)
 
-    if (await isBroken(plan, paidSinceCents, breachDate, businessDate, facility.paymentRetryDays)) {
+    if (!onHold.has(plan.leaseId) && (await isBroken(plan, paidSinceCents, breachDate, businessDate, facility.paymentRetryDays))) {
       await prisma.paymentPlan.update({
         where: { id: plan.id },
         data: { status: 'broken', brokenAt: businessDate },
