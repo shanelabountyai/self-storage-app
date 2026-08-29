@@ -516,6 +516,14 @@ export default async function AdminSettingsPage() {
             min={0}
             max={28}
             defaultValue={facility.invoiceLeadDays}
+            /* B-211. This number does two jobs and only named one of them:
+               `emitInstallmentReminders` reads it to decide how far ahead a
+               payment-plan installment reminder goes out. Shortening invoice
+               lead time for an unrelated reason silently moved every
+               installment reminder, on the population that most needs the
+               warning. Whether the two should differ is a second field and a
+               decision; naming the coupling costs one string. */
+            hint="Also how far ahead a payment-plan installment reminder is sent."
           />
           <Field
             name="prorateOnMoveOut"

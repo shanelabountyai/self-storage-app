@@ -57,10 +57,11 @@ export default async function RoleLimitsPage() {
         <h1 className="text-xl font-semibold">What each role may approve</h1>
         <p className="text-muted-foreground max-w-prose text-sm text-pretty">
           Four limits per staff role, in dollars, for the whole portfolio — a role is one set of
-          rules everywhere, not one per site. Over the limit does not fail: it escalates to the next
-          role up that can cover the amount, so a lower-ranked role can never be left more generous
-          than the one above it. Changes take effect on the next action; nothing already approved is
-          revisited.
+          rules everywhere, not one per site. Over the limit, the action is refused and the staff
+          member is told which role can approve it — they have to hand it over, and nothing is
+          queued or routed automatically. A lower-ranked role can never be left more generous than
+          the one above it, so the person they are sent to can always cover the amount. Changes take
+          effect on the next action; nothing already approved is revisited.
         </p>
       </header>
 

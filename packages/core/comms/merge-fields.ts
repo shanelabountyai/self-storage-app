@@ -251,7 +251,8 @@ export const EVENT_MERGE_FIELDS: Record<string, readonly MergeFieldSpec[]> = {
     { field: 'plan.total', description: 'What the whole plan covers', sample: '$1,800.00' },
     {
       field: 'plan.schedule',
-      description: 'Every installment, one per line, with its date and amount',
+      description:
+        'Every installment with its date and amount. Renders as a table in the email and as a numbered list in the plain-text version — put it on a line of its own, not inside a sentence.',
       sample: '1. September 15, 2026 — $600.00\n2. October 15, 2026 — $600.00\n3. November 15, 2026 — $600.00',
     },
     {
