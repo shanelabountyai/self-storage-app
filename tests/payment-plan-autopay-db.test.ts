@@ -121,7 +121,50 @@ async function newLease(): Promise<string> {
   return lease.id
 }
 
-async function invoice(leaseId: string, amountCents: number, dueDate: Date): Promise<string> {
+/// A lease under its OWN tenant.
+///
+/// `claimsFor` allocates across everything a TENANT owes at the facility, and
+/// this file's leases all hang off one shared tenant that nothing cleans up
+/// between tests. Any test that allocates without naming or narrowing invoices
+/// would otherwise land its money on an earlier test's open invoice — which is
+/// the shared-state trap, not a defect in the code under test.
+async function newLeaseUnderOwnTenant(): Promise<{ leaseId: string; tenantId: string }> {
+  counter += 1
+  const tenant = await prisma.tenant.create({
+    data: {
+      email: `plan-alloc-${counter}-${suffix}@example.com`,
+      firstName: 'Dana',
+      lastName: 'Payer',
+      stripeCustomerId: `cus_alloc_${counter}_${suffix}`,
+    },
+  })
+  const unit = await prisma.unit.create({
+    data: { facilityId, unitTypeId, number: `PPB-${counter}-${suffix}` },
+  })
+  const lease = await prisma.lease.create({
+    data: {
+      facilityId,
+      tenantId: tenant.id,
+      unitId: unit.id,
+      status: 'active',
+      startDate: d('2026-06-01'),
+      billingDay: 1,
+      monthlyRateCents: 12_900,
+      autopayEnabled: true,
+    },
+  })
+  return { leaseId: lease.id, tenantId: tenant.id }
+}
+
+async function invoice(
+  leaseId: string,
+  amountCents: number,
+  dueDate: Date,
+  /// B-203's cases need real categories: the allocation order ranks by
+  /// category first, so an invoice with no line items behaves as pure rent and
+  /// cannot show what tax-before-rent does to a plan.
+  lines: { type: 'rent' | 'tax' | 'protection' | 'fee'; amountCents: number }[] = [],
+): Promise<string> {
   counter += 1
   const row = await prisma.invoice.create({
     data: {
@@ -135,6 +178,14 @@ async function invoice(leaseId: string, amountCents: number, dueDate: Date): Pro
       periodEnd: new Date(dueDate.getTime() + 30 * 86_400_000),
       subtotalCents: amountCents,
       totalCents: amountCents,
+      lineItems: {
+        create: lines.map((line) => ({
+          type: line.type,
+          description: line.type,
+          unitAmountCents: line.amountCents,
+          amountCents: line.amountCents,
+        })),
+      },
     },
   })
   return row.id
@@ -428,6 +479,88 @@ describeDb('payment plans and autopay', () => {
     ])
     expect(covered.amountPaidCents).toBe(30_000)
     expect(rent.amountPaidCents).toBe(0)
+  })
+
+  it('lands a COUNTER payment on the plan, not on this month\'s tax (B-203)', async () => {
+    // The defect this row was raised on. Only autopay's installment charge
+    // carried `restrictToInvoiceIds`; a payment taken at the counter or in the
+    // portal passed no options at all, so it allocated by the facility's
+    // ordinary order — tax first — and every open invoice's tax share outranks
+    // every arrears rent share.
+    const { leaseId, tenantId: payer } = await newLeaseUnderOwnTenant()
+    const arrears = await invoice(leaseId, 60_000, d('2026-07-01'), [
+      { type: 'rent', amountCents: 60_000 },
+    ])
+    const septemberRent = await invoice(leaseId, 12_900, d('2026-09-01'), [
+      { type: 'rent', amountCents: 11_500 },
+      { type: 'tax', amountCents: 1_400 },
+    ])
+    await plan({
+      leaseId,
+      invoiceIds: [arrears],
+      totalCents: 60_000,
+      autoCollect: false,
+      installments: [
+        { dueDate: d('2026-09-15'), amountCents: 30_000 },
+        { dueDate: d('2026-10-15'), amountCents: 30_000 },
+      ],
+    })
+
+    // Dana hands over the $300 the reminder asked for, in cash, on the day.
+    const payment = await prisma.payment.create({
+      data: { facilityId, tenantId: payer, amountCents: 30_000, method: 'cash', status: 'succeeded' },
+    })
+    await prisma.$transaction(async (tx) => {
+      await applyPayment(tx, { id: payment.id, tenantId: payer, facilityId, amountCents: 30_000 })
+    })
+
+    // Every cent on the plan. Before this, $1,400 of it went to September's
+    // tax, plan progress moved $28,600 of $30,000, `installmentViews` read
+    // partial coverage as uncovered, and three days later the breach job ended
+    // the plan and demanded the lot from a tenant who had paid on time.
+    const [covered, rent] = await Promise.all([
+      prisma.invoice.findUniqueOrThrow({ where: { id: arrears }, select: { amountPaidCents: true } }),
+      prisma.invoice.findUniqueOrThrow({ where: { id: septemberRent }, select: { amountPaidCents: true } }),
+    ])
+    expect(covered.amountPaidCents).toBe(30_000)
+    expect(rent.amountPaidCents).toBe(0)
+  })
+
+  it('spills what the plan does not need onto the current month (B-203)', async () => {
+    // Deferred, not restricted. The amount is whatever the tenant chose to
+    // hand over rather than a figure we raised, so a payment bigger than the
+    // arrears must reach the rent the payer plainly also meant to cover —
+    // stranding it as unapplied credit would be a second surprise.
+    const { leaseId, tenantId: payer } = await newLeaseUnderOwnTenant()
+    const arrears = await invoice(leaseId, 60_000, d('2026-07-01'), [
+      { type: 'rent', amountCents: 60_000 },
+    ])
+    const septemberRent = await invoice(leaseId, 12_900, d('2026-09-01'), [
+      { type: 'rent', amountCents: 11_500 },
+      { type: 'tax', amountCents: 1_400 },
+    ])
+    await plan({
+      leaseId,
+      invoiceIds: [arrears],
+      totalCents: 60_000,
+      autoCollect: false,
+      installments: [{ dueDate: d('2026-09-15'), amountCents: 60_000 }],
+    })
+
+    const payment = await prisma.payment.create({
+      data: { facilityId, tenantId: payer, amountCents: 65_000, method: 'cash', status: 'succeeded' },
+    })
+    const applied = await prisma.$transaction((tx) =>
+      applyPayment(tx, { id: payment.id, tenantId: payer, facilityId, amountCents: 65_000 }),
+    )
+
+    const [covered, rent] = await Promise.all([
+      prisma.invoice.findUniqueOrThrow({ where: { id: arrears }, select: { amountPaidCents: true } }),
+      prisma.invoice.findUniqueOrThrow({ where: { id: septemberRent }, select: { amountPaidCents: true } }),
+    ])
+    expect(covered.amountPaidCents).toBe(60_000)
+    expect(rent.amountPaidCents).toBe(5_000)
+    expect(applied.unappliedCents).toBe(0)
   })
 
   it('breaks a manual-pay plan once its grace has run, with no ladder to wait for', async () => {

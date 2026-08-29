@@ -113,6 +113,29 @@ export async function claimsFor(
   return targets
 }
 
+/// The invoices each active plan at this facility froze, keyed by lease.
+///
+/// B-203. Kept per lease rather than as one flat set because a tenant can hold
+/// two leases here — one on a plan, one not — and money handed over for the
+/// second must not be dragged onto the first's arrears.
+async function coveredByPlan(
+  tenantId: string,
+  facilityId: string,
+  client: Prisma.TransactionClient | typeof prisma = prisma,
+): Promise<Map<string, Set<string>>> {
+  const plans = await client.paymentPlan.findMany({
+    where: { status: 'active', lease: { facilityId, tenantId } },
+    select: { leaseId: true, invoiceIds: true },
+  })
+  const byLease = new Map<string, Set<string>>()
+  for (const plan of plans) {
+    const existing = byLease.get(plan.leaseId) ?? new Set<string>()
+    for (const id of plan.invoiceIds) existing.add(id)
+    byLease.set(plan.leaseId, existing)
+  }
+  return byLease
+}
+
 export type AppliedPayment = {
   lines: AllocationLine[]
   unappliedCents: number
@@ -136,6 +159,7 @@ export async function applyPayment(
   })
 
   let targets = await claimsFor(payment.tenantId, payment.facilityId, tx)
+  let deferred: AllocationTarget[] = []
 
   // B-189. A payment plan installment settles a SLICE of the arrears the plan
   // froze, so it narrows to that set rather than naming one invoice — and the
@@ -158,6 +182,50 @@ export async function applyPayment(
     if (narrowed.length > 0) targets = narrowed
   }
 
+  // B-203. A payment nobody narrowed — the counter, the portal, a pay link —
+  // pays a plan's arrears BEFORE the current rent of the same lease.
+  //
+  // Only autopay's installment charge carried `restrictToInvoiceIds`, so a
+  // tenant on a plan who handed over the exact installment at the counter had
+  // it allocated by the ordinary order: tax first, and every open invoice's tax
+  // share outranks every arrears rent share. This month's $12 tax and $12
+  // protection came out of a $300 installment, `installmentViews` reads partial
+  // coverage as uncovered, and three days later the breach job ended the plan
+  // and demanded the lot. The tenant paid, on time, exactly what we asked for.
+  //
+  // Deferring rather than RESTRICTING is the difference that matters here. The
+  // amount is whatever the tenant chose to hand over, not a figure we raised:
+  // $300 covers the installment and stops, $500 covers it and spills onto the
+  // current month the way the payer plainly intended. A hard restrict would
+  // strand that $200 as unapplied credit, which is a second surprise on top of
+  // the one being fixed.
+  //
+  // Scoped to the plan's OWN lease. A tenant with two leases here, one on a
+  // plan and one not, has the second untouched — its invoices are not deferred
+  // and keep their ordinary rank.
+  if (!options.explicitInvoiceId && !options.restrictToInvoiceIds) {
+    const byLease = await coveredByPlan(payment.tenantId, payment.facilityId, tx)
+    if (byLease.size > 0) {
+      const covered = new Set([...byLease.values()].flatMap((ids) => [...ids]))
+      const postPlan = new Set(
+        (
+          await tx.invoice.findMany({
+            where: {
+              facilityId: payment.facilityId,
+              leaseId: { in: [...byLease.keys()] },
+              id: { notIn: [...covered] },
+            },
+            select: { id: true },
+          })
+        ).map((invoice) => invoice.id),
+      )
+      if (postPlan.size > 0) {
+        deferred = targets.filter((target) => postPlan.has(target.invoiceId))
+        targets = targets.filter((target) => !postPlan.has(target.invoiceId))
+      }
+    }
+  }
+
   // An explicitly named invoice (autopay, B-045) wins outright. The charge was
   // raised for that invoice and settling a different one would leave the
   // invoice autopay believes it paid still open — and the next night's run
@@ -169,7 +237,18 @@ export async function applyPayment(
     if (named.length > 0) targets = named
   }
 
-  const result = allocatePayment(payment.amountCents, targets, orderFor(facility.paymentAllocationOrder))
+  const order = orderFor(facility.paymentAllocationOrder)
+  const first = allocatePayment(payment.amountCents, targets, order)
+  // Whatever the plan's arrears did not absorb falls through to the current
+  // rent that was deferred above, in the facility's ordinary order.
+  const second =
+    first.unappliedCents > 0 && deferred.length > 0
+      ? allocatePayment(first.unappliedCents, deferred, order)
+      : { lines: [], unappliedCents: first.unappliedCents }
+  const result = {
+    lines: [...first.lines, ...second.lines],
+    unappliedCents: second.unappliedCents,
+  }
 
   for (const { invoiceId, amountCents } of byInvoice(result.lines)) {
     const existing = await tx.paymentAllocation.findUnique({
