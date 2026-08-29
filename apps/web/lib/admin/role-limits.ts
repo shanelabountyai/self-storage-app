@@ -119,9 +119,14 @@ function effective(limit: number | null): number {
 /// order and stops at the first one whose limit covers the amount. Give a
 /// facility manager a bigger waiver limit than the regional above them and
 /// every over-limit waiver escalates to somebody with LESS authority than the
-/// person who asked — the approval goes through a rung that cannot actually
-/// authorise it, and the one above never sees it. So this is refused at the
-/// point of editing rather than left to surface as a strange approval chain.
+/// person who asked — the staff member is sent to a rung that cannot actually
+/// authorise it, and the one above never hears about it. So this is refused at
+/// the point of editing rather than left to surface at a counter.
+///
+/// B-211: nothing here ESCALATES in the sense of routing or queueing. The
+/// over-limit action is refused outright and names who can carry it; a human
+/// hands it over. The ladder exists so that the name it gives is a name that
+/// can actually say yes.
 ///
 /// Only roles that HOLD the action's permission are compared, because they are
 /// exactly the roles `nextApproverRole` considers — a number sitting on a role
@@ -143,8 +148,8 @@ export function ladderViolation(
       if (effective(below.limits[action]) > effective(above.limits[action])) {
         return (
           `${below.roleName} would be able to approve ${describe(below.limits[action])} while ` +
-          `${above.roleName}, who is ranked above them and is who an over-limit ` +
-          `${MONETARY_ACTION_LABELS[action].toLowerCase()} escalates to, is held to ` +
+          `${above.roleName}, who is ranked above them and is who a staff member is sent to when ` +
+          `an over-limit ${MONETARY_ACTION_LABELS[action].toLowerCase()} is refused, is held to ` +
           `${describe(above.limits[action])}. Raise ${above.roleName} first.`
         )
       }
