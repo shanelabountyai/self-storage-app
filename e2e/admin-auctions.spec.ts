@@ -62,8 +62,13 @@ test.describe('signed in as the demo owner', () => {
     expect(response.status()).toBe(200)
     expect(response.headers()['content-type']).toContain('text/csv')
     expect(response.headers()['cache-control']).toContain('no-store')
+    // B-205: no generated `Lot` column — it was `index + 1` over whatever
+    // passed readiness at that moment, so it named a different unit on a later
+    // download. `Unit` and `Case reference` identify a lot for its whole life.
+    // `Tenant` and `Sale time` are two of the three elements a lien
+    // advertisement must carry and were both missing.
     expect((await response.text()).split('\r\n')[0]).toBe(
-      'Lot,Facility,Address,City,State,ZIP,Unit,Size,Width ft,Length ft,Sq ft,Sale date,Terms,Case reference',
+      'Facility,Address,City,State,ZIP,Unit,Tenant,Size,Width ft,Length ft,Sq ft,Sale date,Sale time,Terms,Case reference',
     )
   })
 

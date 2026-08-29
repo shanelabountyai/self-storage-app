@@ -538,6 +538,17 @@ model Facility {
   /// are the AFTER-the-sale record of what the buyer actually agreed to, and
   /// deliberately not this.
   auctionSaleTerms         String?
+  /// B-205. The time and place of sale are two of the three things a lien
+  /// advertisement has to carry, and the sheet had neither — the address gives
+  /// the place, this gives the time. Facility-level for the same reason the
+  /// terms are: a sale is one event with many lots, and the time is current
+  /// policy rather than evidence pinned to a timeline version.
+  ///
+  /// Free text, not a `DateTime`. It is read aloud to a newspaper clerk and
+  /// printed on a sheet — "10:00 AM, or immediately following the preceding
+  /// sale" is a real and common phrasing that no time column can hold. Null
+  /// stays a real state, exactly as the terms do.
+  auctionSaleTime          String?
   googleReviewUrl          String?
   /// US-7 AC1: "N days after move-in completion (default 7, configurable per
   /// facility)." Its own control ships in this item, per this repo's own rule

@@ -68,7 +68,7 @@ export default async function DelinquencyTimelinePage({
     activeTimeline(facilityId),
     prisma.facility.findUniqueOrThrow({
       where: { id: facilityId },
-      select: { state: true, auctionSaleTerms: true },
+      select: { state: true, auctionSaleTerms: true, auctionSaleTime: true },
     }),
     noticeTemplateKeys(facilityId),
   ])
@@ -296,22 +296,37 @@ export default async function DelinquencyTimelinePage({
         className="flex flex-col gap-3"
       >
         <input type="hidden" name="facilityId" value={facilityId} />
-        <h2 className="font-medium">Terms of sale at auction</h2>
+        <h2 className="font-medium">Time and terms of sale at auction</h2>
         <p className="text-muted-foreground max-w-prose text-sm text-pretty">
-          Printed on every lot of the auction sheet you download from the auctions screen —
-          payment method, cleanout deadline, buyer&apos;s premium, and whether the contents are
-          sold as seen. Left empty, the Terms column on that sheet is blank and the auctions
-          screen says so; nothing is filled in on your behalf.
+          Both are printed on every lot of the auction sheet you download from the auctions
+          screen. Left empty, that column on the sheet is blank and the auctions screen says so;
+          nothing is filled in on your behalf.
         </p>
+        {/* B-205. The time of sale is one of the three things a lien
+            advertisement has to carry, alongside the name of the person whose
+            account it is held on and a description of the goods. Its control
+            ships in the same item as its column, per this repo's own rule.
+
+            Free text rather than a time picker, and the hint says why: "or
+            immediately following the preceding sale" is a real and common
+            phrasing that no time control can hold, and it is read down a phone
+            to a newspaper clerk. */}
+        <Field
+          name="auctionSaleTime"
+          label="Time of sale"
+          as="input"
+          defaultValue={facility.auctionSaleTime ?? ''}
+          hint="For example: 10:00 AM, or immediately following the preceding sale."
+        />
         <Field
           name="auctionSaleTerms"
           label="Terms"
           as="input"
           defaultValue={facility.auctionSaleTerms ?? ''}
-          hint="One line. It is advertised to buyers, so write it the way you want it read out."
+          hint="One line — it is printed on every lot. For example: Cash only, 10% buyer's premium, contents sold as seen, unit to be emptied within 48 hours."
         />
         <div>
-          <Button type="submit">Save terms</Button>
+          <Button type="submit">Save time and terms</Button>
         </div>
       </AdminForm>
 

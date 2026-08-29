@@ -409,6 +409,29 @@ describeDb('the auction pipeline', () => {
       // Trimmed to a value, and null only when genuinely unset.
       expect(sheet!.facility.saleTerms).toBe('Cash only, 48-hour cleanout.')
       expect(sheet!.facility.postalCode).toBeTruthy()
+      // B-205. The name of the person on whose account the sale is held is a
+      // required element of the advertisement, not a convenience.
+      expect(lot!.tenantName).toBeTruthy()
+    })
+
+    it('carries the time of sale, and leaves it null until somebody sets one (B-205)', async () => {
+      // The time and the place are two of the three elements a lien
+      // advertisement must carry. The address gave the place; nothing gave the
+      // time, so a manager reading this file down a phone to a classifieds
+      // clerk published an advertisement missing it.
+      const caseId = await makeReadyCase()
+      await scheduleSale(regional(), caseId, new Date('2026-09-14T00:00:00Z'))
+
+      expect((await auctionLotSheet(regional(), facilityId))!.facility.saleTime).toBeNull()
+
+      await updateAuctionSaleTerms(
+        settingsAdmin(),
+        facilityId,
+        'Cash only.',
+        '  10:00 AM, or immediately following the preceding sale.  ',
+      )
+      const sheet = await auctionLotSheet(regional(), facilityId)
+      expect(sheet!.facility.saleTime).toBe('10:00 AM, or immediately following the preceding sale.')
     })
 
     it('drops a scheduled lot the moment the tenant settles, with the reason', async () => {

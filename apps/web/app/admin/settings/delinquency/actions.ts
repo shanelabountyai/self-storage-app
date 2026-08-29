@@ -107,9 +107,14 @@ export async function saveAuctionTermsAction(
   const actor = await requireStaffActor()
   const facilityId = String(formData.get('facilityId') ?? '')
 
-  await updateAuctionSaleTerms(actor, facilityId, String(formData.get('auctionSaleTerms') ?? ''))
+  await updateAuctionSaleTerms(
+    actor,
+    facilityId,
+    String(formData.get('auctionSaleTerms') ?? ''),
+    String(formData.get('auctionSaleTime') ?? ''),
+  )
 
   revalidatePath('/admin/settings/delinquency')
   revalidatePath('/admin/auctions')
-  return success('Saved. These terms print on every lot on the auction sheet.')
+  return success('Saved. This prints on every lot on the auction sheet.')
 }

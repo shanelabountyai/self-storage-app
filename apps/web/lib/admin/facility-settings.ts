@@ -752,21 +752,30 @@ export async function updateGateAdapter(
 /// spellings of it would make that check read `!terms?.trim()` at every call
 /// site instead of once here. Audit-logged like every other facility setting —
 /// what a sale was advertised on is a question a wrongful-sale complaint asks.
+/// B-205: the time of sale saves through here too.
+///
+/// One function and one audit entry because they are one form and one
+/// decision — the terms and the time are both "what this facility advertises",
+/// and splitting them would put two `facility.settings_changed` rows in the log
+/// for a single save. `time` is optional so the existing single-argument tests
+/// and any caller that only knows about the terms keep working unchanged.
 export async function updateAuctionSaleTerms(
   actor: Actor,
   facilityId: string,
   terms: string,
+  time?: string,
 ): Promise<void> {
   requirePermission(actor, "facility:settings", facilityId);
 
   const value = terms.trim() || null;
+  const timeValue = time === undefined ? undefined : time.trim() || null;
   const before = await prisma.facility.findUniqueOrThrow({
     where: { id: facilityId },
-    select: { auctionSaleTerms: true },
+    select: { auctionSaleTerms: true, auctionSaleTime: true },
   });
   await prisma.facility.update({
     where: { id: facilityId },
-    data: { auctionSaleTerms: value },
+    data: { auctionSaleTerms: value, ...(timeValue === undefined ? {} : { auctionSaleTime: timeValue }) },
   });
 
   await recordAudit({
@@ -775,7 +784,10 @@ export async function updateAuctionSaleTerms(
     entityType: "Facility",
     entityId: facilityId,
     facilityId,
-    before: { auctionSaleTerms: before.auctionSaleTerms },
-    after: { auctionSaleTerms: value },
+    before: { auctionSaleTerms: before.auctionSaleTerms, auctionSaleTime: before.auctionSaleTime },
+    after: {
+      auctionSaleTerms: value,
+      auctionSaleTime: timeValue === undefined ? before.auctionSaleTime : timeValue,
+    },
   });
 }

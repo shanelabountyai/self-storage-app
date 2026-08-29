@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { selectListableLots, type LotCandidate } from '../packages/core/auctions/listing'
+import { selectListableLots, withUnitSizes, type LotCandidate } from '../packages/core/auctions/listing'
 import type { Blocker } from '../packages/core/auctions/readiness'
 
 // B-129 / PRD 02 §4.6 US-30. Which scheduled sales may be advertised.
@@ -103,5 +103,36 @@ describe('selectListableLots', () => {
     ])
     expect(lots.map((one) => one.caseId)).toEqual(['ok'])
     expect(refused.map((one) => one.unitNumber)).toEqual(['A-2', 'A-3'])
+  })
+})
+
+describe('withUnitSizes', () => {
+  const sizes = new Map([['unit-1', { name: '10x20', widthFt: 10, lengthFt: 20 }]])
+
+  it('attaches the size a buyer bids on', () => {
+    const { sized, refused } = withUnitSizes(
+      [{ caseId: 'case-1', unitNumber: 'A-100', unitId: 'unit-1' }],
+      (id) => sizes.get(id),
+    )
+    expect(sized).toHaveLength(1)
+    expect(sized[0].size.name).toBe('10x20')
+    expect(refused).toEqual([])
+  })
+
+  it('names a lot it cannot size rather than dropping it from both lists (B-205)', () => {
+    // This was a `flatMap ... return []` in the database function: the lot
+    // appeared in neither `lots` nor `refused`, so a sale advertised for four
+    // lots when five were scheduled was discovered after the fact. The state
+    // cannot arise through the schema, which is exactly why the check lives
+    // here — the rule it broke is that every dropped case is named.
+    const { sized, refused } = withUnitSizes(
+      [{ caseId: 'case-2', unitNumber: 'B-114', unitId: 'unit-missing' }],
+      (id) => sizes.get(id),
+    )
+    expect(sized).toEqual([])
+    expect(refused).toHaveLength(1)
+    expect(refused[0].kind).toBe('no_unit_type')
+    expect(refused[0].unitNumber).toBe('B-114')
+    expect(refused[0].reason).toContain('no size on record')
   })
 })
