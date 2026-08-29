@@ -15,6 +15,10 @@ function blocker(message: string): Blocker {
   return { kind: 'balance_settled', message }
 }
 
+function holdBlocker(message: string): Blocker {
+  return { kind: 'on_hold', message }
+}
+
 function lot(overrides: Partial<LotCandidate> = {}): LotCandidate {
   return {
     caseId: 'case-1',
@@ -38,6 +42,25 @@ describe('selectListableLots', () => {
     // ride along without this module knowing about any of them.
     const { lots } = selectListableLots([{ ...lot(), unitId: 'unit-9' }])
     expect(lots[0].unitId).toBe('unit-9')
+  })
+
+  it('refuses a scheduled case whose tenant agreed a payment plan (B-202)', () => {
+    // The commonest thing that happens in the window between scheduling a sale
+    // and advertising it: the tenant walks in and agrees a plan. Before B-202
+    // the `payment_plan` hold did not declare `block_auction`, so readiness
+    // stayed true and the lot went out on the sheet — with our own plan email
+    // in the tenant's inbox saying we had stood the collections down.
+    const { lots, refused } = selectListableLots([
+      lot({
+        readiness: {
+          ready: false,
+          blockers: [holdBlocker('A hold on this lease blocks sale — see the account holds.')],
+        },
+      }),
+    ])
+    expect(lots).toEqual([])
+    expect(refused[0].kind).toBe('not_ready')
+    expect(refused[0].reason).toContain('blocks sale')
   })
 
   it('refuses a case that is still only eligible', () => {

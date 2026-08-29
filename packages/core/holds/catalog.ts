@@ -123,8 +123,15 @@ export const HOLD_TYPES = [
     type: 'payment_plan',
     label: 'Payment plan',
     bannerNote:
-      'The tenant is on an agreed plan. Late fees and collections are paused while they keep to it — check the plan before taking action.',
-    effects: ['halt_dunning', 'halt_late_fees', 'halt_access_suspension'],
+      'The tenant is on an agreed plan. Late fees, collections and any scheduled sale are paused while they keep to it — check the plan before taking action.',
+    // `block_auction` is here for the same reason it is on `litigation`: the
+    // sale is the one action with no way back. D-104 built the lot sheet to
+    // decide on LIVE readiness precisely because a sale is scheduled once and
+    // then sits for weeks, during which the tenant may pay — and agreeing a
+    // plan at the counter is that event, in its commonest form. Without this
+    // the plan halts the ladder, the fees and the gate, and the unit still
+    // goes out on the next advertisement.
+    effects: ['halt_dunning', 'halt_late_fees', 'halt_access_suspension', 'block_auction'],
     liftRequiresManager: false,
     requiresEstateContact: false,
   },
