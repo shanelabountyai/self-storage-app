@@ -6888,7 +6888,7 @@ The fix went past the index. The test now maps **all six** screen columns to the
 
 ## B-202 — a payment plan now blocks the auction it always should have
 
-`PENDING`
+`b06b9b5`
 
 **What it built.** One array element: `block_auction` added to the `payment_plan` entry in `packages/core/holds/catalog.ts`. Plus the two operator-facing refusal sentences that enumerate which holds stop a sale — `auctionReadiness`'s `on_hold` blocker and `approveAuction`'s refusal in `apps/web/lib/auctions/service.ts` — which now name payment-plan holds alongside SCRA, bankruptcy, deceased and litigation.
 
