@@ -150,8 +150,16 @@ export async function runAutopay(
   // automatic stay under Chapter 7 makes a charge against a debtor a violation,
   // and halting the chasing while still helping ourselves to the balance would
   // be the worst of both.
+  //
+  // B-204: the set covers the leases of ACTIVE PLANS as well as those with a
+  // due invoice tonight. An installment charge is money taken off a card the
+  // same as any other, and a plan lease need have no due invoice at all — so
+  // computing this from `invoices` alone left `collectInstallments` charging a
+  // bankrupt, an active-duty servicemember and a deceased tenant after a
+  // person had correctly told the system not to.
+  const plans = await activePlansFor(facilityId)
   const onHold = await effectsByLease(
-    invoices.map((invoice) => invoice.leaseId),
+    [...invoices.map((invoice) => invoice.leaseId), ...plans.map((plan) => plan.leaseId)],
     'halt_autopay',
     businessDate,
   )
@@ -170,7 +178,6 @@ export async function runAutopay(
   // Without this, `runAutopay` charged the FULL outstanding on every one of
   // those invoices the same night the plan was agreed: the precise outcome the
   // plan exists to prevent, executed by the system that was told about it.
-  const plans = await activePlansFor(facilityId)
   const deferredInvoiceIds = new Set(plans.flatMap((plan) => plan.invoiceIds))
 
   for (const invoice of invoices) {
@@ -311,7 +318,7 @@ export async function runAutopay(
   // installment collected tonight must be visible to the job that decides
   // whether the plan survives the night, and a separate registry entry is one
   // reordering away from being wrong.
-  await collectInstallments(facilityId, plans, businessDate, facility.paymentRetryDays, result, recordItem)
+  await collectInstallments(facilityId, plans, businessDate, facility.paymentRetryDays, onHold, result, recordItem)
 
   return result
 }
@@ -363,10 +370,22 @@ async function collectInstallments(
   plans: readonly ActivePlan[],
   businessDate: Date,
   retryDays: readonly number[],
+  onHold: ReadonlySet<string>,
   result: AutopayResult,
   recordItem: RecordItem,
 ): Promise<void> {
   for (const plan of plans) {
+    // US-42, checked FIRST. A hold declaring `halt_autopay` stops us taking
+    // money at all, and that has to outrank every reason below it: a charge
+    // against a debtor under an automatic stay is a violation whether or not
+    // the plan was set to collect automatically, and `deceased` is on the list
+    // for the reason B-096's own comment gives.
+    if (onHold.has(plan.leaseId)) {
+      result.skipped += 1
+      recordItem({ itemId: plan.id, ok: true, message: `installment skipped — ${SKIP_MESSAGE.lease_on_hold}` })
+      continue
+    }
+
     // Three separate ways to be manual-pay, and they are different facts.
     // D-97's per-plan opt-out is the tenant choosing it at agreement; autopay
     // being off on the lease is the tenant having chosen it earlier and more
