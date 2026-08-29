@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 import { PUBLIC_SCAN_ROUTES as PUBLIC_ROUTES } from '../apps/web/lib/a11y/scan-coverage'
-import { assertNoAxeViolations } from './a11y-helpers'
+import { assertNoAxeViolations, expectNoHorizontalOverflow, TEXT_SPACING } from './a11y-helpers'
 
 // B-139. The list itself lives in `apps/web/lib/a11y/scan-coverage.ts`, beside
 // the exception list the public accessibility page renders, so the two cannot
@@ -33,19 +33,19 @@ for (const route of PUBLIC_ROUTES) {
 // The shipped reflow check covered the homepage alone. A two-column hours grid
 // and a table are exactly the things that break out of 320px, and neither is on
 // the homepage.
+// B-201. `expectNoHorizontalOverflow` rather than a `documentElement`
+// comparison — see its note. The root comparison is still inside it; what is
+// added is a per-element check no containment can mask. There is no
+// `[contain:layout]` anywhere on the public site (B-199 verified that by grep,
+// and the public accessibility statement's reflow sentence rests on it), so
+// this closes no hole here. It is the same check everywhere so that the day a
+// containing block does appear on a customer page, that claim does not quietly
+// stop being tested.
 for (const route of PUBLIC_ROUTES) {
   test(`${route} reflows to 320px without horizontal scroll`, async ({ page }) => {
     await page.setViewportSize({ width: 320, height: 800 })
     await page.goto(route)
-
-    const overflow = await page.evaluate(() => ({
-      scrollWidth: document.documentElement.scrollWidth,
-      clientWidth: document.documentElement.clientWidth,
-    }))
-    expect(
-      overflow.scrollWidth,
-      `document scrolls horizontally at 320px (${overflow.scrollWidth}px of content)`,
-    ).toBeLessThanOrEqual(overflow.clientWidth)
+    await expectNoHorizontalOverflow(page, `at 320px on ${route}`)
   })
 }
 
@@ -58,35 +58,19 @@ test.describe('text zoomed to 200%', () => {
   for (const route of PUBLIC_ROUTES) {
     test(`${route} survives 200% zoom`, async ({ page }) => {
       await page.goto(route)
-      const overflow = await page.evaluate(
-        () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
-      )
-      expect(overflow, 'document scrolls horizontally at 200% zoom').toBe(false)
+      await expectNoHorizontalOverflow(page, `at 200% zoom on ${route}`)
     })
   }
 })
 
 // --- 1.4.12 Text spacing -----------------------------------------------------
-// The user-stylesheet values from the criterion itself. Content must not be
-// clipped or overlapped when a reader forces them — the usual failure is a
-// fixed-height button or a `truncate` that turns into lost words.
-const TEXT_SPACING = `* {
-  line-height: 1.5 !important;
-  letter-spacing: 0.12em !important;
-  word-spacing: 0.16em !important;
-}
-p { margin-bottom: 2em !important; }`
-
 for (const route of PUBLIC_ROUTES) {
   test(`${route} tolerates forced text spacing`, async ({ page }) => {
     await page.goto(route)
     await page.addStyleTag({ content: TEXT_SPACING })
 
     // Horizontal overflow is the observable form of "content was clipped".
-    const overflow = await page.evaluate(
-      () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
-    )
-    expect(overflow, 'content is clipped when text spacing is increased').toBe(false)
+    await expectNoHorizontalOverflow(page, `under forced text spacing on ${route}`)
   })
 }
 

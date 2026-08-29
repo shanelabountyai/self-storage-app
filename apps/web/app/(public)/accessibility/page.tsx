@@ -684,6 +684,49 @@ const LAST_REVIEWED = '19 August 2026'
 //
 // `LAST_REVIEWED` does not move: no claim on this page was re-checked against
 // the build, and none changed.
+//
+// ── B-201 (2026-08-28) ──────────────────────────────────────────────────────
+//
+// Re-read at B-201 (the reflow check that `[contain:layout]` cannot mask).
+// **No sentence changes, and unlike B-199 this row DID ship customer-facing
+// markup, so that needs saying rather than assuming.**
+//
+// **What reached a customer page.** The fix is `min-w-0` on `Field`'s wrapper,
+// and `Field` is not an admin-only component — `/checkout`, `/reservations`
+// and eight portal pages import it. So the change landed on the very pages the
+// sentence below is about. It was re-run rather than reasoned about: the
+// public and portal loops were measured at 320px, at 200% zoom and under
+// forced text spacing against the build, and are green. The claim is
+// re-checked, not merely still written down.
+//
+// **Every DEFECT found was on `/admin`** — six overflowing `<select>` wrappers
+// and one unbreakable environment-variable name, on four staff routes this page
+// makes no claim about. Nothing below was false and nothing below becomes true.
+//
+// **What changed is what CARRIES the sentence, which is the part worth
+// recording.** The B-199 entry above argued the public reflow claim was safe
+// because `[contain:layout]` sits on `admin/layout.tsx` and nowhere else, so
+// the public assertion could still genuinely go red — an argument that was
+// correct and that had to be re-made by grep every time somebody added a
+// containing block. The public loops no longer rest on it: they ask, per
+// element, whether anything is painted past the right edge of the screen that
+// no scrollbar reaches, which no containment between that element and the root
+// can hide. The sentence is now carried by a check whose validity is not a
+// property of some other layout file.
+//
+// **One gap named rather than left implicit.** `/portal/pay` and
+// `/portal/transfer` are customer-facing, and until this row they had never
+// been checked at 320px, at 200% zoom or under forced text spacing by
+// anything — B-156 gave them an axe scan in their own specs and only an axe
+// scan. Both now pass all three. No sentence here enumerates which check
+// reaches which route, so nothing on the page was false; but "automated tests
+// run at both phone and desktop widths" was true of the axe scan on those two
+// routes and not of the width checks, and that is the kind of distance between
+// a general claim and its coverage this page exists to refuse.
+//
+// `LAST_REVIEWED` does not move: the reflow claim was re-checked against the
+// build and the rest of the page was not, which is the rule the B-150 entry
+// states.
 export default function AccessibilityPage() {
   return (
     <ProsePage

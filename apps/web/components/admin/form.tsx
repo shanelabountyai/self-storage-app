@@ -327,8 +327,26 @@ export function Field({
     )
   }
 
+  // B-201. `min-w-0` is the other half of B-116's `max-w-full` on
+  // CONTROL_CLASS, and without it that fix does nothing. This wrapper is a flex
+  // item in `AdminForm`'s wrapping row, so its default `min-width: auto` holds
+  // it at its own min-content width — which, for a `<select>`, is the LONGEST
+  // OPTION. `max-w-full` then caps the control at 100% of a parent that is
+  // already too wide, and the pair cancels out: `protectionRequired` ran to
+  // 365px on a 320px phone with B-116's fix present and applied, and B-116's
+  // own comment names that exact control. Six of them on three screens were in
+  // that state with every one of their routes green, because `[contain:layout]`
+  // on `<main>` stops the document-level reflow assertion at the containing
+  // block (B-199) — `expectNoHorizontalOverflow` is the check that can see it.
+  //
+  // PREPENDED rather than put in the default string, which is the whole point.
+  // A caller passing `className` REPLACES the default, and five files declare a
+  // local `FIELD_CLASS` that is a hand-copy of that default — so a fix written
+  // into the default reached `/admin/settings` and left `/admin/rate-increases`
+  // and the transfer wizard exactly as broken. Every `Field` gets this now,
+  // whatever it was handed.
   return (
-    <div className={className ?? 'flex flex-col gap-1 text-sm'}>
+    <div className={`min-w-0 ${className ?? 'flex flex-col gap-1 text-sm'}`}>
       <label htmlFor={id}>{label}</label>
       {as === 'select' ? <select {...shared}>{children}</select> : <input {...shared} />}
       {messages}

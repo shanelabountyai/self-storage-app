@@ -222,6 +222,15 @@ test.describe('the tenant ledger (B-049)', () => {
     await page.goto('/admin/tenants?q=dana@demo.example.com')
     await page.getByRole('link', { name: 'Dana Delinquent' }).click()
     await page.getByRole('link', { name: /^Ledger/ }).first().click()
+    // B-201. `waitForURL`, not just a visible `<main>` — the profile's own
+    // `<main>` is already visible, so without it the scan below can win the
+    // race against the client-side transition and scan the PREVIOUS page. This
+    // is the fault B-199 diagnosed and fixed on the lien-notices scan; the same
+    // two lines were here and in the move-out scan the whole time. It surfaced as
+    // a `color-contrast` incomplete naming `.text-left > .text-right`, a
+    // profile element that is not on this route, with the "no longer in the
+    // DOM" note `assertNoAxeViolations` prints for exactly this case.
+    await page.waitForURL(/\/ledger\//)
     await expect(page.getByRole('main')).toBeVisible()
 
     await assertNoAxeViolations(page)

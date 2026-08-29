@@ -93,7 +93,11 @@ export default async function IndexationPage() {
           <ul className="mt-1 list-disc pl-5">
             {configured.missing.map((name) => (
               <li key={name}>
-                <code>{name}</code>
+                {/* B-201. `GOOGLE_SEARCH_CONSOLE_CLIENT_EMAIL` has no break
+                    opportunity in it, so it ran to 347px on a 320px screen —
+                    the same fault, and the same fix, as B-094's JSON example on
+                    `/admin/units/setup` (1.4.10). */}
+                <code className="break-all">{name}</code>
               </li>
             ))}
           </ul>

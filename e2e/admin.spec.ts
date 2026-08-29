@@ -1,7 +1,12 @@
 import { ADMIN_SCAN_ROUTES as ADMIN_ROUTES } from '../apps/web/lib/a11y/scan-coverage'
 import { expect, test } from '@playwright/test'
 import { signInAsDemoOwner } from './sign-in'
-import { assertNoAxeViolations, expectPreexisting } from './a11y-helpers'
+import {
+  assertNoAxeViolations,
+  expectNoHorizontalOverflow,
+  expectPreexisting,
+  TEXT_SPACING,
+} from './a11y-helpers'
 
 // Proves the edge-level gate (apps/web/proxy.ts) actually redirects, which is
 // the security-critical property of "role-gated routes" (PRD 02 FR-1-3).
@@ -102,29 +107,24 @@ test.describe('signed in as the demo owner', () => {
   // unit-type list and the settings forms. All three shared one real cause,
   // not three — see `[contain:layout]` on `<main>` in `admin/layout.tsx`.
 
-  // B-199. Two limits of this loop, both found by a defect it did not catch.
+  // B-199 found two limits of this loop, and B-201 closed both.
   //
   // (1) `[contain:layout]` on `<main>` — added by B-116 so a correctly-wrapped
   // table's own scroll region stops Chromium's root-level scrollWidth walk —
-  // also hides an INCORRECTLY-wrapped one. A wide table with no
-  // `overflow-x-auto` overflows inside a containing block the document cannot
-  // see past, so `documentElement.scrollWidth` stays at 320 and this assertion
-  // passes while the overflowing columns are unreachable by any means. The
-  // check is still right; it just cannot be the only one. Seven tables across
-  // five admin screens were in that state.
+  // also hid an INCORRECTLY-wrapped one, so seven tables across five admin
+  // screens overflowed unreachably while every one of their routes was green.
+  // `expectNoHorizontalOverflow` asks the question of every element rather than
+  // of the document, which no containment can mask; see its note.
   //
-  // (2) It runs over ADMIN_SCAN_ROUTES only, so every route in
-  // `SCANNED_BY_OWN_SPEC` — the dynamic ones needing a live fixture, the
-  // tenant profile among them — has never been reflow-checked at all. That
-  // gap is B-201; this row fixes the tables and pins the one route it is about.
+  // (2) It runs over ADMIN_SCAN_ROUTES only, so the dynamic routes in
+  // `SCANNED_BY_OWN_SPEC` were reflow-checked by nothing. They are now, in
+  // `e2e/a11y-own-spec-routes.spec.ts`, through the same click-through their
+  // axe scan already uses.
   for (const route of ADMIN_ROUTES) {
     test(`${route} reflows to 320px without horizontal scroll`, async ({ page }) => {
       await page.setViewportSize({ width: 320, height: 800 })
       await page.goto(route)
-      const overflow = await page.evaluate(
-        () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
-      )
-      expect(overflow, 'admin scrolls horizontally at 320px').toBe(false)
+      await expectNoHorizontalOverflow(page, 'at 320px')
     })
   }
 
@@ -138,29 +138,16 @@ test.describe('signed in as the demo owner', () => {
       test(`${route} survives 200% zoom`, async ({ page }) => {
         // The outer describe's beforeEach (line ~30) already signs in.
         await page.goto(route)
-        const overflow = await page.evaluate(
-          () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
-        )
-        expect(overflow, 'admin scrolls horizontally at 200% zoom').toBe(false)
+        await expectNoHorizontalOverflow(page, 'at 200% zoom')
       })
     }
   })
-
-  const TEXT_SPACING = `* {
-    line-height: 1.5 !important;
-    letter-spacing: 0.12em !important;
-    word-spacing: 0.16em !important;
-  }
-  p { margin-bottom: 2em !important; }`
 
   for (const route of ADMIN_ROUTES) {
     test(`${route} tolerates forced text spacing`, async ({ page }) => {
       await page.goto(route)
       await page.addStyleTag({ content: TEXT_SPACING })
-      const overflow = await page.evaluate(
-        () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
-      )
-      expect(overflow, 'content is clipped when text spacing is increased').toBe(false)
+      await expectNoHorizontalOverflow(page, 'under forced text spacing')
     })
   }
 

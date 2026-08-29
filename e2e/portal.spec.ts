@@ -1,7 +1,13 @@
 import { PORTAL_SCAN_ROUTES as PORTAL_ROUTES } from '../apps/web/lib/a11y/scan-coverage'
 import { expect, test } from '@playwright/test'
 import { signInAsDemoTenant, signInAsPlanTenant } from './sign-in'
-import { assertNoAxeViolations, expectAnnounced, expectPreexisting } from './a11y-helpers'
+import {
+  assertNoAxeViolations,
+  expectAnnounced,
+  expectNoHorizontalOverflow,
+  expectPreexisting,
+  TEXT_SPACING,
+} from './a11y-helpers'
 
 // PRD 01 §4.7 US-701/US-702, §6.8.1. Mirrors e2e/admin.spec.ts's split: an
 // unauthenticated gating check, then a real session against the demo tenant
@@ -72,14 +78,16 @@ test.describe('signed in as the demo tenant', () => {
     await assertNoAxeViolations(page)
   })
 
+  // B-201. `expectNoHorizontalOverflow` rather than a `documentElement`
+  // comparison — see its note. The root check is still in there; what is added
+  // is the per-element one no containment between the element and the root can
+  // mask, which is what found six overflowing `<select>` wrappers on admin
+  // screens that had been green throughout.
   for (const route of PORTAL_ROUTES) {
     test(`${route} reflows to 320px without horizontal scroll`, async ({ page }) => {
       await page.setViewportSize({ width: 320, height: 800 })
       await page.goto(route)
-      const overflow = await page.evaluate(
-        () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
-      )
-      expect(overflow, 'portal scrolls horizontally at 320px').toBe(false)
+      await expectNoHorizontalOverflow(page, `at 320px on ${route}`)
     })
   }
 
@@ -90,29 +98,16 @@ test.describe('signed in as the demo tenant', () => {
       test(`${route} survives 200% zoom`, async ({ page }) => {
         // The outer describe's beforeEach already signs in.
         await page.goto(route)
-        const overflow = await page.evaluate(
-          () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
-        )
-        expect(overflow, 'portal scrolls horizontally at 200% zoom').toBe(false)
+        await expectNoHorizontalOverflow(page, `at 200% zoom on ${route}`)
       })
     }
   })
-
-  const TEXT_SPACING = `* {
-    line-height: 1.5 !important;
-    letter-spacing: 0.12em !important;
-    word-spacing: 0.16em !important;
-  }
-  p { margin-bottom: 2em !important; }`
 
   for (const route of PORTAL_ROUTES) {
     test(`${route} tolerates forced text spacing`, async ({ page }) => {
       await page.goto(route)
       await page.addStyleTag({ content: TEXT_SPACING })
-      const overflow = await page.evaluate(
-        () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
-      )
-      expect(overflow, 'content is clipped when text spacing is increased').toBe(false)
+      await expectNoHorizontalOverflow(page, `under forced text spacing on ${route}`)
     })
   }
 

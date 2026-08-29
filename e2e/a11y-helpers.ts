@@ -280,3 +280,140 @@ export async function assertNoAxeViolations(
     `axe could not decide these on ${pathname}${options.state ? ` (${options.state})` : ''} — check them by hand, then add a route-scoped entry to HAND_CHECKED_INCOMPLETE`,
   ).toEqual([])
 }
+
+// B-201 / 1.4.10 Reflow. The overflow assertion that `[contain:layout]` cannot
+// mask.
+//
+// Every reflow, zoom and text-spacing check in this suite asked one question of
+// one element: `document.documentElement.scrollWidth > clientWidth`. B-116 put
+// `contain: layout` on admin's `<main>` so a correctly-wrapped table's own
+// scroll region would stop Chromium's root-level scrollWidth walk — and it
+// stops the walk either way. A wide table with NO `overflow-x-auto` wrapper
+// overflows inside a containing block the document cannot see past, so the root
+// stays at 320 and the assertion passes while the columns are unreachable by
+// any means: not by scrolling the page, not by scrolling the table, not at all.
+// That is strictly worse than the sideways scroll the check exists to catch,
+// and seven admin tables were in exactly that state while every one of their
+// routes was green (B-199).
+//
+// So ask a question the document is not the subject of: **is anything painted
+// past the right edge of the screen that no scrollbar reaches?** That is what a
+// reader actually experiences, it is measured per element rather than per
+// document, and no amount of containment between the element and the root can
+// hide it. The root check stays too — it is the criterion's own wording, it is
+// one line, and it catches a page that scrolls for a reason no single element
+// accounts for.
+//
+// ── What is deliberately NOT flagged, and why ───────────────────────────────
+//
+// The first version of this compared `scrollWidth > clientWidth` on every
+// element instead. It is more sensitive and it was unusable: on seven routes it
+// produced 60+ findings and not one of them was a defect.
+//
+//  - **`sr-only` text.** A 1×1 clipped box always has content wider than
+//    itself; that is what visually-hidden means. Worse, `sr-only` is
+//    `position: absolute`, and a `div.overflow-x-auto` here is `position:
+//    static` — so an sr-only span inside a horizontally scrolled table is NOT
+//    clipped by that scroll container, escapes to the nearest positioned
+//    ancestor, and single-handedly pushed `<main>`'s scrollWidth to 675px on
+//    the tenant profile. `<main>` then looked like the very defect this exists
+//    to find, on a page that renders correctly.
+//  - **The contents of a CLOSED `<details>`.** Chromium lays out
+//    `content-visibility: hidden` subtrees, so the portal nav's collapsed
+//    "Manage" menu reported six links overflowing a 45px column nobody can see.
+//  - **Content inside a real scroll region.** The whole point of the wrapper.
+//
+// So: only elements a reader can actually see, and only where nothing scrolls
+// to them. `checkVisibility` covers `display: none`, `visibility: hidden` and
+// the skipped-subtree case in one call.
+const EDGE_SLACK_PX = 1
+
+async function offscreenOffenders(page: Page): Promise<string[]> {
+  return page.evaluate((slack) => {
+    const name = (el: Element) => {
+      const classes =
+        typeof el.className === 'string' ? el.className.trim().split(/\s+/).filter(Boolean) : []
+      return `${el.tagName.toLowerCase()}${el.id ? `#${el.id}` : ''}${
+        classes.length ? `.${classes.slice(0, 4).join('.')}` : ''
+      }`
+    }
+
+    // Reachable by scrolling something. A DOM-ancestor walk rather than a
+    // containing-block one: what matters is whether the reader has a scrollbar
+    // that brings this into view, and for everything in normal flow the two
+    // agree.
+    const scrollsHorizontally = (el: Element) => {
+      for (let a = el.parentElement; a; a = a.parentElement) {
+        const { overflowX } = getComputedStyle(a)
+        if (overflowX === 'auto' || overflowX === 'scroll') return true
+      }
+      return false
+    }
+
+    const visible = (el: Element) => {
+      if (!(el as HTMLElement).checkVisibility?.({ contentVisibilityAuto: true, visibilityProperty: true }))
+        return false
+      const style = getComputedStyle(el)
+      // Tailwind's `sr-only`. Both spellings, since the utility has used
+      // `clip: rect(0,0,0,0)` and `clip-path: inset(50%)` in different majors.
+      if (style.clipPath === 'inset(50%)' || /rect\(0px,\s*0px,\s*0px,\s*0px\)/.test(style.clip))
+        return false
+      return true
+    }
+
+    const offenders: Element[] = []
+    for (const el of document.querySelectorAll('body *')) {
+      const rect = el.getBoundingClientRect()
+      if (rect.width === 0 || rect.height === 0) continue
+      if (rect.right <= window.innerWidth + slack) continue
+      if (!visible(el)) continue
+      if (scrollsHorizontally(el)) continue
+      offenders.push(el)
+    }
+
+    // The OUTERMOST offenders. A table that sticks out past the screen takes
+    // every row, cell and link in it along; the element that needs the wrapper
+    // is the one at the top of that chain, and the rest are the same defect
+    // reported forty times.
+    return offenders
+      .filter((el) => !offenders.some((other) => other !== el && other.contains(el)))
+      .map((el) => {
+        // The text is what makes this findable. A class list says what the
+        // element is made of; the words say which one on the page it is, which
+        // is the difference between reading the failure and re-running the
+        // check under a debugger (the same reason B-199 put axe's target
+        // selectors in `assertNoAxeViolations`'s message).
+        const text = (el.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 60)
+        return `${name(el)} — right edge at ${Math.round(el.getBoundingClientRect().right)}px, screen is ${window.innerWidth}px${text ? ` — "${text}"` : ''}`
+      })
+  }, EDGE_SLACK_PX)
+}
+
+/// `condition` names what was being done to the page — "at 320px", "at 200%
+/// zoom" — because the assertion is the same one three times over and the
+/// failure has to say which pass produced it.
+export async function expectNoHorizontalOverflow(page: Page, condition: string): Promise<void> {
+  expect(
+    await offscreenOffenders(page),
+    `content is painted past the right edge of the screen with no way to scroll to it, ${condition}. The usual fix is the wrapper the rest of this codebase uses for a wide table: \`overflow-x-auto\` on the parent AND a \`min-w-\` floor on the table (B-199 — \`overflow-x-auto\` alone does nothing, because \`w-full\` sizes the table to the wrapper and the columns are crushed instead)`,
+  ).toEqual([])
+
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+    ),
+    `the page scrolls horizontally, ${condition}`,
+  ).toBe(false)
+}
+
+// 1.4.12 Text spacing. The user-stylesheet values from the criterion itself.
+// Content must not be clipped or overlapped when a reader forces them — the
+// usual failure is a fixed-height button or a `truncate` that turns into lost
+// words. One copy: `e2e/a11y.spec.ts` and `e2e/admin.spec.ts` each carried an
+// identical one, differing only in indentation (B-201).
+export const TEXT_SPACING = `* {
+  line-height: 1.5 !important;
+  letter-spacing: 0.12em !important;
+  word-spacing: 0.16em !important;
+}
+p { margin-bottom: 2em !important; }`
