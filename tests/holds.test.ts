@@ -43,7 +43,9 @@ describe('the catalog', () => {
   it('blocks auction on every type where a sale would be the unrecoverable mistake', () => {
     // Selling a servicemember's goods, a debtor's under a stay, or a dead
     // person's is the one action with no way back.
-    for (const type of ['military_scra', 'bankruptcy', 'deceased', 'litigation']) {
+    // `payment_plan` joins them (B-202): the plan halts the ladder, the fees
+    // and the gate, and before this the unit still went out on the lot sheet.
+    for (const type of ['military_scra', 'bankruptcy', 'deceased', 'litigation', 'payment_plan']) {
       expect(holdTypeSpec(type)!.effects, type).toContain('block_auction')
     }
   })
@@ -132,6 +134,8 @@ describe('effectsOf', () => {
 describe('hasEffect', () => {
   it('answers the one question every consumer asks', () => {
     expect(hasEffect([hold({ type: 'payment_plan' })], 'halt_late_fees', d('2026-09-15'))).toBe(true)
-    expect(hasEffect([hold({ type: 'payment_plan' })], 'block_auction', d('2026-09-15'))).toBe(false)
+    // A billing dispute is the narrow one now: it pauses fees and collections
+    // and deliberately does not reach the sale.
+    expect(hasEffect([hold({ type: 'dispute' })], 'block_auction', d('2026-09-15'))).toBe(false)
   })
 })
