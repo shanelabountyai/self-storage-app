@@ -746,6 +746,25 @@ const LAST_REVIEWED = '19 August 2026'
 //
 // `LAST_REVIEWED` does not move: no claim on this page was re-checked against
 // the build, and none changed.
+//
+// Re-read at B-203 (a manual payment reaches the plan, not this month's tax).
+// **Nothing on this page changes — but unlike the B-129 and B-197 entries
+// above, this row IS customer-facing, so the reason has to be different.** It
+// is not that no customer reaches the change; a tenant paying in the portal
+// reaches it every time. It is that what changed is where the cents land, not
+// a pixel of markup: no route, no state, no control, no message, no colour.
+// `/portal/pay` is already scanned by `e2e/portal.spec.ts` and by
+// `a11y-own-spec-routes.spec.ts`, and its own claims here — the pre-mounted
+// "Taking payment" region, the field-level refusals — are untouched.
+//
+// Worth saying plainly, because the customer-facing test is about the customer
+// rather than about the DOM: the tenant-visible effect of this row is that a
+// plan reads as paid when the tenant has paid it. That is a correctness claim
+// about money, and this page deliberately makes none — it is a statement about
+// whether the site can be operated, not about whether it is right.
+//
+// `LAST_REVIEWED` does not move: no claim on this page was re-checked against
+// the build, and none changed.
 export default function AccessibilityPage() {
   return (
     <ProsePage
