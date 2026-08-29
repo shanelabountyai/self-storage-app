@@ -6872,7 +6872,7 @@ The fix went past the index. The test now maps **all six** screen columns to the
 
 ## B-218 — `gh pr ready` now runs the e2e lane, which it never has
 
-`PENDING`
+`94d49de`
 
 **What it built.** One line in `.github/workflows/ci.yml`: `types: [opened, synchronize, reopened, ready_for_review]` on the `pull_request` trigger.
 
