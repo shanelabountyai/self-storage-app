@@ -109,7 +109,7 @@ export function auctionReadiness(input: ReadinessInput): Readiness {
       kind: 'on_hold',
       message:
         'A hold on this lease blocks sale — see the account holds on the tenant profile. ' +
-        'Military (SCRA), bankruptcy, deceased and litigation holds all stop a lien sale. ' +
+        'Military (SCRA), bankruptcy, deceased, litigation and payment-plan holds all stop a lien sale. ' +
         'Lift the hold first if it genuinely no longer applies; do not work around it.',
     })
   }

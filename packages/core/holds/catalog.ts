@@ -124,7 +124,16 @@ export const HOLD_TYPES = [
     label: 'Payment plan',
     bannerNote:
       'The tenant is on an agreed plan. Late fees and collections are paused while they keep to it — check the plan before taking action.',
-    effects: ['halt_dunning', 'halt_late_fees', 'halt_access_suspension'],
+    // B-202. `block_auction` is here for a different reason than it is on
+    // `military_scra` or `bankruptcy` — selling under those is a federal
+    // problem, selling under this one is selling the goods of a tenant holding
+    // a payment agreement we generated and emailed him. It is the commonest of
+    // the two at the counter by a wide margin, and it was the only one of the
+    // "tenant is not actually in default any more" events missing from the
+    // list D-104 built the lot sheet's refusal rule around. Blocking is the
+    // safe default; whether agreeing a plan on a `scheduled` case should also
+    // CANCEL it is an owner decision and not this row's.
+    effects: ['halt_dunning', 'halt_late_fees', 'halt_access_suspension', 'block_auction'],
     liftRequiresManager: false,
     requiresEstateContact: false,
   },

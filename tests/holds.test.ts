@@ -43,7 +43,12 @@ describe('the catalog', () => {
   it('blocks auction on every type where a sale would be the unrecoverable mistake', () => {
     // Selling a servicemember's goods, a debtor's under a stay, or a dead
     // person's is the one action with no way back.
-    for (const type of ['military_scra', 'bankruptcy', 'deceased', 'litigation']) {
+    //
+    // B-202 added `payment_plan`, for a different reason: selling under it is
+    // selling the goods of a tenant holding an agreement we generated. Not a
+    // federal problem, but the commonest of these at the counter and equally
+    // unrecoverable once the contents are gone.
+    for (const type of ['military_scra', 'bankruptcy', 'deceased', 'litigation', 'payment_plan']) {
       expect(holdTypeSpec(type)!.effects, type).toContain('block_auction')
     }
   })
@@ -132,6 +137,7 @@ describe('effectsOf', () => {
 describe('hasEffect', () => {
   it('answers the one question every consumer asks', () => {
     expect(hasEffect([hold({ type: 'payment_plan' })], 'halt_late_fees', d('2026-09-15'))).toBe(true)
-    expect(hasEffect([hold({ type: 'payment_plan' })], 'block_auction', d('2026-09-15'))).toBe(false)
+    // `dispute`, not `payment_plan`: B-202 gave the latter `block_auction`.
+    expect(hasEffect([hold({ type: 'dispute' })], 'block_auction', d('2026-09-15'))).toBe(false)
   })
 })
