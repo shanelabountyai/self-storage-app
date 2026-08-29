@@ -12,9 +12,11 @@ import {
   recordSaleOutcome,
   recordSurplusDisposition,
   recordSurplusNotified,
+  auctionLotSheet,
   scheduleSale,
   setContainsVehicle,
 } from '../apps/web/lib/auctions/service'
+import { updateAuctionSaleTerms } from '../apps/web/lib/admin/facility-settings'
 import { verifyDocument } from '../apps/web/lib/documents/store'
 import type { Actor } from '../apps/web/lib/rbac/actor'
 import type { PermissionKey } from '@storage/db/rbac-catalog'
@@ -379,6 +381,75 @@ describeDb('the auction pipeline', () => {
 
       const row = await prisma.auctionCase.findUniqueOrThrow({ where: { id: caseId } })
       expect(row.status).toBe('scheduled')
+    })
+  })
+
+  // B-129 / PRD 02 §4.6 US-30. The lot sheet, against real rows.
+  //
+  // The property worth a database here is the one the pure test cannot reach:
+  // that the sheet is computed from LIVE readiness rather than from the stored
+  // status, so a case that was legitimately scheduled and has since become
+  // unsellable drops off the sheet without anybody editing it.
+  describe('the auction lot sheet', () => {
+    // `facility:settings` rather than adding it to `ALL`: that list is shared
+    // with every other actor in this file, and widening it would quietly
+    // weaken whatever refusals the rest of the suite relies on.
+    const settingsAdmin = () => actorWith(regionalId, 30, [...ALL, 'facility:settings'])
+
+    it('carries a scheduled, ready lot with its size, address and terms', async () => {
+      const caseId = await makeReadyCase()
+      await scheduleSale(regional(), caseId, new Date('2026-09-14T00:00:00Z'))
+      await updateAuctionSaleTerms(settingsAdmin(), facilityId, '  Cash only, 48-hour cleanout.  ')
+
+      const sheet = await auctionLotSheet(regional(), facilityId)
+      const lot = sheet!.lots.find((one) => one.caseId === caseId)
+      expect(lot).toBeDefined()
+      expect(lot!.scheduledSaleDate.toISOString().slice(0, 10)).toBe('2026-09-14')
+      expect(lot!.squareFeet).toBe(lot!.widthFt * lot!.lengthFt)
+      // Trimmed to a value, and null only when genuinely unset.
+      expect(sheet!.facility.saleTerms).toBe('Cash only, 48-hour cleanout.')
+      expect(sheet!.facility.postalCode).toBeTruthy()
+    })
+
+    it('drops a scheduled lot the moment the tenant settles, with the reason', async () => {
+      const caseId = await makeReadyCase()
+      await scheduleSale(regional(), caseId, new Date('2026-09-14T00:00:00Z'))
+      expect((await auctionLotSheet(regional(), facilityId))!.lots.map((one) => one.caseId)).toContain(
+        caseId,
+      )
+
+      // Paid in full. Nothing touches the auction case: `status` stays
+      // `scheduled`, which is exactly why the sheet cannot key off it.
+      const owed = await prisma.ledgerEntry.aggregate({
+        where: { leaseId },
+        _sum: { amountCents: true },
+      })
+      await prisma.ledgerEntry.create({
+        data: {
+          facilityId,
+          leaseId,
+          type: 'payment',
+          amountCents: -(owed._sum.amountCents ?? 0),
+          description: 'Paid the lien off',
+          occurredAt: new Date('2026-08-01T00:00:00Z'),
+        },
+      })
+
+      const sheet = await auctionLotSheet(regional(), facilityId)
+      expect(sheet!.lots.map((one) => one.caseId)).not.toContain(caseId)
+      const refusal = sheet!.refused.find((one) => one.caseId === caseId)
+      expect(refusal?.kind).toBe('not_ready')
+      expect(refusal?.reason).toContain('owes nothing')
+
+      // And the case itself was not edited to achieve that.
+      const row = await prisma.auctionCase.findUniqueOrThrow({ where: { id: caseId } })
+      expect(row.status).toBe('scheduled')
+    })
+
+    it('leaves the terms null until somebody sets them', async () => {
+      await updateAuctionSaleTerms(settingsAdmin(), facilityId, '   ')
+      const sheet = await auctionLotSheet(regional(), facilityId)
+      expect(sheet!.facility.saleTerms).toBeNull()
     })
   })
 

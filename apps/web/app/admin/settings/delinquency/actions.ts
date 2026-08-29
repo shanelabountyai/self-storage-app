@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { requireStaffActor } from '@/lib/rbac/session'
 import { fieldError, success, type FormState } from '@/lib/admin/form-state'
 import { exampleTimeline, saveTimeline } from '@/lib/admin/delinquency-timeline'
+import { updateAuctionSaleTerms } from '@/lib/admin/facility-settings'
 import {
   AUTOMATED_ACTIONS,
   DELIVERY_METHODS,
@@ -90,4 +91,25 @@ export async function saveTimelineAction(_prev: FormState, formData: FormData): 
 export async function loadExampleAction(): Promise<{ label: string; steps: TimelineStep[] }> {
   await requireStaffActor()
   return exampleTimeline()
+}
+
+/// PRD 02 §4.6 US-30 (B-129). The terms of sale the lot sheet prints.
+///
+/// Its own action and its own form rather than a field on the timeline above,
+/// because saving the timeline mints a new VERSION that leases stay pinned to
+/// (US-29). Terms of sale are current facility policy, not a thing a case is
+/// governed by — folding them in would mean editing a comma bumped the version
+/// every open case's approval screen cites.
+export async function saveAuctionTermsAction(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const actor = await requireStaffActor()
+  const facilityId = String(formData.get('facilityId') ?? '')
+
+  await updateAuctionSaleTerms(actor, facilityId, String(formData.get('auctionSaleTerms') ?? ''))
+
+  revalidatePath('/admin/settings/delinquency')
+  revalidatePath('/admin/auctions')
+  return success('Saved. These terms print on every lot on the auction sheet.')
 }

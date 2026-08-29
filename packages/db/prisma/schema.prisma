@@ -525,6 +525,19 @@ model Facility {
   /// twice. Per facility rather than org-wide because separate books per site
   /// is ordinary in this industry.
   chartOfAccounts          Json?
+  /// PRD 02 §4.6 US-30 (B-129). The terms of sale this facility advertises for
+  /// a lien auction — payment method, cleanout deadline, buyer's premium, "sold
+  /// as is, contents unknown". It goes on the lot sheet for every scheduled
+  /// sale, so it is a facility policy rather than something retyped per case.
+  ///
+  /// Null is a real state and stays one: the lot sheet leaves the column blank
+  /// and the auctions screen says the terms are not set, which is D-63's
+  /// posture applied here — an unconfigured install degrades honestly rather
+  /// than shipping a plausible default that becomes a term nobody chose. The
+  /// per-case `buyerForfeitTerms` and `buyerCleanoutDeadline` on `AuctionCase`
+  /// are the AFTER-the-sale record of what the buyer actually agreed to, and
+  /// deliberately not this.
+  auctionSaleTerms         String?
   googleReviewUrl          String?
   /// US-7 AC1: "N days after move-in completion (default 7, configurable per
   /// facility)." Its own control ships in this item, per this repo's own rule

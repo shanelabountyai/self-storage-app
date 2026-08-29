@@ -13,6 +13,7 @@ import {
   type Readiness,
   type StepEvidence,
 } from '@storage/core/auctions'
+import { selectListableLots, type LotRefusal } from '@storage/core/auctions'
 import { orderedSteps, type TimelineStep } from '@storage/core/delinquency'
 import { requirePermission } from '@/lib/rbac/authorize'
 import { toAuditActor } from '@/lib/rbac/audit-actor'
@@ -976,4 +977,119 @@ export async function outstandingSurpluses(actor: Actor, facilityId: string) {
       ...obligation,
     }
   })
+}
+
+// PRD 02 §4.6 US-30 (B-129). The lot sheet behind `/admin/auctions/lots.csv`.
+//
+// Built on `auctionCasesFor`, which is the same call the auctions screen makes,
+// so the export and the screen cannot disagree about which sales are live — the
+// structural guarantee B-042 established for the occupancy exports rather than
+// a second query shaped close enough. The refusal list is what the screen
+// renders, so an operator reads "three of your five scheduled sales are not
+// exportable, and here is why" instead of downloading a short file and not
+// noticing.
+
+export type ListingLot = {
+  caseId: string
+  unitNumber: string
+  unitTypeName: string
+  widthFt: number
+  lengthFt: number
+  squareFeet: number
+  scheduledSaleDate: Date
+}
+
+export type LotSheet = {
+  facility: {
+    name: string
+    addressLine1: string
+    addressLine2: string | null
+    city: string
+    state: string
+    postalCode: string
+    /// Null when nobody has set the terms of sale. Rendered as a blank column
+    /// and said out loud on screen — see the note on `Facility.auctionSaleTerms`.
+    saleTerms: string | null
+  }
+  lots: ListingLot[]
+  refused: LotRefusal[]
+}
+
+export async function auctionLotSheet(actor: Actor, facilityId: string): Promise<LotSheet | null> {
+  const cases = await auctionCasesFor(actor, facilityId, { includeClosed: true })
+
+  // `selectListableLots` decides on `auctionReadiness`, not on `status` — a
+  // tenant who paid, a hold that landed, or a vehicle recorded since the sale
+  // was scheduled all make the advertisement wrong, and all leave `status` at
+  // `scheduled`. See the note in packages/core/auctions/listing.ts.
+  const { lots: listable, refused } = selectListableLots(
+    cases.map((one) => ({
+      caseId: one.id,
+      unitNumber: one.unitNumber,
+      status: one.status as 'eligible' | 'scheduled' | 'sold' | 'cancelled',
+      scheduledSaleDate: one.scheduledSaleDate,
+      readiness: one.readiness,
+      unitId: one.unitId,
+    })),
+  )
+
+  const [facility, units] = await Promise.all([
+    prisma.facility.findUnique({
+      where: { id: facilityId },
+      select: {
+        name: true,
+        addressLine1: true,
+        addressLine2: true,
+        city: true,
+        state: true,
+        postalCode: true,
+        auctionSaleTerms: true,
+      },
+    }),
+    // The unit the goods are in NOW, which is what `unitId` on the view already
+    // means (B-160 / D-91) — a lot sheet has to send a buyer to the door they
+    // will actually be opening.
+    listable.length
+      ? prisma.unit.findMany({
+          where: { id: { in: listable.map((one) => one.unitId) } },
+          select: {
+            id: true,
+            unitType: { select: { name: true, widthFt: true, lengthFt: true } },
+          },
+        })
+      : Promise.resolve([]),
+  ])
+  if (!facility) return null
+
+  const typeByUnit = new Map(units.map((unit) => [unit.id, unit.unitType]))
+
+  return {
+    facility: {
+      name: facility.name,
+      addressLine1: facility.addressLine1,
+      addressLine2: facility.addressLine2,
+      city: facility.city,
+      state: facility.state,
+      postalCode: facility.postalCode,
+      saleTerms: facility.auctionSaleTerms,
+    },
+    lots: listable.flatMap((one) => {
+      const type = typeByUnit.get(one.unitId)
+      // A unit with no type cannot happen through the schema, and a lot sheet
+      // that silently invents "0x0" would be worse than one row short.
+      if (!type) return []
+      return [
+        {
+          caseId: one.caseId,
+          unitNumber: one.unitNumber,
+          unitTypeName: type.name,
+          widthFt: type.widthFt,
+          lengthFt: type.lengthFt,
+          squareFeet: type.widthFt * type.lengthFt,
+          scheduledSaleDate: one.scheduledSaleDate!,
+        },
+      ]
+    }),
+    refused,
+  }
 }

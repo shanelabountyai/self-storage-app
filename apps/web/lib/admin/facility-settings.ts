@@ -743,3 +743,39 @@ export async function updateGateAdapter(
 
   return { rerouted };
 }
+
+/// PRD 02 §4.6 US-30 (B-129). The terms of sale this facility advertises for a
+/// lien auction, which the lot sheet prints on every row.
+///
+/// Trimmed to null rather than stored as an empty string: "not set" is a state
+/// the auctions screen says out loud and the export leaves blank, and two
+/// spellings of it would make that check read `!terms?.trim()` at every call
+/// site instead of once here. Audit-logged like every other facility setting —
+/// what a sale was advertised on is a question a wrongful-sale complaint asks.
+export async function updateAuctionSaleTerms(
+  actor: Actor,
+  facilityId: string,
+  terms: string,
+): Promise<void> {
+  requirePermission(actor, "facility:settings", facilityId);
+
+  const value = terms.trim() || null;
+  const before = await prisma.facility.findUniqueOrThrow({
+    where: { id: facilityId },
+    select: { auctionSaleTerms: true },
+  });
+  await prisma.facility.update({
+    where: { id: facilityId },
+    data: { auctionSaleTerms: value },
+  });
+
+  await recordAudit({
+    actor: toAuditActor(actor),
+    action: "facility.settings_changed",
+    entityType: "Facility",
+    entityId: facilityId,
+    facilityId,
+    before: { auctionSaleTerms: before.auctionSaleTerms },
+    after: { auctionSaleTerms: value },
+  });
+}

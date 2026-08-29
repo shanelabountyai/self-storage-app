@@ -22,7 +22,7 @@ import {
   type TimelineStep,
 } from '@storage/core/delinquency'
 import { prisma } from '@storage/db'
-import { saveTimelineAction } from './actions'
+import { saveAuctionTermsAction, saveTimelineAction } from './actions'
 
 export const metadata = { title: 'Delinquency timeline' }
 
@@ -66,7 +66,10 @@ export default async function DelinquencyTimelinePage({
   const [versions, active, facility, templateKeys] = await Promise.all([
     timelinesFor(actor, facilityId),
     activeTimeline(facilityId),
-    prisma.facility.findUniqueOrThrow({ where: { id: facilityId }, select: { state: true } }),
+    prisma.facility.findUniqueOrThrow({
+      where: { id: facilityId },
+      select: { state: true, auctionSaleTerms: true },
+    }),
     noticeTemplateKeys(facilityId),
   ])
 
@@ -276,6 +279,40 @@ export default async function DelinquencyTimelinePage({
         <Button type="submit" className="self-start">
           Save as a new version and activate
         </Button>
+      </AdminForm>
+
+      {/* PRD 02 §4.6 US-30 (B-129). Its own form, not a field on the timeline
+          above: saving the timeline mints a VERSION that every lease it
+          governs stays pinned to (US-29), and editing a comma in the terms of
+          sale should not bump the version each open case's approval screen
+          cites. Terms are current policy; a timeline version is evidence.
+
+          Shipped in the same item as the column it writes, per this repo's own
+          rule — a setting reachable only from a database client is how five of
+          them accumulated. */}
+      <AdminForm
+        action={saveAuctionTermsAction}
+        label="Terms of sale"
+        className="flex flex-col gap-3"
+      >
+        <input type="hidden" name="facilityId" value={facilityId} />
+        <h2 className="font-medium">Terms of sale at auction</h2>
+        <p className="text-muted-foreground max-w-prose text-sm text-pretty">
+          Printed on every lot of the auction sheet you download from the auctions screen —
+          payment method, cleanout deadline, buyer&apos;s premium, and whether the contents are
+          sold as seen. Left empty, the Terms column on that sheet is blank and the auctions
+          screen says so; nothing is filled in on your behalf.
+        </p>
+        <Field
+          name="auctionSaleTerms"
+          label="Terms"
+          as="input"
+          defaultValue={facility.auctionSaleTerms ?? ''}
+          hint="One line. It is advertised to buyers, so write it the way you want it read out."
+        />
+        <div>
+          <Button type="submit">Save terms</Button>
+        </div>
       </AdminForm>
 
       {versions.length > 0 && (

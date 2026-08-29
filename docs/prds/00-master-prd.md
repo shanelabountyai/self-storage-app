@@ -277,7 +277,7 @@ Every query, screen, report, and permission is facility-scoped from day one. No 
 6. **Data retention:** how long to keep former-tenant PII and ID images? (Legal minimum per state vs. marketing value.)
 7. **Existing tenant migration:** is there legacy management software to import from, and in what format?
 8. **SMS consent & compliance:** confirm TCPA-compliant opt-in flows before enabling SMS notices in Phase 2.
-9. **Auction channel:** live on-site auctions vs. online (e.g., StorageTreasures-style) — affects Phase 2 lien workflow endpoints. **Still open, and now blocking (2026-08-18, D-63):** B-083 shipped the certified-mail half of US-30 and split the marketplace-listing half out as **B-129** rather than answer this question by building for it. Until it is answered, the auction pipeline records advertising as rows a person types (B-062).
+9. **Auction channel:** live on-site auctions vs. online (e.g., StorageTreasures-style) — affects Phase 2 lien workflow endpoints. **Still open, and now blocking (2026-08-18, D-63):** B-083 shipped the certified-mail half of US-30 and split the marketplace-listing half out as **B-129** rather than answer this question by building for it. Until it is answered, the auction pipeline records advertising as rows a person types (B-062). **Still open at B-129 (2026-08-29, D-104), and deliberately not answered by it.** B-129 shipped the half that is neutral between the two: a structured lot sheet — lot, address, size, sale date and terms — that an operator uploads to a marketplace, hands to an auctioneer, or reads to a newspaper. No marketplace driver is written, so nothing has encoded an answer here. What is still blocked on this question, and on a partner agreement, is the integration itself.
 
 ---
 

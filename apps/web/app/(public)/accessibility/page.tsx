@@ -727,6 +727,25 @@ const LAST_REVIEWED = '19 August 2026'
 // `LAST_REVIEWED` does not move: the reflow claim was re-checked against the
 // build and the rest of the page was not, which is the rule the B-150 entry
 // states.
+//
+// ── B-129 (2026-08-29) ──────────────────────────────────────────────────────
+//
+// Re-read at B-129 (the auction lot sheet). **Nothing on this page changes, and
+// nothing on it should.** Everything this row shipped is behind `auctions:approve`
+// or `facility:settings`: a section on `/admin/auctions`, a terms-of-sale form
+// on `/admin/settings/delinquency`, and a staff-only CSV route. No customer
+// reaches any of it, and this page is a statement about the site a customer
+// uses — the same reasoning as the B-197 entry above.
+//
+// The routes are not left unchecked, though. Both screens are already in
+// `ADMIN_SCAN_ROUTES`, so `admin.spec.ts` scans the new markup for WCAG
+// violations and — since B-201 — measures it at 320px, at 200% zoom and under
+// forced text spacing, with the per-element check that `[contain:layout]`
+// cannot mask. The refusal list is a `<ul>` of links with the reason as text
+// beside each one, so it is not carrying meaning in colour or position.
+//
+// `LAST_REVIEWED` does not move: no claim on this page was re-checked against
+// the build, and none changed.
 export default function AccessibilityPage() {
   return (
     <ProsePage
