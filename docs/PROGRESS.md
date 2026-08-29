@@ -6816,7 +6816,7 @@ The fix went past the index. The test now maps **all six** screen columns to the
 
 ## B-201 — The reflow check that `[contain:layout]` cannot mask, and the seven defects it found on green routes
 
-`PENDING`
+`bf21eba`
 
 **What it built.** Two halves of one gap, both named by B-199 and both closed here.
 
