@@ -6910,7 +6910,9 @@ The fix went past the index. The test now maps **all six** screen columns to the
 
 ## B-203 — a manual payment reaches the plan, not this month's tax
 
-`PENDING`
+`921822f`
+
+*(The record commit — this entry, the ✅, D-105 and the accessibility re-read — is `302c4a3`. Rebase-merged via PR #4, so both SHAs are the ones that ran and both are reachable from `main`. The branch's third commit was the empty placeholder the draft PR was opened on; the rebase dropped it, which is correct and is why this item shows two commits rather than three.)*
 
 **What it built.** One deferral inside `applyPayment` (`apps/web/lib/billing/allocation.ts`), plus the `coveredByPlan` lookup it needs. A payment that names no invoice and narrows to none — the counter, the portal, a pay link, a re-application after a reversal — now ranks an active plan's frozen `invoiceIds` ahead of every other invoice on the **same lease**, and lets whatever is left over fall through to the rest in the facility's ordinary order. Two database tests in `tests/payment-plan-autopay-db.test.ts`.
 
