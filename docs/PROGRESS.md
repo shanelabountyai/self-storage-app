@@ -6936,7 +6936,7 @@ The fix went past the index. The test now maps **all six** screen columns to the
 
 ## B-204 — the installment charge now obeys a bankruptcy, SCRA or deceased hold
 
-`SHA-PENDING`
+`4c2ca90`
 
 **What it built.** Two guards, in the two jobs that run an hour apart. `collectInstallments` (`apps/web/lib/billing/autopay.ts`) skips a plan whose lease carries a `halt_autopay` hold, and records the skip rather than falling through a silent `continue`. `evaluatePaymentPlanBreaches` (`apps/web/lib/delinquency/payment-plan-breach.ts`) declines to break a plan on one of those leases, while leaving the completion branch reachable. Two database tests in `tests/payment-plan-autopay-db.test.ts`, both verified failing against the unmodified source.
 
