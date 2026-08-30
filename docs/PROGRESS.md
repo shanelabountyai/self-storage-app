@@ -6964,7 +6964,7 @@ The fix went past the index. The test now maps **all six** screen columns to the
 
 ## B-204 — An installment charge honours `halt_autopay`
 
-`SHA-PENDING`
+`40ee469`
 
 **What it built.** `collectInstallments` (`apps/web/lib/billing/autopay.ts`) consulted no hold at all. `runAutopay`'s invoice loop has honoured `halt_autopay` since US-42; the installment half, added by B-189 in the same file, had only three guards — `plan.autoCollect`, `lease.autopayEnabled` and a saved card. `military_scra`, `bankruptcy` and `deceased` all declare `halt_autopay` (`packages/core/holds/catalog.ts`), so a bankruptcy hold placed on the 10th did not stop the 3am charge on the 15th. That is a stay violation committed by the system *after* somebody correctly told it not to, and it is a charge against a real person's card.
 
