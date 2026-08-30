@@ -6936,7 +6936,7 @@ The fix went past the index. The test now maps **all six** screen columns to the
 
 ## B-205 — The lot sheet carries what a lien advertisement has to carry
 
-`SHA_PLACEHOLDER`
+`18f4b34`, `88cbe59`, `db9432e`
 
 **What it built.** Four defects on one document — `/admin/auctions/lots.csv`, the only file this product generates *for publication*.
 
