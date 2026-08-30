@@ -239,7 +239,7 @@ export const EVENT_MERGE_FIELDS: Record<string, readonly MergeFieldSpec[]> = {
     { field: 'protection.premium', description: 'What it costs per month', sample: '$14.00' },
   ],
 
-  // ── PRD 05 CN-24 (B-191). The payment plan's four messages. ────────────────
+  // ── PRD 05 CN-24 (B-191), with the fifth from B-206. ──────────────────────
   //
   // `plan.collection_line` is on two of them and says the same thing in both:
   // whether the card will actually be charged. It reports what D-97 calls the
@@ -275,11 +275,29 @@ export const EVENT_MERGE_FIELDS: Record<string, readonly MergeFieldSpec[]> = {
   'payment_plan.broken': [
     { field: 'unit.number', description: 'Unit number', sample: 'A-12' },
     { field: 'plan.balance', description: 'What is owed now the plan has ended', sample: '$1,200.00' },
+    // B-206. The two facts a tenant who believes they paid needs in order to
+    // check: which payment, and when it was due.
+    { field: 'plan.missed_amount', description: 'The installment that was not paid', sample: '$600.00' },
+    { field: 'plan.missed_due_date', description: 'When that installment was due', sample: 'Tuesday, October 15' },
     { field: 'links.pay_now', description: 'One-tap link to pay', sample: 'https://example.com/pay/abc123' },
+    { field: 'links.plan', description: 'Link to the plan in their account', sample: 'https://example.com/portal/payment-plan' },
   ],
   'payment_plan.completed': [
     { field: 'unit.number', description: 'Unit number', sample: 'A-12' },
     { field: 'plan.total', description: 'What the plan covered in total', sample: '$1,800.00' },
+  ],
+  // B-206. `plan.cancel_reason` is staff free text, and the only merge field in
+  // the product that is. The cancel form says the tenant reads it; the sample
+  // here is written the way that form's hint asks for one.
+  'payment_plan.cancelled': [
+    { field: 'unit.number', description: 'Unit number', sample: 'A-12' },
+    {
+      field: 'plan.cancel_reason',
+      description: 'Why staff cancelled the plan, in the words they typed. The tenant reads this.',
+      sample: 'The unit was transferred to a new lease, so this plan no longer applies.',
+    },
+    { field: 'plan.balance', description: 'What is owed now the plan has ended', sample: '$1,200.00' },
+    { field: 'links.pay_now', description: 'One-tap link to pay', sample: 'https://example.com/pay/abc123' },
   ],
 }
 

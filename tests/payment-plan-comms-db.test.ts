@@ -12,7 +12,7 @@ import {
 import type { Actor } from '../apps/web/lib/rbac/actor'
 import type { PermissionKey } from '@storage/db/rbac-catalog'
 
-// B-191 / PRD 05 CN-24. A payment plan's four messages.
+// B-191 / PRD 05 CN-24. A payment plan's messages; the fifth is B-206's.
 //
 // Before this, a plan said nothing to the tenant at any point in its life: not
 // when it was agreed, not before an installment, and — the one that matters —
@@ -25,7 +25,7 @@ import type { PermissionKey } from '@storage/db/rbac-catalog'
 // so a suite that seeded its own would prove the engine works (B-030 already
 // does) and nothing about what a tenant actually receives.
 //
-// **The clock is pinned** (CN-24's own AC, and CLAUDE.md's trap). These four
+// **The clock is pinned** (CN-24's own AC, and CLAUDE.md's trap). These five
 // are transactional so no marketing quiet-hours gate applies to them today —
 // but every date in the assertions below is derived from "now", and a suite
 // whose expected strings move with the wall clock is one that goes red in
@@ -230,12 +230,15 @@ describeDb('payment plan notifications (CN-24)', () => {
   })
 
   describe('the catalog', () => {
-    it('wires a rule to each of the four events', () => {
+    it('wires a rule to each of the five events', () => {
       const events = COMMS_RULES.map((rule) => rule.event)
       expect(events).toContain('payment_plan.agreed')
       expect(events).toContain('payment_plan.installment_due_soon')
       expect(events).toContain('payment_plan.broken')
       expect(events).toContain('payment_plan.completed')
+      // B-206. The fifth. It was the branch a PERSON took, which is why it
+      // went unnoticed: everything the nightly job did announced itself.
+      expect(events).toContain('payment_plan.cancelled')
     })
 
     it('does not skip the installment reminder when autopay would cover it', () => {
@@ -353,7 +356,13 @@ describeDb('payment plan notifications (CN-24)', () => {
       await cancelPaymentPlan(actor(), planId, 'Tenant paid the whole arrears at the counter.')
       await drainEvents()
 
-      expect(sends).toHaveLength(0)
+      // B-206: cancelling now sends its OWN message, so this asserts the
+      // absence of the REMINDER rather than of all mail. A tenant who is told
+      // the plan is over and is also told their next installment is due has
+      // been sent two messages that contradict each other.
+      expect(sends.map((send) => send.subject)).not.toContainEqual(
+        expect.stringContaining('installment is due'),
+      )
       const message = await prisma.message.findFirst({
         where: { facilityId, templateKey: 'payment_plan_installment_due_soon' },
         select: { status: true },
@@ -379,6 +388,12 @@ describeDb('payment plan notifications (CN-24)', () => {
       expect(sends[0].body).toContain('$1,800.00')
       expect(sends[0].body).toContain('Late fees start again')
       expect(sends[0].body).toMatch(/\/pay\/[A-Za-z0-9_-]{20,}/)
+      // B-206. WHICH payment was missed, and a route to the schedule. Without
+      // the first a tenant who believes they paid has nothing to check
+      // against; without the second the one message announcing the break
+      // cannot reach the plan page built for that moment.
+      expect(sends[0].body).toContain('Tuesday, September 15')
+      expect(sends[0].body).toContain('/portal/payment-plan')
       // D-15 again: no internal vocabulary in a message about somebody's money.
       expect(sends[0].body).not.toMatch(/hold lifted|dunning|delinquen|installment status/i)
     })
@@ -403,13 +418,53 @@ describeDb('payment plan notifications (CN-24)', () => {
       })
       await drainEvents()
 
-      expect(sends[0].body).toContain('$1,000.00')
-      expect(sends[0].body).not.toContain('$1,800.00')
+      // Scoped to the BALANCE sentence: since B-206 the message also quotes the
+      // missed installment, which for this one-installment plan is $1,800.00
+      // and is correct there — it is what was due on the 15th, not what is
+      // owed now.
+      expect(sends[0].body).toContain('$1,000.00 is now owed in full')
+      expect(sends[0].body).not.toContain('$1,800.00 is now owed in full')
+      expect(sends[0].body).toContain('pay $1,000.00')
+    })
+  })
+
+  describe('plan cancelled by staff', () => {
+    // B-206. `cancelPaymentPlan` lifted the hold and emitted nothing, so a
+    // regional's Monday decision restarted late fees, the ladder and gate
+    // suspension while the tenant held an email promising the opposite for as
+    // long as they kept to the dates — which they had.
+    it('tells the tenant, in the words the staffer was already made to type', async () => {
+      const leaseId = await newLease()
+      await arrears(leaseId, 180_000)
+      const planId = await agreePlan(leaseId, [{ dueDate: d('2026-09-15'), amountCents: 180_000 }])
+      await drainEvents()
+      sends.length = 0
+      await prisma.domainEvent.deleteMany({ where: { facilityId } })
+
+      const result = await cancelPaymentPlan(
+        actor(),
+        planId,
+        'The unit was transferred to a new lease, so this plan no longer applies.',
+      )
+      expect(result.ok).toBe(true)
+      await drainEvents()
+
+      expect(sends).toHaveLength(1)
+      expect(sends[0].subject).toContain('cancelled')
+      expect(sends[0].body).toContain('The unit was transferred to a new lease')
+      expect(sends[0].body).toContain('$1,800.00')
+      expect(sends[0].body).toContain('Late fees start again')
+      expect(sends[0].body).toMatch(/\/pay\/[A-Za-z0-9_-]{20,}/)
+      // It was not a missed payment, and saying so is the difference between a
+      // tenant who calls us and one who believes they broke the agreement.
+      expect(sends[0].body).toContain('No payment was missed')
+      // D-15: no internal vocabulary in a message about somebody's money.
+      expect(sends[0].body).not.toMatch(/hold lifted|dunning|delinquen|installment status/i)
     })
   })
 
   describe('plan kept', () => {
-    it('says thank you, and is the only one of the four that is good news', async () => {
+    it('says thank you, and is the only one of the five that is good news', async () => {
       const leaseId = await newLease()
       await arrears(leaseId, 60_000)
       await agreePlan(leaseId, [{ dueDate: d('2026-09-15'), amountCents: 60_000 }])

@@ -124,10 +124,11 @@ export const EVENT_NAMES = [
   "delinquency.day_reached",
   "delinquency.stage_changed",
 
-  // Payment plans (PRD 02 §4.6 US-25 / PRD 05 CN-24, B-191). Four facts in a
-  // plan's life, each of which the tenant used to learn from nothing at all.
+  // Payment plans (PRD 02 §4.6 US-25 / PRD 05 CN-24, B-191; the fifth added
+  // by B-206). Five facts in a plan's life, each of which the tenant used to
+  // learn from nothing at all.
   //
-  // Entity is the LEASE on all four — that is what the comms recipient
+  // Entity is the LEASE on all five — that is what the comms recipient
   // resolver already reaches a tenant through, and a plan has no contact
   // details of its own. `payload.planId` says which plan; a lease can have a
   // chain of them (D-98).
@@ -147,6 +148,11 @@ export const EVENT_NAMES = [
   "payment_plan.broken",
   /// Every installment collected. The only one of the four that is good news.
   "payment_plan.completed",
+  /// B-206. A staffer cancelled the plan. The same beat as `broken` — the hold
+  /// is lifted and late fees, dunning and access suspension all restart — but a
+  /// person decided it rather than a missed date, and was already made to type
+  /// a reason. Without this the tenant's only notice is the keypad.
+  "payment_plan.cancelled",
 
   // Inbound messages (PRD 05 CN-14, §8 Phase 3)
   /// B-135 / D-78. A text arrived that is not STOP, HELP, START or YES — a

@@ -1123,14 +1123,47 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
   // the whole point of the message is what is owed now that the plan has
   // ended, and a tenant who paid something between the job and the dispatch
   // must be quoted the figure that is true.
-  'payment_plan.broken': async (event, recipient) => ({
-    'plan.balance': formatCents(await leaseBalanceCents(recipient.lease?.id ?? null)),
-    'links.pay_now': await payNowLink(recipient, event),
-  }),
+  'payment_plan.broken': async (event, recipient) => {
+    // B-206. The missed installment comes off the payload rather than being
+    // re-derived here: which one broke the plan is a decision the breach job
+    // made, against a grace window and a retry ladder this send path has no
+    // business re-running. Same shape as `installment_due_soon` above, and the
+    // same failure mode — no installment resolved, no context, and the render
+    // guard refuses to mail a sentence with a hole where the amount goes.
+    const plan = await planForEvent(event)
+    const payload = (event.payload ?? {}) as { installmentId?: string }
+    const missed = plan?.installments.find((one) => one.id === payload.installmentId)
+    if (!missed) return {} as MergeContext
+    return {
+      'plan.balance': formatCents(await leaseBalanceCents(recipient.lease?.id ?? null)),
+      'plan.missed_amount': formatCents(missed.amountCents),
+      'plan.missed_due_date': formatPlanDate(missed.dueDate, {
+        weekday: 'long',
+        month: 'long',
+        day: 'numeric',
+      }),
+      'links.pay_now': await payNowLink(recipient, event),
+      'links.plan': `${baseUrl()}/portal/payment-plan`,
+    }
+  },
 
   'payment_plan.completed': async (event) => {
     const plan = await planForEvent(event)
     return plan ? { 'plan.total': formatCents(plan.totalCents) } : ({} as MergeContext)
+  },
+
+  // B-206. The reason is read from the plan row rather than carried on the
+  // event, for the same reason `plan.balance` is read at send time: the row is
+  // what the audit log and the staff screen show, and a message quoting
+  // something different from both is worse than no message.
+  'payment_plan.cancelled': async (event, recipient) => {
+    const plan = await planForEvent(event)
+    if (!plan?.cancelReason) return {} as MergeContext
+    return {
+      'plan.cancel_reason': plan.cancelReason,
+      'plan.balance': formatCents(await leaseBalanceCents(recipient.lease?.id ?? null)),
+      'links.pay_now': await payNowLink(recipient, event),
+    }
   },
 }
 
@@ -1146,6 +1179,7 @@ async function planForEvent(event: DomainEvent) {
     select: {
       totalCents: true,
       autoCollect: true,
+      cancelReason: true,
       installments: {
         orderBy: { dueDate: 'asc' },
         select: { id: true, dueDate: true, amountCents: true },
