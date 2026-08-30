@@ -12,6 +12,7 @@ import {
   recordSurplusNotified,
   scheduleSale,
   setContainsVehicle,
+  setGoodsDescription,
 } from '@/lib/auctions/service'
 import type { SurplusDisposition } from '@storage/db'
 
@@ -42,6 +43,13 @@ export async function setVehicleAction(formData: FormData): Promise<void> {
     formData.get('containsVehicle') === 'yes',
     String(formData.get('note') ?? ''),
   )
+  revalidate(caseId)
+}
+
+export async function setGoodsDescriptionAction(formData: FormData): Promise<void> {
+  const actor = await requireStaffActor()
+  const caseId = String(formData.get('caseId') ?? '')
+  await setGoodsDescription(actor, caseId, String(formData.get('goodsDescription') ?? ''))
   revalidate(caseId)
 }
 

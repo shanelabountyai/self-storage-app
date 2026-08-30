@@ -145,6 +145,9 @@ export type AuctionCaseView = {
   status: string
   containsVehicle: boolean
   vehicleNote: string | null
+  /// B-205. The general description of the goods the advertisement carries.
+  /// Null until somebody writes it; see the note on the column.
+  goodsDescription: string | null
   approvedAt: Date | null
   approvedByName: string | null
   scheduledSaleDate: Date | null
@@ -310,6 +313,7 @@ export async function auctionCase(actor: Actor, caseId: string): Promise<Auction
     status: row.status,
     containsVehicle: row.containsVehicle,
     vehicleNote: row.vehicleNote,
+    goodsDescription: row.goodsDescription,
     approvedAt: row.approvedAt,
     approvedByName: approver ? `${approver.firstName} ${approver.lastName}` : null,
     scheduledSaleDate: row.scheduledSaleDate,
@@ -398,6 +402,47 @@ export async function setContainsVehicle(
         entityType: 'AuctionCase',
         entityId: caseId,
         context: { containsVehicle, note: note.trim() },
+      },
+      tx,
+    )
+  })
+  return { ok: true }
+}
+
+/// B-205. The general description of the goods, written for the advertisement.
+///
+/// `tenants:edit` rather than `auctions:approve`: this is ad copy a manager
+/// drafts, not a decision to sell somebody's property, and gating it behind the
+/// approval permission would mean the one person who has walked past the unit
+/// cannot describe what is in it.
+///
+/// Audited like the vehicle flag, and for the same reason — "what did the
+/// advertisement say the goods were" is a question a wrongful-sale complaint
+/// asks, and the answer has to survive somebody editing the field afterwards.
+/// Blank clears it back to null rather than storing an empty string, so "not
+/// written yet" has one spelling (the same choice `updateAuctionSaleTerms`
+/// makes).
+export async function setGoodsDescription(
+  actor: Actor,
+  caseId: string,
+  description: string,
+): Promise<ActionResult> {
+  const row = await prisma.auctionCase.findUniqueOrThrow({ where: { id: caseId } })
+  requirePermission(actor, 'tenants:edit', row.facilityId)
+
+  const value = description.trim() || null
+
+  await prisma.$transaction(async (tx) => {
+    await tx.auctionCase.update({ where: { id: caseId }, data: { goodsDescription: value } })
+    await recordAudit(
+      {
+        actor: toAuditActor(actor),
+        facilityId: row.facilityId,
+        action: 'lease.updated',
+        entityType: 'AuctionCase',
+        entityId: caseId,
+        before: { goodsDescription: row.goodsDescription },
+        after: { goodsDescription: value },
       },
       tx,
     )
@@ -995,6 +1040,10 @@ export type ListingLot = {
   /// The person on whose account the sale is held — a required element of the
   /// advertisement, not a convenience (B-205).
   tenantName: string
+  /// The general description of the goods, the third required element (B-205).
+  /// Null when nobody has written one: a blank column rather than a refusal,
+  /// because the SALE is lawful and only the copy is missing.
+  goodsDescription: string | null
   unitTypeName: string
   widthFt: number
   lengthFt: number
@@ -1041,6 +1090,7 @@ export async function auctionLotSheet(actor: Actor, facilityId: string): Promise
       // of the three things a lien advertisement has to carry, and the sheet
       // did not have it. Already on the case view; it rides along.
       tenantName: one.tenantName,
+      goodsDescription: one.goodsDescription,
     })),
   )
 
@@ -1093,6 +1143,7 @@ export async function auctionLotSheet(actor: Actor, facilityId: string): Promise
       caseId: one.caseId,
       unitNumber: one.unitNumber,
       tenantName: one.tenantName,
+      goodsDescription: one.goodsDescription,
       unitTypeName: one.size.name,
       widthFt: one.size.widthFt,
       lengthFt: one.size.lengthFt,

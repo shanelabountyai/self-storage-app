@@ -764,7 +764,27 @@ const LAST_REVIEWED = '19 August 2026'
 // whether the site can be operated, not about whether it is right.
 //
 // `LAST_REVIEWED` does not move: no claim on this page was re-checked against
+// the build, and none changed.//
+// Re-read at B-205 (the lot sheet carries what an advertisement has to carry).
+// **Nothing on this page changes**, and it is the B-129 reasoning unchanged:
+// every surface this row touched is behind `auctions:approve`, `tenants:edit`
+// or `facility:settings` — two columns and a filename on a staff-only CSV, a
+// time-of-sale field on `/admin/settings/delinquency`, a description field on
+// the auction case screen, and two notes on `/admin/auctions`. No customer
+// reaches any of it.
+//
+// One thing IS worth naming rather than leaving to the B-129 sentence above.
+// That entry said the new markup is scanned because both screens are in
+// `ADMIN_SCAN_ROUTES` — true of the routes, and B-215 has since found it is
+// not true of the STATE: `/admin/auctions`'s populated lot-sheet branch has
+// been rendered by no scan, because the demo seed schedules no sale. The notes
+// this row adds sit inside that same unscanned branch. That is a pre-existing
+// gap this row neither creates nor closes, and B-215 owns it by name; it is
+// recorded here so the B-129 sentence is not read as more coverage than it is.
+//
+// `LAST_REVIEWED` does not move: no claim on this page was re-checked against
 // the build, and none changed.
+
 export default function AccessibilityPage() {
   return (
     <ProsePage

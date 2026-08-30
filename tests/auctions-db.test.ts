@@ -15,6 +15,7 @@ import {
   auctionLotSheet,
   scheduleSale,
   setContainsVehicle,
+  setGoodsDescription,
 } from '../apps/web/lib/auctions/service'
 import { updateAuctionSaleTerms } from '../apps/web/lib/admin/facility-settings'
 import { verifyDocument } from '../apps/web/lib/documents/store'
@@ -432,6 +433,35 @@ describeDb('the auction pipeline', () => {
       )
       const sheet = await auctionLotSheet(regional(), facilityId)
       expect(sheet!.facility.saleTime).toBe('10:00 AM, or immediately following the preceding sale.')
+    })
+
+    it('carries the description of the goods, and blanks rather than refuses without one (B-205)', async () => {
+      // The third required element of the advertisement. Deliberately NOT a
+      // refusal: the sale is lawful and only the copy is unwritten, so dropping
+      // the lot would push it off the sheet on the day it most needs to be on
+      // one. The screen names the units instead.
+      const caseId = await makeReadyCase()
+      await scheduleSale(regional(), caseId, new Date('2026-09-14T00:00:00Z'))
+
+      const before = await auctionLotSheet(regional(), facilityId)
+      const unwritten = before!.lots.find((one) => one.caseId === caseId)
+      expect(unwritten).toBeDefined()
+      expect(unwritten!.goodsDescription).toBeNull()
+      expect(before!.refused.map((one) => one.caseId)).not.toContain(caseId)
+
+      // Trimmed to a value; blank clears back to null so "not written yet" has
+      // one spelling, the same choice the terms make.
+      expect(await setGoodsDescription(manager(), caseId, '  Household furniture and boxes.  ')).toEqual({
+        ok: true,
+      })
+      const after = await auctionLotSheet(regional(), facilityId)
+      expect(after!.lots.find((one) => one.caseId === caseId)!.goodsDescription).toBe(
+        'Household furniture and boxes.',
+      )
+
+      await setGoodsDescription(manager(), caseId, '   ')
+      const cleared = await auctionLotSheet(regional(), facilityId)
+      expect(cleared!.lots.find((one) => one.caseId === caseId)!.goodsDescription).toBeNull()
     })
 
     it('drops a scheduled lot the moment the tenant settles, with the reason', async () => {
