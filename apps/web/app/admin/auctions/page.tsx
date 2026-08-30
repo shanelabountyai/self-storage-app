@@ -44,6 +44,10 @@ export default async function AuctionsPage() {
     auctionLotSheet(actor, facilityId),
   ])
 
+  // B-205. Named per lot rather than counted, because the fix is on the case
+  // and the operator is one click from it here.
+  const undescribed = sheet?.lots.filter((lot) => lot.goodsDescription === null) ?? []
+
   return (
     <div className="flex flex-col gap-8">
       <div>
@@ -133,28 +137,47 @@ export default async function AuctionsPage() {
                 {sheet.lots.length === 1 ? '' : 's'})
               </a>{' '}
               <span className="text-muted-foreground">
-                — unit, tenant, address, size, sale date, time and terms, as a CSV you upload or
-                hand over. Downloading it is not a record that an advertisement ran; add that on the
+                — unit, tenant, description of the goods, address, size, sale date, time and terms, as a
+                CSV you upload or hand over. Downloading it is not a record that an advertisement ran; add that on the
                 case once it has.
               </span>
             </p>
           )}
 
-          {/* B-205. The sheet is NOT a complete advertisement, and saying so
-              here is the honest-degradation posture D-63 and D-104 already take
-              on the blank Terms column. A general description of the goods is
-              the third required element and this product has nowhere to hold
-              one — inventory photo references live inside the hashed evidence
-              document `recordLockCut` renders, and a second copy that can
-              disagree with the original is worse than an absent column. So the
-              operator is told, on the screen where they are about to hand the
-              file over, rather than finding out when the sale is challenged. */}
-          <p role="note" className="border-input rounded-lg border p-3 text-sm text-pretty">
-            <strong className="font-medium">This sheet is not a complete advertisement.</strong> It
-            carries the unit, the tenant&apos;s name, the address, the sale date and the time and
-            terms — but not a description of the goods, which Texas also requires and this system
-            does not hold. Add that yourself before the advertisement runs.
-          </p>
+          {/* B-205. The description of the goods is the third required
+              element, and unlike the time and terms it is per lot — so the gap
+              is named per lot, with a link to the case that fixes it, rather
+              than as one sentence telling the operator to remember something
+              on their own.
+
+              It is a note and not a refusal on purpose: the SALE is lawful,
+              only the advertisement copy is unwritten, and dropping a lot for
+              missing copy would push it off the sheet on the day it most needs
+              to be on one. The refusal list stays reserved for sales that may
+              not be advertised at all. */}
+          {undescribed.length > 0 && (
+            <p role="note" className="border-input rounded-lg border p-3 text-sm text-pretty">
+              <strong className="font-medium">
+                {undescribed.length === sheet.lots.length
+                  ? 'No lot on this sheet has a description of the goods'
+                  : `${undescribed.length} of ${sheet.lots.length} lots have no description of the goods`}
+              </strong>
+              , so that column is blank for{' '}
+              {undescribed.map((lot, index) => (
+                <span key={lot.caseId}>
+                  {index > 0 && ', '}
+                  <Link
+                    href={`/admin/auctions/${lot.caseId}`}
+                    className="underline underline-offset-2"
+                  >
+                    unit {lot.unitNumber}
+                  </Link>
+                </span>
+              ))}
+              . Texas requires one in the advertisement alongside the tenant&apos;s name and the
+              time and place of the sale. Write it on the case before the advertisement runs.
+            </p>
+          )}
 
           {(sheet.facility.saleTerms === null || sheet.facility.saleTime === null) && (
             <p role="note" className="border-input rounded-lg border p-3 text-sm text-pretty">

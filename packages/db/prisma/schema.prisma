@@ -4640,6 +4640,25 @@ model AuctionCase {
   /// A facility-local calendar day: the sale is "on the 14th".
   scheduledSaleDate DateTime? @db.Date
 
+  /// B-205. The GENERAL description of the goods, written for publication —
+  /// "household furniture, boxes and hand tools". The third element a Texas
+  /// lien advertisement has to carry, alongside the tenant's name and the time
+  /// and place of the sale.
+  ///
+  /// Deliberately NOT derived from the itemised inventory below, and it does
+  /// not reopen D-104's reasoning about photographs. That reasoning was about
+  /// re-keying primary evidence into a CSV where a second copy could disagree
+  /// with the hashed original. This is a different field with a different job:
+  /// a phrase somebody writes for a newspaper, days BEFORE the lock is cut, at
+  /// a point when no inventory exists to copy from. The two never overlap.
+  ///
+  /// Null is a real state and the lot sheet leaves the column blank, the same
+  /// posture the terms take. It does NOT refuse the lot: the sale is lawful,
+  /// only the advertisement copy is unwritten, and the refusal list is reserved
+  /// for sales that may not be advertised at all. The auctions screen names the
+  /// units it is missing on.
+  goodsDescription String?
+
   /// Lock cut and inventory. "The primary evidence that you sold what you said
   /// you sold" — so the itemised inventory and its photographs are rendered
   /// into a hashed `Document` (US-27's mechanism), not free text on this row.

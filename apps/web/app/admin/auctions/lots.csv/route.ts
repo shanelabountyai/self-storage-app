@@ -56,6 +56,7 @@ export async function GET(request: Request): Promise<Response> {
       'ZIP',
       'Unit',
       'Tenant',
+      'Description of goods',
       'Size',
       'Width ft',
       'Length ft',
@@ -73,6 +74,10 @@ export async function GET(request: Request): Promise<Response> {
       facility.postalCode,
       lot.unitNumber,
       lot.tenantName,
+      // B-205. Blank when nobody has written one. The auctions screen names
+      // every lot it is missing on, so a blank here is a gap somebody has
+      // already been told about rather than one discovered at the newspaper.
+      lot.goodsDescription ?? '',
       lot.unitTypeName,
       lot.widthFt,
       lot.lengthFt,

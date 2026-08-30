@@ -12,6 +12,7 @@ import {
   recordLockCutAction,
   recordSaleAction,
   scheduleAction,
+  setGoodsDescriptionAction,
   setVehicleAction,
   surplusDispositionAction,
   surplusNotifiedAction,
@@ -219,6 +220,47 @@ export default async function AuctionCasePage({
               </form>
             </section>
           )}
+
+          {/* B-205. The general description of the goods, which the lot
+              sheet prints and a lien advertisement is required to carry.
+              Above the advertising log on purpose: it has to be written
+              BEFORE a run is placed, not recorded after one.
+
+              Not the itemised inventory and not derived from it — that is
+              primary evidence, hashed into a document by `recordLockCut`
+              below, and usually does not exist yet when this is written. */}
+          <section aria-labelledby="goods-heading" className="flex flex-col gap-2">
+            <h2 id="goods-heading" className="text-sm font-medium">
+              Description of the goods
+            </h2>
+            <p className="text-muted-foreground max-w-prose text-xs text-pretty">
+              A general description for the advertisement — &ldquo;household furniture, boxes and
+              hand tools&rdquo;. Texas requires one alongside the tenant&apos;s name and the time
+              and place of the sale. It prints on this lot&apos;s row of the sheet; left empty,
+              that column is blank and the auctions screen says which lots are missing it.
+            </p>
+            <form
+              action={setGoodsDescriptionAction}
+              className="border-input flex flex-wrap items-end gap-2 rounded-lg border p-4"
+            >
+              <input type="hidden" name="caseId" value={caseId} />
+              <label className="flex flex-1 flex-col gap-1 text-sm">
+                General description
+                <input
+                  name="goodsDescription"
+                  defaultValue={view.goodsDescription ?? ''}
+                  placeholder="Household furniture, boxes and hand tools"
+                  className="border-input bg-background min-h-11 rounded-md border px-3 text-sm"
+                />
+              </label>
+              <button
+                type="submit"
+                className="border-input hover:bg-accent min-h-11 rounded-md border px-4 text-sm font-medium"
+              >
+                Save description
+              </button>
+            </form>
+          </section>
 
           <section aria-labelledby="ads-heading" className="flex flex-col gap-2">
             <h2 id="ads-heading" className="text-sm font-medium">
