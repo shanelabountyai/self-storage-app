@@ -232,6 +232,15 @@ async function plan(options: {
   return row.id
 }
 
+/// A hold of a given catalog type, in force from before every fixture date.
+/// The effects are not stored on the row — `activeHoldsByLease` reads them off
+/// the catalog by type — so the type is the whole of what a fixture says.
+async function placeHold(leaseId: string, type: 'bankruptcy' | 'military_scra' | 'deceased'): Promise<void> {
+  await prisma.leaseHold.create({
+    data: { leaseId, type, reason: `${type} fixture`, effectiveFrom: d('2026-08-01'), placedByStaffId: staffId },
+  })
+}
+
 const installmentCharges = () => charges.filter((charge) => charge.paymentPlanInstallmentId)
 
 describeDb('payment plans and autopay', () => {
@@ -343,6 +352,51 @@ describeDb('payment plans and autopay', () => {
     // And the arrears are still deferred rather than swept up by the ordinary
     // path — manual-pay is not "collect it the old way".
     expect(charges).toHaveLength(0)
+  })
+
+  // B-204. `bankruptcy`, `military_scra` and `deceased` all declare
+  // `halt_autopay`, and until this item `collectInstallments` consulted no
+  // hold at all: a stay placed on the 10th did not stop the 3am charge on the
+  // 15th. A charge against a debtor after somebody correctly told us not to is
+  // a stay violation, not a billing bug.
+  it('charges no installment on a lease held under a bankruptcy stay', async () => {
+    const leaseId = await newLease()
+    const arrears = await invoice(leaseId, 120_000, d('2026-07-01'))
+    await plan({
+      leaseId,
+      invoiceIds: [arrears],
+      totalCents: 120_000,
+      installments: [{ dueDate: d('2026-09-01'), amountCents: 60_000 }],
+    })
+    await placeHold(leaseId, 'bankruptcy')
+
+    await runAutopay(facilityId, d('2026-09-01'), recordItem)
+
+    expect(charges).toHaveLength(0)
+    expect(collected.some((item) => item.message?.includes('the lease is on hold'))).toBe(true)
+  })
+
+  // The half a set built from tonight's invoices cannot see. An installment is
+  // charged off the PLAN, not off an invoice, so a plan lease with nothing in
+  // the invoice query — here a tenant who moved out still owing the arrears the
+  // plan covers — was absent from `onHold` entirely and charged regardless.
+  it('honours the hold on a plan lease with no invoice in tonight\'s run', async () => {
+    const leaseId = await newLease()
+    const arrears = await invoice(leaseId, 120_000, d('2026-07-01'))
+    await plan({
+      leaseId,
+      invoiceIds: [arrears],
+      totalCents: 120_000,
+      installments: [{ dueDate: d('2026-09-01'), amountCents: 60_000 }],
+    })
+    await placeHold(leaseId, 'deceased')
+    // Out of `runAutopay`'s invoice query — it scopes to occupying leases — and
+    // still an active plan with an installment due tonight.
+    await prisma.lease.update({ where: { id: leaseId }, data: { status: 'ended' } })
+
+    await runAutopay(facilityId, d('2026-09-01'), recordItem)
+
+    expect(installmentCharges()).toHaveLength(0)
   })
 
   it('charges only what is left of an installment the tenant part-paid', async () => {
