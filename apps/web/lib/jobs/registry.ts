@@ -130,11 +130,12 @@ export const CONSUMERS: readonly Consumer[] = [
       'lease.rate_increase_scheduled',
       // PRD 02 US-14 (B-077). The transfer confirmation.
       'lease.transferred',
-      // PRD 05 CN-24 (B-191). A payment plan's four messages.
+      // PRD 05 CN-24 (B-191). A payment plan's messages; the fifth is B-206's.
       'payment_plan.agreed',
       'payment_plan.installment_due_soon',
       'payment_plan.broken',
       'payment_plan.completed',
+      'payment_plan.cancelled',
     ],
     handle: async ({ event }) => {
       await processCommsEvent(event)

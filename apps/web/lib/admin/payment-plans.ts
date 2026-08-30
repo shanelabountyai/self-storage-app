@@ -255,7 +255,13 @@ export async function cancelPaymentPlan(
 
   const plan = await prisma.paymentPlan.findUnique({
     where: { id: planId },
-    select: { id: true, status: true, holdId: true, lease: { select: { facilityId: true } } },
+    select: {
+      id: true,
+      status: true,
+      holdId: true,
+      leaseId: true,
+      lease: { select: { facilityId: true } },
+    },
   })
   if (!plan) return { ok: false, reason: 'not_found' }
   if (plan.status !== 'active') return { ok: false, reason: 'not_active' }
@@ -276,14 +282,40 @@ export async function cancelPaymentPlan(
     return { ok: false, reason: lifted.reason === 'needs_manager' ? 'needs_manager' : 'forbidden' }
   }
 
-  await prisma.paymentPlan.update({
-    where: { id: planId },
-    data: {
-      status: 'cancelled',
-      cancelledAt: new Date(),
-      cancelledByStaffId: actor.staffUserId,
-      cancelReason: cancelReason.trim(),
-    },
+  await prisma.$transaction(async (tx) => {
+    await tx.paymentPlan.update({
+      where: { id: planId },
+      data: {
+        status: 'cancelled',
+        cancelledAt: new Date(),
+        cancelledByStaffId: actor.staffUserId,
+        cancelReason: cancelReason.trim(),
+      },
+    })
+
+    // B-206. The branch B-191 missed. Cancelling restarts late fees, the
+    // dunning ladder and gate suspension exactly as a break does, and the
+    // tenant is holding an email that says we hold off on all three while they
+    // keep to the dates — which they did. Without this their first notice is
+    // the keypad.
+    //
+    // In the same transaction as the status change, for the reason
+    // `payment_plan.agreed` is: a plan that was cancelled and never announced
+    // is the silence, not a missing nicety. The hold is lifted outside it
+    // because `liftHold` writes its own audit entry and takes no `tx` — a
+    // lifted hold with the plan still `active` is the pre-existing window and
+    // is self-healing (the nightly job re-evaluates), whereas a cancelled plan
+    // with no event is silent forever.
+    await emitEvent(
+      {
+        name: 'payment_plan.cancelled',
+        entityType: 'Lease',
+        entityId: plan.leaseId,
+        facilityId: plan.lease.facilityId,
+        payload: { planId },
+      },
+      tx,
+    )
   })
 
   return { ok: true }

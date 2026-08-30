@@ -1096,9 +1096,55 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
       '',
       'A payment on your plan for unit {{unit.number}} at {{facility.name}} was not made, so the plan has ended.',
       '',
+      'The payment we did not receive was {{plan.missed_amount}}, due {{plan.missed_due_date}}.',
+      '',
       '{{plan.balance}} is now owed in full. Late fees start again from today, payment notices resume, and your gate access can be turned off.',
       '',
       'To put it right, pay {{plan.balance}} — or call {{facility.phone}} today and we will go through it with you. Talking to us is always better than leaving it.',
+      '',
+      'Pay now: {{links.pay_now}}',
+      '',
+      'Your plan and everything paid against it: {{links.plan}}',
+    ].join('\n'),
+    // B-206. The date and the amount are here because a tenant who believes
+    // they paid has nothing to check against without them, and `links.plan`
+    // because this is the one message announcing the break — sending it with
+    // no route to the schedule B-193 built for exactly this moment was the
+    // gap. Both are REQUIRED, so a break with no identifiable installment
+    // fails loudly rather than mailing a sentence with a hole in it.
+    requiredMergeFields: [
+      'tenant.first_name',
+      'unit.number',
+      'facility.name',
+      'plan.balance',
+      'plan.missed_amount',
+      'plan.missed_due_date',
+      'links.pay_now',
+      'links.plan',
+      'facility.phone',
+    ],
+  },
+  {
+    // B-206. The fifth message. `cancelPaymentPlan` lifted the hold and told
+    // the tenant nothing, so a regional's Monday decision reached them at the
+    // keypad — with an email in their inbox promising we were holding off on
+    // late fees, notices and access for as long as they kept to the dates.
+    // They had. A person ended it, and this says so, in that person's words:
+    // `plan.cancel_reason` is the reason the cancel form already forces them
+    // to type, and the form now says the tenant reads it.
+    key: 'payment_plan_cancelled',
+    classification: 'transactional',
+    subject: 'Your payment plan at {{facility.name}} has been cancelled',
+    bodyText: [
+      'Hi {{tenant.first_name}},',
+      '',
+      'We have cancelled the payment plan on unit {{unit.number}} at {{facility.name}}. No payment was missed — this was our decision, and the reason we recorded is:',
+      '',
+      '{{plan.cancel_reason}}',
+      '',
+      '{{plan.balance}} is now owed in full. Late fees start again from today, payment notices resume, and your gate access can be turned off.',
+      '',
+      'If this is not what you were expecting, call {{facility.phone}} today and we will go through it with you — including whether we can agree a new plan.',
       '',
       'Pay now: {{links.pay_now}}',
     ].join('\n'),
@@ -1106,6 +1152,7 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
       'tenant.first_name',
       'unit.number',
       'facility.name',
+      'plan.cancel_reason',
       'plan.balance',
       'links.pay_now',
       'facility.phone',
@@ -1430,7 +1477,7 @@ export const COMMS_RULES: readonly CommsRuleSeed[] = [
   // ── PRD 05 CN-24 (B-191). ───────────────────────────────────────────────────
   //
   // Email only. CN-13's `payment_reminders` category governs the one message
-  // of the four that is a reminder; the other three are a record of a
+  // of the five that is a reminder; the other four are a record of a
   // financial agreement and its end, which is not a preference to switch off.
   { event: 'payment_plan.agreed', templateKey: 'payment_plan_agreed', classification: 'transactional' },
   {
@@ -1448,4 +1495,8 @@ export const COMMS_RULES: readonly CommsRuleSeed[] = [
   },
   { event: 'payment_plan.broken', templateKey: 'payment_plan_broken', classification: 'transactional' },
   { event: 'payment_plan.completed', templateKey: 'payment_plan_completed', classification: 'transactional' },
+  // B-206. Transactional for the same reason `broken` is: it is the end of a
+  // financial agreement and the moment three collections mechanisms restart,
+  // not a preference a tenant can switch off.
+  { event: 'payment_plan.cancelled', templateKey: 'payment_plan_cancelled', classification: 'transactional' },
 ]

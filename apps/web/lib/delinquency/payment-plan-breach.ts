@@ -71,7 +71,8 @@ export async function evaluatePaymentPlanBreaches(
     // has since taken back goes back to `missed`.
     const paidSinceCents = await planProgressCents(plan.totalCents, plan.invoiceIds)
 
-    if (await isBroken(plan, paidSinceCents, breachDate, businessDate, facility.paymentRetryDays)) {
+    const missed = await brokenOn(plan, paidSinceCents, breachDate, businessDate, facility.paymentRetryDays)
+    if (missed) {
       await prisma.paymentPlan.update({
         where: { id: plan.id },
         data: { status: 'broken', brokenAt: businessDate },
@@ -86,7 +87,12 @@ export async function evaluatePaymentPlanBreaches(
         entityType: 'Lease',
         entityId: plan.leaseId,
         facilityId,
-        payload: { planId: plan.id },
+        // B-206. `installmentId` so the notice can name WHICH payment was
+        // missed: a tenant who believes they paid has nothing to check
+        // against without it. The decision of which installment broke the
+        // plan is made here, against the grace window and the retry ladder,
+        // and the send path must not re-derive it.
+        payload: { planId: plan.id, installmentId: missed.id },
       })
       await createTask({
         facilityId,
@@ -181,8 +187,13 @@ export async function emitInstallmentReminders(
 }
 
 
-/// Whether a plan is broken tonight — an uncovered installment whose date has
-/// passed AND whose collection has genuinely finished failing.
+/// The installment that broke the plan tonight, or null — an uncovered
+/// installment whose date has passed AND whose collection has genuinely
+/// finished failing.
+///
+/// Returns the installment rather than a boolean (B-206) because
+/// `payment_plan_broken` names it to the tenant, and the alternative is the
+/// send path re-running the grace window and the retry ladder to guess.
 ///
 /// **Why this is not simply `isBreached` (B-189, CN-6).** Once an installment
 /// is auto-collected, the night it falls due is also the night its card is
@@ -205,7 +216,7 @@ export async function emitInstallmentReminders(
 ///     plan (D-97's opt-out), a lease with autopay off, or a tenant with no
 ///     saved card has no ladder running, so a missed installment breaks the
 ///     plan the same night it always did.
-async function isBroken(
+async function brokenOn(
   plan: {
     autoCollect: boolean
     installments: readonly { id: string; dueDate: Date; amountCents: number }[]
@@ -219,28 +230,31 @@ async function isBroken(
   /// another, or a facility running both would get their sum.
   businessDate: Date,
   retryDays: readonly number[],
-): Promise<boolean> {
+): Promise<{ id: string; dueDate: Date; amountCents: number } | null> {
   const missed = installmentViews(plan.installments, paidSinceCents, breachDate).filter(
     (view) => view.status === 'missed',
   )
-  if (missed.length === 0) return false
+  if (missed.length === 0) return null
+
+  // `installmentViews` re-derives `position` from date order over the very
+  // array passed in, so position N is row N-1 and every view has a row. Mapped
+  // back once, here, rather than threading the id through core's view type.
+  const missedRows = missed.map((view) => plan.installments[view.position - 1])
 
   const autoCollected = isAutoCollecting({
     autoCollect: plan.autoCollect,
     autopayEnabled: plan.lease.autopayEnabled,
     hasSavedCard: Boolean(plan.lease.tenant.stripeDefaultPaymentMethodId),
   })
-  if (!autoCollected) return true
+  // Date order, so the earliest uncovered installment is both what broke the
+  // plan and what the tenant will recognise: the first payment they were
+  // expected to make and did not.
+  if (!autoCollected) return missedRows[0]
 
-  // `installmentViews` re-derives `position` from date order, which is the same
-  // order the rows were selected in — so position N is row N-1 and the id is
-  // recoverable without threading it through core's view type.
-  for (const view of missed) {
-    const installment = plan.installments[view.position - 1]
-    if (!installment) return true
-    if (!(await ladderStillRunning(installment, businessDate, retryDays))) return true
+  for (const installment of missedRows) {
+    if (!(await ladderStillRunning(installment, businessDate, retryDays))) return installment
   }
-  return false
+  return null
 }
 
 /// Whether US-20's retry schedule still has an attempt to make for this

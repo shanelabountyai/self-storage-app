@@ -1757,9 +1757,10 @@ export default async function TenantProfilePage({
                   <p className="text-muted-foreground max-w-prose text-xs text-pretty">
                     Cancelling lifts the hold tonight — dunning, late fees and
                     access suspension resume on this lease, and everything the
-                    plan deferred is past due again in full. It counts towards
-                    the number of plans this lease may have in a year, so
-                    agreeing a replacement may need a manager.
+                    plan deferred is past due again in full. The tenant is
+                    emailed straight away, with your reason in it. It counts
+                    towards the number of plans this lease may have in a year,
+                    so agreeing a replacement may need a manager.
                   </p>
                   <AdminForm
                     action={cancelPaymentPlanAction}
@@ -1776,11 +1777,17 @@ export default async function TenantProfilePage({
                         (2.4.6). The server refuses `missing_reason`, so the
                         field says so and carries `required` rather than
                         letting the refusal be the first the staffer hears of
-                        it (3.3.2). */}
+                        it (3.3.2).
+
+                        B-206: the hint said "audit log" and only that, which
+                        was true until this reason started being emailed to the
+                        tenant. A staffer typing an internal shorthand into a
+                        field they believe only colleagues read is the whole
+                        hazard, so the tenant is named first. */}
                     <Field
                       name="cancelReason"
                       label={`Reason for cancelling the plan on unit ${plan.unitNumber}`}
-                      hint="Required. It is written to the audit log with your name."
+                      hint="Required. The tenant is emailed this wording, so write it to them. It is also written to the audit log with your name."
                       required
                       className={FIELD_CLASS}
                     />

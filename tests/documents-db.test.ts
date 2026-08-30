@@ -247,8 +247,9 @@ describeDb('document store', () => {
 
   it('keeps every document for a subject, newest first', async () => {
     const subjectId = `multi-${suffix}`
+    const ids: string[] = []
     for (const title of ['First notice', 'Second notice']) {
-      await storeGeneratedDocument({
+      const { id } = await storeGeneratedDocument({
         facilityId,
         type: 'notice',
         subjectType: 'Lease',
@@ -257,10 +258,32 @@ describeDb('document store', () => {
         template: '<p>{{body}}</p>',
         values: { body: title },
       })
+      ids.push(id)
     }
+
+    // `createdAt` is generated CLIENT-side at millisecond precision, so two
+    // writes this close together routinely land on the same instant and
+    // `documentsFor`'s `orderBy: { createdAt: 'desc' }` becomes a coin flip:
+    // this assertion failed roughly two runs in three, on main, for that
+    // reason alone and nothing to do with the store. Stamping the rows an
+    // hour apart asserts what `documentsFor` actually promises — newest
+    // first — instead of asserting that two simultaneous writes have an
+    // order, which is the one thing the data cannot say.
+    //
+    // Whether the store should GUARANTEE an order for genuinely simultaneous
+    // writes is B-219; it has no production caller today.
+    await prisma.document.update({
+      where: { id: ids[0] },
+      data: { createdAt: new Date('2026-08-01T10:00:00.000Z') },
+    })
+    await prisma.document.update({
+      where: { id: ids[1] },
+      data: { createdAt: new Date('2026-08-01T11:00:00.000Z') },
+    })
+
     const found = await documentsFor('Lease', subjectId)
     expect(found).toHaveLength(2)
-    expect(found[0].title).toBe('Second notice')
+    expect(found.map((document) => document.title)).toEqual(['Second notice', 'First notice'])
   })
 
   it('soft-deletes rather than removing evidence', async () => {
