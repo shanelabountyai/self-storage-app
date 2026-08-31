@@ -1147,6 +1147,33 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
     }
   },
 
+  // D-107 (B-208). The plan broke on rent it never deferred. Same shape as
+  // `broken` above and the same refusal: no invoice resolved, no context, and
+  // the render guard declines to mail a sentence with a hole in it.
+  'payment_plan.broken_unpaid_rent': async (event, recipient) => {
+    const payload = (event.payload ?? {}) as { invoiceId?: string }
+    const invoice = payload.invoiceId
+      ? await prisma.invoice.findUnique({
+          where: { id: payload.invoiceId },
+          select: { totalCents: true, amountPaidCents: true, dueDate: true },
+        })
+      : null
+    if (!invoice) return {} as MergeContext
+    return {
+      'plan.balance': formatCents(await leaseBalanceCents(recipient.lease?.id ?? null)),
+      // What is still outstanding on it, not what it was raised for: a tenant
+      // who part-paid must be quoted the part they did not.
+      'invoice.amount': formatCents(invoice.totalCents - invoice.amountPaidCents),
+      'invoice.due_date': formatPlanDate(invoice.dueDate, {
+        weekday: 'long',
+        month: 'long',
+        day: 'numeric',
+      }),
+      'links.pay_now': await payNowLink(recipient, event),
+      'links.plan': `${baseUrl()}/portal/payment-plan`,
+    }
+  },
+
   'payment_plan.completed': async (event) => {
     const plan = await planForEvent(event)
     return plan ? { 'plan.total': formatCents(plan.totalCents) } : ({} as MergeContext)

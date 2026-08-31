@@ -146,6 +146,11 @@ export const EVENT_NAMES = [
   /// step that lifts it, so the tenant is told the same night collections
   /// resume rather than by the next dunning letter or the keypad.
   "payment_plan.broken",
+  /// D-107 (B-208). The plan broke because rent it never deferred went unpaid
+  /// past the day this facility charges its first late fee — a different fact
+  /// from a missed installment, and a different message: this tenant kept
+  /// every payment the schedule asked for. Carries `invoiceId`.
+  "payment_plan.broken_unpaid_rent",
   /// Every installment collected. The only one of the four that is good news.
   "payment_plan.completed",
   /// B-206. A staffer cancelled the plan. The same beat as `broken` — the hold

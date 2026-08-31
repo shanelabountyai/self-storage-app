@@ -134,6 +134,7 @@ export const CONSUMERS: readonly Consumer[] = [
       'payment_plan.agreed',
       'payment_plan.installment_due_soon',
       'payment_plan.broken',
+      'payment_plan.broken_unpaid_rent',
       'payment_plan.completed',
       'payment_plan.cancelled',
     ],

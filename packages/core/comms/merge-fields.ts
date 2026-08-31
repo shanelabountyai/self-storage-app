@@ -282,6 +282,17 @@ export const EVENT_MERGE_FIELDS: Record<string, readonly MergeFieldSpec[]> = {
     { field: 'links.pay_now', description: 'One-tap link to pay', sample: 'https://example.com/pay/abc123' },
     { field: 'links.plan', description: 'Link to the plan in their account', sample: 'https://example.com/portal/payment-plan' },
   ],
+  // D-107 (B-208). The plan's own dates were kept; rent charged after it was
+  // agreed was not paid. `invoice.*` rather than `plan.missed_*` because that
+  // is what this is — an unpaid rent bill, not a missed installment.
+  'payment_plan.broken_unpaid_rent': [
+    { field: 'unit.number', description: 'Unit number', sample: 'A-12' },
+    { field: 'plan.balance', description: 'What is owed now the plan has ended', sample: '$1,200.00' },
+    { field: 'invoice.amount', description: 'The rent still outstanding on that invoice', sample: '$129.00' },
+    { field: 'invoice.due_date', description: 'When that rent was due', sample: 'Tuesday, September 1' },
+    { field: 'links.pay_now', description: 'One-tap link to pay', sample: 'https://example.com/pay/abc123' },
+    { field: 'links.plan', description: 'Link to the plan in their account', sample: 'https://example.com/portal/payment-plan' },
+  ],
   'payment_plan.completed': [
     { field: 'unit.number', description: 'Unit number', sample: 'A-12' },
     { field: 'plan.total', description: 'What the plan covered in total', sample: '$1,800.00' },

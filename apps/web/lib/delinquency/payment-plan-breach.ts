@@ -4,6 +4,8 @@ import { DEFAULT_RETRY_DAYS, isTerminalDecline } from '@storage/core/billing'
 import { daysBetween } from '@storage/core/jobs'
 import { installmentViews, isAutoCollecting, isFullyPaid } from '@storage/core/payment-plans'
 import { systemLiftHold } from '@/lib/admin/holds'
+import { lateFeeStepsFor } from '@/lib/billing/late-fees'
+import { activeTimeline } from '@/lib/admin/delinquency-timeline'
 import { createTask } from '@/lib/admin/tasks'
 import { planProgressCents } from '@/lib/admin/payment-plans'
 import type { RecordItem } from '@/lib/delinquency/engine'
@@ -53,6 +55,9 @@ export async function evaluatePaymentPlanBreaches(
     select: { paymentRetryDays: true, planGraceDays: true },
   })
 
+  // D-107 (B-208). The day this facility considers rent genuinely late.
+  const rentLateDay = await currentRentLateDay(facilityId, businessDate)
+
   // D-98 (B-190). An installment is not missed for BREACH purposes until its
   // grace has run out. Applied by moving the clock back rather than by
   // filtering the result, so it lands identically on every path below —
@@ -72,27 +77,51 @@ export async function evaluatePaymentPlanBreaches(
     const paidSinceCents = await planProgressCents(plan.totalCents, plan.invoiceIds)
 
     const missed = await brokenOn(plan, paidSinceCents, breachDate, businessDate, facility.paymentRetryDays)
-    if (missed) {
+    // D-107 (B-208). Only asked when the schedule itself is being kept —
+    // an installment breach names the installment and needs no second reason.
+    const overdueRent = missed ? null : await overdueRentOutsidePlan(plan, rentLateDay, businessDate)
+
+    const breach = missed
+      ? {
+          // B-206. `installmentId` so the notice can name WHICH payment was
+          // missed: a tenant who believes they paid has nothing to check
+          // against without it. The decision of which installment broke the
+          // plan is made here, against the grace window and the retry ladder,
+          // and the send path must not re-derive it.
+          event: 'payment_plan.broken' as const,
+          payload: { planId: plan.id, installmentId: missed.id },
+          reasonCode: 'payment_plan_broken',
+          message: 'payment plan broken — collections resume',
+        }
+      : overdueRent
+        ? {
+            // D-107 (B-208). A different fact and a different message: this
+            // tenant kept every installment. `invoiceId` for the same reason
+            // `installmentId` is carried above — the send path must not
+            // re-derive which unpaid rent ended the plan.
+            event: 'payment_plan.broken_unpaid_rent' as const,
+            payload: { planId: plan.id, invoiceId: overdueRent.id },
+            reasonCode: 'payment_plan_broken_unpaid_rent',
+            message: 'payment plan broken — rent outside the plan went unpaid',
+          }
+        : null
+
+    if (breach) {
       await prisma.paymentPlan.update({
         where: { id: plan.id },
         data: { status: 'broken', brokenAt: businessDate },
       })
-      await systemLiftHold(plan.holdId, 'delinquency:payment-plan-breach', 'payment_plan_broken')
+      await systemLiftHold(plan.holdId, 'delinquency:payment-plan-breach', breach.reasonCode)
       // PRD 05 CN-24 (B-191). The same beat that lifts the hold. This job runs
       // at hour 4, the dunning ladder at 5 and the timeline at 6 — so the
       // tenant hears it from us before they hear it from the ladder, or from
       // the keypad.
       await emitEvent({
-        name: 'payment_plan.broken',
+        name: breach.event,
         entityType: 'Lease',
         entityId: plan.leaseId,
         facilityId,
-        // B-206. `installmentId` so the notice can name WHICH payment was
-        // missed: a tenant who believes they paid has nothing to check
-        // against without it. The decision of which installment broke the
-        // plan is made here, against the grace window and the retry ladder,
-        // and the send path must not re-derive it.
-        payload: { planId: plan.id, installmentId: missed.id },
+        payload: breach.payload,
       })
       await createTask({
         facilityId,
@@ -102,7 +131,7 @@ export async function evaluatePaymentPlanBreaches(
         at: businessDate,
         priority: 'high',
       })
-      recordItem({ itemId: plan.leaseId, ok: true, message: 'payment plan broken — collections resume' })
+      recordItem({ itemId: plan.leaseId, ok: true, message: breach.message })
     } else if (isFullyPaid(plan.installments, paidSinceCents)) {
       await prisma.paymentPlan.update({
         where: { id: plan.id },
@@ -275,4 +304,69 @@ async function ladderStillRunning(
     select: { failureCode: true },
   })
   return !isTerminalDecline(lastFailure?.failureCode)
+}
+
+
+/// D-107 (B-208). The day this facility considers rent genuinely late — the
+/// `daysPastDue` of its own first late-fee step.
+///
+/// Not a new setting. "When is rent late here" is a question this facility has
+/// already answered, effective-dated, with a control an operator has already
+/// used; a second column beside it configuring the same intent is exactly the
+/// accumulation this repo's first rule is about. A lenient ladder therefore
+/// buys a lenient plan rule automatically, which is the right coupling.
+///
+/// Falls back to the delinquency timeline's first step for a facility that
+/// charges no late fees but does run a lien clock, and returns null when there
+/// is neither — a facility that acts on late rent in no way at all hides
+/// nothing behind a plan, so there is nothing for this to protect.
+async function currentRentLateDay(facilityId: string, asOf: Date): Promise<number | null> {
+  const steps = await lateFeeStepsFor(facilityId, asOf)
+  if (steps.length > 0) return steps[0].daysPastDue
+  const timeline = await activeTimeline(facilityId)
+  return timeline?.steps[0]?.dayOffset ?? null
+}
+
+/// The rent the plan never deferred and the tenant has stopped paying, or null.
+///
+/// **The hole this closes (B-208).** `halt_late_fees` and `halt_dunning` are
+/// evaluated per LEASE, not per invoice, so a plan's hold stands every
+/// collections mechanism down on the whole lease — including rent invoiced
+/// after the plan was agreed, which the plan never promised anything about.
+/// B-189 narrowed autopay to the frozen `invoiceIds` so a card keeps paying
+/// current rent; nothing did the equivalent for the fee ladder or the
+/// timeline. A manual-pay tenant could therefore keep every installment, pay
+/// no rent at all, and for up to ninety days take no late fee, no notice, no
+/// access suspension and no lien clock — twice a year at
+/// `planMaxPerRollingYear`. D-96 says current rent stays due on its own date;
+/// this is what makes that sentence true of a tenant who does not pay it.
+///
+/// Rent only. A fee invoice raised after the plan started should not exist —
+/// the hold is stopping the ladder that would raise it — and ending somebody's
+/// forbearance over one is not what "current rent stays due" means.
+///
+/// `void` is excluded and nothing else is, matching `arrearsForLease`: the set
+/// this asks about is the same set a plan would have been agreed over.
+async function overdueRentOutsidePlan(
+  plan: { leaseId: string; invoiceIds: string[] },
+  rentLateDay: number | null,
+  businessDate: Date,
+): Promise<{ id: string } | null> {
+  if (rentLateDay === null) return null
+  const cutoff = new Date(businessDate.getTime() - rentLateDay * 86_400_000)
+
+  const invoices = await prisma.invoice.findMany({
+    where: {
+      leaseId: plan.leaseId,
+      kind: 'rent',
+      status: { not: 'void' },
+      dueDate: { lte: cutoff },
+      id: { notIn: plan.invoiceIds },
+    },
+    orderBy: { dueDate: 'asc' },
+    select: { id: true, totalCents: true, amountPaidCents: true },
+  })
+  // Oldest first, so what ends the plan is the first bill they let go past —
+  // the one they will recognise, and the one the message names.
+  return invoices.find((invoice) => invoice.totalCents > invoice.amountPaidCents) ?? null
 }

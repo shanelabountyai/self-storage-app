@@ -708,6 +708,22 @@ const LAST_REVIEWED = '19 August 2026'
 // `LAST_REVIEWED` does not move: no claim on this page was re-checked against
 // the build, and none changed.
 //
+// Re-read 2026-08-31, at B-208 (a payment plan stops covering for rent it never
+// deferred). **No change.** The item is a nightly job, one new event and one
+// new email template; it renders no route, no state and no control. Nothing on
+// the public site or the portal is added or altered, so the generated coverage
+// claim and the route-keyed exception list are both untouched.
+//
+// The one thing worth naming: this ships a SIXTH payment-plan email, and the
+// B-198 entry above settled that this page says nothing about email in either
+// direction — a client's rendering of a message is not the site, and a page
+// that starts certifying outbound mail acquires a claim nobody re-checks. That
+// stands, and it is why a new template adds no sentence here. The template's
+// own FR-9a record is in `render.ts` and in PROGRESS, where B-198 put it.
+//
+// `LAST_REVIEWED` does not move: no claim on this page was re-checked against
+// the build, and none changed.
+//
 // ── B-201 (2026-08-28) ──────────────────────────────────────────────────────
 //
 // Re-read at B-201 (the reflow check that `[contain:layout]` cannot mask).

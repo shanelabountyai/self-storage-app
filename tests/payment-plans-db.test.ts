@@ -230,6 +230,7 @@ describeDb('payment plans', () => {
 
   afterAll(async () => {
     if (!hasDatabase) return
+    await prisma.lateFeeRule.deleteMany({ where: { facilityId } })
     await prisma.paymentPlan.deleteMany({ where: { lease: { facilityId } } })
     await prisma.leaseHold.deleteMany({ where: { lease: { facilityId } } })
     await prisma.ledgerEntry.deleteMany({ where: { facilityId } })
@@ -565,6 +566,85 @@ describeDb('payment plans', () => {
       const plan = await paymentPlanForLease(leaseId)
       expect(plan?.status).toBe('completed')
       expect(await leaseHasEffect(leaseId, 'halt_dunning')).toBe(false)
+    })
+
+    // --------------------------------------------------- B-208 / D-107 ----
+
+    /// The facility's first late-fee step — the day it decided rent is
+    /// genuinely late, which D-107 makes the day a plan stops covering for
+    /// unpaid rent. Created per test rather than in `beforeAll`, because every
+    /// other test in this file is written against a facility that has none.
+    async function lateFeeAtDay(daysPastDue: number): Promise<void> {
+      await prisma.lateFeeRule.create({
+        data: {
+          facilityId,
+          step: 1,
+          daysPastDue,
+          amountCents: 2000,
+          effectiveFrom: d('2026-01-01'),
+        },
+      })
+    }
+
+    it('breaks a plan when rent it never deferred goes unpaid past the first late-fee day', async () => {
+      // B-208. The hole: `halt_late_fees` and `halt_dunning` are evaluated per
+      // LEASE, so a tenant could keep every installment, pay no rent at all,
+      // and take no fee, no notice, no suspension and no lien clock for the
+      // life of the plan.
+      await lateFeeAtDay(5)
+      const leaseId = await newLease(5000)
+      const created = await createPaymentPlan(actor(managerId, 20), leaseId, {
+        installments: [{ dueDate: d('2026-10-01'), amountCents: 5000 }],
+        autoCollect: false,
+      })
+      if (!created.ok) throw new Error('setup failed')
+
+      // Rent charged AFTER the plan was agreed, so it is not in `invoiceIds`.
+      await invoice(leaseId, 12_900, { dueDate: d('2026-09-01') })
+
+      // Four days past due: inside this facility's own idea of late, and the
+      // frozen arrears are still unpaid — which must NOT break the plan, since
+      // deferring exactly those is what the plan is.
+      await evaluatePaymentPlanBreaches(facilityId, d('2026-09-04'), recordItem)
+      expect((await paymentPlanForLease(leaseId))?.status).toBe('active')
+
+      await evaluatePaymentPlanBreaches(facilityId, d('2026-09-06'), recordItem)
+      expect((await paymentPlanForLease(leaseId))?.status).toBe('broken')
+      expect(await leaseHasEffect(leaseId, 'halt_late_fees')).toBe(false)
+      expect(await leaseHasEffect(leaseId, 'halt_dunning')).toBe(false)
+      expect(collected.some((c) => c.message?.includes('rent outside the plan'))).toBe(true)
+
+      // A different fact gets a different message: this tenant kept every
+      // installment, and `payment_plan_broken` opens by telling them they did
+      // not.
+      const event = await prisma.domainEvent.findFirst({
+        where: { name: 'payment_plan.broken_unpaid_rent', entityId: leaseId },
+      })
+      expect(event).not.toBeNull()
+
+      await prisma.lateFeeRule.deleteMany({ where: { facilityId } })
+    })
+
+    it('leaves the plan standing when that rent is paid', async () => {
+      // The dangerous direction. Breaking the plan of somebody who paid
+      // everything asked of them is worse than the hole this closes.
+      await lateFeeAtDay(5)
+      const leaseId = await newLease(5000)
+      const created = await createPaymentPlan(actor(managerId, 20), leaseId, {
+        installments: [{ dueDate: d('2026-10-01'), amountCents: 5000 }],
+        autoCollect: false,
+      })
+      if (!created.ok) throw new Error('setup failed')
+
+      const rent = await invoice(leaseId, 12_900, { dueDate: d('2026-09-01') })
+      // Named explicitly: unnamed, it would settle the older frozen arrears.
+      await pay(leaseId, 12_900, { invoiceId: rent })
+
+      await evaluatePaymentPlanBreaches(facilityId, d('2026-09-06'), recordItem)
+      expect((await paymentPlanForLease(leaseId))?.status).toBe('active')
+      expect(await leaseHasEffect(leaseId, 'halt_dunning')).toBe(true)
+
+      await prisma.lateFeeRule.deleteMany({ where: { facilityId } })
     })
 
     // ------------------------------------------------- B-188 / D-96 ----

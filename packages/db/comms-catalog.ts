@@ -1032,7 +1032,7 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
       '',
       '{{plan.collection_line}}',
       '',
-      'While you keep to these dates we hold off on late fees, payment notices and turning off your gate access. If a payment is missed, the plan ends, all three start again, and the full amount becomes due.',
+      'While you keep to these dates we hold off on late fees, payment notices and turning off your gate access. If a payment is missed, or new rent goes unpaid, the plan ends, all three start again, and the full amount becomes due.',
       '',
       'Rent for each new month is separate from this plan and is still due on its usual date.',
       '',
@@ -1119,6 +1119,50 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
       'plan.balance',
       'plan.missed_amount',
       'plan.missed_due_date',
+      'links.pay_now',
+      'links.plan',
+      'facility.phone',
+    ],
+  },
+  {
+    // D-107 (B-208). The sixth message, and the one whose whole reason for
+    // existing is that `payment_plan_broken` would be a lie here. That one
+    // opens "A payment on your plan was not made" — and this tenant made every
+    // payment the schedule asked for. What they stopped paying is the rent
+    // charged since, which the plan never deferred and the agreement email
+    // says in as many words is still due on its usual date. Telling somebody
+    // who kept to a schedule that they did not is how a collections message
+    // becomes the thing a tenant is angriest about, and it announces the
+    // restart of late fees, notices and access suspension in the same breath.
+    key: 'payment_plan_broken_unpaid_rent',
+    classification: 'transactional',
+    subject: 'Your payment plan at {{facility.name}} has ended',
+    bodyText: [
+      'Hi {{tenant.first_name}},',
+      '',
+      'You kept to the payments on your plan for unit {{unit.number}} at {{facility.name}}, and we want to say so first.',
+      '',
+      'The plan covered what you owed when we agreed it. Rent charged since then was still due on its usual date, and {{invoice.amount}} due {{invoice.due_date}} has not been paid — so the plan has ended.',
+      '',
+      '{{plan.balance}} is now owed in full. Late fees start again from today, payment notices resume, and your gate access can be turned off.',
+      '',
+      'To put it right, pay {{plan.balance}} — or call {{facility.phone}} today and we will go through it with you. Talking to us is always better than leaving it.',
+      '',
+      'Pay now: {{links.pay_now}}',
+      '',
+      'Your plan and everything paid against it: {{links.plan}}',
+    ].join('\n'),
+    // Required for the same reason B-206 made the installment's amount and
+    // date required: a tenant who believes they paid their rent has nothing to
+    // check against without them, and a break with no identifiable invoice
+    // should fail loudly rather than mail a sentence with a hole in it.
+    requiredMergeFields: [
+      'tenant.first_name',
+      'unit.number',
+      'facility.name',
+      'plan.balance',
+      'invoice.amount',
+      'invoice.due_date',
       'links.pay_now',
       'links.plan',
       'facility.phone',
@@ -1494,6 +1538,11 @@ export const COMMS_RULES: readonly CommsRuleSeed[] = [
     category: 'payment_reminders',
   },
   { event: 'payment_plan.broken', templateKey: 'payment_plan_broken', classification: 'transactional' },
+  {
+    event: 'payment_plan.broken_unpaid_rent',
+    templateKey: 'payment_plan_broken_unpaid_rent',
+    classification: 'transactional',
+  },
   { event: 'payment_plan.completed', templateKey: 'payment_plan_completed', classification: 'transactional' },
   // B-206. Transactional for the same reason `broken` is: it is the end of a
   // financial agreement and the moment three collections mechanisms restart,

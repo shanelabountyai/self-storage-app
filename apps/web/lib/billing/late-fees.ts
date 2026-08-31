@@ -33,7 +33,11 @@ import type { Actor } from '@/lib/rbac/actor'
 type RecordItem = (outcome: { itemId: string; ok: boolean; message?: string }) => void
 
 /// The steps in force at a facility on a given date, one per step number.
-async function stepsFor(facilityId: string, asOf: Date): Promise<LateFeeStep[]> {
+///
+/// Exported for B-208: `lateFeeStepsFor(...)[0].daysPastDue` is the day this
+/// facility decided rent is genuinely late, and the payment-plan breach job
+/// reads it rather than inventing a second number for the same idea (D-107).
+export async function lateFeeStepsFor(facilityId: string, asOf: Date): Promise<LateFeeStep[]> {
   const rows = await prisma.lateFeeRule.findMany({ where: { facilityId } })
   // Effective-dated per step (FR-9), so changing only the second fee leaves the
   // first alone.
@@ -64,7 +68,7 @@ export async function assessLateFees(
 ): Promise<AssessResult> {
   const result: AssessResult = { charged: 0, skipped: 0 }
 
-  const steps = await stepsFor(facilityId, businessDate)
+  const steps = await lateFeeStepsFor(facilityId, businessDate)
   if (steps.length === 0) return result
 
   const leases = await prisma.lease.findMany({
