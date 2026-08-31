@@ -183,6 +183,10 @@ export type TenantLeaseSummary = {
   /// the plan form has to show it rather than let a staffer guess from the
   /// balance beside it.
   arrearsCents: number;
+  /// B-210. D-98's grace window at this lease's facility, so the plan builder
+  /// states the rule the breach job actually runs rather than "miss it and the
+  /// plan ends".
+  planGraceDays: number;
   startDate: Date;
   endDate: Date | null;
   /// B-186. When the tenant told the facility they were leaving — off-platform
@@ -380,7 +384,7 @@ export async function tenantProfile(
           startDate: true,
           endDate: true,
           noticeGivenAt: true,
-          facility: { select: { name: true } },
+          facility: { select: { name: true, planGraceDays: true } },
           unit: { select: { number: true } },
         },
       }),
@@ -468,6 +472,7 @@ export async function tenantProfile(
     monthlyRateCents: lease.monthlyRateCents,
     balanceCents: leaseBalances[index]._sum.amountCents ?? 0,
     arrearsCents: leaseArrears[index].outstandingCents,
+    planGraceDays: lease.facility.planGraceDays,
     startDate: lease.startDate,
     endDate: lease.endDate,
     noticeGivenAt: lease.noticeGivenAt,

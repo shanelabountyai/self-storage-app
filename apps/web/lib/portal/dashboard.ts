@@ -78,12 +78,30 @@ export type PortalLeaseSummary = {
   /// So: present for a `broken` plan as well as an active one, with the two
   /// facts kept apart. `completed` and `cancelled` are still null — a permanent
   /// route to the plan's history is B-193's.
+  ///
+  /// B-210, two further corrections in the same direction — say the true thing,
+  /// not the frightening one.
+  ///
+  /// It is null once the lease owes nothing. `status === 'broken'` had no time
+  /// bound and no balance test, so "Your payment plan has ended… the full
+  /// balance above is due now" rendered forever, directly beneath a $0.00
+  /// balance, for every tenant who ever broke a plan and then paid it off. The
+  /// plan itself stays on `/portal/payment-plan`, which is where a record of
+  /// something finished belongs.
+  ///
+  /// And `late` is separated from `missed`, because D-98 gives the tenant
+  /// `planGraceDays` to catch an installment up and nothing outside the breach
+  /// job knew it.
   paymentPlan: {
     status: 'active' | 'broken'
     /// The next installment still ahead, if any.
     next: { dueDate: Date; amountCents: number } | null
-    /// The OLDEST installment whose date has passed uncovered. Never merged
-    /// with `next`: they are different facts and one of them is an alarm.
+    /// The OLDEST uncovered installment whose date has passed but whose grace
+    /// has NOT — the plan is still alive and there is a deadline to name.
+    late: { dueDate: Date; amountCents: number; payByDate: Date } | null
+    /// The OLDEST installment uncovered past its grace. Never merged with
+    /// `next` or with `late`: they are different facts and one of them is an
+    /// alarm.
     missed: { dueDate: Date; amountCents: number } | null
   } | null
 }
@@ -170,10 +188,13 @@ export async function portalDashboardForTenant(
               }
             : null,
         paymentPlan:
-          plan && (plan.status === 'active' || plan.status === 'broken')
+          plan &&
+          (plan.status === 'active' || plan.status === 'broken') &&
+          (balance._sum.amountCents ?? 0) > 0
             ? {
                 status: plan.status,
                 next: installmentFact(plan.installments, 'upcoming'),
+                late: installmentFact(plan.installments, 'late'),
                 missed: installmentFact(plan.installments, 'missed'),
               }
             : null,
@@ -186,9 +207,16 @@ export async function portalDashboardForTenant(
 /// Ordered by date already (`paymentPlanForLease` sorts them), so "first" is
 /// the soonest upcoming one and the oldest missed one.
 function installmentFact(
-  installments: readonly { dueDate: Date; amountCents: number; status: string }[],
-  status: 'upcoming' | 'missed',
-): { dueDate: Date; amountCents: number } | null {
+  installments: readonly {
+    dueDate: Date
+    amountCents: number
+    status: string
+    graceEndsOn: Date
+  }[],
+  status: 'upcoming' | 'late' | 'missed',
+): { dueDate: Date; amountCents: number; payByDate: Date } | null {
   const found = installments.find((installment) => installment.status === status)
-  return found ? { dueDate: found.dueDate, amountCents: found.amountCents } : null
+  return found
+    ? { dueDate: found.dueDate, amountCents: found.amountCents, payByDate: found.graceEndsOn }
+    : null
 }

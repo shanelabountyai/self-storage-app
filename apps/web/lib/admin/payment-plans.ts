@@ -392,6 +392,9 @@ export async function paymentPlansForLease(
       lease: {
         select: {
           autopayEnabled: true,
+          // B-210. D-98's grace window, so every screen built off this view
+          // reads a plan inside grace as `late` rather than as broken.
+          facility: { select: { planGraceDays: true } },
           tenant: { select: { stripeDefaultPaymentMethodId: true } },
         },
       },
@@ -418,7 +421,12 @@ export async function paymentPlansForLease(
           hasSavedCard: Boolean(plan.lease.tenant.stripeDefaultPaymentMethodId),
         }),
         collectedCents: paidSinceCents,
-        installments: installmentViews(plan.installments, paidSinceCents, asOf),
+        installments: installmentViews(
+          plan.installments,
+          paidSinceCents,
+          asOf,
+          plan.lease.facility.planGraceDays,
+        ),
       }
     }),
   )

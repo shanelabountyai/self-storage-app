@@ -271,6 +271,8 @@ describeDb('payment plan notifications (CN-24)', () => {
       expect(sends[0].body).toContain('from your card on file')
       // D-15: what the tenant loses if a payment is missed, in their words.
       expect(sends[0].body).toContain('the plan ends')
+      // B-210. Including how long they have to put it right (D-98's grace).
+      expect(sends[0].body).toContain('3 days to catch it up')
       expect(sends[0].body).not.toMatch(/installment status|hold lifted|dunning|delinquen/i)
 
       // CN-24 / B-198: the same schedule as a real table in the HTML part —
@@ -325,6 +327,10 @@ describeDb('payment plan notifications (CN-24)', () => {
       expect(sends[0].body).toContain('Tuesday, September 15')
       // Autopay is on and a card is saved, and it still goes.
       expect(sends[0].body).toContain('from your card on file')
+      // B-210. This said "if it is missed, the plan ends", which is not the
+      // rule D-98 runs — the tenant has the facility's grace to catch it up,
+      // and a tenant told the plan is already gone has no reason to.
+      expect(sends[0].body).toContain('3 days to catch it up')
     })
 
     it('raises nothing on a day no installment is the lead days away', async () => {

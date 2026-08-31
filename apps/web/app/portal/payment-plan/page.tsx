@@ -129,9 +129,19 @@ export default async function PortalPaymentPlanPage() {
                               .reduce((sum, i) => sum + i.amountCents, 0),
                         )}
                       </td>
+                      {/* B-210. A payment inside D-98's grace is LATE, not
+                          missed — the plan is still alive, and the deadline is
+                          the only thing the tenant can act on. Said in words
+                          with the date in them (1.4.1 A): "Missed" in red on a
+                          plan that has not broken is both frightening and
+                          false. */}
                       <td className="py-1 capitalize">
                         {installment.status === 'missed' ? (
                           <span className="font-medium text-red-800">Missed</span>
+                        ) : installment.status === 'late' ? (
+                          <span className="font-medium normal-case">
+                            Late — pay by {formatDate(installment.graceEndsOn)}
+                          </span>
                         ) : (
                           installment.status
                         )}

@@ -257,7 +257,9 @@ export async function haltedLeases(
         tenantId: true,
         tenant: { select: { firstName: true, lastName: true } },
         unit: { select: { number: true } },
-        facility: { select: { name: true } },
+        // B-210. `planGraceDays` so `missedCount` below counts installments
+        // that have actually broken their grace, not ones a day past due.
+        facility: { select: { name: true, planGraceDays: true } },
       },
     }),
     prisma.ledgerEntry.groupBy({
@@ -297,7 +299,9 @@ export async function haltedLeases(
     const haltedSince = oldestEffectiveFrom(halting)
     const plan = planByLease.get(lease.id)
     const collectedCents = plan ? (progress.get(plan.id)?.progressCents ?? 0) : 0
-    const views = plan ? installmentViews(plan.installments, collectedCents, asOf) : []
+    const views = plan
+      ? installmentViews(plan.installments, collectedCents, asOf, lease.facility.planGraceDays)
+      : []
 
     rows.push({
       leaseId: lease.id,

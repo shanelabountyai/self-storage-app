@@ -730,13 +730,20 @@ describeDb('payment plans', () => {
       })
       await pay(leaseId, 15_000, { invoiceId: nextRent })
 
+      // B-210. `late`, not `missed`: the view is now measured against the same
+      // grace window the breach job uses, so the schedule the tenant reads and
+      // the night the plan actually ends can no longer disagree. This asserted
+      // `missed` at +2 while the break below happens at +5, and the comment
+      // beneath it called that two separate windows — it was one window, read
+      // two different ways.
       const plan = await paymentPlanForLease(leaseId, new Date(now.getTime() + 2 * day))
-      expect(plan?.installments.map((i) => i.status)).toEqual(['missed', 'upcoming'])
+      expect(plan?.installments.map((i) => i.status)).toEqual(['late', 'upcoming'])
+      const pastGrace = await paymentPlanForLease(leaseId, new Date(now.getTime() + 5 * day))
+      expect(pastGrace?.installments.map((i) => i.status)).toEqual(['missed', 'upcoming'])
 
       // ...and the nightly job breaks it, rather than leaving the ladder
-      // halted on a payment that never touched the arrears.
-      // Past D-98's three days of grace — the view above is `missed` at +2,
-      // and the BREAK is a separate window.
+      // halted on a payment that never touched the arrears — on the same day
+      // the view above starts reading `missed`.
       await evaluatePaymentPlanBreaches(facilityId, new Date(now.getTime() + 5 * day), recordItem)
       expect((await paymentPlanForLease(leaseId))?.status).toBe('broken')
       expect(await leaseHasEffect(leaseId, 'halt_dunning')).toBe(false)
@@ -765,12 +772,18 @@ describeDb('payment plans', () => {
       })
       expect(returned).toMatchObject({ ok: true })
 
+      // B-210. Inside D-98's grace the plan is alive and the installment reads
+      // `late`, with the deadline on it; past the grace it reads `missed`, on
+      // the same day the nightly job below ends the plan.
       const plan = await paymentPlanForLease(leaseId, new Date(now.getTime() + 2 * day))
       expect(plan?.status).toBe('active')
-      expect(plan?.installments[0].status).toBe('missed')
+      expect(plan?.installments[0].status).toBe('late')
+      expect(plan?.installments[0].graceEndsOn).toEqual(new Date(now.getTime() + 4 * day))
+      expect(
+        (await paymentPlanForLease(leaseId, new Date(now.getTime() + 5 * day)))?.installments[0]
+          .status,
+      ).toBe('missed')
 
-      // Past D-98's three days of grace — the view above is `missed` at +2,
-      // and the BREAK is a separate window.
       await evaluatePaymentPlanBreaches(facilityId, new Date(now.getTime() + 5 * day), recordItem)
       expect((await paymentPlanForLease(leaseId))?.status).toBe('broken')
       expect(await leaseHasEffect(leaseId, 'halt_dunning')).toBe(false)

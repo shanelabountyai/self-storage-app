@@ -823,6 +823,45 @@ const LAST_REVIEWED = '19 August 2026'
 //
 // `LAST_REVIEWED` does not move: no claim on this page was re-checked against
 // the build, and none changed.
+//
+// ── B-210 (2026-08-31) ──────────────────────────────────────────────────────
+//
+// Re-read at B-210 (a tenant one day late is told their plan is dead).
+// **Customer-facing, and it adds a state to two portal screens — so the
+// declared exceptions are WIDENED rather than left, and nothing else moves.**
+//
+// **What reached a customer page.** `/portal`'s plan card gains a third
+// warning state ("A payment on your plan is late", with the pay-by date and a
+// pay link carrying the installment amount) and loses its permanent one — the
+// card is now suppressed once the lease owes nothing, so "Your payment plan
+// has ended… the full balance above is due now" no longer renders forever over
+// a $0.00 balance. `/portal/payment-plan`'s schedule gains a "Late — pay by
+// <date>" row status.
+//
+// **Both are told apart by WORDS, not colour (1.4.1 A)** — the same rule the
+// B-191 entry above records for this card, and the reason the late row is a
+// sentence with a date in it rather than an amber cell. The card is still a
+// server-rendered `role="status"` present at page load rather than inserted on
+// change (4.1.3 AA); a plan going from live to late is not something that
+// happens while the tenant is looking at the page.
+//
+// **Two exceptions in `STATE_EXCEPTIONS` are widened, in the understating
+// direction.** The `/portal` card exception named "the two warning states" and
+// there are now three; the `/portal/payment-plan` exception covered only ENDED
+// plans, and the late and missed ROW states of a live one were never named at
+// all. Both need an installment whose date has actually gone by, which the
+// demo seed deliberately does not create (a past installment would be broken
+// by the nightly job on a schedule nobody controls, so the fixture would show
+// a different thing depending on when the jobs last ran — the B-193 entry
+// above settled that). Declared, not closed.
+//
+// **The emails are again out of scope of this page**, per the B-198 and B-208
+// entries: two plan templates now state D-98's grace window instead of "miss
+// it and the plan ends", and this page says nothing about outbound mail in
+// either direction.
+//
+// `LAST_REVIEWED` does not move: no claim on this page was re-checked against
+// the build, and none changed.
 
 export default function AccessibilityPage() {
   return (

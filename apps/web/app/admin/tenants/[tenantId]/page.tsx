@@ -712,9 +712,18 @@ export default async function TenantProfilePage({
                             .reduce((sum, i) => sum + i.amountCents, 0),
                       )}
                     </td>
+                    {/* B-210. Inside D-98's grace the plan is still alive,
+                        and the counter has to be able to say so with the
+                        deadline in it — a staffer reading "Missed" to a tenant
+                        who has three days left is quoting a rule the product
+                        does not run. */}
                     <td className="py-1 capitalize">
                       {installment.status === "missed" ? (
                         <span className="font-medium text-red-800">Missed</span>
+                      ) : installment.status === "late" ? (
+                        <span className="font-medium normal-case">
+                          Late — pay by {formatDate(installment.graceEndsOn)}
+                        </span>
                       ) : (
                         installment.status
                       )}
@@ -1826,8 +1835,14 @@ export default async function TenantProfilePage({
                   </p>
                   <p className="text-muted-foreground max-w-prose text-xs text-pretty">
                     Agreeing one places a hold that stops dunning, late fees and
-                    access suspension on this lease tonight; missing an
-                    installment lifts it automatically and collections resume.
+                    access suspension on this lease tonight;{" "}
+                    {/* B-210. The grace window is what the tenant will be told
+                        on the phone and in every plan email, so the person
+                        agreeing the plan has to be quoting the same rule. */}
+                    {lease.planGraceDays > 0
+                      ? `an installment still unpaid ${lease.planGraceDays} ${lease.planGraceDays === 1 ? "day" : "days"} after its date`
+                      : "missing an installment"}{" "}
+                    lifts it automatically and collections resume.
                     Rent invoiced from here on is still due on its own date — a
                     plan covers what is already past due, so paying next month&rsquo;s
                     rent does not count towards an installment, and that rent is

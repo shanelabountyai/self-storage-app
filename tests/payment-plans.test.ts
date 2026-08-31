@@ -119,6 +119,39 @@ describe('installmentViews', () => {
     expect(views[0].status).toBe('missed')
   })
 
+  // B-210. D-98's grace window reached only the breach job, so every screen
+  // and both plan emails called a payment one day late a broken promise while
+  // the plan was in fact alive for three more days.
+  it('reads an installment inside the grace window as late, not missed', () => {
+    const views = installmentViews(installments, 0, d('2026-09-02'), 3)
+    expect(views[0].status).toBe('late')
+    expect(views[0].graceEndsOn).toEqual(d('2026-09-04'))
+  })
+
+  it('is missed once the grace window itself has passed', () => {
+    expect(installmentViews(installments, 0, d('2026-09-04'), 3)[0].status).toBe('late')
+    expect(installmentViews(installments, 0, d('2026-09-05'), 3)[0].status).toBe('missed')
+  })
+
+  // The breach job moves its own clock back by the same number of days rather
+  // than passing `graceDays`; the two must land on the identical boundary or a
+  // plan breaks on a night the portal says it is still alive.
+  it('lands on the same boundary as a clock moved back by the grace', () => {
+    const shifted = (asOf: string) =>
+      installmentViews(installments, 0, new Date(d(asOf).getTime() - 3 * 86_400_000))[0].status ===
+      'missed'
+    for (const day of ['2026-09-01', '2026-09-03', '2026-09-04', '2026-09-05', '2026-09-20']) {
+      expect(installmentViews(installments, 0, d(day), 3)[0].status === 'missed').toBe(shifted(day))
+    }
+  })
+
+  it('with no grace configured, behaves exactly as it did before', () => {
+    expect(installmentViews(installments, 0, d('2026-09-02'), 0)[0].status).toBe('missed')
+    expect(installmentViews(installments, 0, d('2026-09-02'), 0)[0].graceEndsOn).toEqual(
+      d('2026-09-01'),
+    )
+  })
+
   it('numbers installments by schedule order, not input order', () => {
     const outOfOrder = [installments[2], installments[0], installments[1]]
     const views = installmentViews(outOfOrder, 0, d('2026-08-15'))

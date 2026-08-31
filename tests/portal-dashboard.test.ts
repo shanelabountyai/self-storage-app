@@ -264,14 +264,34 @@ describeDb('portalDashboardForTenant', () => {
       },
     })
 
-    // Nothing paid, and the first installment's date has gone: it is MISSED,
-    // and the second is what is actually next.
+    // B-210. The card is gated on the lease owing something, so the arrears
+    // the plan was agreed over have to be on the ledger for it to render at
+    // all — which is the true state of any lease that has a plan.
+    await prisma.ledgerEntry.create({
+      data: { facilityId, leaseId: lease.id, type: 'charge', amountCents: 120_000, description: 'Arrears' },
+    })
+
+    // B-210. Five days after the first installment's date, past the facility's
+    // three-day grace: it is genuinely MISSED, and the second is what is next.
     const asOf = new Date(Date.UTC(2026, 8, 20))
     const [active] = await portalDashboardForTenant(tenantId, asOf)
     expect(active.paymentPlan).toEqual({
       status: 'active',
-      next: { dueDate: new Date(Date.UTC(2026, 9, 15)), amountCents: 60_000 },
-      missed: { dueDate: new Date(Date.UTC(2026, 8, 15)), amountCents: 60_000 },
+      next: { dueDate: new Date(Date.UTC(2026, 9, 15)), amountCents: 60_000, payByDate: new Date(Date.UTC(2026, 9, 18)) },
+      late: null,
+      missed: { dueDate: new Date(Date.UTC(2026, 8, 15)), amountCents: 60_000, payByDate: new Date(Date.UTC(2026, 8, 18)) },
+    })
+
+    // B-210. One day past the same date, the plan is alive for two more days
+    // and the card has to say so — with the deadline, which is the only thing
+    // the tenant can act on. This read "missed" before, on a plan the breach
+    // job would not have touched for another two nights.
+    const [inGrace] = await portalDashboardForTenant(tenantId, new Date(Date.UTC(2026, 8, 16)))
+    expect(inGrace.paymentPlan?.missed).toBeNull()
+    expect(inGrace.paymentPlan?.late).toEqual({
+      dueDate: new Date(Date.UTC(2026, 8, 15)),
+      amountCents: 60_000,
+      payByDate: new Date(Date.UTC(2026, 8, 18)),
     })
 
     await prisma.paymentPlan.update({
@@ -281,12 +301,28 @@ describeDb('portalDashboardForTenant', () => {
     const [broken] = await portalDashboardForTenant(tenantId, asOf)
     expect(broken.paymentPlan?.status).toBe('broken')
 
+    // B-210. "Your payment plan has ended… the full balance above is due now"
+    // had no balance test, so it rendered forever over a $0.00 balance for
+    // every tenant who ever broke a plan and then paid it off. The plan itself
+    // stays on /portal/payment-plan, which is where a finished thing belongs.
+    await prisma.ledgerEntry.create({
+      data: { facilityId, leaseId: lease.id, type: 'payment', amountCents: -120_000, description: 'Paid off' },
+    })
+    const [settled] = await portalDashboardForTenant(tenantId, asOf)
+    expect(settled.balanceCents).toBe(0)
+    expect(settled.paymentPlan).toBeNull()
+    await prisma.ledgerEntry.deleteMany({ where: { leaseId: lease.id } })
+    await prisma.ledgerEntry.create({
+      data: { facilityId, leaseId: lease.id, type: 'charge', amountCents: 120_000, description: 'Arrears' },
+    })
+
     // A plan that closed out cleanly does go quiet here — a permanent route to
     // its history is B-193's, not this card's.
     await prisma.paymentPlan.update({ where: { id: plan.id }, data: { status: 'completed' } })
     const [completed] = await portalDashboardForTenant(tenantId, asOf)
     expect(completed.paymentPlan).toBeNull()
 
+    await prisma.ledgerEntry.deleteMany({ where: { leaseId: lease.id } })
     await prisma.paymentPlan.delete({ where: { id: plan.id } })
     await prisma.leaseHold.delete({ where: { id: hold.id } })
     await prisma.lease.delete({ where: { id: lease.id } })

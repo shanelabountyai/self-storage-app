@@ -595,18 +595,35 @@ export const STATE_EXCEPTIONS: readonly StateException[] = [
     reason:
       'the schedule of a plan the tenant has finished with, in any of its three ended states, which needs a plan that actually reached one — the demo plan is live and stays that way',
   },
+  // B-210. The same fixture problem one row down: every installment in the
+  // demo plan is in the FUTURE by design (a past one would be broken by the
+  // nightly job on a schedule nobody controls), so the schedule's two other
+  // row states have never been scanned. B-210 added the second of them — an
+  // installment inside D-98's grace, which now reads "Late — pay by <date>"
+  // instead of "Missed" — so declaring the pair is the honest move rather than
+  // leaving a state this item created undeclared.
+  {
+    route: '/portal/payment-plan',
+    state: 'a late or missed installment row',
+    audience: 'portal',
+    reason:
+      'the schedule rows for an installment past its date — inside its grace, and past it — which need an installment that has actually gone by, and one moves on its own the moment the nightly jobs run',
+  },
   // B-191. The twin of the row above, and an omission B-090c left behind: the
   // dashboard has carried a payment-plan card since that item, in a state no
   // scan reached. B-196 closed the common one — "you're on a plan", with the
   // next payment named — and these two remain for the same reason as the row
   // above: both need a payment to have been missed, which no fixture can hold
   // still.
+  // B-210 widened this from two warning states to three: a payment inside its
+  // grace is now told apart from one past it, because the card called both a
+  // missed payment while the plan was in fact alive for `planGraceDays` more.
   {
     route: '/portal',
-    state: 'payment plan card, after a missed payment or a break',
+    state: 'payment plan card, after a late or missed payment or a break',
     audience: 'portal',
     reason:
-      'the two warning states of the plan card — a payment missed, and the plan ended because one was — which need a plan that has actually missed one, and a missed installment moves on its own the moment the nightly jobs run',
+      'the three warning states of the plan card — a payment late inside its grace, a payment missed past it, and the plan ended because one was — which all need a plan that has actually let an installment date go by, and that state moves on its own the moment the nightly jobs run',
   },
 ] as const
 

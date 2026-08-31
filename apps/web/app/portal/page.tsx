@@ -142,11 +142,44 @@ function LeaseCard({ lease, impersonated }: { lease: PortalLeaseSummary; imperso
             </p>
           ) : (
             <>
+              {/* B-210. Late is not missed. D-98 gives the tenant
+                  `planGraceDays` to catch an installment up, and this card
+                  called the day after a due date a missed payment — the plan is
+                  alive, and the tenant who reads that it is not has no reason
+                  to pay. The deadline is stated because "soon" is not a rule
+                  somebody can keep, and the pay link carries the installment
+                  amount rather than the whole arrears the plan exists to
+                  replace (the same correction B-193 made on the plan page). */}
+              {lease.paymentPlan.late && (
+                <p>
+                  <strong>A payment on your plan is late.</strong>{' '}
+                  {formatRate(lease.paymentPlan.late.amountCents)} was due on{' '}
+                  {formatDueDate(lease.paymentPlan.late.dueDate, lease.facilityTimezone)}. Your plan
+                  carries on if you pay it by{' '}
+                  <strong>
+                    {formatDueDate(lease.paymentPlan.late.payByDate, lease.facilityTimezone)}
+                  </strong>
+                  .{' '}
+                  <Link
+                    href={`/portal/pay?lease=${lease.leaseId}&amount=${lease.paymentPlan.late.amountCents / 100}`}
+                    className="underline underline-offset-4"
+                  >
+                    Pay {formatRate(lease.paymentPlan.late.amountCents)} now
+                  </Link>
+                  , or call {lease.facilityPhone}.
+                </p>
+              )}
               {lease.paymentPlan.missed && (
                 <p>
                   <strong>A payment on your plan was missed.</strong>{' '}
                   {formatRate(lease.paymentPlan.missed.amountCents)} was due on{' '}
-                  {formatDueDate(lease.paymentPlan.missed.dueDate, lease.facilityTimezone)}. Pay it
+                  {formatDueDate(lease.paymentPlan.missed.dueDate, lease.facilityTimezone)}.{' '}
+                  <Link
+                    href={`/portal/pay?lease=${lease.leaseId}&amount=${lease.paymentPlan.missed.amountCents / 100}`}
+                    className="underline underline-offset-4"
+                  >
+                    Pay {formatRate(lease.paymentPlan.missed.amountCents)} now
+                  </Link>{' '}
                   to keep the plan, or call {lease.facilityPhone}.
                 </p>
               )}

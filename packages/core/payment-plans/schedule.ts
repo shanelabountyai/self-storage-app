@@ -155,11 +155,24 @@ export function isAutoCollecting(input: {
   return input.autoCollect && input.autopayEnabled && input.hasSavedCard
 }
 
-export type InstallmentStatus = 'paid' | 'upcoming' | 'missed'
+/// B-210. `late` is a fourth state, not a shade of `missed`: D-98's grace
+/// window was applied ONLY inside the breach job, by shifting its own clock,
+/// so every screen and message read the day after a due date as a broken
+/// promise while the plan was in fact alive for `planGraceDays` more. Telling
+/// a tenant their plan has ended when it has not is the same class of harm as
+/// telling them a payment is taken care of when it is not (D-97) — it is a
+/// reason to stop trying.
+export type InstallmentStatus = 'paid' | 'upcoming' | 'late' | 'missed'
 
 export type InstallmentView = PlannedInstallment & {
   position: number
   status: InstallmentStatus
+  /// The last day this installment can be paid without breaking the plan —
+  /// `dueDate` plus the facility's grace. Equal to `dueDate` where there is no
+  /// grace. Carried on the view rather than recomputed per screen because it
+  /// is the deadline the tenant is held to, and three screens and two emails
+  /// state it.
+  graceEndsOn: Date
 }
 
 /// Which installments a cumulative amount paid since the plan started covers.
@@ -175,6 +188,16 @@ export function installmentViews(
   installments: readonly PlannedInstallment[],
   paidSincePlanStartCents: number,
   asOf: Date,
+  /// D-98's grace window (`Facility.planGraceDays`), in days. Zero — the
+  /// default, and what every pre-B-210 caller had — makes `late` unreachable
+  /// and reproduces the old two-state behaviour exactly.
+  ///
+  /// `evaluatePaymentPlanBreaches` passes a clock already moved back by the
+  /// same number of days instead, which lands on the identical boundary
+  /// (`dueDate + grace < asOf`); it stays that way because the breach job
+  /// measures the retry ladder against the unshifted date in the same call and
+  /// must not net the two windows against each other.
+  graceDays = 0,
 ): InstallmentView[] {
   let remaining = Math.max(0, paidSincePlanStartCents)
   const ordered = [...installments].sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime())
@@ -182,12 +205,15 @@ export function installmentViews(
   return ordered.map((installment, index) => {
     const covered = remaining >= installment.amountCents
     remaining = covered ? remaining - installment.amountCents : 0
+    const graceEndsOn = new Date(installment.dueDate.getTime() + Math.max(0, graceDays) * 86_400_000)
     const status: InstallmentStatus = covered
       ? 'paid'
-      : installment.dueDate.getTime() < asOf.getTime()
+      : graceEndsOn.getTime() < asOf.getTime()
         ? 'missed'
-        : 'upcoming'
-    return { ...installment, position: index + 1, status }
+        : installment.dueDate.getTime() < asOf.getTime()
+          ? 'late'
+          : 'upcoming'
+    return { ...installment, position: index + 1, status, graceEndsOn }
   })
 }
 

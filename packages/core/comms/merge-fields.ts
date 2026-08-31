@@ -259,6 +259,17 @@ export const EVENT_MERGE_FIELDS: Record<string, readonly MergeFieldSpec[]> = {
       description: 'Whether each payment is taken from their card automatically',
       sample: 'We will take each payment from your card on file on the date shown.',
     },
+    {
+      // B-210. The rule these two messages used to state was the one nothing
+      // runs: D-98 gives a late installment `planGraceDays` to be caught up,
+      // and both templates said the plan ended the day it was missed. A tenant
+      // told their plan is already gone has no reason to pay by the deadline
+      // that would in fact save it.
+      field: 'plan.grace_line',
+      description: 'What happens if a payment is late, including how long they have to catch it up',
+      sample:
+        'If a payment is late you have 3 days to catch it up. If it is still unpaid after that, or new rent goes unpaid, the plan ends, all three start again, and the full amount becomes due.',
+    },
     { field: 'links.plan', description: 'Link to the plan in their account', sample: 'https://example.com/portal/payment-plan' },
   ],
   'payment_plan.installment_due_soon': [
@@ -269,6 +280,12 @@ export const EVENT_MERGE_FIELDS: Record<string, readonly MergeFieldSpec[]> = {
       field: 'plan.collection_line',
       description: 'Whether this payment is taken from their card automatically',
       sample: 'We will take this payment from your card on file on the due date.',
+    },
+    {
+      field: 'plan.grace_line',
+      description: 'What happens if this payment is late, including how long they have to catch it up',
+      sample:
+        'If it is late you have 3 days to catch it up. After that the plan ends: the full amount you owe becomes due, late fees start again and your gate access can be turned off.',
     },
     { field: 'links.pay_now', description: 'One-tap link to pay', sample: 'https://example.com/pay/abc123' },
   ],

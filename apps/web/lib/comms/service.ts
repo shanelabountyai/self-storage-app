@@ -1098,6 +1098,7 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
       'plan.total': formatCents(plan.totalCents),
       'plan.schedule': scheduleValue(plan.installments),
       'plan.collection_line': collectionLine(plan, 'each payment'),
+      'plan.grace_line': graceLine(plan.lease.facility.planGraceDays, 'agreed'),
       'links.plan': `${baseUrl()}/portal/payment-plan`,
     }
   },
@@ -1115,6 +1116,7 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
         day: 'numeric',
       }),
       'plan.collection_line': collectionLine(plan, 'this payment'),
+      'plan.grace_line': graceLine(plan.lease.facility.planGraceDays, 'due_soon'),
       'links.pay_now': await payNowLink(recipient, event),
     }
   },
@@ -1212,7 +1214,12 @@ async function planForEvent(event: DomainEvent) {
         select: { id: true, dueDate: true, amountCents: true },
       },
       lease: {
-        select: { autopayEnabled: true, tenant: { select: { stripeDefaultPaymentMethodId: true } } },
+        select: {
+          autopayEnabled: true,
+          // B-210. D-98's grace window, for `graceLine` below.
+          facility: { select: { planGraceDays: true } },
+          tenant: { select: { stripeDefaultPaymentMethodId: true } },
+        },
       },
     },
   })
@@ -1247,6 +1254,30 @@ function collectionLine(
   return automatic
     ? `We will take ${subject} from your card on file on the date shown — you do not need to do anything.`
     : `${subject === 'each payment' ? 'These payments are' : 'This payment is'} not taken automatically. Pay online, over the phone, or at the office on or before the date shown.`
+}
+
+/// B-210. D-98's grace window, in the tenant's words and read fresh at send
+/// time from the facility that actually runs the breach job.
+///
+/// Both of these messages previously stated the rule as "miss a payment and
+/// the plan ends", which is what the code did before B-190 and has not been
+/// true since. The number is stated rather than described because a deadline
+/// a tenant cannot count to is not one they can keep — and because the
+/// facility can change it, so a sentence with "three days" typed into it goes
+/// quietly false the day somebody edits the setting.
+///
+/// Zero grace is a real configuration and gets the original sentence back:
+/// there is no catching up to describe.
+function graceLine(graceDays: number, message: 'agreed' | 'due_soon'): string {
+  const days = `${graceDays} ${graceDays === 1 ? 'day' : 'days'}`
+  if (message === 'agreed') {
+    return graceDays > 0
+      ? `If a payment is late you have ${days} to catch it up. If it is still unpaid after that, or new rent goes unpaid, the plan ends, all three start again, and the full amount becomes due.`
+      : 'If a payment is missed, or new rent goes unpaid, the plan ends, all three start again, and the full amount becomes due.'
+  }
+  return graceDays > 0
+    ? `If it is late you have ${days} to catch it up. After that the plan ends: the full amount you owe becomes due, late fees start again and your gate access can be turned off.`
+    : 'If it is missed, the plan ends: the full amount you owe becomes due, late fees start again and your gate access can be turned off.'
 }
 
 /// What the lease owes right now, from the ledger — PRD 01 §7.3 makes the
