@@ -512,6 +512,7 @@ export default async function AdminSettingsPage() {
           <Field
             name="invoiceLeadDays"
             label="Invoice this many days ahead"
+            hint="Also how far ahead a payment-plan installment reminder goes out — one number for both, so shortening it moves those reminders too."
             type="number"
             min={0}
             max={28}

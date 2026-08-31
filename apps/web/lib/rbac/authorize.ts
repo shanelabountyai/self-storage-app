@@ -193,9 +193,14 @@ export type MonetaryDecision =
   | { allowed: false; reason: 'forbidden' }
   | { allowed: false; reason: 'over_limit'; limitCents: number; escalateToRank: number | null }
 
-/// PRD 02 RBAC-2: over-limit does not simply fail — it routes to the next role
-/// up. Returning the target rank lets the caller create the approval request
-/// (the approval workflow itself lands with refunds in B-048).
+/// PRD 02 RBAC-2 asked for an approval REQUEST routed to the next role up.
+/// **It was never built, no row owns it, and D-98 settled the posture instead:
+/// refuse, and name who can.** The rank comes back so the caller can look up
+/// the lowest role above whose limit covers the amount and put its NAME in the
+/// refusal — nothing is queued, routed or notified, and that person performs
+/// the action themselves. This comment promised the workflow "lands with
+/// refunds in B-048"; B-048 shipped without it, and the roles screen was still
+/// telling owners over-limit work escalates until B-211.
 export function checkMonetaryAuthority(
   actor: Actor,
   action: MonetaryAction,

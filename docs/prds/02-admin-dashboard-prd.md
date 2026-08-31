@@ -85,7 +85,7 @@ Role-based access control (RBAC) with facility scoping. A user has exactly one r
 
 **Requirements:**
 - **RBAC-1:** Permissions are enforced server-side on every API endpoint; the UI hides what the role can't do.
-- **RBAC-2:** Monetary authority limits (max fee waiver, max refund without approval) are configurable per role at the org level; exceeding the limit creates an approval request routed to the next role up.
+- **RBAC-2:** Monetary authority limits (max fee waiver, max refund without approval) are configurable per role at the org level. **Corrected 2026-08-31 (B-211) to what is built, and to what D-98 settled:** exceeding the limit is **refused on the spot**, and the refusal **names** the lowest role above whose limit covers the amount. It does not create an approval request: nothing is routed, queued or notified, and the person named has to perform the action themselves. A routed approval request has never been built and **no backlog row owns it** — the comment on `checkMonetaryAuthority` promised it would arrive with refunds in B-048, B-048 shipped without it, and `/admin/settings/roles` went on telling owners that over-limit work "does not fail: it escalates to the next role up" for four months after. An owner who believes that sets manager limits low, and every over-limit waiver dead-ends at the counter with a tenant standing there.
 - **RBAC-3:** All auth via the shared identity service (master PRD); staff accounts require MFA for Owner/Admin and Regional roles.
 - **RBAC-4:** Session facility context (see 5.1) never widens data access beyond assigned facilities.
 

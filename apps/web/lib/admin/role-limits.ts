@@ -118,14 +118,14 @@ function effective(limit: number | null): number {
 /// `nextApproverRole` walks roles above the actor's rank in ASCENDING rank
 /// order and stops at the first one whose limit covers the amount. Give a
 /// facility manager a bigger waiver limit than the regional above them and
-/// every over-limit waiver escalates to somebody with LESS authority than the
-/// person who asked — the approval goes through a rung that cannot actually
-/// authorise it, and the one above never sees it. So this is refused at the
-/// point of editing rather than left to surface as a strange approval chain.
+/// every over-limit waiver names somebody with LESS authority than the person
+/// who asked — the staffer is sent to a rung that cannot actually authorise it,
+/// and the one above is never told. So this is refused at the point of editing
+/// rather than left to surface at a counter.
 ///
 /// Only roles that HOLD the action's permission are compared, because they are
 /// exactly the roles `nextApproverRole` considers — a number sitting on a role
-/// that cannot waive a fee has no bearing on where a waiver escalates to.
+/// that cannot waive a fee has no bearing on who an over-limit waiver names.
 /// Equal ranks are not compared: neither is above the other.
 export function ladderViolation(
   rows: RoleLimitRow[],
@@ -144,7 +144,7 @@ export function ladderViolation(
         return (
           `${below.roleName} would be able to approve ${describe(below.limits[action])} while ` +
           `${above.roleName}, who is ranked above them and is who an over-limit ` +
-          `${MONETARY_ACTION_LABELS[action].toLowerCase()} escalates to, is held to ` +
+          `${MONETARY_ACTION_LABELS[action].toLowerCase()} refusal sends staff to, is held to ` +
           `${describe(above.limits[action])}. Raise ${above.roleName} first.`
         )
       }
