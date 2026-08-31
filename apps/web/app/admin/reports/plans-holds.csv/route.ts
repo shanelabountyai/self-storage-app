@@ -53,7 +53,7 @@ export async function GET(): Promise<Response> {
       'Days halted',
       'Plan status',
       'Plan total',
-      'Collected under plan',
+      'Cleared under plan',
       'Next installment due',
       'Next installment amount',
       'Installments missed',

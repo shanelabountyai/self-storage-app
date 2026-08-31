@@ -1,5 +1,6 @@
 import { prisma } from '@storage/db'
 import { recordAudit } from '@storage/core/audit'
+import { businessDateFor } from '@storage/core/jobs'
 import { emitEvent } from '@storage/core/events'
 import {
   installmentViews,
@@ -102,7 +103,7 @@ export async function createPaymentPlan(
   // fix six dates on a form that was never going to be accepted.
   const facility = await prisma.facility.findUniqueOrThrow({
     where: { id: lease.facilityId },
-    select: { planMaxDays: true, planMaxPerRollingYear: true },
+    select: { planMaxDays: true, planMaxPerRollingYear: true, timezone: true },
   })
 
   // Every plan on this lease in the last rolling year, whatever became of it.
@@ -110,10 +111,25 @@ export async function createPaymentPlan(
   // last night was replaceable this morning, for ever, each replacement
   // re-halting dunning, late fees and access suspension while the lien clock
   // never ran.
+  //
+  // ONE exception, and it does not reopen D-98 (B-209): a plan cancelled on
+  // the same facility-local day it was created, having collected nothing while
+  // it stood, is a CORRECTION rather than an arrangement. A manager who
+  // mistypes an installment date, spots it and re-enters the schedule had
+  // otherwise spent one of the lease's two plans for the year — on a Saturday,
+  // at the counter, with no amend path anywhere in the product.
+  //
+  // It cannot buy anybody a free plan, on two counts. A plan cancelled the day
+  // it was agreed provided no forbearance to speak of: its hold is lifted with
+  // it, and any plan that survives past local midnight counts however it ends.
+  // And a payment landing on the covered arrears while it stood makes it count
+  // regardless, which is the case a cancel-and-re-agree would be reaching for.
   const yearAgo = new Date(now.getTime() - 365 * 86_400_000)
-  const priorCount = await prisma.paymentPlan.count({
+  const priorPlans = await prisma.paymentPlan.findMany({
     where: { leaseId, createdAt: { gte: yearAgo } },
+    select: { id: true, invoiceIds: true, createdAt: true, cancelledAt: true },
   })
+  const priorCount = priorPlans.length - (await correctionCount(priorPlans, facility.timezone))
   if (priorCount >= facility.planMaxPerRollingYear) {
     return { ok: false, reason: 'too_many_plans', priorCount, limit: facility.planMaxPerRollingYear }
   }
@@ -388,7 +404,7 @@ export async function paymentPlansForLease(
 
   return Promise.all(
     plans.map(async (plan) => {
-      const paidSinceCents = progress.get(plan.id) ?? 0
+      const paidSinceCents = progress.get(plan.id)?.progressCents ?? 0
       return {
         id: plan.id,
         status: plan.status,
@@ -443,6 +459,65 @@ export async function arrearsForLease(
   }
 }
 
+/// How many of these plans are same-day corrections rather than arrangements
+/// (B-209) — see the note in `createPaymentPlan`, which is the only caller.
+///
+/// The money test reads ALLOCATIONS inside the plan's own few minutes, not its
+/// progress: progress is a live figure off the invoices, so the successor
+/// plan's payments — or next spring's — would silently un-correct a mistype
+/// somebody fixed in March, and a rule about what happened on one Saturday
+/// must not change its mind afterwards.
+async function correctionCount(
+  plans: readonly { id: string; invoiceIds: string[]; createdAt: Date; cancelledAt: Date | null }[],
+  timezone: string,
+): Promise<number> {
+  const sameDay = plans.filter(
+    (plan) =>
+      plan.cancelledAt !== null &&
+      businessDateFor(plan.cancelledAt, timezone).getTime() ===
+        businessDateFor(plan.createdAt, timezone).getTime(),
+  )
+  if (sameDay.length === 0) return 0
+
+  const invoiceIds = [...new Set(sameDay.flatMap((plan) => plan.invoiceIds))]
+  const allocations =
+    invoiceIds.length === 0
+      ? []
+      : await prisma.paymentAllocation.findMany({
+          where: { invoiceId: { in: invoiceIds } },
+          select: { invoiceId: true, createdAt: true },
+        })
+
+  return sameDay.filter(
+    (plan) =>
+      !allocations.some(
+        (allocation) =>
+          plan.invoiceIds.includes(allocation.invoiceId) &&
+          allocation.createdAt >= plan.createdAt &&
+          allocation.createdAt <= plan.cancelledAt!,
+      ),
+  ).length
+}
+
+/// What a plan's covered arrears have done since it was agreed, split three
+/// ways (B-209).
+///
+/// `progressCents` is the figure the SCHEDULE is measured against — the debt
+/// came down, and `installmentViews` is right not to care how. The other two
+/// say how, and an owner deciding whether plans work at all needs the
+/// difference: waive $600 of fees to make four plans agreeable and the debt
+/// falls $600 with nobody having collected a cent.
+export type PlanProgress = {
+  /// `collectedCents + waivedCents`. What D-96 has always meant by progress.
+  progressCents: number
+  /// The part somebody actually paid — the frozen total less what is still
+  /// outstanding on the covered invoices, counting a VOIDED one's unpaid
+  /// remainder as still outstanding, because forgiving it collected nothing.
+  collectedCents: number
+  /// The part a manager forgave by voiding a covered invoice.
+  waivedCents: number
+}
+
 /// How much of the arrears a plan has actually retired (D-96, B-188).
 ///
 /// The frozen total less what is still outstanding on the invoices the plan
@@ -468,7 +543,7 @@ export async function arrearsForLease(
 /// go, since outstanding never falls below zero.
 export async function planProgressCents(totalCents: number, invoiceIds: string[]): Promise<number> {
   const byPlan = await planProgressByPlan([{ id: 'one', totalCents, invoiceIds }])
-  return byPlan.get('one') ?? 0
+  return byPlan.get('one')?.progressCents ?? 0
 }
 
 /// The same figure for many plans in one query (B-195).
@@ -480,32 +555,50 @@ export async function planProgressCents(totalCents: number, invoiceIds: string[]
 /// true while there is one implementation to point at.
 export async function planProgressByPlan(
   plans: readonly { id: string; totalCents: number; invoiceIds: string[] }[],
-): Promise<Map<string, number>> {
+): Promise<Map<string, PlanProgress>> {
   const allInvoiceIds = [...new Set(plans.flatMap((plan) => plan.invoiceIds))]
   const invoices =
     allInvoiceIds.length === 0
       ? []
       : await prisma.invoice.findMany({
-          where: { id: { in: allInvoiceIds }, status: { not: 'void' } },
-          select: { id: true, totalCents: true, amountPaidCents: true },
+          where: { id: { in: allInvoiceIds } },
+          select: { id: true, status: true, totalCents: true, amountPaidCents: true },
         })
-  // A voided invoice is absent from this map, which is what makes it drop out
-  // of the outstanding sum entirely — the same behaviour the per-plan query
-  // had, where `status: { not: 'void' }` simply did not return the row.
-  const outstandingByInvoice = new Map(
+  // Voided invoices come back too now, flagged rather than filtered out: they
+  // are the whole difference between the two figures below, and the query that
+  // excluded them could not tell "paid" from "forgiven" at all.
+  const byInvoice = new Map(
     invoices.map((invoice) => [
       invoice.id,
-      Math.max(0, invoice.totalCents - invoice.amountPaidCents),
+      {
+        voided: invoice.status === 'void',
+        outstandingCents: Math.max(0, invoice.totalCents - invoice.amountPaidCents),
+      },
     ]),
   )
 
   return new Map(
     plans.map((plan) => {
-      const outstandingCents = plan.invoiceIds.reduce(
-        (sum, invoiceId) => sum + (outstandingByInvoice.get(invoiceId) ?? 0),
-        0,
-      )
-      return [plan.id, plan.invoiceIds.length === 0 ? 0 : Math.max(0, plan.totalCents - outstandingCents)]
+      if (plan.invoiceIds.length === 0) {
+        return [plan.id, { progressCents: 0, collectedCents: 0, waivedCents: 0 }]
+      }
+      // Two outstanding sums off the same rows. `outstandingAll` keeps a
+      // voided invoice's unpaid remainder in, so the money that came in is
+      // what is left when it is subtracted from the frozen total.
+      let outstandingAll = 0
+      let outstandingLive = 0
+      for (const invoiceId of plan.invoiceIds) {
+        const invoice = byInvoice.get(invoiceId)
+        if (!invoice) continue
+        outstandingAll += invoice.outstandingCents
+        if (!invoice.voided) outstandingLive += invoice.outstandingCents
+      }
+      const progressCents = Math.max(0, plan.totalCents - outstandingLive)
+      const collectedCents = Math.max(0, plan.totalCents - outstandingAll)
+      // The remainder by construction, never a third subtraction — so the two
+      // always add back up to the progress the schedule is measured against,
+      // including where a bounce has clamped `collectedCents` at zero.
+      return [plan.id, { progressCents, collectedCents, waivedCents: progressCents - collectedCents }]
     }),
   )
 }

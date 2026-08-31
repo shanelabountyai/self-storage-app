@@ -66,6 +66,11 @@ export type HaltedPlanSummary = {
   id: string
   status: 'active' | 'completed' | 'broken' | 'cancelled'
   totalCents: number
+  /// What the plan has RETIRED, however it came down — `PlanProgress.progressCents`,
+  /// the figure `installmentViews` below is measured against, so this row and
+  /// its next-installment cell cannot disagree. Deliberately not the
+  /// effectiveness table's `collectedCents`, which excludes waivers; the
+  /// screen and the export say "cleared" for exactly that reason (B-209).
   collectedCents: number
   /// The next installment not yet covered, or null once every one is. Derived
   /// through `installmentViews` rather than by reading a stored flag, which is
@@ -81,9 +86,19 @@ export type PlanEffectiveness = {
   /// Plans AGREED in the period, and what they promised to clear.
   agreedCount: number
   agreedCents: number
-  /// What those same plans have actually retired — as of now, not as of the
+  /// What those same plans have actually COLLECTED — as of now, not as of the
   /// end of the period. See the note at the top of the file.
+  ///
+  /// Allocations only (B-209). Progress, which is what the schedule is
+  /// measured against, also comes down when a manager voids a covered invoice
+  /// — right there, wrong here: this is the figure an owner uses to decide
+  /// whether plans work at all, and waiving $600 of fees to make four plans
+  /// agreeable read as $600 collected.
   collectedCents: number
+  /// The forgiven half of that same reduction, shown beside it rather than
+  /// dropped. It is not a smaller number for being the wrong kind of money —
+  /// four plans bought with waivers is the thing worth seeing.
+  waivedCents: number
   /// Plans that BROKE in the period, and how much of what they promised was
   /// still outstanding. Not a subset of the agreed figures: a plan agreed in
   /// February and broken in March belongs to February's `agreedCents` and
@@ -120,6 +135,7 @@ const EMPTY_EFFECTIVENESS: PlanEffectiveness = {
   agreedCount: 0,
   agreedCents: 0,
   collectedCents: 0,
+  waivedCents: 0,
   brokenCount: 0,
   brokenCents: 0,
   completedCount: 0,
@@ -193,6 +209,7 @@ export function sumEffectiveness(rows: readonly PlanEffectiveness[]): PlanEffect
       agreedCount: acc.agreedCount + row.agreedCount,
       agreedCents: acc.agreedCents + row.agreedCents,
       collectedCents: acc.collectedCents + row.collectedCents,
+      waivedCents: acc.waivedCents + row.waivedCents,
       brokenCount: acc.brokenCount + row.brokenCount,
       brokenCents: acc.brokenCents + row.brokenCents,
       completedCount: acc.completedCount + row.completedCount,
@@ -279,7 +296,7 @@ export async function haltedLeases(
 
     const haltedSince = oldestEffectiveFrom(halting)
     const plan = planByLease.get(lease.id)
-    const collectedCents = plan ? (progress.get(plan.id) ?? 0) : 0
+    const collectedCents = plan ? (progress.get(plan.id)?.progressCents ?? 0) : 0
     const views = plan ? installmentViews(plan.installments, collectedCents, asOf) : []
 
     rows.push({
@@ -355,20 +372,23 @@ export async function planEffectiveness(
   const byFacility = new Map<string, PlanEffectiveness>()
   for (const plan of plans) {
     const facilityId = plan.lease.facilityId
-    const collected = progress.get(plan.id) ?? 0
+    const moved = progress.get(plan.id) ?? { progressCents: 0, collectedCents: 0, waivedCents: 0 }
     const current = byFacility.get(facilityId) ?? { ...EMPTY_EFFECTIVENESS }
 
     if (inPeriod(plan.createdAt)) {
       current.agreedCount += 1
       current.agreedCents += plan.totalCents
-      current.collectedCents += collected
+      current.collectedCents += moved.collectedCents
+      current.waivedCents += moved.waivedCents
     }
     if (inPeriod(plan.brokenAt)) {
       current.brokenCount += 1
       // What the plan promised and has still not delivered. Clamped because a
       // tenant can keep paying after a break, and "minus $200 broke" is not a
       // fact about anything.
-      current.brokenCents += Math.max(0, plan.totalCents - collected)
+      // Progress, not collections: a waived invoice is genuinely not owed any
+      // more, so counting it here would report money nobody is going to chase.
+      current.brokenCents += Math.max(0, plan.totalCents - moved.progressCents)
     }
     if (inPeriod(plan.completedAt)) {
       current.completedCount += 1

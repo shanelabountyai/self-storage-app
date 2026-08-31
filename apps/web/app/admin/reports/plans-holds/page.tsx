@@ -296,7 +296,7 @@ export default async function PlansHoldsPage({
                                 {PLAN_STATUS_LABELS[row.plan.status]}
                                 <span className="text-muted-foreground block text-xs">
                                   {formatCents(row.plan.collectedCents)} of{' '}
-                                  {formatCents(row.plan.totalCents)} collected
+                                  {formatCents(row.plan.totalCents)} cleared
                                   {row.plan.missedCount > 0 && (
                                     <> · {row.plan.missedCount} missed</>
                                   )}
@@ -325,7 +325,10 @@ export default async function PlansHoldsPage({
           Do the plans work — {label}
         </h2>
         <p className="text-muted-foreground max-w-prose text-sm text-pretty">
-          Plans agreed in this month, and what became of them. <strong>Collected</strong> and{' '}
+          Plans agreed in this month, and what became of them. <strong>Collected</strong> is money
+          somebody paid; <strong>waived</strong> is arrears a manager forgave by voiding an
+          invoice. The debt came down either way, which is why they sit side by side — plans made
+          agreeable by writing the fees off are not plans that worked. Collected, waived and{' '}
           <strong>still owed on broken plans</strong> are read from the invoices as they stand
           today, not as they stood at the end of the month — a tenant who pays late moves those
           figures for a month already past, and a plan agreed in one month can break in another,
@@ -335,7 +338,7 @@ export default async function PlansHoldsPage({
         <div tabIndex={0} className="overflow-x-auto">
           <table className="w-full min-w-3xl border-collapse text-sm">
             <caption className="sr-only">
-              Payment plans agreed, collected, broken and completed in {label}, per facility
+              Payment plans agreed, collected, waived, broken and completed in {label}, per facility
             </caption>
             <thead>
               <tr className="border-input border-b text-left">
@@ -350,6 +353,9 @@ export default async function PlansHoldsPage({
                 </th>
                 <th scope="col" className="py-2 pr-4 text-right">
                   Collected
+                </th>
+                <th scope="col" className="py-2 pr-4 text-right">
+                  Waived
                 </th>
                 <th scope="col" className="py-2 pr-4 text-right">
                   Plans broken
@@ -378,6 +384,9 @@ export default async function PlansHoldsPage({
                     {formatCents(facility.effectiveness.collectedCents)}
                   </td>
                   <td className="py-2 pr-4 text-right tabular-nums">
+                    {formatCents(facility.effectiveness.waivedCents)}
+                  </td>
+                  <td className="py-2 pr-4 text-right tabular-nums">
                     {facility.effectiveness.brokenCount}
                   </td>
                   <td className="py-2 pr-4 text-right tabular-nums">
@@ -400,6 +409,9 @@ export default async function PlansHoldsPage({
                   <td className="py-2 pr-4 text-right tabular-nums">
                     {formatCents(report.total.collectedCents)}
                   </td>
+                  <td className="py-2 pr-4 text-right tabular-nums">
+                    {formatCents(report.total.waivedCents)}
+                  </td>
                   <td className="py-2 pr-4 text-right tabular-nums">{report.total.brokenCount}</td>
                   <td className="py-2 pr-4 text-right tabular-nums">
                     {formatCents(report.total.brokenCents)}
@@ -411,7 +423,7 @@ export default async function PlansHoldsPage({
               )}
               {report.facilities.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="text-muted-foreground py-3">
+                  <td colSpan={8} className="text-muted-foreground py-3">
                     No facilities you can see money for.
                   </td>
                 </tr>

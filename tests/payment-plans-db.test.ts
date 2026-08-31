@@ -187,6 +187,22 @@ async function pay(
   return payment.id
 }
 
+/// Pushes a plan's agreement a day back from its cancellation, so the rolling
+/// year counts it. B-209 excludes a plan cancelled the same facility-local day
+/// it was created with nothing collected — a correction, not an arrangement —
+/// and both timestamps land in the same second when a test agrees and cancels
+/// in a row.
+async function backdateCancel(planId: string): Promise<void> {
+  const plan = await prisma.paymentPlan.findUniqueOrThrow({
+    where: { id: planId },
+    select: { createdAt: true },
+  })
+  await prisma.paymentPlan.update({
+    where: { id: planId },
+    data: { createdAt: new Date(plan.createdAt.getTime() - 86_400_000) },
+  })
+}
+
 describeDb('payment plans', () => {
   beforeAll(async () => {
     const facility = await prisma.facility.create({
@@ -424,6 +440,11 @@ describeDb('payment plans', () => {
       expect(
         await cancelPaymentPlan(actor(managerId, 20), first.planId, 'tenant changed their mind'),
       ).toMatchObject({ ok: true })
+      // Backdated so it is not a same-day CORRECTION, which B-209 excludes
+      // from the count deliberately. A plan agreed one day and cancelled the
+      // next is an arrangement that was made and then unmade; that is the
+      // chain this row is about.
+      await backdateCancel(first.planId)
 
       // Manager is the LOWEST rank that may agree one at all, so the second is
       // not theirs to agree.
@@ -442,11 +463,47 @@ describeDb('payment plans', () => {
       expect(
         await cancelPaymentPlan(asRegional, agreed.planId, 'broke it again'),
       ).toMatchObject({ ok: true })
+      await backdateCancel(agreed.planId)
 
       const third = await createPaymentPlan(asRegional, leaseId, {
         installments: [{ dueDate: d('2026-09-03'), amountCents: 5000 }],
       })
       expect(third).toMatchObject({ ok: false, reason: 'too_many_plans', priorCount: 2, limit: 2 })
+    })
+
+    it('does not spend a plan on a same-day correction, and does spend one once money moves (B-209)', async () => {
+      // The Saturday case: a manager mistypes an installment date, spots it,
+      // cancels and re-enters. There is no amend path anywhere in the
+      // product, so without this the lease has spent one of its two plans for
+      // the year and the second must be agreed a rank up.
+      const leaseId = await newLease()
+      const mistyped = await createPaymentPlan(actor(managerId, 20), leaseId, {
+        installments: [{ dueDate: d('2026-09-01'), amountCents: 5000 }],
+      })
+      if (!mistyped.ok) throw new Error('setup failed')
+      expect(
+        await cancelPaymentPlan(actor(managerId, 20), mistyped.planId, 'mistyped the date'),
+      ).toMatchObject({ ok: true })
+
+      // Re-entered by the SAME manager: not escalated, because as far as the
+      // count is concerned this is still the lease's first plan.
+      const corrected = await createPaymentPlan(actor(managerId, 20), leaseId, {
+        installments: [{ dueDate: d('2026-09-02'), amountCents: 5000 }],
+      })
+      expect(corrected).toMatchObject({ ok: true })
+      if (!corrected.ok) throw new Error('unreachable')
+
+      // And it is ungameable: once money has moved under a plan, cancelling it
+      // the same day no longer buys a free one.
+      await pay(leaseId, 1000)
+      expect(
+        await cancelPaymentPlan(actor(managerId, 20), corrected.planId, 'renegotiated'),
+      ).toMatchObject({ ok: true })
+      expect(
+        await createPaymentPlan(actor(managerId, 20), leaseId, {
+          installments: [{ dueDate: d('2026-09-03'), amountCents: 4000 }],
+        }),
+      ).toMatchObject({ ok: false, reason: 'needs_escalation', priorCount: 1 })
     })
 
     it('reads a chain of plans as a chain, with what each one collected', async () => {

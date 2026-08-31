@@ -37,6 +37,7 @@ let planLeaseId = ''
 let bankruptLeaseId = ''
 let chasedLeaseId = ''
 let planId = ''
+let planInvoiceId = ''
 let invoiceCounter = 0
 
 function actor(permissions: PermissionKey[] = ['reports:financial', 'reports:operational']): Actor {
@@ -161,6 +162,7 @@ describeDb('plans & holds report (B-195)', () => {
     //    $50 of the $200 it froze, and $150 is still deferred.
     const onPlan = await makeLease('plan', 5_000)
     planLeaseId = onPlan.leaseId
+    planInvoiceId = onPlan.invoiceId
     const planHold = await placeHold(planLeaseId, 'payment_plan', d('2026-04-10'))
     const plan = await prisma.paymentPlan.create({
       data: {
@@ -313,6 +315,36 @@ describeDb('plans & holds report (B-195)', () => {
       expect(april.agreedCount).toBe(1)
       expect(april.agreedCents).toBe(20_000)
       expect(april.collectedCents).toBe(5_000)
+    })
+
+    it('never counts a waiver as money collected, and shows it beside it (B-209)', async () => {
+      // The defect: `collectedCents` was progress, and progress falls when a
+      // manager VOIDS a covered invoice. Write off the $150 still owed to make
+      // this plan agreeable and the report said $200 was collected — which is
+      // the one figure an owner uses to decide whether plans work at all.
+      await prisma.invoice.update({ where: { id: planInvoiceId }, data: { status: 'void' } })
+      try {
+        const april = (await planEffectiveness([facilityId], APRIL.start, APRIL.end)).get(
+          facilityId,
+        )!
+        expect(april.collectedCents).toBe(5_000)
+        expect(april.waivedCents).toBe(15_000)
+        expect(april.collectedCents + april.waivedCents).toBe(20_000)
+
+        // And the SCHEDULE is untouched: the debt did come down, so the plan
+        // still reads as having retired the whole $200 — the definition
+        // `installmentViews` is measured against (D-96, B-188).
+        const row = (await haltedLeases([facilityId], ASOF)).find(
+          (candidate) => candidate.leaseId === planLeaseId,
+        )!
+        expect(row.plan!.collectedCents).toBe(20_000)
+        expect(row.plan!.nextInstallment).toBeNull()
+      } finally {
+        await prisma.invoice.update({
+          where: { id: planInvoiceId },
+          data: { status: 'partially_paid' },
+        })
+      }
     })
 
     it('counts nothing in a month the plan did not touch', async () => {
