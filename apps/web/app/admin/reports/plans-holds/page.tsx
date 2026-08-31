@@ -134,11 +134,19 @@ export default async function PlansHoldsPage({
       </div>
 
       <nav aria-label="Related reports" className="flex flex-wrap gap-3">
+        {/* B-207. Named for what it exports rather than for the page it sits
+            on. The file carries the halted list as of now and nothing else —
+            the plan-effectiveness figures below answer for the chosen month,
+            and a file where half the rows answered for a month and half did
+            not would be worse than two files. That was already the deliberate
+            design (see the route's own note); the only thing missing was
+            saying so on the screen, where a reader picks a month, presses
+            Download and gets a file the month never touched. */}
         <Link
           href="/admin/reports/plans-holds.csv"
           className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
         >
-          Download CSV
+          Download the halted list (CSV)
         </Link>
         <Link
           href="/admin/reports/delinquency"
@@ -153,6 +161,10 @@ export default async function PlansHoldsPage({
           All reports
         </Link>
       </nav>
+      <p className="text-muted-foreground max-w-prose text-sm text-pretty">
+        The CSV is the halted list as it stands right now. It does not carry the plan
+        effectiveness figures, and the month above does not change it.
+      </p>
 
       <section aria-labelledby="halted-heading" className="flex flex-col gap-3">
         <h2 id="halted-heading" className="font-medium">

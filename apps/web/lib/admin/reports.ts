@@ -1,6 +1,6 @@
 import { prisma } from '@storage/db'
 import {
-  arAging,
+  arAgingSplit,
   attachRate,
   daysPastDue,
   economicOccupancy,
@@ -11,6 +11,7 @@ import {
   rateVariance,
   reservationConversion,
   sumArAging,
+  sumArAgingSplit,
   sumAttachRate,
   sumEconomicOccupancy,
   sumMoveCounts,
@@ -18,6 +19,7 @@ import {
   UNASSIGNED_STAFF,
   wholeMonthsBetween,
   type ArAging,
+  type ArAgingSplit,
   type AttachRateResult,
   type ConversionResult,
   type EconomicOccupancyResult,
@@ -26,6 +28,7 @@ import {
   type RateVarianceRow,
 } from '@storage/core/metrics'
 import { OCCUPYING_LEASE_STATUSES } from '@storage/core/inventory'
+import { effectsByLease } from '@/lib/admin/holds'
 import { facilityAccess, ForbiddenError, can } from '@/lib/rbac/authorize'
 import type { Actor } from '@/lib/rbac/actor'
 
@@ -560,8 +563,12 @@ export async function movesForFacility(
 }
 
 export type DelinquencyReport = {
-  rows: { facilityId: string; facilityName: string; aging: ArAging }[]
+  rows: { facilityId: string; facilityName: string; aging: ArAging; split: ArAgingSplit }[]
   total: ArAging
+  /// B-207. The same money, split by whether the delinquency ladder is still
+  /// working it. `totalSplit.total` is `total` by construction, so everything
+  /// that tied out before still ties out.
+  totalSplit: ArAgingSplit
   /// B-150. The instant every bucket in this report describes.
   ///
   /// AR aging is point-in-time and D-65 settled that it stays that way — how
@@ -608,6 +615,7 @@ export async function delinquencyReport(actor: Actor): Promise<DelinquencyReport
   return {
     rows,
     total: sumArAging(rows.map((row) => row.aging)),
+    totalSplit: sumArAgingSplit(rows.map((row) => row.split)),
     asOf,
     timezone: zones.size === 1 ? [...zones][0]! : null,
   }
@@ -618,11 +626,25 @@ export async function delinquencyReport(actor: Actor): Promise<DelinquencyReport
 /// Takes no date and cannot be given one — see D-65. Exported for the same
 /// reason as `occupancyForFacility`: a scheduled report knows its facility and
 /// has no actor to scope by.
+///
+/// B-207: the split is computed HERE, not by each caller, because this one
+/// function is what the AR table, the dashboard tile, the scheduled
+/// delinquency email and the accounting close all read. B-195 built
+/// `arAgingSplit` and only the tenant-level drill-down used it, so the four
+/// surfaces that actually get forwarded to an owner still could not say
+/// whether anyone was chasing the money. `aging` is `split.total` by
+/// construction and is deliberately still returned — nothing that tied out
+/// stops tying out.
 export async function agingForFacility(
   facilityId: string,
   facilityName: string,
   asOf: Date = new Date(),
-): Promise<{ facilityId: string; facilityName: string; aging: ArAging }> {
+): Promise<{
+  facilityId: string
+  facilityName: string
+  aging: ArAging
+  split: ArAgingSplit
+}> {
   const leases = await prisma.lease.findMany({
     where: { facilityId },
     select: {
@@ -630,25 +652,34 @@ export async function agingForFacility(
       invoices: { select: { dueDate: true, totalCents: true, amountPaidCents: true } },
     },
   })
-  if (leases.length === 0) return { facilityId, facilityName, aging: arAging([]) }
+  if (leases.length === 0) {
+    const empty = arAgingSplit([])
+    return { facilityId, facilityName, aging: empty.total, split: empty }
+  }
 
-  const balances = await prisma.ledgerEntry.groupBy({
-    by: ['leaseId'],
-    where: { leaseId: { in: leases.map((lease) => lease.id) } },
-    _sum: { amountCents: true },
-  })
+  const leaseIds = leases.map((lease) => lease.id)
+  const [balances, halted] = await Promise.all([
+    prisma.ledgerEntry.groupBy({
+      by: ['leaseId'],
+      where: { leaseId: { in: leaseIds } },
+      _sum: { amountCents: true },
+    }),
+    // `halt_dunning` and not "has any hold", for the reason `delinquencyDetail`
+    // gives at length: the catalog decides which holds stop the ladder, not
+    // this file (US-42).
+    effectsByLease(leaseIds, 'halt_dunning', asOf),
+  ])
   const balanceByLease = new Map(balances.map((row) => [row.leaseId, row._sum.amountCents ?? 0]))
 
-  return {
-    facilityId,
-    facilityName,
-    aging: arAging(
-      leases.map((lease) => ({
-        daysPastDue: daysPastDue(lease.invoices, asOf),
-        outstandingCents: balanceByLease.get(lease.id) ?? 0,
-      })),
-    ),
-  }
+  const split = arAgingSplit(
+    leases.map((lease) => ({
+      daysPastDue: daysPastDue(lease.invoices, asOf),
+      outstandingCents: balanceByLease.get(lease.id) ?? 0,
+      halted: halted.has(lease.id),
+    })),
+  )
+
+  return { facilityId, facilityName, aging: split.total, split }
 }
 
 export type FacilityAttachRate = {

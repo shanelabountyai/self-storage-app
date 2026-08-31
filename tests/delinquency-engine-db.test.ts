@@ -516,6 +516,21 @@ describeDb('the delinquency engine', () => {
         reasonCode: 'insufficient_funds',
       })
       expect(returned.ok).toBe(true)
+
+      // Pin when the bounce happened. `returnPayment` stamps the reversal entry
+      // with the real wall clock, and `reversalGracedLeases` measures the grace
+      // window from THAT — so every date below was really being compared
+      // against today, and the suite passed or failed on what day it was run.
+      // It went red for the first time on 2026-08-31, when "10 days before
+      // 2026-09-10" caught up with the calendar; the two tests either side of
+      // it were passing for the wrong reason, one of them because the bounce
+      // was dated five days AFTER the business date it was asserted against.
+      // 2026-08-24 is the date the comments have always claimed: two days
+      // before the grace-window assertion, seventeen before the resume.
+      await prisma.ledgerEntry.updateMany({
+        where: { leaseId, paymentId: payment.id, type: 'adjustment', reversalOfId: { not: null } },
+        data: { occurredAt: d('2026-08-24') },
+      })
       return payment.id
     }
 

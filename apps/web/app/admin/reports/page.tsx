@@ -8,6 +8,7 @@ import {
   occupancyReport,
   unitOccupancyNote,
 } from '@/lib/admin/reports'
+import { ArAgingSplitTable } from '@/components/admin/ar-aging-split-table'
 import { formatCents } from '@/lib/format'
 import { UNASSIGNED_STAFF, type AttachRateBucket } from '@storage/core/metrics'
 
@@ -22,14 +23,6 @@ export const metadata = { title: 'Reports' }
 
 // US-39.4's buckets, in the order the PRD lists them. Labels say "days" once,
 // in the header, rather than repeating it in five column titles.
-const AR_BUCKET_LABELS = [
-  ['d0to10', '0–10'],
-  ['d11to30', '11–30'],
-  ['d31to60', '31–60'],
-  ['d61to90', '61–90'],
-  ['over90', 'Over 90'],
-] as const
-
 function percent(ratio: number): string {
   return `${(ratio * 100).toFixed(1)}%`
 }
@@ -572,49 +565,28 @@ export default async function ReportsPage({
         <p id="ar-as-at" className="text-muted-foreground text-sm text-pretty">
           {arAgingNote(delinquency.asOf, delinquency.timezone, label)}
         </p>
-        {/* Wide table: scrolls inside its own container rather than pushing the
+        {/* B-207. The same table the delinquency drill-down renders, and the
+            same component — B-195's chased/halted split existed for months and
+            reached only that one screen, while this table, the dashboard tile,
+            the scheduled email and the close pack (the four an owner actually
+            gets forwarded) still showed one undifferentiated figure. Sharing
+            the component is what stops them diverging again.
+            Wide table: scrolls inside its own container rather than pushing the
             page sideways. */}
-        <div tabIndex={0} className="overflow-x-auto">
-          <table className="w-full text-sm" aria-describedby="ar-as-at">
-            <caption className="sr-only">
-              Outstanding balances per facility, aged into 0–10, 11–30, 31–60, 61–90 and over-90-day
-              buckets
-            </caption>
-            <thead>
-              <tr className="border-b text-left">
-                <th scope="col" className="py-2 font-medium">Facility</th>
-                {AR_BUCKET_LABELS.map(([key, label]) => (
-                  <th key={key} scope="col" className="py-2 text-right font-medium">
-                    {label}
-                  </th>
-                ))}
-                <th scope="col" className="py-2 text-right font-medium">Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {delinquency.rows.map((row) => (
-                <tr key={row.facilityId} className="border-b">
-                  <th scope="row" className="py-2 font-normal">{row.facilityName}</th>
-                  {AR_BUCKET_LABELS.map(([key]) => (
-                    <td key={key} className="py-2 text-right tabular-nums">
-                      {formatCents(row.aging[key])}
-                    </td>
-                  ))}
-                  <td className="py-2 text-right tabular-nums">{formatCents(row.aging.totalCents)}</td>
-                </tr>
-              ))}
-              <tr className="font-medium">
-                <th scope="row" className="py-2 font-medium">All facilities</th>
-                {AR_BUCKET_LABELS.map(([key]) => (
-                  <td key={key} className="py-2 text-right tabular-nums">
-                    {formatCents(delinquency.total[key])}
-                  </td>
-                ))}
-                <td className="py-2 text-right tabular-nums">{formatCents(delinquency.total.totalCents)}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        <ArAgingSplitTable
+          rows={delinquency.rows}
+          total={delinquency.totalSplit}
+          caption="Outstanding balances per facility, aged into 0–10, 11–30, 31–60, 61–90 and over-90-day buckets, split into money being chased, money halted behind a hold, and the total of the two"
+          describedBy="ar-as-at"
+        />
+        <p className="text-muted-foreground max-w-prose text-sm text-pretty">
+          Halted means a hold has stopped the collections ladder — an agreed payment plan, a
+          bankruptcy, a deployment, a death. Nothing is being sent about it.{' '}
+          <Link href="/admin/reports/plans-holds" className="underline underline-offset-2">
+            Who, and why
+          </Link>
+          .
+        </p>
         <p className="text-muted-foreground text-sm text-pretty">
           Days past due are counted from the oldest unpaid invoice&apos;s original due date — not
           from the last card retry, so a lease that has declined several times keeps ageing instead

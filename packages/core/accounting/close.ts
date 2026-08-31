@@ -51,6 +51,27 @@ export type PointInTimeFigures = {
   arD61to90Cents: number
   arOver90Cents: number
   arTotalCents: number
+  /// B-207. The halted half of the same buckets — money behind a hold that
+  /// stops the collections ladder, so nothing was being sent about it on the
+  /// day the month was filed. The chased half is the difference, and is not
+  /// stored twice.
+  ///
+  /// **Optional, and deliberately NOT a snapshot version bump.** The version
+  /// exists so the journal export can refuse a snapshot it cannot categorise
+  /// (see `CLOSE_SNAPSHOT_VERSION`), and the journal never reads a
+  /// point-in-time figure — drift is computed over the period-derived half and
+  /// nothing else. Bumping would have refused the journal export of every
+  /// already-filed month over a field the journal does not use. A month closed
+  /// before this shipped simply has no split, and the pack says so rather than
+  /// showing a zero the reader would believe.
+  arHalted?: {
+    d0to10: number
+    d11to30: number
+    d31to60: number
+    d61to90: number
+    over90: number
+    totalCents: number
+  }
 }
 
 /// Figures derived from dated rows, which a later run can reproduce — and

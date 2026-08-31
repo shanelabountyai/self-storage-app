@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { getAdminActor } from '@/lib/admin/context'
 import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
 import { agingByFacility, delinquencyDetail } from '@/lib/admin/delinquency-detail'
-import { AR_BUCKETS, type ArAging } from '@storage/core/metrics'
+import { ArAgingSplitTable, AR_BUCKET_LABELS } from '@/components/admin/ar-aging-split-table'
 import { formatCents } from '@/lib/format'
 
 export const metadata = { title: 'Delinquency aging' }
@@ -21,40 +21,12 @@ export const metadata = { title: 'Delinquency aging' }
 // stopped it four months ago, and summed together the figure means neither.
 // The `Total` column is unchanged and still ties out; the split sits beside it.
 
-const BUCKET_LABELS: Record<string, string> = {
-  d0to10: '0–10',
-  d11to30: '11–30',
-  d31to60: '31–60',
-  d61to90: '61–90',
-  over90: 'Over 90',
-}
-
 const STATUS_LABELS: Record<string, string> = {
   pending: 'Pending',
   active: 'Active',
   delinquent: 'Delinquent',
   pending_auction: 'Pending auction',
   ended: 'Moved out',
-}
-
-/// One facility's row of buckets, labelled by what is happening to the money.
-///
-/// The label is a `<th scope="row">` rather than a plain cell, so a screen
-/// reader announcing a figure says which half of the split it belongs to.
-function SplitCells({ label, aging }: { label: string; aging: ArAging }) {
-  return (
-    <>
-      <th scope="row" className="py-2 pr-4 text-left font-normal">
-        {label}
-      </th>
-      {AR_BUCKETS.map((bucket) => (
-        <td key={bucket} className="py-2 pr-4 text-right tabular-nums">
-          {formatCents(aging[bucket])}
-        </td>
-      ))}
-      <td className="py-2 pr-4 text-right tabular-nums">{formatCents(aging.totalCents)}</td>
-    </>
-  )
 }
 
 export default async function DelinquencyPage() {
@@ -146,71 +118,23 @@ export default async function DelinquencyPage() {
         <h2 id="buckets-heading" className="font-medium">
           By facility
         </h2>
+        {/* B-207. This paragraph used to claim the two halves "are never shown
+            added together" and the <tfoot> then showed exactly that. The claim
+            was the wrong half to keep: a total that ties out against the ledger
+            is the figure an accountant reconciles, and removing it to satisfy a
+            sentence would have made the screen useless for the reader who needs
+            it. So the total stays, at BOTH levels, and the sentence says what
+            the split is for instead. */}
         <p className="text-muted-foreground max-w-prose text-sm text-pretty">
-          Each facility reads twice: what the delinquency ladder is still chasing, and what is
-          halted behind a hold. They add up to the total, and they are never shown added together
-          — a bucket that mixes them is a figure nobody can act on.
+          Each facility reads three ways: what the delinquency ladder is still chasing, what is
+          halted behind a hold, and the two added up. The total is what ties out against the
+          ledger; the split is what says whether anybody is working the money behind it.
         </p>
-        <div tabIndex={0} className="overflow-x-auto">
-          <table className="w-full min-w-3xl border-collapse text-sm">
-            <caption className="sr-only">
-              Outstanding balance by aging bucket, per facility, split into money being chased and
-              money halted behind a hold
-            </caption>
-            <thead>
-              <tr className="border-input border-b text-left">
-                <th scope="col" className="py-2 pr-4">
-                  Facility
-                </th>
-                <th scope="col" className="py-2 pr-4">
-                  Collections
-                </th>
-                {AR_BUCKETS.map((bucket) => (
-                  <th key={bucket} scope="col" className="py-2 pr-4 text-right">
-                    {BUCKET_LABELS[bucket]} days
-                  </th>
-                ))}
-                <th scope="col" className="py-2 pr-4 text-right">
-                  Total
-                </th>
-              </tr>
-            </thead>
-            {/* One <tbody> per facility, with the name as a `scope="rowgroup"`
-                header spanning its two rows. That is what makes the halted row
-                announce as "Cedar Park, Halted, 61–90 days" rather than as a
-                row of figures with no owner — a rowSpan cell with `scope="row"`
-                would claim only the first of the two. */}
-            {byFacility.map((row) => (
-              <tbody key={row.facilityId}>
-                <tr className="border-input border-b">
-                  <th scope="rowgroup" rowSpan={2} className="py-2 pr-4 text-left align-top font-medium">
-                    {row.facilityName}
-                  </th>
-                  <SplitCells label="Being chased" aging={row.split.chased} />
-                </tr>
-                <tr className="border-input border-b">
-                  <SplitCells label="Halted" aging={row.split.halted} />
-                </tr>
-              </tbody>
-            ))}
-            {byFacility.length > 0 && (
-              <tfoot>
-                <tr className="border-input border-b font-semibold">
-                  <th scope="rowgroup" rowSpan={3} className="py-2 pr-4 text-left align-top">
-                    All facilities
-                  </th>
-                  <SplitCells label="Being chased" aging={report.split.chased} />
-                </tr>
-                <tr className="border-input border-b font-semibold">
-                  <SplitCells label="Halted" aging={report.split.halted} />
-                </tr>
-                <tr className="border-input border-b font-semibold">
-                  <SplitCells label="Total" aging={report.aging} />
-                </tr>
-              </tfoot>
-            )}
-          </table>
-        </div>
+        <ArAgingSplitTable
+          rows={byFacility}
+          total={report.split}
+          caption="Outstanding balance by aging bucket, per facility, split into money being chased, money halted behind a hold, and the total of the two"
+        />
       </section>
 
       <section aria-labelledby="steps-heading" className="flex flex-col gap-3">
@@ -292,7 +216,7 @@ export default async function DelinquencyPage() {
                       and "Moved out" is the word that has to be readable. */}
                   <td className="py-2 pr-4">{STATUS_LABELS[row.leaseStatus] ?? row.leaseStatus}</td>
                   <td className="py-2 pr-4 text-right tabular-nums">{row.daysPastDue}</td>
-                  <td className="py-2 pr-4">{BUCKET_LABELS[row.bucket]}</td>
+                  <td className="py-2 pr-4">{AR_BUCKET_LABELS[row.bucket]}</td>
                   <td className="py-2 pr-4">
                     {row.dunningStep === 0 ? '—' : row.dunningStep}
                     {row.nextStepDay !== null && (

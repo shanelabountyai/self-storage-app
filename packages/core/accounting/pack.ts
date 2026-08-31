@@ -60,6 +60,15 @@ function percent(ratio: number): string {
 export function buildPack(input: PackInput, money: (cents: number) => string): EmailDocument {
   const point = input.pointInTime
   const derived = input.periodDerived
+  const halted = point.arHalted
+
+  /// One aging row, three columns when the split was recorded and two when it
+  /// was not. Chased is derived rather than stored — the snapshot keeps the
+  /// total and the halted half, and the third figure is arithmetic.
+  const arRow = (label: string, total: number, haltedCents?: number): string[] =>
+    haltedCents === undefined
+      ? [label, money(total)]
+      : [label, money(total - haltedCents), money(haltedCents), money(total)]
 
   const sections: EmailSection[] = [
     {
@@ -113,19 +122,28 @@ export function buildPack(input: PackInput, money: (cents: number) => string): E
     },
     {
       heading: 'What was owed',
-      paragraphs: ['Measured at the moment the month was filed. There is no way to recompute it later.'],
+      // B-207. Split into what the collections ladder was working and what was
+      // halted behind a hold. A month closed before that was recorded has no
+      // split, and says so rather than reporting a zero halted figure that
+      // would read as "everything was being chased".
+      paragraphs: [
+        'Measured at the moment the month was filed. There is no way to recompute it later.',
+        halted
+          ? 'Halted means a hold had stopped the collections ladder — an agreed payment plan, a bankruptcy, a deployment, a death. Nothing was being sent about it.'
+          : 'This month was filed before the chased/halted split was recorded, so the total is all this pack can say.',
+      ],
       table: {
         caption: 'Outstanding balances by age',
-        columns: ['Age', 'Amount'],
+        columns: halted ? ['Age', 'Being chased', 'Halted', 'Total'] : ['Age', 'Amount'],
         rows: [
-          ['Not yet 11 days', money(point.arD0to10Cents)],
-          ['11 to 30 days', money(point.arD11to30Cents)],
-          ['31 to 60 days', money(point.arD31to60Cents)],
-          ['61 to 90 days', money(point.arD61to90Cents)],
+          arRow('Not yet 11 days', point.arD0to10Cents, halted?.d0to10),
+          arRow('11 to 30 days', point.arD11to30Cents, halted?.d11to30),
+          arRow('31 to 60 days', point.arD31to60Cents, halted?.d31to60),
+          arRow('61 to 90 days', point.arD61to90Cents, halted?.d61to90),
           // The words, never a colour (FR-9a) — and this is the row somebody
           // has to act on.
-          ['Over 90 days — needs attention', money(point.arOver90Cents)],
-          ['Total owed', money(point.arTotalCents)],
+          arRow('Over 90 days — needs attention', point.arOver90Cents, halted?.over90),
+          arRow('Total owed', point.arTotalCents, halted?.totalCents),
         ],
       },
     },

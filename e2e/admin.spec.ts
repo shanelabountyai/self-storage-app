@@ -386,16 +386,17 @@ test.describe('the dashboard (B-113)', () => {
     await page.goto('/admin/reports/delinquency')
 
     // B-195 split every facility into a "Being chased" row and a "Halted" row
-    // under one `scope="rowgroup"` header, and there is no combined row per
-    // facility — the tile is the whole receivable, so it equals the two added
-    // together and neither one alone.
+    // under one `scope="rowgroup"` header; B-207 added the third row, the
+    // facility's own total, so a facility reads on the same footing as the
+    // portfolio footer rather than making the reader add the halves at one
+    // level and not the other.
     //
     // This assertion used to read the FIRST matching row and pass, because
     // nothing in the demo data had ever been halted, so chased always WAS the
     // total. B-196's payment plan is the first fixture to make that false, and
-    // summing is the assertion that was meant all along: a tile that quietly
-    // stopped counting money behind a hold would now fail here rather than
-    // agreeing with half a report.
+    // the arithmetic is the assertion that was meant all along: a tile that
+    // quietly stopped counting money behind a hold would now fail here rather
+    // than agreeing with half a report.
     //
     // `.first()` is the aging table's own group for this facility; the detail
     // table below it repeats the name once per delinquent tenant.
@@ -406,8 +407,10 @@ test.describe('the dashboard (B-113)', () => {
         rows.map((row) => row.querySelector('td:last-child')?.textContent?.trim() ?? ''),
       )
     const cents = (text: string) => Math.round(Number(text.replace(/[$,]/g, '')) * 100)
-    expect(totals.length, 'the facility group renders a chased row and a halted row').toBe(2)
-    expect(totals.reduce((sum, text) => sum + cents(text), 0)).toBe(cents(shown!))
+    expect(totals.length, 'the facility group renders chased, halted and total').toBe(3)
+    const [chased, halted, total] = totals.map(cents)
+    expect(chased + halted, 'the two halves add up to the row that ties out').toBe(total)
+    expect(total, 'the tile is the whole receivable, not half of it').toBe(cents(shown!))
   })
 
   test('All facilities rolls up instead of sending the owner away', async ({ page }) => {

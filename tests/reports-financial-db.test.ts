@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { prisma } from '../packages/db'
-import { categoryTotal } from '../packages/core/metrics'
+import { AR_BUCKETS, categoryTotal } from '../packages/core/metrics'
 import {
   billedTotal,
   collectedTotal,
@@ -360,6 +360,78 @@ describeDb('financial reports', () => {
       })
       const distinct = new Set(zones.map((row) => row.timezone))
       expect(report.timezone).toBe(distinct.size === 1 ? [...distinct][0] : null)
+    })
+  })
+
+  describe('the chased/halted split, on every surface (B-207)', () => {
+    // B-195 built `arAgingSplit` and only `delinquencyDetail` called it, so the
+    // four surfaces an owner is actually forwarded — the AR table, the
+    // dashboard tile, the scheduled delinquency email and the accounting close
+    // — still reported one undifferentiated figure. All four read
+    // `agingForFacility`, so that is where the split belongs and the only place
+    // it can be tested once for all of them.
+    //
+    // The hold goes on the ENDED lease, which already carries a balance in the
+    // fixture above. Placed and removed here so no earlier expectation moves.
+
+    let holdId = ''
+
+    beforeAll(async () => {
+      if (!hasDatabase) return
+      const hold = await prisma.leaseHold.create({
+        data: {
+          leaseId: endedLeaseId,
+          // Declares `halt_dunning` in the catalog, which is the test — not the
+          // type name. A hold whose effects leave the ladder running must stay
+          // in `chased`, and the catalog is what decides (US-42).
+          type: 'bankruptcy',
+          effectiveFrom: d('2026-02-01'),
+          reason: 'B-207 fixture',
+        },
+        select: { id: true },
+      })
+      holdId = hold.id
+    })
+
+    afterAll(async () => {
+      if (!hasDatabase || holdId === '') return
+      await prisma.leaseHold.delete({ where: { id: holdId } })
+    })
+
+    it('puts the halted lease in `halted` and everything else in `chased`', async () => {
+      const row = await agingForFacility(facilityId, 'split', d('2026-04-20'))
+
+      expect(row.split.halted.totalCents).toBe(16_464)
+      expect(row.split.chased.totalCents).toBe(row.aging.totalCents - 16_464)
+      expect(row.split.chased.totalCents).toBeGreaterThan(0)
+    })
+
+    it('keeps `aging` equal to the two halves, bucket by bucket', async () => {
+      // The guarantee the whole split rests on: nothing that tied out against
+      // the ledger before stops tying out. Asserted per bucket, not just on the
+      // total, because a mis-bucketed halted dollar would cancel out in a sum.
+      const row = await agingForFacility(facilityId, 'split', d('2026-04-20'))
+      for (const bucket of AR_BUCKETS) {
+        expect(row.aging[bucket]).toBe(row.split.chased[bucket] + row.split.halted[bucket])
+      }
+      expect(row.aging).toEqual(row.split.total)
+    })
+
+    it('reads the hold as of the date it is given, not the wall clock', async () => {
+      // Before the hold took effect, the same lease is money somebody was
+      // chasing. An `agingForFacility` that asked `activeHoldsByLease` for
+      // `now` would report a February balance as halted by a hold placed later.
+      const before = await agingForFacility(facilityId, 'before', d('2026-01-15'))
+      expect(before.split.halted.totalCents).toBe(0)
+    })
+
+    it('rolls the split up to the portfolio, and the roll-up ties out', async () => {
+      const report = await delinquencyReport(actor())
+      expect(report.totalSplit.total).toEqual(report.total)
+      expect(report.totalSplit.halted.totalCents).toBe(
+        report.rows.reduce((sum, row) => sum + row.split.halted.totalCents, 0),
+      )
+      expect(report.totalSplit.halted.totalCents).toBeGreaterThan(0)
     })
   })
 

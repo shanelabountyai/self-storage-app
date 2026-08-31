@@ -107,6 +107,10 @@ export async function figuresFor(
       arD61to90Cents: ar?.d61to90 ?? 0,
       arOver90Cents: ar?.over90 ?? 0,
       arTotalCents: ar?.totalCents ?? 0,
+      // B-207. Frozen for the same reason the buckets are: on the day the
+      // month is filed, how much of the receivable nobody was working is a
+      // fact that cannot be observed again afterwards.
+      arHalted: { ...aging.split.halted },
     },
     periodDerived: {
       billedCents: rev ? billedTotal(rev) : 0,

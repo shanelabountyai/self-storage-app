@@ -154,8 +154,14 @@ export default async function AdminDashboardPage({
   // Absent for a role without `reports:financial` — `delinquencyReport` scopes
   // to the financial facilities, so the tile is omitted rather than rendered as
   // a zero the reader would believe.
-  const owed = delinquency.rows.find((row) => row.facilityId === facilityId)?.aging
+  const owedRow = delinquency.rows.find((row) => row.facilityId === facilityId)
+  const owed = owedRow?.aging
   const seriouslyLate = owed ? owed.d31to60 + owed.d61to90 + owed.over90 : 0
+  // B-207. The tile's hint said how much was over 30 days and never whether
+  // anyone was chasing it, which is the difference between a facility that is
+  // working its list and one where a bankruptcy hold stopped the ladder four
+  // months ago. Halted money is the half a manager cannot fix by making calls.
+  const halted = owedRow?.split.halted.totalCents ?? 0
 
   return (
     <div>
@@ -210,11 +216,14 @@ export default async function AdminDashboardPage({
             // The window, on the tile rather than in the query. "Delinquent
             // leases: 0" said nothing and was wrong; this says how much and how
             // bad.
-            hint={
+            hint={[
               seriouslyLate > 0
                 ? `${formatCents(seriouslyLate)} over 30 days`
-                : 'nothing over 30 days'
-            }
+                : 'nothing over 30 days',
+              halted > 0 ? `${formatCents(halted)} halted` : null,
+            ]
+              .filter(Boolean)
+              .join(' · ')}
             href="/admin/delinquency"
           />
         )}

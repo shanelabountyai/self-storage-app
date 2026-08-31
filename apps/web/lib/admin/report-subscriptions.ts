@@ -159,25 +159,40 @@ async function sectionsFor(
 
   if (key === 'delinquency') {
     const row = await agingForFacility(facilityId, facilityName)
-    const aging = row.aging
+    const { chased, halted, total } = row.split
+    const agingRow = (label: string, bucket: keyof typeof total): string[] => [
+      label,
+      formatCents(chased[bucket]),
+      formatCents(halted[bucket]),
+      formatCents(total[bucket]),
+    ]
     return [
       {
         heading: 'Money owed',
         // Point-in-time, and it says so: this figure is as of the moment the
         // email was built, not as of the end of the period above it (D-65).
-        paragraphs: ['As of this morning, not as of the end of the period covered above.'],
+        //
+        // B-207: split into chased and halted, as a column rather than as
+        // three tables. This email is the surface an owner is most likely to
+        // read without opening the product at all, so it is the last place
+        // that should show a figure whose meaning depends on which half of it
+        // anybody is working. `Total` is unchanged and still ties out.
+        paragraphs: [
+          'As of this morning, not as of the end of the period covered above.',
+          'Halted means a hold has stopped the collections ladder — an agreed payment plan, a bankruptcy, a deployment, a death. Nothing is being sent about it, and it will not clear itself.',
+        ],
         table: {
           caption: 'Outstanding balances by age',
-          columns: ['Age', 'Amount'],
+          columns: ['Age', 'Being chased', 'Halted', 'Total'],
           rows: [
-            ['Not yet 11 days', formatCents(aging.d0to10)],
-            ['11 to 30 days', formatCents(aging.d11to30)],
-            ['31 to 60 days', formatCents(aging.d31to60)],
-            ['61 to 90 days', formatCents(aging.d61to90)],
+            agingRow('Not yet 11 days', 'd0to10'),
+            agingRow('11 to 30 days', 'd11to30'),
+            agingRow('31 to 60 days', 'd31to60'),
+            agingRow('61 to 90 days', 'd61to90'),
             // The word, not a colour — FR-9a, and the one bucket somebody has
             // to act on.
-            ['Over 90 days — needs attention', formatCents(aging.over90)],
-            ['Total owed', formatCents(aging.totalCents)],
+            agingRow('Over 90 days — needs attention', 'over90'),
+            agingRow('Total owed', 'totalCents'),
           ],
         },
       },

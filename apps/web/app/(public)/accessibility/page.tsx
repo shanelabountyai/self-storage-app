@@ -685,6 +685,29 @@ const LAST_REVIEWED = '19 August 2026'
 // `LAST_REVIEWED` does not move: no claim on this page was re-checked against
 // the build, and none changed.
 //
+// Re-read 2026-08-31, at B-207 (the chased/halted split reaches the roll-up,
+// the emailed report and the month-end close). **No change, and nothing
+// customer-facing:** every surface is behind `reports:financial` — the AR table
+// on `/admin/reports`, the aging table on `/admin/reports/delinquency`, the
+// dashboard's Money owed tile, the scheduled delinquency email a staff
+// subscriber receives, and the accounting close pack. No public or portal route
+// is added or altered, so the generated coverage claim and the route-keyed
+// exception list are both untouched.
+//
+// Two things worth naming rather than leaving implied. The aging table is now
+// ONE shared component rendered on two admin screens, which means an accessible
+// name, a row header or a scroll container fixed in one place is fixed in both
+// — and, equally, a defect in it is now a defect on two screens. And that
+// component still attaches each facility's name with `scope="rowgroup"`, which
+// **B-216 has already established no screen reader implements**; this row moved
+// that markup and deliberately did not fix it, because B-216 owns the remedy
+// and half-fixing it here would leave the two screens disagreeing until that
+// row lands. Recorded so B-216 is read as covering the shared component rather
+// than only the page it was raised against.
+//
+// `LAST_REVIEWED` does not move: no claim on this page was re-checked against
+// the build, and none changed.
+//
 // ── B-201 (2026-08-28) ──────────────────────────────────────────────────────
 //
 // Re-read at B-201 (the reflow check that `[contain:layout]` cannot mask).

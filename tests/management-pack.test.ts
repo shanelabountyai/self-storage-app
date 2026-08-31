@@ -109,6 +109,45 @@ describe('what the pack contains', () => {
     expect(rows).toContainEqual(['Referral rewards', '$50.00'])
   })
 
+  it('splits the aging into chased and halted when the month recorded it (B-207)', () => {
+    const split = buildPack(
+      input({
+        pointInTime: {
+          ...POINT,
+          arHalted: {
+            d0to10: 0,
+            d11to30: 0,
+            d31to60: 1_000,
+            d61to90: 0,
+            over90: 5_000,
+            totalCents: 6_000,
+          },
+        },
+      }),
+      money,
+    )
+    const rows = split.sections.flatMap((section) => section.table?.rows ?? [])
+    // Chased is the difference, never a second stored figure — $30 in the
+    // 31–60 bucket, $10 of it halted.
+    expect(rows).toContainEqual(['31 to 60 days', '$20.00', '$10.00', '$30.00'])
+    // The over-90 bucket is entirely behind a hold, which is exactly the case
+    // the split exists to make visible: the row an owner would otherwise read
+    // as "chase this" is one nobody is allowed to chase.
+    expect(rows).toContainEqual(['Over 90 days — needs attention', '$0.00', '$50.00', '$50.00'])
+    expect(rows).toContainEqual(['Total owed', '$90.00', '$60.00', '$150.00'])
+  })
+
+  it('says a month filed before the split simply has no split (B-207)', () => {
+    // A version-2 snapshot carries no `arHalted`, and the pack must not report
+    // it as zero halted — that reads as "all of it was being chased", which is
+    // a claim the month never made. Two columns and a sentence saying why.
+    const rows = pack.sections.flatMap((section) => section.table?.rows ?? [])
+    expect(rows).toContainEqual(['Total owed', '$150.00'])
+    const owed = pack.sections.find((section) => section.heading === 'What was owed')!
+    expect(owed.table!.columns).toEqual(['Age', 'Amount'])
+    expect(owed.paragraphs!.join(' ')).toContain('before the chased/halted split was recorded')
+  })
+
   it('labels tax as held for the state rather than as income', () => {
     const rows = pack.sections.flatMap((section) => section.table?.rows ?? [])
     const tax = rows.find((row) => row[0].startsWith('Tax billed'))
