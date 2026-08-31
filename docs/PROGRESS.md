@@ -7075,7 +7075,7 @@ The fix is the one the row prescribed: `activePlansFor` now runs before the hold
 
 ## B-209 — "Collected under plans" counted money nobody collected, and correcting a mistyped plan burned the lease's annual allowance
 
-`PENDING`
+`5ed47a4`
 
 **What it built.** Two defects the operator review raised against the plans-and-holds report and the plan builder, merged because both are about what a payment plan's arithmetic claims.
 
