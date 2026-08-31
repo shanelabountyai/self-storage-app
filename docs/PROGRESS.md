@@ -7049,7 +7049,7 @@ The fix is the one the row prescribed: `activePlansFor` now runs before the hold
 
 ## B-208 — A payment plan stops covering for rent it never deferred
 
-`PENDING`
+`e4276e6`
 
 **What it built.** `halt_late_fees` and `halt_dunning` are evaluated per LEASE, not per invoice (`apps/web/lib/billing/late-fees.ts:88`, `packages/core/delinquency/engine.ts:63`), so a payment plan's hold stood every collections mechanism down on the whole lease — including rent charged after the plan was agreed, which the plan never promised anything about. B-189 narrowed **autopay** to the plan's frozen `invoiceIds` so a card keeps paying current rent; nothing did the equivalent for the fee ladder or the timeline. A manual-pay tenant could therefore keep every installment, pay no rent at all, and for up to ninety days take no late fee, no notice, no access suspension and no lien clock — twice a year at `planMaxPerRollingYear: 2`.
 
