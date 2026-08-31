@@ -6985,7 +6985,7 @@ The fix is the one the row prescribed: `activePlansFor` now runs before the hold
 
 ## B-206 — The plan tells the tenant when it ends, and which payment ended it
 
-`5d507b3`
+`48aca48` (the `--rebase` merge of PR #6 rewrote the commit; it was `5d507b3` on the branch)
 
 **What it built.** Two gaps on the same feature, both about a tenant learning that a payment plan is over.
 
