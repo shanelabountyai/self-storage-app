@@ -7015,7 +7015,7 @@ The fix is the one the row prescribed: `activePlansFor` now runs before the hold
 
 ## B-207 — The chased/halted split reaches the roll-up, the emailed report and the month-end close
 
-`PENDING`
+`e65e314`
 
 **What it built.** B-195 built `arAgingSplit` — every AR bucket read twice, as money the delinquency ladder is still working and money behind a hold that stopped it — and exactly one screen called it. The four surfaces that actually get forwarded to an owner still reported one undifferentiated figure, because all four read `agingForFacility` and it returned a plain `ArAging`.
 
