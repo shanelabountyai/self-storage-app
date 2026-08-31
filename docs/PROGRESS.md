@@ -7099,7 +7099,7 @@ The fix is the one the row prescribed: `activePlansFor` now runs before the hold
 
 ## B-210 — A tenant one day late was told their plan was dead, and a plan that broke in March still said so in December
 
-`PENDING`
+`80f7e7a`
 
 **What it built.** Two portal defects the UX review raised, merged because both are the same mistake: the screen states something worse than what the product actually does, to the tenant whose next move is deciding whether it is worth paying.
 
