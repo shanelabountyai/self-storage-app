@@ -7127,7 +7127,7 @@ The fix is the one the row prescribed: `activePlansFor` now runs before the hold
 
 ## B-211 — Three screens described behaviour the product does not have
 
-`PENDING`
+`fd3ea9e`
 
 **What it built.** Copy only, no logic: three statements the product makes about itself that were false, and — for the first one — the two places the false statement came from rather than only the screen it was read on.
 
