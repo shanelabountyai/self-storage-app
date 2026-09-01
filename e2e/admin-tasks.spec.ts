@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { prisma } from '../packages/db'
 import { signInAsDemoOwner } from './sign-in'
 import { assertNoAxeViolations, expectAnnounced, expectPreexisting } from './a11y-helpers'
 
@@ -146,22 +147,109 @@ test.describe('signed in as the demo owner', () => {
   // B-141. Before this, `completeTaskAction` discarded the service's
   // `{ ok: false, missingFields }` refusal: the button was pressed, the page
   // re-rendered identically, and the task stayed open with no explanation —
-  // indistinguishable from a broken control. This is safe to run against any
-  // open task and any number of times: a refused submission changes nothing.
+  // indistinguishable from a broken control.
+  //
+  // B-221 gave it a fixture it owns. It used to take the first card on
+  // `/admin/tasks` and `test.skip` when there were none, which meant it
+  // asserted NOTHING: the freshly seeded demo raises no tasks, so the skip was
+  // the normal outcome and had been for the test's whole life. When a queue
+  // finally was not empty it FAILED, and the reason was in the catalog rather
+  // than in a race — `overlock_apply` requires `["note", "photo_reference"]`,
+  // the only type in the catalog that requires more than a note. This test
+  // fills the note alone, so on that card the empty second field failed the
+  // browser's own `required` check, the form never submitted, and the server
+  // refusal it waits for could not arrive. `element(s) not found`, five
+  // seconds, at the alert.
+  //
+  // So it now creates one `insurance_proof_review` task — a type that requires
+  // only a note, and that nothing else in this suite raises — reaches it by
+  // the `?type=` filter the queue already supports, and deletes it afterwards.
+  // B-120 discipline (1): a fixture nothing else asserts against. The action
+  // stays safe to repeat, because a refused submission changes nothing.
   // a11y-state: /admin/tasks | completion refused
-  test('a refused completion says why, rather than re-rendering identically', async ({ page }) => {
-    await page.goto('/admin/tasks')
-    const cards = page.locator('li').filter({ has: page.getByRole('button', { name: /^Complete/ }) })
-    const count = await cards.count()
-    test.skip(count === 0, 'nothing open today to exercise this against')
+  const REFUSAL_TASK_TYPE = 'insurance_proof_review'
+  let refusalTaskId = ''
+  let refusalFacilityId = ''
+  let refusalMarker = ''
+
+  test.beforeAll(async ({}, testInfo) => {
+    // One project only, for the reason the returned-mail test above gives:
+    // both projects share the one real demo database.
+    if (testInfo.project.name !== 'desktop-chrome') return
+
+    // Any demo lease will do — the subject only has to resolve to something a
+    // human could read. Ordered so the choice is the same on every run.
+    const lease = await prisma.lease.findFirst({
+      where: { facility: { slug: { startsWith: 'demo-' } } },
+      orderBy: { id: 'asc' },
+      select: { id: true, facilityId: true },
+    })
+    if (!lease) return
+
+    // Per WORKER, not per run. `beforeAll` runs once in each worker that
+    // picks up a test from this file, and `Task` is unique on
+    // (type, entityId, businessDate) — that is the queue's idempotency
+    // guarantee doing its job, and it made the first version of this fixture
+    // fail with `Unique constraint failed` the moment two workers raced it.
+    // A different business date per worker gives each one its own row, and
+    // the marker below is how the test finds the row that belongs to it.
+    refusalFacilityId = lease.facilityId
+    refusalMarker = `B-221 refusal fixture, worker ${testInfo.workerIndex}`
+    const task = await prisma.task.create({
+      data: {
+        facilityId: lease.facilityId,
+        type: REFUSAL_TASK_TYPE,
+        entityType: 'Lease',
+        entityId: lease.id,
+        // `lte: today` is the queue's filter, so anything in the past shows.
+        businessDate: new Date(Date.now() - (testInfo.workerIndex + 1) * 86_400_000),
+        status: 'open',
+        // B-169's field, and it renders on the card — which is what makes one
+        // worker's fixture distinguishable from another's on screen.
+        detail: refusalMarker,
+      },
+      select: { id: true },
+    })
+    refusalTaskId = task.id
+  })
+
+  test.afterAll(async () => {
+    if (!refusalTaskId) return
+    // `Task` carries no append-only trigger and `audit_log` does not reference
+    // it, so this really is reclaimable — unlike a facility (B-185).
+    await prisma.task.deleteMany({ where: { id: refusalTaskId } })
+  })
+
+  test('a refused completion says why, rather than re-rendering identically', async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'desktop-chrome', 'owns a shared-database fixture — see note')
+    expect(refusalTaskId, 'the fixture task was created').not.toBe('')
+
+    // The queue is per-facility, so put the context on the fixture's facility
+    // rather than hoping the default lands there.
+    await page.goto('/admin')
+    await page.getByLabel('Switch facility').selectOption(refusalFacilityId)
+    await page.getByRole('button', { name: 'Switch', exact: true }).click()
+
+    await page.goto(`/admin/tasks?type=${REFUSAL_TASK_TYPE}`)
+    // Filtered to the type AND to this worker's own marker: another worker's
+    // fixture is in the same queue, and taking "the first card" is the habit
+    // that made this test unreliable in the first place.
+    const cards = page
+      .locator('li')
+      .filter({ has: page.getByRole('button', { name: /^Complete/ }) })
+      .filter({ hasText: refusalMarker })
+    await expect(cards, "this worker's fixture is on the queue").toHaveCount(1)
 
     const card = cards.first()
-    const subject = await card.locator('p').first().innerText()
 
     // A whitespace-only note passes the input's `required` attribute (which
     // only checks non-empty) but fails the server's `missingProofFields`
     // (which trims) — the way to reach the server round trip without
-    // fighting native HTML5 validation in a real browser.
+    // fighting native HTML5 validation in a real browser. This type requires
+    // the note and nothing else, so there is no second empty field to stop
+    // the submission before it leaves the browser.
     await card.getByPlaceholder('What did you do?').fill('   ')
     await card.getByRole('button', { name: /^Complete/ }).click()
 
@@ -175,8 +263,10 @@ test.describe('signed in as the demo owner', () => {
     // at the button with no idea anything happened.
     await expect(alert).toBeFocused()
 
-    // The task is still open — nothing was silently completed.
-    await expect(page.getByText(subject)).toBeVisible()
+    // The task is still open — nothing was silently completed. Asserted on the
+    // marked card rather than on the type's label, which every worker's
+    // fixture shares and which resolved to three elements when it was.
+    await expect(cards, 'the task is still open — nothing was silently completed').toHaveCount(1)
 
     // B-184 (T3). FR-24 in as many words: no axe scan ran after an invalid
     // submit on any admin or portal form, `AdminForm`'s error summary

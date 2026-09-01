@@ -7274,6 +7274,28 @@ The three measurements moved into `measureThreeWays` so both loops share one cop
 - **Verified on `desktop-chrome` only.** The spec sets its own viewport in every pass, so `mobile-chrome` would measure the same three CSS viewports; the device scale factor is a rendering concern and not a layout one, as the file's existing comment says.
 - Unit suite green end to end: 3916 passed, 8 skipped, reconciled to 3924. The touched e2e file: 11 passed, 0 failed. Lint and typecheck clean. No schema change, so no migration and nothing for the drift check to see.
 
+## B-221 — The test that had never once run, and the catalog entry that made it fail when it finally did
+
+`PENDING`
+
+**What it built.** `a refused completion says why` took the first card on `/admin/tasks` and `test.skip`ped when there were none. It now creates the task it exercises, reaches it through the `?type=` filter the queue already supports, and deletes it afterwards.
+
+**What it decided.**
+
+- **The row asked for a reproduction first, and the reproduction is the finding.** Run alone against a freshly seeded database, the test **skips**. The demo seed raises no tasks, so an empty queue was not an edge case — it was the normal outcome, and had been for this test's entire life. `PROGRESS` recorded that state at B-170 and it was read as a one-off. A test whose skip condition is its usual condition asserts nothing, and this one asserted nothing while looking green.
+- **The failure, when a queue finally was not empty, was in the catalog and not in a race.** The row's leading hypothesis was B-120's shape — a sibling spec completing the task between page load and click. It is simpler than that: **`overlock_apply` is the only type in the catalog that requires more than a note** (`["note", "photo_reference"]`, `packages/core/tasks/catalog.ts:283`). The test fills the note alone, so on that card the empty second field failed the **browser's own** `required` check, the form never submitted, and the server refusal the test waits for could not arrive — `element(s) not found`, five seconds, at the alert. Everything the row ruled out was correctly ruled out; what it had not considered was a type needing a field the test does not know about.
+- **A fixture the test owns, not a wider skip.** The row forbade the skip route in as many words. `insurance_proof_review` requires only a note and is raised by exactly one place in the product (`lib/protection/changes.ts`), none of it reachable from this suite — so the fixture cannot collide with real work.
+- **Per WORKER, not per run, and that was a defect found in the building.** The first version created one task in `beforeAll` and died with `Unique constraint failed on the fields: (type, entityId, businessDate)` the moment two workers picked up tests from this file — which is the queue's own idempotency guarantee (B-095) working exactly as designed, against a fixture that had assumed it would run once. Each worker now gets its own business date, and `Task.detail` (B-169's field, which renders on the card) carries a marker naming the worker, so a worker finds *its* fixture rather than "the first card". Taking the first card is the habit that made this test unreliable to begin with.
+- **The last assertion was scoped to the marked card too.** "The task is still open" was checking the type's LABEL, which every worker's fixture shares — three elements, strict-mode violation. A test that asserts on shared text is the same defect one level down.
+
+**One runnable check.** The test itself, which now runs instead of skipping. **Run twice on both projects: 15 passed, 3 skipped, twice** — and the database queried afterwards for stray `insurance_proof_review` rows both times: **none**, so the fixture reclaims itself.
+
+**What it left behind.**
+
+- **`flagging returned mail` still self-skips** once it has run on a given calendar day, which is documented and correct (the flag is idempotent per tenant per business day). It is a different discipline from this row's and was not touched.
+- **Nothing stops the next test from filling one proof field and assuming that is all of them.** `requiredProofFields` is per type and only one type currently has two, so the trap is dormant rather than removed. A test that needs any card would have to read the card's own inputs rather than knowing the shape in advance.
+- **The queue is still empty on a fresh demo seed.** That is the condition that hid this for months, and it is unchanged — this row gave one test its own task rather than giving the demo a task list. Whether the demo should carry a realistic queue is a seed question and belongs with the rows that are about the queue.
+
 ## B-223 — A report's month is complete when it is complete at every facility the figures come from
 
 `a2b54f1`
