@@ -7276,7 +7276,7 @@ The three measurements moved into `measureThreeWays` so both loops share one cop
 
 ## B-224 — A sale could be booked before the date the notice gave, and recorded with no advertisement at all
 
-`PENDING`
+`12fa7bb`
 
 **What it built.** The auction pipeline's whole premise is "no override, no yellow banner" — and it hard-blocked the notice while leaving the clock alone. `scheduleSale` performed **no date arithmetic of any kind**: it stored whatever date it was handed. `recordSaleOutcome` refused a sale with no lock cut and an incomplete buyer record, and accepted one with no advertisement on file. So a manager could serve the lien notice on the 5th giving the tenant until the 19th, schedule the sale for the 9th, cut the lock, take $900 and record the outcome — the two commonest wrongful-sale claims, both reachable through the happy path with every readiness rule green.
 
