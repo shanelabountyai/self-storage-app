@@ -19,6 +19,15 @@ import { useAnnounceOutside } from '@/components/admin/announce'
 
 const FormStateContext = createContext<FormState>(IDLE_FORM_STATE)
 
+/// B-213 / WCAG 3.3.1 A, 3.3.3 AA. The id of the enclosing `FieldSet`'s error
+/// message, so a `Field` inside a refused group can describe itself with it.
+///
+/// `aria-describedby` on the <fieldset> ITSELF reaches nobody: no shipping
+/// screen reader announces a group's description when focus lands on a control
+/// inside it. A description on the CONTROL always is announced, so the group's
+/// message has to be handed down rather than declared once at the top.
+const FieldSetErrorContext = createContext<string | null>(null)
+
 type AdminFormProps = {
   action: (state: FormState, formData: FormData) => Promise<FormState>
   children: React.ReactNode
@@ -282,7 +291,17 @@ export function Field({
   const state = useContext(FormStateContext)
   const id = useId()
   const error = state.status === 'error' ? state.fieldErrors[name] : undefined
-  const describedBy = [error ? `${id}-error` : null, hint ? `${id}-hint` : null]
+  // B-213. The enclosing group's refusal, when there is one. `validateSchedule`
+  // reports "must be in date order" against the INSTALLMENT, not against its
+  // date or its amount, and this field is one of the two that caused it — so it
+  // is invalid and it is described by that message, even though nothing is
+  // keyed under its own name.
+  const groupErrorId = useContext(FieldSetErrorContext)
+  const describedBy = [
+    error ? `${id}-error` : null,
+    groupErrorId,
+    hint ? `${id}-hint` : null,
+  ]
     .filter(Boolean)
     .join(' ')
 
@@ -292,7 +311,7 @@ export function Field({
   const shared = {
     id,
     name,
-    'aria-invalid': error ? true : undefined,
+    'aria-invalid': error || groupErrorId ? true : undefined,
     'aria-describedby': describedBy || undefined,
     className: choice ? 'mt-1' : CONTROL_CLASS,
     ...control,
@@ -354,14 +373,45 @@ export function Field({
   )
 }
 
-/// A set of radios or checkboxes that answer one question, with the error on
-/// the group rather than on any one control.
+/// A set of controls that answer one question, with the error on the group
+/// rather than on any one of them.
 ///
 /// "Choose a protection plan" is a fact about the whole set — there is no
 /// single radio it belongs to, and putting it on the first one tells a
 /// control-by-control navigator who happens to land on the third one nothing at
-/// all. `aria-invalid` and `aria-describedby` are global attributes, so a
-/// `<fieldset>` (role `group`) carries both.
+/// all.
+///
+/// **B-213. Allowed is not conveyed, and this used to rely on allowed.** The
+/// group's error sat on the `<fieldset>` as `aria-invalid` and
+/// `aria-describedby`, reasoning that both are global attributes. They are, and
+/// neither reaches anybody: no shipping screen reader announces a group's
+/// description when focus lands on a control inside it, and `aria-invalid` has
+/// no mapping on role `group` at all. axe passes it regardless, because
+/// `aria-invalid` is global in axe's model too — so B-192's headline fix,
+/// refusals reaching the field that caused them, landed visually only.
+///
+/// The message therefore travels TWO ways, and both are load-bearing:
+///
+///  1. **Folded into the `<legend>`**, screen-reader-only so it is not printed
+///     twice. The legend is the group's accessible NAME, which every screen
+///     reader announces on entering the group — including to bare `<input
+///     type="radio">` children that know nothing about this component, which is
+///     the protection step and the SCRA declaration.
+///  2. **Handed to `Field` children through `FieldSetErrorContext`**, which
+///     append it to their own `aria-describedby` and mark themselves invalid.
+///     A group name is announced when focus ENTERS the group; a description is
+///     announced wherever focus lands, including on a jump straight to the
+///     second control from a rotor.
+///
+/// The cost is that a `Field` child inside a refused group hears the message
+/// twice in one utterance — once as part of the group name, once as its own
+/// description. That is a nuisance; being told nothing at all was the defect,
+/// and neither mechanism covers the other's case.
+///
+/// The fieldset keeps `aria-describedby` for its HINT, which is not announced
+/// there either — a smaller version of the same problem, and not this row's:
+/// a hint is guidance nobody is stuck without, and no group here relies on one
+/// to be usable.
 ///
 /// `name` is the key the ACTION reports the error under, which is not always
 /// the `name` on the inputs — the protection step's radios are `tier` and its
@@ -382,17 +432,23 @@ export function FieldSet({
   const state = useContext(FormStateContext)
   const id = useId()
   const error = state.status === 'error' ? state.fieldErrors[name] : undefined
-  const describedBy = [error ? `${id}-error` : null, hint ? `${id}-hint` : null]
-    .filter(Boolean)
-    .join(' ')
 
   return (
     <fieldset
       className={className}
-      aria-invalid={error ? true : undefined}
-      aria-describedby={describedBy || undefined}
+      // No `aria-invalid`: role `group` has no mapping for it, so it announced
+      // nothing and made the omission look handled.
+      aria-describedby={hint ? `${id}-hint` : undefined}
     >
-      <legend className="font-medium">{legend}</legend>
+      <legend className="font-medium">
+        {legend}
+        {/* `sr-only`, not hidden: the visible message is the <p> below, and a
+            legend that printed it too would say it twice on screen. `sr-only`
+            is `position: absolute`, so the text stays in the accessibility
+            tree — which is the whole point, because the legend is what a
+            screen reader reads as this group's name. */}
+        {error && <span className="sr-only">, {error}</span>}
+      </legend>
       {/* Above the options, not below them: a sighted user should meet the
           reason before the things they have to choose between. */}
       {hint && (
@@ -405,7 +461,9 @@ export function FieldSet({
           {error}
         </p>
       )}
-      {children}
+      <FieldSetErrorContext.Provider value={error ? `${id}-error` : null}>
+        {children}
+      </FieldSetErrorContext.Provider>
     </fieldset>
   )
 }

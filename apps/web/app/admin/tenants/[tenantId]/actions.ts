@@ -530,20 +530,31 @@ export async function createPaymentPlanAction(
         // fault. Problems with no installment (the total mismatch, the day
         // cap, an empty schedule) have no field to land on and stay the
         // summary message — which is right: they are about the plan.
+        const byRow = [...problemsByRow(result.problems, formRow)];
         const fieldErrors = Object.fromEntries(
-          [...problemsByRow(result.problems, formRow)].map(([row, problem]) => [
-            `installment_${row}`,
-            problem,
-          ]),
+          byRow.map(([row, problem]) => [`installment_${row}`, problem]),
         );
         const summary = result.problems
           .filter((p) => p.index === null)
           .map((p) => p.problem)
           .join(" ");
+        // B-213 / WCAG 3.3.1. The summary the alert box is focused into names
+        // WHICH installments are marked. Its `<ul>` lists the messages with no
+        // ordinal on any of them — "Installments must be in date order, one per
+        // date" three times over, against twelve fields — so without this the
+        // one thing the summary is for, saying where to go, was missing from
+        // it.
+        const rows = byRow.map(([row]) => row).sort((a, b) => a - b);
+        const marked =
+          rows.length === 0
+            ? ""
+            : rows.length === 1
+              ? `Installment ${rows[0]} is marked below.`
+              : `Installments ${rows.slice(0, -1).join(", ")} and ${rows[rows.length - 1]} are marked below.`;
         return {
           status: "error",
           message:
-            summary ||
+            [summary, marked].filter(Boolean).join(" ") ||
             "That schedule cannot be agreed — see the installments marked below.",
           fieldErrors,
         };

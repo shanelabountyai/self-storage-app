@@ -505,6 +505,15 @@ export const SCANNED_STATES: readonly ScannedState[] = [
     state: 'payment plan builder refused',
     spec: 'e2e/admin-tenants.spec.ts',
   },
+  // B-213. The refusal that lands ON an installment, which is a different
+  // rendering from the one above and had never been painted by any test: an
+  // empty submit produces only plan-level problems, so `fieldErrors` is `{}`
+  // and the fieldset error branch never runs.
+  {
+    route: '/admin/tenants/[tenantId]',
+    state: 'payment plan builder refused per installment',
+    spec: 'e2e/admin-tenants.spec.ts',
+  },
 ] as const
 
 export type StateException = {

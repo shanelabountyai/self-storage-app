@@ -344,6 +344,64 @@ test.describe('payment plans on the tenant profile', () => {
     await assertNoAxeViolations(page, { state: 'payment plan builder refused' })
   })
 
+  // a11y-state: /admin/tenants/[tenantId] | payment plan builder refused per installment
+  //
+  // B-213. The refusal that lands ON an installment, which no test in the repo
+  // had ever rendered — the empty submit above yields only `index: null`
+  // problems, so `fieldErrors` is `{}` and no fieldset error is ever painted.
+  // That gap is why B-192's group error could sit on the <fieldset> as
+  // `aria-invalid`/`aria-describedby`, reaching no screen reader, through two
+  // items and an axe pass.
+  //
+  // Read-only against the shared fixture (B-120): the schedule is refused, so
+  // nothing is written and nothing on Dana's lease moves.
+  test('a refusal about one installment reaches that installment, not just the summary', async ({
+    page,
+  }) => {
+    await page.goto('/admin/tenants?q=dana@demo.example.com')
+    await page.getByRole('link', { name: 'Dana Delinquent' }).click()
+    await openDisclosure(page, 'Set up a payment plan')
+
+    const details = page.locator('details').filter({ hasText: 'Set up a payment plan' })
+
+    // Two installments, out of date order. `validateSchedule` reports that
+    // against the SECOND one — an installment, not one of its two fields — and
+    // the sum will not match either, which is a plan-level problem and belongs
+    // in the summary rather than on a row.
+    await details.getByLabel('Due', { exact: true }).nth(0).fill('2027-03-01')
+    await details.getByLabel('Amount ($)').nth(0).fill('80.00')
+    await details.getByLabel('Due', { exact: true }).nth(1).fill('2027-02-01')
+    await details.getByLabel('Amount ($)').nth(1).fill('80.00')
+    await details.getByRole('button', { name: /^Agree the plan for unit/ }).click()
+
+    // The summary names WHERE to go, which is the one thing an error summary
+    // is for and the one thing its ordinal-less <ul> could not say.
+    const alert = page.getByRole('region', { name: 'Actions' }).getByRole('alert')
+    await expect(alert).toContainText('Installment 2 is marked below.')
+
+    // The group carries the message as part of its NAME, which is what every
+    // screen reader announces on entering it — and is what reaches the bare
+    // radios in the protection step and the SCRA declaration, which are not
+    // `Field`s and can never be described by one.
+    const group = details.getByRole('group', { name: /^Installment 2/ })
+    await expect(group).toHaveAccessibleName(/must be in date order/)
+
+    // And both controls inside it are described by that message and marked
+    // invalid, so a jump straight to either one still carries it. Before this
+    // they carried neither: the error is keyed `installment_2` while they are
+    // named `dueDate_2` and `amount_2`.
+    for (const field of ['Due', 'Amount ($)']) {
+      const control = group.getByLabel(field, { exact: true })
+      await expect(control).toHaveAccessibleDescription(/must be in date order/)
+      await expect(control).toHaveAttribute('aria-invalid', 'true')
+    }
+
+    // The <fieldset> itself no longer claims an invalid state it cannot convey.
+    await expect(group).not.toHaveAttribute('aria-invalid', 'true')
+
+    await assertNoAxeViolations(page, { state: 'payment plan builder refused per installment' })
+  })
+
   // B-212. The even split, which exists because the staffer was making up to
   // six amounts sum to the arrears to the cent, in their head, at a counter.
   //

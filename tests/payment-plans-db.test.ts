@@ -36,7 +36,32 @@ let unitTypeId = ''
 let managerId = ''
 let counterId = ''
 
-const d = (iso: string) => new Date(`${iso}T00:00:00.000Z`)
+/// **Every date this file treats as "the future" is an offset from the moment
+/// the run starts, not a literal.** It used to write `2026-09-01` and later,
+/// and on 2026-09-01 that stopped being the future: `createPaymentPlan`
+/// refuses an installment whose date is not after `new Date()`, so twelve of
+/// the twenty-four tests here went red at UTC midnight, mid-session, with
+/// nothing in the code having changed. Every plan the setup tried to create
+/// was refused with "Each installment date must be in the future" and each
+/// test that needed one threw `setup failed` — which reads exactly like a
+/// broken creation path.
+///
+/// The OFFSETS are what the assertions are actually about, and they are
+/// preserved exactly: an installment at `at(1)`, the nightly job at `at(3)`
+/// and again at `at(5)`, with D-98's three-day grace between them. Every date
+/// shifts by the same amount, so every gap — and every facility-local business
+/// date difference computed from them — is what it was.
+///
+/// **Pinning the clock is NOT the fix here, and was tried first.**
+/// `vi.setFakeTimers({ toFake: ['Date'] })` moves the JavaScript clock and
+/// nothing else: `PaymentPlan.createdAt` is `@default(now())` and comes back
+/// carrying the REAL instant, while `cancelledAt` — written by application
+/// code as `new Date()` — carries the fake one. B-209's same-day-correction
+/// rule compares exactly those two, so pinning made a correction look like an
+/// arrangement agreed a fortnight later. Half this file was already written
+/// against `new Date()` offsets; this makes the other half agree with it.
+const RUN = Date.now()
+const at = (days: number) => new Date(RUN + days * 86_400_000)
 const collected: { itemId: string; ok: boolean; message?: string }[] = []
 const recordItem = (outcome: { itemId: string; ok: boolean; message?: string }) => {
   collected.push(outcome)
@@ -88,7 +113,7 @@ async function invoice(
   options: { dueDate?: Date; kind?: 'rent' | 'fee' } = {},
 ): Promise<string> {
   invoiceCounter += 1
-  const dueDate = options.dueDate ?? d('2026-07-01')
+  const dueDate = options.dueDate ?? at(-62)
   const row = await prisma.invoice.create({
     data: {
       facilityId,
@@ -131,7 +156,7 @@ async function newLease(arrearsCents = 5000): Promise<string> {
       tenantId,
       unitId: unit.id,
       status: 'active',
-      startDate: d('2026-08-01'),
+      startDate: at(-31),
       billingDay: 1,
       monthlyRateCents: 12_900,
     },
@@ -267,8 +292,8 @@ describeDb('payment plans', () => {
       const leaseId = await newLease(10_000)
       const result = await createPaymentPlan(actor(managerId, 20), leaseId, {
         installments: [
-          { dueDate: d('2026-09-01'), amountCents: 5000 },
-          { dueDate: d('2026-10-01'), amountCents: 5000 },
+          { dueDate: at(1), amountCents: 5000 },
+          { dueDate: at(31), amountCents: 5000 },
         ],
       })
       expect(result).toMatchObject({ ok: true })
@@ -294,7 +319,7 @@ describeDb('payment plans', () => {
       // and completed itself.
       const leaseId = await newLease(180_000)
       const short = await createPaymentPlan(actor(managerId, 20), leaseId, {
-        installments: [{ dueDate: d('2026-09-01'), amountCents: 5000 }],
+        installments: [{ dueDate: at(1), amountCents: 5000 }],
       })
       expect(short).toMatchObject({ ok: false, reason: 'invalid_schedule' })
       if (short.ok || short.reason !== 'invalid_schedule') throw new Error('expected a refusal')
@@ -306,8 +331,8 @@ describeDb('payment plans', () => {
       // And the same lease succeeds the moment the installments add up.
       const exact = await createPaymentPlan(actor(managerId, 20), leaseId, {
         installments: [
-          { dueDate: d('2026-09-01'), amountCents: 90_000 },
-          { dueDate: d('2026-10-01'), amountCents: 90_000 },
+          { dueDate: at(1), amountCents: 90_000 },
+          { dueDate: at(31), amountCents: 90_000 },
         ],
       })
       expect(exact).toMatchObject({ ok: true })
@@ -316,7 +341,7 @@ describeDb('payment plans', () => {
     it('refuses a plan on a lease with nothing past due', async () => {
       const leaseId = await newLease(0)
       const result = await createPaymentPlan(actor(managerId, 20), leaseId, {
-        installments: [{ dueDate: d('2026-09-01'), amountCents: 5000 }],
+        installments: [{ dueDate: at(1), amountCents: 5000 }],
       })
       expect(result).toMatchObject({ ok: false, reason: 'invalid_schedule' })
       if (result.ok || result.reason !== 'invalid_schedule') throw new Error('expected a refusal')
@@ -329,7 +354,7 @@ describeDb('payment plans', () => {
     it('refuses an invalid row, and places no hold', async () => {
       const badLease = await newLease()
       const bad = await createPaymentPlan(actor(managerId, 20), badLease, {
-        installments: [{ dueDate: d('2026-08-01'), amountCents: 5000 }], // due date not in the future
+        installments: [{ dueDate: at(-31), amountCents: 5000 }], // due date not in the future
       })
       expect(bad).toMatchObject({ ok: false, reason: 'invalid_schedule' })
       expect(await leaseHasEffect(badLease, 'halt_dunning')).toBe(false)
@@ -338,7 +363,7 @@ describeDb('payment plans', () => {
     it('freezes the invoices it covers, so later rent cannot satisfy an installment', async () => {
       const leaseId = await newLease(5000)
       const created = await createPaymentPlan(actor(managerId, 20), leaseId, {
-        installments: [{ dueDate: d('2026-09-01'), amountCents: 5000 }],
+        installments: [{ dueDate: at(1), amountCents: 5000 }],
       })
       if (!created.ok) throw new Error('setup failed')
 
@@ -352,7 +377,7 @@ describeDb('payment plans', () => {
       const leaseId = await newLease()
       await expect(
         createPaymentPlan(actor(counterId, 10), leaseId, {
-          installments: [{ dueDate: d('2026-09-01'), amountCents: 5000 }],
+          installments: [{ dueDate: at(1), amountCents: 5000 }],
         }),
       ).rejects.toThrow()
     })
@@ -360,10 +385,10 @@ describeDb('payment plans', () => {
     it('refuses a second active plan on the same lease', async () => {
       const leaseId = await newLease()
       await createPaymentPlan(actor(managerId, 20), leaseId, {
-        installments: [{ dueDate: d('2026-09-01'), amountCents: 5000 }],
+        installments: [{ dueDate: at(1), amountCents: 5000 }],
       })
       const second = await createPaymentPlan(actor(managerId, 20), leaseId, {
-        installments: [{ dueDate: d('2026-09-15'), amountCents: 5000 }],
+        installments: [{ dueDate: at(15), amountCents: 5000 }],
       })
       expect(second).toMatchObject({ ok: false, reason: 'already_active' })
     })
@@ -373,7 +398,7 @@ describeDb('payment plans', () => {
     it('lifts the hold and resumes collections', async () => {
       const leaseId = await newLease()
       const created = await createPaymentPlan(actor(managerId, 20), leaseId, {
-        installments: [{ dueDate: d('2026-09-01'), amountCents: 5000 }],
+        installments: [{ dueDate: at(1), amountCents: 5000 }],
       })
       if (!created.ok) throw new Error('setup failed')
 
@@ -388,7 +413,7 @@ describeDb('payment plans', () => {
     it('refuses without a reason', async () => {
       const leaseId = await newLease()
       const created = await createPaymentPlan(actor(managerId, 20), leaseId, {
-        installments: [{ dueDate: d('2026-09-01'), amountCents: 5000 }],
+        installments: [{ dueDate: at(1), amountCents: 5000 }],
       })
       if (!created.ok) throw new Error('setup failed')
 
@@ -407,7 +432,7 @@ describeDb('payment plans', () => {
       // nothing else, so a manager could defer any balance over any schedule.
       const leaseId = await newLease(300_000)
       const result = await createPaymentPlan(actor(managerId, 20), leaseId, {
-        installments: [{ dueDate: d('2026-09-01'), amountCents: 300_000 }],
+        installments: [{ dueDate: at(1), amountCents: 300_000 }],
       })
       expect(result).toMatchObject({ ok: false, reason: 'over_limit', limitCents: 200_000 })
       // Named from the role table rather than hardcoded — the seeded
@@ -434,7 +459,7 @@ describeDb('payment plans', () => {
       // ran. Cancelled plans count — the count is of plans AGREED.
       const leaseId = await newLease()
       const first = await createPaymentPlan(actor(managerId, 20), leaseId, {
-        installments: [{ dueDate: d('2026-09-01'), amountCents: 5000 }],
+        installments: [{ dueDate: at(1), amountCents: 5000 }],
       })
       if (!first.ok) throw new Error('setup failed')
       expect(
@@ -449,14 +474,14 @@ describeDb('payment plans', () => {
       // Manager is the LOWEST rank that may agree one at all, so the second is
       // not theirs to agree.
       const second = await createPaymentPlan(actor(managerId, 20), leaseId, {
-        installments: [{ dueDate: d('2026-09-02'), amountCents: 5000 }],
+        installments: [{ dueDate: at(2), amountCents: 5000 }],
       })
       expect(second).toMatchObject({ ok: false, reason: 'needs_escalation', priorCount: 1 })
 
       // A regional agrees it, and then the facility's limit of two is reached.
       const asRegional = actor(managerId, 30)
       const agreed = await createPaymentPlan(asRegional, leaseId, {
-        installments: [{ dueDate: d('2026-09-02'), amountCents: 5000 }],
+        installments: [{ dueDate: at(2), amountCents: 5000 }],
       })
       expect(agreed).toMatchObject({ ok: true })
       if (!agreed.ok) throw new Error('unreachable')
@@ -466,7 +491,7 @@ describeDb('payment plans', () => {
       await backdateCancel(agreed.planId)
 
       const third = await createPaymentPlan(asRegional, leaseId, {
-        installments: [{ dueDate: d('2026-09-03'), amountCents: 5000 }],
+        installments: [{ dueDate: at(3), amountCents: 5000 }],
       })
       expect(third).toMatchObject({ ok: false, reason: 'too_many_plans', priorCount: 2, limit: 2 })
     })
@@ -478,7 +503,7 @@ describeDb('payment plans', () => {
       // the year and the second must be agreed a rank up.
       const leaseId = await newLease()
       const mistyped = await createPaymentPlan(actor(managerId, 20), leaseId, {
-        installments: [{ dueDate: d('2026-09-01'), amountCents: 5000 }],
+        installments: [{ dueDate: at(1), amountCents: 5000 }],
       })
       if (!mistyped.ok) throw new Error('setup failed')
       expect(
@@ -488,7 +513,7 @@ describeDb('payment plans', () => {
       // Re-entered by the SAME manager: not escalated, because as far as the
       // count is concerned this is still the lease's first plan.
       const corrected = await createPaymentPlan(actor(managerId, 20), leaseId, {
-        installments: [{ dueDate: d('2026-09-02'), amountCents: 5000 }],
+        installments: [{ dueDate: at(2), amountCents: 5000 }],
       })
       expect(corrected).toMatchObject({ ok: true })
       if (!corrected.ok) throw new Error('unreachable')
@@ -501,7 +526,7 @@ describeDb('payment plans', () => {
       ).toMatchObject({ ok: true })
       expect(
         await createPaymentPlan(actor(managerId, 20), leaseId, {
-          installments: [{ dueDate: d('2026-09-03'), amountCents: 4000 }],
+          installments: [{ dueDate: at(3), amountCents: 4000 }],
         }),
       ).toMatchObject({ ok: false, reason: 'needs_escalation', priorCount: 1 })
     })
@@ -511,7 +536,7 @@ describeDb('payment plans', () => {
       // lease on its second plan read on every screen as a lease on one.
       const leaseId = await newLease()
       const first = await createPaymentPlan(actor(managerId, 20), leaseId, {
-        installments: [{ dueDate: d('2026-09-01'), amountCents: 5000 }],
+        installments: [{ dueDate: at(1), amountCents: 5000 }],
       })
       if (!first.ok) throw new Error('setup failed')
       await pay(leaseId, 2000)
@@ -520,7 +545,7 @@ describeDb('payment plans', () => {
       ).toMatchObject({ ok: true })
 
       const second = await createPaymentPlan(actor(managerId, 30), leaseId, {
-        installments: [{ dueDate: d('2026-09-15'), amountCents: 3000 }],
+        installments: [{ dueDate: at(15), amountCents: 3000 }],
       })
       expect(second).toMatchObject({ ok: true })
 
@@ -553,29 +578,29 @@ describeDb('payment plans', () => {
       // auto-collect path already had B-189's retry ladder holding it open.
       const leaseId = await newLease()
       const created = await createPaymentPlan(actor(managerId, 20), leaseId, {
-        installments: [{ dueDate: d('2026-09-01'), amountCents: 5000 }],
+        installments: [{ dueDate: at(1), amountCents: 5000 }],
         autoCollect: false,
       })
       if (!created.ok) throw new Error('setup failed')
 
-      await evaluatePaymentPlanBreaches(facilityId, d('2026-09-03'), recordItem)
+      await evaluatePaymentPlanBreaches(facilityId, at(3), recordItem)
       expect((await paymentPlanForLease(leaseId))?.status).toBe('active')
       expect(await leaseHasEffect(leaseId, 'halt_dunning')).toBe(true)
 
-      await evaluatePaymentPlanBreaches(facilityId, d('2026-09-05'), recordItem)
+      await evaluatePaymentPlanBreaches(facilityId, at(5), recordItem)
       expect((await paymentPlanForLease(leaseId))?.status).toBe('broken')
     })
 
     it('breaks a plan whose installment passed unpaid, lifts the hold, and raises a task', async () => {
       const leaseId = await newLease()
       const created = await createPaymentPlan(actor(managerId, 20), leaseId, {
-        installments: [{ dueDate: d('2026-09-01'), amountCents: 5000 }],
+        installments: [{ dueDate: at(1), amountCents: 5000 }],
       })
       if (!created.ok) throw new Error('setup failed')
 
       // D-98 (B-190). Four days after the due date, not one: the facility's
       // three days of grace have to have run out before a plan is broken.
-      await evaluatePaymentPlanBreaches(facilityId, d('2026-09-05'), recordItem)
+      await evaluatePaymentPlanBreaches(facilityId, at(5), recordItem)
 
       const plan = await paymentPlanForLease(leaseId)
       expect(plan?.status).toBe('broken')
@@ -638,7 +663,7 @@ describeDb('payment plans', () => {
           step: 1,
           daysPastDue,
           amountCents: 2000,
-          effectiveFrom: d('2026-01-01'),
+          effectiveFrom: at(-365),
         },
       })
     }
@@ -651,21 +676,21 @@ describeDb('payment plans', () => {
       await lateFeeAtDay(5)
       const leaseId = await newLease(5000)
       const created = await createPaymentPlan(actor(managerId, 20), leaseId, {
-        installments: [{ dueDate: d('2026-10-01'), amountCents: 5000 }],
+        installments: [{ dueDate: at(31), amountCents: 5000 }],
         autoCollect: false,
       })
       if (!created.ok) throw new Error('setup failed')
 
       // Rent charged AFTER the plan was agreed, so it is not in `invoiceIds`.
-      await invoice(leaseId, 12_900, { dueDate: d('2026-09-01') })
+      await invoice(leaseId, 12_900, { dueDate: at(1) })
 
       // Four days past due: inside this facility's own idea of late, and the
       // frozen arrears are still unpaid — which must NOT break the plan, since
       // deferring exactly those is what the plan is.
-      await evaluatePaymentPlanBreaches(facilityId, d('2026-09-04'), recordItem)
+      await evaluatePaymentPlanBreaches(facilityId, at(4), recordItem)
       expect((await paymentPlanForLease(leaseId))?.status).toBe('active')
 
-      await evaluatePaymentPlanBreaches(facilityId, d('2026-09-06'), recordItem)
+      await evaluatePaymentPlanBreaches(facilityId, at(6), recordItem)
       expect((await paymentPlanForLease(leaseId))?.status).toBe('broken')
       expect(await leaseHasEffect(leaseId, 'halt_late_fees')).toBe(false)
       expect(await leaseHasEffect(leaseId, 'halt_dunning')).toBe(false)
@@ -688,16 +713,16 @@ describeDb('payment plans', () => {
       await lateFeeAtDay(5)
       const leaseId = await newLease(5000)
       const created = await createPaymentPlan(actor(managerId, 20), leaseId, {
-        installments: [{ dueDate: d('2026-10-01'), amountCents: 5000 }],
+        installments: [{ dueDate: at(31), amountCents: 5000 }],
         autoCollect: false,
       })
       if (!created.ok) throw new Error('setup failed')
 
-      const rent = await invoice(leaseId, 12_900, { dueDate: d('2026-09-01') })
+      const rent = await invoice(leaseId, 12_900, { dueDate: at(1) })
       // Named explicitly: unnamed, it would settle the older frozen arrears.
       await pay(leaseId, 12_900, { invoiceId: rent })
 
-      await evaluatePaymentPlanBreaches(facilityId, d('2026-09-06'), recordItem)
+      await evaluatePaymentPlanBreaches(facilityId, at(6), recordItem)
       expect((await paymentPlanForLease(leaseId))?.status).toBe('active')
       expect(await leaseHasEffect(leaseId, 'halt_dunning')).toBe(true)
 
@@ -814,14 +839,14 @@ describeDb('payment plans', () => {
     it('is idempotent — re-running after a plan already broke does nothing further', async () => {
       const leaseId = await newLease()
       const created = await createPaymentPlan(actor(managerId, 20), leaseId, {
-        installments: [{ dueDate: d('2026-09-01'), amountCents: 5000 }],
+        installments: [{ dueDate: at(1), amountCents: 5000 }],
       })
       if (!created.ok) throw new Error('setup failed')
 
-      await evaluatePaymentPlanBreaches(facilityId, d('2026-09-02'), recordItem)
+      await evaluatePaymentPlanBreaches(facilityId, at(2), recordItem)
       const firstCount = await prisma.task.count({ where: { type: 'payment_plan_broken', entityId: leaseId } })
 
-      await evaluatePaymentPlanBreaches(facilityId, d('2026-09-03'), recordItem)
+      await evaluatePaymentPlanBreaches(facilityId, at(3), recordItem)
       const secondCount = await prisma.task.count({ where: { type: 'payment_plan_broken', entityId: leaseId } })
 
       expect(secondCount).toBe(firstCount)
