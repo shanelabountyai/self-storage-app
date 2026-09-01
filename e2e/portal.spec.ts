@@ -350,4 +350,40 @@ test.describe('signed in as the tenant on a payment plan', () => {
 
     await assertNoAxeViolations(page, { state: 'payment plan card' })
   })
+
+  // B-244. This tenant has TWO units (seeded so this case exists at all), and
+  // until this row every money statement on the card — the balance, the Pay
+  // button, the late installment — was emitted ABOVE the `<h2>` naming its
+  // unit, inside a `<section>` with no accessible name. So in the outline they
+  // all sat under the OTHER unit's heading, and there was no region name to
+  // fall back on either: a screen-reader user heard "$306.23 was due on 15
+  // September. Pay $306.23 now" with no programmatic tie to a unit, on the
+  // screen where they decide what to pay.
+  //
+  // What fails if it regresses: the plan card must be INSIDE the region named
+  // for its own unit. Moving the heading back below it puts the card in the
+  // previous region, or in none.
+  test('every money statement sits in a region named for its own unit', async ({ page }) => {
+    await page.goto('/portal')
+    await expect(page.getByRole('main')).toBeVisible()
+
+    // Two units, so "which unit is this about" is a real question here.
+    const regions = page.getByRole('main').getByRole('region')
+    const names = await regions.evaluateAll((nodes) =>
+      nodes.map((node) => node.getAttribute('aria-label') ?? node.textContent?.trim() ?? ''),
+    )
+    expect(names.length, 'the plan tenant holds more than one unit').toBeGreaterThan(1)
+
+    // The region containing the plan card is named for a unit — not unnamed,
+    // and not the generic one.
+    const planRegion = regions.filter({ hasText: "You're on a payment plan" })
+    await expect(planRegion, 'exactly one region carries the plan card').toHaveCount(1)
+    await expect(planRegion).toHaveAttribute('aria-labelledby', /lease-.+-heading/)
+
+    // And that region's own heading is the first thing in it, so the outline
+    // says which unit before it says what is owed.
+    const heading = planRegion.getByRole('heading', { level: 2 })
+    await expect(heading).toHaveCount(1)
+    await expect(heading).toContainText('Unit')
+  })
 })

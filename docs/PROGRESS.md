@@ -7274,6 +7274,30 @@ The three measurements moved into `measureThreeWays` so both loops share one cop
 - **Verified on `desktop-chrome` only.** The spec sets its own viewport in every pass, so `mobile-chrome` would measure the same three CSS viewports; the device scale factor is a rendering concern and not a layout one, as the file's existing comment says.
 - Unit suite green end to end: 3916 passed, 8 skipped, reconciled to 3924. The touched e2e file: 11 passed, 0 failed. Lint and typecheck clean. No schema change, so no migration and nothing for the drift check to see.
 
+## B-244 — The portal said what you owed before it said which unit it was about
+
+`PENDING`
+
+**What it built.** `LeaseCard` opened a `<section>` with no accessible name and then rendered, in order: the access-suspension alert, the settling-funds card, the balance and its Pay button, the pending transfer, the payment-plan card and the pending move-out. The `<h2>` naming the facility and unit came **last**.
+
+On a tenant with two units that put every money statement for the second unit under the FIRST unit's heading in the document outline, because it was emitted before its own. An unnamed `<section>` is not exposed as a region either, so there was no second mechanism to fall back on. A screen-reader user heard *"A payment on your plan is late. $306.23 was due on 15 September. Pay $306.23 now"* with no programmatic tie to a unit, on the screen where they decide what to pay. **SC 1.3.1 Info and Relationships, Level A.**
+
+The heading is the first child now, and the `<section>` is `aria-labelledby` it.
+
+**What it decided.**
+
+- **The id comes from `leaseId`, not `useId`.** This is a server component, so `useId` is not available — and a stable id derived from the data is the better answer anyway.
+- **The demo seed gained a second unit for the plan tenant, and that is half the fix.** Every portal fixture in the suite was a single-lease tenant, which is exactly why this survived: with one card there is only one unit it could mean, so the missing association costs nothing and shows nothing. B-215's `/portal | payment plan card` scan signed in as that same single-lease tenant, so the ambiguous case was rendered by no test and scanned by no axe run. The new lease carries no plan and owes nothing — it adds a second card, not a second plan, which is what keeps it safe against the specs already asserting on this tenant (B-120).
+
+**One runnable check.** `e2e/portal.spec.ts`: on the two-unit plan tenant, more than one region is exposed, exactly one carries the plan card, that region is `aria-labelledby` a `lease-…-heading`, and its own `<h2>` names a unit. **Verified by removing the `aria-labelledby` and watching it fail** — without a name the `<section>`s stop being exposed as regions at all, so the count assertion goes first, which is the honest failure for that regression.
+
+**What it left behind.**
+
+- **No screen reader has been run.** The claim here is structural — every money statement is inside a named region whose heading names its unit, and the heading precedes it in the outline. What that announces is unmeasured, here as everywhere else in this repo.
+- **The other portal surfaces were not audited for the same shape.** `/portal/methods`, `/portal/statements` and `/portal/documents` were not checked for headings emitted after their content; this row fixed the card the finding named.
+- **B-245 is still open and touches the same component** — the eight populated live regions per lease, re-inserted on a client-side navigation. Nothing here changes their number or their roles.
+- **The single-lease assumption is only half-retired.** One demo tenant now holds two units. Every other portal fixture is still one lease, so a defect that needs two to show still hides everywhere except this tenant.
+
 ## B-224 — A sale could be booked before the date the notice gave, and recorded with no advertisement at all
 
 `12fa7bb`

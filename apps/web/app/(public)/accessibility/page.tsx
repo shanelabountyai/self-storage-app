@@ -1099,6 +1099,28 @@ const LAST_REVIEWED = '19 August 2026'
 // than left implied, because this page's exception lists are only as honest as
 // what gets written down when a sweep is partial.
 
+// Re-read 2026-09-01, at B-244 (the portal dashboard's heading order).
+// **Customer-facing, and a real SC 1.3.1 (A) failure removed** — every money
+// statement on a lease card (the balance, the Pay button, the late installment,
+// the suspension alert) was emitted ABOVE the `<h2>` naming its unit, inside a
+// `<section>` with no accessible name, so on a two-unit tenant they all sat
+// under the other unit's heading in the outline with no region name to fall
+// back on.
+//
+// **Nothing on this page changes, and that is the finding worth recording.**
+// The shortfall list never mentioned this, because nobody knew: every portal
+// fixture in the suite was a single-lease tenant, so the ambiguous case was
+// rendered by no test and scanned by no axe run. A statement can only be as
+// honest as the coverage behind it, and this one was silent rather than wrong.
+// The seed now gives one demo tenant two units, so the case exists to be
+// scanned at all.
+//
+// `LAST_REVIEWED` does not move. No claim on this page was re-checked against
+// the build and none changed — the shortfall list was read and had nothing to
+// remove. That this rule, applied item by item, guarantees the date never moves
+// is **B-250**, and the cadence that would replace it is **D-115**; neither is
+// this row's to decide.
+
 export default function AccessibilityPage() {
   return (
     <ProsePage

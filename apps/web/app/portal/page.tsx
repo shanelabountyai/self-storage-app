@@ -49,8 +49,44 @@ function LeaseCard({ lease, impersonated }: { lease: PortalLeaseSummary; imperso
   const dueDate = formatDueDate(lease.nextDueDate, lease.facilityTimezone)
   const telHref = `tel:${lease.facilityPhone.replace(/[^0-9+]/g, '')}`
 
+  // B-244. The heading FIRST, and the section named by it.
+  //
+  // Everything below used to render above this `<h2>`: the access-suspension
+  // alert, the settling-funds card, the balance and its Pay button, the pending
+  // transfer, the payment-plan card and the pending move-out. On a tenant with
+  // two units that put every money statement for the second unit UNDER the
+  // first unit's heading in the document outline, because it was emitted before
+  // its own — so "A payment on your plan is late. $306.23 was due on 15
+  // September. Pay $306.23 now" had no programmatic tie to a unit, on the screen
+  // where a tenant decides what to pay. The `<section>` was unnamed too, so it
+  // was not exposed as a region either and there was no second mechanism to
+  // fall back on (SC 1.3.1 A).
+  //
+  // The id is derived from `leaseId` rather than `useId` because this is a
+  // server component, and a stable id from the data is better than a generated
+  // one anyway.
+  const headingId = `lease-${lease.leaseId}-heading`
+
   return (
-    <section className="border-input flex flex-col gap-4 rounded-lg border p-4">
+    <section
+      aria-labelledby={headingId}
+      className="border-input flex flex-col gap-4 rounded-lg border p-4"
+    >
+      <div>
+        <h2 id={headingId} className="font-medium">
+          {lease.facilityName} — Unit {lease.unitNumber}
+        </h2>
+        <p className="text-muted-foreground text-sm">
+          <span aria-hidden="true">
+            {lease.widthFt}×{lease.lengthFt}
+          </span>
+          <span className="sr-only">
+            {lease.widthFt} foot by {lease.lengthFt} foot
+          </span>{' '}
+          · {formatRate(lease.monthlyRateCents)}/mo
+        </p>
+      </div>
+
       {owesMoney && lease.accessSuspended && (
         <div role="alert" className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-pretty text-red-900">
           <p>
@@ -215,21 +251,6 @@ function LeaseCard({ lease, impersonated }: { lease: PortalLeaseSummary; imperso
           </p>
         </div>
       )}
-
-      <div>
-        <h2 className="font-medium">
-          {lease.facilityName} — Unit {lease.unitNumber}
-        </h2>
-        <p className="text-muted-foreground text-sm">
-          <span aria-hidden="true">
-            {lease.widthFt}×{lease.lengthFt}
-          </span>
-          <span className="sr-only">
-            {lease.widthFt} foot by {lease.lengthFt} foot
-          </span>{' '}
-          · {formatRate(lease.monthlyRateCents)}/mo
-        </p>
-      </div>
 
       <dl className="grid grid-cols-2 gap-4 text-sm">
         <div>

@@ -918,6 +918,30 @@ async function seedLifecycleStates(
         },
       },
     })
+
+    // B-244. A SECOND unit for the same tenant, deliberately with no plan and
+    // nothing owing on it.
+    //
+    // Every portal fixture in this suite was a single-lease tenant, so the
+    // dashboard's ambiguous case — which unit is the plan on? which unit's
+    // balance is that? — was rendered by no test and scanned by no axe run.
+    // That is why B-244's defect (every money statement emitted ABOVE the
+    // heading naming its unit, in an unnamed `<section>`) survived: with one
+    // card there is only one unit it could mean, so the missing association
+    // costs nothing and shows nothing.
+    //
+    // Safe against the specs that already assert on this tenant (B-120): the
+    // plan card and the schedule table are scoped to the lease that has a plan,
+    // and this lease has none — it adds a second card, not a second plan.
+    const planSecondSlot = next()
+    await makeLease(
+      facility.id,
+      planSecondSlot.unit.id,
+      planTenant.id,
+      'active',
+      planSecondSlot.rate,
+      150,
+    )
   }
 
   // --- pending_auction: far enough along to demo the lien arc -------------
