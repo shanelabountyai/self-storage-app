@@ -7303,7 +7303,7 @@ The facility now rides in the row header each row already had. `SplitCells` take
 
 ## B-220 — Two month-turn defects in the reports section, and a third the fix uncovered
 
-`PENDING`
+`79aaca9`
 
 **What it built.** Three things, from one root question: whose calendar is a report's default window reckoned in, and is that window one anything happened in?
 
