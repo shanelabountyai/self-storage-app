@@ -7276,7 +7276,7 @@ The three measurements moved into `measureThreeWays` so both loops share one cop
 
 ## B-245 — Nine live regions that were never status messages, and the navigation no scan could see
 
-`PENDING`
+`5477a05`
 
 **What it built.** Seven regions on the portal dashboard (six `role="status"`, one `role="alert"`, plus a second alert on the autopay line — eight per lease on the two-unit case), one on `/admin/delinquency` and one on the management pack. All nine were **page content wearing a live-region role**: true when the page is drawn, unchanged while it is read, reached by heading and document position.
 
