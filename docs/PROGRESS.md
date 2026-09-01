@@ -7274,6 +7274,30 @@ The three measurements moved into `measureThreeWays` so both loops share one cop
 - **Verified on `desktop-chrome` only.** The spec sets its own viewport in every pass, so `mobile-chrome` would measure the same three CSS viewports; the device scale factor is a rendering concern and not a layout one, as the file's existing comment says.
 - Unit suite green end to end: 3916 passed, 8 skipped, reconciled to 3924. The touched e2e file: 11 passed, 0 failed. Lint and typecheck clean. No schema change, so no migration and nothing for the drift check to see.
 
+## B-222 — The revenue report's figures sat in rows with no header, and the fix had to change what the report looks like
+
+`PENDING`
+
+**What it built.** `RowPair` attached each facility's name with one `<th scope="rowgroup" rowSpan={2}>`. B-216 had already established that no screen reader implements `rowgroup`, and this instance was worse than the aging table's: `RowPair` had **no per-row header at all** to fold the name into, because each row's identity — "Billed", "Coll." — lived in a `<span>` *inside* its first money cell. A row describing itself from within one of its own data cells. So all fourteen of a facility's figures sat in rows with nothing naming them.
+
+Each of the two rows now carries its own `<th scope="row">`. The facility name is printed on the first and visually hidden on the second, so the column still reads as one facility with two lines under it, and the half-labels moved **out of the money cells** and into the headers.
+
+**What it decided.**
+
+- **B-216's remedy was not transferable, and the alternatives were each wrong for a nameable reason.** `scope="row"` on the spanning cell rests on rowspan semantics nobody here has watched an AT resolve. Promoting a money `<td>` to a `<th>` makes a figure into a header. An sr-only `<th>` added to the second row breaks the column count the `rowSpan` balances. What was left was the design call the row named: give the label column real content, which means the report looks different.
+- **`headers`/`id` across all fourteen cells was refused**, as the row instructed. It is the no-visual-change option, and it would have replaced the AT-behaviour claim B-216 just removed with a second one this repo equally cannot watch. Trading an unwatchable claim for another unwatchable claim is not progress.
+- **The comment claims structure and nothing else.** Every figure sits in a row whose header names the facility and which half of the pair it is. **No announcement is asserted and none was observed** — the standard B-216 set, and the sentence B-222 said not to re-introduce.
+- **`text-transform: uppercase` is a rendering choice, so the test does not read the rendered string.** The first version of the assertion used `allInnerTexts()` and failed against correct markup, because `innerText` returns what is painted — "BILLED" — while the DOM and the accessible name carry "Billed". An assertion on the painted string is a check on a CSS declaration. It reads `allTextContents()` now.
+
+**One runnable check.** `e2e/admin-reports.spec.ts`, scoped to this table by its caption because the page carries other tables with row headers: every `Billed` row header has a `Coll.` row header naming the same facility, which is the association `rowgroup` was failing to make. **Verified by replacing the second row's `<th>` with a `<td>` and watching it fail** (`a Coll. row header for every Billed one`), then restoring. The route also gained an axe assertion; it had none of its own before, only the route-loop scan.
+
+**What it left behind.**
+
+- **`scope="rowgroup"` is now gone from the whole codebase**, not just from one of its two users. The accessibility page's B-216 entry named this instance as deliberately unfixed; its B-222 entry now closes that loop, so the two are read together.
+- **No screen reader has been run**, here as everywhere else in this repo. What changed is that the markup no longer depends on a scope value nothing implements.
+- **`LAST_REVIEWED` does not move.** `/admin/reports/revenue` is behind `reports:financial`, no public or portal route is touched, and no claim on the accessibility page was re-checked against the build. The structurally frozen review date is **B-250**'s row.
+- **The visual change is not reviewed by anyone.** "Billed" and "Coll." now sit under the facility name in the label column instead of beside the first figure of each row. That is the design call B-222 authorised, but nobody has looked at the result on a real report.
+
 ## B-253 — The ordinary way to add a migration connected to shared cloud infrastructure and offered to drop it
 
 `e16bac9`

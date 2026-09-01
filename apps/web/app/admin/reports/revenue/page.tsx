@@ -221,28 +221,59 @@ export default async function RevenuePage({
 /// Two rows per facility: billed above, collected below. A single row with
 /// eight money columns is unreadable, and the comparison the report exists for
 /// is vertical — this rent number against that rent number.
+///
+/// B-222. Each of the two rows carries its OWN `<th scope="row">`. It used to
+/// be one `<th scope="rowgroup" rowSpan={2}>` holding the facility name, and
+/// `rowgroup` is implemented by none of NVDA, JAWS or VoiceOver — so all
+/// fourteen of a facility's figures sat in rows with no header at all, which
+/// is worse than the aging table's version of the same defect (B-216) because
+/// `RowPair` had no per-row header to fold the name into.
+///
+/// Making one meant giving the label column real content, so "Billed" and
+/// "Coll." moved OUT of the first money cell of each row — where they were
+/// `<span>`s decorating a number, describing the whole row from inside one of
+/// its cells — and into the row header where they belong. That is the visible
+/// change, and it is the point: the row's identity is now in the row's header
+/// rather than smuggled into its data.
+///
+/// The facility name is visually hidden on the second row and printed once, so
+/// the column still reads as one facility with two lines under it. **This
+/// claims structure and nothing else**: every figure now sits in a row whose
+/// header names the facility and which half of the pair it is. No announcement
+/// is asserted and none was observed — the same correction B-216 made.
 function RowPair({ row, emphasis = false }: { row: RevenueRow; emphasis?: boolean }) {
   const weight = emphasis ? 'font-semibold' : ''
+  const rollUp = emphasis ? ' (roll-up of every facility above)' : ''
   return (
     <>
-      <tr className={`border-input border-b ${weight}`}>
-        <th scope="rowgroup" rowSpan={2} className="py-2 pr-4 text-left align-top font-medium">
-          {row.facilityName}
-          {emphasis && <span className="sr-only"> (roll-up of every facility above)</span>}
+      <tr className={`${weight}`}>
+        <th scope="row" className="py-2 pr-4 text-left align-top font-medium">
+          <span className="block">
+            {row.facilityName}
+            {emphasis && <span className="sr-only">{rollUp}</span>}
+          </span>
+          <span className="text-muted-foreground block text-xs font-normal uppercase">Billed</span>
         </th>
         {REVENUE_CATEGORIES.map((category) => (
-          <td key={category} className="py-2 pr-4 text-right tabular-nums">
-            <span className="text-muted-foreground mr-2 text-xs uppercase">Billed</span>
+          <td key={category} className="py-2 pr-4 text-right align-bottom tabular-nums">
             {formatCents(row.billed[category])}
           </td>
         ))}
-        <td className="text-muted-foreground py-2 pr-4 text-right">—</td>
-        <td className="py-2 pr-4 text-right tabular-nums">{formatCents(billedTotal(row))}</td>
+        <td className="text-muted-foreground py-2 pr-4 text-right align-bottom">—</td>
+        <td className="py-2 pr-4 text-right align-bottom tabular-nums">
+          {formatCents(billedTotal(row))}
+        </td>
       </tr>
       <tr className={`border-input border-b ${weight}`}>
+        <th scope="row" className="py-2 pr-4 text-left align-top font-medium">
+          <span className="sr-only">
+            {row.facilityName}
+            {rollUp}{' '}
+          </span>
+          <span className="text-muted-foreground block text-xs font-normal uppercase">Coll.</span>
+        </th>
         {REVENUE_CATEGORIES.map((category) => (
           <td key={category} className="py-2 pr-4 text-right tabular-nums">
-            <span className="text-muted-foreground mr-2 text-xs uppercase">Coll.</span>
             {formatCents(row.collected[category])}
           </td>
         ))}

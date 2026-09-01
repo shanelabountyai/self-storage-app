@@ -121,6 +121,64 @@ test.describe('signed in as the demo owner', () => {
 
 // B-082 part 4 / PRD 04 FR-AN-3. Funnel v2 and promo ROI.
 
+test.describe('revenue report', () => {
+  test.beforeEach(async ({ page }) => {
+    await signInAsDemoOwner(page)
+    await page.goto('/admin/reports/revenue')
+    await expect(page.getByRole('main')).toBeVisible()
+  })
+
+  // B-222. The facility used to be attached to each pair of rows with one
+  // `<th scope="rowgroup" rowSpan={2}>`, which no screen reader implements —
+  // so all fourteen of a facility's figures sat in rows with no header at all.
+  // Each row carries its own now, and this is what fails if it goes back:
+  // `rowheader` is the ARIA role of a `<th scope="row">`, and the name is the
+  // header's full text, the visually hidden facility name included.
+  //
+  // Read-only, and it asserts against whichever facility the demo seed put
+  // first rather than a named one, so it neither depends on nor disturbs any
+  // other spec's fixture (B-120).
+  test('every row of figures has a header naming the facility and which half it is', async ({
+    page,
+  }) => {
+    // Scoped to this table by its caption, because the page carries other
+    // tables with row headers of their own.
+    const table = page.getByRole('table', { name: /Billed and collected by category/ })
+    await expect(table).toBeVisible()
+
+    // `allTextContents`, not `allInnerTexts`: the half-labels are rendered
+    // through `text-transform: uppercase`, and `innerText` returns what is
+    // PAINTED ("BILLED") while the accessible name and the DOM both carry what
+    // was written. Asserting against the painted string would make this test a
+    // check on a CSS declaration.
+    const headers = (await table.getByRole('rowheader').allTextContents()).map((text) =>
+      text.replace(/\s+/g, ' ').trim(),
+    )
+    expect(headers.length, 'the revenue table renders row headers at all').toBeGreaterThan(0)
+
+    const billed = headers.filter((text) => text.endsWith('Billed'))
+    const collected = headers.filter((text) => text.endsWith('Coll.'))
+    expect(billed.length, 'a Billed row header per facility').toBeGreaterThan(0)
+    expect(collected.length, 'a Coll. row header for every Billed one').toBe(billed.length)
+
+    // The association `rowgroup` was failing to make: the SECOND row of a pair
+    // names the same facility as the first, rather than being an unheadered
+    // run of figures under it.
+    const facility = billed[0].replace(/Billed$/, '').trim()
+    expect(facility.length, 'the header names a facility, not just the word Billed').toBeGreaterThan(
+      0,
+    )
+    expect(
+      collected.some((text) => text.startsWith(facility)),
+      'the collected row names its facility too, not just "Coll."',
+    ).toBe(true)
+  })
+
+  test('has no WCAG 2.1 AA violations', async ({ page }) => {
+    await assertNoAxeViolations(page)
+  })
+})
+
 test.describe('funnel v2 and promo ROI', () => {
   test.beforeEach(async ({ page }) => {
     await signInAsDemoOwner(page)

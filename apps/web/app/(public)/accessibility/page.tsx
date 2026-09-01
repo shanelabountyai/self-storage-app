@@ -1044,6 +1044,41 @@ const LAST_REVIEWED = '19 August 2026'
 //
 // `LAST_REVIEWED` does not move: two portal regions gained an affordance, no
 // claim on this page was re-checked against the build, and none changed.
+//
+// Re-read 2026-09-01, at B-222 (the revenue report's `scope="rowgroup"`).
+// **The sibling instance the B-216 entry above named as deliberately not fixed
+// is now fixed**, so that entry should be read with this one: `RowPair` no
+// longer uses `scope="rowgroup"` anywhere, and the construct is gone from the
+// whole codebase rather than from one of its two users.
+//
+// B-216's remedy did not transfer, which is why this was its own row. The
+// aging table already had a per-row `<th scope="row">` to fold the facility
+// into; `RowPair` had none, because each row's identity ("Billed", "Coll.")
+// lived in a `<span>` INSIDE its first money cell — a row describing itself
+// from within one of its own data cells. So making a row header meant giving
+// the label column real content, and the two half-labels moved out of the
+// figures and into the headers where they belong. That is a visible change to
+// an operator-facing report, and it is the change B-222 named as the design
+// call: the alternative, `headers`/`id` across all fourteen cells, would have
+// traded the AT-behaviour claim B-216 removed for a second one this repo can
+// equally not watch.
+//
+// **The comment claims structure and nothing else.** Every figure now sits in
+// a row whose header names the facility and which half of the pair it is. No
+// announcement is asserted and none was observed — the standard B-216 set.
+//
+// **One runnable check**, `e2e/admin-reports.spec.ts`: every Billed row header
+// has a Coll. row header naming the same facility. It reads `textContent`
+// rather than `innerText`, because the half-labels render through
+// `text-transform: uppercase` and `innerText` returns what is PAINTED
+// ("BILLED") — asserting on that would make the test a check on a CSS
+// declaration rather than on the markup. **Verified by replacing the second
+// row's `<th>` with a `<td>` and watching it fail**, then restoring.
+//
+// `LAST_REVIEWED` does not move: `/admin/reports/revenue` is behind
+// `reports:financial`, no public or portal route is touched, and no claim on
+// this page was re-checked against the build. The structurally frozen review
+// date is B-250's row, not this one's to move.
 
 export default function AccessibilityPage() {
   return (
