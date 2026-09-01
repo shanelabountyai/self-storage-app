@@ -7274,6 +7274,28 @@ The three measurements moved into `measureThreeWays` so both loops share one cop
 - **Verified on `desktop-chrome` only.** The spec sets its own viewport in every pass, so `mobile-chrome` would measure the same three CSS viewports; the device scale factor is a rendering concern and not a layout one, as the file's existing comment says.
 - Unit suite green end to end: 3916 passed, 8 skipped, reconciled to 3924. The touched e2e file: 11 passed, 0 failed. Lint and typecheck clean. No schema change, so no migration and nothing for the drift check to see.
 
+## B-253 — The ordinary way to add a migration connected to shared cloud infrastructure and offered to drop it
+
+`PENDING`
+
+**What it built.** `db:migrate` was `dotenv -e .env.local -- prisma migrate dev`, and `.env.local` is the **Neon dev branch**. So the documented way to author a migration connected to shared cloud infrastructure — and because that branch has **none of the 107 migrations applied**, `migrate dev` did not offer to add one. It announced *"We need to reset the `public` schema at ep-holy-block-axpgn0o0.c-4.us-east-2.aws.neon.tech"* and offered `migrate reset`. One keystroke, at a prompt raised by a command whose stated purpose is "add a migration".
+
+Four script changes. `db:migrate` now runs `dotenv -e .env.test -e .env.local`, so it authors against local Postgres — the **resettable** thing, and the one `db:migrate:e2e` already keeps in sync. `db:migrate:cloud` is new and uses `migrate deploy`, which only applies pending migrations and cannot drop anything. `db:migrate:all` runs test → e2e → cloud. `db:status` reports **both** databases and **exits non-zero if either is behind**.
+
+**What it decided.**
+
+- **The scripts were built rather than the claim corrected.** The global `CLAUDE.md` says "`db:migrate:all` and `db:status` exist so that cannot go unnoticed" — and neither was in `package.json`. Two ways to make that true: delete the sentence, or build what it describes. The sentence describes the right safety net, and a session reading it would reasonably stop looking for the hazard, so the net is what was missing.
+- **`db:status` deliberately exits 1 when either database is behind, and does not stop at the first one.** `cmd-a; cmd-b` would have masked the exit code, which is the specific failure the conventions call out. It captures both and re-exits, so it reports the full picture *and* fails.
+- **Nothing was applied to the Neon branch.** `db:migrate:cloud` would bring it up to date in one command and `migrate deploy` cannot drop anything — but it is remote infrastructure and running it is the owner's call, not a side effect of a backlog item. It is one command when they want it.
+
+**One runnable check.** Both new scripts were run. `db:status` prints `storage_test … Database schema is up to date!` then `neondb … Following migrations have not yet been applied` and exits **1**. `db:migrate --create-only` now reports `Datasource "db": … "storage_test" … at "localhost:5432"` and creates the migration instead of proposing a reset — verified, and the probe migration deleted.
+
+**What it left behind.**
+
+- **The Neon dev branch is still empty.** `npm run dev`, `db:seed`, `db:seed:demo` and `db:studio` all point at it, so any of them against it today will fail or find nothing. `npm run db:migrate:cloud` fixes it and was deliberately not run.
+- **`db:generate` still reads `.env.local`.** Harmless — `prisma generate` needs the schema file, not a reachable database — but it means the one remaining unqualified `.env.local` in the migrate path is the one that cannot do damage.
+- **No guard stops a future script from pointing a destructive command at the cloud.** The convention is now written down in the project `CLAUDE.md` and enforced by nothing.
+
 ## B-252 — Two unit tests that failed permanently from 12:00 CDT today, and only one of them was a defect
 
 `1bf0b50`
