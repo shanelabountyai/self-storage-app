@@ -7212,7 +7212,7 @@ The message now travels **two** ways, and both are load-bearing:
 
 ## B-214 — The accessibility statement's hand-check sentence was false for two of the five waiver paths
 
-`PENDING`
+`6ac5179`
 
 **What it built.** The public accessibility statement said of the checks axe cannot decide: *"Each of those is waived only on the page it was checked on, so the same check still has to pass everywhere else."* The mechanism has three paths, and that sentence was true of one.
 
