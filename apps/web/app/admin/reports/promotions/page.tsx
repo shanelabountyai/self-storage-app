@@ -1,10 +1,10 @@
 import Link from 'next/link'
 import { getAdminActor } from '@/lib/admin/context'
 import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
-import { reportRange } from '@/lib/admin/report-range'
 import { formatCents } from '@/lib/format'
 import { promoRoiReport } from '@/lib/analytics/promo-roi'
 import { paybackMonths } from '@storage/core/promotions'
+import { reportRangeForActor } from '@/lib/admin/reports'
 
 export const metadata = { title: 'Promotions' }
 
@@ -26,8 +26,8 @@ export default async function PromotionsReportPage({
   searchParams: Promise<{ from?: string; to?: string }>
 }) {
   const params = await searchParams
-  const range = reportRange(params)
   const actor = await getAdminActor()
+  const range = await reportRangeForActor(actor, params)
 
   if (!hasPermissionAnywhere(actor, ['reports:operational'])) {
     return <p className="text-muted-foreground text-sm">You don&apos;t have access to reports.</p>

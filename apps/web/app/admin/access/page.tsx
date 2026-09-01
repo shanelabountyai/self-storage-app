@@ -2,8 +2,8 @@ import Link from 'next/link'
 import { getAdminActor } from '@/lib/admin/context'
 import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
 import { accessEventLog, summariseFlags } from '@/lib/access/event-log'
-import { reportRange } from '@/lib/admin/report-range'
 import { ACCESS_FLAGS, ACCESS_FLAG_LABELS, isAccessFlag } from '@storage/core/access'
+import { reportRangeForActor } from '@/lib/admin/reports'
 
 export const metadata = { title: 'Gate activity' }
 
@@ -37,8 +37,8 @@ export default async function AccessEventsPage({
   const params = await searchParams
   // D-109: gate activity is a LOG, not a report — its default window ends
   // today, because what a manager opens it for is what just happened.
-  const range = reportRange(params, { window: 'rolling-30-days' })
   const actor = await getAdminActor()
+  const range = await reportRangeForActor(actor, params, { window: 'rolling-30-days' })
 
   if (!hasPermissionAnywhere(actor, ['access:events'])) {
     return <p className="text-muted-foreground text-sm">You don&apos;t have access to gate activity.</p>

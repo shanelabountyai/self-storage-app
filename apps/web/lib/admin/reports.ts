@@ -31,6 +31,7 @@ import { OCCUPYING_LEASE_STATUSES } from '@storage/core/inventory'
 import { effectsByLease } from '@/lib/admin/holds'
 import { facilityAccess, ForbiddenError, can } from '@/lib/rbac/authorize'
 import type { Actor } from '@/lib/rbac/actor'
+import { reportRange, type ReportRange, type ReportRangeOptions } from '@/lib/admin/report-range'
 
 // PRD 02 US-39 / US-2. The adapter between real rows and @storage/core/metrics.
 //
@@ -51,6 +52,29 @@ export async function reportableFacilities(
     // describes in the operator's own clock rather than in UTC.
     select: { id: true, name: true, timezone: true },
   })
+}
+
+/// B-223. The report range for an actor, reckoned against every facility they
+/// can report on rather than against UTC.
+///
+/// The seven report screens take an actor, not a site, so none of them could
+/// supply a timezone and all of them defaulted to UTC — which for the hours
+/// between UTC midnight and facility-local midnight on the 1st offered a month
+/// that had not ended in Texas. `reportRange` now takes the whole list and
+/// reckons against the westernmost; this is the one function that knows what
+/// the list is.
+///
+/// It costs one extra `facility` read per report page — `reportableFacilities`
+/// is called again inside the report itself. That is a small indexed select and
+/// the alternative is threading the list through every report signature to save
+/// it, which buys less than it complicates.
+export async function reportRangeForActor(
+  actor: Actor,
+  params: { from?: string; to?: string },
+  options: Omit<ReportRangeOptions, 'timeZones'> = {},
+): Promise<ReportRange> {
+  const facilities = await reportableFacilities(actor)
+  return reportRange(params, { ...options, timeZones: facilities.map((f) => f.timezone) })
 }
 
 /// Facilities this actor may see MONEY for.

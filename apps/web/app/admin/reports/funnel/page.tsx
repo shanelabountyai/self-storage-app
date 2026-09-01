@@ -1,8 +1,8 @@
 import Link from 'next/link'
 import { getAdminActor } from '@/lib/admin/context'
 import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
-import { reportRange } from '@/lib/admin/report-range'
 import { funnelReport } from '@/lib/analytics/funnel'
+import { reportRangeForActor } from '@/lib/admin/reports'
 
 export const metadata = { title: 'Funnel' }
 
@@ -50,8 +50,8 @@ export default async function FunnelPage({
   }>
 }) {
   const params = await searchParams
-  const range = reportRange(params)
   const actor = await getAdminActor()
+  const range = await reportRangeForActor(actor, params)
 
   if (!hasPermissionAnywhere(actor, ['reports:operational'])) {
     return <p className="text-muted-foreground text-sm">You don&apos;t have access to reports.</p>

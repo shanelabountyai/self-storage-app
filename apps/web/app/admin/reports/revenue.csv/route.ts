@@ -1,5 +1,5 @@
 import { requireStaffActor } from '@/lib/rbac/session'
-import { reportRange } from '@/lib/admin/report-range'
+import { reportRangeForActor } from '@/lib/admin/reports'
 import { billedTotal, collectedTotal, revenueReport, type RevenueRow } from '@/lib/admin/revenue-report'
 import { REVENUE_CATEGORIES } from '@storage/core/metrics'
 import { csvCents, toCsv } from '@/lib/admin/csv'
@@ -47,7 +47,7 @@ function rowsFor(row: RevenueRow): (readonly unknown[])[] {
 export async function GET(request: Request): Promise<Response> {
   const actor = await requireStaffActor()
   const url = new URL(request.url)
-  const range = reportRange({
+  const range = await reportRangeForActor(actor, {
     from: url.searchParams.get('from') ?? undefined,
     to: url.searchParams.get('to') ?? undefined,
   })

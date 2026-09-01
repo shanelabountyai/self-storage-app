@@ -1,3 +1,5 @@
+import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { reportRange } from '../apps/web/lib/admin/report-range'
 
@@ -33,7 +35,53 @@ describe('reportRange', () => {
   it('reckons the month in the timezone it is given', () => {
     const justAfterUtcMidnight = new Date('2026-09-01T00:32:00.000Z')
     expect(reportRange({}, { now: justAfterUtcMidnight }).fromValue).toBe('2026-08-01')
-    expect(reportRange({}, { now: justAfterUtcMidnight, timeZone: 'America/Chicago' }).fromValue).toBe('2026-07-01')
+    expect(
+      reportRange({}, { now: justAfterUtcMidnight, timeZones: ['America/Chicago'] }).fromValue,
+    ).toBe('2026-07-01')
+  })
+
+  // B-223. A report spans every facility the actor may read, and those can be
+  // in several zones. A month is complete only when it is complete in ALL of
+  // them, so the reckoning follows the WESTERNMOST — which is just the earliest
+  // local date among them.
+  it('reckons a multi-zone portfolio against its westernmost facility', () => {
+    // 00:32 UTC on 1 September: already September in London, still 31 August in
+    // Chicago, still 31 August in Honolulu. The complete month is July, because
+    // August has not finished at every site the figures come from.
+    const justAfterUtcMidnight = new Date('2026-09-01T00:32:00.000Z')
+    const zones = ['Europe/London', 'America/New_York', 'America/Chicago', 'Pacific/Honolulu']
+    expect(reportRange({}, { now: justAfterUtcMidnight, timeZones: zones }).fromValue).toBe(
+      '2026-07-01',
+    )
+
+    // Order must not matter — this is a minimum, not a first-one-wins.
+    expect(
+      reportRange({}, { now: justAfterUtcMidnight, timeZones: [...zones].reverse() }).fromValue,
+    ).toBe('2026-07-01')
+
+    // An all-London portfolio genuinely has finished August at that instant,
+    // and is not held back by a facility it does not have.
+    expect(
+      reportRange({}, { now: justAfterUtcMidnight, timeZones: ['Europe/London'] }).fromValue,
+    ).toBe('2026-08-01')
+  })
+
+  // Once every zone has crossed the boundary the answer is the same for all of
+  // them, so the westernmost rule costs nothing for the other ~29 days.
+  it('agrees with every zone once the month has ended everywhere', () => {
+    const midMonth = new Date('2026-09-14T12:00:00.000Z')
+    const zones = ['Europe/London', 'America/Chicago', 'Pacific/Honolulu']
+    expect(reportRange({}, { now: midMonth, timeZones: zones }).fromValue).toBe('2026-08-01')
+    expect(reportRange({}, { now: midMonth }).fromValue).toBe('2026-08-01')
+  })
+
+  // An actor who can report on no facility has no figures for the range to be
+  // wrong about, so this is the old behaviour and stays it.
+  it('falls back to UTC when there are no facilities in scope', () => {
+    const justAfterUtcMidnight = new Date('2026-09-01T00:32:00.000Z')
+    expect(reportRange({}, { now: justAfterUtcMidnight, timeZones: [] }).fromValue).toBe(
+      '2026-08-01',
+    )
   })
 
   // A January default must not land in month -1 of the same year.
@@ -88,5 +136,35 @@ describe('reportRange', () => {
     const again = reportRange({ from: first.fromValue, to: first.toValue }, { now })
     expect(again.start.getTime()).toBe(first.start.getTime())
     expect(again.end.getTime()).toBe(first.end.getTime())
+  })
+})
+
+// B-223. The defect was not that `reportRange` reckoned badly — it was that no
+// caller could tell it where the facilities are, so every one of them took the
+// UTC default and nobody noticed for a month. `reportRangeForActor` is the only
+// thing that knows the answer, so a screen that calls `reportRange` directly is
+// back to reckoning a US operator's month in UTC.
+//
+// A grep rather than a type: the signature cannot express "not from a page",
+// and the failure mode is a NEW file, which no existing test would cover.
+describe('every report screen reckons its range against its facilities', () => {
+  const appDir = join(__dirname, '..', 'apps', 'web', 'app')
+
+  function walk(dir: string): string[] {
+    return readdirSync(dir).flatMap((entry) => {
+      const full = join(dir, entry)
+      if (statSync(full).isDirectory()) return walk(full)
+      return /\.(ts|tsx)$/.test(entry) ? [full] : []
+    })
+  }
+
+  it('no page or route calls reportRange directly', () => {
+    const offenders = walk(appDir).filter((file) =>
+      /(?<!ForActor\()\breportRange\s*\(/.test(readFileSync(file, 'utf8')),
+    )
+    expect(
+      offenders.map((file) => file.slice(appDir.length + 1)),
+      'call reportRangeForActor(actor, ...) instead — see B-223',
+    ).toEqual([])
   })
 })

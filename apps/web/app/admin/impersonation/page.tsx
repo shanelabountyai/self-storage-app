@@ -1,7 +1,6 @@
 import Link from 'next/link'
 import { getAdminActor } from '@/lib/admin/context'
 import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
-import { reportRange } from '@/lib/admin/report-range'
 import { switcherFacilities } from '@/lib/admin/facility-selection'
 import { AdminForm } from '@/components/admin/form'
 import { Button } from '@/components/ui/button'
@@ -13,6 +12,7 @@ import {
   type SessionRow,
 } from '@/lib/impersonation/oversight'
 import { forceEndImpersonationAction } from './actions'
+import { reportRangeForActor } from '@/lib/admin/reports'
 
 export const metadata = { title: 'Support sessions' }
 
@@ -73,7 +73,11 @@ export default async function ImpersonationOversightPage({
 
   // D-109: oversight is a LOG, not a report. A report default would have
   // shown an owner a month that ended before the session they came to check.
-  const range = reportRange({ from: one('from'), to: one('to') }, { window: 'rolling-30-days' })
+  const range = await reportRangeForActor(
+    actor,
+    { from: one('from'), to: one('to') },
+    { window: 'rolling-30-days' },
+  )
   const facilityId = one('facility')
   const subjectQuery = one('subject')
 

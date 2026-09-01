@@ -7274,6 +7274,35 @@ The three measurements moved into `measureThreeWays` so both loops share one cop
 - **Verified on `desktop-chrome` only.** The spec sets its own viewport in every pass, so `mobile-chrome` would measure the same three CSS viewports; the device scale factor is a rendering concern and not a layout one, as the file's existing comment says.
 - Unit suite green end to end: 3916 passed, 8 skipped, reconciled to 3924. The touched e2e file: 11 passed, 0 failed. Lint and typecheck clean. No schema change, so no migration and nothing for the drift check to see.
 
+## B-223 — A report's month is complete when it is complete at every facility the figures come from
+
+`PENDING`
+
+**What it built.** D-109 made every report default to the last **complete** calendar month, and `reportRange` took a `timeZone` to reckon that in — but **no caller could supply one**. All eleven call sites (seven screens and four CSV routes) take an actor, not a site, so every one of them fell to the UTC default. For the hours between UTC midnight and facility-local midnight on the 1st, a report opened on a month that had not ended in Texas: up to five hours, more in Alaska and Hawaii.
+
+`reportRange` now takes `timeZones` — the zones of every facility in scope — and reckons the month against the **westernmost**, which is simply the earliest local date among them. `reportRangeForActor(actor, params, options)` in `lib/admin/reports.ts` is the one function that knows what that list is, and all eleven call sites go through it.
+
+**What it decided.**
+
+- **Option (a) from the row: complete everywhere, not "pass a timezone".** For a multi-facility roll-up there is no single right zone, and picking the operator's own would make two staff reading the same URL see different months. The figures come from all of those sites, so the window closes when the last of them closes it. That is correct by construction rather than by choosing well.
+- **No offset arithmetic.** "Westernmost" sounds like it needs UTC offsets and DST handling; it does not. `businessDateFor(now, zone)` already answers "what day is it there", and the **minimum** of those dates is the one that has advanced least — which is the westernmost, by definition, without a single offset computed. Ordering does not matter and DST is the zone database's problem, not this function's.
+- **Option (b) was not taken and (c) was not needed.** Giving the report pages the facility switcher is a bigger change that would make the all-facilities case fall back to (a) anyway, so (a) is the part that has to exist either way. And with (a) built there is nothing left to disclaim on screen.
+- **`timeZone: string` was replaced rather than kept alongside `timeZones`.** Two ways to say the same thing, one of which is wrong for the multi-facility case that is the whole point, is how the next page picks the wrong one.
+- **The extra query was accepted.** `reportRangeForActor` reads `reportableFacilities` again — the report itself calls it too. A small indexed select against threading the list through every report signature to save it, which buys less than it complicates.
+
+**One runnable check.** Two, and the second is the one that matters more.
+
+`tests/report-range.test.ts` gains the multi-zone cases: at 00:32 UTC on 1 September a London/New York/Chicago/Honolulu portfolio reports **July**, because August has not ended at every site; an all-London portfolio reports August, because for it, it has; the answer does not depend on the order of the list; and mid-month every zone agrees, so the rule costs nothing for the other twenty-nine days.
+
+And a **guard**: no file under `apps/web/app` may call `reportRange` directly. The defect here was never that the function reckoned badly — it was that no caller could tell it where the facilities were, so all eleven took the default and nobody noticed for a month. The failure mode is a NEW file, which no existing test would cover, so it is a grep over the app directory rather than a type. **Verified by pointing one page back at `reportRange` and watching it fail**, naming the file.
+
+**What it left behind.**
+
+- **`/admin/access` and `/admin/impersonation` changed too, and deliberately.** Both use the `rolling-30-days` window, which is anchored on the same `today`, so their window now also closes when it closes everywhere. That is consistent rather than incidental — but it is a behaviour change on two screens the row named only in passing.
+- **No e2e assertion was pinned to a fake clock**, as the row instructed. Pinning is what let the original defect survive until a 19:32 run.
+- **The management pack still does not go through here**, and should not: it has one facility by construction and reckons its own month in that facility's zone.
+- **Nothing stops a report from being written that has no actor.** The guard covers `apps/web/app`; a range computed in a job or a script would not be caught, and none exists today.
+
 ## B-222 — The revenue report's figures sat in rows with no header, and the fix had to change what the report looks like
 
 `0da0eff`

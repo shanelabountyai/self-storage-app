@@ -1,10 +1,10 @@
 import Link from 'next/link'
 import { getAdminActor } from '@/lib/admin/context'
 import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
-import { reportRange } from '@/lib/admin/report-range'
 import { billedTotal, collectedTotal, revenueReport, type RevenueRow } from '@/lib/admin/revenue-report'
 import { REVENUE_CATEGORIES } from '@storage/core/metrics'
 import { formatCents } from '@/lib/format'
+import { reportRangeForActor } from '@/lib/admin/reports'
 
 export const metadata = { title: 'Revenue' }
 
@@ -36,8 +36,8 @@ export default async function RevenuePage({
   searchParams: Promise<{ from?: string; to?: string }>
 }) {
   const params = await searchParams
-  const range = reportRange(params)
   const actor = await getAdminActor()
+  const range = await reportRangeForActor(actor, params)
 
   if (!hasPermissionAnywhere(actor, ['reports:financial'])) {
     return (

@@ -1,5 +1,5 @@
 import { requireStaffActor } from '@/lib/rbac/session'
-import { reportRange } from '@/lib/admin/report-range'
+import { reportRangeForActor } from '@/lib/admin/reports'
 import { commsDashboard } from '@/lib/admin/comms-dashboard'
 import { csvPercent, toCsv } from '@/lib/admin/csv'
 
@@ -11,7 +11,7 @@ import { csvPercent, toCsv } from '@/lib/admin/csv'
 export async function GET(request: Request): Promise<Response> {
   const actor = await requireStaffActor()
   const url = new URL(request.url)
-  const range = reportRange({
+  const range = await reportRangeForActor(actor, {
     from: url.searchParams.get('from') ?? undefined,
     to: url.searchParams.get('to') ?? undefined,
   })

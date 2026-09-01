@@ -1,8 +1,8 @@
 import Link from 'next/link'
 import { getAdminActor } from '@/lib/admin/context'
 import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
-import { reportRange } from '@/lib/admin/report-range'
 import { commsDashboard, type RateRow } from '@/lib/admin/comms-dashboard'
+import { reportRangeForActor } from '@/lib/admin/reports'
 
 export const metadata = { title: 'Deliverability' }
 
@@ -36,8 +36,8 @@ export default async function DeliverabilityPage({
   searchParams: Promise<{ from?: string; to?: string; facility?: string }>
 }) {
   const params = await searchParams
-  const range = reportRange(params)
   const actor = await getAdminActor()
+  const range = await reportRangeForActor(actor, params)
 
   if (!hasPermissionAnywhere(actor, ['reports:operational'])) {
     return <p className="text-muted-foreground text-sm">You don&apos;t have access to reports.</p>

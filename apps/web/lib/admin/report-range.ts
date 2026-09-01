@@ -44,14 +44,24 @@ function parseDay(value: string | undefined): Date | null {
 /// and the accounting close use, so a figure read here and a figure read there
 /// are about the same days.
 ///
-/// `timeZone` is the zone the calendar month is reckoned in. **Most callers
-/// cannot supply one and should not pretend to**: a report spans every facility
-/// the actor may read, which can be several zones, and none of the seven report
-/// pages resolves a single facility at all — they take an actor, not a site. So
-/// the default is UTC and the residual is named rather than hidden: for the few
-/// hours between UTC midnight and facility-local midnight on the 1st, this
-/// calls a month complete that is still running at a US facility. That is a
-/// smaller window than the defect it replaces, and B-223 owns closing it.
+/// `timeZones` are the zones of every facility in scope, and a month is
+/// complete only when it is complete in **all** of them — so the reckoning is
+/// done against the westernmost, which is simply the earliest local date among
+/// them (B-223). No offset arithmetic: `businessDateFor` already answers "what
+/// day is it there", and the smallest answer is the one that has advanced
+/// least.
+///
+/// This is what "pass a timezone" could not do. A report spans every facility
+/// the actor may read, which can be several zones, and picking one — the
+/// operator's own, or the first in the list — would make two staff reading the
+/// same URL see different months. Correct-by-construction instead: the figures
+/// come from all of these sites, so the window closes when the last of them
+/// closes it.
+///
+/// An empty list falls back to UTC, which is the old behaviour and is right for
+/// the only case that reaches it: an actor who can report on no facility has no
+/// figures for the range to be wrong about.
+///
 /// The management pack does NOT go through here — it has one facility by
 /// construction and reckons its own month in that facility's zone.
 ///
@@ -60,8 +70,9 @@ function parseDay(value: string | undefined): Date | null {
 /// helps nobody. The form shows what was actually used.
 export type ReportRangeOptions = {
   now?: Date
-  /// The zone the calendar month is reckoned in. See the note above.
-  timeZone?: string
+  /// The zones of every facility in scope. The month is reckoned against the
+  /// westernmost of them. See the note above.
+  timeZones?: readonly string[]
   /// Which default applies when the URL names no range. See `DefaultWindow`.
   window?: DefaultWindow
 }
@@ -84,13 +95,21 @@ export function reportRange(
   params: { from?: string; to?: string },
   options: ReportRangeOptions = {},
 ): ReportRange {
-  const { now = new Date(), timeZone = 'UTC', window = 'last-complete-month' } = options
+  const { now = new Date(), timeZones, window = 'last-complete-month' } = options
 
   // The facility-local calendar date first, then the month off that — reading
   // `getUTCMonth()` on the raw instant is what made the pack show a month that
   // had not ended yet (B-220 defect 1). `businessDateFor` returns UTC midnight
   // of the local date, so the UTC getters below are correct on its result.
-  const today = businessDateFor(now, timeZone)
+  //
+  // B-223: the EARLIEST of those dates across every facility in scope, which is
+  // the westernmost one. A month is complete only when it is complete
+  // everywhere the figures come from, and taking the minimum says exactly that
+  // without computing a single UTC offset.
+  const zones = timeZones && timeZones.length > 0 ? timeZones : ['UTC']
+  const today = zones
+    .map((zone) => businessDateFor(now, zone))
+    .reduce((earliest, date) => (date < earliest ? date : earliest))
   const monthStart =
     window === 'rolling-30-days'
       ? new Date(today.getTime() - 29 * 86_400_000)

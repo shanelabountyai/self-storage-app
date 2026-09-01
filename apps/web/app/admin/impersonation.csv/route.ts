@@ -1,8 +1,8 @@
 import { requireStaffActor } from '@/lib/rbac/session'
 import { ForbiddenError, hasPermissionAnywhere } from '@/lib/rbac/authorize'
-import { reportRange } from '@/lib/admin/report-range'
 import { toCsv } from '@/lib/admin/csv'
 import { sessionReport } from '@/lib/impersonation/oversight'
+import { reportRangeForActor } from '@/lib/admin/reports'
 
 // PRD 09 FR-19 (B-092). "CSV-exportable", under PRD 02 US-39's rule that the
 // export matches the on-screen data exactly — which is only true because this
@@ -30,7 +30,11 @@ export async function GET(request: Request): Promise<Response> {
   const url = new URL(request.url)
   const one = (key: string): string | undefined => url.searchParams.get(key) ?? undefined
   // D-109, same window as the screen it exports (US-39).
-  const range = reportRange({ from: one('from'), to: one('to') }, { window: 'rolling-30-days' })
+  const range = await reportRangeForActor(
+    actor,
+    { from: one('from'), to: one('to') },
+    { window: 'rolling-30-days' },
+  )
 
   const rows = await sessionReport(actor, {
     from: range.start,
