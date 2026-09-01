@@ -386,7 +386,9 @@ test.describe('the dashboard (B-113)', () => {
     await page.goto('/admin/reports/delinquency')
 
     // B-195 split every facility into a "Being chased" row and a "Halted" row
-    // under one `scope="rowgroup"` header; B-207 added the third row, the
+    // under one facility cell spanning the group — a `scope="rowgroup"` header
+    // until B-216 moved the association into each row's own `<th scope="row">`,
+    // `rowgroup` being implemented by no screen reader; B-207 added the third row, the
     // facility's own total, so a facility reads on the same footing as the
     // portfolio footer rather than making the reader add the halves at one
     // level and not the other.
@@ -411,6 +413,17 @@ test.describe('the dashboard (B-113)', () => {
     const [chased, halted, total] = totals.map(cents)
     expect(chased + halted, 'the two halves add up to the row that ties out').toBe(total)
     expect(total, 'the tile is the whole receivable, not half of it').toBe(cents(shown!))
+
+    // B-216. The facility used to be attached to these three rows with
+    // `scope="rowgroup"`, which no screen reader implements — so each row of
+    // figures had no header naming whose money it was. It is in the row header
+    // now, and this is what fails if it goes back: `rowheader` is the ARIA role
+    // of a `<th scope="row">`, and the name is the header's full text, the
+    // visually hidden facility included.
+    await expect(
+      group.getByRole('rowheader', { name: `${facilityName}, Halted` }),
+      'the halted row carries a row header naming the facility, not just "Halted"',
+    ).toHaveCount(1)
   })
 
   test('All facilities rolls up instead of sending the owner away', async ({ page }) => {

@@ -27,12 +27,22 @@ export type ArAgingSplitRow = {
 
 /// One line of buckets, labelled by what is happening to the money.
 ///
-/// The label is a `<th scope="row">` rather than a plain cell, so a screen
-/// reader announcing a figure says which half of the split it belongs to.
-function SplitCells({ label, aging }: { label: string; aging: ArAging }) {
+/// The label is a `<th scope="row">` rather than a plain cell, so every figure
+/// carries which half of the split it belongs to.
+///
+/// B-216. `group` — the facility, or "All facilities" in the footer — is
+/// carried in that SAME row header rather than in a `scope="rowgroup"` cell one
+/// column to the left. `rowgroup` is in the HTML spec and is implemented by
+/// none of NVDA, JAWS or VoiceOver, so the facility was associated with these
+/// figures only in principle. Visually hidden because the name is already on
+/// screen once, in the spanning cell this header sits beside; what it adds is
+/// the association, which now lives in a header the row actually has instead
+/// of in a scope value nothing reads.
+function SplitCells({ group, label, aging }: { group: string; label: string; aging: ArAging }) {
   return (
     <>
       <th scope="row" className="py-2 pr-4 text-left font-normal">
+        <span className="sr-only">{group}, </span>
         {label}
       </th>
       {AR_BUCKETS.map((bucket) => (
@@ -78,48 +88,46 @@ export function ArAgingSplitTable({
             </th>
           </tr>
         </thead>
-        {/* One <tbody> per facility, with the name as a `scope="rowgroup"`
-            header spanning its three rows. That is what makes the halted row
-            announce as "Cedar Park, Halted, 61–90 days" rather than as a row of
-            figures with no owner — a rowSpan cell with `scope="row"` would
-            claim only the first of the three. */}
+        {/* One <tbody> per facility. The name spans the group's three rows as a
+            plain <td>: it is there to be seen, and the association it used to
+            claim through `scope="rowgroup"` now lives in each row's own
+            `<th scope="row">` instead (see `SplitCells`).
+
+            What is claimed here is structural and no more: every figure in this
+            table has a row header, in the row it belongs to, naming both the
+            facility and which half of the split it is. No announcement is
+            asserted and none was observed — this repo does not assert
+            screen-reader behaviour nobody has watched, which is what the
+            sentence this replaces did. */}
         {rows.map((row) => (
           <tbody key={row.facilityId}>
             <tr className="border-input border-b">
-              <th
-                scope="rowgroup"
-                rowSpan={3}
-                className="py-2 pr-4 text-left align-top font-medium"
-              >
+              <td rowSpan={3} className="py-2 pr-4 text-left align-top font-medium">
                 {row.facilityName}
-              </th>
-              <SplitCells label="Being chased" aging={row.split.chased} />
+              </td>
+              <SplitCells group={row.facilityName} label="Being chased" aging={row.split.chased} />
             </tr>
             <tr className="border-input border-b">
-              <SplitCells label="Halted" aging={row.split.halted} />
+              <SplitCells group={row.facilityName} label="Halted" aging={row.split.halted} />
             </tr>
             <tr className="border-input border-b">
-              <SplitCells label="Total" aging={row.split.total} />
+              <SplitCells group={row.facilityName} label="Total" aging={row.split.total} />
             </tr>
           </tbody>
         ))}
         {rows.length > 0 && (
           <tfoot>
             <tr className="border-input border-b font-semibold">
-              <th
-                scope="rowgroup"
-                rowSpan={3}
-                className="py-2 pr-4 text-left align-top"
-              >
+              <td rowSpan={3} className="py-2 pr-4 text-left align-top">
                 All facilities
-              </th>
-              <SplitCells label="Being chased" aging={total.chased} />
+              </td>
+              <SplitCells group="All facilities" label="Being chased" aging={total.chased} />
             </tr>
             <tr className="border-input border-b font-semibold">
-              <SplitCells label="Halted" aging={total.halted} />
+              <SplitCells group="All facilities" label="Halted" aging={total.halted} />
             </tr>
             <tr className="border-input border-b font-semibold">
-              <SplitCells label="Total" aging={total.total} />
+              <SplitCells group="All facilities" label="Total" aging={total.total} />
             </tr>
           </tfoot>
         )}
