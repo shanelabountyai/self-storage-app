@@ -2696,6 +2696,12 @@ model DelinquencyTimeline {
   /// at its ORIGINAL due date (D-25), so without this the tenant is instantly
   /// back at full age and the whole ladder is due at once.
   reversalGraceDays Int      @default(10)
+  /// B-224 / D-10. Days required between the served lien notice's own deadline
+  /// and the sale, ON TOP of that deadline. The deadline comparison is the hard
+  /// rule and is correct with no number at all, which is why this defaults to
+  /// 0: an existing facility gets the rule and no surprise margin. Per-state
+  /// configuration, presented as an example and never as compliant (US-29).
+  minDaysNoticeToSale Int  @default(0)
   /// D-92 (B-161). Where the ladder picks up after a reversal: `true` resumes
   /// at the stage already reached, `false` restarts at day one and re-serves
   /// every notice. Resume is the default — it closes the pay-then-reverse loop

@@ -5,6 +5,7 @@ import { auctionCase } from '@/lib/auctions/service'
 import { SURPLUS_DISPOSITION_LABELS } from '@storage/core/auctions'
 import { TIMELINE_DISCLAIMER } from '@storage/core/delinquency'
 import { formatCents } from '@/lib/format'
+import { AdminForm, Field } from '@/components/admin/form'
 import {
   addAdvertisementAction,
   approveAction,
@@ -301,16 +302,33 @@ export default async function AuctionCasePage({
               <h2 id="schedule-heading" className="text-sm font-medium">
                 Schedule the sale
               </h2>
-              <form action={scheduleAction} className="border-input flex flex-wrap items-end gap-2 rounded-lg border p-4">
+              {/* B-224. An `AdminForm`, not a bare `<form>`: `scheduleSale`
+                  can now refuse the date it is handed — before the deadline
+                  the served notice gave the tenant, or in the past — and a
+                  refusal that re-renders the page identically is
+                  indistinguishable from a broken button. */}
+              <AdminForm
+                action={scheduleAction}
+                label="Schedule the sale"
+                className="border-input flex flex-wrap items-end gap-2 rounded-lg border p-4"
+              >
                 <input type="hidden" name="caseId" value={caseId} />
-                <label className="flex flex-col gap-1 text-sm">
-                  Sale date
-                  <input name="saleDate" type="date" required className="border-input bg-background min-h-11 rounded-md border px-3 text-sm" />
-                </label>
+                <Field
+                  name="saleDate"
+                  label="Sale date"
+                  type="date"
+                  required
+                  className="flex flex-col gap-1 text-sm"
+                  hint={
+                    view.noticeDeadline
+                      ? `On or after ${view.noticeDeadline.toISOString().slice(0, 10)}${view.minDaysNoticeToSale > 0 ? ` plus the ${view.minDaysNoticeToSale} day${view.minDaysNoticeToSale === 1 ? '' : 's'} this facility requires` : ''} — the deadline the served lien notice gave the tenant.`
+                      : undefined
+                  }
+                />
                 <button type="submit" className="border-input hover:bg-accent min-h-11 rounded-md border px-4 text-sm font-medium">
                   Schedule
                 </button>
-              </form>
+              </AdminForm>
             </section>
           )}
 
@@ -360,7 +378,16 @@ export default async function AuctionCasePage({
                 Enter what the sale raised and what it cost. The system applies sale costs, then the
                 lien balance, then the surplus — and posts the ledger entries itself.
               </p>
-              <form action={recordSaleAction} className="border-input flex flex-col gap-3 rounded-lg border p-4">
+              {/* B-224. Same reason as the schedule form: this action now
+                  refuses a sale with no advertisement recorded on or before
+                  its date, and one dated before the day it was scheduled for.
+                  Neither is a readiness rule, so neither can be derived by
+                  re-rendering the page. */}
+              <AdminForm
+                action={recordSaleAction}
+                label="Record the sale outcome"
+                className="border-input flex flex-col gap-3 rounded-lg border p-4"
+              >
                 <input type="hidden" name="caseId" value={caseId} />
                 <div className="flex flex-wrap gap-2">
                   <label className="flex flex-col gap-1 text-sm">
@@ -450,7 +477,7 @@ export default async function AuctionCasePage({
                 <button type="submit" className="border-input hover:bg-accent min-h-11 self-start rounded-md border px-4 text-sm font-medium">
                   Record the sale
                 </button>
-              </form>
+              </AdminForm>
             </section>
           )}
 

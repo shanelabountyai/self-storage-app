@@ -31,6 +31,9 @@ export type TimelineVersion = {
   /// whether the ladder resumes at the stage reached or restarts at day one.
   reversalGraceDays: number
   reversalResumes: boolean
+  /// B-224 / D-10. Days required between the served lien notice's deadline and
+  /// the sale, on top of that deadline. 0 means the deadline alone.
+  minDaysNoticeToSale: number
   steps: TimelineStep[]
   createdAt: Date
   createdByName: string | null
@@ -59,6 +62,7 @@ export async function timelinesFor(actor: Actor, facilityId: string): Promise<Ti
     qualifyingAmount: row.qualifyingAmount as QualifyingAmount,
     reversalGraceDays: row.reversalGraceDays,
     reversalResumes: row.reversalResumes,
+    minDaysNoticeToSale: row.minDaysNoticeToSale,
     steps: orderedSteps((row.steps ?? []) as unknown as TimelineStep[]),
     createdAt: row.createdAt,
     createdByName: row.createdByStaff
@@ -93,6 +97,7 @@ export async function activeTimeline(facilityId: string): Promise<TimelineVersio
     qualifyingAmount: row.qualifyingAmount as QualifyingAmount,
     reversalGraceDays: row.reversalGraceDays,
     reversalResumes: row.reversalResumes,
+    minDaysNoticeToSale: row.minDaysNoticeToSale,
     steps: orderedSteps((row.steps ?? []) as unknown as TimelineStep[]),
     createdAt: row.createdAt,
     createdByName: row.createdByStaff
@@ -122,6 +127,10 @@ export async function saveTimeline(
     /// should get rather than a zero.
     reversalGraceDays?: number
     reversalResumes?: boolean
+    /// B-224. Omitted means 0 — the notice deadline alone, which is the hard
+    /// rule and is correct without a margin. An org-default push and every
+    /// pre-B-224 caller get that rather than a number nobody chose.
+    minDaysNoticeToSale?: number
     steps: TimelineStep[]
   },
 ): Promise<SaveResult> {
@@ -130,6 +139,7 @@ export async function saveTimeline(
   const steps = orderedSteps(input.steps)
   const reversalGraceDays = input.reversalGraceDays ?? 10
   const reversalResumes = input.reversalResumes ?? true
+  const minDaysNoticeToSale = input.minDaysNoticeToSale ?? 0
 
   // Validated against the templates that ACTUALLY exist for this facility, not
   // against a typed string. A step naming a template nobody has written reads
@@ -147,6 +157,20 @@ export async function saveTimeline(
       index: null,
       field: 'reversalGraceDays',
       problem: 'Grace after a returned payment must be a whole number of days from 0 to 90.',
+    })
+  }
+  // B-224. Same reasoning as the grace window one line up, and it matters more:
+  // this number decides the earliest date somebody's belongings may be sold, and
+  // it is reachable by a POST.
+  if (
+    !Number.isInteger(minDaysNoticeToSale) ||
+    minDaysNoticeToSale < 0 ||
+    minDaysNoticeToSale > 180
+  ) {
+    problems.push({
+      index: null,
+      field: 'minDaysNoticeToSale',
+      problem: 'Days between the notice deadline and the sale must be a whole number from 0 to 180.',
     })
   }
   if (problems.length > 0) return { ok: false, problems }
@@ -169,6 +193,7 @@ export async function saveTimeline(
         qualifyingAmount: input.qualifyingAmount,
         reversalGraceDays,
         reversalResumes,
+        minDaysNoticeToSale,
         steps: steps as unknown as object,
         createdByStaffId: actor.kind === 'staff' ? actor.staffUserId : null,
       },

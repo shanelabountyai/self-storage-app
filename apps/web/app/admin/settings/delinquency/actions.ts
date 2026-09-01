@@ -62,6 +62,9 @@ export async function saveTimelineAction(_prev: FormState, formData: FormData): 
     // is refused by `saveTimeline` rather than quietly meaning zero days.
     reversalGraceDays: Number(formData.get('reversalGraceDays')),
     reversalResumes: formData.get('reversalResumes') !== 'restart',
+    // B-224. Passed through as typed, like the grace window — a blank becomes
+    // NaN and is refused rather than quietly meaning "no margin".
+    minDaysNoticeToSale: Number(formData.get('minDaysNoticeToSale')),
     steps: stepsFromForm(formData),
   })
 

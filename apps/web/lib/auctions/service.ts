@@ -6,6 +6,7 @@ import {
   distribute,
   ledgerPostings,
   missingBuyerFields,
+  saleDateBlocker,
   surplusHoldUntil,
   surplusObligation,
   type Blocker,
@@ -151,6 +152,12 @@ export type AuctionCaseView = {
   approvedAt: Date | null
   approvedByName: string | null
   scheduledSaleDate: Date | null
+  /// B-224. The served lien notice's own deadline, and the facility's extra
+  /// margin after it. On the view because `scheduleSale` runs the same rule
+  /// against a date that is not stored yet, and re-querying for two fields it
+  /// has already read would be a second source of the same truth.
+  noticeDeadline: Date | null
+  minDaysNoticeToSale: number
   outstandingCents: number
   readiness: Readiness
   /// US-29: "shows the configured timeline summary on every auction approval
@@ -189,7 +196,7 @@ export async function auctionCase(actor: Actor, caseId: string): Promise<Auction
     where: { id: caseId },
     include: {
       unit: { select: { number: true } },
-      timeline: { select: { label: true, version: true, steps: true } },
+      timeline: { select: { label: true, version: true, steps: true, minDaysNoticeToSale: true } },
       advertisements: { orderBy: { runDate: 'asc' } },
       lease: {
         select: {
@@ -235,7 +242,9 @@ export async function auctionCase(actor: Actor, caseId: string): Promise<Auction
     // the chain's tail simply is not found, and the blocker below says why.
     prisma.notice.findFirst({
       where: { leaseId: currentLeaseId, type: 'lien', status: 'delivered', supersededAt: null },
-      select: { id: true },
+      // B-224: `deadlineDate` too — the date the notice told the tenant they
+      // had until, which is the earliest a sale may be set for.
+      select: { id: true, deadlineDate: true },
     }),
     row.approvedByStaffId
       ? prisma.staffUser.findUnique({
@@ -285,6 +294,12 @@ export async function auctionCase(actor: Actor, caseId: string): Promise<Auction
     approved: Boolean(row.approvedAt),
     outstandingCents,
     status: row.status,
+    // B-224. A case already scheduled is re-checked against the notice on
+    // every read, so a sale that should never have been booked shows the
+    // blocker rather than sitting there looking ready.
+    noticeDeadline: servedLienNotice?.deadlineDate ?? null,
+    scheduledSaleDate: row.scheduledSaleDate,
+    minDaysNoticeToSale: row.timeline?.minDaysNoticeToSale ?? 0,
   })
 
   const blockedDays = new Set(readiness.blockers.map((one) => one.dayOffset).filter(Boolean))
@@ -317,6 +332,8 @@ export async function auctionCase(actor: Actor, caseId: string): Promise<Auction
     approvedAt: row.approvedAt,
     approvedByName: approver ? `${approver.firstName} ${approver.lastName}` : null,
     scheduledSaleDate: row.scheduledSaleDate,
+    noticeDeadline: servedLienNotice?.deadlineDate ?? null,
+    minDaysNoticeToSale: row.timeline?.minDaysNoticeToSale ?? 0,
     outstandingCents,
     readiness,
     timelineLabel: row.timeline?.label ?? null,
@@ -532,6 +549,38 @@ export async function scheduleSale(
       ok: false,
       reason: 'This sale cannot be scheduled yet.',
       blockers: view.readiness.blockers,
+    }
+  }
+
+  // B-224. Until this, `scheduleSale` did no date arithmetic of any kind — it
+  // stored whatever it was handed, so a sale could be booked before the
+  // deadline the served notice gave the tenant, or in the past. Readiness
+  // re-checks the STORED date on every read; this is the check at the moment a
+  // date could enter, and it runs the identical rule.
+  const tooEarly = saleDateBlocker({
+    saleDate,
+    noticeDeadline: view.noticeDeadline,
+    minDaysNoticeToSale: view.minDaysNoticeToSale,
+  })
+  if (tooEarly) {
+    return { ok: false, reason: tooEarly.message, blockers: [tooEarly] }
+  }
+
+  // A sale cannot be scheduled for a day that has already gone. This one is
+  // NOT in `auctionReadiness`, deliberately: a scheduled sale whose date
+  // arrives is fine, and a readiness rule would start flagging every booked
+  // case the morning of its own sale.
+  const today = new Date()
+  const todayDate = new Date(
+    Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()),
+  )
+  if (saleDate.getTime() < todayDate.getTime()) {
+    return {
+      ok: false,
+      reason:
+        `The sale date ${saleDate.toISOString().slice(0, 10)} has already passed. ` +
+        'Schedule a date in the future — a sale cannot be booked for a day that has gone, and ' +
+        'recording an outcome does not need a back-dated schedule.',
     }
   }
 
@@ -762,6 +811,45 @@ export async function recordSaleOutcome(
     return {
       ok: false,
       reason: `The buyer record is incomplete: ${missing.join(', ')}. A sales-tax return on auction proceeds cannot be filed without it.`,
+    }
+  }
+
+  // B-224. A sale recorded as having happened before the day it was scheduled
+  // for is either a typo or a sale nobody was told about. Either way the file
+  // cannot be defended, and the pipeline should not be the thing that wrote it
+  // down without comment.
+  if (view.scheduledSaleDate && input.soldAt.getTime() < view.scheduledSaleDate.getTime()) {
+    return {
+      ok: false,
+      reason:
+        `This sale is dated ${input.soldAt.toISOString().slice(0, 10)}, before the ` +
+        `${view.scheduledSaleDate.toISOString().slice(0, 10)} it was scheduled and advertised for. ` +
+        'Correct the date. If the sale genuinely happened earlier than it was advertised, that is a ' +
+        'problem with the sale rather than with this form.',
+    }
+  }
+
+  // B-224. The second of the two commonest wrongful-sale claims, after "no
+  // notice was served": no advertisement. `recordSaleOutcome` refused a sale
+  // with no lock cut and an incomplete buyer record, and accepted one with no
+  // advertisement at all.
+  //
+  // Dated on or BEFORE the sale: an advertisement that ran afterwards
+  // advertised nothing. And it is an `AuctionAdvertisement` row specifically —
+  // D-104 already settled that downloading the lot sheet is not evidence an
+  // advertisement ran, so the sheet does not satisfy this and must not be
+  // allowed to.
+  const advertisedBySale = await prisma.auctionAdvertisement.count({
+    where: { auctionCaseId: caseId, runDate: { lte: input.soldAt } },
+  })
+  if (advertisedBySale === 0) {
+    return {
+      ok: false,
+      reason:
+        'No advertisement is recorded as having run on or before this sale date. Add the ' +
+        'publication, the run date and the tear-sheet reference under "Advertisement" first — a ' +
+        'sale with no advertisement behind it is the second most common wrongful-sale claim there ' +
+        'is, and the lot sheet is not evidence that one ran.',
     }
   }
 

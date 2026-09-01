@@ -7274,6 +7274,34 @@ The three measurements moved into `measureThreeWays` so both loops share one cop
 - **Verified on `desktop-chrome` only.** The spec sets its own viewport in every pass, so `mobile-chrome` would measure the same three CSS viewports; the device scale factor is a rendering concern and not a layout one, as the file's existing comment says.
 - Unit suite green end to end: 3916 passed, 8 skipped, reconciled to 3924. The touched e2e file: 11 passed, 0 failed. Lint and typecheck clean. No schema change, so no migration and nothing for the drift check to see.
 
+## B-224 — A sale could be booked before the date the notice gave, and recorded with no advertisement at all
+
+`PENDING`
+
+**What it built.** The auction pipeline's whole premise is "no override, no yellow banner" — and it hard-blocked the notice while leaving the clock alone. `scheduleSale` performed **no date arithmetic of any kind**: it stored whatever date it was handed. `recordSaleOutcome` refused a sale with no lock cut and an incomplete buyer record, and accepted one with no advertisement on file. So a manager could serve the lien notice on the 5th giving the tenant until the 19th, schedule the sale for the 9th, cut the lock, take $900 and record the outcome — the two commonest wrongful-sale claims, both reachable through the happy path with every readiness rule green.
+
+Four refusals now. `saleDateBlocker` is a pure function in `packages/core/auctions/readiness.ts`; `auctionReadiness` runs it against a case's **stored** `scheduledSaleDate` on every read, and `scheduleSale` runs the identical rule against the date it is **handed**. `scheduleSale` also refuses a date already past. `recordSaleOutcome` refuses a sale with no `AuctionAdvertisement` dated on or before it, and one dated before the day it was scheduled for.
+
+**What it decided.**
+
+- **One rule, two callers.** The deadline check is a single exported function rather than a copy in each place. Readiness cannot cover scheduling on its own, because at that moment the date is not stored yet; scheduling cannot cover readiness, because a case booked wrongly must keep showing the blocker on every later read rather than sitting there looking ready.
+- **Both dates are business dates, and no timezone conversion was added.** `Notice.deadlineDate` is `@db.Date` and the sale date is parsed as UTC midnight from a date-only input, so neither carries a zone and comparing them directly **is** the facility-local comparison. Converting either through a timezone here would introduce exactly the day-shift B-220 and B-223 were about, in the direction that hurts.
+- **The past-date rule is in `scheduleSale` only, deliberately.** As a readiness rule it would start flagging every properly booked case on the morning of its own sale.
+- **No served notice means this rule says nothing.** `no_lien_notice_served` owns that case. "The sale is too early" about a notice that does not exist sends a manager to change the date when the fix is to serve the notice.
+- **`minDaysNoticeToSale` is a margin ON TOP of the deadline, defaulting to 0** (D-10). The deadline comparison is the hard rule and is correct with no number at all, so every existing facility gets the refusal and no margin it did not choose; a non-zero default would have retroactively blocked sales already booked inside it. It ships with its control in the same commit, per this repo's first hard-learned rule, and the hint says in as many words that it is an example configuration and not legal advice (US-29).
+- **The lot sheet is not evidence.** The advertisement refusal counts `AuctionAdvertisement` rows and nothing else, because D-104 already settled that downloading a sheet is not evidence one ran. The refusal says so on screen.
+- **Two forms became `AdminForm`s, and that was not optional.** `actions.ts` says a refusal is not an exception because "the page derives it from the same readiness call" — true only where the page CAN derive it, and neither of these it can: a date refused before it is stored leaves the page identical, and "no advertisement ran" is not a readiness rule. A refusal that re-renders the page unchanged is indistinguishable from a broken button, which is B-141's defect in the one place in the product where the consequence is somebody's property.
+
+**One runnable check.** Eleven, across two files. `tests/auction-readiness.test.ts` covers the rule itself: the row's own example (served on the 5th, deadline the 19th, sale booked for the 9th), the deadline day being allowed, the facility margin, silence when no notice is served, and — defence in depth — that a negative or fractional margin can never make an *earlier* sale permissible than the deadline alone. `tests/auctions-db.test.ts` covers the service: a sale refused with no advertisement, refused with one that ran *after* it, refused when dated before its own scheduled day, and a schedule refused inside the notice deadline **with nothing written** (the case stays `eligible` with a null sale date — a refusal, not a warning) while the deadline day itself is accepted.
+
+**A real defect found along the way, in the tests.** Every existing auction fixture scheduled sales for the literal `2026-09-01`, which was **today**. The new past-date rule would have started failing all of them tomorrow — the exact rot B-252 found one table over, and it would have looked like B-224 breaking rather than a fixture expiring. Every sale date in `auctions-db.test.ts` is now relative (`saleDay(days)`), including the surplus hold-until assertion that was pinned to `2026-11-30` because that was ninety days after the literal.
+
+**What it left behind.**
+
+- **The other six forms on the auction case screen are still bare `<form>`s** with plain labels and no error summary. Their actions still return `void`, so `recordLockCut`, `addAdvertisement`, `cancelAuction` and the surplus actions all still refuse in silence. B-224 converted the two whose refusals it introduced; the rest is a real gap and not this row's.
+- **`minDaysNoticeToSale` is not pushed by the org defaults.** A new facility gets the column default of 0, which is safe, but B-079's org-default push does not carry it — so an operator setting 10 days across a portfolio still sets it per site.
+- **Nothing re-checks an already-sold case.** The readiness rule runs on `scheduledSaleDate`, and a case that is `sold` already carries `already_sold` as a blocker, so a sale recorded before its deadline in the past is not surfaced retrospectively. Nothing in the demo data is in that state.
+
 ## B-221 — The test that had never once run, and the catalog entry that made it fail when it finally did
 
 `46bb333`

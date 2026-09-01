@@ -1080,6 +1080,25 @@ const LAST_REVIEWED = '19 August 2026'
 // this page was re-checked against the build. The structurally frozen review
 // date is B-250's row, not this one's to move.
 
+// Re-read 2026-09-01, at B-224 (a sale schedulable before the notice deadline).
+// **No claim on this page changed, and `LAST_REVIEWED` does not move** —
+// `/admin/auctions/[caseId]` is behind `auctions:approve` and no public or
+// portal route is touched.
+//
+// Worth recording anyway, because it moved an admin screen TOWARD the standard
+// rather than away from it: the schedule form and the sale-outcome form became
+// `AdminForm`s, so their refusals now land in a focused `role="alert"` summary
+// with the submitted values restored, instead of a re-render that looked
+// exactly like the button having done nothing (FR-19, and B-141's defect). The
+// sale-date field is a real `Field`, so its refusal carries `aria-invalid` and
+// `aria-describedby`.
+//
+// **The other six forms on that screen are still bare `<form>`s** — lock cut,
+// advertisement, cancel, and the three surplus controls — with plain labels,
+// no error summary and actions that return `void`. That is named here rather
+// than left implied, because this page's exception lists are only as honest as
+// what gets written down when a sweep is partial.
+
 export default function AccessibilityPage() {
   return (
     <ProsePage

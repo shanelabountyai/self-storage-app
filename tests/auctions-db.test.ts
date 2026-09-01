@@ -280,7 +280,7 @@ describeDb('the auction pipeline', () => {
       const caseId = await makeReadyCase()
       await setContainsVehicle(manager(), caseId, true, 'A boat on a trailer.')
 
-      const result = await scheduleSale(regional(), caseId, new Date('2026-09-01T00:00:00Z'))
+      const result = await scheduleSale(regional(), caseId, saleDay())
       expect(result.ok).toBe(false)
       if (result.ok) throw new Error('unreachable')
       expect(result.blockers?.map((one) => one.kind)).toContain('contains_vehicle')
@@ -308,7 +308,7 @@ describeDb('the auction pipeline', () => {
         data: { proof: { note: 'posted it' } },
       })
 
-      const result = await scheduleSale(regional(), caseId, new Date('2026-09-01T00:00:00Z'))
+      const result = await scheduleSale(regional(), caseId, saleDay())
       expect(result.ok).toBe(false)
       if (result.ok) throw new Error('unreachable')
       expect(result.blockers?.some((one) => one.kind === 'step_lacks_proof')).toBe(true)
@@ -318,7 +318,7 @@ describeDb('the auction pipeline', () => {
       const caseId = await makeReadyCase()
       await prisma.notice.deleteMany({ where: { leaseId } })
 
-      const result = await scheduleSale(regional(), caseId, new Date('2026-09-01T00:00:00Z'))
+      const result = await scheduleSale(regional(), caseId, saleDay())
       expect(result.ok).toBe(false)
       if (result.ok) throw new Error('unreachable')
       expect(result.blockers?.map((one) => one.kind)).toContain('no_lien_notice_served')
@@ -331,7 +331,7 @@ describeDb('the auction pipeline', () => {
         data: { status: 'generated', deliveredAt: null },
       })
 
-      const result = await scheduleSale(regional(), caseId, new Date('2026-09-01T00:00:00Z'))
+      const result = await scheduleSale(regional(), caseId, saleDay())
       expect(result.ok).toBe(false)
     })
 
@@ -342,7 +342,7 @@ describeDb('the auction pipeline', () => {
         data: { approvedAt: null, approvedByStaffId: null },
       })
 
-      const result = await scheduleSale(regional(), caseId, new Date('2026-09-01T00:00:00Z'))
+      const result = await scheduleSale(regional(), caseId, saleDay())
       expect(result.ok).toBe(false)
       if (result.ok) throw new Error('unreachable')
       expect(result.blockers?.map((one) => one.kind)).toContain('not_approved')
@@ -369,15 +369,63 @@ describeDb('the auction pipeline', () => {
         },
       })
 
-      const result = await scheduleSale(regional(), caseId, new Date('2026-09-01T00:00:00Z'))
+      const result = await scheduleSale(regional(), caseId, saleDay())
       expect(result.ok).toBe(false)
       if (result.ok) throw new Error('unreachable')
       expect(result.blockers?.map((one) => one.kind)).toContain('balance_settled')
     })
 
+    // B-224. Until this row `scheduleSale` did no date arithmetic of any kind:
+    // it stored whatever it was handed. A manager serving the notice giving the
+    // tenant until the 19th could book the sale for the 9th, and every
+    // readiness rule still passed.
+    it('refuses a sale date before the deadline the served notice gave', async () => {
+      const caseId = await makeReadyCase()
+      const deadline = saleDay(30)
+      // Scoped to THIS case's own lease. An unscoped `updateMany` over every
+      // delivered lien notice would reach into whatever else is running
+      // against this database (B-120), and the notice tables are shared.
+      const own = await prisma.auctionCase.findUniqueOrThrow({
+        where: { id: caseId },
+        select: { leaseId: true },
+      })
+      await prisma.notice.updateMany({
+        where: { leaseId: own.leaseId, type: 'lien', status: 'delivered' },
+        data: { deadlineDate: deadline },
+      })
+
+      const tooEarly = await scheduleSale(regional(), caseId, saleDay(10))
+      expect(tooEarly.ok).toBe(false)
+      if (tooEarly.ok) throw new Error('unreachable')
+      expect(tooEarly.reason).toContain(deadline.toISOString().slice(0, 10))
+      expect(tooEarly.reason).toContain('Move the sale to')
+
+      // Nothing was written — the refusal is a refusal, not a warning.
+      const untouched = await prisma.auctionCase.findUniqueOrThrow({ where: { id: caseId } })
+      expect(untouched.status).toBe('eligible')
+      expect(untouched.scheduledSaleDate).toBeNull()
+
+      // The deadline day itself is the earliest defensible date, and is allowed.
+      const onTheDay = await scheduleSale(regional(), caseId, deadline)
+      expect(onTheDay).toEqual({ ok: true })
+
+      await prisma.notice.updateMany({
+        where: { leaseId: own.leaseId, type: 'lien', status: 'delivered' },
+        data: { deadlineDate: null },
+      })
+    })
+
+    it('refuses a sale date that has already passed', async () => {
+      const caseId = await makeReadyCase()
+      const result = await scheduleSale(regional(), caseId, saleDay(-1))
+      expect(result.ok).toBe(false)
+      if (result.ok) throw new Error('unreachable')
+      expect(result.reason).toContain('has already passed')
+    })
+
     it('schedules when every rule passes', async () => {
       const caseId = await makeReadyCase()
-      const result = await scheduleSale(regional(), caseId, new Date('2026-09-01T00:00:00Z'))
+      const result = await scheduleSale(regional(), caseId, saleDay())
       expect(result).toEqual({ ok: true })
 
       const row = await prisma.auctionCase.findUniqueOrThrow({ where: { id: caseId } })
@@ -399,13 +447,15 @@ describeDb('the auction pipeline', () => {
 
     it('carries a scheduled, ready lot with its size, address and terms', async () => {
       const caseId = await makeReadyCase()
-      await scheduleSale(regional(), caseId, new Date('2026-09-14T00:00:00Z'))
+      await scheduleSale(regional(), caseId, saleDay())
       await updateAuctionSaleTerms(settingsAdmin(), facilityId, '  Cash only, 48-hour cleanout.  ')
 
       const sheet = await auctionLotSheet(regional(), facilityId)
       const lot = sheet!.lots.find((one) => one.caseId === caseId)
       expect(lot).toBeDefined()
-      expect(lot!.scheduledSaleDate.toISOString().slice(0, 10)).toBe('2026-09-14')
+      expect(lot!.scheduledSaleDate.toISOString().slice(0, 10)).toBe(
+        saleDay().toISOString().slice(0, 10),
+      )
       expect(lot!.squareFeet).toBe(lot!.widthFt * lot!.lengthFt)
       // Trimmed to a value, and null only when genuinely unset.
       expect(sheet!.facility.saleTerms).toBe('Cash only, 48-hour cleanout.')
@@ -421,7 +471,7 @@ describeDb('the auction pipeline', () => {
       // time, so a manager reading this file down a phone to a classifieds
       // clerk published an advertisement missing it.
       const caseId = await makeReadyCase()
-      await scheduleSale(regional(), caseId, new Date('2026-09-14T00:00:00Z'))
+      await scheduleSale(regional(), caseId, saleDay())
 
       expect((await auctionLotSheet(regional(), facilityId))!.facility.saleTime).toBeNull()
 
@@ -441,7 +491,7 @@ describeDb('the auction pipeline', () => {
       // the lot would push it off the sheet on the day it most needs to be on
       // one. The screen names the units instead.
       const caseId = await makeReadyCase()
-      await scheduleSale(regional(), caseId, new Date('2026-09-14T00:00:00Z'))
+      await scheduleSale(regional(), caseId, saleDay())
 
       const before = await auctionLotSheet(regional(), facilityId)
       const unwritten = before!.lots.find((one) => one.caseId === caseId)
@@ -466,7 +516,7 @@ describeDb('the auction pipeline', () => {
 
     it('drops a scheduled lot the moment the tenant settles, with the reason', async () => {
       const caseId = await makeReadyCase()
-      await scheduleSale(regional(), caseId, new Date('2026-09-14T00:00:00Z'))
+      await scheduleSale(regional(), caseId, saleDay())
       expect((await auctionLotSheet(regional(), facilityId))!.lots.map((one) => one.caseId)).toContain(
         caseId,
       )
@@ -565,14 +615,36 @@ describeDb('the auction pipeline', () => {
     })
   })
 
+  // B-224 / B-252. The sale dates below are RELATIVE. `scheduleSale` now
+  // refuses a date that has already passed, so a literal like
+  // `2026-09-01T00:00:00Z` is a fixture that works on the day it is written and
+  // fails silently ever after — the exact rot B-252 found in
+  // `portal-dashboard.test.ts`, one table over.
+  function saleDay(daysAhead = 14): Date {
+    const now = new Date()
+    return new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + daysAhead),
+    )
+  }
+
   describe('recording the sale', () => {
     async function readyToSell(): Promise<string> {
       const caseId = await makeReadyCase()
-      await scheduleSale(regional(), caseId, new Date('2026-09-01T00:00:00Z'))
+      await scheduleSale(regional(), caseId, saleDay())
       await recordLockCut(regional(), caseId, {
         cutAt: new Date('2026-09-01T14:00:00Z'),
         oldLockDisposition: 'Cut off and binned',
         items: [{ description: 'Sofa', photoReference: 'photo-1' }],
+      })
+      // B-224. `recordSaleOutcome` refuses a sale with no advertisement dated
+      // on or before it — the second commonest wrongful-sale claim, and one
+      // this pipeline used to accept in silence. Dated well before the sale so
+      // it is the fixture's ordinary state rather than a boundary case; the
+      // boundary has its own test below.
+      await addAdvertisement(regional(), caseId, {
+        publication: 'The Austin Chronicle',
+        runDate: saleDay(7),
+        reference: 'tear-sheet-1',
       })
       return caseId
     }
@@ -580,7 +652,7 @@ describeDb('the auction pipeline', () => {
     it('posts the waterfall as ledger entries and settles the lease', async () => {
       const caseId = await readyToSell()
       const result = await recordSaleOutcome(regional(), caseId, {
-        soldAt: new Date('2026-09-01T18:00:00Z'),
+        soldAt: saleDay(),
         grossProceedsCents: 100_000,
         saleCostsCents: 15_000,
         buyer: BUYER,
@@ -609,8 +681,14 @@ describeDb('the auction pipeline', () => {
 
     it('leaves the deficiency on the ledger when the sale fell short', async () => {
       const caseId = await readyToSell()
+      // B-224: no advertisement, no sale.
+      await addAdvertisement(regional(), caseId, {
+        publication: 'The Austin Chronicle',
+        runDate: saleDay(7),
+        reference: 'tear-sheet-1',
+      })
       await recordSaleOutcome(regional(), caseId, {
-        soldAt: new Date('2026-09-01T18:00:00Z'),
+        soldAt: saleDay(),
         grossProceedsCents: 40_000,
         saleCostsCents: 15_000,
         buyer: BUYER,
@@ -630,8 +708,14 @@ describeDb('the auction pipeline', () => {
 
     it('releases the unit to maintenance for cleanout verification', async () => {
       const caseId = await readyToSell()
+      // B-224: no advertisement, no sale.
+      await addAdvertisement(regional(), caseId, {
+        publication: 'The Austin Chronicle',
+        runDate: saleDay(7),
+        reference: 'tear-sheet-1',
+      })
       await recordSaleOutcome(regional(), caseId, {
-        soldAt: new Date('2026-09-01T18:00:00Z'),
+        soldAt: saleDay(),
         grossProceedsCents: 100_000,
         saleCostsCents: 0,
         buyer: BUYER,
@@ -645,10 +729,85 @@ describeDb('the auction pipeline', () => {
       expect(lease.status).toBe('ended')
     })
 
-    it('refuses an incomplete buyer record', async () => {
+    // B-224. The two commonest wrongful-sale claims, both of which this
+    // pipeline used to accept in silence while every readiness rule stayed
+    // green.
+    it('refuses a sale with no advertisement recorded on or before it', async () => {
+      const caseId = await makeReadyCase()
+      await scheduleSale(regional(), caseId, saleDay())
+      await recordLockCut(regional(), caseId, {
+        cutAt: new Date('2026-09-01T14:00:00Z'),
+        oldLockDisposition: 'Cut off',
+        items: [{ description: 'Sofa', photoReference: 'photo-1' }],
+      })
+
+      const result = await recordSaleOutcome(regional(), caseId, {
+        soldAt: saleDay(),
+        grossProceedsCents: 100_000,
+        saleCostsCents: 0,
+        buyer: BUYER,
+      })
+      expect(result.ok).toBe(false)
+      if (result.ok) throw new Error('unreachable')
+      expect(result.reason).toContain('No advertisement')
+      // Names the fix, as every refusal on this path does — and says in as
+      // many words that the lot sheet is not evidence one ran (D-104).
+      expect(result.reason).toContain('tear-sheet')
+      expect(result.reason).toContain('lot sheet is not evidence')
+    })
+
+    it('does not accept an advertisement that ran AFTER the sale', async () => {
+      const caseId = await makeReadyCase()
+      await scheduleSale(regional(), caseId, saleDay())
+      await recordLockCut(regional(), caseId, {
+        cutAt: new Date('2026-09-01T14:00:00Z'),
+        oldLockDisposition: 'Cut off',
+        items: [{ description: 'Sofa', photoReference: 'photo-1' }],
+      })
+      // An advertisement that ran the day after the sale advertised nothing.
+      await addAdvertisement(regional(), caseId, {
+        publication: 'The Austin Chronicle',
+        runDate: saleDay(15),
+        reference: 'tear-sheet-late',
+      })
+
+      const result = await recordSaleOutcome(regional(), caseId, {
+        soldAt: saleDay(),
+        grossProceedsCents: 100_000,
+        saleCostsCents: 0,
+        buyer: BUYER,
+      })
+      expect(result.ok).toBe(false)
+      if (result.ok) throw new Error('unreachable')
+      expect(result.reason).toContain('No advertisement')
+    })
+
+    it('refuses a sale dated before the day it was scheduled and advertised for', async () => {
       const caseId = await readyToSell()
       const result = await recordSaleOutcome(regional(), caseId, {
-        soldAt: new Date(),
+        // A week before the scheduled date: either a typo, or a sale nobody
+        // was told about. Neither is a file that can be defended.
+        soldAt: saleDay(7),
+        grossProceedsCents: 100_000,
+        saleCostsCents: 0,
+        buyer: BUYER,
+      })
+      expect(result.ok).toBe(false)
+      if (result.ok) throw new Error('unreachable')
+      expect(result.reason).toContain('before the')
+      expect(result.reason).toContain('scheduled and advertised for')
+    })
+
+    it('refuses an incomplete buyer record', async () => {
+      const caseId = await readyToSell()
+      // B-224: no advertisement, no sale.
+      await addAdvertisement(regional(), caseId, {
+        publication: 'The Austin Chronicle',
+        runDate: saleDay(7),
+        reference: 'tear-sheet-1',
+      })
+      const result = await recordSaleOutcome(regional(), caseId, {
+        soldAt: saleDay(),
         grossProceedsCents: 100_000,
         saleCostsCents: 0,
         buyer: { ...BUYER, governmentIdReference: '' },
@@ -661,8 +820,14 @@ describeDb('the auction pipeline', () => {
 
     it('requires a resale certificate from a tax-exempt buyer', async () => {
       const caseId = await readyToSell()
+      // B-224: no advertisement, no sale.
+      await addAdvertisement(regional(), caseId, {
+        publication: 'The Austin Chronicle',
+        runDate: saleDay(7),
+        reference: 'tear-sheet-1',
+      })
       const result = await recordSaleOutcome(regional(), caseId, {
-        soldAt: new Date(),
+        soldAt: saleDay(),
         grossProceedsCents: 100_000,
         saleCostsCents: 0,
         buyer: { ...BUYER, taxExempt: true },
@@ -674,10 +839,16 @@ describeDb('the auction pipeline', () => {
 
     it('refuses a sale with no lock cut behind it', async () => {
       const caseId = await makeReadyCase()
-      await scheduleSale(regional(), caseId, new Date('2026-09-01T00:00:00Z'))
+      await scheduleSale(regional(), caseId, saleDay())
 
+      // B-224: no advertisement, no sale.
+      await addAdvertisement(regional(), caseId, {
+        publication: 'The Austin Chronicle',
+        runDate: saleDay(7),
+        reference: 'tear-sheet-1',
+      })
       const result = await recordSaleOutcome(regional(), caseId, {
-        soldAt: new Date(),
+        soldAt: saleDay(),
         grossProceedsCents: 100_000,
         saleCostsCents: 0,
         buyer: BUYER,
@@ -689,8 +860,14 @@ describeDb('the auction pipeline', () => {
 
     it('refuses to record a sale that was never scheduled', async () => {
       const caseId = await makeReadyCase()
+      // B-224: no advertisement, no sale.
+      await addAdvertisement(regional(), caseId, {
+        publication: 'The Austin Chronicle',
+        runDate: saleDay(7),
+        reference: 'tear-sheet-1',
+      })
       const result = await recordSaleOutcome(regional(), caseId, {
-        soldAt: new Date(),
+        soldAt: saleDay(),
         grossProceedsCents: 100_000,
         saleCostsCents: 0,
         buyer: BUYER,
@@ -702,14 +879,20 @@ describeDb('the auction pipeline', () => {
   describe('surplus — a liability, not revenue', () => {
     async function sellFor(grossProceedsCents: number): Promise<string> {
       const caseId = await makeReadyCase()
-      await scheduleSale(regional(), caseId, new Date('2026-09-01T00:00:00Z'))
+      await scheduleSale(regional(), caseId, saleDay())
       await recordLockCut(regional(), caseId, {
         cutAt: new Date('2026-09-01T14:00:00Z'),
         oldLockDisposition: 'Cut off',
         items: [{ description: 'Sofa', photoReference: 'photo-1' }],
       })
+      // B-224, as in `readyToSell` above: no advertisement, no sale.
+      await addAdvertisement(regional(), caseId, {
+        publication: 'The Austin Chronicle',
+        runDate: saleDay(7),
+        reference: 'tear-sheet-1',
+      })
       await recordSaleOutcome(regional(), caseId, {
-        soldAt: new Date('2026-09-01T18:00:00Z'),
+        soldAt: saleDay(),
         grossProceedsCents,
         saleCostsCents: 0,
         buyer: BUYER,
@@ -724,8 +907,12 @@ describeDb('the auction pipeline', () => {
       // Never "no surplus" — that is how one gets quietly kept.
       expect(row.surplusDisposition).toBe('held')
       expect(row.surplusCents).toBe(40_000)
-      // 90 days, from this facility's setting.
-      expect(row.surplusHoldUntil?.toISOString().slice(0, 10)).toBe('2026-11-30')
+      // 90 days, from this facility's setting — reckoned from the sale date
+      // rather than from a literal, since B-224 made that date relative.
+      const expected = new Date(saleDay().getTime() + 90 * 86_400_000)
+      expect(row.surplusHoldUntil?.toISOString().slice(0, 10)).toBe(
+        expected.toISOString().slice(0, 10),
+      )
     })
 
     it('shows up as outstanding until it is dispositioned', async () => {
@@ -786,7 +973,7 @@ describeDb('the auction pipeline', () => {
   describe('cancelling', () => {
     it('restores the normal lifecycle and logs the reason', async () => {
       const caseId = await makeReadyCase()
-      await scheduleSale(regional(), caseId, new Date('2026-09-01T00:00:00Z'))
+      await scheduleSale(regional(), caseId, saleDay())
 
       const result = await cancelAuction(regional(), caseId, 'Tenant paid in full at the counter')
       expect(result).toEqual({ ok: true })
@@ -812,14 +999,20 @@ describeDb('the auction pipeline', () => {
 
     it('refuses to cancel a sale that already happened', async () => {
       const caseId = await makeReadyCase()
-      await scheduleSale(regional(), caseId, new Date('2026-09-01T00:00:00Z'))
+      await scheduleSale(regional(), caseId, saleDay())
       await recordLockCut(regional(), caseId, {
         cutAt: new Date(),
         oldLockDisposition: 'Cut off',
         items: [{ description: 'Sofa', photoReference: 'photo-1' }],
       })
+      // B-224: no advertisement, no sale.
+      await addAdvertisement(regional(), caseId, {
+        publication: 'The Austin Chronicle',
+        runDate: saleDay(7),
+        reference: 'tear-sheet-1',
+      })
       await recordSaleOutcome(regional(), caseId, {
-        soldAt: new Date('2026-09-01T18:00:00Z'),
+        soldAt: saleDay(),
         grossProceedsCents: 100_000,
         saleCostsCents: 0,
         buyer: BUYER,
@@ -950,7 +1143,7 @@ describeDb('the auction pipeline', () => {
       // Not the generic one: a manager who served the notice themselves must
       // not be told no notice was served.
       expect(moved.readiness.blockers.map((one) => one.kind)).not.toContain('no_lien_notice_served')
-      expect(await scheduleSale(regional(), caseId, new Date('2026-09-01T00:00:00Z'))).toMatchObject({ ok: false })
+      expect(await scheduleSale(regional(), caseId, saleDay())).toMatchObject({ ok: false })
 
       await serveLienNoticeOn(movedLeaseId)
       const reserved = (await auctionCase(regional(), caseId))!
@@ -962,7 +1155,7 @@ describeDb('the auction pipeline', () => {
       const caseId = await makeReadyCase()
       await moveGoods()
       await serveLienNoticeOn(movedLeaseId)
-      await scheduleSale(regional(), caseId, new Date('2026-09-01T00:00:00Z'))
+      await scheduleSale(regional(), caseId, saleDay())
       await recordLockCut(regional(), caseId, {
         cutAt: new Date('2026-09-01T15:00:00Z'),
         oldLockDisposition: 'Cut and binned',
@@ -975,8 +1168,14 @@ describeDb('the auction pipeline', () => {
       })
       expect(before._sum.amountCents).toBe(60_000)
 
+      // B-224: no advertisement, no sale.
+      await addAdvertisement(regional(), caseId, {
+        publication: 'The Austin Chronicle',
+        runDate: saleDay(7),
+        reference: 'tear-sheet-1',
+      })
       const result = await recordSaleOutcome(regional(), caseId, {
-        soldAt: new Date('2026-09-02T00:00:00Z'),
+        soldAt: saleDay(),
         grossProceedsCents: 80_000,
         saleCostsCents: 5_000,
         buyer: BUYER,
@@ -1004,14 +1203,20 @@ describeDb('the auction pipeline', () => {
       const caseId = await makeReadyCase()
       await moveGoods()
       await serveLienNoticeOn(movedLeaseId)
-      await scheduleSale(regional(), caseId, new Date('2026-09-01T00:00:00Z'))
+      await scheduleSale(regional(), caseId, saleDay())
       await recordLockCut(regional(), caseId, {
         cutAt: new Date('2026-09-01T15:00:00Z'),
         oldLockDisposition: 'Cut and binned',
         items: [{ description: 'Sofa', photoReference: 'IMG_1' }],
       })
+      // B-224: no advertisement, no sale.
+      await addAdvertisement(regional(), caseId, {
+        publication: 'The Austin Chronicle',
+        runDate: saleDay(7),
+        reference: 'tear-sheet-1',
+      })
       await recordSaleOutcome(regional(), caseId, {
-        soldAt: new Date('2026-09-02T00:00:00Z'),
+        soldAt: saleDay(),
         grossProceedsCents: 80_000,
         saleCostsCents: 5_000,
         buyer: BUYER,
@@ -1031,7 +1236,7 @@ describeDb('the auction pipeline', () => {
       const pinnedUnitNumber = (await auctionCase(regional(), caseId))!.unitNumber
       await moveGoods()
       await serveLienNoticeOn(movedLeaseId)
-      await scheduleSale(regional(), caseId, new Date('2026-09-01T00:00:00Z'))
+      await scheduleSale(regional(), caseId, saleDay())
 
       expect(
         await recordLockCut(regional(), caseId, {

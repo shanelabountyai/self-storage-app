@@ -176,6 +176,24 @@ export default async function DelinquencyTimelinePage({
           </Field>
         </div>
 
+        {/* B-224 / D-10. The hard rule is that a sale may not be scheduled
+            before the date the served notice gave the tenant, and that rule
+            needs no number — which is why this defaults to 0 and is presented
+            as a margin ON TOP of the deadline rather than as the interval
+            itself. It is an example configuration, not legal advice, and the
+            hint says so in as many words (US-29). */}
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field
+            name="minDaysNoticeToSale"
+            label="Extra days between the notice deadline and the sale"
+            type="number"
+            min={0}
+            max={180}
+            defaultValue={String(active?.minDaysNoticeToSale ?? 0)}
+            hint="A sale can never be scheduled before the deadline the served lien notice gave the tenant — that is enforced whatever this says. This adds a margin after it. 0 means the deadline alone. Your state may require more; this field is an example configuration, not legal advice."
+          />
+        </div>
+
         <div className="flex flex-col gap-4">
           {rows.map((step, index) => (
             <fieldset key={index} className="border-input flex flex-col gap-3 rounded-lg border p-4">

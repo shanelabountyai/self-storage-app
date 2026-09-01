@@ -16,6 +16,7 @@ export type BlockerKind =
   | 'step_lacks_proof'
   | 'no_lien_notice_served'
   | 'notice_names_another_unit'
+  | 'sale_before_notice_deadline'
   | 'not_approved'
   | 'balance_settled'
   | 'already_sold'
@@ -71,6 +72,22 @@ export type ReadinessInput = {
   /// looking at one. The engine halting first made the gap invisible: every
   /// case that existed had been opened before the hold was placed.
   blockedByHold: boolean
+  /// B-224. The served lien notice's own deadline — the date the notice told
+  /// the tenant they had until. Null when no notice is served, in which case
+  /// `no_lien_notice_served` is already blocking and this rule has nothing to
+  /// say.
+  noticeDeadline?: Date | null
+  /// B-224. The date a sale is currently scheduled for, when it is scheduled.
+  /// Null on a case that has not been, where there is no date to check yet —
+  /// `scheduleSale` runs the same rule against the date it is HANDED, which is
+  /// the moment that matters.
+  scheduledSaleDate?: Date | null
+  /// B-224 / D-10. Days the facility requires between the notice deadline and
+  /// the sale, on top of the deadline itself. Configuration rather than a
+  /// constant, because the interval is per-state; 0 means the deadline is the
+  /// only rule, which is the safe default and the one every existing facility
+  /// gets.
+  minDaysNoticeToSale?: number
   /// Regional or owner approval, per the AC.
   approved: boolean
   /// What the lease still owes. A tenant who paid is not auctionable, whatever
@@ -208,7 +225,61 @@ export function auctionReadiness(input: ReadinessInput): Readiness {
     })
   }
 
+  // Only meaningful once a date exists. On a case that has not been scheduled
+  // there is nothing to check here — `scheduleSale` runs the identical rule
+  // against the date it is handed, which is the moment a bad date could enter.
+  if (input.scheduledSaleDate) {
+    const tooEarly = saleDateBlocker({
+      saleDate: input.scheduledSaleDate,
+      noticeDeadline: input.noticeDeadline ?? null,
+      minDaysNoticeToSale: input.minDaysNoticeToSale ?? 0,
+    })
+    if (tooEarly) blockers.push(tooEarly)
+  }
+
   return { ready: blockers.length === 0, blockers }
+}
+
+/// B-224. Whether a sale date falls before the tenant was told it could.
+///
+/// The single most common wrongful-sale claim after "no notice was served" is
+/// "the sale happened before the date the notice gave me", and until this
+/// function `scheduleSale` did no date arithmetic of any kind: it stored
+/// whatever it was handed. A manager serving the notice on the 5th giving the
+/// tenant until the 19th could schedule for the 9th, and every readiness rule
+/// still passed.
+///
+/// **Both dates are business dates** — `Notice.deadlineDate` is `@db.Date` and
+/// the sale date is parsed as UTC midnight from a date-only input — so they
+/// carry no zone and comparing them directly IS the facility-local comparison.
+/// Converting either one through a timezone here would introduce the day-shift
+/// this rule exists to prevent (B-220, B-223).
+///
+/// Returns the blocker rather than throwing, so both callers can present it
+/// the way they present every other one.
+export function saleDateBlocker(input: {
+  saleDate: Date
+  noticeDeadline: Date | null
+  minDaysNoticeToSale: number
+}): Blocker | null {
+  // No served notice is `no_lien_notice_served`'s business, not this rule's.
+  // Saying "the sale is too early" about a notice that does not exist would
+  // send a manager to change the date when the fix is to serve the notice.
+  if (!input.noticeDeadline) return null
+
+  const margin = Math.max(0, Math.trunc(input.minDaysNoticeToSale))
+  const earliest = new Date(input.noticeDeadline.getTime() + margin * 86_400_000)
+  if (input.saleDate.getTime() >= earliest.getTime()) return null
+
+  const day = (date: Date) => date.toISOString().slice(0, 10)
+  return {
+    kind: 'sale_before_notice_deadline',
+    message:
+      `The sale is set for ${day(input.saleDate)}, before ${day(earliest)} — the date the served ` +
+      `lien notice gave the tenant${margin > 0 ? `, plus the ${margin} day${margin === 1 ? '' : 's'} this facility requires after it` : ''}. ` +
+      `Selling before the deadline in the notice is the claim this pipeline exists to prevent. ` +
+      `Move the sale to ${day(earliest)} or later, or serve a new notice and let its own deadline run.`,
+  }
 }
 
 /// US-28's own list for the buyer record: "name, address, government-ID

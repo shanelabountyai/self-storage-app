@@ -15,11 +15,26 @@ import {
   setGoodsDescription,
 } from '@/lib/auctions/service'
 import type { SurplusDisposition } from '@storage/db'
+import { fieldError, success, type FormState } from '@/lib/admin/form-state'
 
 // Every action here re-reads its own page afterwards. A refusal is not an
 // exception — "this sale is blocked because three steps lack proof" is
 // information a manager needs on screen, and the page derives it from the same
 // readiness call the service used.
+//
+// B-224. That reasoning holds only where the page can DERIVE the refusal, and
+// two of them it cannot: a sale date refused before it is stored leaves the
+// page identical, and "no advertisement ran" is not a readiness rule. Those two
+// actions return `FormState` and their forms are `AdminForm`s, so the refusal
+// lands in a focused, announced summary rather than in a re-render that looks
+// exactly like the click having done nothing — which is B-141's defect, in the
+// one place in the product where the consequence is somebody's property.
+
+/// A refusal that belongs to the form rather than to one field — "no
+/// advertisement is recorded" is about the case, not about a box.
+function refusal(message: string): FormState {
+  return { status: 'error', message, fieldErrors: {} }
+}
 
 function revalidate(caseId: string): void {
   revalidatePath('/admin/auctions')
@@ -60,11 +75,16 @@ export async function approveAction(formData: FormData): Promise<void> {
   revalidate(caseId)
 }
 
-export async function scheduleAction(formData: FormData): Promise<void> {
+export async function scheduleAction(_state: FormState, formData: FormData): Promise<FormState> {
   const actor = await requireStaffActor()
   const caseId = String(formData.get('caseId') ?? '')
-  await scheduleSale(actor, caseId, dateFrom(formData.get('saleDate')))
+  const saleDate = dateFrom(formData.get('saleDate'))
+  const result = await scheduleSale(actor, caseId, saleDate)
   revalidate(caseId)
+  // Every refusal here is about the date the manager typed, so it belongs on
+  // that field rather than only in the summary.
+  if (!result.ok) return fieldError({ saleDate: result.reason })
+  return success(`Sale scheduled for ${saleDate.toISOString().slice(0, 10)}.`)
 }
 
 export async function addAdvertisementAction(formData: FormData): Promise<void> {
@@ -99,7 +119,7 @@ export async function recordLockCutAction(formData: FormData): Promise<void> {
   revalidate(caseId)
 }
 
-export async function recordSaleAction(formData: FormData): Promise<void> {
+export async function recordSaleAction(_state: FormState, formData: FormData): Promise<FormState> {
   const actor = await requireStaffActor()
   const caseId = String(formData.get('caseId') ?? '')
 
@@ -112,7 +132,7 @@ export async function recordSaleAction(formData: FormData): Promise<void> {
     return Number.isFinite(cents) ? cents : 0
   }
 
-  await recordSaleOutcome(actor, caseId, {
+  const result = await recordSaleOutcome(actor, caseId, {
     soldAt: dateFrom(formData.get('soldAt')),
     grossProceedsCents: dollars('grossProceeds'),
     saleCostsCents: dollars('saleCosts'),
@@ -133,6 +153,14 @@ export async function recordSaleAction(formData: FormData): Promise<void> {
     },
   })
   revalidate(caseId)
+  if (!result.ok) {
+    // The date refusals name the field the manager can fix; the advertisement
+    // one does not belong to any box on this form.
+    return /sale is dated|already passed/i.test(result.reason)
+      ? fieldError({ soldAt: result.reason })
+      : refusal(result.reason)
+  }
+  return success('Sale outcome recorded.')
 }
 
 export async function cancelAction(formData: FormData): Promise<void> {

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   auctionReadiness,
   missingBuyerFields,
+  saleDateBlocker,
   type ReadinessInput,
   type StepEvidence,
 } from '../packages/core/auctions/readiness'
@@ -299,5 +300,112 @@ describe('surplus — a liability with a statutory life', () => {
   it('allows claimed and remitted against a real surplus', () => {
     expect(canRecordDisposition(25_000, 'claimed')).toEqual({ allowed: true })
     expect(canRecordDisposition(25_000, 'remitted')).toEqual({ allowed: true })
+  })
+})
+
+// B-224. The two commonest wrongful-sale claims are "no notice was served" and
+// "the sale happened before the date the notice gave me". The first has been
+// blocked since B-062; until this row `scheduleSale` did no date arithmetic of
+// ANY kind and stored whatever it was handed, so the second was reachable
+// through the pipeline's own happy path with every readiness rule green.
+const day = (iso: string) => new Date(`${iso}T00:00:00.000Z`)
+
+describe('saleDateBlocker', () => {
+  it('refuses a sale set before the deadline the served notice gave', () => {
+    // The row's own example: served on the 5th, giving the tenant until the
+    // 19th, sale booked for the 9th.
+    const blocker = saleDateBlocker({
+      saleDate: day('2026-09-09'),
+      noticeDeadline: day('2026-09-19'),
+      minDaysNoticeToSale: 0,
+    })
+    expect(blocker?.kind).toBe('sale_before_notice_deadline')
+    // Names the fix, as every other blocker on this list does.
+    expect(blocker?.message).toContain('2026-09-19')
+    expect(blocker?.message).toMatch(/Move the sale to/)
+  })
+
+  it('allows the deadline day itself', () => {
+    // "On or after". A sale on the day the tenant was given until is the
+    // earliest defensible one, and refusing it would be a rule nobody stated.
+    expect(
+      saleDateBlocker({
+        saleDate: day('2026-09-19'),
+        noticeDeadline: day('2026-09-19'),
+        minDaysNoticeToSale: 0,
+      }),
+    ).toBeNull()
+  })
+
+  it('adds the facility margin on top of the deadline', () => {
+    const input = { noticeDeadline: day('2026-09-19'), minDaysNoticeToSale: 10 }
+    expect(saleDateBlocker({ ...input, saleDate: day('2026-09-28') })?.kind).toBe(
+      'sale_before_notice_deadline',
+    )
+    expect(saleDateBlocker({ ...input, saleDate: day('2026-09-29') })).toBeNull()
+  })
+
+  it('says nothing when no notice is served', () => {
+    // `no_lien_notice_served` owns that case. Saying "the sale is too early"
+    // about a notice that does not exist sends a manager to change the date
+    // when the fix is to serve the notice.
+    expect(
+      saleDateBlocker({
+        saleDate: day('2026-01-01'),
+        noticeDeadline: null,
+        minDaysNoticeToSale: 30,
+      }),
+    ).toBeNull()
+  })
+
+  it('treats a negative or fractional margin as no margin rather than as licence', () => {
+    // The column is validated at the form and in `saveTimeline`, so this is
+    // defence in depth — but a margin that came back negative must never make
+    // an EARLIER sale permissible than the deadline alone.
+    const input = { saleDate: day('2026-09-18'), noticeDeadline: day('2026-09-19') }
+    expect(saleDateBlocker({ ...input, minDaysNoticeToSale: -30 })?.kind).toBe(
+      'sale_before_notice_deadline',
+    )
+    expect(saleDateBlocker({ ...input, minDaysNoticeToSale: 0.9 })?.kind).toBe(
+      'sale_before_notice_deadline',
+    )
+  })
+})
+
+describe('auctionReadiness — the scheduled date', () => {
+  it('blocks a case already scheduled inside the notice deadline', () => {
+    // Re-checked on every read, so a sale that should never have been booked
+    // shows the blocker rather than sitting there looking ready.
+    const result = auctionReadiness(
+      ready({
+        status: 'scheduled',
+        scheduledSaleDate: day('2026-09-09'),
+        noticeDeadline: day('2026-09-19'),
+      }),
+    )
+    expect(result.ready).toBe(false)
+    expect(result.blockers.map((one) => one.kind)).toContain('sale_before_notice_deadline')
+  })
+
+  it('says nothing about a case that has no date yet', () => {
+    // `scheduleSale` runs the identical rule against the date it is HANDED,
+    // which is the moment a bad date could enter. A case with no date has
+    // nothing to check.
+    expect(auctionReadiness(ready({ noticeDeadline: day('2026-09-19') }))).toEqual({
+      ready: true,
+      blockers: [],
+    })
+  })
+
+  it('leaves a properly scheduled case ready', () => {
+    expect(
+      auctionReadiness(
+        ready({
+          status: 'scheduled',
+          scheduledSaleDate: day('2026-09-20'),
+          noticeDeadline: day('2026-09-19'),
+        }),
+      ),
+    ).toEqual({ ready: true, blockers: [] })
   })
 })
