@@ -7276,7 +7276,7 @@ The three measurements moved into `measureThreeWays` so both loops share one cop
 
 ## B-222 — The revenue report's figures sat in rows with no header, and the fix had to change what the report looks like
 
-`PENDING`
+`0da0eff`
 
 **What it built.** `RowPair` attached each facility's name with one `<th scope="rowgroup" rowSpan={2}>`. B-216 had already established that no screen reader implements `rowgroup`, and this instance was worse than the aging table's: `RowPair` had **no per-row header at all** to fold the name into, because each row's identity — "Billed", "Coll." — lived in a `<span>` *inside* its first money cell. A row describing itself from within one of its own data cells. So all fourteen of a facility's figures sat in rows with nothing naming them.
 
