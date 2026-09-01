@@ -7276,7 +7276,7 @@ The three measurements moved into `measureThreeWays` so both loops share one cop
 
 ## B-221 — The test that had never once run, and the catalog entry that made it fail when it finally did
 
-`PENDING`
+`46bb333`
 
 **What it built.** `a refused completion says why` took the first card on `/admin/tasks` and `test.skip`ped when there were none. It now creates the task it exercises, reaches it through the `?type=` filter the queue already supports, and deletes it afterwards.
 
