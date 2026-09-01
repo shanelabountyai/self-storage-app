@@ -1139,6 +1139,28 @@ const LAST_REVIEWED = '19 August 2026'
 // spec for that now. B-244's was the fixture gap; this one was the navigation
 // gap. Neither was a gap in the rules being checked.
 
+// Re-read 2026-09-01, at B-246 (scan contract VI — the layout half had no
+// exception list). **No claim on this page changes and `LAST_REVIEWED` does
+// not move**: the two states involved are both behind `tenants:view` on
+// `/admin/tenants/[tenantId]`, no public or portal route is touched, and the
+// generated coverage claim and `STATE_EXCEPTIONS` are both untouched.
+//
+// Two things recorded rather than left implied. **A real reflow defect was
+// found by turning the measurement on** — the payment-plan builder painted
+// content 18px past the right edge at 200% zoom, because `sm:grid-cols-3` and
+// Tailwind's `sm` breakpoint is 640px, which is exactly the viewport a
+// 200%-zoom check produces. Fixed here, on an admin screen, so this page has
+// nothing to add or retract; the fourth instance of this shape in the repo
+// (B-199, B-201, B-217) and the first caused by a breakpoint rather than a
+// missing wrapper.
+//
+// And the coverage picture in the CODE is now richer than the one on this
+// page. Seventeen states declare, with a reason, that their layout is not
+// measured directly; this page publishes only the axe exceptions. That is a
+// deliberate scope line — publishing a second list is a claim change — but it
+// means "what we have checked" is understated here rather than overstated,
+// which is the safe direction and the one worth naming.
+
 export default function AccessibilityPage() {
   return (
     <ProsePage

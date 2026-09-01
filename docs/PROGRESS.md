@@ -7274,6 +7274,33 @@ The three measurements moved into `measureThreeWays` so both loops share one cop
 - **Verified on `desktop-chrome` only.** The spec sets its own viewport in every pass, so `mobile-chrome` would measure the same three CSS viewports; the device scale factor is a rendering concern and not a layout one, as the file's existing comment says.
 - Unit suite green end to end: 3916 passed, 8 skipped, reconciled to 3924. The touched e2e file: 11 passed, 0 failed. Lint and typecheck clean. No schema change, so no migration and nothing for the drift check to see.
 
+## B-246 — Scan contract VI: the layout half had no exception list, so "neither list" was a valid place to be
+
+`PENDING`
+
+**What it built.** B-215 gave `SCANNED_STATES` a layout half — `STATE_REACH` in `e2e/a11y-own-spec-routes.spec.ts`, which measures a state at 320px, 200% zoom and forced text spacing. The contract between them ran **one way**: every `STATE_REACH` key had to name a real scanned state, but nothing said a scanned state had to be measured, or to say why not. So a state could have axe and **no width measurement at any viewport**, appear in neither list, and be invisible. Two shipped that way inside B-202–B-220.
+
+`ScannedState` now carries `layout: 'reached' | 'excepted'`, with `layoutException` required for the second. Two unit tests enforce both directions. Four states are reached, seventeen are excepted with a reason.
+
+**What it decided.**
+
+- **A field, not a second list.** `STATE_EXCEPTIONS` is a separate array for the axe half, and a separate array is a thing you can forget to add to. A required field on the entry cannot be forgotten — the entry either says which it is, or the test names it.
+- **An exception has to be a reason somebody can disagree with.** The test requires more than twenty characters, which is a crude proxy for "not 'todo'". Every one of the seventeen says why the state's layout is already covered by a route loop, or why the state is a timing condition no measurement run can hold still. **Verified by flipping one entry to `excepted` with no reason and watching the test name it.**
+- **The exceptions are declared in code, not published.** `STATE_EXCEPTIONS` reaches the public accessibility statement; these do not. The row asked for a state with axe and no width to be "a declared row rather than an invisible one", and a declaration the build enforces is that. Publishing a second list is a claim change and was not in scope.
+- **Read out of the spec file rather than imported.** `STATE_REACH` lives in a Playwright module; importing it into the unit suite would pull `@playwright/test` in with it. Same technique the existing `a11y-state:` check already uses.
+
+**A real defect, found by turning the measurement on.** The payment-plan builder failed immediately: **content painted 18px past the right edge at 200% zoom, with no way to scroll to it.** The cause is exact — `sm:grid-cols-3`, and Tailwind's `sm` breakpoint is **640px**, which is exactly the viewport a 200%-zoom check produces. Three columns of a date field and a money field were being asked to fit in 640px. A counter staffer at 200% zoom, or on a phone in landscape, lost the third installment's amount box off the side of the screen. `md:grid-cols-3` now, plus `min-w-0` on the fieldsets per B-201 — a date input has a wide intrinsic minimum and will not shrink to its column without being told it may.
+
+This is the fourth time this repo has found the same shape (B-199, B-201, B-217, now this) and the first time a *breakpoint* was the cause rather than a missing wrapper.
+
+**One runnable check.** Three. The two contract tests in `tests/a11y-scan-coverage.test.ts` — every `reached` state has a `STATE_REACH` key, every `excepted` one has a reason — and the measurement itself, which now runs on both states and passes only because the grid was fixed.
+
+**What it left behind.**
+
+- **Seventeen exceptions are reasoned, not proven.** Each says the state's layout is covered by a route loop or is an unreachable timing condition. Those are arguments, and a wrong one is now visible and arguable rather than absent — which is the whole point — but nobody has measured them to check.
+- **`payment plan builder refused per installment` is excepted on the grounds that it differs only in which error branch renders.** If a future refusal branch changes the grid, that reasoning stops holding and nothing will catch it.
+- **The public accessibility statement says nothing about layout exceptions.** Its shortfall list is unchanged, and no claim on it became false — but the page now describes less of the coverage picture than the code does.
+
 ## B-245 — Nine live regions that were never status messages, and the navigation no scan could see
 
 `5477a05`

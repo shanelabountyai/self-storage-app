@@ -178,6 +178,38 @@ const STATE_REACH: Record<string, { audience: Audience; go: (page: Page) => Prom
       await expect(page.getByRole('columnheader', { name: 'Left after' })).toBeVisible()
     },
   },
+  // B-246. The two states B-215 left with axe and no width measurement at all,
+  // and which were declared in neither list — the exact hole this row closed in
+  // `SCANNED_STATES`. Both are on the tenant profile, which B-217 established
+  // is real phone work for counter staff.
+  '/admin/tenants/[tenantId] | payment plan schedule': {
+    audience: 'admin',
+    async go(page) {
+      // The tenant WITH a plan, not Dana — the schedule renders on hers.
+      await page.goto('/admin/tenants?q=pia@demo.example.com')
+      await page.getByRole('link', { name: 'Pia Planned' }).click()
+      const section = page.getByRole('region', { name: 'Payment plans' })
+      // The table, not the heading above it. A width check that passed because
+      // there was nothing on the page is the failure this row is about.
+      await expect(section.getByRole('columnheader', { name: 'Left after' })).toBeVisible()
+    },
+  },
+  '/admin/tenants/[tenantId] | payment plan builder refused': {
+    audience: 'admin',
+    async go(page) {
+      await page.goto('/admin/tenants?q=dana@demo.example.com')
+      await page.getByRole('link', { name: 'Dana Delinquent' }).click()
+      // The builder lives inside a `<details>`, so `openDanasProfile` measured
+      // it at `display: none` — twelve date and money fields in a three-column
+      // grid, plus the split-count `<select>`, laid out by no measurement at
+      // any width until this entry.
+      await page.locator('summary').filter({ hasText: 'Set up a payment plan' }).first().click()
+      await expect(page.getByRole('button', { name: /^Agree the plan for unit/ })).toBeVisible()
+      // Refused, which is the state named — and repeatable, because nothing is
+      // written by a refusal.
+      await page.getByRole('button', { name: /^Agree the plan for unit/ }).click()
+    },
+  },
   '/portal | payment plan card': {
     audience: 'plan-tenant',
     async go(page) {

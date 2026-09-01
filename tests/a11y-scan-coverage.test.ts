@@ -167,6 +167,56 @@ describe('the accessibility scan contract (B-139)', () => {
       expect(orphaned, 'a spec claims a state SCANNED_STATES does not list').toEqual([])
     })
 
+    // B-246. The half B-215 left open, and the reason two states shipped with
+    // axe and no width measurement at all: the contract between `SCANNED_STATES`
+    // (the axe claim) and `STATE_REACH` (the layout claim) ran ONE WAY. Every
+    // `STATE_REACH` key had to name a real scanned state — the e2e spec asserts
+    // that — but nothing said a scanned state had to be measured, or to say why
+    // not. So "neither list" was a valid place to be, and invisible.
+    //
+    // Read out of the spec file rather than imported, because `STATE_REACH` is
+    // a Playwright module: importing it here would pull `@playwright/test` into
+    // the unit suite. The same technique the a11y-state check above uses.
+    it('makes every scanned state say whether its LAYOUT is measured', () => {
+      const source = readFileSync(join(process.cwd(), 'e2e/a11y-own-spec-routes.spec.ts'), 'utf8')
+      const reachBlock = source.slice(source.indexOf('const STATE_REACH'))
+      const reached = new Set(
+        [...reachBlock.matchAll(/^\s{2}'([^']+)':\s*\{/gm)].map((m) => m[1]),
+      )
+      expect(
+        reached.size,
+        'no STATE_REACH keys parsed — did that constant move or change shape?',
+      ).toBeGreaterThan(0)
+
+      for (const entry of SCANNED_STATES) {
+        const key = `${entry.route} | ${entry.state}`
+        if (entry.layout === 'reached') {
+          expect(
+            reached,
+            `${key} is declared layout: 'reached' but STATE_REACH has no entry for it`,
+          ).toContain(key)
+        } else {
+          // An exception has to be a reason somebody can disagree with. "Not
+          // done yet" is the state this field exists to stop being silent.
+          expect(
+            (entry.layoutException ?? '').trim().length,
+            `${key} is excepted from the layout checks with no reason given`,
+          ).toBeGreaterThan(20)
+        }
+      }
+    })
+
+    it('measures the layout of no state it does not also scan', () => {
+      // The direction that already held, asserted here too so both live in one
+      // place: a STATE_REACH key naming a state SCANNED_STATES does not list
+      // would be a width measurement of something nothing else claims.
+      const source = readFileSync(join(process.cwd(), 'e2e/a11y-own-spec-routes.spec.ts'), 'utf8')
+      const reachBlock = source.slice(source.indexOf('const STATE_REACH'))
+      const reached = [...reachBlock.matchAll(/^\s{2}'([^']+)':\s*\{/gm)].map((m) => m[1])
+      const claimed = new Set(SCANNED_STATES.map((one) => `${one.route} | ${one.state}`))
+      expect(reached.filter((key) => !claimed.has(key))).toEqual([])
+    })
+
     // B-196 (gap 2). B-187 migrated the last five raw scans onto the shared
     // helper; this is what makes the sixth fail rather than quietly reopening
     // the hole. A spec that builds its own `AxeBuilder` asserts nothing about

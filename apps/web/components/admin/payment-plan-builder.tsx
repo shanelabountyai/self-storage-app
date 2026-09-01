@@ -183,7 +183,16 @@ export function PaymentPlanBuilder({
       >
         <input type="hidden" name="tenantId" value={tenantId} />
         <input type="hidden" name="leaseId" value={leaseId} />
-        <div className="grid gap-2 sm:grid-cols-3">
+        {/* B-246. `md:` not `sm:`. Tailwind's `sm` breakpoint is 640px, which
+            is EXACTLY the viewport a 200%-zoom check produces — so three
+            columns of a date field and a money field were being asked to fit
+            in 640px and painted 18px past the right edge with no way to scroll
+            to them. A counter staffer at 200% zoom, or on a phone in landscape,
+            lost the third installment's amount box off the side of the screen.
+            `min-w-0` on the fieldsets as well, per B-201: a date input has a
+            wide intrinsic minimum and will not shrink to its column without
+            being told it may. */}
+        <div className="grid gap-2 md:grid-cols-3">
           {rows.map((row, index) => (
             // B-192. A real <fieldset>/<legend>, not a <div> with a <span> in
             // it. Six of these render twelve controls called "Due" and
@@ -201,7 +210,7 @@ export function PaymentPlanBuilder({
               key={index}
               name={`installment_${index + 1}`}
               legend={<span className="text-xs">Installment {index + 1}</span>}
-              className="border-input flex flex-col gap-1 rounded-md border p-2"
+              className="border-input flex min-w-0 flex-col gap-1 rounded-md border p-2"
             >
               <Field
                 name={`dueDate_${index + 1}`}

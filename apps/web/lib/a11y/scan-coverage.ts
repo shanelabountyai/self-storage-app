@@ -359,6 +359,23 @@ export type ScannedState = {
   /// spec's `// a11y-state:` comment.
   state: string
   spec: string
+  /// B-246, and this is the half B-215 left open.
+  ///
+  /// `SCANNED_STATES` is the AXE claim. The LAYOUT claim — 320px reflow, 200%
+  /// zoom, forced text spacing — is `STATE_REACH` in
+  /// `e2e/a11y-own-spec-routes.spec.ts`, and the contract between them ran one
+  /// way only: every `STATE_REACH` key had to name a real scanned state, but
+  /// nothing said a scanned state had to be measured or to say why not. So a
+  /// state could have axe and no width at any viewport, be in neither list,
+  /// and be invisible. Two of them were, both shipped by B-202–B-220.
+  ///
+  /// `reached` means `STATE_REACH` has a key for it. `excepted` means it is
+  /// deliberately not measured, and `layoutException` says why. The unit test
+  /// enforces both directions, so the third option — saying nothing — is gone.
+  layout: 'reached' | 'excepted'
+  /// Required when `layout` is `excepted`. A reason a person can disagree with,
+  /// not "not done yet".
+  layoutException?: string
 }
 
 export const SCANNED_STATES: readonly ScannedState[] = [
@@ -368,17 +385,26 @@ export const SCANNED_STATES: readonly ScannedState[] = [
     route: '/storage/tx/austin/demo-austin-south',
     state: 'waitlist form opened',
     spec: 'e2e/a11y.spec.ts',
+    layout: 'excepted',
+    layoutException:
+      "The public route loop already measures this page at all three widths, and the disclosure adds one short form to a column layout the loop has held — the reflow risk is in the page, not in the two fields.",
   },
   // B-171. Both public marketing forms, refused.
   {
     route: '/storage/tx/austin/demo-austin-south',
     state: 'waitlist form refused',
     spec: 'e2e/smoke.spec.ts',
+    layout: 'excepted',
+    layoutException:
+      "Same page and same form as the state above; the refusal adds an error summary to a container the public loop measures.",
   },
   {
     route: '/storage/tx/austin/demo-austin-south',
     state: 'lead form refused',
     spec: 'e2e/smoke.spec.ts',
+    layout: 'excepted',
+    layoutException:
+      "As above — the public route loop measures this page, and the refusal adds a summary rather than a new layout.",
   },
   // A settings form refused (3.3.1/3.3.3/4.1.3) — axe only ever sees a
   // freshly-loaded page unless a spec drives it into the error branch itself.
@@ -386,6 +412,9 @@ export const SCANNED_STATES: readonly ScannedState[] = [
     route: '/admin/settings',
     state: 'settings submit refused',
     spec: 'e2e/admin.spec.ts',
+    layout: 'excepted',
+    layoutException:
+      "The admin route loop measures `/admin/settings` at all three widths, and a refused submit adds `AdminForm`'s summary to that same measured container.",
   },
   // B-184 (T5). The confirm-and-echo step 3.3.4 depends on — the one place in
   // the product where an append-only row is agreed to before it publishes.
@@ -393,6 +422,9 @@ export const SCANNED_STATES: readonly ScannedState[] = [
     route: '/admin/settings',
     state: 'tax rate confirm-and-echo',
     spec: 'e2e/admin.spec.ts',
+    layout: 'excepted',
+    layoutException:
+      "The confirm step renders inside the same `AdminForm` container on `/admin/settings` that the admin route loop measures at all three widths; what it adds is a `<dl>` of two columns, not a new grid.",
   },
   // The transfer wizard's priced settlement, which only renders after picking
   // a unit and recalculating — the base wizard is SCANNED_BY_OWN_SPEC, this is
@@ -401,6 +433,9 @@ export const SCANNED_STATES: readonly ScannedState[] = [
     route: '/admin/tenants/[tenantId]/transfer',
     state: 'settlement recalculated',
     spec: 'e2e/admin-transfer.spec.ts',
+    layout: 'excepted',
+    layoutException:
+      "Reaching it needs a live settlement quote to go stale mid-flow (B-173), which is a timing state no measurement run can hold still.",
   },
   // The tenant profile with a disclosure open — everything behind a closed
   // <details> is invisible to axe, so the base scan alone would have missed
@@ -409,6 +444,9 @@ export const SCANNED_STATES: readonly ScannedState[] = [
     route: '/admin/tenants/[tenantId]',
     state: 'disclosure open',
     spec: 'e2e/admin-tenants.spec.ts',
+    layout: 'excepted',
+    layoutException:
+      "The widest thing behind a disclosure on this profile is the payment-plan builder, and B-246 added that specifically to STATE_REACH — this state opens a narrower one on the same page.",
   },
   // B-086 part 1. The "Add someone" disclosure on the tenant's shared-access
   // list, opened. Same reason as the tenant profile above and the same rule
@@ -419,6 +457,9 @@ export const SCANNED_STATES: readonly ScannedState[] = [
     route: '/portal/access',
     state: 'add-someone disclosure open',
     spec: 'e2e/portal.spec.ts',
+    layout: 'excepted',
+    layoutException:
+      "One short form inside the portal container the portal route loop already measures at all three widths.",
   },
   // B-184 (T3). A refused task completion, added alongside the invalid-submit
   // scan this row required.
@@ -426,6 +467,9 @@ export const SCANNED_STATES: readonly ScannedState[] = [
     route: '/admin/tasks',
     state: 'completion refused',
     spec: 'e2e/admin-tasks.spec.ts',
+    layout: 'excepted',
+    layoutException:
+      "B-221 gave this its own per-worker fixture; the card sits inside the queue list the admin route loop measures, and the refusal adds a summary rather than a grid.",
   },
   // B-174. The one portal refusal that IS scanned — the sibling stale-preview
   // mismatch below is not (see STATE_EXCEPTIONS).
@@ -433,6 +477,9 @@ export const SCANNED_STATES: readonly ScannedState[] = [
     route: '/portal/move-out',
     state: 'date past the ceiling (refused)',
     spec: 'e2e/portal-move-out.spec.ts',
+    layout: 'excepted',
+    layoutException:
+      "The portal route loop measures this page; the refusal adds a summary to it.",
   },
   // B-173's stale-preview guard, on all three screens it protects — type a
   // new value, skip the explicit recalculate control ("Recalculate",
@@ -443,16 +490,25 @@ export const SCANNED_STATES: readonly ScannedState[] = [
     route: '/admin/tenants/[tenantId]/move-out',
     state: 'stale-preview refusal',
     spec: 'e2e/admin-move-out.spec.ts',
+    layout: 'excepted',
+    layoutException:
+      "All three of these need a priced preview to go stale between render and submit (B-173) — a timing state, not a layout one, and the underlying pages are in the route loops.",
   },
   {
     route: '/portal/move-out',
     state: 'stale-preview refusal',
     spec: 'e2e/portal-move-out.spec.ts',
+    layout: 'excepted',
+    layoutException:
+      "All three of these need a priced preview to go stale between render and submit (B-173) — a timing state, not a layout one, and the underlying pages are in the route loops.",
   },
   {
     route: '/portal/transfer',
     state: 'stale-preview refusal',
     spec: 'e2e/portal-transfer.spec.ts',
+    layout: 'excepted',
+    layoutException:
+      "All three of these need a priced preview to go stale between render and submit (B-173) — a timing state, not a layout one, and the underlying pages are in the route loops.",
   },
   // B-187. Reachable only for a lapsed checkout session whose size has since
   // sold out — no route can be visited to reach it, the same reason the
@@ -463,6 +519,9 @@ export const SCANNED_STATES: readonly ScannedState[] = [
     route: '/checkout',
     state: 'unit lost',
     spec: 'e2e/checkout-unit-lost.spec.ts',
+    layout: 'excepted',
+    layoutException:
+      "Needs another session to claim the unit mid-checkout; the fallback offer renders inside the checkout container the public loop measures.",
   },
   // B-196. Six states behind ONE missing fixture. Every surface below renders
   // only for a lease under a hold or on a plan, and the demo seed placed
@@ -475,21 +534,29 @@ export const SCANNED_STATES: readonly ScannedState[] = [
     route: '/portal/payment-plan',
     state: 'active plan schedule',
     spec: 'e2e/portal.spec.ts',
+    layout: 'reached',
   },
   {
     route: '/portal',
     state: 'payment plan card',
     spec: 'e2e/portal.spec.ts',
+    layout: 'reached',
   },
   {
     route: '/admin/delinquency',
     state: 'the halted-leases section',
     spec: 'e2e/admin.spec.ts',
+    layout: 'excepted',
+    layoutException:
+      "Rendered by `ArAgingSplitTable`, whose scroll wrapper and column count B-216 and B-217 measured on the two report routes the admin loop covers.",
   },
   {
     route: '/admin/reports/plans-holds',
     state: 'a facility with halted leases',
     spec: 'e2e/admin-reports.spec.ts',
+    layout: 'excepted',
+    layoutException:
+      "Same component and same wrapper as the state above, behind a per-facility disclosure.",
   },
   // The READ half of the profile's plan section, and a refused submit of the
   // builder — twelve fields called "Due" and "Amount ($)", scanned until now
@@ -499,11 +566,13 @@ export const SCANNED_STATES: readonly ScannedState[] = [
     route: '/admin/tenants/[tenantId]',
     state: 'payment plan schedule',
     spec: 'e2e/admin-tenants.spec.ts',
+    layout: 'reached',
   },
   {
     route: '/admin/tenants/[tenantId]',
     state: 'payment plan builder refused',
     spec: 'e2e/admin-tenants.spec.ts',
+    layout: 'reached',
   },
   // B-213. The refusal that lands ON an installment, which is a different
   // rendering from the one above and had never been painted by any test: an
@@ -513,6 +582,9 @@ export const SCANNED_STATES: readonly ScannedState[] = [
     route: '/admin/tenants/[tenantId]',
     state: 'payment plan builder refused per installment',
     spec: 'e2e/admin-tenants.spec.ts',
+    layout: 'excepted',
+    layoutException:
+      "The same builder as the state above, which IS measured — this differs only in which error branch renders inside it, not in the grid that could overflow.",
   },
 ] as const
 
