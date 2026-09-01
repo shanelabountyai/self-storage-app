@@ -7276,7 +7276,7 @@ The three measurements moved into `measureThreeWays` so both loops share one cop
 
 ## B-246 — Scan contract VI: the layout half had no exception list, so "neither list" was a valid place to be
 
-`PENDING`
+`796e4bf`
 
 **What it built.** B-215 gave `SCANNED_STATES` a layout half — `STATE_REACH` in `e2e/a11y-own-spec-routes.spec.ts`, which measures a state at 320px, 200% zoom and forced text spacing. The contract between them ran **one way**: every `STATE_REACH` key had to name a real scanned state, but nothing said a scanned state had to be measured, or to say why not. So a state could have axe and **no width measurement at any viewport**, appear in neither list, and be invisible. Two shipped that way inside B-202–B-220.
 
