@@ -7336,7 +7336,7 @@ The facility now rides in the row header each row already had. `SplitCells` take
 
 ## B-217 — The leases a counter staffer opens on a phone are cards now, and every scroll region that stays says it scrolls
 
-`PENDING`
+`67c2c9c`
 
 **What it built.** Two things, which are the two halves of the call B-199 explicitly left open ("whether the answer is a scroll wrapper or a stacked layout on narrow viewports is a UX call, not a mechanical one").
 
