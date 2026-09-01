@@ -7274,6 +7274,27 @@ The three measurements moved into `measureThreeWays` so both loops share one cop
 - **Verified on `desktop-chrome` only.** The spec sets its own viewport in every pass, so `mobile-chrome` would measure the same three CSS viewports; the device scale factor is a rendering concern and not a layout one, as the file's existing comment says.
 - Unit suite green end to end: 3916 passed, 8 skipped, reconciled to 3924. The touched e2e file: 11 passed, 0 failed. Lint and typecheck clean. No schema change, so no migration and nothing for the drift check to see.
 
+## B-252 — Two unit tests that failed permanently from 12:00 CDT today, and only one of them was a defect
+
+`PENDING`
+
+**What it built.** `tests/portal-dashboard.test.ts:190` hardcoded `const expiresAt = new Date(Date.UTC(2026, 8, 1, 17, 0))` and handed it to a `reservation.create`. `reservation` carries a `reservation_expires_after_creation` check constraint, and that compares `expiresAt` against the row's own `createdAt` — the **database's** clock. The literal was in the future when it was written and stopped being so at 12:00 CDT on 2026-09-01, at which point every row the test wrote violated the constraint. Not intermittently: permanently, from that instant on.
+
+`expiresAt` is now `Date.now() + 14 days`, and the per-test teardown moved from the end of the test body into an `afterEach`.
+
+**What it decided.**
+
+- **The clock was not pinned harder.** The test is already careful about time — it passes an explicit `new Date(Date.UTC(2026, 7, 1))` as "now" to `portalDashboardForTenant` — and that is exactly what hid this: the assertion's clock is pinned and the constraint's is not, so the two agreed right up until the wall clock walked past the literal. A fixture row that must be live when it is written has to be dated from the clock that will judge it. The pinned "now" in the assertion stays, because the *assertion* is about the dashboard's reckoning and is correct.
+- **The second failure was not a second defect.** Every test in this file reuses the one `unitId` from `beforeAll`, and `Lease.unitId` is unique, so each test has to leave the unit free for the next. That was happening at the end of each test *body*, so when the transfer-hold test threw at `:191` it never deleted its lease, and the next test failed `Unique constraint failed on the fields: (unitId)` at its own `lease.create`. One defect was being reported as two, and the second report pointed at innocent code. Teardown that only runs when the body succeeds is teardown that abandons its post exactly when it is needed.
+- **`afterEach` deletes by `facilityId`, not by captured id.** A test that dies before it can name what it made still gets cleaned up.
+
+**One runnable check.** The suite itself: 9 passed, run twice, which is this repo's rule for anything touching shared state. The failing state is trivially reproducible by restoring the literal.
+
+**What it left behind.**
+
+- **No sweep for other date literals in fixtures.** This one was found because it detonated. `grep` for `Date.UTC(2026` across `tests/` returns many, and most are assertions about reckoning — which are correct and must stay literal. The dangerous subset is narrow: a literal handed to a WRITE whose table has a constraint against the real clock. Nothing enumerates that subset today.
+- **B-253 is still open** — `db:migrate` still points at the Neon dev branch and still offers to reset it.
+
 ## B-219 — The document store keeps its "newest first" promise for two documents written in the same instant
 
 `32d9e30`

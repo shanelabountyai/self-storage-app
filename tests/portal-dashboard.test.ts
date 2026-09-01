@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { prisma } from '../packages/db'
 import { nextBillingDate, portalDashboardForTenant } from '../apps/web/lib/portal/dashboard'
 
@@ -65,6 +65,21 @@ describeDb('portalDashboardForTenant', () => {
       data: { facilityId, unitTypeId: unitType.id, number: 'A-1' },
     })
     unitId = unit.id
+  })
+
+  // B-252. Every test here reuses the one `unitId` from `beforeAll`, and
+  // `Lease.unitId` is unique, so each test has to leave the unit free for the
+  // next one. That used to happen at the END OF EACH TEST BODY, which meant a
+  // test that threw took its neighbour down with it: when the transfer-hold
+  // test started failing on its own expiry literal, the lease it never
+  // deleted made the NEXT test fail with `Unique constraint failed on the
+  // fields: (unitId)` — one defect reported as two, and the second one
+  // pointing at innocent code. Teardown that runs whether or not the body did.
+  afterEach(async () => {
+    if (!hasDatabase) return
+    await prisma.reservation.deleteMany({ where: { facilityId } })
+    await prisma.ledgerEntry.deleteMany({ where: { facilityId } })
+    await prisma.lease.deleteMany({ where: { facilityId } })
   })
 
   afterAll(async () => {
@@ -187,7 +202,16 @@ describeDb('portalDashboardForTenant', () => {
       data: { facilityId, name: `10x15 ${suffix}`, widthFt: 10, lengthFt: 15 },
     })
     const toUnit = await prisma.unit.create({ data: { facilityId, unitTypeId: toUnitType.id, number: 'A-2' } })
-    const expiresAt = new Date(Date.UTC(2026, 8, 1, 17, 0))
+    // B-252: relative to the REAL clock, not a literal. `reservation` carries a
+    // `reservation_expires_after_creation` check constraint, and that compares
+    // `expiresAt` against the row's own `createdAt` — the database's clock, not
+    // the one this test pins. The literal that used to be here, 2026-09-01T17:00Z,
+    // was in the future when it was written and stopped being so at 12:00 CDT on
+    // 2026-09-01, at which point every row this test wrote violated the
+    // constraint and the test failed permanently rather than intermittently.
+    // Still comfortably ahead of the `2026-08-01` "now" the assertion below
+    // passes in, so the hold reads as live either way.
+    const expiresAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)
     const hold = await prisma.reservation.create({
       data: {
         facilityId,
@@ -214,10 +238,9 @@ describeDb('portalDashboardForTenant', () => {
       expiresAt,
     })
 
-    await prisma.reservation.delete({ where: { id: hold.id } })
-    await prisma.unit.delete({ where: { id: toUnit.id } })
-    await prisma.unitType.delete({ where: { id: toUnitType.id } })
-    await prisma.lease.delete({ where: { id: lease.id } })
+    // Nothing is torn down here on purpose — see the `afterEach` above. The
+    // unit and unit type this test made are reclaimed by `afterAll` with the
+    // rest of the facility.
   })
 
   // B-191 / PRD 05 CN-24. The card used to be populated only while the plan
