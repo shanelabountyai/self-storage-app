@@ -7274,6 +7274,29 @@ The three measurements moved into `measureThreeWays` so both loops share one cop
 - **Verified on `desktop-chrome` only.** The spec sets its own viewport in every pass, so `mobile-chrome` would measure the same three CSS viewports; the device scale factor is a rendering concern and not a layout one, as the file's existing comment says.
 - Unit suite green end to end: 3916 passed, 8 skipped, reconciled to 3924. The touched e2e file: 11 passed, 0 failed. Lint and typecheck clean. No schema change, so no migration and nothing for the drift check to see.
 
+## B-219 — The document store keeps its "newest first" promise for two documents written in the same instant
+
+`PENDING`
+
+**What it built.** `documentsFor` orders a subject's documents `createdAt desc`, and `Document.createdAt` was `@default(now())` — which Prisma fills **client-side, at millisecond precision**, and sends with the INSERT. The column's `DEFAULT` had been in the migration since B-023 and had never once been used. Two documents written back to back therefore shared an instant and the sort between them was a coin flip.
+
+`Document.createdAt` is now `@default(dbgenerated("clock_timestamp()"))`, so Prisma omits the column and Postgres fills it. Same change on **`Notice.createdAt`** and **`Message.createdAt`**, which the row asked to be checked rather than assumed: a lease's notices are ordered newest-first and that list is the lien file, and the tenant profile's communication history is ordered the same way and capped at 20, so a tie there could reorder the page *and* change which row falls off the end of it. Two migrations, because the first was already applied by the time the other two were found and editing an applied migration desyncs its checksum.
+
+**What it decided.**
+
+- **`clock_timestamp()`, not the `CURRENT_TIMESTAMP` the row prescribed.** `CURRENT_TIMESTAMP` is transaction-START time and is identical for every row written inside one `$transaction`, so it would have narrowed the tie rather than removed it — and `storeGeneratedDocument` takes a transaction client precisely so callers can write inside one. `clock_timestamp()` reads the real clock per statement at microsecond resolution, which is what makes ties vanish rather than needing a tie-break. The row's stated *intent* — "makes ties vanish rather than needing a tie-break" — is met by `clock_timestamp()` and not by its own suggestion. No caller writes two documents in one transaction today (notices and auctions write one each; the lease loop runs outside a transaction over distinct subjects), so this is the difference between a fix that is correct and one that happens to be correct.
+- **No cuid tie-break**, as the row instructed. cuid v2 is deliberately unsortable and relying on v1's timestamp prefix is the kind of cleverness this repo decodes at 3am.
+- **`AuditLog` was checked and deliberately left alone.** `findAuditEntries` already orders `[{ occurredAt: 'desc' }, { id: 'desc' }]`, so a tie resolves deterministically rather than at random. Chronology within one instant is still unknowable there, but nothing reads differently between two runs — and non-determinism is the defect this row is about. The other ~57 `@default(now())` columns were not swept: the three named here are the ones that are both sorted on and where a tie costs something.
+
+**One runnable check.** `tests/documents-db.test.ts`, "orders documents written back to back, unstamped": five documents stored in a loop with nothing stamped, asserting both the order and that the five stored instants are **distinct** — read back as `::text` through `$queryRaw`, because the distinction lives in the microseconds and a JS `Date` truncates to milliseconds, so `createdAt.getTime()` would report them identical even when the stored values differ. **Verified against a real failing run:** reverting the schema to `@default(now())` and regenerating makes it fail 3 runs out of 3; restoring makes it pass twice in a row. The pre-existing hour-apart case was kept and its comment corrected — it asserts the ordinary promise, this one asserts the back-to-back case.
+
+**What it left behind.**
+
+- **Two pre-existing unit failures, both in `tests/portal-dashboard.test.ts`, neither reachable from this diff** — reproduced identically with the diff stashed. The first hardcodes `expiresAt = Date.UTC(2026, 8, 1, 17, 0)` and every row it writes now violates `reservation_expires_after_creation`, because that instant passed at 12:00 CDT today; it will fail permanently from here. The second fails `Unique constraint failed on (unitId)` at `lease.create`. **Raised as B-252.** Full unit suite otherwise green: 3919 passed, 8 skipped, 2 failed, reconciled to 3929.
+- **`db:migrate` points at the Neon cloud dev branch and proposes to RESET it.** Running it to author this migration produced "We need to reset the `public` schema at ep-holy-block…neon.tech". Nothing was reset and nothing was created; both migrations here were written by hand and applied with `db:migrate:test` and `db:migrate:e2e`. `CLAUDE.md` says `db:migrate:all` and `db:status` "exist so that cannot go unnoticed" — **neither script is in `package.json`**. Raised as B-253.
+- **The accessibility statement was not re-read and `LAST_REVIEWED` does not move.** Nothing here is customer-facing: this is a database default, and `documentsFor` still has no production caller. It becomes customer-visible when a lease's document list is rendered.
+- **Nothing sweeps the remaining `@default(now())` columns.** If a future screen sorts on one of them and ties matter, this is the fix and this is the test to copy.
+
 ## B-216 — The aging report attached its facility name with `scope="rowgroup"`, which no screen reader implements
 
 `74bc47e`

@@ -261,17 +261,12 @@ describeDb('document store', () => {
       ids.push(id)
     }
 
-    // `createdAt` is generated CLIENT-side at millisecond precision, so two
-    // writes this close together routinely land on the same instant and
-    // `documentsFor`'s `orderBy: { createdAt: 'desc' }` becomes a coin flip:
-    // this assertion failed roughly two runs in three, on main, for that
-    // reason alone and nothing to do with the store. Stamping the rows an
-    // hour apart asserts what `documentsFor` actually promises — newest
-    // first — instead of asserting that two simultaneous writes have an
-    // order, which is the one thing the data cannot say.
-    //
-    // Whether the store should GUARANTEE an order for genuinely simultaneous
-    // writes is B-219; it has no production caller today.
+    // Stamped an hour apart so this case asserts the ordinary promise —
+    // newest first over documents written at different times — rather than
+    // the back-to-back case, which is the next test's job. B-219 made that
+    // second case real; before it, `createdAt` was generated CLIENT-side at
+    // millisecond precision and this assertion failed roughly two runs in
+    // three for that reason alone and nothing to do with the store.
     await prisma.document.update({
       where: { id: ids[0] },
       data: { createdAt: new Date('2026-08-01T10:00:00.000Z') },
@@ -284,6 +279,44 @@ describeDb('document store', () => {
     const found = await documentsFor('Lease', subjectId)
     expect(found).toHaveLength(2)
     expect(found.map((document) => document.title)).toEqual(['Second notice', 'First notice'])
+  })
+
+  // B-219. The promise the store makes is "newest first", and until this row
+  // it could not keep it for two documents written in the same millisecond —
+  // which is what a lien file does when it stores a notice and its proof one
+  // after the other. Nothing is stamped here on purpose: if `createdAt` ever
+  // goes back to being generated client-side, the two rows share an instant
+  // and this fails at roughly the rate the ordering is wrong.
+  it('orders documents written back to back, unstamped', async () => {
+    const subjectId = `sametick-${suffix}`
+    const titles = ['Notice one', 'Notice two', 'Notice three', 'Notice four', 'Notice five']
+    for (const title of titles) {
+      await storeGeneratedDocument({
+        facilityId,
+        type: 'notice',
+        subjectType: 'Lease',
+        subjectId,
+        title,
+        template: '<p>{{body}}</p>',
+        values: { body: title },
+      })
+    }
+
+    const found = await documentsFor('Lease', subjectId)
+    expect(found.map((document) => document.title)).toEqual([...titles].reverse())
+
+    // The ordering has to come from distinct timestamps rather than from the
+    // database happening to return insertion order for a tied sort — a tie
+    // that sorts correctly today is still a coin flip. Read as TEXT, because
+    // the distinction lives in the microseconds and a JS `Date` truncates to
+    // milliseconds: `createdAt.getTime()` would report these as identical
+    // even when the stored values differ, which is the assertion failing for
+    // a reason that has nothing to do with the ordering.
+    const stamps = await prisma.$queryRaw<{ at: string }[]>`
+      SELECT "createdAt"::text AS at FROM "document" WHERE "subjectId" = ${subjectId}
+    `
+    expect(stamps).toHaveLength(titles.length)
+    expect(new Set(stamps.map((row) => row.at)).size).toBe(titles.length)
   })
 
   it('soft-deletes rather than removing evidence', async () => {

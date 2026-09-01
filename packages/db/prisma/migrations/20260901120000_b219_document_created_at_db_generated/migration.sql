@@ -1,0 +1,13 @@
+-- B-219. Let Postgres generate the document timestamp.
+--
+-- The column already carried a DEFAULT, but nothing ever used it: Prisma's
+-- `@default(now())` is filled CLIENT-side at millisecond precision and sent
+-- with the INSERT, so two documents written back to back shared an instant
+-- and `documentsFor`'s "newest first" was a coin flip.
+--
+-- `clock_timestamp()` rather than the `CURRENT_TIMESTAMP` this column had:
+-- CURRENT_TIMESTAMP is transaction-START time and is identical for every row
+-- written inside one `$transaction`, so it would narrow the tie rather than
+-- remove it. clock_timestamp() reads the real clock per statement, at
+-- microsecond resolution.
+ALTER TABLE "document" ALTER COLUMN "createdAt" SET DEFAULT clock_timestamp();
