@@ -106,32 +106,9 @@ export async function createPaymentPlan(
     select: { planMaxDays: true, planMaxPerRollingYear: true, timezone: true },
   })
 
-  // Every plan on this lease in the last rolling year, whatever became of it.
-  // Cancelled and broken ones COUNT — the whole defect was that a plan broken
-  // last night was replaceable this morning, for ever, each replacement
-  // re-halting dunning, late fees and access suspension while the lien clock
-  // never ran.
-  //
-  // ONE exception, and it does not reopen D-98 (B-209): a plan cancelled on
-  // the same facility-local day it was created, having collected nothing while
-  // it stood, is a CORRECTION rather than an arrangement. A manager who
-  // mistypes an installment date, spots it and re-enters the schedule had
-  // otherwise spent one of the lease's two plans for the year — on a Saturday,
-  // at the counter, with no amend path anywhere in the product.
-  //
-  // It cannot buy anybody a free plan, on two counts. A plan cancelled the day
-  // it was agreed provided no forbearance to speak of: its hold is lifted with
-  // it, and any plan that survives past local midnight counts however it ends.
-  // And a payment landing on the covered arrears while it stood makes it count
-  // regardless, which is the case a cancel-and-re-agree would be reaching for.
-  const yearAgo = new Date(now.getTime() - 365 * 86_400_000)
-  const priorPlans = await prisma.paymentPlan.findMany({
-    where: { leaseId, createdAt: { gte: yearAgo } },
-    select: { id: true, invoiceIds: true, createdAt: true, cancelledAt: true },
-  })
-  const priorCount = priorPlans.length - (await correctionCount(priorPlans, facility.timezone))
-  if (priorCount >= facility.planMaxPerRollingYear) {
-    return { ok: false, reason: 'too_many_plans', priorCount, limit: facility.planMaxPerRollingYear }
+  const { priorCount, limit } = await planCapFor(leaseId, facility, now)
+  if (priorCount >= limit) {
+    return { ok: false, reason: 'too_many_plans', priorCount, limit }
   }
   if (priorCount > 0) {
     // The second plan is agreed a rank up. Derived from the role table rather
@@ -467,8 +444,51 @@ export async function arrearsForLease(
   }
 }
 
+/// D-98's rolling-year cap on ONE lease: how many plans it has already had
+/// that count, and how many this facility allows.
+///
+/// Exported because the tenant profile has to render the same refusal the
+/// server would give (B-212) — a builder offered where it can never succeed is
+/// worse than an absent one, and a screen that guesses the count would refuse
+/// plans the server would take. One function, both callers, no second copy of
+/// the rule.
+///
+/// Every plan on this lease in the last rolling year counts, whatever became of
+/// it. Cancelled and broken ones COUNT — the whole defect was that a plan
+/// broken last night was replaceable this morning, for ever, each replacement
+/// re-halting dunning, late fees and access suspension while the lien clock
+/// never ran.
+///
+/// ONE exception, and it does not reopen D-98 (B-209): a plan cancelled on the
+/// same facility-local day it was created, having collected nothing while it
+/// stood, is a CORRECTION rather than an arrangement. A manager who mistypes an
+/// installment date, spots it and re-enters the schedule had otherwise spent
+/// one of the lease's two plans for the year — on a Saturday, at the counter,
+/// with no amend path anywhere in the product.
+///
+/// It cannot buy anybody a free plan, on two counts. A plan cancelled the day
+/// it was agreed provided no forbearance to speak of: its hold is lifted with
+/// it, and any plan that survives past local midnight counts however it ends.
+/// And a payment landing on the covered arrears while it stood makes it count
+/// regardless, which is the case a cancel-and-re-agree would be reaching for.
+export async function planCapFor(
+  leaseId: string,
+  facility: { planMaxPerRollingYear: number; timezone: string },
+  now: Date = new Date(),
+): Promise<{ priorCount: number; limit: number }> {
+  const yearAgo = new Date(now.getTime() - 365 * 86_400_000)
+  const priorPlans = await prisma.paymentPlan.findMany({
+    where: { leaseId, createdAt: { gte: yearAgo } },
+    select: { id: true, invoiceIds: true, createdAt: true, cancelledAt: true },
+  })
+  return {
+    priorCount: priorPlans.length - (await correctionCount(priorPlans, facility.timezone)),
+    limit: facility.planMaxPerRollingYear,
+  }
+}
+
 /// How many of these plans are same-day corrections rather than arrangements
-/// (B-209) — see the note in `createPaymentPlan`, which is the only caller.
+/// (B-209) — see the note on `planCapFor`, which is the only caller.
 ///
 /// The money test reads ALLOCATIONS inside the plan's own few minutes, not its
 /// progress: progress is a live figure off the invoices, so the successor

@@ -343,6 +343,59 @@ test.describe('payment plans on the tenant profile', () => {
 
     await assertNoAxeViolations(page, { state: 'payment plan builder refused' })
   })
+
+  // B-212. The even split, which exists because the staffer was making up to
+  // six amounts sum to the arrears to the cent, in their head, at a counter.
+  //
+  // Read-only against the shared fixture on purpose (B-120): it fills the form
+  // and reads the running total, and never submits. Agreeing a plan on Dana
+  // would place a `payment_plan` hold and halt collections on the one lease
+  // the dunning specs need chased.
+  test('fills a schedule that adds up exactly, without being asked to do the sum', async ({
+    page,
+  }) => {
+    await page.goto('/admin/tenants?q=dana@demo.example.com')
+    await page.getByRole('link', { name: 'Dana Delinquent' }).click()
+    await openDisclosure(page, 'Set up a payment plan')
+
+    const details = page.locator('details').filter({ hasText: 'Set up a payment plan' })
+    // `.first()`: this disclosure holds TWO polite regions — the running
+    // total, and `AdminForm`'s own success region, which is empty at idle and
+    // sits inside the <form> below it (B-184). The running total is first in
+    // DOM order, which is also where it belongs on screen.
+    const total = details.getByRole('status').first()
+
+    // Nothing typed yet, so the whole arrears is still to allocate — and the
+    // figure is the PAST DUE one, not the lease balance beside it.
+    await expect(total).toContainText(/to allocate\.$/)
+
+    await details.getByLabel('Split into').selectOption('3')
+    await details.getByLabel('First one due').fill('2027-01-31')
+    await details.getByRole('button', { name: 'Fill the schedule' }).click()
+
+    await expect(total).toHaveText(/^Adds up exactly to \$/)
+
+    // Monthly, with the day of month clamped rather than rolled forward —
+    // naive month arithmetic puts installments 2 and 3 both in March.
+    await expect(details.getByLabel('Due', { exact: true }).nth(0)).toHaveValue('2027-01-31')
+    await expect(details.getByLabel('Due', { exact: true }).nth(1)).toHaveValue('2027-02-28')
+    await expect(details.getByLabel('Due', { exact: true }).nth(2)).toHaveValue('2027-03-31')
+
+    // Editing after the fill is the point of a suggestion: the total follows.
+    await details.getByLabel('Amount ($)').nth(0).fill('1.00')
+    await expect(total).toContainText('still to allocate')
+  })
+
+  // B-212. The builder used to render for every non-ended lease with no active
+  // plan, so a current tenant got twelve fields over "$0.00 is past due" that
+  // refused every submit.
+  test('is not offered on a lease with nothing past due', async ({ page }) => {
+    await page.goto('/admin/tenants?q=alex.active5@demo.example.com')
+    await page.getByRole('link', { name: 'Alex Active' }).first().click()
+
+    await expect(page.getByRole('region', { name: 'Actions' })).toBeVisible()
+    await expect(page.locator('summary').filter({ hasText: 'Set up a payment plan' })).toHaveCount(0)
+  })
 })
 
 // B-083 / PRD 02 §4.6 US-30. The lien-notices screen for one lease.

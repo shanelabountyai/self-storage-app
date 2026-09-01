@@ -238,3 +238,49 @@ export function isFullyPaid(
   const total = installments.reduce((sum, installment) => sum + installment.amountCents, 0)
   return paidSincePlanStartCents >= total
 }
+
+/// B-212. The arithmetic `validateSchedule`'s own refusal tells a staffer to
+/// do — "they must add up exactly — round the last installment to make up the
+/// difference" — done for them, because they are doing it in their head, in
+/// front of a tenant, over up to twelve fields. $1,837.42 over six months is
+/// not a sum anybody should be asked to compact by hand at a counter.
+///
+/// A SUGGESTION, never a constraint: it fills the same fields the staffer can
+/// then edit, and `validateSchedule` remains the only thing that decides
+/// whether a schedule may be agreed. Nothing here is a second copy of that
+/// rule — it just produces a schedule that happens to satisfy it.
+///
+/// FLOOR on every installment but the last, remainder on the last, so the last
+/// is the largest. Ceiling-and-shrink reads slightly better and can produce a
+/// final installment of zero on a small arrears (20¢ over six is 4,4,4,4,4,0),
+/// which `validateSchedule` then refuses — a "fill this in for me" control that
+/// yields a refused form is the defect this row is fixing, not a new one.
+///
+/// Dates are `yyyy-mm-dd` because this fills `<input type="date">`. Monthly
+/// from `startDate`, with the day of month CLAMPED to the length of each target
+/// month: naive month arithmetic turns 31 January into 3 March and puts two
+/// installments in the same month, which `validateSchedule` refuses for being
+/// out of order.
+export function evenSchedule(
+  totalCents: number,
+  count: number,
+  startDate: string,
+): { dueDate: string; amountCents: number }[] {
+  // Never more rows than the form has, and never so many that an installment
+  // rounds down to nothing.
+  const n = Math.max(1, Math.min(count, MAX_INSTALLMENTS, totalCents))
+  const each = Math.floor(totalCents / n)
+  return Array.from({ length: n }, (_, i) => ({
+    dueDate: addMonths(startDate, i),
+    amountCents: i === n - 1 ? totalCents - each * (n - 1) : each,
+  }))
+}
+
+function addMonths(startDate: string, months: number): string {
+  const [year, month, day] = startDate.split('-').map(Number)
+  if (!year || !month || !day) return startDate
+  // Day 0 of the following month is the last day of the target month.
+  const lastDay = new Date(Date.UTC(year, month - 1 + months + 1, 0)).getUTCDate()
+  const target = new Date(Date.UTC(year, month - 1 + months, Math.min(day, lastDay)))
+  return target.toISOString().slice(0, 10)
+}

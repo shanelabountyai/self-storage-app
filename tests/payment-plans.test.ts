@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   MAX_INSTALLMENTS,
+  evenSchedule,
   installmentViews,
   isBreached,
   isFullyPaid,
@@ -220,5 +221,50 @@ describe('problemsByRow', () => {
 
   it('ignores an index with no row behind it rather than keying on undefined', () => {
     expect(problemsByRow([{ index: 4, problem: 'x' }], [1, 2]).size).toBe(0)
+  })
+})
+
+// B-212. The even split the builder offers, which exists only because
+// `validateSchedule` demands cent-exact arithmetic across twelve fields and a
+// staffer was doing it in their head at a counter. The property that matters
+// is the one the refusal states: it must ADD UP EXACTLY, every time.
+describe('evenSchedule', () => {
+  it('adds up to the arrears exactly, at every count', () => {
+    // 1,837.42 is the row's own example — the sum nobody should do by hand.
+    for (const total of [183742, 100, 999_99, 7, 1]) {
+      for (let count = 1; count <= MAX_INSTALLMENTS; count++) {
+        const rows = evenSchedule(total, count, '2026-09-01')
+        expect(rows.reduce((sum, row) => sum + row.amountCents, 0)).toBe(total)
+        // `validateSchedule` refuses a zero or negative installment, so a
+        // "fill this in for me" control must never produce one.
+        expect(rows.every((row) => row.amountCents > 0)).toBe(true)
+      }
+    }
+  })
+
+  it('produces a schedule validateSchedule accepts', () => {
+    const rows = evenSchedule(183742, 6, '2026-09-30')
+    const problems = validateSchedule(
+      rows.map((row) => ({ dueDate: d(row.dueDate), amountCents: row.amountCents })),
+      183742,
+      d('2026-08-31'),
+    )
+    expect(problems).toEqual([])
+  })
+
+  it('clamps the day of month rather than rolling into the next one', () => {
+    // Naive month arithmetic turns 31 January into 3 March, which puts two
+    // installments in March and is refused for being out of order.
+    expect(evenSchedule(600, 4, '2026-01-31').map((row) => row.dueDate)).toEqual([
+      '2026-01-31',
+      '2026-02-28',
+      '2026-03-31',
+      '2026-04-30',
+    ])
+  })
+
+  it('never asks for more installments than there are cents, or than the form has rows', () => {
+    expect(evenSchedule(3, 6, '2026-09-01')).toHaveLength(3)
+    expect(evenSchedule(100_000, MAX_INSTALLMENTS + 2, '2026-09-01')).toHaveLength(MAX_INSTALLMENTS)
   })
 })

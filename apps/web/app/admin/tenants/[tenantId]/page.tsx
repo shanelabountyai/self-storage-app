@@ -18,7 +18,6 @@ import {
   updateAddressAction,
   liftHoldAction,
   placeHoldAction,
-  createPaymentPlanAction,
   cancelPaymentPlanAction,
   refundAction,
   returnPaymentAction,
@@ -30,12 +29,12 @@ import { startTenantImpersonationAction } from "@/app/admin/impersonation/action
 import { IMPERSONATION_TTL_MINUTES } from "@/lib/impersonation/service";
 import { can, hasPermissionAnywhere } from "@/lib/rbac/authorize";
 import { ChargeFeeForm } from "@/components/admin/charge-fee-form";
+import { PaymentPlanBuilder } from "@/components/admin/payment-plan-builder";
 import { RefundMethodFields } from "@/components/admin/refund-method-fields";
 import { chargeableFees, chargeableLeases } from "@/lib/billing/charges";
 import { RETURN_FEE_CHOICES } from "@/lib/billing/reversals";
 import { scheduledFeeCents } from "@/lib/billing/fee-invoice";
 import { HOLD_TYPES, type HoldEffect } from "@storage/core/holds";
-import { MAX_INSTALLMENTS } from "@storage/core/payment-plans";
 import { leaseStatusLabel } from "@storage/core/labels";
 import {
   referralsForStaff,
@@ -464,8 +463,14 @@ export default async function TenantProfilePage({
                   <th scope="col" className="py-2 font-medium">
                     Rate
                   </th>
+                  {/* B-212. "Total balance", not "Balance": the plan builder
+                      below shows a SECOND money figure for the same lease —
+                      what is past due — and a staffer who typed this one into
+                      the installments was refused with no way to tell which
+                      number the form meant. The builder names both; this names
+                      itself the same way. */}
                   <th scope="col" className="py-2 text-right font-medium">
-                    Balance
+                    Total balance
                   </th>
                   <th scope="col" className="py-2 font-medium">
                     Started
@@ -629,20 +634,23 @@ export default async function TenantProfilePage({
 
         {/* D-98 (B-190). Repeats are the thing worth seeing, so they are said
             in words at the top rather than left to be counted off the cards.
-            Not colour-carried (WCAG 1.4.1) and not a badge: it is a sentence. */}
-        {profile.planChains.map((chain) => (
-          <p key={chain.leaseId} role="note" className="border-input rounded-lg border p-3 text-sm text-pretty">
-            Unit {chain.unitNumber} has had{" "}
-            <strong>
-              {chain.count} payment {chain.count === 1 ? "plan" : "plans"}
-            </strong>{" "}
-            in the last twelve months
-            {chain.count > 1 &&
-              ", and each one halted dunning, late fees and access suspension while it ran"}
-            . {formatCents(chain.collectedCents)} has been collected across{" "}
-            {chain.count === 1 ? "it" : "them"}.
-          </p>
-        ))}
+            Not colour-carried (WCAG 1.4.1) and not a badge: it is a sentence.
+
+            B-212. REPEATS — so a chain of one no longer renders. "Unit 104 has
+            had 1 payment plan in the last twelve months, $0.00 has been
+            collected across it" is the single card directly below it, said
+            again in worse words, in a box that looks like a warning. */}
+        {profile.planChains
+          .filter((chain) => chain.count > 1)
+          .map((chain) => (
+            <p key={chain.leaseId} role="note" className="border-input rounded-lg border p-3 text-sm text-pretty">
+              Unit {chain.unitNumber} has had{" "}
+              <strong>{chain.count} payment plans</strong> in the last twelve
+              months, and each one halted dunning, late fees and access
+              suspension while it ran. {formatCents(chain.collectedCents)} has
+              been collected across them.
+            </p>
+          ))}
 
         {profile.paymentPlans.map((plan) => (
           <div
@@ -1819,97 +1827,47 @@ export default async function TenantProfilePage({
                   (plan) => plan.leaseId === lease.leaseId && plan.status === "active",
                 ),
             )
+            /* B-212. Nothing past due, no plan to agree. The disclosure used to
+               render for every non-ended lease with no active plan, so on a
+               current tenant it opened to "$0.00 is past due" over twelve
+               fields and refused every submit — `validateSchedule` returns
+               "There is nothing past due on this lease to put on a plan"
+               before it looks at anything else. A control that can never
+               succeed is worse than an absent one. */
+            .filter((lease) => lease.arrearsCents > 0)
             .filter((lease) => can(actor, "delinquency:execute_step", lease.facilityId))
             .map((lease) => (
               <details key={lease.leaseId} className="border-input rounded-lg border p-4">
                 <summary className="cursor-pointer font-medium">
                   Set up a payment plan — unit {lease.unitNumber}
                 </summary>
-                <div className="mt-3 flex flex-col gap-3">
-                  <p className="max-w-prose text-xs text-pretty">
-                    <span className="font-medium">
-                      {formatCents(lease.arrearsCents)} is past due on this lease.
-                    </span>{" "}
-                    The installments must add up to exactly that. Fill in as many
-                    as the plan needs and leave the rest blank.
-                  </p>
-                  <p className="text-muted-foreground max-w-prose text-xs text-pretty">
-                    Agreeing one places a hold that stops dunning, late fees and
-                    access suspension on this lease tonight;{" "}
-                    {/* B-210. The grace window is what the tenant will be told
-                        on the phone and in every plan email, so the person
-                        agreeing the plan has to be quoting the same rule. */}
-                    {lease.planGraceDays > 0
-                      ? `an installment still unpaid ${lease.planGraceDays} ${lease.planGraceDays === 1 ? "day" : "days"} after its date`
-                      : "missing an installment"}{" "}
-                    lifts it automatically and collections resume.
-                    Rent invoiced from here on is still due on its own date — a
-                    plan covers what is already past due, so paying next month&rsquo;s
-                    rent does not count towards an installment, and that rent is
-                    still collected on its own due date.
-                  </p>
-                  <AdminForm
-                    action={createPaymentPlanAction}
-                    label={`Agree a payment plan for unit ${lease.unitNumber}`}
-                    className="flex flex-col gap-3"
-                    announceOutside
-                  >
-                    <input type="hidden" name="tenantId" value={profile.tenantId} />
-                    <input type="hidden" name="leaseId" value={lease.leaseId} />
-                    <div className="grid gap-2 sm:grid-cols-3">
-                      {Array.from({ length: MAX_INSTALLMENTS }, (_, i) => i + 1).map((n) => (
-                        // B-192. A real <fieldset>/<legend>, not a <div> with a
-                        // <span> in it. Six of these render twelve controls
-                        // called "Due" and "Amount ($)", and without the group
-                        // name nothing ties any of them to an ordinal — a
-                        // screen-reader user meets twelve identically-named
-                        // fields (1.3.1, 3.3.2).
-                        //
-                        // `FieldSet` rather than a bare <fieldset> because the
-                        // schedule's refusals are about an INSTALLMENT, not
-                        // about one of its two fields: "must be in date order"
-                        // belongs to the pair. `validateSchedule` numbers its
-                        // problems by installment, and `createPaymentPlanAction`
-                        // now reports each under this key (3.3.1, 3.3.3).
-                        <FieldSet
-                          key={n}
-                          name={`installment_${n}`}
-                          legend={<span className="text-xs">Installment {n}</span>}
-                          className="border-input flex flex-col gap-1 rounded-md border p-2"
-                        >
-                          <Field name={`dueDate_${n}`} label="Due" type="date" className={FIELD_CLASS} />
-                          <Field name={`amount_${n}`} label="Amount ($)" type="text" inputMode="decimal" className={FIELD_CLASS} />
-                        </FieldSet>
-                      ))}
-                    </div>
-                    {/* D-97. Auto-collection is the default and the box is
-                        ticked; untucking it is the tenant asking to pay each
-                        installment themselves. Present at agreement rather than
-                        as a setting somewhere else, because it is a term of the
-                        conversation being had at that moment. */}
-                    <label className="flex max-w-prose items-start gap-2 text-sm">
-                      <input type="checkbox" name="autoCollect" defaultChecked className="mt-1 size-4" />
-                      <span>
-                        Charge each installment to the card on file on its due
-                        date.{" "}
-                        <span className="text-muted-foreground">
-                          Untick if the tenant would rather pay each one
-                          themselves. Either way this lease keeps paying its
-                          ordinary rent automatically if it already does — a plan
-                          defers what is past due, not what comes next.
-                        </span>
-                      </span>
-                    </label>
-                    <Field name="note" label="Note (optional)" className={FIELD_CLASS} />
-                    <div>
-                      <button
-                        type="submit"
-                        className="border-input hover:bg-accent inline-flex min-h-11 items-center justify-center rounded-md border px-4 text-sm font-medium"
-                      >
-                        Agree the plan for unit {lease.unitNumber}
-                      </button>
-                    </div>
-                  </AdminForm>
+                <div className="mt-3">
+                  {/* B-212. The other control that can never succeed: D-98's
+                      rolling-year cap is checked by `createPaymentPlan` BEFORE
+                      the schedule, so at the limit every one of these twelve
+                      fields is filled in for nothing. The count comes from
+                      `planCapFor` — the same function the server refuses with,
+                      not a recount off the cards below — so this cannot refuse
+                      a plan the server would take. The wording matches that
+                      refusal, including where the limit is changed. */}
+                  {lease.planCap.priorCount >= lease.planCap.limit ? (
+                    <p role="note" className="max-w-prose text-sm text-pretty">
+                      This lease has already had {lease.planCap.priorCount} payment{" "}
+                      {lease.planCap.priorCount === 1 ? "plan" : "plans"} in the last
+                      twelve months, and this facility allows {lease.planCap.limit}.
+                      Another one would halt collections again with nothing new
+                      agreed — the limit is in facility settings if it is wrong.
+                    </p>
+                  ) : (
+                    <PaymentPlanBuilder
+                      tenantId={profile.tenantId}
+                      leaseId={lease.leaseId}
+                      unitNumber={lease.unitNumber}
+                      arrearsCents={lease.arrearsCents}
+                      balanceCents={lease.balanceCents}
+                      planGraceDays={lease.planGraceDays}
+                    />
+                  )}
                 </div>
               </details>
             ))}

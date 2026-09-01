@@ -28,6 +28,7 @@ import { createTask } from "@/lib/admin/tasks";
 import { activeHolds, type ActiveHold } from "@/lib/admin/holds";
 import {
   arrearsForLease,
+  planCapFor,
   paymentPlansForLease,
   type PaymentPlanView,
 } from "@/lib/admin/payment-plans";
@@ -187,6 +188,12 @@ export type TenantLeaseSummary = {
   /// states the rule the breach job actually runs rather than "miss it and the
   /// plan ends".
   planGraceDays: number;
+  /// B-212. D-98's rolling-year plan cap on THIS lease, as `createPaymentPlan`
+  /// counts it — same function, so the screen and the server cannot disagree
+  /// about whether another plan is possible. The builder is a control that can
+  /// never succeed once `priorCount` has reached `limit`, and the profile now
+  /// renders the refusal in its place.
+  planCap: { priorCount: number; limit: number };
   startDate: Date;
   endDate: Date | null;
   /// B-186. When the tenant told the facility they were leaving — off-platform
@@ -384,7 +391,17 @@ export async function tenantProfile(
           startDate: true,
           endDate: true,
           noticeGivenAt: true,
-          facility: { select: { name: true, planGraceDays: true } },
+          facility: {
+            select: {
+              name: true,
+              planGraceDays: true,
+              // B-212. D-98's rolling-year cap, so the profile can refuse a
+              // plan where `createPaymentPlan` would rather than offering a
+              // form that cannot be submitted.
+              planMaxPerRollingYear: true,
+              timezone: true,
+            },
+          },
           unit: { select: { number: true } },
         },
       }),
@@ -463,6 +480,10 @@ export async function tenantProfile(
     leases.map((lease) => arrearsForLease(lease.id, new Date())),
   );
 
+  const leasePlanCaps = await Promise.all(
+    leases.map((lease) => planCapFor(lease.id, lease.facility)),
+  );
+
   const leaseSummaries: TenantLeaseSummary[] = leases.map((lease, index) => ({
     leaseId: lease.id,
     facilityId: lease.facilityId,
@@ -473,6 +494,7 @@ export async function tenantProfile(
     balanceCents: leaseBalances[index]._sum.amountCents ?? 0,
     arrearsCents: leaseArrears[index].outstandingCents,
     planGraceDays: lease.facility.planGraceDays,
+    planCap: leasePlanCaps[index],
     startDate: lease.startDate,
     endDate: lease.endDate,
     noticeGivenAt: lease.noticeGivenAt,
