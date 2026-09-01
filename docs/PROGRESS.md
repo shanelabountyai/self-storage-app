@@ -7276,7 +7276,7 @@ The three measurements moved into `measureThreeWays` so both loops share one cop
 
 ## B-244 — The portal said what you owed before it said which unit it was about
 
-`PENDING`
+`1d87c01`
 
 **What it built.** `LeaseCard` opened a `<section>` with no accessible name and then rendered, in order: the access-suspension alert, the settling-funds card, the balance and its Pay button, the pending transfer, the payment-plan card and the pending move-out. The `<h2>` naming the facility and unit came **last**.
 
