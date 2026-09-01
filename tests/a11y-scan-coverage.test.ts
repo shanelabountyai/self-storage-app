@@ -191,6 +191,24 @@ describe('the accessibility scan contract (B-139)', () => {
       expect(helper, 'e2e/a11y-helpers.ts no longer builds a scan').toMatch(/new\s+AxeBuilder/)
     })
 
+    // B-214. The two site-wide waivers in `assertNoAxeViolations` — the ones the
+    // public statement now describes in their own bullets — were each an
+    // unconditional `return`, and both were wider than the sentence that
+    // covered them. This is a source check for the same reason the one above is:
+    // reverting either is a one-token edit, and the only visible effect is a
+    // scan going green.
+    it('waives an off-screen node and an iframe node conditionally, not outright', () => {
+      const helper = readFileSync(join(process.cwd(), 'e2e', 'a11y-helpers.ts'), 'utf8')
+      expect(
+        helper,
+        'the hit test waives an off-screen centre point outright again — it must waive only where a scrollable ancestor brings the node back (B-199 is the case that is not scrollable)',
+      ).toMatch(/stack\.length === 0\) return scrollsHorizontally\(el\)/)
+      expect(
+        helper,
+        'undecided nodes inside every iframe are dropped again — the drop is scoped to a cross-origin frame, so a frame we author is checked like any other markup',
+      ).toMatch(/origin !== location\.origin/)
+    })
+
     it('states no STATE_EXCEPTIONS for a route that no longer exists', () => {
       const stale = [...new Set(STATE_EXCEPTIONS.map((e) => e.route))].filter(
         (route) => !ROUTES.includes(route),

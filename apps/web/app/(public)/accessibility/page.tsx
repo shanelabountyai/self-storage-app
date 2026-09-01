@@ -862,6 +862,41 @@ const LAST_REVIEWED = '19 August 2026'
 //
 // `LAST_REVIEWED` does not move: no claim on this page was re-checked against
 // the build, and none changed.
+//
+// ── B-214 (2026-08-31) ──────────────────────────────────────────────────────
+//
+// Re-read at B-214 (this page's own hand-check sentence). **This row exists
+// because a sentence here was false, so unusually the page IS the change.**
+//
+// "Each of those is waived only on the page it was checked on" described ONE of
+// three waiver paths. `HAND_CHECKED_INCOMPLETE` is genuinely route-keyed and
+// the sentence was true of it. `VERIFIED_BY_HIT_TEST` waives two checks on
+// EVERY route and re-proves them per node — better engineering than a route
+// list, and not what the sentence said. And `if (n.target.length !== 1)` in
+// `assertNoAxeViolations` dropped every undecided node inside ANY iframe, on
+// every route, under a comment describing a Stripe-specific waiver. Three
+// bullets now, one per path, each saying what it actually promises.
+//
+// **Two of the three were also narrowed, not just described.** The hit test
+// waived a node whose centre point is off-screen; that is the case axe cannot
+// decide only where a scrollbar brings the node back, so it now asks
+// (`scrollsHorizontally`) instead of assuming. Off-screen with nothing to
+// scroll is B-199's case — unreachable by any means — and 1.4.3 and 1.4.11 were
+// silently unenforced on exactly those nodes. The iframe drop is now scoped to
+// a frame whose `src` is cross-origin (Stripe's Payment Element; the Google
+// Maps embed behind "Show map"), so a same-origin frame we author is checked
+// like any other markup. Neither narrowing can waive MORE than before.
+//
+// **The "everywhere they run" sentence** was three clauses deep and is now
+// plain: a check the tool cannot decide fails the run as well, on every page in
+// it. Every commitment it carried is still made.
+//
+// **No route, state or exception list moves**, and no page's coverage changes —
+// the waivers got smaller, which can only turn a scan red, never green.
+//
+// `LAST_REVIEWED` does not move: this corrects a description of the mechanism
+// to match the mechanism. No claim about a page was re-checked against the
+// build.
 
 export default function AccessibilityPage() {
   return (
@@ -915,17 +950,34 @@ export default function AccessibilityPage() {
           Automated accessibility tests run at both phone and desktop widths on every
           push to our main branch, and on every pull request that is open for review.
           They are not a release gate: a failing run tells us, it does not stop the
-          deploy. They also fail on checks the tool could not decide, everywhere they
-          run, so &ldquo;we did not test that&rdquo; cannot quietly read as &ldquo;that
+          deploy. A check the tool cannot decide fails the run as well, on every page in
+          it, so &ldquo;we did not test that&rdquo; never quietly reads as &ldquo;that
           passed&rdquo;.
         </p>
         <p>
-          A few of those undecided checks are ones we have looked at by hand and found to
-          be a limit of the tool rather than a real problem &mdash; a bar that overlaps the
-          page on purpose so it stays in reach, a striped background the checker cannot see
-          through. Each of those is waived only on the page it was checked on, so the same
-          check still has to pass everywhere else.
+          A few of those undecided checks are ones we have looked at and found to be a
+          limit of the tool rather than a real problem. They are set aside in three
+          different ways, and we would rather name each than round them off:
         </p>
+        <ul className="list-disc space-y-1 pl-5">
+          <li>
+            Some are waived only on the page they were checked on &mdash; a bar that
+            overlaps the page on purpose so it stays in reach, a striped background the
+            checker cannot see through. The same check still has to pass everywhere else.
+          </li>
+          <li>
+            Some are waived anywhere on the site, but only where the test itself re-checks
+            the thing that confused the tool. A cell that has scrolled out of view in a
+            wide table is one: it is set aside only where you have a scrollbar that brings
+            it back, and something genuinely painted off the edge of the screen still
+            fails.
+          </li>
+          <li>
+            Content inside a frame served by another company &mdash; the card form, the map
+            &mdash; is not checked by these tests. That is their page, not ours. A frame we
+            build ourselves is checked like anything else.
+          </li>
+        </ul>
         <p>
           They do not yet cover everything. These are the pages outside that run, and the
           reason each one is:

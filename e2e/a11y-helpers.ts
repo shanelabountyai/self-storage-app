@@ -165,12 +165,28 @@ async function nothingOverlaps(page: Page, selector: string): Promise<boolean> {
     // (B-199): the failure it produces otherwise sends you hunting for an
     // overlay that never existed, on a page the node was never on.
     if (!el) return false
+
+    // The same DOM-ancestor walk `offscreenOffenders` does below, duplicated
+    // rather than shared: a closure cannot cross the `page.evaluate` boundary.
+    // Two copies, kept in step by hand — change one, change the other.
+    const scrollsHorizontally = (node: Element) => {
+      for (let a = node.parentElement; a; a = a.parentElement) {
+        const { overflowX } = getComputedStyle(a)
+        if (overflowX === 'auto' || overflowX === 'scroll') return true
+      }
+      return false
+    }
+
     const rect = el.getBoundingClientRect()
     const stack = document.elementsFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)
-    // An empty stack means the centre is off-screen — scrolled out of a
-    // horizontally overflowing table — which is the case axe cannot decide and
-    // a sighted reader is not looking at either.
-    if (stack.length === 0) return true
+    // An empty stack means the centre is off-screen. That is the case axe
+    // cannot decide ONLY where the reader has a scrollbar that brings it back —
+    // a cell scrolled out of an `overflow-x: auto` table, which is the whole
+    // reason this hit test exists. Off-screen with nothing to scroll is B-199's
+    // case instead: painted past the edge and unreachable by any means. Waiving
+    // that left 1.4.3 and 1.4.11 unenforced on exactly the nodes where they
+    // matter most, so it is now a question rather than an assumption (B-214).
+    if (stack.length === 0) return scrollsHorizontally(el)
     const top = stack[0]
     return top === el || el.contains(top) || top.contains(el)
   }, selector)
@@ -212,9 +228,17 @@ export async function assertNoAxeViolations(
       routeMatches(row.route, pathname) && (row.state === undefined || row.state === options.state),
   )
 
-  // A node inside a third-party iframe (target path length > 1) is the one
-  // exemption that isn't text-matched, since a target path there is never
-  // stable to begin with.
+  // A node axe reached INSIDE a nested browsing context: `target` is a path
+  // (`['iframe[name=...]', 'html']`) rather than one selector, and no text match
+  // applies, since a target path there is never stable to begin with.
+  //
+  // B-214: this used to drop every such node, on every route, with only the
+  // Stripe reasoning below to justify it — so an undecided check inside ANY
+  // frame was silently waived, including one whose document we write. It is now
+  // scoped to a frame whose content is not ours: cross-origin by its own `src`,
+  // which covers Stripe's Payment Element and the Google Maps embed on a
+  // facility page, and covers nothing we author. A same-origin frame is kept and
+  // reported like any other node.
   //
   // Payment step: Stripe's own Payment Element splits into several
   // `__privateStripeFrame…` iframes, each carrying the identical title Stripe
@@ -226,12 +250,34 @@ export async function assertNoAxeViolations(
   // selector, never prose, so it isn't subject to that truncation. A real
   // duplicate title on an iframe we DO control still fails: nothing here
   // matches by the generic "title is not unique" wording alone.
-  const isThirdPartyFrame = (n: (typeof incomplete)[number]['nodes'][number]) =>
-    n.target.some((t) => typeof t === 'string' && /stripeframe/i.test(t))
+  const isThirdPartyFrame = async (
+    n: (typeof incomplete)[number]['nodes'][number],
+  ): Promise<boolean> => {
+    // Stripe's frames stay matched by name as well as by origin: several of them
+    // carry no `src` of their own, so the origin test alone would start
+    // reporting the payment step's undecided checks against markup we cannot fix.
+    if (n.target.some((t) => typeof t === 'string' && /stripeframe/i.test(t))) return true
+    // Only a node INSIDE a frame. The iframe element itself is markup we wrote,
+    // wherever it points, so a bad title or a missing name on it still fails.
+    if (n.target.length === 1) return false
+    const sel = n.target[0]
+    if (typeof sel !== 'string') return false
+    return page.evaluate((s) => {
+      const frame = document.querySelector(s)
+      if (!(frame instanceof HTMLIFrameElement) || !frame.src) return false
+      try {
+        return new URL(frame.src, location.href).origin !== location.origin
+      } catch {
+        return false
+      }
+    }, sel)
+  }
 
   const keep = async (n: (typeof incomplete)[number]['nodes'][number]): Promise<boolean> => {
-    if (n.target.length !== 1) return false
-    if (isThirdPartyFrame(n)) return false
+    if (await isThirdPartyFrame(n)) return false
+    // Everything below reads a single resolvable selector; a node in a frame we
+    // do author has none, and is reported rather than measured.
+    if (n.target.length !== 1) return true
     const summary = n.failureSummary ?? ''
     if (inForce.some((row) => row.pattern.test(summary))) return false
     if (VERIFIED_BY_HIT_TEST.some((pattern) => pattern.test(summary))) {
