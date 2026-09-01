@@ -7274,6 +7274,29 @@ The three measurements moved into `measureThreeWays` so both loops share one cop
 - **Verified on `desktop-chrome` only.** The spec sets its own viewport in every pass, so `mobile-chrome` would measure the same three CSS viewports; the device scale factor is a rendering concern and not a layout one, as the file's existing comment says.
 - Unit suite green end to end: 3916 passed, 8 skipped, reconciled to 3924. The touched e2e file: 11 passed, 0 failed. Lint and typecheck clean. No schema change, so no migration and nothing for the drift check to see.
 
+## B-247 — The menu built for a phone revealed 20px tap targets
+
+`PENDING`
+
+**What it built.** The portal nav's `Manage` `<summary>` correctly carried `min-h-11`. The six links it reveals carried only `underline underline-offset-2` — roughly 20px tall with 8px between them, on the one navigation a customer uses on a phone. B-117 moved those errands behind the disclosure *precisely because* this row is read at 360px, and the height reached the disclosure and not its contents.
+
+All **twelve** links in that nav carry `min-h-11` now, and `/portal | manage menu open` is a declared, measured and scanned state.
+
+**What it decided.**
+
+- **This is a PRD 01 §6.2 shipping-gate miss and NOT a WCAG 2.1 AA failure**, and the row said so in as many words because the reviewer was careful about it: **2.5.5 Target Size is AAA in WCAG 2.1, and 2.5.8 is WCAG 2.2.** Neither is this project's stated target. The fix is worth making because §6.2 is our own criterion for the customer site; claiming a conformance defect that does not exist would be the same overstatement this repo keeps finding on its own accessibility page, pointed the other way.
+- **Twelve links, not the six the review named.** The four top-level links, the conditional payment-plan link and `Move out` have exactly the same shape. They sit in a `flex items-center` row whose height comes from the `Manage` summary beside them, so they *look* fine and their own boxes were not. Same file, same rule, same one-word fix — fixing six of twelve would have left the row half-true and the next reviewer re-finding it.
+- **The admin side nav has the same shape and was deliberately left alone.** §6.2 is scoped to the customer site. That is desk work, and `form.tsx` already implements the split correctly by defaulting to the consumer size and letting the admin layout opt down.
+- **The state had to be declared, not just fixed.** `/portal` is in the portal route loop, but the disclosure is CLOSED there — the six links were in the accessibility tree of no scan and measured at no width. That is B-246's hole, one row later, and it is why the fix ships with a `SCANNED_STATES` entry and a `STATE_REACH` entry rather than only a class change.
+
+**One runnable check.** `e2e/portal.spec.ts`: open the menu, measure all six revealed links, assert each is at least 44px tall, then scan. The height is asserted **directly** rather than left to axe, because axe does not check a project's own shipping gate — no automated rule would have caught this, which is why it survived. **Verified by reverting one link's class and watching it fail by name:** *"Refer a friend is under the 44px §6.2 asks for."*
+
+**What it left behind.**
+
+- **Spacing is not asserted, only height.** §6.2 asks for ≥8px between targets as well; the `gap-2` on the container provides it, and nothing checks that it stays.
+- **The width half of 44×44 is untested.** Every one of these is a text link in a column, so its width is its text — "Protection" is comfortably past 44px, but a shorter label would not be, and this test would not notice.
+- **The admin nav's ~36px controls remain**, correctly per §6.2's scope, and no test records that as a deliberate choice rather than an oversight.
+
 ## B-246 — Scan contract VI: the layout half had no exception list, so "neither list" was a valid place to be
 
 `796e4bf`

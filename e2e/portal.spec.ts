@@ -361,6 +361,35 @@ test.describe('signed in as the tenant on a payment plan', () => {
     await assertNoAxeViolations(page, { state: 'payment plan card' })
   })
 
+  // B-247. The Manage disclosure, OPENED. The portal route loop scans this page
+  // with it closed, so the six links behind it were in the accessibility tree
+  // of no scan — which is how they kept a roughly 20px tap target on the one
+  // navigation a customer uses on a phone, while the `<summary>` above them
+  // correctly carried 44px.
+  //
+  // PRD 01 §6.2 (44×44px with 8px spacing), not a WCAG 2.1 AA rule: 2.5.5
+  // Target Size is AAA and 2.5.8 is WCAG 2.2. The axe scan here is for whatever
+  // else the open menu renders; the height is asserted directly, because axe
+  // does not check a project's own shipping gate.
+  //
+  // a11y-state: /portal | manage menu open
+  test('the Manage menu opens to 44px tap targets, and has no WCAG 2.1 AA violations', async ({
+    page,
+  }) => {
+    await page.goto('/portal')
+    await page.locator('summary').filter({ hasText: 'Manage' }).first().click()
+
+    const nav = page.getByRole('navigation', { name: 'Your account' })
+    const revealed = ['Move to another unit', 'Who can get in', 'Protection', 'Contact details', 'Notifications', 'Refer a friend']
+    for (const name of revealed) {
+      const box = await nav.getByRole('link', { name }).boundingBox()
+      expect(box, `${name} is not laid out`).not.toBeNull()
+      expect(box!.height, `${name} is under the 44px §6.2 asks for`).toBeGreaterThanOrEqual(44)
+    }
+
+    await assertNoAxeViolations(page, { state: 'manage menu open' })
+  })
+
   // B-245 (and test-coverage gap 3 from the same review). EVERY axe run in
   // this suite is a `goto` — a fresh document load — so a defect that only
   // exists after a CLIENT-SIDE navigation is on a surface no scan can reach.

@@ -178,6 +178,18 @@ const STATE_REACH: Record<string, { audience: Audience; go: (page: Page) => Prom
       await expect(page.getByRole('columnheader', { name: 'Left after' })).toBeVisible()
     },
   },
+  // B-247. The six errands behind `Manage`, which the portal route loop never
+  // opens — so their 44px tap targets are measured here or nowhere.
+  '/portal | manage menu open': {
+    audience: 'tenant',
+    async go(page) {
+      await page.goto('/portal')
+      await page.locator('summary').filter({ hasText: 'Manage' }).first().click()
+      await expect(
+        page.getByRole('navigation', { name: 'Your account' }).getByRole('link', { name: 'Refer a friend' }),
+      ).toBeVisible()
+    },
+  },
   // B-246. The two states B-215 left with axe and no width measurement at all,
   // and which were declared in neither list — the exact hole this row closed in
   // `SCANNED_STATES`. Both are on the tenant profile, which B-217 established

@@ -1161,6 +1161,26 @@ const LAST_REVIEWED = '19 August 2026'
 // means "what we have checked" is understated here rather than overstated,
 // which is the safe direction and the one worth naming.
 
+// Re-read 2026-09-01, at B-247 (the Manage menu's tap targets).
+// **Customer-facing, and `LAST_REVIEWED` still does not move** — because
+// nothing this page claims was re-checked and nothing it claims changed.
+//
+// The distinction the row turns on is worth keeping written down here, since
+// this is the page where overstatement costs most: a 20px tap target on the
+// portal nav is a **PRD 01 §6.2** miss and **not a WCAG 2.1 AA failure**.
+// 2.5.5 Target Size is AAA in WCAG 2.1 and 2.5.8 is WCAG 2.2, and neither is
+// what this page says we target. So there was no conformance defect to
+// disclose while it was broken, and there is no conformance improvement to
+// claim now that it is fixed — only our own gate, met.
+//
+// Also worth recording: **no automated rule would have caught this.** axe does
+// not check a project's own shipping gate, and the state was behind a closed
+// disclosure the route loop never opens, so it was in the accessibility tree
+// of no scan and measured at no width. The fix ships with a declared state and
+// a direct height assertion for that reason. Third row running where the
+// defect survived by being invisible to the tooling rather than by being
+// subtle.
+
 export default function AccessibilityPage() {
   return (
     <ProsePage

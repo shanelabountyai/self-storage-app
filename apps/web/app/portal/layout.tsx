@@ -64,22 +64,38 @@ export default async function PortalLayout({ children }: { children: React.React
               checks routinely stay one tap away; the once-a-while errands
               sit behind Manage (five since B-090 part 2); Move out is on its
               own, because it is the one irreversible destination in the
-              list and does not belong beside "check my statement." */}
+              list and does not belong beside "check my statement."
+
+              B-247. Every link here carries `min-h-11`, not just the `Manage`
+              summary. PRD 01 §6.2 asks for tap targets of at least 44×44px
+              with 8px between them on the customer site, and the six links
+              Manage REVEALS had only `underline underline-offset-2` — roughly
+              20px tall, on the phone the menu exists for. B-117 moved those
+              errands behind the disclosure precisely because this row is read
+              at 360px, and the height reached the disclosure and not its
+              contents.
+
+              **This is a §6.2 shipping-gate miss and NOT a WCAG 2.1 AA
+              failure**, and the distinction is kept deliberately: 2.5.5 Target
+              Size is AAA in WCAG 2.1 and 2.5.8 is WCAG 2.2. Nothing here
+              claims a conformance defect that does not exist. The admin side
+              nav has the same shape and is out of §6.2's scope, which is the
+              customer site — that is desk work and stays as it is. */}
           <nav aria-label="Your account" className="flex flex-wrap items-center gap-4 text-sm">
-            <Link href="/portal" className="underline underline-offset-2">
+            <Link href="/portal" className="inline-flex min-h-11 items-center underline underline-offset-2">
               Overview
             </Link>
-            <Link href="/portal/methods" className="underline underline-offset-2">
+            <Link href="/portal/methods" className="inline-flex min-h-11 items-center underline underline-offset-2">
               Payment methods
             </Link>
-            <Link href="/portal/statements" className="underline underline-offset-2">
+            <Link href="/portal/statements" className="inline-flex min-h-11 items-center underline underline-offset-2">
               Statements
             </Link>
-            <Link href="/portal/documents" className="underline underline-offset-2">
+            <Link href="/portal/documents" className="inline-flex min-h-11 items-center underline underline-offset-2">
               Documents
             </Link>
             {showPaymentPlan && (
-              <Link href="/portal/payment-plan" className="underline underline-offset-2">
+              <Link href="/portal/payment-plan" className="inline-flex min-h-11 items-center underline underline-offset-2">
                 Payment plan
               </Link>
             )}
@@ -88,28 +104,28 @@ export default async function PortalLayout({ children }: { children: React.React
                 Manage
               </summary>
               <div className="flex flex-col gap-2 pt-2">
-                <Link href="/portal/transfer" className="underline underline-offset-2">
+                <Link href="/portal/transfer" className="inline-flex min-h-11 items-center underline underline-offset-2">
                   Move to another unit
                 </Link>
-                <Link href="/portal/access" className="underline underline-offset-2">
+                <Link href="/portal/access" className="inline-flex min-h-11 items-center underline underline-offset-2">
                   Who can get in
                 </Link>
-                <Link href="/portal/protection" className="underline underline-offset-2">
+                <Link href="/portal/protection" className="inline-flex min-h-11 items-center underline underline-offset-2">
                   Protection
                 </Link>
-                <Link href="/portal/contact" className="underline underline-offset-2">
+                <Link href="/portal/contact" className="inline-flex min-h-11 items-center underline underline-offset-2">
                   Contact details
                 </Link>
-                <Link href="/portal/notifications" className="underline underline-offset-2">
+                <Link href="/portal/notifications" className="inline-flex min-h-11 items-center underline underline-offset-2">
                   Notifications
                 </Link>
-                <Link href="/portal/refer" className="underline underline-offset-2">
+                <Link href="/portal/refer" className="inline-flex min-h-11 items-center underline underline-offset-2">
                   Refer a friend
                 </Link>
               </div>
             </details>
             <span aria-hidden="true" className="border-muted-foreground/40 h-4 border-l" />
-            <Link href="/portal/move-out" className="underline underline-offset-2">
+            <Link href="/portal/move-out" className="inline-flex min-h-11 items-center underline underline-offset-2">
               Move out
             </Link>
           </nav>

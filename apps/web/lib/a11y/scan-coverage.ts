@@ -558,6 +558,16 @@ export const SCANNED_STATES: readonly ScannedState[] = [
     layoutException:
       "Same component and same wrapper as the state above, behind a per-facility disclosure.",
   },
+  // B-247. `/portal` is in the portal route loop, but the Manage disclosure is
+  // CLOSED there — so the six links it reveals were in the accessibility tree
+  // of no scan and measured at no width, which is how they kept a ~20px tap
+  // target on the one nav a customer uses on a phone.
+  {
+    route: '/portal',
+    state: 'manage menu open',
+    spec: 'e2e/portal.spec.ts',
+    layout: 'reached',
+  },
   // The READ half of the profile's plan section, and a refused submit of the
   // builder — twelve fields called "Due" and "Amount ($)", scanned until now
   // only pristine. Two tenants: the schedule needs a lease WITH a plan, and the
