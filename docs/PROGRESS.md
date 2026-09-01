@@ -7152,7 +7152,7 @@ The fix is the one the row prescribed: `activePlansFor` now runs before the hold
 
 ## B-212 — The payment-plan builder is offered where it cannot work, and where it can, it demands cent-exact arithmetic across twelve fields
 
-`PENDING`
+`14904be`
 
 **What it built.** Two halves, both about the same form on `/admin/tenants/[tenantId]`.
 
