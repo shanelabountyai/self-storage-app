@@ -7276,7 +7276,7 @@ The three measurements moved into `measureThreeWays` so both loops share one cop
 
 ## B-223 — A report's month is complete when it is complete at every facility the figures come from
 
-`PENDING`
+`a2b54f1`
 
 **What it built.** D-109 made every report default to the last **complete** calendar month, and `reportRange` took a `timeZone` to reckon that in — but **no caller could supply one**. All eleven call sites (seven screens and four CSV routes) take an actor, not a site, so every one of them fell to the UTC default. For the hours between UTC midnight and facility-local midnight on the 1st, a report opened on a month that had not ended in Texas: up to five hours, more in Alaska and Hawaii.
 
