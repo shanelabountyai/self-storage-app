@@ -7276,7 +7276,7 @@ The three measurements moved into `measureThreeWays` so both loops share one cop
 
 ## B-253 — The ordinary way to add a migration connected to shared cloud infrastructure and offered to drop it
 
-`PENDING`
+`e16bac9`
 
 **What it built.** `db:migrate` was `dotenv -e .env.local -- prisma migrate dev`, and `.env.local` is the **Neon dev branch**. So the documented way to author a migration connected to shared cloud infrastructure — and because that branch has **none of the 107 migrations applied**, `migrate dev` did not offer to add one. It announced *"We need to reset the `public` schema at ep-holy-block-axpgn0o0.c-4.us-east-2.aws.neon.tech"* and offered `migrate reset`. One keystroke, at a prompt raised by a command whose stated purpose is "add a migration".
 
