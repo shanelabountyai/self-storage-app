@@ -1121,6 +1121,24 @@ const LAST_REVIEWED = '19 August 2026'
 // is **B-250**, and the cadence that would replace it is **D-115**; neither is
 // this row's to decide.
 
+// Re-read 2026-09-01, at B-245 (nine live regions that were never status
+// messages). **Customer-facing** — seven of the nine are on `/portal`.
+//
+// **No claim on this page changes and `LAST_REVIEWED` does not move**, and the
+// reasoning is worth writing down because it cuts against the instinct. This
+// page says nothing about live regions or announcements, and that silence is
+// correct: what an inserted-already-populated region announces is precisely
+// what nobody here has measured. B-245's fix was to STOP INSERTING them rather
+// than to claim what happens when they arrive, so there is no new claim to
+// make — the surfaces simply no longer do the thing whose effect was unknown.
+//
+// Recording the shape anyway, because it is the second time in two rows that a
+// defect survived by being invisible to the tooling: every axe run in this
+// repo is a `goto`, a fresh document load, so a fault that only appears after a
+// CLIENT-SIDE navigation was on a surface no scan could reach. There is one
+// spec for that now. B-244's was the fixture gap; this one was the navigation
+// gap. Neither was a gap in the rules being checked.
+
 export default function AccessibilityPage() {
   return (
     <ProsePage

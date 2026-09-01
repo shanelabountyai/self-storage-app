@@ -182,8 +182,13 @@ const STATE_REACH: Record<string, { audience: Audience; go: (page: Page) => Prom
     audience: 'plan-tenant',
     async go(page) {
       await page.goto('/portal')
+      // B-245 removed the `role="status"` here; B-244 made each lease card a
+      // named region, which is what this reaches for now.
       await expect(
-        page.getByRole('main').getByRole('status').filter({ hasText: 'payment plan' }),
+        page
+          .getByRole('main')
+          .getByRole('region')
+          .filter({ hasText: "You're on a payment plan" }),
       ).toContainText("You're on a payment plan")
     },
   },

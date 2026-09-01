@@ -7274,6 +7274,33 @@ The three measurements moved into `measureThreeWays` so both loops share one cop
 - **Verified on `desktop-chrome` only.** The spec sets its own viewport in every pass, so `mobile-chrome` would measure the same three CSS viewports; the device scale factor is a rendering concern and not a layout one, as the file's existing comment says.
 - Unit suite green end to end: 3916 passed, 8 skipped, reconciled to 3924. The touched e2e file: 11 passed, 0 failed. Lint and typecheck clean. No schema change, so no migration and nothing for the drift check to see.
 
+## B-245 — Nine live regions that were never status messages, and the navigation no scan could see
+
+`PENDING`
+
+**What it built.** Seven regions on the portal dashboard (six `role="status"`, one `role="alert"`, plus a second alert on the autopay line — eight per lease on the two-unit case), one on `/admin/delinquency` and one on the management pack. All nine were **page content wearing a live-region role**: true when the page is drawn, unchanged while it is read, reached by heading and document position.
+
+Every one of the roles is gone. The words, the styling and the position are unchanged.
+
+**What it decided.**
+
+- **The comment defending them was right about the wrong thing.** *"The region is server-rendered and present at page load rather than inserted on change (4.1.3 AA)"* holds for a full document load and is **false for a client-side navigation**: `LeaseCard` is inside the page component, so a `<Link>` back to `/portal` unmounts and remounts the subtree and React inserts every region **already populated**, in one commit — the exact case `e2e/a11y.spec.ts` and `components/admin/form.tsx` both name as unreliable. Two of them are assertive, so on the two-unit tenant that is four assertive interruptions over whatever was being read.
+- **Removed rather than re-plumbed.** The alternative was mounting them empty at layout level and writing into them, which the reviewer offered. Nothing on these surfaces changes after load — there is no event to announce — so a live region there is machinery with no message to carry. `/portal` has no post-load state change at all, so it gets no pre-mounted region either; the `AdminForm` pattern stays where there are actually forms.
+- **No announcement is asserted and none was observed.** The B-216 standard, and the reason this row could be decided at all: the question "does an inserted region announce?" is exactly what nobody here has measured, so the fix was to stop inserting them rather than to claim what happens when they arrive.
+- **Two specs were asserting the ROLE rather than the content.** `shows the past-due banner` located the banner by `getByRole('alert')`, and both plan-card scans located the card by `getByRole('status')`. All three now find what a reader finds — the banner's own words, and the card inside the lease region B-244 named. A test that asserts a live-region role is a test that will keep a live-region role alive.
+
+**One runnable check.** `e2e/portal.spec.ts`: sign in, load `/portal/statements`, click the **`<Link>`** back to Overview, and assert no populated `[role="status"]` or `[role="alert"]` inside `<main>`. This is test-coverage gap 3 from the same review, folded in here — **every axe run in the suite is a `goto`**, a fresh document load, so this defect lived on a surface no scan in the repo could reach.
+
+**Verified against a real failing run, and the first attempt was not one.** Restoring the role on the settling-funds card passed, because that card does not render for the plan tenant — a check that cannot fail is not a check. Restoring it on the payment-plan card fails and names the text: *"You're on a payment plan. Your next payment is $107.34 on September 11."*
+
+**A trap the spec had to be written around.** Next ships its own `role="alert"` route announcer and fills it with the page title on exactly this kind of navigation. That is the framework doing its job; an unscoped query reports it as the defect. Scoped to `<main>`, the same way two existing tests already are.
+
+**What it left behind.**
+
+- **`AnnounceRegion` and `AdminForm`'s status paragraph are untouched.** Those are real status messages, pre-mounted empty and written into on change, which is the pattern this row leaves as the only one in the codebase.
+- **No screen reader has been run**, so the claim here is structural: nothing on these surfaces is inserted into a live region any more. What the old behaviour actually announced is now unmeasurable, and deliberately so.
+- **Only the surfaces the review named were swept.** A `grep` for `role="status"` across the app still returns other instances, and no test stops a new one being added to static prose.
+
 ## B-244 — The portal said what you owed before it said which unit it was about
 
 `1d87c01`

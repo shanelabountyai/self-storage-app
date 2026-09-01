@@ -113,10 +113,12 @@ test.describe('signed in as the demo tenant', () => {
 
   test('shows the past-due banner and a suspended gate-code panel, not a code', async ({ page }) => {
     await page.goto('/portal')
-    // Scoped to <main>: Next ships its own empty role="alert" route announcer
-    // in the document, and an unscoped query matches that instead (same note
-    // as e2e/admin.spec.ts's settings-error test).
-    await expect(page.getByRole('main').getByRole('alert')).toContainText('past due')
+    // B-245 took the `role="alert"` off this banner: it is page content that is
+    // true when the page is drawn, not a status message, and as a live region
+    // it was re-inserted already populated on every client-side navigation
+    // back here. So this asserts what the banner SAYS and where it sits, which
+    // is what a reader actually gets — not the role it used to wear.
+    await expect(page.getByRole('main').getByText(/account is past due/i)).toBeVisible()
     await expect(page.getByText('Access is suspended until the balance is paid')).toBeVisible()
     await expect(page.getByRole('button', { name: /show gate code/i })).toHaveCount(0)
   })
@@ -343,12 +345,62 @@ test.describe('signed in as the tenant on a payment plan', () => {
     await expect(page.getByRole('main')).toBeVisible()
 
     // The card itself, not the nav entry that shares its words.
-    const card = page.getByRole('main').getByRole('status').filter({ hasText: 'payment plan' })
+    //
+    // B-245 took the `role="status"` off this card — it was page content, not a
+    // status message, and a client-side navigation re-inserted it already
+    // populated. Located by its own text inside the lease region now, which is
+    // what a reader has to go on too.
+    const card = page
+      .getByRole('main')
+      .getByRole('region')
+      .filter({ hasText: "You're on a payment plan" })
     await expect(card).toContainText("You're on a payment plan")
     await expect(card).toContainText('Your next payment is')
     await expect(card.getByRole('link', { name: 'See the full schedule' })).toBeVisible()
 
     await assertNoAxeViolations(page, { state: 'payment plan card' })
+  })
+
+  // B-245 (and test-coverage gap 3 from the same review). EVERY axe run in
+  // this suite is a `goto` — a fresh document load — so a defect that only
+  // exists after a CLIENT-SIDE navigation is on a surface no scan can reach.
+  //
+  // What used to happen: `LeaseCard` sits inside the page component, so a
+  // `<Link>` back to `/portal` unmounted and remounted the subtree and React
+  // inserted six `role="status"` regions and up to two `role="alert"` ones
+  // ALREADY POPULATED, in one commit. On this two-unit tenant that is four
+  // assertive interruptions over whatever was being read. None of them was a
+  // status message; all of them were page content.
+  //
+  // Read-only, and it asserts on structure rather than on an announcement —
+  // what assistive technology does with an inserted region is exactly what
+  // nobody here has measured, which is why the fix was to stop inserting them.
+  test('a soft navigation back to the dashboard inserts no populated live region', async ({
+    page,
+  }) => {
+    await page.goto('/portal/statements')
+    await expect(page.getByRole('main')).toBeVisible()
+
+    // A real in-app `<Link>`, not another `goto` — a goto is a document load
+    // and would not exercise this at all.
+    await page.getByRole('navigation', { name: 'Your account' }).getByRole('link', { name: 'Overview' }).click()
+    await expect(page).toHaveURL(/\/portal$/)
+    await expect(page.getByRole('main')).toBeVisible()
+
+    // Scoped to <main>. Next ships its own `role="alert"` route announcer in
+    // the document and fills it with the page title on exactly this kind of
+    // navigation — that is the framework doing its job, and an unscoped query
+    // reports it as the defect (the same trap `admin.spec.ts`'s settings test
+    // and the past-due banner test above both name).
+    const populated = await page
+      .getByRole('main')
+      .locator('[role="status"], [role="alert"]')
+      .evaluateAll((nodes) => nodes.map((node) => (node.textContent ?? '').trim()).filter(Boolean))
+
+    expect(
+      populated,
+      'a live region that arrives already full is either silent or an interruption, and nobody knows which',
+    ).toEqual([])
   })
 
   // B-244. This tenant has TWO units (seeded so this case exists at all), and

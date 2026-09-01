@@ -88,7 +88,7 @@ function LeaseCard({ lease, impersonated }: { lease: PortalLeaseSummary; imperso
       </div>
 
       {owesMoney && lease.accessSuspended && (
-        <div role="alert" className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-pretty text-red-900">
+        <div className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-pretty text-red-900">
           <p>
             Your account is past due. Your gate code won&apos;t open the gate until the balance is
             paid. Pay your full balance of <strong>{formatRate(lease.balanceCents)}</strong> and
@@ -111,7 +111,7 @@ function LeaseCard({ lease, impersonated }: { lease: PortalLeaseSummary; imperso
           has not arrived, and subtracting it would make this screen disagree
           with the ledger and with every staff screen. */}
       {lease.settlingCents > 0 && (
-        <div role="status" className="border-input rounded-md border p-3 text-sm text-pretty">
+        <div className="border-input rounded-md border p-3 text-sm text-pretty">
           <p>
             <strong>{formatRate(lease.settlingCents)}</strong> is on its way from your bank. Bank
             payments take about four business days to clear. Your balance updates when it arrives,
@@ -120,7 +120,7 @@ function LeaseCard({ lease, impersonated }: { lease: PortalLeaseSummary; imperso
         </div>
       )}
       {owesMoney && !lease.accessSuspended && (
-        <div role="status" className="border-input rounded-md border p-3 text-sm text-pretty">
+        <div className="border-input rounded-md border p-3 text-sm text-pretty">
           <p>
             You have a balance of <strong>{formatRate(lease.balanceCents)}</strong>.
           </p>
@@ -139,7 +139,7 @@ function LeaseCard({ lease, impersonated }: { lease: PortalLeaseSummary; imperso
           question a tenant returns to answer — used to be two taps deep
           behind the "Manage" disclosure. */}
       {lease.pendingTransfer && (
-        <div role="status" className="border-input rounded-md border p-3 text-sm text-pretty">
+        <div className="border-input rounded-md border p-3 text-sm text-pretty">
           <p>
             You asked to move to <strong>Unit {lease.pendingTransfer.toUnitNumber}</strong> on{' '}
             {formatDueDate(lease.pendingTransfer.transferDate, lease.facilityTimezone)}. We&apos;re
@@ -163,10 +163,25 @@ function LeaseCard({ lease, impersonated }: { lease: PortalLeaseSummary; imperso
           one named a payment already failed on a date already gone.
 
           Everything that distinguishes the three states is a WORD (1.4.1 A);
-          nothing here is carried by colour. The region is server-rendered and
-          present at page load rather than inserted on change (4.1.3 AA). */}
+          nothing here is carried by colour.
+
+          B-245: this used to be a `role="status"`, defended by the sentence
+          "the region is server-rendered and present at page load rather than
+          inserted on change (4.1.3 AA)". That reasoning holds for a full
+          document load and is FALSE for a client-side navigation: `LeaseCard`
+          is inside the page component, so a `<Link>` back to `/portal`
+          unmounts and remounts this subtree and React inserts the region
+          ALREADY POPULATED — the one case `e2e/a11y.spec.ts` and
+          `components/admin/form.tsx` both name as unreliable, and this page
+          carried eight of them per lease, two of them assertive.
+
+          None of them was a status message. This is page content: it is true
+          when the page is drawn, it does not change while the tenant reads it,
+          and it is reached by heading and document position. That is what it
+          has now. **No announcement is asserted and none was observed** —
+          the B-216 standard. */}
       {lease.paymentPlan && (
-        <div role="status" className="border-input rounded-md border p-3 text-sm text-pretty">
+        <div className="border-input rounded-md border p-3 text-sm text-pretty">
           {lease.paymentPlan.status === 'broken' ? (
             <p>
               <strong>Your payment plan has ended</strong> because a payment was missed. The full
@@ -240,7 +255,7 @@ function LeaseCard({ lease, impersonated }: { lease: PortalLeaseSummary; imperso
         </div>
       )}
       {lease.pendingMoveOutDate && (
-        <div role="status" className="border-input rounded-md border p-3 text-sm text-pretty">
+        <div className="border-input rounded-md border p-3 text-sm text-pretty">
           <p>
             You asked to move out on{' '}
             <strong>{formatDueDate(lease.pendingMoveOutDate, lease.facilityTimezone)}</strong>.{' '}
@@ -280,7 +295,7 @@ function LeaseCard({ lease, impersonated }: { lease: PortalLeaseSummary; imperso
             </Link>
           </dd>
           {lease.autopayNeedsCard && (
-            <p role="alert" className="mt-1 text-sm text-pretty text-red-800">
+            <p className="mt-1 text-sm text-pretty text-red-800">
               No card on file — nothing will be charged automatically.
             </p>
           )}

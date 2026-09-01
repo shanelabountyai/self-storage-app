@@ -86,7 +86,10 @@ export default async function ManagementPackPage({
               ? 'mt-2 rounded-md border-2 border-amber-500 bg-amber-50 p-3 text-sm text-pretty text-amber-950'
               : 'text-muted-foreground mt-2 max-w-prose text-sm text-pretty'
           }
-          {...(pack.driftCount > 0 ? { role: 'alert' as const } : {})}
+          /* B-245: no `role="alert"`. The drift warning is the first thing on
+             the page and is read in document order; wearing an alert role made
+             it an assertive interruption every time the report was opened, for
+             prose that had not changed. */
         >
           {/* First thing on the page, never last: these numbers get quoted, and
               "can this still change?" decides whether they should be. */}

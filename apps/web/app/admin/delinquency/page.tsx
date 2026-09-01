@@ -80,7 +80,12 @@ export default async function DelinquencyQueuePage({
       {overdueCount > 0 && (
         // FR-23: never colour alone — the count is text, read from across a
         // room or by a screen reader either way.
-        <p role="alert" className="rounded-lg border-2 border-red-500 bg-red-50 p-4 text-red-950">
+        //
+        // B-245: not a live region. This is static page prose that is true when
+        // the page is drawn and does not change while it is read; `role="alert"`
+        // on it made a heading-and-position job into an assertive interruption
+        // on every navigation back to this screen.
+        <p className="rounded-lg border-2 border-red-500 bg-red-50 p-4 text-red-950">
           <span className="font-semibold">{overdueCount} overdue</span>
           <span className="mt-1 block text-sm text-pretty">
             Still open from a day that has already passed.
