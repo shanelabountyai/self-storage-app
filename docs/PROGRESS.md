@@ -7250,7 +7250,7 @@ The paragraph is now three bullets, one per path, each saying what it actually p
 
 ## B-215 — The layout loops reached routes but never states, so both customer-facing payment-plan surfaces were axe-only
 
-`PENDING`
+`00c2129`
 
 **What it built.** A `STATE_REACH` table in `e2e/a11y-own-spec-routes.spec.ts`, keyed by the same `route | state` string `SCANNED_STATES` and the coverage test already join on, plus a `plan-tenant` audience for the sign-in helper. Two entries — `/portal/payment-plan | active plan schedule` and `/portal | payment plan card` — now get the same three passes `SCANNED_BY_OWN_SPEC` routes get: 320px reflow, 200% zoom, forced text spacing, with the per-element check no containment can mask.
 
