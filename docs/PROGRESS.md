@@ -7276,7 +7276,7 @@ The three measurements moved into `measureThreeWays` so both loops share one cop
 
 ## B-219 — The document store keeps its "newest first" promise for two documents written in the same instant
 
-`PENDING`
+`32d9e30`
 
 **What it built.** `documentsFor` orders a subject's documents `createdAt desc`, and `Document.createdAt` was `@default(now())` — which Prisma fills **client-side, at millisecond precision**, and sends with the INSERT. The column's `DEFAULT` had been in the migration since B-023 and had never once been used. Two documents written back to back therefore shared an instant and the sort between them was a coin flip.
 
