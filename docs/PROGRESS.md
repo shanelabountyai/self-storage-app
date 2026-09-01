@@ -7276,7 +7276,7 @@ The three measurements moved into `measureThreeWays` so both loops share one cop
 
 ## B-247 — The menu built for a phone revealed 20px tap targets
 
-`PENDING`
+`fbd3a4f`
 
 **What it built.** The portal nav's `Manage` `<summary>` correctly carried `min-h-11`. The six links it reveals carried only `underline underline-offset-2` — roughly 20px tall with 8px between them, on the one navigation a customer uses on a phone. B-117 moved those errands behind the disclosure *precisely because* this row is read at 360px, and the height reached the disclosure and not its contents.
 
