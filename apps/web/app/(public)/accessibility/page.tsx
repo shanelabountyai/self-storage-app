@@ -998,6 +998,26 @@ const LAST_REVIEWED = '19 August 2026'
 // `LAST_REVIEWED` does not move: no claim on this page was re-checked against
 // the build, and none changed.
 
+// ── B-220 (2026-09-01) ──────────────────────────────────────────────────────
+//
+// Re-read at B-220 (the two month-turn defects in the reports section).
+// **Nothing on this page changes, and nothing on it should.** Every file the
+// item touched is under `/admin` — the report date-range parser, the management
+// pack, the gate-activity and support-session logs, the facility switcher's
+// type, and the demo seed. No public or portal route is added or altered, so
+// the generated coverage claim and both exception lists are untouched. Same
+// reasoning as the B-129, B-197 and B-216 entries above.
+//
+// One thing worth naming, because it is the kind of change that LOOKS like it
+// reaches a customer and does not: D-109 moved every report's default window to
+// the last complete calendar month, and a tenant sees no report. The one
+// customer-facing surface that renders a date range — a portal statement — goes
+// through `monthBounds` on the lease's facility, not through `reportRange`, and
+// was not touched.
+//
+// `LAST_REVIEWED` does not move: no claim on this page was re-checked against
+// the build, and none changed.
+
 export default function AccessibilityPage() {
   return (
     <ProsePage

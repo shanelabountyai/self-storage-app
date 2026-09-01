@@ -29,7 +29,8 @@ export async function GET(request: Request): Promise<Response> {
 
   const url = new URL(request.url)
   const one = (key: string): string | undefined => url.searchParams.get(key) ?? undefined
-  const range = reportRange({ from: one('from'), to: one('to') })
+  // D-109, same window as the screen it exports (US-39).
+  const range = reportRange({ from: one('from'), to: one('to') }, { window: 'rolling-30-days' })
 
   const rows = await sessionReport(actor, {
     from: range.start,

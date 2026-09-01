@@ -4,7 +4,12 @@ import type { Actor } from '@/lib/rbac/actor'
 
 export const FACILITY_COOKIE = 'storage_facility'
 
-export type SwitcherFacility = { id: string; name: string; slug: string }
+/// B-220. `timezone` (IANA, e.g. "America/Chicago") rides along because every
+/// month-boundary default on an admin screen is a facility-local question and
+/// the switcher is where a page learns which facility it is on. The management
+/// pack read `getUTCMonth()` for want of it and offered a month that had not
+/// ended locally.
+export type SwitcherFacility = { id: string; name: string; slug: string; timezone: string }
 
 /// Facilities the switcher may offer: every active facility for an
 /// all-facilities actor, or exactly the ones they're assigned to. Never wider
@@ -19,7 +24,7 @@ export async function switcherFacilities(actor: Actor): Promise<SwitcherFacility
       status: 'active',
       ...(access.all ? {} : { id: { in: access.facilityIds } }),
     },
-    select: { id: true, name: true, slug: true },
+    select: { id: true, name: true, slug: true, timezone: true },
     orderBy: { name: 'asc' },
   })
 }

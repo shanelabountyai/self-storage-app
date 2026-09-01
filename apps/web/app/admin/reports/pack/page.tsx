@@ -4,6 +4,7 @@ import { resolveSelectedFacility } from '@/lib/admin/facility-selection-logic'
 import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
 import { managementPack } from '@/lib/admin/management-pack'
 import { periodsFor } from '@/lib/admin/accounting-close'
+import { businessDateFor } from '@storage/core/jobs'
 
 export const metadata = { title: 'Management pack' }
 
@@ -19,6 +20,19 @@ export const metadata = { title: 'Management pack' }
 
 export const dynamic = 'force-dynamic'
 
+/// B-220 defect 1. `now` must already be the facility-local calendar date —
+/// `businessDateFor(new Date(), timezone)`, which returns UTC midnight of that
+/// date, so the UTC getters below read the LOCAL month.
+///
+/// It used to be handed the raw instant, and the five hours between UTC
+/// midnight and Central midnight are what that cost: at 2026-09-01T00:32Z the
+/// default was August, but in America/Chicago it was still 19:32 on 31 August
+/// and August had not ended. The page then rendered a pack for a month that was
+/// still running, under a name claiming all of it — which the comment beside
+/// `months` below forbids in as many words — and the month being shown appeared
+/// in neither the nav nor `aria-current`, because `periodsFor` filters on
+/// `.ended`, which is reckoned locally. Invisible outside those five hours,
+/// which is how it survived until a 19:32 run.
 function previousMonth(now: Date): { year: number; month: number } {
   const year = now.getUTCFullYear()
   const month = now.getUTCMonth() + 1
@@ -50,7 +64,7 @@ export default async function ManagementPackPage({
     )
   }
 
-  const fallback = previousMonth(new Date())
+  const fallback = previousMonth(businessDateFor(new Date(), selected.facility.timezone))
   const year = Number(params.year) || fallback.year
   const month = Number(params.month) || fallback.month
   const safeMonth = month >= 1 && month <= 12 ? month : fallback.month

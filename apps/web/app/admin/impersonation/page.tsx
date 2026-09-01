@@ -71,7 +71,9 @@ export default async function ImpersonationOversightPage({
     return typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
   }
 
-  const range = reportRange({ from: one('from'), to: one('to') })
+  // D-109: oversight is a LOG, not a report. A report default would have
+  // shown an owner a month that ended before the session they came to check.
+  const range = reportRange({ from: one('from'), to: one('to') }, { window: 'rolling-30-days' })
   const facilityId = one('facility')
   const subjectQuery = one('subject')
 

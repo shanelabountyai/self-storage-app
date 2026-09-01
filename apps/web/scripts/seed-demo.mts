@@ -1149,8 +1149,28 @@ async function main() {
     // One of the two periods applied: the redemption has given away half of
     // what it committed, which is what makes "still to give" a non-zero number
     // on the report instead of a column of noughts.
+    //
+    // B-220. Dated into the middle of the LAST COMPLETE calendar month, not
+    // left to `now()`. `promoRoiReport` filters on `createdAt`, and D-109 makes
+    // every report default to that month — so a redemption stamped at seed time
+    // lands in the CURRENT month and falls outside the window the report opens
+    // on, in CI as much as locally. `admin-reports.spec.ts` then fails on the
+    // "Discount given" column header, because a report with no rows renders no
+    // table at all, which reads exactly like a broken report rather than a
+    // fixture out of range.
+    //
+    // The 15th, so no timezone or month-length arithmetic can push it over a
+    // boundary. **Reseed if a month has turned since you last did** — a fixture
+    // pinned to seed time cannot follow a moving window, and the alternative
+    // (re-stamping it in `e2e/global-setup.ts`) is machinery this does not need
+    // until it bites.
+    const seededAt = new Date()
+    const lastMonth = new Date(
+      Date.UTC(seededAt.getUTCFullYear(), seededAt.getUTCMonth() - 1, 15),
+    )
     await prisma.promoRedemption.create({
       data: {
+        createdAt: lastMonth,
         promotionId: roiPromotion.id,
         facilityId: roiLease.facilityId,
         leaseId: roiLease.id,

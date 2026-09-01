@@ -5,7 +5,12 @@
 
 export const ALL_FACILITIES = 'all' as const
 
-export type SwitcherFacility = { id: string; name: string; slug: string }
+/// B-220. `timezone` (IANA, e.g. "America/Chicago") rides along because every
+/// month-boundary default on an admin screen is a facility-local question and
+/// the switcher is where a page learns which facility it is on. The management
+/// pack read `getUTCMonth()` for want of it and offered a month that had not
+/// ended locally.
+export type SwitcherFacility = { id: string; name: string; slug: string; timezone: string }
 
 export type SelectedFacility =
   | { mode: 'all' }

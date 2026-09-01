@@ -5,8 +5,8 @@ import {
 } from '../apps/web/lib/admin/facility-selection-logic'
 
 const FACILITIES: SwitcherFacility[] = [
-  { id: 'fac-a', name: 'Austin', slug: 'austin' },
-  { id: 'fac-b', name: 'Dallas', slug: 'dallas' },
+  { id: 'fac-a', name: 'Austin', slug: 'austin', timezone: 'America/Chicago' },
+  { id: 'fac-b', name: 'Dallas', slug: 'dallas', timezone: 'America/Chicago' },
 ]
 
 describe('resolveSelectedFacility', () => {

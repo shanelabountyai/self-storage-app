@@ -35,7 +35,9 @@ export default async function AccessEventsPage({
   searchParams: Promise<{ from?: string; to?: string; result?: string; flag?: string }>
 }) {
   const params = await searchParams
-  const range = reportRange(params)
+  // D-109: gate activity is a LOG, not a report — its default window ends
+  // today, because what a manager opens it for is what just happened.
+  const range = reportRange(params, { window: 'rolling-30-days' })
   const actor = await getAdminActor()
 
   if (!hasPermissionAnywhere(actor, ['access:events'])) {
