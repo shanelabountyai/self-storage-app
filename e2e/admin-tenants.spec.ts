@@ -547,21 +547,23 @@ test.describe('lien notices for a lease', () => {
   })
 })
 
-// B-199. The leases table is seven columns wide with up to four action links
-// in the last one, and it shipped with no scroll wrapper — so at 375px those
-// links sat outside the document, untappable. Six tests in this file and
-// `admin-notices` recorded it as a `mobile-chrome` flake for four items before
-// anybody looked underneath.
+// B-199, then B-217. The leases table is seven columns wide with up to four
+// action links in the last one, and it shipped with no scroll wrapper — so at
+// 375px those links sat outside the document, untappable. Six tests in this
+// file and `admin-notices` recorded it as a `mobile-chrome` flake for four
+// items before anybody looked underneath.
 //
-// Those six going green is most of the proof, but not all of it: they would
-// also pass against a `w-full` table with no `min-w`, which crushes seven
-// columns into 327px rather than overflowing. This asserts the half they
-// cannot — that the wrapper has something to scroll, and that the last
-// column's links are reachable once it does.
+// B-199 made the links reachable with a scroll wrapper and a `min-w-2xl`
+// floor, and said in its own row that whether the answer was a scroll wrapper
+// or a stacked layout was a UX call it was not making. B-217 made it: below
+// `sm` the leases render as cards, so on a phone there is no sideways scroll
+// to do. The wrapper and the floor are still there above `sm`, which is what
+// the second test pins — dropping the floor would leave the table exactly as
+// wide as the wrapper and crush seven columns rather than scroll them.
 test.describe('the leases table on a phone', () => {
   test.use({ viewport: { width: 375, height: 800 } })
 
-  test('scrolls itself rather than clipping its action links', async ({ page }) => {
+  test('renders each lease as a card rather than a sideways scroll', async ({ page }) => {
     await signInAsDemoOwner(page)
     await page.goto('/admin/tenants?q=dana@demo.example.com')
     await page.getByRole('link', { name: 'Dana Delinquent' }).click()
@@ -569,16 +571,20 @@ test.describe('the leases table on a phone', () => {
     const ledger = page.getByRole('link', { name: /^Ledger/ }).first()
     await expect(ledger).toBeVisible()
 
-    // The wrapper is a real scroll region, not a squashed table.
-    const overflows = await ledger.evaluate((el) => {
-      const wrapper = el.closest('div.overflow-x-auto')
-      if (!wrapper) return null
-      return wrapper.scrollWidth > wrapper.clientWidth
-    })
-    expect(overflows, 'the leases table has no overflow-x-auto wrapper').not.toBeNull()
-    expect(overflows, 'the wrapper does not scroll, so the columns are crushed instead').toBe(true)
+    // The visible rendering is the card list, not the table in a scroll
+    // region — `closest` returns null because the table is `display: none`
+    // here and this link is the card's.
+    const inScrollRegion = await ledger.evaluate(
+      (el) => el.closest('div.overflow-x-auto') !== null,
+    )
+    expect(inScrollRegion, 'the leases are still a sideways-scrolled table at 375px').toBe(false)
 
-    // And the document still does not scroll sideways because of it.
+    // A tap target, not a 16px text link (2.5.5).
+    const box = await ledger.boundingBox()
+    expect(box, 'the Ledger link has no box').not.toBeNull()
+    expect(box!.height).toBeGreaterThanOrEqual(44)
+
+    // And the document still does not scroll sideways.
     const documentScrolls = await page.evaluate(
       () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
     )
@@ -587,5 +593,29 @@ test.describe('the leases table on a phone', () => {
     // The click the six failing tests could not make.
     await ledger.click()
     await expect(page).toHaveURL(/\/ledger\//)
+  })
+})
+
+test.describe('the leases table on a desk', () => {
+  test.use({ viewport: { width: 1280, height: 900 } })
+
+  test('keeps the scroll wrapper and its floor above sm', async ({ page }) => {
+    await signInAsDemoOwner(page)
+    await page.goto('/admin/tenants?q=dana@demo.example.com')
+    await page.getByRole('link', { name: 'Dana Delinquent' }).click()
+
+    const ledger = page.getByRole('link', { name: /^Ledger/ }).first()
+    await expect(ledger).toBeVisible()
+
+    const floored = await ledger.evaluate((el) => {
+      const wrapper = el.closest('div.overflow-x-auto')
+      const table = wrapper?.querySelector('table')
+      if (!wrapper || !table) return null
+      // The floor is what a narrowed wrapper has to overflow. `w-full` alone
+      // would make these equal at any width.
+      return table.getBoundingClientRect().width >= 672
+    })
+    expect(floored, 'the leases table has no overflow-x-auto wrapper').not.toBeNull()
+    expect(floored, 'the min-w floor is gone, so a narrow wrapper crushes the columns').toBe(true)
   })
 })

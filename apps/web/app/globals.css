@@ -164,3 +164,32 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* B-217. Every wide table in /admin and /portal sits in a `tabIndex={0}`
+   `overflow-x-auto` region, and on macOS and iOS the overlay scrollbar is
+   invisible until something scrolls it — so the region gives no sign that
+   there is anything off to the right. The affordance a scroll region is
+   supposed to have is a scrollbar; styling it is what makes Chromium and
+   WebKit draw the classic always-visible one instead of the overlay, and it
+   still appears only when the content actually overflows.
+
+   Done here rather than per-wrapper for the reason the reduce-motion block
+   above is: there are forty of these regions and a forty-first will be added
+   without remembering. Not a background gradient — axe cannot resolve text
+   contrast over a background image and reports every cell in the region as
+   `color-contrast` incomplete, which would bury the real hand checks. */
+[tabindex="0"].overflow-x-auto {
+  scrollbar-width: thin;
+  scrollbar-color: var(--muted-foreground) var(--muted);
+}
+[tabindex="0"].overflow-x-auto::-webkit-scrollbar {
+  height: 0.5rem;
+}
+[tabindex="0"].overflow-x-auto::-webkit-scrollbar-track {
+  background: var(--muted);
+  border-radius: 0.25rem;
+}
+[tabindex="0"].overflow-x-auto::-webkit-scrollbar-thumb {
+  background: var(--muted-foreground);
+  border-radius: 0.25rem;
+}

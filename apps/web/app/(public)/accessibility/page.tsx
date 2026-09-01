@@ -1018,6 +1018,33 @@ const LAST_REVIEWED = '19 August 2026'
 // `LAST_REVIEWED` does not move: no claim on this page was re-checked against
 // the build, and none changed.
 
+// ── B-217 (2026-09-01) ─────────────────────────────────────────────────
+//
+// Re-read at B-217 (the stacked leases card and the scroll affordance).
+// **No sentence changes, and unlike B-199 this row does reach two customer
+// pages — which is why it was checked rather than waved through on "admin
+// only".** The stacked card is on the staff tenant profile and makes no claim
+// here. The scrollbar rule in `globals.css` is not scoped to `/admin`: it
+// styles every `tabIndex={0}` `overflow-x-auto` region in the product, and two
+// of them are on `/portal` (the referrals table and the notification-history
+// table). Both get a visible scrollbar where macOS and iOS previously drew an
+// overlay one that vanished, so a region a tenant could scroll now says so.
+//
+// That is an improvement to an affordance, not a new claim, and the page has
+// no sentence about scrollbars to keep true. Two things were checked before
+// leaving it alone. The thumb is `--muted-foreground` on a `--muted` track —
+// a UI component boundary under 1.4.11, and the pair clears 3:1 in both
+// themes (light 0.556 on 0.97, dark 0.708 on 0.269). And the affordance is
+// deliberately NOT a background gradient, which is the other standard answer:
+// axe cannot resolve text contrast over a background image, so a gradient on
+// the wrapper would have reported every cell inside every one of these forty
+// regions as a `color-contrast` incomplete — forty regions' worth of noise
+// burying the hand checks this page's own exception list depends on being
+// short enough to read.
+//
+// `LAST_REVIEWED` does not move: two portal regions gained an affordance, no
+// claim on this page was re-checked against the build, and none changed.
+
 export default function AccessibilityPage() {
   return (
     <ProsePage
