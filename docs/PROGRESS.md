@@ -7180,7 +7180,7 @@ The fix is the one the row prescribed: `activePlansFor` now runs before the hold
 
 ## B-213 — The builder's per-installment refusal reaches no assistive technology, and no test in the repo renders one
 
-`PENDING`
+`5af3e40`
 
 **What it built.** `FieldSet` put the group's error on the `<fieldset>` itself, as `aria-invalid` and `aria-describedby`, reasoning that both are global attributes. They are. Neither is conveyed: no shipping screen reader announces a group's description when focus lands on a control inside it, and `aria-invalid` has no mapping on role `group` at all. So B-192's headline fix — refusals reaching the field that caused them — landed **visually only**, and axe passed it, because `aria-invalid` is global in axe's model too.
 
