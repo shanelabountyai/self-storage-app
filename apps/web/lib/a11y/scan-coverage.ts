@@ -618,6 +618,21 @@ export const STATE_EXCEPTIONS: readonly StateException[] = [
     reason:
       'the schedule rows for an installment past its date — inside its grace, and past it — which need an installment that has actually gone by, and one moves on its own the moment the nightly jobs run',
   },
+  // B-215. `/admin/auctions` is in ADMIN_SCAN_ROUTES, and against demo data it
+  // renders "no sale here is ready to advertise" — the lot sheet's populated
+  // branch (the download link, the lot count, and B-205's per-lot
+  // missing-description note with its links to each case) has been rendered by
+  // no scan, and appeared in neither list while this pair claimed to name every
+  // state anybody had named. Declared rather than seeded: reaching it needs a
+  // case scheduled with a sale date that also clears every refusal the case
+  // screen applies, and the demo seed schedules no sale.
+  {
+    route: '/admin/auctions',
+    state: 'a sale ready to advertise',
+    audience: 'admin',
+    reason:
+      'the lot sheet with lots on it, which needs a scheduled sale carrying a sale date and clearing every refusal check — the demo seed schedules none',
+  },
   // B-191. The twin of the row above, and an omission B-090c left behind: the
   // dashboard has carried a payment-plan card since that item, in a state no
   // scan reached. B-196 closed the common one — "you're on a plan", with the

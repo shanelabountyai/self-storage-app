@@ -1,7 +1,14 @@
-import { expect, test, type Page } from '@playwright/test'
-import { SCANNED_BY_OWN_SPEC } from '../apps/web/lib/a11y/scan-coverage'
-import { signInAsDemoOwner, signInAsDemoTenant } from './sign-in'
-import { expectNoHorizontalOverflow, TEXT_SPACING } from './a11y-helpers'
+import { expect, test, type Page } from "@playwright/test";
+import {
+  SCANNED_BY_OWN_SPEC,
+  SCANNED_STATES,
+} from "../apps/web/lib/a11y/scan-coverage";
+import {
+  signInAsDemoOwner,
+  signInAsDemoTenant,
+  signInAsPlanTenant,
+} from "./sign-in";
+import { expectNoHorizontalOverflow, TEXT_SPACING } from "./a11y-helpers";
 
 // B-201 / PRD 02 §5.5 FR-24 (WCAG 2.1 AA, 1.4.10 Reflow, 1.4.4 Resize text,
 // 1.4.12 Text spacing).
@@ -28,47 +35,64 @@ import { expectNoHorizontalOverflow, TEXT_SPACING } from './a11y-helpers'
 // in those files because it is the thing being shared; the axe scans stay
 // where they are, beside the behaviour they were written next to.
 
-type Audience = 'admin' | 'tenant'
+type Audience = "admin" | "tenant" | "plan-tenant";
+
+async function signIn(page: Page, audience: Audience): Promise<void> {
+  if (audience === "admin") await signInAsDemoOwner(page);
+  else if (audience === "plan-tenant") await signInAsPlanTenant(page);
+  else await signInAsDemoTenant(page);
+}
 
 /// How to reach each route in `SCANNED_BY_OWN_SPEC`, keyed by the route
 /// pattern. Every entry in that list must appear here — the loop below asserts
 /// it, so a new own-spec route with no way to reach it is a failing test rather
 /// than a route that quietly drops out of three checks.
-const REACH: Record<string, { audience: Audience; go: (page: Page) => Promise<void> }> = {
-  '/portal/transfer': {
-    audience: 'tenant',
+const REACH: Record<
+  string,
+  { audience: Audience; go: (page: Page) => Promise<void> }
+> = {
+  "/portal/transfer": {
+    audience: "tenant",
     async go(page) {
-      await page.goto('/portal/transfer')
-      await expect(page.getByRole('main')).toBeVisible()
+      await page.goto("/portal/transfer");
+      await expect(page.getByRole("main")).toBeVisible();
     },
   },
-  '/portal/pay': {
-    audience: 'tenant',
+  "/portal/pay": {
+    audience: "tenant",
     async go(page) {
-      await page.goto('/portal')
-      await page.getByRole('link', { name: /pay \$.* now/i }).first().click()
-      await page.waitForURL(/\/portal\/pay\?lease=/)
-      await expect(page.getByRole('heading', { name: 'Pay your balance' })).toBeVisible()
+      await page.goto("/portal");
+      await page
+        .getByRole("link", { name: /pay \$.* now/i })
+        .first()
+        .click();
+      await page.waitForURL(/\/portal\/pay\?lease=/);
+      await expect(
+        page.getByRole("heading", { name: "Pay your balance" }),
+      ).toBeVisible();
     },
   },
-  '/admin/tenants/[tenantId]': { audience: 'admin', go: (page) => openDanasProfile(page) },
-  '/admin/tenants/[tenantId]/ledger/[leaseId]': {
-    audience: 'admin',
+  "/admin/tenants/[tenantId]": {
+    audience: "admin",
+    go: (page) => openDanasProfile(page),
+  },
+  "/admin/tenants/[tenantId]/ledger/[leaseId]": {
+    audience: "admin",
     go: (page) => fromProfile(page, /^Ledger/, /\/ledger\//),
   },
-  '/admin/tenants/[tenantId]/notices/[leaseId]': {
-    audience: 'admin',
-    go: (page) => fromProfile(page, 'Notices', /\/notices\//),
+  "/admin/tenants/[tenantId]/notices/[leaseId]": {
+    audience: "admin",
+    go: (page) => fromProfile(page, "Notices", /\/notices\//),
   },
-  '/admin/tenants/[tenantId]/move-out': {
-    audience: 'admin',
-    go: (page) => fromProfile(page, 'Move out', /\/move-out\?lease=/),
+  "/admin/tenants/[tenantId]/move-out": {
+    audience: "admin",
+    go: (page) => fromProfile(page, "Move out", /\/move-out\?lease=/),
   },
-  '/admin/tenants/[tenantId]/transfer': {
-    audience: 'admin',
-    go: (page) => fromProfile(page, 'Transfer', /\/transfer\?lease=/),
+  "/admin/tenants/[tenantId]/transfer": {
+    audience: "admin",
+    go: (page) => fromProfile(page, "Transfer", /\/transfer\?lease=/),
   },
-}
+};
 
 // dana@demo.example.com uniquely: two "Dana Delinquent" tenants exist, one per
 // demo facility, and the name alone would not tell them apart. This is the one
@@ -76,10 +100,10 @@ const REACH: Record<string, { audience: Audience; go: (page: Page) => Promise<vo
 // anything worth measuring. Read-only throughout — nothing here submits a
 // form, so none of it touches the shared fixture B-120's rule protects.
 async function openDanasProfile(page: Page): Promise<void> {
-  await page.goto('/admin/tenants?q=dana@demo.example.com')
-  await page.getByRole('link', { name: 'Dana Delinquent' }).click()
-  await page.waitForURL(/\/admin\/tenants\/[^/?]+$/)
-  await expect(page.getByRole('main')).toBeVisible()
+  await page.goto("/admin/tenants?q=dana@demo.example.com");
+  await page.getByRole("link", { name: "Dana Delinquent" }).click();
+  await page.waitForURL(/\/admin\/tenants\/[^/?]+$/);
+  await expect(page.getByRole("main")).toBeVisible();
 }
 
 /// `waitForURL`, not just a visible `<main>`: the profile's own `<main>` is
@@ -87,15 +111,47 @@ async function openDanasProfile(page: Page): Promise<void> {
 /// against the client-side transition and measure the PREVIOUS page — the
 /// mistake B-199 found in the lien-notices scan, where it presented as a
 /// finding naming nodes that do not exist on the route.
-async function fromProfile(page: Page, link: string | RegExp, url: RegExp): Promise<void> {
-  await openDanasProfile(page)
-  await page.getByRole('link', { name: link }).first().click()
-  await page.waitForURL(url)
-  await expect(page.getByRole('main')).toBeVisible()
+async function fromProfile(
+  page: Page,
+  link: string | RegExp,
+  url: RegExp,
+): Promise<void> {
+  await openDanasProfile(page);
+  await page.getByRole("link", { name: link }).first().click();
+  await page.waitForURL(url);
+  await expect(page.getByRole("main")).toBeVisible();
+}
+
+/// The three measurements, once. Reached once at the project's own viewport,
+/// then measured three times: the three are one test rather than three because
+/// the click-through is two or three page loads and the assertion is the same
+/// function each time — splitting them triples the cost of the expensive half
+/// for no information the first failure would not already have given, since all
+/// three measure the same page for the same kind of fault. The condition string
+/// is what says which pass produced a failure.
+async function measureThreeWays(page: Page, label: string): Promise<void> {
+  // 1.4.10 Reflow: 320 CSS px, the criterion's own width.
+  await page.setViewportSize({ width: 320, height: 800 });
+  await expectNoHorizontalOverflow(page, `at 320px on ${label}`);
+
+  // 1.4.4 Resize text: 640×512 is a 1280×1024 desktop at 200%. The device
+  // scale factor the static loops also set is a rendering concern, not a
+  // layout one — the CSS viewport, which is all an overflow measurement
+  // reads, is 640 either way, and it cannot be changed after the context
+  // exists anyway.
+  await page.setViewportSize({ width: 640, height: 512 });
+  await expectNoHorizontalOverflow(page, `at 200% zoom on ${label}`);
+
+  // 1.4.12 Text spacing, on the zoomed viewport it is hardest at.
+  await page.addStyleTag({ content: TEXT_SPACING });
+  await expectNoHorizontalOverflow(
+    page,
+    `under forced text spacing on ${label}`,
+  );
 }
 
 for (const { route, spec } of SCANNED_BY_OWN_SPEC) {
-  const reach = REACH[route]
+  const reach = REACH[route];
 
   test(`${route} holds its layout at 320px, 200% zoom and forced text spacing`, async ({
     page,
@@ -103,34 +159,80 @@ for (const { route, spec } of SCANNED_BY_OWN_SPEC) {
     expect(
       reach,
       `${route} is scanned by ${spec} but has no entry in REACH, so nothing checks it at 320px`,
-    ).toBeDefined()
+    ).toBeDefined();
 
-    if (reach.audience === 'admin') await signInAsDemoOwner(page)
-    else await signInAsDemoTenant(page)
+    await signIn(page, reach.audience);
+    await reach.go(page);
+    await measureThreeWays(page, route);
+  });
+}
 
-    // Reached once, at the project's own viewport, then measured three times.
-    // The three are one test rather than three because the click-through is
-    // two or three page loads and the assertion is the same function each
-    // time — splitting them triples the cost of the expensive half for no
-    // information the first failure would not already have given, since all
-    // three measure the same page for the same kind of fault. The condition
-    // string is what says which pass produced a failure.
-    await reach.go(page)
+// ── B-215: the same gap one level down ──────────────────────────────────────
+//
+// B-201 gave the three layout loops routes. `SCANNED_STATES` is the level
+// below that (B-184): a route's real markup often depends on WHO is signed in
+// or what was done on it, and those states were given to axe and to nothing
+// else. So both customer-facing payment-plan surfaces — the four-column
+// installment schedule and the dashboard plan card — had been scanned by axe
+// since B-196 and measured at no width by anything, because `portal.spec.ts`
+// runs its layout loops as Dana, who has no plan, and therefore measures
+// `/portal/payment-plan` in its EMPTY state. A four-column table of dates and
+// money on a page a tenant reads on a phone: the exact shape B-199 spent an
+// item on.
+//
+// Keyed by `route | state`, the same string `SCANNED_STATES` and the coverage
+// test already join on.
+//
+// **This table is opt-in, and the contract runs one way only.** Every key here
+// must name a real `SCANNED_STATES` entry — the loop asserts that, so a state
+// renamed out from under this file fails rather than silently measuring
+// nothing. The reverse is NOT claimed: most scanned states are reached by a
+// submit or a disclosure rather than a `goto`, and pretending this file covers
+// them would be the overstatement `scan-coverage.ts` exists to stop. What
+// belongs here is a state reachable by signing in as the right actor and going
+// to the page.
+const STATE_REACH: Record<
+  string,
+  { audience: Audience; go: (page: Page) => Promise<void> }
+> = {
+  "/portal/payment-plan | active plan schedule": {
+    audience: "plan-tenant",
+    async go(page) {
+      await page.goto("/portal/payment-plan");
+      // The TABLE, not the empty state — the same guard `portal.spec.ts` puts
+      // in front of its axe scan, and for the same reason: a layout check that
+      // passed because there was nothing on the page is the failure this
+      // closes.
+      await expect(
+        page.getByRole("columnheader", { name: "Left after" }),
+      ).toBeVisible();
+    },
+  },
+  "/portal | payment plan card": {
+    audience: "plan-tenant",
+    async go(page) {
+      await page.goto("/portal");
+      await expect(
+        page
+          .getByRole("main")
+          .getByRole("status")
+          .filter({ hasText: "payment plan" }),
+      ).toContainText("You're on a payment plan");
+    },
+  },
+};
 
-    // 1.4.10 Reflow: 320 CSS px, the criterion's own width.
-    await page.setViewportSize({ width: 320, height: 800 })
-    await expectNoHorizontalOverflow(page, `at 320px on ${route}`)
+for (const [key, reach] of Object.entries(STATE_REACH)) {
+  test(`${key} holds its layout at 320px, 200% zoom and forced text spacing`, async ({
+    page,
+  }) => {
+    expect(
+      SCANNED_STATES.map((s) => `${s.route} | ${s.state}`),
+      `${key} is not a state SCANNED_STATES lists, so this measures a state nothing else claims`,
+    ).toContain(key);
 
-    // 1.4.4 Resize text: 640×512 is a 1280×1024 desktop at 200%. The device
-    // scale factor the static loops also set is a rendering concern, not a
-    // layout one — the CSS viewport, which is all an overflow measurement
-    // reads, is 640 either way, and it cannot be changed after the context
-    // exists anyway.
-    await page.setViewportSize({ width: 640, height: 512 })
-    await expectNoHorizontalOverflow(page, `at 200% zoom on ${route}`)
-
-    // 1.4.12 Text spacing, on the zoomed viewport it is hardest at.
-    await page.addStyleTag({ content: TEXT_SPACING })
-    await expectNoHorizontalOverflow(page, `under forced text spacing on ${route}`)
-  })
+    await signIn(page, reach.audience);
+    await reach.go(page);
+    await measureThreeWays(page, key);
+  });
 }

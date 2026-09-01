@@ -1,17 +1,20 @@
-import { ProsePage, Section, metadataFor } from '@/components/site/prose-page'
-import { SITE } from '@/lib/site-config'
-import { customerFacingExceptions, customerFacingStateExceptions } from '@/lib/a11y/scan-coverage'
+import { ProsePage, Section, metadataFor } from "@/components/site/prose-page";
+import { SITE } from "@/lib/site-config";
+import {
+  customerFacingExceptions,
+  customerFacingStateExceptions,
+} from "@/lib/a11y/scan-coverage";
 
 export const metadata = metadataFor(
-  'Accessibility',
-  'Our accessibility target, what we test, and how to tell us when we get it wrong.',
-)
+  "Accessibility",
+  "Our accessibility target, what we test, and how to tell us when we get it wrong.",
+);
 
 /// The date the claims below were last checked against the build. A statement's
 /// credibility rests on the record, not the intention — an undated one is a
 /// claim about a codebase that has since moved. Update this when the claims are
 /// re-verified, not when the page is edited.
-const LAST_REVIEWED = '19 August 2026'
+const LAST_REVIEWED = "19 August 2026";
 
 // PRD 01 §6.8 requires a public accessibility statement. Unlike the legal pages
 // this describes our own conformance, so every sentence has to be true of the
@@ -898,6 +901,57 @@ const LAST_REVIEWED = '19 August 2026'
 // to match the mechanism. No claim about a page was re-checked against the
 // build.
 
+// ── B-215 (2026-09-01) ──────────────────────────────────────────────────────
+//
+// Re-read at B-215 (the layout checks reach routes but never states).
+// **Nothing on this page changes, no markup shipped, and the row's own
+// prediction of a defect was wrong — which is the part worth recording.**
+//
+// **What was actually open.** B-201 gave the 320px / 200%-zoom /
+// text-spacing loops to `SCANNED_BY_OWN_SPEC` and not to `SCANNED_STATES`.
+// `portal.spec.ts` runs its layout loops as Dana, who has no plan, so
+// `/portal/payment-plan` was measured in its EMPTY state and the plan-tenant
+// block ran axe and nothing else. Both customer-facing plan surfaces — the
+// four-column installment schedule and the dashboard plan card — had been
+// scanned since B-196 and measured at no width by anything. Same distance
+// between a general claim and its coverage the B-201 entry above names: the
+// sentence below was true of the axe scan on those two surfaces and not of
+// the width checks.
+//
+// **They are measured now, and they were already green.** A `STATE_REACH`
+// table in `e2e/a11y-own-spec-routes.spec.ts`, keyed by the same
+// `route | state` string `SCANNED_STATES` uses, reaches both by signing in as
+// the plan tenant and going to the page, then runs the same three passes.
+// **The backlog row expected a defect here and there is none**: the schedule
+// is a bare `w-full` table with no scroll wrapper, four columns of dates and
+// money, and at 320px under forced text spacing it fits. No wrapper was added
+// — `overflow-x-auto` alone does nothing (B-199), and pairing it with a
+// `min-w-` floor would MANUFACTURE a sideways scroll on a page that has none
+// today, which is worse for the tenant reading it on a phone. The measurement
+// stands in place of the prediction: with `min-w-2xl` forced onto that table
+// as a probe, the new check failed at 320px exactly as it should, so what is
+// recorded here is a check known to bite, not a green result taken on trust.
+//
+// **The contract runs one way only, and says so.** `STATE_REACH` asserts each
+// of its keys names a real `SCANNED_STATES` entry, so a renamed state fails
+// rather than quietly measuring nothing. It does NOT assert the reverse: most
+// scanned states are reached by a submit or a disclosure rather than a `goto`,
+// and claiming this file covers them would be the overstatement the two lists
+// exist to stop.
+//
+// **One admin state declared rather than left implicit.** `/admin/auctions`
+// renders "no sale here is ready to advertise" against demo data, so the lot
+// sheet's populated branch — B-129's download link and B-205's per-lot
+// missing-description note — is rendered by no scan and was in neither list.
+// It is a `STATE_EXCEPTIONS` row now, `audience: 'admin'`, so it does not
+// print on this page: a visitor is owed an honest account of the surfaces THEY
+// use, and this is not one.
+//
+// `LAST_REVIEWED` does not move: no claim about a customer page changed, and
+// the two surfaces newly measured were measured against the build rather than
+// reasoned about — but neither is named in a sentence here, so nothing below
+// was false before and nothing below becomes true now.
+
 export default function AccessibilityPage() {
   return (
     <ProsePage
@@ -906,81 +960,85 @@ export default function AccessibilityPage() {
     >
       <Section heading="What we target">
         <p>
-          Web Content Accessibility Guidelines (WCAG) 2.1, Level AA. That covers keyboard
-          operation, screen-reader support, colour contrast, text resizing, and reflow on
-          small screens.
+          Web Content Accessibility Guidelines (WCAG) 2.1, Level AA. That covers
+          keyboard operation, screen-reader support, colour contrast, text
+          resizing, and reflow on small screens.
         </p>
       </Section>
 
       <Section heading="What is true today">
         <ul className="list-disc space-y-1 pl-5">
           <li>
-            Every page on this public site works with a keyboard alone, and the focus
-            indicator meets the 3:1 contrast the guidelines ask for.
+            Every page on this public site works with a keyboard alone, and the
+            focus indicator meets the 3:1 contrast the guidelines ask for.
           </li>
           <li>
-            Colour is never the only way we tell you something — a status shown in colour
-            is also written in words.
+            Colour is never the only way we tell you something — a status shown
+            in colour is also written in words.
           </li>
           <li>
-            Text can be resized to 200% and the page reflows to 320px wide without
-            sideways scrolling.
+            Text can be resized to 200% and the page reflows to 320px wide
+            without sideways scrolling.
           </li>
           <li>Form fields have real labels, not just placeholder text.</li>
           <li>
-            When a form rejects something you typed, the message is tied to the field
-            itself, so a screen reader reads it out with that field rather than leaving you
-            to hunt for it — and what you already entered is still there, so you fix the one
-            thing we asked about rather than filling the form in again. A successful save is
-            announced too.
+            When a form rejects something you typed, the message is tied to the
+            field itself, so a screen reader reads it out with that field rather
+            than leaving you to hunt for it — and what you already entered is
+            still there, so you fix the one thing we asked about rather than
+            filling the form in again. A successful save is announced too.
           </li>
           <li>Animation respects your system&apos;s reduced-motion setting.</li>
           <li>
-            Where we show a map, the information is given as text first and the map is
-            collapsed behind a button you have to press. On a facility page that text is
-            the address and a directions link; on search results it is the list of
-            facilities itself, with distances and prices. You never need the map, and if
-            one fails to load we say so rather than leaving an empty box.
+            Where we show a map, the information is given as text first and the
+            map is collapsed behind a button you have to press. On a facility
+            page that text is the address and a directions link; on search
+            results it is the list of facilities itself, with distances and
+            prices. You never need the map, and if one fails to load we say so
+            rather than leaving an empty box.
           </li>
         </ul>
       </Section>
 
       <Section heading="How we check">
         <p>
-          Automated accessibility tests run at both phone and desktop widths on every
-          push to our main branch, and on every pull request that is open for review.
-          They are not a release gate: a failing run tells us, it does not stop the
-          deploy. A check the tool cannot decide fails the run as well, on every page in
-          it, so &ldquo;we did not test that&rdquo; never quietly reads as &ldquo;that
-          passed&rdquo;.
+          Automated accessibility tests run at both phone and desktop widths on
+          every push to our main branch, and on every pull request that is open
+          for review. They are not a release gate: a failing run tells us, it
+          does not stop the deploy. A check the tool cannot decide fails the run
+          as well, on every page in it, so &ldquo;we did not test that&rdquo;
+          never quietly reads as &ldquo;that passed&rdquo;.
         </p>
         <p>
-          A few of those undecided checks are ones we have looked at and found to be a
-          limit of the tool rather than a real problem. They are set aside in three
-          different ways, and we would rather name each than round them off:
+          A few of those undecided checks are ones we have looked at and found
+          to be a limit of the tool rather than a real problem. They are set
+          aside in three different ways, and we would rather name each than
+          round them off:
         </p>
         <ul className="list-disc space-y-1 pl-5">
           <li>
-            Some are waived only on the page they were checked on &mdash; a bar that
-            overlaps the page on purpose so it stays in reach, a striped background the
-            checker cannot see through. The same check still has to pass everywhere else.
+            Some are waived only on the page they were checked on &mdash; a bar
+            that overlaps the page on purpose so it stays in reach, a striped
+            background the checker cannot see through. The same check still has
+            to pass everywhere else.
           </li>
           <li>
-            Some are waived anywhere on the site, but only where the test itself re-checks
-            the thing that confused the tool. A cell that has scrolled out of view in a
-            wide table is one: it is set aside only where you have a scrollbar that brings
-            it back, and something genuinely painted off the edge of the screen still
-            fails.
+            Some are waived anywhere on the site, but only where the test itself
+            re-checks the thing that confused the tool. A cell that has scrolled
+            out of view in a wide table is one: it is set aside only where you
+            have a scrollbar that brings it back, and something genuinely
+            painted off the edge of the screen still fails.
           </li>
           <li>
-            Content inside a frame served by another company &mdash; the card form, the map
-            &mdash; is not checked by these tests. That is their page, not ours. A frame we
-            build ourselves is checked like anything else.
+            Content inside a frame served by another company &mdash; the card
+            form, the map &mdash; is not checked by these tests. That is their
+            page, not ours. A frame we build ourselves is checked like anything
+            else.
           </li>
         </ul>
         <p>
-          They do not yet cover everything. These are the pages outside that run, and the
-          reason each one is:
+          They do not yet cover everything. These are the pages outside that
+          run, and the reason each one is:
         </p>
         <ul className="list-disc space-y-1 pl-5">
           {customerFacingExceptions().map((exception) => (
@@ -988,75 +1046,95 @@ export default function AccessibilityPage() {
           ))}
         </ul>
         <p>
-          We would rather name each gap than let a general claim cover it. This list is
-          generated from the same file the tests read, so a page that stops being checked
-          appears here rather than quietly disappearing from both.
+          We would rather name each gap than let a general claim cover it. This
+          list is generated from the same file the tests read, so a page that
+          stops being checked appears here rather than quietly disappearing from
+          both.
         </p>
         <p>
-          That list names pages. Some screens also have states — an error message, a
-          hold that has expired, a size that sold out while you were deciding — that only
-          appear once you have done something on them. These are the ones we know are not
-          covered, and why:
+          That list names pages. Some screens also have states — an error
+          message, a hold that has expired, a size that sold out while you were
+          deciding — that only appear once you have done something on them.
+          These are the ones we know are not covered, and why:
         </p>
         <ul className="list-disc space-y-1 pl-5">
           {customerFacingStateExceptions().map((exception) => (
-            <li key={`${exception.route}-${exception.state}`}>{exception.reason}</li>
+            <li key={`${exception.route}-${exception.state}`}>
+              {exception.reason}
+            </li>
           ))}
         </ul>
         <p>
-          More states than these probably exist that we have not found and named yet —
-          unlike the page list above, this one cannot claim to be complete.
+          More states than these probably exist that we have not found and named
+          yet — unlike the page list above, this one cannot claim to be
+          complete.
         </p>
         <p>
-          Automated testing is a floor, not a ceiling — it catches roughly a third of real
-          problems, and it cannot judge whether a screen reader says something that makes
-          sense. <strong>Neither a full screen-reader pass nor a recorded keyboard pass
-          has been carried out yet</strong>, so nothing on this page rests on one.
+          Automated testing is a floor, not a ceiling — it catches roughly a
+          third of real problems, and it cannot judge whether a screen reader
+          says something that makes sense.{" "}
+          <strong>
+            Neither a full screen-reader pass nor a recorded keyboard pass has
+            been carried out yet
+          </strong>
+          , so nothing on this page rests on one.
         </p>
       </Section>
 
       <Section heading="Where we fall short today">
         <p>
-          This site is under active construction. These are the problems we know about, as
-          of {LAST_REVIEWED}. If one of them blocks you, tell us and we will help you
-          finish what you were doing by phone or email in the meantime.
+          This site is under active construction. These are the problems we know
+          about, as of {LAST_REVIEWED}. If one of them blocks you, tell us and
+          we will help you finish what you were doing by phone or email in the
+          meantime.
         </p>
         <ul className="list-disc space-y-1 pl-5">
           <li>
-            <strong>Renting online without JavaScript.</strong> The whole checkout works
-            with JavaScript turned off, but the countdown on the 30-minute hold does not:
-            it shows the time left when the page was drawn and does not tick down, so if
-            you are reading the lease when it runs out, the expiry can be the first you
-            hear of it. With JavaScript on you are warned five minutes out and can extend
-            the hold in one press.
+            <strong>Renting online without JavaScript.</strong> The whole
+            checkout works with JavaScript turned off, but the countdown on the
+            30-minute hold does not: it shows the time left when the page was
+            drawn and does not tick down, so if you are reading the lease when
+            it runs out, the expiry can be the first you hear of it. With
+            JavaScript on you are warned five minutes out and can extend the
+            hold in one press.
           </li>
           <li>
-            <strong>Our staff-facing screens</strong> have known problems. Long lists on Tasks,
-            Leads, Delinquency and Support sessions are not paginated. No customer uses them,
-            but we are not going to describe them as done.
+            <strong>Our staff-facing screens</strong> have known problems. Long
+            lists on Tasks, Leads, Delinquency and Support sessions are not
+            paginated. No customer uses them, but we are not going to describe
+            them as done.
           </li>
           <li>
-            <strong>The maps we show are not fully accessible</strong>, and they are not
-            ours to fix. A facility page embeds OpenStreetMap, whose zoom controls are
-            named &ldquo;+&rdquo; and &ldquo;&minus;&rdquo; and whose marker has no text
-            alternative. Search results can show a second map from a different provider,
-            where we control the price markers but not the tiles or the vendor&apos;s own
-            controls beneath them; we have not yet assessed that one against a live map,
-            so nothing here rests on it. Both stay collapsed behind a button, and neither
-            is ever the only way to get the information.
+            <strong>The maps we show are not fully accessible</strong>, and they
+            are not ours to fix. A facility page embeds OpenStreetMap, whose
+            zoom controls are named &ldquo;+&rdquo; and &ldquo;&minus;&rdquo;
+            and whose marker has no text alternative. Search results can show a
+            second map from a different provider, where we control the price
+            markers but not the tiles or the vendor&apos;s own controls beneath
+            them; we have not yet assessed that one against a live map, so
+            nothing here rests on it. Both stay collapsed behind a button, and
+            neither is ever the only way to get the information.
           </li>
         </ul>
-        <p className="text-muted-foreground text-sm">Last reviewed: {LAST_REVIEWED}.</p>
+        <p className="text-muted-foreground text-sm">
+          Last reviewed: {LAST_REVIEWED}.
+        </p>
       </Section>
 
       <Section heading="Tell us when we get it wrong">
         <p>
-          If something here blocks you, email{' '}
-          <a href={`mailto:${SITE.supportEmail}`} className="underline underline-offset-4">
+          If something here blocks you, email{" "}
+          <a
+            href={`mailto:${SITE.supportEmail}`}
+            className="underline underline-offset-4"
+          >
             {SITE.supportEmail}
-          </a>{' '}
-          or call{' '}
-          <a href={`tel:${SITE.phone.href}`} className="underline underline-offset-4">
+          </a>{" "}
+          or call{" "}
+          <a
+            href={`tel:${SITE.phone.href}`}
+            className="underline underline-offset-4"
+          >
             {SITE.phone.display}
           </a>
           . Tell us the page and what happened, and we will fix it and reply. An
@@ -1064,5 +1142,5 @@ export default function AccessibilityPage() {
         </p>
       </Section>
     </ProsePage>
-  )
+  );
 }
