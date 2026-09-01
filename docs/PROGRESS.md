@@ -7276,7 +7276,7 @@ The three measurements moved into `measureThreeWays` so both loops share one cop
 
 ## B-252 — Two unit tests that failed permanently from 12:00 CDT today, and only one of them was a defect
 
-`PENDING`
+`1bf0b50`
 
 **What it built.** `tests/portal-dashboard.test.ts:190` hardcoded `const expiresAt = new Date(Date.UTC(2026, 8, 1, 17, 0))` and handed it to a `reservation.create`. `reservation` carries a `reservation_expires_after_creation` check constraint, and that compares `expiresAt` against the row's own `createdAt` — the **database's** clock. The literal was in the future when it was written and stopped being so at 12:00 CDT on 2026-09-01, at which point every row the test wrote violated the constraint. Not intermittently: permanently, from that instant on.
 
