@@ -7276,7 +7276,7 @@ The three measurements moved into `measureThreeWays` so both loops share one cop
 
 ## B-216 — The aging report attached its facility name with `scope="rowgroup"`, which no screen reader implements
 
-`PENDING`
+`74bc47e`
 
 **What it built.** `ArAgingSplitTable` gave every facility's three rows — being chased, halted, total — one `<th scope="rowgroup" rowSpan={3}>` carrying the facility name. `rowgroup` is in the HTML spec and is implemented by none of NVDA, JAWS or VoiceOver, so each row of figures had no header naming whose money it was.
 
