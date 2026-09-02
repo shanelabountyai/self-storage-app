@@ -7929,7 +7929,7 @@ The reports were deliberately not touched, per the row: eight columns of figures
 
 ## B-230 — The counter takes a card, a walk-in move-in takes cash, and a counter rental stops reporting as a web rental
 
-`PENDING`
+`8221ee5`
 
 Three defects on one code path, and the fix is the tender step each of them was missing.
 
