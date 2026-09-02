@@ -1420,6 +1420,47 @@ const LAST_REVIEWED = '19 August 2026'
 // client transition. The accessible name it was asserting was correct all
 // along; only the locator was wrong.
 
+// Re-read 2026-09-02, at B-232 (the portal says what the balance is FOR, and
+// what paying it buys). **Customer-facing**, on `/portal/pay`, `/portal` and
+// `/portal/statements`. No public route added, so the generated coverage claim
+// and the route-keyed exception list are untouched, and no claim on this page
+// changed in either direction — but three of the row's acceptance criteria were
+// accessibility ones and are worth recording as built rather than promised.
+//
+// **(1) The itemisation is a real `<table>` with column headers** (1.3.1), not a
+// row of flex divs that happen to line up. The association between "Late fee,
+// assessed 11 August" and "$20.00" has to survive being read one cell at a
+// time, and a visual list gives a screen-reader user the amounts as a bare
+// column of numbers. `<th scope="row">` on the Balance and Paying-today rows in
+// the `<tfoot>`, for the same reason. It sits in an `overflow-x-auto` wrapper,
+// which is exactly the scrollbar case the "wide table" bullet above already
+// describes — the cell is reachable, not painted off the edge.
+//
+// **(2) The live consequence region pre-exists its message** (4.1.3). "Pay a
+// different amount" now says what the entered figure does to gate access, and
+// the `role="status"` paragraph renders unconditionally and empty rather than
+// being inserted when there is something to announce — the failure mode this
+// file has recorded since B-105 and `AdminForm` states for every admin form.
+// It carries B-248's 700ms settle for B-248's reason: typing "437.50" mutates
+// the sentence six times, and a polite region does not coalesce those.
+//
+// **(3) The phone number for a disputable charge is on that charge's line**
+// (2.4.4), not only at the foot of the page. A tenant who thinks a late fee is
+// wrong should not have to scroll past the pay button to find out who to ask.
+// `/portal/statements`'s rows gained their closing balance in the same item,
+// which incidentally retires twelve identical "View" links — the least useful
+// accessible name a list of months can offer.
+//
+// `/portal/pay`, `/portal` and `/portal/statements` are all already in the
+// portal scan (`e2e/portal.spec.ts`, `PORTAL_ROUTES`), so all three keep their
+// axe pass plus the 320px, 200%-zoom and text-spacing passes; the new e2e
+// asserts the table's headers by role and the status region by role rather than
+// by class, so a regression to divs fails the suite rather than the scan.
+//
+// **`LAST_REVIEWED` is not bumped**, per the rule the B-150 entry states: this
+// is three screens re-checked and one new pattern scanned, not a re-review of
+// the page's claims, and no screen-reader pass was recorded.
+
 export default function AccessibilityPage() {
   return (
     <ProsePage

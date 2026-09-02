@@ -53,6 +53,15 @@ export type PortalLeaseSummary = {
   /// billing day. Autopay needs both halves (see Lease.autopayEnabled).
   autopayNeedsCard: boolean
   accessSuspended: boolean
+  /// B-232. What this tenant owes across every occupying lease at THIS
+  /// facility, and the facility's own restore threshold — the two inputs the
+  /// gate rule actually uses (`gateDecision` via `tenantStates`). The banner
+  /// hardcoded *"Pay your full balance of $X"*, which was one lease's balance
+  /// measured against D-16's default rather than the facility's setting, and
+  /// therefore wrong in both directions at once. `restoreShortfallCents` turns
+  /// the pair into the number to say.
+  facilityBalanceCents: number
+  restoreAtOrBelowCents: number
   gateCode: string | null
   /// B-103. A bank payment taken but not yet settled, in cents.
   ///
@@ -135,6 +144,7 @@ export async function portalDashboardForTenant(
             name: true,
             phone: true,
             timezone: true,
+            accessRestoreAtOrBelowCents: true,
             // B-227. Rent is taxable; the figure is wrong without these.
             taxComponents: { select: { jurisdiction: true, rateBasisPoints: true } },
           },
@@ -143,6 +153,19 @@ export async function portalDashboardForTenant(
       },
     }),
   ])
+
+  // B-232. One grouped read for the facility-wide figure the gate rule uses,
+  // rather than a second aggregate per lease inside the map — a tenant with two
+  // units at one site needs the SUM, and the banner was showing one unit's.
+  const facilityBalances = new Map<string, number>()
+  if (leases.length > 0) {
+    const totals = await prisma.ledgerEntry.groupBy({
+      by: ['facilityId'],
+      where: { leaseId: { in: leases.map((lease) => lease.id) } },
+      _sum: { amountCents: true },
+    })
+    for (const row of totals) facilityBalances.set(row.facilityId, row._sum.amountCents ?? 0)
+  }
 
   return Promise.all(
     leases.map(async (lease) => {
@@ -196,6 +219,8 @@ export async function portalDashboardForTenant(
         autopayEnabled: lease.autopayEnabled,
         autopayNeedsCard: lease.autopayEnabled && !tenant.stripeDefaultPaymentMethodId,
         accessSuspended: grant?.state === 'suspended',
+        facilityBalanceCents: facilityBalances.get(lease.facilityId) ?? 0,
+        restoreAtOrBelowCents: lease.facility.accessRestoreAtOrBelowCents,
         gateCode,
         settlingCents: settling._sum.amountCents ?? 0,
         pendingMoveOutDate: lease.moveOutDate,

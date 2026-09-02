@@ -85,6 +85,21 @@ export type PayableLease = {
   /// B-225. What a month costs, so a prepayment ceiling can be stated in months
   /// rather than as a bare number of dollars nobody can justify.
   monthlyRateCents: number
+  /// B-232. Ledger entries are instants; the day one happened on is a
+  /// facility-local day, and the itemisation names those days.
+  facilityTimezone: string
+  /// B-232. What this tenant owes across EVERY occupying lease at this
+  /// facility — which is the figure the gate rule actually reads
+  /// (`tenantStates`), because a grant cannot be partially suspended. Usually
+  /// equal to `balanceCents`; different, and load-bearing, for a tenant with
+  /// two units.
+  facilityBalanceCents: number
+  /// B-232. `Facility.accessRestoreAtOrBelowCents`. Zero is D-16's default, not
+  /// the rule — the portal used to restate the default as though it were.
+  restoreAtOrBelowCents: number
+  /// B-232. Whether the gate is actually shut right now. The consequence
+  /// sentence is only true, and only wanted, when it is.
+  accessSuspended: boolean
 }
 
 /// B-225. How far past the balance a tenant may pay from the portal.
@@ -110,17 +125,42 @@ export async function payableLease(tenantId: string, leaseId: string): Promise<P
     select: {
       id: true,
       facilityId: true,
-      facility: { select: { name: true, phone: true } },
+      facility: {
+        select: {
+          name: true,
+          phone: true,
+          timezone: true,
+          accessRestoreAtOrBelowCents: true,
+        },
+      },
       unit: { select: { number: true } },
       monthlyRateCents: true,
     },
   })
   if (!lease) return null
 
-  const balance = await prisma.ledgerEntry.aggregate({
-    where: { leaseId: lease.id },
-    _sum: { amountCents: true },
-  })
+  // B-232. Every occupying lease this tenant holds AT THIS FACILITY, in one
+  // grouped read — this lease's balance and the facility-wide one the gate rule
+  // reads come out of the same rows, so they cannot be two numbers that drift.
+  const [balances, grant] = await Promise.all([
+    prisma.ledgerEntry.groupBy({
+      by: ['leaseId'],
+      where: {
+        lease: {
+          tenantId,
+          facilityId: lease.facilityId,
+          status: { in: [...OCCUPYING_LEASE_STATUSES] },
+        },
+      },
+      _sum: { amountCents: true },
+    }),
+    prisma.accessGrant.findUnique({
+      where: { facilityId_tenantId: { facilityId: lease.facilityId, tenantId } },
+      select: { state: true },
+    }),
+  ])
+
+  const byLease = new Map(balances.map((row) => [row.leaseId, row._sum.amountCents ?? 0]))
 
   return {
     leaseId: lease.id,
@@ -128,8 +168,12 @@ export async function payableLease(tenantId: string, leaseId: string): Promise<P
     facilityName: lease.facility.name,
     facilityPhone: lease.facility.phone,
     unitNumber: lease.unit.number,
-    balanceCents: balance._sum.amountCents ?? 0,
+    balanceCents: byLease.get(lease.id) ?? 0,
     monthlyRateCents: lease.monthlyRateCents,
+    facilityTimezone: lease.facility.timezone,
+    facilityBalanceCents: [...byLease.values()].reduce((sum, cents) => sum + cents, 0),
+    restoreAtOrBelowCents: lease.facility.accessRestoreAtOrBelowCents,
+    accessSuspended: grant?.state === 'suspended',
   }
 }
 

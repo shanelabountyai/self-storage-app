@@ -135,6 +135,43 @@ test.describe('signed in as the demo tenant', () => {
     await expect(page.getByText('Paying today')).toBeVisible()
   })
 
+  // B-232. The screen asked for money with a bare total on it, and said nothing
+  // about what a partial payment does to the gate. Reads only — nothing is
+  // filled and nothing is submitted, so it is safe against the shared demo
+  // database however many times it runs (B-120).
+  test('itemises the balance and says what paying it buys', async ({ page }) => {
+    await page.goto('/portal')
+    await page.getByRole('link', { name: /pay \$.* now/i }).first().click()
+    await expect(page).toHaveURL(/\/portal\/pay\?lease=/)
+
+    // A real table with column headers, not a visual list (1.3.1): the tie
+    // between a line and its amount has to survive being read one cell at a
+    // time.
+    const bill = page.getByRole('table', { name: /what you owe on unit/i })
+    await expect(bill.getByRole('columnheader', { name: 'What' })).toBeVisible()
+    await expect(bill.getByRole('columnheader', { name: 'Amount' })).toBeVisible()
+    // The demo tenant is months behind, so there is more than one line and the
+    // itemisation is not a restatement of the total.
+    await expect(bill.getByRole('row').filter({ hasText: 'Monthly rent' })).not.toHaveCount(0)
+    await expect(bill.getByRole('row').filter({ hasText: 'Paying today' })).toHaveCount(1)
+
+    // D-16's consequence, stated before the control that takes the money. This
+    // tenant's gate IS suspended — the dashboard test above asserts the same
+    // state from the other side.
+    await expect(
+      page.getByRole('main').getByText(/gate code is switched off/i),
+    ).toBeVisible()
+
+    // And the live one, inside "Pay a different amount", present before input
+    // (4.1.3) rather than inserted with the message.
+    await page.getByRole('group').filter({ hasText: 'Pay a different amount' }).click()
+    const amount = page.getByLabel('Amount in dollars')
+    await amount.fill('1.00')
+    await expect(
+      page.getByRole('status').filter({ hasText: 'will not reopen your gate' }),
+    ).toBeVisible({ timeout: 5_000 })
+  })
+
   test('the pay screen refuses a lease that is not on this account', async ({ page }) => {
     // The lease id is in the URL, so this is the check that matters.
     await page.goto('/portal/pay?lease=not-this-tenants-lease')

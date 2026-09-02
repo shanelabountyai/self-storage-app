@@ -205,7 +205,7 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
       '',
       'Your belongings are safe and nothing has been sold or moved.',
       '',
-      'Paying the balance of {{balance.total}} turns your code back on automatically, usually within a couple of minutes: {{links.pay_now}}',
+      'Paying {{access.restore_amount}} turns your code back on automatically, usually within a couple of minutes: {{links.pay_now}}',
       '',
       'If that is wrong, or you need to reach your unit urgently, call {{facility.phone}} and we will sort it out.',
     ].join('\n'),
@@ -214,7 +214,14 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
       'unit.number',
       'facility.name',
       'access.days_past_due',
-      'balance.total',
+      // B-232 / D-16. NOT `balance.total`. What reopens the gate is the
+      // tenant's balance across every unit at this facility, less the
+      // facility's own `accessRestoreAtOrBelowCents` — and this said "pay the
+      // balance" while the rule read a different number. `restoreShortfallCents`
+      // is shared with the portal screen and the dashboard banner, so the three
+      // cannot name different figures. Where the threshold is 0 and the tenant
+      // has one unit — every facility today — it is the same amount as before.
+      'access.restore_amount',
       'links.pay_now',
       'facility.phone',
     ],
@@ -226,12 +233,12 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
     classification: 'transactional',
     channel: 'sms',
     bodyText:
-      '{{facility.name}}: gate access for unit {{unit.number}} is paused, {{access.days_past_due}} days past due. Pay {{balance.total}} to restore it: {{links.pay_now}}',
+      '{{facility.name}}: gate access for unit {{unit.number}} is paused, {{access.days_past_due}} days past due. Pay {{access.restore_amount}} to restore it: {{links.pay_now}}',
     requiredMergeFields: [
       'unit.number',
       'facility.name',
       'access.days_past_due',
-      'balance.total',
+      'access.restore_amount',
       'links.pay_now',
     ],
   },

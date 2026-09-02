@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { describeRestore, describeSuspension, gateDecision } from '../packages/core/access'
+import {
+  describeRestore,
+  describeSuspension,
+  gateDecision,
+  restoreShortfallCents,
+  wouldRestoreAccess,
+} from '../packages/core/access'
 
 // PRD 02 §4.6 US-45, decided as D-16 (B-098). The decision that locks a paying
 // customer out of their own property, or lets them back in.
@@ -129,5 +135,76 @@ describe('the sentence a person reads', () => {
     expect(describeRestore(new Date('2026-07-20T00:00:00.000Z'))).toBe(
       'Access restored, balance paid, 2026-07-20',
     )
+  })
+})
+
+// B-232 / D-16. The number the portal, the dashboard banner and the suspension
+// notice all say. Three places used to restate the DEFAULT threshold of zero as
+// though it were the rule, on ONE lease's balance.
+describe('restoreShortfallCents', () => {
+  it('is the whole balance where the threshold is D-16\'s default of zero', () => {
+    expect(
+      restoreShortfallCents({ facilityBalanceCents: 48_750, restoreAtOrBelowCents: 0 }),
+    ).toBe(48_750)
+  })
+
+  it('is what a relaxed threshold actually asks for, not the balance', () => {
+    // The defect in one line: a site that set $50 was demanding $487.50 for
+    // what $437.50 buys.
+    expect(
+      restoreShortfallCents({ facilityBalanceCents: 48_750, restoreAtOrBelowCents: 5_000 }),
+    ).toBe(43_750)
+  })
+
+  it('is never negative — at or below the threshold there is nothing left to pay', () => {
+    expect(
+      restoreShortfallCents({ facilityBalanceCents: 2_000, restoreAtOrBelowCents: 5_000 }),
+    ).toBe(0)
+    expect(
+      restoreShortfallCents({ facilityBalanceCents: -1_000, restoreAtOrBelowCents: 0 }),
+    ).toBe(0)
+  })
+
+  it('agrees with gateDecision at the boundary, in both directions', () => {
+    // The two must never disagree: this is the figure a tenant is TOLD will
+    // reopen the gate, and `gateDecision` is what actually reopens it.
+    const restoreAtOrBelowCents = 5_000
+    for (const facilityBalanceCents of [4_999, 5_000, 5_001]) {
+      const shortfall = restoreShortfallCents({ facilityBalanceCents, restoreAtOrBelowCents })
+      const after = facilityBalanceCents - shortfall
+      expect(
+        gateDecision({
+          state: 'suspended',
+          daysPastDue: 20,
+          balanceCents: after,
+          suspendAtDays: 6,
+          restoreAtOrBelowCents,
+          onHold: false,
+        }),
+      ).toEqual({ action: 'restore' })
+    }
+  })
+})
+
+describe('wouldRestoreAccess', () => {
+  it('says no to the partial payment that leaves the gate shut', () => {
+    // The wasted trip, and the angriest call the office takes.
+    expect(
+      wouldRestoreAccess({
+        facilityBalanceCents: 48_750,
+        restoreAtOrBelowCents: 5_000,
+        payingCents: 10_000,
+      }),
+    ).toBe(false)
+  })
+
+  it('says yes at exactly the shortfall, not only above it', () => {
+    expect(
+      wouldRestoreAccess({
+        facilityBalanceCents: 48_750,
+        restoreAtOrBelowCents: 5_000,
+        payingCents: 43_750,
+      }),
+    ).toBe(true)
   })
 })

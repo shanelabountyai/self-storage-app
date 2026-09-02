@@ -9,9 +9,12 @@ import {
   prepayCeilingFor,
   type AmountProblem,
 } from '@/lib/portal/payment'
-import { formatRate } from '@/lib/format'
+import { balanceBreakdownFor, reconciles } from '@/lib/portal/balance-breakdown'
+import { restoreShortfallCents } from '@storage/core/access'
+import { formatCents, formatRate } from '@/lib/format'
 import { SITE } from '@/lib/site-config'
 import { PortalPayment } from '@/components/portal/portal-payment'
+import { PayAmountForm } from '@/components/portal/pay-amount-form'
 
 export const metadata: Metadata = { title: 'Pay your balance' }
 
@@ -102,7 +105,21 @@ export default async function PortalPayPage({
     prepayCeilingFor(lease),
   )
   const amountCents = checked.ok ? checked.amountCents : lease.balanceCents
-  const setup = await startPortalPayment(actor.tenantId, lease, amountCents)
+  const [setup, breakdown] = await Promise.all([
+    startPortalPayment(actor.tenantId, lease, amountCents),
+    balanceBreakdownFor(lease.leaseId, lease.facilityTimezone),
+  ])
+
+  // B-232. The itemisation comes off the same ledger read as the total, so this
+  // holds by construction. It is checked anyway, and the lines are dropped
+  // rather than shown if it fails: a bill that does not add up, on the screen
+  // that then asks for the money, is worse than the bare total this replaced.
+  const itemised = reconciles(breakdown, lease.balanceCents) ? breakdown.lines : []
+  const shortfallCents = restoreShortfallCents({
+    facilityBalanceCents: lease.facilityBalanceCents,
+    restoreAtOrBelowCents: lease.restoreAtOrBelowCents,
+  })
+  const telHref = `tel:${phone.replace(/[^0-9+]/g, '')}`
 
   return (
     <div className="flex flex-col gap-6">
@@ -114,17 +131,109 @@ export default async function PortalPayPage({
       </div>
 
       {/* 3.3.4 Error Prevention (Financial): what is being charged, stated
-          before the control that charges it. */}
-      <dl className="border-input rounded-lg border p-4 text-sm">
-        <div className="flex justify-between gap-4">
-          <dt>Balance</dt>
-          <dd className="tabular-nums">{formatRate(lease.balanceCents)}</dd>
-        </div>
-        <div className="mt-2 flex justify-between gap-4 border-t pt-2 text-base font-medium">
-          <dt>Paying today</dt>
-          <dd className="tabular-nums">{formatRate(amountCents)}</dd>
-        </div>
-      </dl>
+          before the control that charges it — and since B-232, what it is FOR.
+          A real table with column headers rather than a visual list of rows
+          (1.3.1): the association between "Late fee, assessed 6 October" and
+          "$20.00" has to survive being read one cell at a time.
+
+          `formatCents` here, not `formatRate`: this is a bill, and a column of
+          figures in which one reads "$129" and the next "$20.00" is harder to
+          check than one where every row carries its cents. */}
+      <div className="border-input overflow-x-auto rounded-lg border">
+        <table className="w-full text-sm">
+          <caption className="px-4 pt-4 text-left font-medium">
+            What you owe on unit {lease.unitNumber}
+          </caption>
+          <thead>
+            <tr className="text-left">
+              <th scope="col" className="px-4 py-2 font-medium">
+                What
+              </th>
+              <th scope="col" className="px-4 py-2 font-medium">
+                When
+              </th>
+              <th scope="col" className="px-4 py-2 text-right font-medium">
+                Amount
+              </th>
+            </tr>
+          </thead>
+          {itemised.length > 0 && (
+            <tbody>
+              {itemised.map((line, index) => (
+                <tr key={`${line.label}-${index}`} className="border-t">
+                  <td className="px-4 py-2">
+                    {line.label}
+                    {/* 2.4.4. The number to call about THIS charge, on the line
+                        that carries it. A tenant who thinks a late fee is wrong
+                        should not have to scroll past the pay button to find
+                        out who to ask. */}
+                    {line.disputable && (
+                      <>
+                        {' '}
+                        <a
+                          href={telHref}
+                          className="text-muted-foreground whitespace-nowrap underline underline-offset-4"
+                        >
+                          Query this — {phone}
+                        </a>
+                      </>
+                    )}
+                  </td>
+                  <td className="text-muted-foreground px-4 py-2 whitespace-nowrap">{line.on}</td>
+                  <td className="px-4 py-2 text-right tabular-nums">
+                    {formatCents(line.amountCents)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          )}
+          <tfoot>
+            <tr className="border-t">
+              <th scope="row" colSpan={2} className="px-4 py-2 text-left font-medium">
+                Balance
+              </th>
+              <td className="px-4 py-2 text-right font-medium tabular-nums">
+                {formatCents(lease.balanceCents)}
+              </td>
+            </tr>
+            <tr className="border-t">
+              <th scope="row" colSpan={2} className="px-4 py-2 pb-4 text-left text-base font-medium">
+                Paying today
+              </th>
+              <td className="px-4 py-2 pb-4 text-right text-base font-medium tabular-nums">
+                {formatCents(amountCents)}
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      {/* B-232 / D-16. What paying this buys, on the screen where the amount is
+          chosen. Not a live region: it is server-rendered and present at load,
+          so it needs no announcement — the one that CHANGES as somebody types
+          is inside "Pay a different amount" below.
+
+          `shortfallCents` is the facility-wide figure the gate rule actually
+          reads, minus the facility's own restore threshold. Both were absent
+          here: the portal restated D-16's DEFAULT of zero as though it were the
+          rule, and read one lease's balance for a decision made across all of
+          them. */}
+      {lease.accessSuspended && (
+        <p className="border-input rounded-lg border p-4 text-sm text-pretty">
+          Your gate code is switched off.{' '}
+          {amountCents >= shortfallCents ? (
+            <>
+              Paying <strong>{formatCents(amountCents)}</strong> turns it back on, usually
+              within a couple of minutes.
+            </>
+          ) : (
+            <>
+              <strong>{formatCents(shortfallCents)}</strong> turns it back on — paying{' '}
+              {formatCents(amountCents)} leaves it switched off.
+            </>
+          )}
+        </p>
+      )}
 
       {!checked.ok && checked.problem !== 'nothing_owed' && (
         <p role="alert" className="border-input rounded-md border p-3 text-sm text-pretty">
@@ -134,25 +243,13 @@ export default async function PortalPayPage({
 
       <details className="border-input rounded-lg border p-4" open={Boolean(amount) && !checked.ok}>
         <summary className="cursor-pointer text-sm font-medium">Pay a different amount</summary>
-        <form method="GET" className="mt-3 flex flex-col gap-3">
-          <input type="hidden" name="lease" value={lease.leaseId} />
-          <label className="flex flex-col gap-1 text-sm">
-            Amount in dollars
-            <input
-              name="amount"
-              type="text"
-              inputMode="decimal"
-              defaultValue={(amountCents / 100).toFixed(2)}
-              className="border-input bg-background h-9 rounded-md border px-2"
-            />
-          </label>
-          <button
-            type="submit"
-            className="border-input hover:bg-accent inline-flex min-h-11 items-center justify-center rounded-md border px-4 text-sm font-medium"
-          >
-            Update amount
-          </button>
-        </form>
+        <PayAmountForm
+          leaseId={lease.leaseId}
+          amountCents={amountCents}
+          facilityBalanceCents={lease.facilityBalanceCents}
+          restoreAtOrBelowCents={lease.restoreAtOrBelowCents}
+          accessSuspended={lease.accessSuspended}
+        />
       </details>
 
       <section aria-labelledby="card-heading">

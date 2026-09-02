@@ -12,6 +12,8 @@ import { mintPayLink, payLinkUrl } from '@/lib/portal/pay-links'
 import { leaseHasEffect } from '@/lib/admin/holds'
 import { REFERRAL_REFUSAL_MESSAGES, type ReferralRefusal } from '@storage/core/referrals'
 import { daysPastDue } from '@storage/core/metrics'
+import { restoreShortfallCents } from '@storage/core/access'
+import { OCCUPYING_LEASE_STATUSES } from '@storage/core/inventory'
 import { isAutoCollecting } from '@storage/core/payment-plans'
 import { formatCalendarDate, formatCents } from '@/lib/format'
 import { facilityPath } from '@/lib/facility/public-facility'
@@ -757,6 +759,7 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
     return {
       'access.days_past_due': String(daysPastDue(invoices, new Date())),
       'balance.total': formatCents(await leaseBalanceCents(recipient.lease?.id ?? null)),
+      'access.restore_amount': formatCents(await restoreAmountCents(recipient)),
       'links.pay_now': await payNowLink(recipient, event),
     }
   },
@@ -1272,6 +1275,56 @@ function graceLine(graceDays: number, message: 'agreed' | 'due_soon'): string {
 
 /// What the lease owes right now, from the ledger — PRD 01 §7.3 makes the
 /// ledger the source of truth for balance, not a sum of invoice remainders.
+/// B-232 / D-16. What still has to be paid before the gate reopens.
+///
+/// The suspension notice said *"Paying the balance of {{balance.total}} turns
+/// your code back on"*, which is the same sentence the portal had and wrong the
+/// same two ways: one LEASE's balance, measured against D-16's DEFAULT
+/// threshold of zero rather than the facility's own setting. The gate rule
+/// (`gateDecision`, fed by `tenantStates`) sums every occupying lease the
+/// tenant holds at the facility and compares it to
+/// `Facility.accessRestoreAtOrBelowCents`, because a grant cannot be partially
+/// suspended.
+///
+/// `restoreShortfallCents` is the same function the portal screen and the
+/// dashboard banner call, so the message and the screen cannot name different
+/// numbers — which is what B-232's row asks for by "the same sentence".
+///
+/// Falls back to the lease balance when there is no tenant or facility on the
+/// recipient: it is the figure this always quoted, so an unusual recipient gets
+/// the old behaviour rather than a zero that would read as "nothing to pay".
+async function restoreAmountCents(recipient: {
+  tenantId: string | null
+  facility: { id: string } | null
+  lease: { id: string } | null
+}): Promise<number> {
+  if (!recipient.tenantId || !recipient.facility) {
+    return leaseBalanceCents(recipient.lease?.id ?? null)
+  }
+
+  const [facility, balances] = await Promise.all([
+    prisma.facility.findUnique({
+      where: { id: recipient.facility.id },
+      select: { accessRestoreAtOrBelowCents: true },
+    }),
+    prisma.ledgerEntry.aggregate({
+      where: {
+        lease: {
+          tenantId: recipient.tenantId,
+          facilityId: recipient.facility.id,
+          status: { in: [...OCCUPYING_LEASE_STATUSES] },
+        },
+      },
+      _sum: { amountCents: true },
+    }),
+  ])
+
+  return restoreShortfallCents({
+    facilityBalanceCents: balances._sum.amountCents ?? 0,
+    restoreAtOrBelowCents: facility?.accessRestoreAtOrBelowCents ?? 0,
+  })
+}
+
 async function leaseBalanceCents(leaseId: string | null): Promise<number> {
   if (!leaseId) return 0
   const sum = await prisma.ledgerEntry.aggregate({

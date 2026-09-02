@@ -151,7 +151,18 @@ export const EVENT_MERGE_FIELDS: Record<string, readonly MergeFieldSpec[]> = {
   'access.suspended': [
     { field: 'unit.number', description: 'Unit number', sample: 'A-12' },
     { field: 'access.days_past_due', description: 'How many days past due', sample: '6' },
-    { field: 'balance.total', description: 'What must be cleared to restore access', sample: '$149.00' },
+    { field: 'balance.total', description: 'What this unit owes', sample: '$149.00' },
+    // B-232 / D-16. What actually reopens the gate, and NOT the same number as
+    // `balance.total`: the rule compares the tenant's balance across every unit
+    // at the facility to `Facility.accessRestoreAtOrBelowCents`. Both fields
+    // stay available — a facility editing this template may want to state the
+    // unit's balance too — but the shipped copy says this one, because "pay the
+    // balance" was a sentence the gate did not honour.
+    {
+      field: 'access.restore_amount',
+      description: 'What must be paid before the gate reopens',
+      sample: '$437.50',
+    },
     { field: 'links.pay_now', description: 'One-tap link to pay', sample: 'https://example.com/pay/abc123' },
   ],
   'access.restored': [{ field: 'unit.number', description: 'Unit number', sample: 'A-12' }],

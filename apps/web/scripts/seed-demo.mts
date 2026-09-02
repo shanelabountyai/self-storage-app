@@ -645,6 +645,33 @@ async function seedUnpaidRent(
         totalCents: owedCents,
         amountPaidCents: 0,
         status: 'open',
+        // B-232. The invoice's own lines, which is what `/portal/pay` itemises
+        // the balance from. Written directly like the rest of this script, and
+        // they SUM to `owedCents` — a demo invoice whose lines disagreed with
+        // its total would make the pay screen's reconciliation check drop the
+        // itemisation and quietly fall back to the bare figure it replaced.
+        lineItems: {
+          create: [
+            {
+              type: 'rent' as const,
+              description: 'Monthly rent',
+              quantity: 1,
+              unitAmountCents: lease.monthlyRateCents,
+              amountCents: lease.monthlyRateCents,
+            },
+            ...(lease.protectionCents > 0
+              ? [
+                  {
+                    type: 'protection' as const,
+                    description: 'Protection plan',
+                    quantity: 1,
+                    unitAmountCents: lease.protectionCents,
+                    amountCents: lease.protectionCents,
+                  },
+                ]
+              : []),
+          ],
+        },
       },
     })
     await prisma.ledgerEntry.create({

@@ -37,6 +37,11 @@ export type StatementSummary = {
   year: number
   month: number
   label: string
+  /// B-232. What was still owed at the end of that month. The list was a month
+  /// label and the word "View" — so a bookkeeper looking for the month a
+  /// balance appeared in opened five statements to find one, and a tenant
+  /// asking "what is this charge" got no help from this screen at all.
+  closingBalanceCents: number
 }
 
 /// Every month every one of this tenant's leases has a statement for, newest
@@ -57,25 +62,61 @@ export async function statementsForTenant(
       startDate: true,
       moveOutDate: true,
       unit: { select: { number: true } },
-      facility: { select: { name: true } },
+      facility: { select: { name: true, timezone: true } },
     },
     orderBy: { startDate: 'desc' },
   })
+  if (leases.length === 0) return []
 
-  return leases.flatMap((lease) =>
-    statementMonths({
+  // B-232. One read of every entry on these leases, and the closing balances
+  // are a prefix sum over it. The alternative — an aggregate per month per
+  // lease — is one query per row on a screen that lists every month a tenant
+  // has ever had, and the arithmetic is a running addition either way.
+  const entries = await prisma.ledgerEntry.findMany({
+    where: { leaseId: { in: leases.map((lease) => lease.id) } },
+    orderBy: { occurredAt: 'asc' },
+    select: { leaseId: true, amountCents: true, occurredAt: true },
+  })
+  const byLease = new Map<string, { amountCents: number; occurredAt: Date }[]>()
+  for (const entry of entries) {
+    byLease.set(entry.leaseId, [...(byLease.get(entry.leaseId) ?? []), entry])
+  }
+
+  return leases.flatMap((lease) => {
+    const ledger = byLease.get(lease.id) ?? []
+    // `statementMonths` returns newest first; the prefix sum has to run oldest
+    // first, so it is built in calendar order and read back by key.
+    const closingByMonth = new Map<string, number>()
+    const months = statementMonths({
       startDate: lease.startDate,
       endDate: lease.moveOutDate,
       now,
-    }).map(({ year, month }) => ({
+    })
+
+    let cursor = 0
+    let running = 0
+    for (const { year, month } of [...months].reverse()) {
+      const period = monthBounds(year, month, lease.facility.timezone)
+      // Everything that occurred before this month ENDED. Entries are sorted,
+      // so the cursor only moves forward — the whole ledger is walked once per
+      // lease however many months it has.
+      while (cursor < ledger.length && ledger[cursor].occurredAt < period.end) {
+        running += ledger[cursor].amountCents
+        cursor += 1
+      }
+      closingByMonth.set(`${year}-${month}`, running)
+    }
+
+    return months.map(({ year, month }) => ({
       leaseId: lease.id,
       unitNumber: lease.unit.number,
       facilityName: lease.facility.name,
       year,
       month,
       label: statementLabel(year, month),
-    })),
-  )
+      closingBalanceCents: closingByMonth.get(`${year}-${month}`) ?? 0,
+    }))
+  })
 }
 
 export type LeaseStatement = Statement & {

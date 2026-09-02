@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { restoreShortfallCents } from '@storage/core/access'
 import { listParts, recurringParts } from '@storage/core/pricing'
 import Link from 'next/link'
 import { requireTenantActor } from '@/lib/rbac/session'
@@ -104,18 +105,41 @@ function LeaseCard({ lease, impersonated }: { lease: PortalLeaseSummary; imperso
 
       {owesMoney && lease.accessSuspended && (
         <div className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-pretty text-red-900">
+          {/* B-232 / D-16. The number that actually reopens the gate.
+              This said "Pay your full balance of $487.50" — hardcoding D-16's
+              DEFAULT threshold of zero as though it were the rule, on one
+              lease's balance. The rule is `balanceCents <= restoreAtOrBelow`,
+              per facility, summed across every lease the tenant holds there,
+              and D-16 stores the threshold precisely so it can be relaxed. A
+              site that set $50 was demanding $487.50 for what $437.50 buys;
+              a tenant with two units was told one unit's figure would do it.
+              Where the threshold is 0 and there is one unit — every facility
+              today — this reads exactly as it did. */}
           <p>
             Your account is past due. Your gate code won&apos;t open the gate until the balance is
-            paid. Pay your full balance of <strong>{formatRate(lease.balanceCents)}</strong> and
-            your gate code starts working again, usually within a couple of minutes.
+            paid. Pay{' '}
+            <strong>
+              {formatRate(
+                restoreShortfallCents({
+                  facilityBalanceCents: lease.facilityBalanceCents,
+                  restoreAtOrBelowCents: lease.restoreAtOrBelowCents,
+                }),
+              )}
+            </strong>{' '}
+            and your gate code starts working again, usually within a couple of minutes.
           </p>
           <PayNowButton lease={lease} />
+          {/* B-232. One clause from a finding that otherwise stays declined: it
+              describes what the office can already do under D-98's plan
+              builder, and commits the product to no tenant-initiated request
+              flow — that remains declined exactly as it was in the B-187–B-196
+              block, and PRD 01 §9 still carries it as an open gap. */}
           <p className="mt-2">
             Or call{' '}
             <a href={telHref} className="underline underline-offset-4">
               {lease.facilityPhone}
             </a>{' '}
-            to pay by phone.
+            to pay by phone, or to ask about splitting it into payments.
           </p>
         </div>
       )}

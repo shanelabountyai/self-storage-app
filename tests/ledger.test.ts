@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   ledgerTotals,
+  openItems,
   reconcile,
   runningBalance,
   type LedgerRow,
@@ -178,5 +179,50 @@ describe('reconcile — US-24’s acceptance criterion', () => {
         uninvoicedChargeCents: -5_000,
       }).reconciles,
     ).toBe(true)
+  })
+})
+
+// B-232. The open items behind a balance — what `/portal/pay` itemises.
+describe('openItems', () => {
+  const history: LedgerRow[] = [
+    row({ id: 'a', occurredAt: t('01'), amountCents: 12_900, description: 'August rent' }),
+    row({ id: 'b', kind: 'payment', occurredAt: t('03'), amountCents: -12_900, description: 'Payment' }),
+    row({ id: 'c', occurredAt: t('05'), amountCents: 12_900, description: 'September rent' }),
+    row({ id: 'd', occurredAt: t('11'), amountCents: 2_000, description: 'Late fee' }),
+  ]
+
+  it('sums to the current balance, which is the whole point of it', () => {
+    const items = openItems(history)
+    const total = items.reduce((sum, line) => sum + line.amountCents, 0)
+    const balance = history.reduce((sum, line) => sum + line.amountCents, 0)
+
+    expect(total).toBe(balance)
+    expect(total).toBe(14_900)
+  })
+
+  it('starts after the last time the account was square, not at the first charge', () => {
+    // A settled August is not part of what is owed in September, and printing
+    // it on a bill is how a tenant concludes they are being charged twice.
+    expect(openItems(history).map((line) => line.id)).toEqual(['c', 'd'])
+  })
+
+  it('takes the LAST zero crossing when there have been several', () => {
+    const items = openItems([
+      ...history,
+      row({ id: 'e', kind: 'payment', occurredAt: t('12'), amountCents: -14_900 }),
+      row({ id: 'f', occurredAt: t('13'), amountCents: 12_900, description: 'October rent' }),
+    ])
+    expect(items.map((line) => line.id)).toEqual(['f'])
+  })
+
+  it('returns nothing when the account is square or in credit', () => {
+    expect(openItems(history.slice(0, 2))).toEqual([])
+    expect(openItems([...history.slice(0, 2), row({ id: 'x', kind: 'credit', amountCents: -500 })])).toEqual([])
+    expect(openItems([])).toEqual([])
+  })
+
+  it('returns the whole history for a tenant who has never been square', () => {
+    const never = [history[0], history[2]]
+    expect(openItems(never).map((line) => line.id)).toEqual(['a', 'c'])
   })
 })

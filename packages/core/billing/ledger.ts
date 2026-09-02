@@ -55,6 +55,36 @@ export function runningBalance(rows: readonly LedgerRow[]): LedgerLine[] {
   })
 }
 
+/// The entries that make up the balance a tenant owes RIGHT NOW.
+///
+/// B-232. `/portal/pay` asked for money with a bare total on it, and *what is
+/// this* is the question that gets asked before anybody pays. The answer has to
+/// come off the same ledger the total does, or the screen shows two numbers a
+/// tenant can prove disagree.
+///
+/// The window is everything after the last point at which the account was
+/// square — the most recent entry that took the running balance to zero or
+/// below. That is the standard open-item view of a balance-forward account, and
+/// it has the property this needs: **the lines returned sum EXACTLY to the
+/// current balance**, by construction rather than by a second addition that
+/// could drift. A tenant who has never been at zero gets their whole history,
+/// which is correct — all of it is still owed.
+///
+/// Empty when nothing is owed. A credit balance has no open items: there is no
+/// set of charges to explain money the facility is holding, and inventing one
+/// would be a bill for a tenant who is ahead.
+export function openItems(rows: readonly LedgerRow[]): LedgerLine[] {
+  const lines = runningBalance(rows)
+  if (lines.length === 0 || lines[lines.length - 1].balanceCents <= 0) return []
+
+  // Search from the END. The last zero crossing is the one that matters, and a
+  // forward scan would stop at the first of what may be several.
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    if (lines[index].balanceCents <= 0) return lines.slice(index + 1)
+  }
+  return lines
+}
+
 export type LedgerTotals = {
   chargedCents: number
   paidCents: number

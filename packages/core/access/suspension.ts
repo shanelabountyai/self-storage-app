@@ -85,6 +85,43 @@ export function gateDecision(input: GateInput): GateDecision {
   return { action: 'suspend', daysPastDue: input.daysPastDue }
 }
 
+/// What still has to be paid, at this facility, before the gate reopens.
+///
+/// B-232. The portal hardcoded *"Pay your full balance of $487.50 and your gate
+/// code starts working again"* — restating D-16's DEFAULT as though it were the
+/// rule. The rule is `balanceCents <= restoreAtOrBelowCents`, per facility, and
+/// D-16 stores the threshold precisely so it can be relaxed: a site that sets
+/// $50 was demanding $487.50 for what $437.50 would buy.
+///
+/// **The balance here is the tenant's balance at the FACILITY, not one lease's.**
+/// `gateDecision` sums across every occupying lease (`tenantStates`), because a
+/// grant cannot be partially suspended — so a two-unit tenant told that paying
+/// unit A's balance reopens their gate drives over, finds it shut, and is right
+/// to be angry. One function, so the screen, the banner and the suspension
+/// notice cannot each answer this differently.
+///
+/// Never negative: at or below the threshold there is nothing left to pay, and
+/// a negative "amount due" is not a refund offer.
+export function restoreShortfallCents(input: {
+  facilityBalanceCents: number
+  restoreAtOrBelowCents: number
+}): number {
+  return Math.max(0, input.facilityBalanceCents - input.restoreAtOrBelowCents)
+}
+
+/// Whether paying `payingCents` now would reopen the gate.
+///
+/// B-232. `/portal/pay`'s "Pay a different amount" said NOTHING about a partial
+/// payment leaving the gate shut, which is the wasted trip and the angriest call
+/// the office takes.
+export function wouldRestoreAccess(input: {
+  facilityBalanceCents: number
+  restoreAtOrBelowCents: number
+  payingCents: number
+}): boolean {
+  return input.payingCents >= restoreShortfallCents(input)
+}
+
 /// The sentence a tenant and a staffer both read, per US-45's own AC:
 /// "Access suspended, 12 days past due, 2026-07-18".
 ///
