@@ -53,6 +53,20 @@ export const AUDIT_ACTIONS = [
     label: "Payment recorded",
     requiresReason: false,
   },
+  /// B-230. A stored card charged by a staffer with nobody presenting it.
+  ///
+  /// Its own action rather than a second `payment.recorded`, and the one place
+  /// in this catalog where the distinction is the whole point: every other
+  /// payment row records money somebody handed over, and this records a charge
+  /// made against a card on file on a staffer's say-so. `requiresReason` is
+  /// false because the reason is the balance — the tenant rang and asked for
+  /// it to go on the card they have with us — and a required free-text box
+  /// that always says "tenant asked" is a field nobody reads.
+  {
+    action: "payment.card_on_file_charged",
+    label: "Card on file charged",
+    requiresReason: false,
+  },
   // B-147. The other side of `payment.returned`: a card dispute we won, where
   // the bank hands the money back. Its own action rather than a second
   // `payment.recorded`, because what happened is that an earlier reversal was

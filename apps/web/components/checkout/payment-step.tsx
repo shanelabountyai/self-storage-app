@@ -1,11 +1,14 @@
-import { AdminForm } from '@/components/admin/form'
+import { AdminForm, Field } from '@/components/admin/form'
 import { StripePayment } from './payment-element'
 import { setAutopayAction } from '@/app/(public)/checkout/actions'
+import { takeCounterMoveInAction } from '@/app/(public)/checkout/counter-actions'
 import { formatRate } from '@/lib/format'
 import { SITE } from '@/lib/site-config'
 import type { AmountDue, PaymentSetup } from '@/lib/checkout/payment'
 
 // PRD 01 US-501 step 5 / §4.6, §6.9.
+
+const COUNTER_FIELD_CLASS = 'flex flex-col gap-1 text-sm'
 
 export function PaymentStep({
   token,
@@ -14,6 +17,7 @@ export function PaymentStep({
   autopayOn,
   returnUrl,
   billingDay,
+  counterTender = false,
 }: {
   token: string
   due: AmountDue
@@ -21,6 +25,15 @@ export function PaymentStep({
   autopayOn: boolean
   returnUrl: string
   billingDay: number
+  /// B-230. True when a signed-in staffer with `payments:take` at this
+  /// facility is the one looking at the screen — the walk-in move-in, which
+  /// `startWalkInMoveInAction` starts by handing staff into this very
+  /// checkout. Until this the step's only tender was the Payment Element, so
+  /// a walk-in with cash could not rent a unit at all.
+  ///
+  /// A prop rather than a lookup in here: this is a server component in a
+  /// public route, and the page it renders in already resolves the actor.
+  counterTender?: boolean
 }) {
   return (
     <div className="mt-4">
@@ -113,6 +126,76 @@ export function PaymentStep({
           </p>
         </AdminForm>
       </section>
+
+      {/* B-230 / US-32. The counter's own tender, above the card form because
+          it is the reason a staffer is on this screen at all: they started
+          this checkout from the POS and the person in front of them is
+          holding notes. Cash and check settle through `recordCounterPayment`
+          — the same receipt series, drawer session, staff attribution and
+          manager ceiling as any other counter payment — and a card still goes
+          through the Element below, which is where it has to go.
+
+          Only rendered for staff. The tenant's own browser sees the card form
+          and nothing else, and the server action refuses anyone who is not
+          staff regardless of what is on screen. */}
+      {counterTender && (
+        <section aria-labelledby="counter-heading" className="mt-6">
+          <h2 id="counter-heading" className="font-medium">
+            Take cash or a check
+          </h2>
+          <p className="text-muted-foreground mt-1 text-sm text-pretty">
+            Staff only. Records the payment, prints to today&apos;s deposit slip and finishes the
+            move-in — the lease, the gate code and the welcome email all go out the same as they
+            would online.
+          </p>
+          <AdminForm
+            action={takeCounterMoveInAction}
+            label="Take cash or a check for this move-in"
+            className="mt-3 grid max-w-lg grid-cols-2 gap-3"
+          >
+            <input type="hidden" name="token" value={token} />
+            <Field
+              name="method"
+              label="Method"
+              as="select"
+              defaultValue="cash"
+              required
+              className={COUNTER_FIELD_CLASS}
+            >
+              <option value="cash">Cash</option>
+              <option value="check">Check</option>
+              <option value="money_order">Money order</option>
+            </Field>
+            {/* The amount is NOT a field. It is the total stated above, worked
+                out server-side by the same `amountDueToday` the card charge
+                uses — a typed figure here would be a move-in settled for
+                whatever a staffer keyed, against a total the renter has just
+                read. */}
+            <Field
+              name="tendered"
+              label="Cash tendered ($)"
+              inputMode="decimal"
+              hint="Cash only — change is worked out for you."
+              className={COUNTER_FIELD_CLASS}
+            />
+            <Field
+              name="checkNumber"
+              label="Check / money-order number"
+              hint="Required for check and money order."
+              className={`${COUNTER_FIELD_CLASS} col-span-2`}
+            />
+            <p className="col-span-2 text-sm">
+              Taking {formatRate(due.totalDueTodayCents)} for this move-in.
+            </p>
+            <button
+              type="submit"
+              className="bg-primary text-primary-foreground col-span-2 inline-flex min-h-11 items-center justify-center self-start rounded-md px-4 text-sm font-medium"
+            >
+              Take {formatRate(due.totalDueTodayCents)} and finish the move-in
+            </button>
+          </AdminForm>
+        </section>
+      )}
 
       <section aria-labelledby="pay-heading" className="mt-6">
         <h2 id="pay-heading" className="font-medium">

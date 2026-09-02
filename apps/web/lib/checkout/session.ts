@@ -4,6 +4,7 @@ import { recomputeUnitStatus } from '@/lib/admin/units'
 import { currentRateForUnitType } from '@/lib/pricing/unit-type-rates'
 import { offerFor } from '@/lib/promotions/service'
 import { sendDirectEmail } from '@/lib/comms/service'
+import type { MoveSource } from '@storage/core/metrics'
 
 // PRD 01 FR-4.1. The server-side checkout state machine.
 //
@@ -115,6 +116,22 @@ export type StartInput = {
   /// have the tab open, which is the subset of move-ins least likely to need
   /// it. The session is the one thing both paths share.
   referralInviteId?: string | null
+  /// PRD 02 US-43 (B-230). How the deal was TAKEN, when the caller knows and
+  /// there is no reservation to inherit it from — `walk_in` for a counter
+  /// move-in, `phone` for one started from a call.
+  ///
+  /// A `MoveSource`, not a marketing channel: `Lease.acquisitionChannel` is
+  /// D-57's second axis and is untouched by this (schema.prisma's own comment
+  /// on the two columns). Held in `data` beside the promo snapshot rather than
+  /// in a column, for the reason `referralInviteId` is: `provisionMoveIn` runs
+  /// from the Stripe webhook as often as from the browser, and the session is
+  /// the one thing both paths share.
+  ///
+  /// Without it every counter rental was stamped `web` — `provisionMoveIn`'s
+  /// `reservationSource ?? 'web'` — so the walk-in half of the business, a
+  /// third to a half of move-ins at most sites, reported as organic web and
+  /// marketing was priced against it.
+  acquisitionSource?: MoveSource | null
 }
 
 export type StartResult =
@@ -168,6 +185,7 @@ export async function startCheckout(input: StartInput): Promise<StartResult> {
               }
             : {}),
           ...(input.referralInviteId ? { referralInviteId: input.referralInviteId } : {}),
+          ...(input.acquisitionSource ? { acquisitionSource: input.acquisitionSource } : {}),
         } as Prisma.InputJsonValue,
         tokenHash: hashSessionToken(token),
         lockExpiresAt: lockUntil(),

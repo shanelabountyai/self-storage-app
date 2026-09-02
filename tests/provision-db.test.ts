@@ -518,6 +518,100 @@ describeDb('move-in provisioning', () => {
     expect(lease.acquisitionChannel).toBeNull()
   })
 
+  // B-230 / US-43. Every counter rental used to report as `web`.
+  //
+  // `startWalkInMoveInAction` hands staff into the SAME public checkout the
+  // website uses — deliberately — and that checkout carries no reservation, so
+  // `reservationSource ?? 'web'` stamped the walk-in half of the business (a
+  // third to a half of move-ins at most sites) as organic web, and marketing
+  // was priced against it.
+  it('records a counter-started move-in as walk_in, not web', async () => {
+    const started = await startCheckout({
+      facilityId,
+      unitTypeId,
+      quotedRateCents: 12_900,
+      acquisitionSource: 'walk_in',
+    })
+    if (!started.ok) throw new Error('could not start checkout')
+    await prisma.checkoutSession.update({
+      where: { id: started.sessionId },
+      data: { tenantId, data: { protection: 'waiver', acquisitionSource: 'walk_in' } },
+    })
+
+    const result = await provisionMoveIn(started.sessionId)
+    if (!result.ok) throw new Error('unreachable')
+
+    const lease = await prisma.lease.findUniqueOrThrow({
+      where: { id: result.leaseId },
+      select: { acquisitionSource: true, acquisitionChannel: true },
+    })
+    expect(lease.acquisitionSource).toBe('walk_in')
+    // D-57's other axis is untouched: how the deal was TAKEN is not where the
+    // renter came from, and a walk-in has no marketing channel to credit.
+    expect(lease.acquisitionChannel).toBeNull()
+  })
+
+  it('lets the reservation’s own source win over the session’s stamp', async () => {
+    // A phone lead held a unit and then finished at the counter. The earlier,
+    // more specific fact is the reservation's — US-43's last AC is about the
+    // source carrying through reservation → move-in — so `phone` must survive
+    // being completed on a counter-started session.
+    const reservation = await createReservation({
+      facilityId,
+      unitTypeId,
+      firstName: 'Ada',
+      lastName: 'Renter',
+      email: `phone-res-${suffix}@example.com`,
+      moveInDate: new Date(),
+      quotedRateCents: 12_900,
+    })
+    if (!reservation.ok) throw new Error('unreachable')
+    await prisma.reservation.update({
+      where: { id: reservation.reservationId },
+      data: { source: 'phone' },
+    })
+
+    const started = await startCheckout({
+      facilityId,
+      unitTypeId,
+      quotedRateCents: 12_900,
+      reservationId: reservation.reservationId,
+      acquisitionSource: 'walk_in',
+    })
+    if (!started.ok) throw new Error('could not start checkout')
+    await prisma.checkoutSession.update({
+      where: { id: started.sessionId },
+      data: { tenantId, data: { protection: 'waiver', acquisitionSource: 'walk_in' } },
+    })
+
+    const result = await provisionMoveIn(started.sessionId)
+    if (!result.ok) throw new Error('unreachable')
+    const lease = await prisma.lease.findUniqueOrThrow({
+      where: { id: result.leaseId },
+      select: { acquisitionSource: true },
+    })
+    expect(lease.acquisitionSource).toBe('phone')
+  })
+
+  it('ignores a session source outside the report’s own vocabulary', async () => {
+    // The value reaches `data` as JSON. A source `normalizeSource` does not
+    // recognise would report as `unknown` for the life of the lease, which is
+    // worse than the honest `web` a session nobody stamped gets.
+    const started = await paidSession()
+    await prisma.checkoutSession.update({
+      where: { id: started.sessionId },
+      data: { data: { protection: 'waiver', acquisitionSource: 'sparefoot' } },
+    })
+
+    const result = await provisionMoveIn(started.sessionId)
+    if (!result.ok) throw new Error('unreachable')
+    const lease = await prisma.lease.findUniqueOrThrow({
+      where: { id: result.leaseId },
+      select: { acquisitionSource: true },
+    })
+    expect(lease.acquisitionSource).toBe('web')
+  })
+
   it('moves the signed lease document onto the lease', async () => {
     const started = await paidSession()
     await prisma.document.create({

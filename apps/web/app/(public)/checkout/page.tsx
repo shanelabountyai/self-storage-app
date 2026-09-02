@@ -23,6 +23,8 @@ import { CallLink, phoneFor } from '@/components/marketing/call-link'
 import { WaitlistForm } from '@/components/marketing/waitlist-form'
 import { joinWaitlistAction } from '../storage/[state]/[city]/[slug]/waitlist-actions'
 import { prefillFromReservation } from '@/lib/checkout/details'
+import { currentActor } from '@/lib/rbac/session'
+import { can } from '@/lib/rbac/authorize'
 import { localityForZip } from '@/lib/geo/geocode'
 import { DetailsStep } from '@/components/checkout/details-step'
 import { UnitStep } from '@/components/checkout/unit-step'
@@ -204,6 +206,18 @@ export default async function CheckoutPage({
 
   const payment = session.step === 'payment' ? await preparePayment(session) : null
   const due = session.step === 'payment' ? await amountDueToday(session) : null
+
+  // B-230 / US-32. Whether to offer the counter's own tender on this step.
+  //
+  // `currentActor` rather than `requireStaffActor`: this is a public route and
+  // an anonymous renter is the ordinary case, so "no actor" has to be an
+  // answer rather than a refusal. Staff AND `payments:take` at THIS facility —
+  // a staffer from another site helping with a link is not the person with a
+  // drawer open here, and the server action re-checks both regardless of what
+  // this renders.
+  const viewer = session.step === 'payment' ? await currentActor() : null
+  const counterTender =
+    viewer?.kind === 'staff' && can(viewer, 'payments:take', session.facilityId)
 
   // US-501 step 7: code, address, hours. `code` is null whenever there is
   // nothing to reveal yet (no encryption key configured, or the synchronous
@@ -639,6 +653,7 @@ export default async function CheckoutPage({
                 facilityPolicy?.billingPolicy ?? 'anniversary',
                 businessDateFor(new Date(), facilityPolicy?.timezone ?? 'UTC'),
               )}
+              counterTender={counterTender}
             />
           )}
 

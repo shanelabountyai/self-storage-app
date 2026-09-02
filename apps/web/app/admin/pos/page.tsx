@@ -163,6 +163,13 @@ export default async function PosPage({
                   <option value="cash">Cash</option>
                   <option value="check">Check</option>
                   <option value="money_order">Money order</option>
+                  {/* B-230. Card goes to /admin/pos/card, carrying the amount
+                      typed here — Stripe's Element takes the details there and
+                      no card number ever reaches this form (US-601's SAQ-A
+                      boundary). The hint says so, because a staffer who sees
+                      "Card" on a form with an Amount box will otherwise expect
+                      a number field to appear. */}
+                  <option value="card">Card</option>
                 </Field>
                 <Field
                   name="amount"
@@ -184,6 +191,10 @@ export default async function PosPage({
                   hint="Required for check and money order."
                   className={`${FIELD_CLASS} col-span-2`}
                 />
+                <p className="text-muted-foreground col-span-2 text-xs text-pretty">
+                  Card takes you to the card screen with this amount, where the tenant enters
+                  their own details — or you can charge the card they have on file.
+                </p>
                 <button
                   type="submit"
                   className="bg-primary text-primary-foreground col-span-2 inline-flex min-h-11 items-center justify-center self-start rounded-md px-4 text-sm font-medium"

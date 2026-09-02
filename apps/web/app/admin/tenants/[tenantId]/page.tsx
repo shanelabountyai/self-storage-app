@@ -2024,6 +2024,26 @@ function LeaseActions({
     <div className={className}>
       {lease.status !== "ended" && (
         <>
+          {/* B-230. The tenant profile carried no payment control at all — the
+              screen a staffer is already on when somebody rings and says "put
+              it on my card" sent them to hunt for the tenant again on the POS
+              search. Rendered only where there is a balance: a "Take payment"
+              link on a paid-up unit is a control whose own screen answers
+              "there is nothing to charge".
+
+              Links to the LEASE, and the card screen derives the facility from
+              it — this list spans every facility a staffer can see, and the
+              POS screen's own facility switcher is not necessarily on the one
+              this unit is at. */}
+          {lease.balanceCents > 0 && (
+            <Link
+              href={`/admin/pos/card?lease=${lease.leaseId}`}
+              className={linkClassName}
+            >
+              Take payment
+              <span className="sr-only"> for unit {lease.unitNumber}</span>
+            </Link>
+          )}
           <Link
             href={`/admin/tenants/${tenantId}/move-out?lease=${lease.leaseId}`}
             className={linkClassName}

@@ -18,6 +18,11 @@ import type { Actor } from "@/lib/rbac/actor";
 import { restoreAccessIfSettled } from "@/lib/access/delinquency-gate";
 import { applyPayment, type AppliedPayment } from "@/lib/billing/allocation";
 import { openSessionFor } from "@/lib/admin/drawer";
+import {
+  createChargeIntent,
+  createCustomerSession,
+} from "@/lib/payments/intents";
+import { paymentsEnabled } from "@/lib/payments/stripe";
 
 // PRD 02 §4.8 US-32. Money taken across the counter.
 //
@@ -70,22 +75,40 @@ export type CounterPaymentResult =
       /// than silently allocated — see the note in packages/core/billing.
       unappliedCents: number;
     }
-  | {
-      ok: false;
-      problem:
-        | TenderProblem
-        | "lease_not_found"
-        | "needs_manager"
-        | "card_not_supported";
-    };
+  | { ok: false; problem: CounterTenderProblem | "lease_not_found" };
 
-/// Records a payment taken at the counter, posts it to the ledger, and issues
-/// a receipt number — all in one transaction, so a failure anywhere leaves no
-/// half-recorded money and no consumed receipt number.
-export async function recordCounterPayment(
+/// Every refusal `counterTenderRefusal` can produce — deliberately WITHOUT
+/// `lease_not_found`, which needs a lease lookup and so belongs to
+/// `recordCounterPayment` alone. Named so a caller that only runs the preflight
+/// gets a union it can exhaust, rather than one carrying a case it can never
+/// see.
+export type CounterTenderProblem =
+  | TenderProblem
+  | "needs_manager"
+  | "card_not_supported";
+
+/// Every refusal that can be decided BEFORE anything is written down.
+///
+/// Split out of `recordCounterPayment` for B-230's walk-in move-in, which has
+/// to provision the lease before it can post a payment against it — a ledger
+/// entry needs a lease, and at the moment the cash is handed over there is
+/// not one yet. That ordering is only safe if the refusals are known first:
+/// provisioning and THEN discovering the cash is $200 over this staffer's
+/// approval limit is a tenant moved in for free.
+///
+/// `null` means nothing here refuses it. It is not a promise that the payment
+/// will succeed — `recordCounterPayment` still checks the lease, and calls
+/// this again itself, so a caller that skipped it changes nothing.
+export async function counterTenderRefusal(
   actor: Actor,
-  input: CounterPaymentInput,
-): Promise<CounterPaymentResult> {
+  input: {
+    facilityId: string;
+    method: CounterMethod;
+    amountCents: number;
+    tenderedCents?: number | null;
+    checkNumber?: string | null;
+  },
+): Promise<{ ok: false; problem: CounterTenderProblem } | null> {
   if (actor.kind !== "staff") throw new ForbiddenError("Staff access required");
   assertFacilityAccess(actor, input.facilityId);
   if (!can(actor, "payments:take", input.facilityId)) {
@@ -96,28 +119,21 @@ export async function recordCounterPayment(
     );
   }
 
-  // A card at the counter still has to go through Stripe — there is no
-  // terminal integration, and recording a card payment by hand would create a
-  // ledger entry with no money behind it. Said plainly rather than silently
-  // accepted (US-32's card path needs a terminal, which is not in this item).
+  // A card at the counter still cannot be recorded BY HAND — that would create
+  // a ledger entry with no money behind it, which is the one thing a payment
+  // record must never be. B-230 gave the counter a real card path instead:
+  // `startCounterCardPayment` raises a PaymentIntent and the tenant presents
+  // the card in Stripe's own Element on the counter screen, so the money is
+  // taken by the same webhook-confirmed path the portal uses and no PAN ever
+  // reaches this codebase (US-601's SAQ-A boundary). This refusal is the
+  // last-line guard behind that, not the product's answer to "they have a
+  // card" — `takePaymentAction` sends `card` to the Element before it gets
+  // here.
   if (input.method === "card")
     return { ok: false, problem: "card_not_supported" };
 
   const settled = settleTender(input);
   if (!settled.ok) return { ok: false, problem: settled.problem };
-
-  const lease = await prisma.lease.findFirst({
-    where: {
-      id: input.leaseId,
-      tenantId: input.tenantId,
-      facilityId: input.facilityId,
-    },
-    select: { id: true },
-  });
-  // Checked rather than trusted: the lease id comes from a form, and posting
-  // to a lease that is not this tenant's at this facility is the same
-  // mis-crediting bug B-035 fixed on the webhook side.
-  if (!lease) return { ok: false, problem: "lease_not_found" };
 
   const facility = await prisma.facility.findUniqueOrThrow({
     where: { id: input.facilityId },
@@ -141,6 +157,48 @@ export async function recordCounterPayment(
     );
     if (rank < MANAGER_RANK) return { ok: false, problem: "needs_manager" };
   }
+
+  return null;
+}
+
+/// Records a payment taken at the counter, posts it to the ledger, and issues
+/// a receipt number — all in one transaction, so a failure anywhere leaves no
+/// half-recorded money and no consumed receipt number.
+export async function recordCounterPayment(
+  actor: Actor,
+  input: CounterPaymentInput,
+): Promise<CounterPaymentResult> {
+  if (actor.kind !== "staff") throw new ForbiddenError("Staff access required");
+  assertFacilityAccess(actor, input.facilityId);
+  if (!can(actor, "payments:take", input.facilityId)) {
+    throw new ForbiddenError(
+      "Missing permission payments:take",
+      "payments:take",
+      input.facilityId,
+    );
+  }
+
+  const preflight = await counterTenderRefusal(actor, input);
+  if (preflight) return preflight;
+
+  // Re-run rather than threaded down from the preflight: `settleTender` is
+  // pure and cheap, and the alternative is a settled tender travelling as a
+  // parameter through a function that could then be called without one.
+  const settled = settleTender(input);
+  if (!settled.ok) return { ok: false, problem: settled.problem };
+
+  const lease = await prisma.lease.findFirst({
+    where: {
+      id: input.leaseId,
+      tenantId: input.tenantId,
+      facilityId: input.facilityId,
+    },
+    select: { id: true },
+  });
+  // Checked rather than trusted: the lease id comes from a form, and posting
+  // to a lease that is not this tenant's at this facility is the same
+  // mis-crediting bug B-035 fixed on the webhook side.
+  if (!lease) return { ok: false, problem: "lease_not_found" };
 
   // A one-element box rather than a `let`: TypeScript narrows a variable only
   // ever assigned inside a callback to `never` where it is read. Same shape as
@@ -399,4 +457,243 @@ function timezoneOffsetMs(at: Date, timezone: string): number {
     get("second"),
   );
   return at.getTime() - asUtc;
+}
+
+// ── B-230. Card at the counter ───────────────────────────────────────────────
+//
+// The counter used to refuse a card outright and tell the tenant to go and use
+// the online payment screen — a deflection to email aimed at precisely the
+// person least likely to read it, standing at the desk wanting their gate to
+// reopen. What was missing was never a terminal: a card-not-present charge
+// through the same `createChargeIntent` the portal uses needs no hardware.
+//
+// **The card is presented in Stripe's own Payment Element, on the counter
+// screen.** Never a PAN typed into a form of ours, and there is no version of
+// this that types one: US-601's SAQ-A boundary is exactly "card details go
+// from the browser to Stripe and nothing in this repo receives them", and a
+// staff-operated screen does not get an exemption from it — it is the surface
+// where a written-down number is most likely to end up on a sticky note.
+//
+// Both functions below stop at RAISING the charge. Nothing here marks a
+// payment succeeded, posts a ledger entry or allocates an invoice: the webhook
+// (`applyStripeEvent`) does all of it, for the reason `createChargeIntent`
+// states — a client that never comes back must not lose the payment.
+
+export type CounterCharge = {
+  leaseId: string;
+  tenantId: string;
+  facilityId: string;
+  tenantName: string;
+  unitNumber: string;
+  balanceCents: number;
+};
+
+/// The lease a staffer is allowed to take money for, with what it owes.
+///
+/// Authorization and lookup in one query, the shape `payableLease` uses in the
+/// portal and for the same reason: a version that returned the lease first and
+/// checked access second is the one that eventually ships with the check
+/// dropped. The FACILITY comes from the lease rather than from the admin
+/// facility switcher — the tenant profile links here for a lease that may be
+/// at another site, and a charge raised against the wrong facility is money
+/// posted to the wrong deposit.
+export async function chargeableLease(
+  actor: Actor,
+  leaseId: string,
+): Promise<CounterCharge | null> {
+  if (actor.kind !== "staff") throw new ForbiddenError("Staff access required");
+
+  const lease = await prisma.lease.findFirst({
+    where: { id: leaseId, status: { not: "ended" } },
+    select: {
+      id: true,
+      facilityId: true,
+      tenantId: true,
+      unit: { select: { number: true } },
+      tenant: { select: { firstName: true, lastName: true } },
+    },
+  });
+  if (!lease) return null;
+
+  assertFacilityAccess(actor, lease.facilityId);
+  if (!can(actor, "payments:take", lease.facilityId)) {
+    throw new ForbiddenError(
+      "Missing permission payments:take",
+      "payments:take",
+      lease.facilityId,
+    );
+  }
+
+  const balance = await prisma.ledgerEntry.aggregate({
+    where: { leaseId: lease.id },
+    _sum: { amountCents: true },
+  });
+
+  return {
+    leaseId: lease.id,
+    tenantId: lease.tenantId,
+    facilityId: lease.facilityId,
+    tenantName: `${lease.tenant.firstName} ${lease.tenant.lastName}`,
+    unitNumber: lease.unit.number,
+    balanceCents: balance._sum.amountCents ?? 0,
+  };
+}
+
+export type CounterCardSetup =
+  | { available: false }
+  | {
+      available: true;
+      clientSecret: string;
+      customerSessionSecret: string | null;
+      paymentId: string;
+      amountCents: number;
+    };
+
+/// Raises the PaymentIntent for a card presented at the counter.
+///
+/// The idempotency key is the lease, the amount AND the balance the amount was
+/// chosen against — `startPortalPayment`'s key, deliberately the same shape,
+/// because the failure it prevents is the same one: reloading the counter
+/// screen must return the intent already raised rather than a second charge,
+/// while a genuine second payment of the same amount gets a different key
+/// because the first one moved the balance.
+///
+/// Namespaced `counter:` rather than `portal:` so a tenant paying the same
+/// figure online and at the desk within Stripe's 24-hour window is not
+/// deduplicated into one payment. They are two payments and the second must be
+/// taken; a shared key would silently return the first one's intent, which the
+/// Element then refuses as already succeeded — a decline with money in hand
+/// and nothing wrong.
+export async function startCounterCardPayment(
+  actor: Actor,
+  lease: CounterCharge,
+  amountCents: number,
+): Promise<CounterCardSetup> {
+  if (actor.kind !== "staff") throw new ForbiddenError("Staff access required");
+  assertFacilityAccess(actor, lease.facilityId);
+  if (!can(actor, "payments:take", lease.facilityId)) {
+    throw new ForbiddenError(
+      "Missing permission payments:take",
+      "payments:take",
+      lease.facilityId,
+    );
+  }
+  if (!paymentsEnabled()) return { available: false };
+
+  const [intent, customerSessionSecret] = await Promise.all([
+    createChargeIntent({
+      facilityId: lease.facilityId,
+      tenantId: lease.tenantId,
+      leaseId: lease.leaseId,
+      amountCents,
+      reference: `counter:${lease.leaseId}:${amountCents}:${lease.balanceCents}`,
+      description: `Counter payment — unit ${lease.unitNumber}`,
+      // The tenant handed over a card to settle a balance, not to enrol in
+      // anything. Autopay enrolment has its own disclosure (D-11a) and its own
+      // screen; retaining a card because it passed through a staff-operated
+      // terminal would be consent nobody gave.
+      saveMethod: false,
+      // Card and Link only. B-230's note on `methodsFor`: a bank debit that
+      // clears in four business days does not reopen a gate today, and the
+      // person at the desk would leave believing they had paid.
+      surface: "counter",
+    }),
+    createCustomerSession(lease.tenantId),
+  ]);
+
+  return {
+    available: true,
+    clientSecret: intent.clientSecret,
+    customerSessionSecret,
+    paymentId: intent.paymentId,
+    amountCents,
+  };
+}
+
+export type CardOnFileResult =
+  | { ok: true; paymentId: string; amountCents: number }
+  | { ok: false; problem: "unavailable" | "no_method" | "declined"; message?: string };
+
+/// US-32 / B-230. Charges the card the tenant already has on file.
+///
+/// The commonest counter request there is — "just put it on the card you have"
+/// — and the tenant profile carried no payment control at all before this.
+///
+/// Off-session, because the cardholder is authorising by voice rather than by
+/// re-presenting the card, and that is what Stripe's `off_session` flag means.
+/// The consequence is that a decline arrives SYNCHRONOUSLY (Stripe throws, no
+/// `payment_intent.payment_failed` webhook follows, because the confirmation
+/// happened inside this request) — the same trap `runAutopay` documents, and
+/// the reason this returns a `declined` problem rather than assuming a webhook
+/// will explain itself later. `createChargeIntent` has already marked its own
+/// Payment row failed with the reason before it rethrows.
+///
+/// The staffer is named on the audit entry, never on the Payment row's
+/// `receivedByStaffId`: that column is US-32's attribution for money physically
+/// received across a counter and a card charge is not that. Recording a staffer
+/// as having received a card payment would put a name on a drawer count that
+/// has no note behind it.
+export async function chargeCardOnFile(
+  actor: Actor,
+  lease: CounterCharge,
+  amountCents: number,
+): Promise<CardOnFileResult> {
+  if (actor.kind !== "staff") throw new ForbiddenError("Staff access required");
+  assertFacilityAccess(actor, lease.facilityId);
+  if (!can(actor, "payments:take", lease.facilityId)) {
+    throw new ForbiddenError(
+      "Missing permission payments:take",
+      "payments:take",
+      lease.facilityId,
+    );
+  }
+  if (!paymentsEnabled()) return { ok: false, problem: "unavailable" };
+
+  const tenant = await prisma.tenant.findUniqueOrThrow({
+    where: { id: lease.tenantId },
+    select: { stripeDefaultPaymentMethodId: true },
+  });
+  if (!tenant.stripeDefaultPaymentMethodId) {
+    return { ok: false, problem: "no_method" };
+  }
+
+  try {
+    const charge = await createChargeIntent({
+      facilityId: lease.facilityId,
+      tenantId: lease.tenantId,
+      leaseId: lease.leaseId,
+      amountCents,
+      // Same key shape as the on-session counter charge above and for the same
+      // reason, in its own namespace: a staffer who presses this twice while
+      // the first round trip is in flight charges the card once.
+      reference: `counter-cof:${lease.leaseId}:${amountCents}:${lease.balanceCents}`,
+      description: `Counter payment — unit ${lease.unitNumber}`,
+      offSession: true,
+      paymentMethodId: tenant.stripeDefaultPaymentMethodId,
+    });
+
+    await recordAudit({
+      actor: toAuditActor(actor),
+      facilityId: lease.facilityId,
+      action: "payment.card_on_file_charged",
+      entityType: "Payment",
+      entityId: charge.paymentId,
+      context: {
+        amountCents,
+        leaseId: lease.leaseId,
+        // The whole point of the audit row: a charge nobody was standing in
+        // front of, made by a named person on a stored card.
+        offSession: true,
+        deduplicated: charge.deduplicated,
+      },
+    });
+
+    return { ok: true, paymentId: charge.paymentId, amountCents };
+  } catch (error) {
+    return {
+      ok: false,
+      problem: "declined",
+      message: error instanceof Error ? error.message : undefined,
+    };
+  }
 }

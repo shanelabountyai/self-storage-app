@@ -169,6 +169,12 @@ export const ADMIN_SCAN_ROUTES = [
   '/admin/pos/drawer',
   '/admin/pos/merchandise',
   '/admin/pos/summary',
+  // B-230. Where the Payment Element lands after a card taken at the counter.
+  // Only its not-found state is reachable without a real card payment — the
+  // same posture as `/portal/pay/done`, and for the same reason. The three
+  // outcome states (taken, still confirming, declined) are a STATE gap the
+  // tenant-facing receipt shares.
+  '/admin/pos/card/done',
   '/admin/tasks',
   '/admin/access',
   '/admin/access/queue',
@@ -245,6 +251,12 @@ export const SCANNED_BY_OWN_SPEC = [
   // rather than a bare `goto`. The reviewers named this one specifically as
   // "in no scan at all"; it no longer is.
   { route: '/admin/tenants/[tenantId]/transfer', spec: 'e2e/admin-transfer.spec.ts' },
+  // B-230. A static route, but its real content needs a live lease with a
+  // balance — a bare `goto` renders only "we couldn't find a live lease", and
+  // scanning that instead of the money form is exactly the overstatement this
+  // file exists to stop. Reached the way the counter reaches it: a click from
+  // a tenant's profile.
+  { route: '/admin/pos/card', spec: 'e2e/admin-pos.spec.ts' },
 ] as const
 
 /// Who the page is for. The public statement lists the first two and not

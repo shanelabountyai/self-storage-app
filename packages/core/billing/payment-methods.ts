@@ -14,6 +14,9 @@ export type PaymentSurface =
   | 'portal'
   /// Saving a method for later, charging nothing today.
   | 'setup'
+  /// B-230. A staff-operated screen at the counter, with the tenant standing
+  /// there. Card only — see `methodsFor`.
+  | 'counter'
 
 export type MethodPolicy = {
   /// Whether this facility permits bank debit at checkout at all.
@@ -41,11 +44,23 @@ export type StripeMethodType = 'card' | 'us_bank_account' | 'link'
 ///     building on money that went back.
 ///   - **setup**: always, because autopay on a bank account is the case §3
 ///     names first and the cheapest money this business can take.
+///   - **counter** (B-230): never. Somebody is at the desk wanting their gate
+///     to reopen now, and a debit that clears in four business days does not
+///     do that — it would leave the tenant believing they had paid while the
+///     delinquency hold stayed on. Cash and check are the counter's own
+///     answer to "no card"; they settle through `recordCounterPayment` the
+///     moment they are taken.
+///
+/// The `checkout` branch is named EXPLICITLY rather than left as the fallback.
+/// It was `else if (policy.achAtCheckoutEnabled)`, which is a rule about one
+/// surface written as a rule about every surface that is not portal or setup —
+/// so adding `counter` above would have silently handed it bank debit at every
+/// facility with ACH at checkout switched on.
 export function methodsFor(surface: PaymentSurface, policy: MethodPolicy): StripeMethodType[] {
   const methods: StripeMethodType[] = ['card', 'link']
 
   if (surface === 'portal' || surface === 'setup') methods.push('us_bank_account')
-  else if (policy.achAtCheckoutEnabled) methods.push('us_bank_account')
+  else if (surface === 'checkout' && policy.achAtCheckoutEnabled) methods.push('us_bank_account')
 
   return methods
 }

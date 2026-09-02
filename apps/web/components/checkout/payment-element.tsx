@@ -102,7 +102,21 @@ function PaymentForm({ returnUrl }: { returnUrl: string }) {
 
       <PaymentElement options={{ layout: 'tabs' }} />
 
-      {/* `aria-busy` rather than `disabled`. Disabling the element that
+      {/* B-230. `aria-busy:opacity-60` was on this button and it failed 1.4.3
+          at 3.34:1 (#dadada on #747474). Caught by the counter card screen's
+          own axe scan — `portal-payment.tsx` carries the identical button and
+          the identical defect — and missed here for the same reason it was
+          missed there: this step's existing scan races the Stripe script, so
+          by the time it runs `stripe` has resolved, `aria-busy` is false and
+          the button is at full opacity. On a slow connection it is the state
+          every renter looks at, and it is the button they are about to press.
+
+          1.4.3's exemption for "inactive user interface components" does not
+          apply, because this button is deliberately NOT `disabled` — it stays
+          focusable and activatable throughout. The dimming was decoration the
+          changed label and the status region above already cover.
+
+          `aria-busy` rather than `disabled`. Disabling the element that
           currently has focus blurs it to <body> in Chromium, so the renter who
           just pressed Pay loses their place in the document at exactly the
           moment the page goes quiet — the failure `use-my-location.tsx` already
@@ -111,7 +125,7 @@ function PaymentForm({ returnUrl }: { returnUrl: string }) {
       <button
         type="submit"
         aria-busy={!stripe || submitting}
-        className="bg-primary text-primary-foreground mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-md px-4 text-base font-medium aria-busy:opacity-60 sm:w-auto"
+        className="bg-primary text-primary-foreground mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-md px-4 text-base font-medium sm:w-auto"
       >
         {submitting ? 'Taking payment…' : 'Pay and complete move-in'}
       </button>

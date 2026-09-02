@@ -12,6 +12,7 @@ import { trackingContext } from '@/lib/analytics/request'
 import { redeemPromotion } from '@/lib/promotions/service'
 import { syncActiveDutyHolds } from '@/lib/tenants/active-duty'
 import { qualifyReferral } from '@/lib/referrals/service'
+import { MOVE_SOURCES } from '@storage/core/metrics'
 
 // PRD 01 FR-4.5 / FR-4.6. Turning a paid checkout into a moved-in tenant.
 //
@@ -180,6 +181,27 @@ export async function provisionMoveIn(sessionId: string): Promise<ProvisionResul
     : null
   const reservationSource = reservation?.source ?? null
 
+  // B-230. How the deal was TAKEN, in `MOVE_SOURCES`' vocabulary.
+  //
+  // The reservation still wins where there is one — it is the earlier, more
+  // specific fact, and it is what US-43's last AC means by "carries through
+  // reservation → move-in". Below it sits the session's own stamp, which is
+  // how a counter-started checkout says `walk_in`: `startWalkInMoveInAction`
+  // hands staff into the SAME public checkout the website uses (deliberately,
+  // so there is one set of move-in rules), and that checkout carries no
+  // reservation, so `reservationSource ?? 'web'` recorded every counter rental
+  // as organic web. `'web'` stays the last resort and is still a fact rather
+  // than a guess: a session nobody stamped came through the public site.
+  //
+  // Validated rather than trusted. The value reaches `data` through
+  // `startCheckout`, and a source outside the report's own vocabulary would be
+  // a lease that reports `unknown` for the rest of its life.
+  const sessionSource =
+    typeof data.acquisitionSource === 'string' &&
+    (MOVE_SOURCES as readonly string[]).includes(data.acquisitionSource)
+      ? data.acquisitionSource
+      : null
+
   // Read before the transaction so the lease can be stamped with it, and reused
   // by the analytics call after the commit rather than read twice. Cookies
   // only — no database work — so this cannot lengthen the transaction below.
@@ -231,7 +253,7 @@ export async function provisionMoveIn(sessionId: string): Promise<ProvisionResul
           // basket carries a rate per line.
           monthlyRateCents: line.quotedRateCents,
           billingDay: billingDayFor(facility.billingPolicy, localToday),
-          acquisitionSource: reservationSource ?? 'web',
+          acquisitionSource: reservationSource ?? sessionSource ?? 'web',
           ...acquisition,
           autopayEnabled,
           // D-52 (B-106). One plan per unit: every lease carries the tier the

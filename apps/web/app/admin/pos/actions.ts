@@ -21,7 +21,10 @@ const PROBLEM_COPY: Record<string, string> = {
   check_number_required: 'Enter the check or money-order number.',
   lease_not_found: 'That unit is not on this tenant’s account at this facility.',
   needs_manager: 'Cash this large needs a manager. Ask one to take it, or split the payment.',
-  card_not_supported: 'Card payments go through the online payment screen — there is no card terminal here yet.',
+  // B-230. The counter takes cards now, on its own screen — this string is
+  // only reachable if something posts `card` past the redirect below, and it
+  // has to say what to do rather than send anybody to email.
+  card_not_supported: 'Cards are taken on the card screen. Choose Card and press Record payment again.',
 }
 
 /// Dollars as typed to integer cents, without floating point: Math.round of
@@ -47,11 +50,28 @@ export async function takePaymentAction(_prev: FormState, formData: FormData): P
     return fieldError({ tendered: 'Enter an amount like 100 or 100.00.' })
   }
 
+  const method = String(formData.get('method') ?? '') as CounterMethod
+  const leaseId = String(formData.get('leaseId') ?? '')
+
+  // B-230. A card leaves this form for the card screen, which raises a real
+  // PaymentIntent and presents Stripe's own Element.
+  //
+  // Routed here rather than from a separate button so the amount a staffer has
+  // already typed carries over — the tenant at the desk has said what they are
+  // paying once, and a screen that made them say it twice is the reason the
+  // old refusal read like a dead end. The amount is validated ABOVE this line,
+  // so nothing unparseable reaches the query string.
+  if (method === 'card') {
+    redirect(
+      `/admin/pos/card?lease=${encodeURIComponent(leaseId)}&amount=${(amountCents / 100).toFixed(2)}`,
+    )
+  }
+
   const result = await recordCounterPayment(actor, {
     facilityId: String(formData.get('facilityId') ?? ''),
     tenantId: String(formData.get('tenantId') ?? ''),
-    leaseId: String(formData.get('leaseId') ?? ''),
-    method: String(formData.get('method') ?? '') as CounterMethod,
+    leaseId,
+    method,
     amountCents,
     tenderedCents,
     checkNumber: String(formData.get('checkNumber') ?? ''),
@@ -96,7 +116,24 @@ export async function startWalkInMoveInAction(formData: FormData): Promise<void>
 
   // The counter quotes the in-store price, not the online one — that is the
   // whole difference between the two rates (D-15's lexicon).
-  const started = await startCheckout({ facilityId, unitTypeId, quotedRateCents: rate.streetRateCents })
+  const started = await startCheckout({
+    facilityId,
+    unitTypeId,
+    quotedRateCents: rate.streetRateCents,
+    // B-230 / US-43. The counter's own rental, recorded as one.
+    //
+    // Without this the session carries no reservation, and `provisionMoveIn`'s
+    // `reservationSource ?? 'web'` stamped every counter move-in as organic
+    // web — the walk-in half of the business, a third to a half of move-ins at
+    // most sites, reporting as the channel it did not come from while
+    // marketing was priced against it.
+    //
+    // `walk_in` unconditionally, and `phone` is NOT a case this screen has:
+    // a rental taken over the phone starts from the lead screen, where
+    // `holdForLead` already creates a reservation carrying `lead.source ??
+    // 'phone'`, and a reservation's source still wins in `provisionMoveIn`.
+    acquisitionSource: 'walk_in',
+  })
   if (!started.ok) redirect('/admin/pos?soldOut=1')
 
   redirect(`/checkout?token=${encodeURIComponent(started.token)}`)

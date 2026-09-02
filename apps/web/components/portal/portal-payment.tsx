@@ -95,14 +95,28 @@ function PayForm({ returnUrl, amountLabel }: { returnUrl: string; amountLabel: s
 
       <PaymentElement options={{ layout: 'tabs' }} />
 
-      {/* `aria-busy` rather than `disabled`, for the reason
+      {/* B-230. `aria-busy:opacity-60` was on this button and it failed 1.4.3
+          at 3.34:1 (#dadada on #747474). Caught by the counter card screen's
+          own axe scan — the component is shared, so the defect was equally the
+          portal's and checkout's, and both of their existing scans missed it
+          by racing the Stripe script: by the time they run, `stripe` has
+          resolved, `aria-busy` is false and the button is at full opacity. On
+          a slow connection it is the state every payer looks at, and it is the
+          button they are about to press.
+
+          1.4.3's exemption for "inactive user interface components" does not
+          apply, because this button is deliberately NOT `disabled` — it stays
+          focusable and activatable throughout. The dimming was decoration the
+          changed label and the status region above already cover.
+
+          `aria-busy` rather than `disabled`, for the reason
           `use-my-location.tsx` documents: disabling the focused element blurs
           it to <body> in Chromium, losing the payer's place at exactly the
           moment the page goes quiet. `inFlight` stops the second press. */}
       <button
         type="submit"
         aria-busy={!stripe || submitting}
-        className="bg-primary text-primary-foreground mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-md px-4 text-base font-medium aria-busy:opacity-60 sm:w-auto"
+        className="bg-primary text-primary-foreground mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-md px-4 text-base font-medium sm:w-auto"
       >
         {submitting ? 'Taking payment…' : `Pay ${amountLabel}`}
       </button>

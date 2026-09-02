@@ -97,3 +97,68 @@ test.describe('signed in as the demo owner', () => {
     await expect(page.getByRole('columnheader', { name: 'Taken by' })).toBeVisible()
   })
 })
+
+// B-230 / PRD 02 §4.8 US-32, PRD 01 US-601. Card at the counter.
+//
+// The counter used to refuse a card outright and send the tenant to the online
+// payment screen — a deflection to email aimed at precisely the person standing
+// at the desk wanting their gate to reopen.
+//
+// Read-only against shared demo data (B-120's rule): nothing here submits a
+// charge. With no Stripe key configured in e2e the screen raises no intent and
+// writes no `Payment` row, so it cannot disturb the past-due tenant the portal
+// suites depend on.
+test.describe('card at the counter', () => {
+  test.beforeEach(async ({ page }) => {
+    await signInAsDemoOwner(page)
+  })
+
+  test('choosing Card carries the typed amount to the card screen', async ({ page }) => {
+    await page.goto(`/admin/pos?q=${DEMO_POS_TENANT_EMAIL}`)
+    await page.getByRole('link', { name: 'Alex Active' }).first().click()
+
+    await page.getByLabel('Method').selectOption('card')
+    await page.getByLabel('Amount ($)').fill('35')
+    await page.getByRole('button', { name: 'Record payment' }).click()
+
+    // The amount travels, so the tenant says what they are paying once. The
+    // old refusal read as a dead end precisely because it did not.
+    await page.waitForURL(/\/admin\/pos\/card\?lease=[^&]+&amount=35\.00/)
+    await expect(page.getByRole('heading', { level: 1, name: 'Take a card payment' })).toBeVisible()
+    // Scoped to the summary list, not the page: the Payment Element's own
+    // "Pay $35.00" button carries the same string, and matching either would
+    // be a test that passes whether or not the figure the staffer reads out
+    // is right.
+    const summary = page.getByRole('main').getByRole('definition').filter({ hasText: '$35.00' })
+    await expect(page.getByText('Charging today')).toBeVisible()
+    await expect(summary).toHaveCount(1)
+  })
+
+  test('the tenant profile can take a payment for a lease that owes something', async ({ page }) => {
+    // dana@demo.example.com uniquely: two "Dana Delinquent" tenants exist, one
+    // per demo facility, and only this one has a real ledger charge — so only
+    // this one renders the control at all, which is the behaviour under test.
+    await page.goto('/admin/tenants?q=dana@demo.example.com')
+    await page.getByRole('link', { name: 'Dana Delinquent' }).click()
+    await page.waitForURL(/\/admin\/tenants\/[^/?]+$/)
+
+    await page.getByRole('link', { name: /^Take payment/ }).first().click()
+    await page.waitForURL(/\/admin\/pos\/card\?lease=/)
+    await expect(page.getByRole('heading', { level: 1, name: 'Take a card payment' })).toBeVisible()
+    // The facility comes from the LEASE, not the admin facility switcher — the
+    // profile lists leases across every site a staffer can see, and a charge
+    // raised against the switcher's facility is money in the wrong deposit.
+    await expect(page.getByText('Balance on this unit')).toBeVisible()
+  })
+
+  test('/admin/pos/card has no WCAG 2.1 AA violations', async ({ page }) => {
+    await page.goto('/admin/tenants?q=dana@demo.example.com')
+    await page.getByRole('link', { name: 'Dana Delinquent' }).click()
+    await page.waitForURL(/\/admin\/tenants\/[^/?]+$/)
+    await page.getByRole('link', { name: /^Take payment/ }).first().click()
+    await page.waitForURL(/\/admin\/pos\/card\?lease=/)
+    await expect(page.getByRole('main')).toBeVisible()
+
+    await assertNoAxeViolations(page)
+  })
+})

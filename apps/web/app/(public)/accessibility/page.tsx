@@ -1359,6 +1359,43 @@ const LAST_REVIEWED = '19 August 2026'
 // alone, which is US-301's requirement that components be named rather than
 // silently omitted.
 
+// Re-read 2026-09-02, at B-230 (the counter could not take a card, a walk-in
+// move-in could not take cash, and every counter rental reported as a web
+// rental). **Customer-facing in one respect only, and it is a FIX to a real
+// 1.4.3 failure this page had no idea about.** The item's own screens are all
+// staff ones — `/admin/pos/card`, the POS form, the tenant profile — and the
+// staff-only tender it adds to the checkout payment step renders for nobody
+// else, so no claim about the public site or the portal changes and
+// `LAST_REVIEWED` does not move.
+//
+// **What it found.** The new counter card screen reuses `PortalPayment`, so it
+// got that component's first axe scan in a state the two existing ones never
+// reach: `aria-busy` true, while the Stripe script is still loading. The pay
+// button carried `aria-busy:opacity-60`, and dimmed it measures **3.34:1**
+// (#dadada on #747474) — a 1.4.3 Contrast (Minimum) failure on the button a
+// payer is about to press. It was equally the portal's and checkout's: the
+// identical button is in `components/checkout/payment-element.tsx`, and both
+// of their scans miss it by racing the script, so by the time they run
+// `aria-busy` is false and the button is at full opacity.
+//
+// **Why the "inactive component" exemption does not apply.** 1.4.3 exempts
+// inactive user interface components, and this button is deliberately NOT
+// `disabled` — B-110 made it `aria-busy` precisely so it stays focusable and
+// activatable while the confirmation runs (disabling the focused element blurs
+// it to <body> in Chromium). A control that keeps its focus and its activation
+// is not inactive, so the exemption it might have claimed is one its own design
+// gives up.
+//
+// The opacity is gone from both components. Nothing is lost: the busy state is
+// still announced by the pre-mounted "Taking payment" region and still shown
+// by the label changing to "Taking payment…", which is what the log entry of
+// 2026-08-14 above already describes. `/admin/pos/card` is now scanned by its
+// own click-through in `e2e/admin-pos.spec.ts` and is registered in
+// `SCANNED_BY_OWN_SPEC`; `/admin/pos/card/done` joins `ADMIN_SCAN_ROUTES` in
+// the same posture as `/portal/pay/done` (only its not-found state is
+// reachable without a real card payment). Neither is on this page's own
+// coverage claim, which covers the public site and the portal.
+
 export default function AccessibilityPage() {
   return (
     <ProsePage
