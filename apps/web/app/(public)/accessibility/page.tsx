@@ -1231,6 +1231,63 @@ const LAST_REVIEWED = '19 August 2026'
 // closed disclosure; this one was in every scan's reach the whole time and the
 // rule was not asking the question.
 
+// ── B-218, entered late at B-250 (2026-09-01) ──────────────────────────
+//
+// **This entry is backdated, and that is the point of writing it.** B-218 was
+// merged with no entry here, and it changed the TRUTH VALUE of a sentence on
+// this page — the one case this log exists to catch, and the one it missed.
+//
+// "How we check" says automated tests run *"on every push to our main branch,
+// and on every pull request that is open for review"*. The second half was
+// **false for the entire life of the split lanes.** `on: pull_request` with no
+// `types:` defaults to `opened, synchronize, reopened`; `ready_for_review` is
+// not among them, so `gh pr ready` fired no workflow event at all and the
+// `e2e` job kept whatever `skipping` conclusion it had earned while the PR was
+// still a draft. Sixteen PRs reported `e2e=skipping` on the strength of it.
+// B-218 added `types: [opened, synchronize, reopened, ready_for_review]` and
+// the sentence became true.
+//
+// So the sentence was an OVERSTATEMENT when written and is accurate now, and
+// **neither half was recorded when it happened**. The rule this page follows is
+// that a claim changing truth value is logged **in either direction** — the
+// direction that matters most being the one where the page was ahead of the
+// build, because that is the one that reads as a misrepresentation rather than
+// as modesty. It was caught by a review, not by this log, which is the honest
+// summary of what happened.
+//
+// `LAST_REVIEWED` does not move. A sentence becoming true is not a re-check of
+// the page, and correcting the record of an overstatement never moves the date
+// (PRD 01 §6.8).
+
+// Re-read 2026-09-01, at B-250 (this page's own review date).
+//
+// **The "Where we fall short" list was re-read against the build in full**, not
+// as a side effect of another row — B-250 exists because no per-item re-read
+// ever does that. All three entries are still true today: the no-JavaScript
+// hold countdown still does not tick, Tasks/Leads/Delinquency/Support sessions
+// are still unpaginated, and the two embedded maps are unchanged and still
+// collapsed behind a button.
+//
+// **A prediction in the backlog turned out to be wrong, and it is recorded
+// rather than quietly dropped.** B-250's row and D-115 both say that B-244,
+// B-245, B-247 and B-249 "change the 'Where we fall short' list rather than
+// `LAST_REVIEWED`". They changed neither: all four fixed customer-facing
+// defects that this list had **never named**, because nobody knew about them
+// until the review that raised them. A shortfall list can only shorten when the
+// thing it admits to gets fixed, and none of these four were on it.
+//
+// That is worth keeping because it sharpens what the list is: it is a record of
+// **known** problems, and four unknown ones were found and fixed in a single
+// day without it moving. The list being short is not evidence the page is
+// close to done.
+//
+// **`LAST_REVIEWED` still does not move, and B-250 could not fix that** — the
+// cadence half is blocked on **D-115**, which is an owner decision about
+// somebody's recurring time and not a thing a build session may settle. What
+// this row could do, it did: the missing B-218 entry above, and this
+// re-verification. The date stands at 19 August 2026 with twenty-one merged
+// items behind it, and **B-254** owns moving it.
+
 export default function AccessibilityPage() {
   return (
     <ProsePage

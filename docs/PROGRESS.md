@@ -7296,7 +7296,7 @@ The three measurements moved into `measureThreeWays` so both loops share one cop
 
 **What it left behind.**
 
-- **`LAST_REVIEWED` is still structurally frozen.** That is **B-254**, blocked on **D-115**. Nothing here improves it; the row is honest about which half shipped.
+- **`LAST_REVIEWED` is still structurally frozen, and closing it is now human work rather than blocked work.** **D-115 was answered while this row was being built — option (B):** the date moves when the PRD 01 §6.8 manual screen-reader pass on the two golden paths is carried out and recorded here as a dated pass, and at no other time. **B-254** owns it and **no build session may tick it** — nobody has ever run VoiceOver or NVDA against this product, the page says so, and the entire value of option (B) is that the date certifies a pass a person actually performed. A session may write up the findings, move the date and edit the shortfall list *after* the pass; it may not move the date on the strength of an axe run or a code read, which is what B-250 just demonstrated cannot move it.
 - **Only one sentence on the page is guarded.** The CI claim now has a test because its truth lives in a file. Every other claim on the page still depends on a human re-reading it, which is the whole problem D-115 is about.
 - **The §6.8 manual screen-reader pass on the two golden paths still has never been carried out.** The page says so honestly. It is option (B) in D-115 and would convert the largest unverified claim in this codebase into a verified one.
 
