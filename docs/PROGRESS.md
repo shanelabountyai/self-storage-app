@@ -7276,7 +7276,7 @@ The three measurements moved into `measureThreeWays` so both loops share one cop
 
 ## B-251 — A "you are here" state made of a 1.09:1 tint and a font-weight bump
 
-`PENDING`
+`3c3ca7d`
 
 **What it built.** The selected state on the management pack's month chips was `bg-accent` plus `font-medium` and nothing else. `--accent` is `oklch(0.97 0 0)` against a white `--background` — **1.09:1**, and **1.31:1** in dark. Twelve chips of which one is "current", told apart by a tint below the threshold of visibility and a 500-vs-400 weight difference at 14px, is not a state a reader with reduced contrast sensitivity can pick out.
 
