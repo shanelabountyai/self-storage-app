@@ -7972,7 +7972,7 @@ Three defects on one code path, and the fix is the tender step each of them was 
 
 ## B-231 — The counter can see what the tenant owes, and a former tenant can finally hand over cash
 
-`PENDING`
+`6751931`
 
 D-110 was answered first, because this row was blocked on a permission policy and not on code.
 
