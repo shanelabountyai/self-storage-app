@@ -7276,7 +7276,7 @@ The three measurements moved into `measureThreeWays` so both loops share one cop
 
 ## B-225 — Money paid ahead had nowhere to live, so the tenant who prepaid was fee'd and then charged again
 
-`PENDING`
+`a323791`
 
 **What it built.** `applyPayment` has returned `unappliedCents` since B-044 and **nothing downstream read it.** A tenant hands the counter $600 in December for six months: $150 settles the open invoice and $450 sits nowhere. In January the new invoice is issued at full value, `assessLateFees` charges a fee, and `runAutopay` takes another $150 from their card — a chargeback and a lost tenant, produced by their own money. The month-end journal had already posted the $450 to Customer Deposits, so the liability was on the books with nothing anywhere that could discharge it, and the portal meanwhile **refused the same overpayment outright** with a comment promising prepayment "comes back with B-044". B-044 shipped without it.
 
