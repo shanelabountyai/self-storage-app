@@ -8083,7 +8083,7 @@ The screen that asks a past-due tenant for money was "Balance $487.50 / Paying t
 
 ## B-234 — A held auction surplus gets an alarm, not a screen
 
-`PENDING`
+`93ea899`
 
 `surplusObligation` has computed both dated obligations a surplus carries since B-062 — the former tenant not yet notified, and the holding period run out — and the only thing reading it was `outstandingSurpluses`, rendered on `/admin/auctions` for the one facility the switcher happened to be on. Nobody opens that screen at a site with no live cases, so a surplus set to `sale + 365 days` sat correctly computed and unread for the whole year of its hold. US-28's own words are that a surplus is a liability with a statutory life, and that quietly retaining one is how a routine auction becomes a class-action-shaped problem. **What was missing was the alarm, not the arithmetic.**
 
