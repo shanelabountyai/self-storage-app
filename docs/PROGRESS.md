@@ -7276,7 +7276,7 @@ The three measurements moved into `measureThreeWays` so both loops share one cop
 
 ## B-228 — The same payment-plan installment was due on two different days, one tap apart
 
-`PENDING_SHA`
+`0dfb9e9`
 
 **What it built.** One formatter for a calendar date, and the five surfaces that render one now call it. `formatCalendarDate` in `apps/web/lib/format.ts`, alongside `formatDay` (B-173's `yyyy-mm-dd` string form), which now delegates to it.
 
