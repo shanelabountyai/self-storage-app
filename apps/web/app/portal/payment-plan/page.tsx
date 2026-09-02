@@ -2,14 +2,20 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { requireTenantActor } from '@/lib/rbac/session'
 import { paymentPlansForTenant } from '@/lib/portal/payment-plan'
-import { formatRate } from '@/lib/format'
+import { formatCalendarDate, formatRate } from '@/lib/format'
 
 export const metadata: Metadata = { title: 'Payment plan' }
 
 // PRD 01 §9 (B-090 part 3). "Delinquency self-cure UX beyond banner (payment
 // plans)". Read-only — see the comment in lib/portal/payment-plan.ts for why.
 
-function formatDate(date: Date): string {
+// B-228. `plan.createdAt` is a real INSTANT (`@default(now())`), which is why
+// it is not `formatCalendarDate` — the installment dates below are, and mixing
+// the two through one helper is how this page and the dashboard ended up
+// naming different days for the same installment. A facility timezone would be
+// the right thing to render this in; `paymentPlansForTenant` does not carry
+// one, so it stays as it was and is left to whoever needs it.
+function formatAgreedOn(date: Date): string {
   return new Intl.DateTimeFormat('en-US', { month: 'long', day: 'numeric', year: 'numeric' }).format(date)
 }
 
@@ -62,7 +68,7 @@ export default async function PortalPaymentPlanPage() {
             <section key={plan.id} className="border-input flex flex-col gap-3 rounded-lg border p-4">
               <div>
                 <h2 className="font-medium">
-                  {plan.facilityName} — Unit {plan.unitNumber} · agreed {formatDate(plan.createdAt)}
+                  {plan.facilityName} — Unit {plan.unitNumber} · agreed {formatAgreedOn(plan.createdAt)}
                 </h2>
                 <p className="text-sm text-pretty">{STATUS_COPY[plan.status] ?? plan.status}</p>
                 {/* D-98 (B-190), tenant side. A replacement plan is agreed over
@@ -94,7 +100,7 @@ export default async function PortalPaymentPlanPage() {
 
               <table className="w-full text-sm">
                 <caption className="sr-only">
-                  Installment schedule for unit {plan.unitNumber}, agreed {formatDate(plan.createdAt)}
+                  Installment schedule for unit {plan.unitNumber}, agreed {formatAgreedOn(plan.createdAt)}
                 </caption>
                 <thead>
                   <tr className="border-b text-left">
@@ -119,7 +125,7 @@ export default async function PortalPaymentPlanPage() {
                 <tbody>
                   {plan.installments.map((installment, index) => (
                     <tr key={installment.position} className="border-b last:border-0">
-                      <td className="py-1">{formatDate(installment.dueDate)}</td>
+                      <td className="py-1">{formatCalendarDate(installment.dueDate)}</td>
                       <td className="py-1 text-right tabular-nums">{formatRate(installment.amountCents)}</td>
                       <td className="py-1 text-right tabular-nums">
                         {formatRate(
@@ -140,7 +146,7 @@ export default async function PortalPaymentPlanPage() {
                           <span className="font-medium text-red-800">Missed</span>
                         ) : installment.status === 'late' ? (
                           <span className="font-medium normal-case">
-                            Late — pay by {formatDate(installment.graceEndsOn)}
+                            Late — pay by {formatCalendarDate(installment.graceEndsOn)}
                           </span>
                         ) : (
                           installment.status
@@ -163,7 +169,7 @@ export default async function PortalPaymentPlanPage() {
                     href={`/portal/pay?lease=${plan.leaseId}&amount=${due.amountCents / 100}`}
                     className="bg-primary text-primary-foreground inline-flex min-h-11 w-fit items-center justify-center rounded-md px-4 text-sm font-medium"
                   >
-                    Pay {formatRate(due.amountCents)} due {formatDate(due.dueDate)}
+                    Pay {formatRate(due.amountCents)} due {formatCalendarDate(due.dueDate)}
                   </Link>
                   <Link
                     href={`/portal/pay?lease=${plan.leaseId}`}

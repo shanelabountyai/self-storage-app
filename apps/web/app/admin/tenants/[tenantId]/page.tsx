@@ -8,7 +8,7 @@ import {
   type TenantLeaseSummary,
   type TenantMessageRow,
 } from "@/lib/admin/tenants";
-import { formatCents } from "@/lib/format";
+import { formatCalendarDate, formatCents } from "@/lib/format";
 import { AdminForm, Field, FieldSet } from "@/components/admin/form";
 import { AnnounceRegion } from "@/components/admin/announce";
 import {
@@ -98,12 +98,25 @@ function isoDate(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
+/// B-228. INSTANTS only — a document upload, a returned-mail stamp, an address
+/// change. A date somebody typed into a `yyyy-mm-dd` field is stored as UTC
+/// midnight and has to be read back in UTC, so it goes through
+/// `calendarDate` below. Rendering one of those here gives the day before on
+/// any machine west of Greenwich, which is how the installment schedule on this
+/// page and the tenant's own dashboard came to name two different days for the
+/// same payment.
 function formatDate(date: Date): string {
   return new Intl.DateTimeFormat("en-US", {
     day: "numeric",
     month: "short",
     year: "numeric",
   }).format(date);
+}
+
+/// B-228. The same reading, for a calendar day. Same look as `formatDate` so
+/// nothing on the page changes shape — only which day it names.
+function calendarDate(date: Date): string {
+  return formatCalendarDate(date, { day: "numeric", month: "short", year: "numeric" });
 }
 
 function formatWhen(date: Date): string {
@@ -506,7 +519,7 @@ export default async function TenantProfilePage({
                     >
                       {formatCents(lease.balanceCents)}
                     </td>
-                    <td className="py-2">{formatDate(lease.startDate)}</td>
+                    <td className="py-2">{calendarDate(lease.startDate)}</td>
                     <td className="py-2">
                       <NoticeGiven lease={lease} tenantId={tenantId} />
                     </td>
@@ -566,7 +579,7 @@ export default async function TenantProfilePage({
                   <dt className="text-muted-foreground">Rate</dt>
                   <dd>{formatCents(lease.monthlyRateCents)}/mo</dd>
                   <dt className="text-muted-foreground">Started</dt>
-                  <dd>{formatDate(lease.startDate)}</dd>
+                  <dd>{calendarDate(lease.startDate)}</dd>
                 </dl>
                 <div className="mt-2 text-sm">
                   <p className="text-muted-foreground">Notice given</p>
@@ -676,7 +689,7 @@ export default async function TenantProfilePage({
               <tbody>
                 {plan.installments.map((installment, index) => (
                   <tr key={installment.position} className="border-b last:border-0">
-                    <td className="py-1">{formatDate(installment.dueDate)}</td>
+                    <td className="py-1">{calendarDate(installment.dueDate)}</td>
                     <td className="py-1 text-right tabular-nums">
                       {formatCents(installment.amountCents)}
                     </td>
@@ -698,7 +711,7 @@ export default async function TenantProfilePage({
                         <span className="font-medium text-red-800">Missed</span>
                       ) : installment.status === "late" ? (
                         <span className="font-medium normal-case">
-                          Late — pay by {formatDate(installment.graceEndsOn)}
+                          Late — pay by {calendarDate(installment.graceEndsOn)}
                         </span>
                       ) : (
                         installment.status

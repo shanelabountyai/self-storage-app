@@ -109,6 +109,20 @@ const gateHours: WeeklySchedule = {
 const daysAgo = (n: number) => new Date(Date.now() - n * 24 * 60 * 60 * 1000)
 const daysFromNow = (n: number) => new Date(Date.now() + n * 24 * 60 * 60 * 1000)
 
+/// B-228. A calendar day, `n` days out — UTC midnight, which is what
+/// `parseDate` stores for a date a staffer types into a `yyyy-mm-dd` field.
+///
+/// `daysFromNow` above gives whatever time of day the seed happened to run at,
+/// and for a field the product only ever fills with a calendar day that is a
+/// shape production never holds. It is also why no browser test could see
+/// B-228: at 11:00Z a UTC reading and a Central one name the same day, so the
+/// dashboard and the schedule agreed in the fixture while disagreeing in
+/// production. Use this wherever the fixture stands in for a typed date.
+const dayFromNow = (n: number) => {
+  const day = daysFromNow(n)
+  return new Date(Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate()))
+}
+
 async function teardown() {
   const facilities = await prisma.facility.findMany({
     where: { slug: { startsWith: DEMO_PREFIX } },
@@ -912,7 +926,7 @@ async function seedLifecycleStates(
         installments: {
           create: amounts.map((amountCents, i) => ({
             position: i + 1,
-            dueDate: daysFromNow(10 + i * 25),
+            dueDate: dayFromNow(10 + i * 25),
             amountCents,
           })),
         },

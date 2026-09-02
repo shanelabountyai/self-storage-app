@@ -30,10 +30,28 @@ export function formatRate(cents: number): string {
 export function formatDay(iso: string): string {
   const date = new Date(`${iso}T00:00:00.000Z`)
   if (Number.isNaN(date.getTime())) return iso
-  return new Intl.DateTimeFormat('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    timeZone: 'UTC',
-  }).format(date)
+  return formatCalendarDate(date, { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
+/// B-228. A date somebody typed into a `yyyy-mm-dd` field — a due date on an
+/// agreement, a move-in day, a transfer day — is a CALENDAR DAY, not an
+/// instant. `parseDate` stores it as UTC midnight, which is the same shape
+/// `businessDateFor` produces for "the local day this happened on", so it has
+/// to be read back in UTC: rendered through a US timezone it names the day
+/// before, every time.
+///
+/// The portal dashboard did exactly that while the schedule one tap away did
+/// not, so the same installment was due on 14 October and on 15 October at
+/// once — and `graceEndsOn` derives from the same value, so a tenant who paid
+/// on the day the schedule named could have their plan marked broken.
+///
+/// This is the one formatter every surface calls for such a date. Do NOT fix a
+/// disagreement by handing one of them a timezone: the value has no time in it
+/// to convert. `formatDay` above is the same rule for a `yyyy-mm-dd` string,
+/// and delegates here.
+export function formatCalendarDate(
+  date: Date,
+  options: Intl.DateTimeFormatOptions = { month: 'long', day: 'numeric', year: 'numeric' },
+): string {
+  return new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', ...options }).format(date)
 }

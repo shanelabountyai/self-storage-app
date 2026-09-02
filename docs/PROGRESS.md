@@ -7274,6 +7274,44 @@ The three measurements moved into `measureThreeWays` so both loops share one cop
 - **Verified on `desktop-chrome` only.** The spec sets its own viewport in every pass, so `mobile-chrome` would measure the same three CSS viewports; the device scale factor is a rendering concern and not a layout one, as the file's existing comment says.
 - Unit suite green end to end: 3916 passed, 8 skipped, reconciled to 3924. The touched e2e file: 11 passed, 0 failed. Lint and typecheck clean. No schema change, so no migration and nothing for the drift check to see.
 
+## B-228 — The same payment-plan installment was due on two different days, one tap apart
+
+`PENDING_SHA`
+
+**What it built.** One formatter for a calendar date, and the five surfaces that render one now call it. `formatCalendarDate` in `apps/web/lib/format.ts`, alongside `formatDay` (B-173's `yyyy-mm-dd` string form), which now delegates to it.
+
+The tenant-facing symptom the row named: the dashboard card said *"$306.23 was due on October 14. Your plan carries on if you pay it by October 17"*, and "See the full schedule" one tap away said the 15th — the day the staffer typed and the day `graceEndsOn` is measured from, so a tenant who paid on the day the schedule named could have had the plan marked broken.
+
+**What it decided.**
+
+- **A date typed into a `yyyy-mm-dd` field is a calendar day, held at UTC midnight and read back in UTC.** Not at facility-local midnight. `parseDate` already stores UTC midnight, which is the same shape `businessDateFor` produces for "the local day this happened on", and `lib/comms/service.ts` had a `formatPlanDate` whose comment stated this exact rule. The defect was never the storage — it was four different readings of it.
+- **The row's prescribed fix was not taken, deliberately.** It proposed that "`parseDate` stops producing a UTC instant for a date entered against a facility that has a timezone". That would have broken the one path that was already right, plus every other `parseDate` consumer that already reads back in UTC — `effectiveFrom` on rate plans and org settings, promotion windows, lead follow-ups, protection expiry — and it would make one lease date mean two different days for two facilities in the same report. The row's closing instruction still holds and was followed: the dashboard's timezone was removed, but by settling the reckoning rather than by giving up on it.
+- **Do not hand `formatCalendarDate` a timezone to settle a disagreement.** There is no time in the value to convert. Written into the function's own comment, because that is the fix that looks right.
+
+**The direction of the shift, measured rather than assumed** — the row asked for exactly this at build time. On Vercel (`TZ=UTC`) the dashboard rendered **14 October** while the schedule and the staffer rendered **15**, which is the row's description. On an `America/Chicago` laptop **all three said 14 October**: the product agreed on the wrong day and nothing looked wrong locally, which is why this survived to be found by review rather than by use.
+
+**It was wider than the plan card.** `formatDueDate` on `/portal` took `lease.facilityTimezone`, and **every one of its seven call sites is a UTC-midnight calendar date** — not just the plan card's three. `nextBillingDate` builds the billing anniversary with `Date.UTC`, `Lease.moveOutDate` is `@db.Date`, and a transfer date is parsed from `yyyy-mm-dd`. So on production the same defect also named the day before the anniversary under **"Next payment due"** and the day before the tenant's own **move-out date**. The function no longer takes a timezone at all; `formatExpiry` beside it keeps one, because a hold expiry is a real instant.
+
+The other surfaces: `/portal/payment-plan` and the staff-side schedule on the tenant profile format `dueDate` and `graceEndsOn` through the shared formatter; `lease.startDate` on that profile too, being `businessDateFor`-derived and the same class of value. The instants those pages also render keep a separate helper — renamed `formatAgreedOn` on the plan page, and commented "INSTANTS only" on the profile — so the next person cannot pick the wrong one by accident. `formatPlanDate` in `lib/comms/service.ts` and the local UTC copy in `/admin/reports/plans-holds` were deleted in favour of the shared one: four copies of the reasoning became one.
+
+**The fixture was part of the defect.** `seed-demo.mts` created plan installments with `daysFromNow` — `Date.now()` plus n days, i.e. whatever time of day the seed happened to run at. That is a shape the product never stores, and it is why no browser test could have caught this at any point: at 11:00Z a UTC reading and a Central one name the same day. Installments now seed at UTC midnight through a `dayFromNow` helper. **Proven rather than assumed:** with the old fixture, the new e2e test passes with the defect reintroduced; with the corrected one it fails — `the schedule has a row due September 12 ... Expected: 1, Received: 0`.
+
+**Two runnable checks.**
+
+- `tests/format-calendar-date.test.ts` — four assertions over a date put through `parseDate` itself: the day the staffer typed survives the round trip; the facility-timezone reading is the day before (the defect, kept runnable, so a future "fix" that re-adds a timezone fails with the reason attached); a 31-day grace window crossing the US fall-back day still lands on the right day; and every shape the surfaces print — the dashboard's month-and-day, the schedules' short form, `formatDay`'s string form — names the same day.
+- `e2e/portal.spec.ts` — the row's own request, as a browser test: the dashboard card's "Your next payment is $X on ⟨day⟩" and the schedule's Due column must name the same day. Asserted on the **day**, not the string, because the two surfaces are allowed to keep their own formats.
+
+**Accessibility.** Customer-facing (`/portal`, `/portal/payment-plan`), and `apps/web/app/(public)/accessibility/page.tsx` was re-read against it: no sentence changes and `LAST_REVIEWED` does not move. No page, control, state or scan coverage moved — only which day a date names, which the statement makes no claim about in either direction.
+
+**Test verification.** Typecheck (including `tsconfig.tests.json`) clean; lint clean (7 pre-existing warnings, unrelated); `prisma migrate diff --exit-code` reports **no difference** — no schema change. Full unit suite: **3,977 passed, 8 skipped of 3,985** (237 files passed, 1 skipped), exit 0. `e2e/portal.spec.ts` + `e2e/admin-tenants.spec.ts` + `e2e/admin.spec.ts` on `desktop-chrome`: **357 passed**, exit 0, including the new same-day test and every axe and layout loop over the two touched portal routes and the tenant profile.
+
+**What it left behind.**
+
+- **`plan.createdAt` on both plan surfaces is still read with no timezone.** It is a genuine instant, so the right reading is the facility's, and `paymentPlansForTenant` does not carry one — a plan agreed at 7pm Central shows the next day as the date it was agreed. Not this row's defect, and named rather than guessed at.
+- **`Lease.noticeGivenAt` is neither reliably a calendar day nor an instant.** It has two writers: `lib/admin/move-out.ts` stores a date a staffer typed, `lib/portal/move-out.ts` stores `new Date()`. Settling it is a data question rather than a formatting one, so nothing here touched it.
+- **`daysFromNow` still fills every other demo date.** Only the plan installments moved, because those are the only ones this row proved wrong. Any other fixture standing in for a typed date has the same latent mismatch and no test that would show it.
+- **Nothing stops a NEW surface writing its own `Intl.DateTimeFormat`.** A lint rule banning bare `Intl.DateTimeFormat` outside `lib/format.ts` would, and would have caught all four copies at once; it is bigger than this row and would need every legitimate instant formatter moved first.
+
 ## B-227 — Three screens promised a monthly charge with the tax left out, and the payment step said "Autopay is on" after the renter turned it off
 
 `dd92b8c`

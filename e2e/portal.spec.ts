@@ -380,6 +380,43 @@ test.describe('signed in as the tenant on a payment plan', () => {
     await assertNoAxeViolations(page, { state: 'payment plan card' })
   })
 
+  // B-228. The dashboard card and the schedule one tap away named two different
+  // days for the same installment: the card formatted the date in the
+  // facility's timezone, the schedule in none, over a value `parseDate` stores
+  // at UTC midnight. `graceEndsOn` derives from it too, so a tenant who paid on
+  // the day the schedule named had a defensible complaint when the plan was
+  // marked broken.
+  //
+  // Both surfaces now call `formatCalendarDate`, and this is what fails if
+  // either one stops: the assertion is on the DAY, not the string, because the
+  // card prints "October 15" and the schedule "October 15, 2026" and they are
+  // allowed to keep those shapes.
+  test('the dashboard and the schedule name the same day for the same installment', async ({
+    page,
+  }) => {
+    await page.goto('/portal')
+    const card = page
+      .getByRole('main')
+      .getByRole('region')
+      .filter({ hasText: "You're on a payment plan" })
+    await expect(card).toContainText('Your next payment is')
+
+    const sentence = (await card.textContent()) ?? ''
+    const match = sentence.match(/Your next payment is \$[\d,.]+ on ([A-Z][a-z]+ \d{1,2})\./)
+    expect(match, `the card states a due date — it said: ${sentence.trim()}`).not.toBeNull()
+    const day = match![1]
+
+    await page.goto('/portal/payment-plan')
+    await expect(page.getByRole('columnheader', { name: 'Due' })).toBeVisible()
+
+    // The same day, in the schedule's own shape. Anchored, so "October 1"
+    // cannot be satisfied by a row reading "October 15, 2026".
+    await expect(
+      page.getByRole('cell', { name: new RegExp(`^${day}, \\d{4}$`) }),
+      `the schedule has a row due ${day}`,
+    ).toHaveCount(1)
+  })
+
   // B-247. The Manage disclosure, OPENED. The portal route loop scans this page
   // with it closed, so the six links behind it were in the accessibility tree
   // of no scan — which is how they kept a roughly 20px tap target on the one

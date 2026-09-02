@@ -13,7 +13,7 @@ import { leaseHasEffect } from '@/lib/admin/holds'
 import { REFERRAL_REFUSAL_MESSAGES, type ReferralRefusal } from '@storage/core/referrals'
 import { daysPastDue } from '@storage/core/metrics'
 import { isAutoCollecting } from '@storage/core/payment-plans'
-import { formatCents } from '@/lib/format'
+import { formatCalendarDate, formatCents } from '@/lib/format'
 import { facilityPath } from '@/lib/facility/public-facility'
 import { absoluteUrl } from '@storage/core/marketing'
 import { currentRateForUnitType } from '@/lib/pricing/unit-type-rates'
@@ -517,7 +517,7 @@ function scheduleValue(
 ): MergeValue {
   const rows = installments.map((installment, index) => [
     `${index + 1}`,
-    formatPlanDate(installment.dueDate),
+    formatCalendarDate(installment.dueDate),
     formatCents(installment.amountCents),
   ])
   return {
@@ -1110,7 +1110,7 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
     if (!plan || !installment) return {} as MergeContext
     return {
       'plan.installment_amount': formatCents(installment.amountCents),
-      'plan.installment_due_date': formatPlanDate(installment.dueDate, {
+      'plan.installment_due_date': formatCalendarDate(installment.dueDate, {
         weekday: 'long',
         month: 'long',
         day: 'numeric',
@@ -1139,7 +1139,7 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
     return {
       'plan.balance': formatCents(await leaseBalanceCents(recipient.lease?.id ?? null)),
       'plan.missed_amount': formatCents(missed.amountCents),
-      'plan.missed_due_date': formatPlanDate(missed.dueDate, {
+      'plan.missed_due_date': formatCalendarDate(missed.dueDate, {
         weekday: 'long',
         month: 'long',
         day: 'numeric',
@@ -1166,7 +1166,7 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
       // What is still outstanding on it, not what it was raised for: a tenant
       // who part-paid must be quoted the part they did not.
       'invoice.amount': formatCents(invoice.totalCents - invoice.amountPaidCents),
-      'invoice.due_date': formatPlanDate(invoice.dueDate, {
+      'invoice.due_date': formatCalendarDate(invoice.dueDate, {
         weekday: 'long',
         month: 'long',
         day: 'numeric',
@@ -1223,16 +1223,6 @@ async function planForEvent(event: DomainEvent) {
       },
     },
   })
-}
-
-/// An installment date is a calendar date the staffer typed, stored as UTC
-/// midnight — formatted in a facility timezone it would read a day early, the
-/// same trap `notice.generated`'s deadline names above.
-function formatPlanDate(
-  date: Date,
-  options: Intl.DateTimeFormatOptions = { month: 'long', day: 'numeric', year: 'numeric' },
-): string {
-  return new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', ...options }).format(date)
 }
 
 /// D-97, in the tenant's words. Says whether the card will actually be charged

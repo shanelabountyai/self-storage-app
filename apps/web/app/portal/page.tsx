@@ -3,7 +3,7 @@ import { listParts, recurringParts } from '@storage/core/pricing'
 import Link from 'next/link'
 import { requireTenantActor } from '@/lib/rbac/session'
 import { portalDashboardForTenant, type PortalLeaseSummary } from '@/lib/portal/dashboard'
-import { formatRate } from '@/lib/format'
+import { formatCalendarDate, formatRate } from '@/lib/format'
 import { GateCodePanel } from '@/components/portal/gate-code-panel'
 import { currentImpersonation } from '@/lib/impersonation/context'
 
@@ -19,8 +19,18 @@ export const metadata: Metadata = { title: 'My account' }
 // paying is two taps from here (US-703's ≤3, and §6.5's ≤2 for the past-due
 // banner). Autopay is shown read-only — toggling it is B-036.
 
-function formatDueDate(date: Date, timezone: string): string {
-  return new Intl.DateTimeFormat('en-US', { timeZone: timezone, month: 'long', day: 'numeric' }).format(date)
+// B-228. Every date this renders is a CALENDAR day held as UTC midnight — the
+// billing anniversary from `nextBillingDate`'s `Date.UTC`, a `@db.Date`
+// move-out day, a transfer day parsed from `yyyy-mm-dd`, an installment date a
+// staffer typed. It used to take `lease.facilityTimezone`, which shifted every
+// one of them a day early in every US zone: the plan card said an installment
+// was due 14 October while the schedule one tap away said the 15th, and "Next
+// payment due" named the day before the anniversary the invoice actually
+// carries. There is no time in these values to convert — see
+// `formatCalendarDate`. The timezone belongs on `formatExpiry` below, which
+// formats a real instant.
+function formatDueDate(date: Date): string {
+  return formatCalendarDate(date, { month: 'long', day: 'numeric' })
 }
 
 // B-142. Absolute facility-local date and time — the hold expiry is never a
@@ -51,7 +61,7 @@ function LeaseCard({ lease, impersonated }: { lease: PortalLeaseSummary; imperso
   // One shared reckoning now, the same one `/portal/methods` and the checkout
   // disclosure use.
   const nextPaymentCents = lease.recurring.totalCents
-  const dueDate = formatDueDate(lease.nextDueDate, lease.facilityTimezone)
+  const dueDate = formatDueDate(lease.nextDueDate)
   const telHref = `tel:${lease.facilityPhone.replace(/[^0-9+]/g, '')}`
 
   // B-244. The heading FIRST, and the section named by it.
@@ -147,7 +157,7 @@ function LeaseCard({ lease, impersonated }: { lease: PortalLeaseSummary; imperso
         <div className="border-input rounded-md border p-3 text-sm text-pretty">
           <p>
             You asked to move to <strong>Unit {lease.pendingTransfer.toUnitNumber}</strong> on{' '}
-            {formatDueDate(lease.pendingTransfer.transferDate, lease.facilityTimezone)}. We&apos;re
+            {formatDueDate(lease.pendingTransfer.transferDate)}. We&apos;re
             holding it until{' '}
             {formatExpiry(lease.pendingTransfer.expiresAt, lease.facilityTimezone)}.{' '}
             <Link href="/portal/transfer" className="underline underline-offset-4">
@@ -210,10 +220,10 @@ function LeaseCard({ lease, impersonated }: { lease: PortalLeaseSummary; imperso
                 <p>
                   <strong>A payment on your plan is late.</strong>{' '}
                   {formatRate(lease.paymentPlan.late.amountCents)} was due on{' '}
-                  {formatDueDate(lease.paymentPlan.late.dueDate, lease.facilityTimezone)}. Your plan
+                  {formatDueDate(lease.paymentPlan.late.dueDate)}. Your plan
                   carries on if you pay it by{' '}
                   <strong>
-                    {formatDueDate(lease.paymentPlan.late.payByDate, lease.facilityTimezone)}
+                    {formatDueDate(lease.paymentPlan.late.payByDate)}
                   </strong>
                   .{' '}
                   <Link
@@ -229,7 +239,7 @@ function LeaseCard({ lease, impersonated }: { lease: PortalLeaseSummary; imperso
                 <p>
                   <strong>A payment on your plan was missed.</strong>{' '}
                   {formatRate(lease.paymentPlan.missed.amountCents)} was due on{' '}
-                  {formatDueDate(lease.paymentPlan.missed.dueDate, lease.facilityTimezone)}.{' '}
+                  {formatDueDate(lease.paymentPlan.missed.dueDate)}.{' '}
                   <Link
                     href={`/portal/pay?lease=${lease.leaseId}&amount=${lease.paymentPlan.missed.amountCents / 100}`}
                     className="underline underline-offset-4"
@@ -245,7 +255,7 @@ function LeaseCard({ lease, impersonated }: { lease: PortalLeaseSummary; imperso
                   <>
                     Your next payment is{' '}
                     <strong>{formatRate(lease.paymentPlan.next.amountCents)}</strong> on{' '}
-                    {formatDueDate(lease.paymentPlan.next.dueDate, lease.facilityTimezone)}.{' '}
+                    {formatDueDate(lease.paymentPlan.next.dueDate)}.{' '}
                   </>
                 ) : (
                   <>There are no payments left to make on it. </>
@@ -263,7 +273,7 @@ function LeaseCard({ lease, impersonated }: { lease: PortalLeaseSummary; imperso
         <div className="border-input rounded-md border p-3 text-sm text-pretty">
           <p>
             You asked to move out on{' '}
-            <strong>{formatDueDate(lease.pendingMoveOutDate, lease.facilityTimezone)}</strong>.{' '}
+            <strong>{formatDueDate(lease.pendingMoveOutDate)}</strong>.{' '}
             <Link href="/portal/move-out" className="underline underline-offset-4">
               Manage this request
             </Link>

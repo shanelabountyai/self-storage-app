@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { getAdminActor } from '@/lib/admin/context'
 import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
 import { plansAndHoldsReport, type HaltedLeaseRow } from '@/lib/admin/plans-holds-report'
-import { formatCents } from '@/lib/format'
+import { formatCalendarDate, formatCents } from '@/lib/format'
 import { ScrollRegion } from '@/components/ui/scroll-region'
 
 export const metadata = { title: 'Plans & holds' }
@@ -52,13 +52,11 @@ function currentMonth(): string {
   return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`
 }
 
+// B-228. This report already read installment dates in UTC — it is the surface
+// that got it right — but it was a fourth copy of the reasoning. One formatter
+// now, so a fifth surface cannot quietly pick a different one.
 function formatDate(date: Date): string {
-  return new Intl.DateTimeFormat('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    timeZone: 'UTC',
-  }).format(date)
+  return formatCalendarDate(date, { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
 function formatInstant(date: Date): string {
