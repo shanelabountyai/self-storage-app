@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { requireTenantActor } from '@/lib/rbac/session'
 import { autopayLeases, savedMethods } from '@/lib/portal/payment-methods'
 import { nextBillingDate } from '@/lib/portal/dashboard'
+import { listParts } from '@storage/core/pricing'
 import { formatRate } from '@/lib/format'
 import { SITE } from '@/lib/site-config'
 import { AdminForm } from '@/components/admin/form'
@@ -133,8 +134,14 @@ export default async function PaymentMethodsPage() {
                 <p className="text-muted-foreground mt-1 text-sm text-pretty">
                   {lease.autopayEnabled ? (
                     <>
-                      We charge <strong>{formatRate(lease.monthlyChargeCents)}</strong> on day{' '}
-                      {lease.billingDay} of each month — next on{' '}
+                      We charge <strong>{formatRate(lease.monthlyChargeCents)}</strong>{' '}
+                      {/* B-227 / US-301. The figure states what it contains.
+                          It was rent plus protection with the tax on rent
+                          missing, so it was LOWER than what autopay actually
+                          took — and this is the sentence a tenant screenshots
+                          when the two do not match. */}
+                      ({listParts(lease.chargeParts)}) on day {lease.billingDay} of each month —
+                      next on{' '}
                       {new Intl.DateTimeFormat('en-US', { month: 'long', day: 'numeric' }).format(
                         next,
                       )}
@@ -142,7 +149,8 @@ export default async function PaymentMethodsPage() {
                     </>
                   ) : (
                     <>
-                      Off. {formatRate(lease.monthlyChargeCents)} is due on day {lease.billingDay} of
+                      Off. {formatRate(lease.monthlyChargeCents)} ({listParts(lease.chargeParts)})
+                      is due on day {lease.billingDay} of
                       each month and you pay it yourself.
                     </>
                   )}

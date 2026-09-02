@@ -1,4 +1,5 @@
 import { prisma } from '@storage/db'
+import { monthlyRecurring, type RecurringCharge } from '@storage/core/pricing'
 import { OCCUPYING_LEASE_STATUSES, TRANSFER_HOLD_SOURCE } from '@storage/core/inventory'
 import { codeForLease } from '@/lib/access/provision'
 import { paymentPlanForLease } from '@/lib/admin/payment-plans'
@@ -38,6 +39,12 @@ export type PortalLeaseSummary = {
   lengthFt: number
   monthlyRateCents: number
   protectionCents: number
+  /// B-227. What the next invoice will actually total — rent, tax on rent, and
+  /// the protection premium — from the one shared reckoning. The dashboard used
+  /// to add `monthlyRateCents + protectionCents` itself and print that as "Next
+  /// payment", which left the tax out and understated the figure a tenant is
+  /// about to be charged.
+  recurring: RecurringCharge
   balanceCents: number
   nextDueDate: Date
   autopayEnabled: boolean
@@ -123,7 +130,15 @@ export async function portalDashboardForTenant(
         monthlyRateCents: true,
         protectionCents: true,
         moveOutDate: true,
-        facility: { select: { name: true, phone: true, timezone: true } },
+        facility: {
+          select: {
+            name: true,
+            phone: true,
+            timezone: true,
+            // B-227. Rent is taxable; the figure is wrong without these.
+            taxComponents: { select: { jurisdiction: true, rateBasisPoints: true } },
+          },
+        },
         unit: { select: { number: true, unitType: { select: { widthFt: true, lengthFt: true } } } },
       },
     }),
@@ -171,6 +186,11 @@ export async function portalDashboardForTenant(
         lengthFt: lease.unit.unitType.lengthFt,
         monthlyRateCents: lease.monthlyRateCents,
         protectionCents: lease.protectionCents,
+        recurring: monthlyRecurring({
+          monthlyRateCents: lease.monthlyRateCents,
+          protectionCents: lease.protectionCents,
+          taxRates: lease.facility.taxComponents,
+        }),
         balanceCents: balance._sum.amountCents ?? 0,
         nextDueDate: nextBillingDate(lease.billingDay, now),
         autopayEnabled: lease.autopayEnabled,

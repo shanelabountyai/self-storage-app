@@ -1,4 +1,5 @@
 import { prisma } from '@storage/db'
+import { monthlyRecurring, recurringParts } from '@storage/core/pricing'
 import { OCCUPYING_LEASE_STATUSES } from '@storage/core/inventory'
 import { ensureStripeCustomer } from '@/lib/payments/customers'
 import { stripeClient } from '@/lib/payments/stripe'
@@ -60,7 +61,13 @@ export type AutopayLease = {
   unitNumber: string
   facilityName: string
   autopayEnabled: boolean
+  /// B-227. What the invoice will total — rent, tax on rent, and protection —
+  /// from the one shared reckoning. It was `monthlyRateCents + protectionCents`
+  /// computed here, and this screen states it as "We charge $X on day 1", which
+  /// is the sentence a tenant screenshots when the charge does not match.
   monthlyChargeCents: number
+  /// What that figure is made of, for the sentence beside it (US-301).
+  chargeParts: string[]
   billingDay: number
 }
 
@@ -74,7 +81,13 @@ export async function autopayLeases(tenantId: string): Promise<AutopayLease[]> {
       monthlyRateCents: true,
       protectionCents: true,
       billingDay: true,
-      facility: { select: { name: true } },
+      // B-227. Rent is taxable; the promised figure is wrong without these.
+      facility: {
+        select: {
+          name: true,
+          taxComponents: { select: { jurisdiction: true, rateBasisPoints: true } },
+        },
+      },
       unit: { select: { number: true } },
     },
   })
@@ -84,7 +97,18 @@ export async function autopayLeases(tenantId: string): Promise<AutopayLease[]> {
     unitNumber: lease.unit.number,
     facilityName: lease.facility.name,
     autopayEnabled: lease.autopayEnabled,
-    monthlyChargeCents: lease.monthlyRateCents + lease.protectionCents,
+    monthlyChargeCents: monthlyRecurring({
+      monthlyRateCents: lease.monthlyRateCents,
+      protectionCents: lease.protectionCents,
+      taxRates: lease.facility.taxComponents,
+    }).totalCents,
+    chargeParts: recurringParts(
+      monthlyRecurring({
+        monthlyRateCents: lease.monthlyRateCents,
+        protectionCents: lease.protectionCents,
+        taxRates: lease.facility.taxComponents,
+      }),
+    ),
     billingDay: lease.billingDay,
   }))
 }

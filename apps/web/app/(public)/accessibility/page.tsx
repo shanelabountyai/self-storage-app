@@ -1331,6 +1331,34 @@ const LAST_REVIEWED = '19 August 2026'
 // truthfulness defect, which this repo has been careful all week not to file
 // under conformance.
 
+// Re-read 2026-09-01, at B-227 (three screens promised a monthly charge with
+// the tax left out, and the payment step said "Autopay is on" after the renter
+// turned it off). **Customer-facing** — `/portal`, `/portal/methods` and the
+// checkout payment step. **No claim on this page changes and `LAST_REVIEWED`
+// does not move.**
+//
+// The half that reaches this page is the autopay disclosure, and it is worth
+// being exact about which criterion it did and did not fail. **4.1.3 Status
+// Messages was already met and this row did not improve it**: `setAutopayAction`
+// has always returned a worded, branched outcome and `AdminForm`'s
+// `role="status"` region is in the DOM before the submit (B-184), so the result
+// announced correctly the whole time. What was wrong was that the STATIC
+// paragraph beside the checkbox contradicted it — the region said "Automatic
+// payments are off" and the disclosure underneath went on asserting autopay was
+// on, and named an amount and a day.
+//
+// So this was a **truthfulness defect and a consent defect**, not a conformance
+// one — D-11a permits a default-on enrolment only with an adjacent, accurate
+// disclosure. Filing it as a WCAG failure would be the overstatement this page
+// keeps catching in the other direction; claiming the fix as an accessibility
+// improvement would be the same error wearing a better coat.
+//
+// One thing genuinely improved for readers and is NOT claimed here either,
+// because this page makes no promise about it: the recurring figure now states
+// what it contains ("rent, tax and your protection plan") rather than standing
+// alone, which is US-301's requirement that components be named rather than
+// silently omitted.
+
 export default function AccessibilityPage() {
   return (
     <ProsePage

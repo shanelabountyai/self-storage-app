@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { listParts, recurringParts } from '@storage/core/pricing'
 import Link from 'next/link'
 import { requireTenantActor } from '@/lib/rbac/session'
 import { portalDashboardForTenant, type PortalLeaseSummary } from '@/lib/portal/dashboard'
@@ -45,7 +46,11 @@ function PayNowButton({ lease }: { lease: PortalLeaseSummary }) {
 
 function LeaseCard({ lease, impersonated }: { lease: PortalLeaseSummary; impersonated: boolean }) {
   const owesMoney = lease.balanceCents > 0
-  const nextPaymentCents = lease.monthlyRateCents + lease.protectionCents
+  // B-227. Was `monthlyRateCents + protectionCents`, computed here — which left
+  // the tax on rent out and understated the charge a tenant is about to see.
+  // One shared reckoning now, the same one `/portal/methods` and the checkout
+  // disclosure use.
+  const nextPaymentCents = lease.recurring.totalCents
   const dueDate = formatDueDate(lease.nextDueDate, lease.facilityTimezone)
   const telHref = `tel:${lease.facilityPhone.replace(/[^0-9+]/g, '')}`
 
@@ -284,6 +289,13 @@ function LeaseCard({ lease, impersonated }: { lease: PortalLeaseSummary; imperso
           <dt className="text-muted-foreground">Next payment</dt>
           <dd className="font-medium">
             {formatRate(nextPaymentCents)} on {dueDate}
+            {/* B-227 / US-301: a total nobody can decompose is one that stayed
+                wrong for months without anybody noticing. The parts are listed
+                from what is actually non-zero, so a lease with no protection
+                plan does not claim one. */}
+            <span className="text-muted-foreground block text-xs font-normal">
+              {listParts(recurringParts(lease.recurring))}
+            </span>
           </dd>
         </div>
         <div>

@@ -7274,6 +7274,33 @@ The three measurements moved into `measureThreeWays` so both loops share one cop
 - **Verified on `desktop-chrome` only.** The spec sets its own viewport in every pass, so `mobile-chrome` would measure the same three CSS viewports; the device scale factor is a rendering concern and not a layout one, as the file's existing comment says.
 - Unit suite green end to end: 3916 passed, 8 skipped, reconciled to 3924. The touched e2e file: 11 passed, 0 failed. Lint and typecheck clean. No schema change, so no migration and nothing for the drift check to see.
 
+## B-227 — Three screens promised a monthly charge with the tax left out, and the payment step said "Autopay is on" after the renter turned it off
+
+`PENDING`
+
+**What it built.** The portal dashboard and `/portal/methods` each summed `monthlyRateCents + protectionCents` and printed it as what recurs. Rent is taxable and protection is not (`invoices.ts` `chargesFor` — Texas taxes self-storage as a taxable service), so the invoice that arrives is rent + tax on rent + protection. **The portal's figure was lower than the one the renter authorised at checkout**, and `/portal/methods` states it as *"We charge $155.00 on day 1"* — the sentence a tenant screenshots when the charge does not match. "You said $155 and took $163.75" is a disputed autopay charge.
+
+One shared reckoning now: `packages/core/pricing/recurring.ts`. The dashboard, `/portal/methods` and the checkout disclosure all read it, and it taxes exactly as `calculateMoveInCost` does for the monthly figure — per jurisdiction, rounded per jurisdiction — so the two cannot drift.
+
+**Second half, same component.** `payment-step.tsx` rendered `defaultChecked={autopayOn}` above a **static** paragraph that always said *"Autopay is on."* A renter who unticked it and pressed Save reloaded onto a page still asserting autopay was on and still naming the amount and the day. The opt-out worked; the disclosure lied about the result. D-11a permits a default-on enrolment **only** with an adjacent, accurate disclosure, so on this screen that is a consent question rather than a copy nit. It branches now, with `/portal/methods` as the model since it already branched correctly.
+
+**What it decided.**
+
+- **Checkout was the surface that was already right**, and it stayed the reference. `AmountDue.ongoingMonthlyCents` is `calculateMoveInCost`'s monthly plus the premium the session recorded at step 3 — rent + tax + protection. The fix moved the portal onto checkout's arithmetic rather than inventing a third.
+- **The figure states what it contains** — "$163.75 (rent, tax and your protection plan)". US-301 requires components be named rather than silently omitted, and this row exists because a total nobody could decompose stayed wrong for months. The parts are built from what is actually non-zero, so a lease with no plan does not claim one and a facility with no tax component does not print the word "tax" beside a figure containing none.
+- **`taxOn` is duplicated into the new module rather than exported from `move-in-cost.ts`.** It is three tokens of arithmetic; the alternative is widening that module's public surface so a second module can borrow a private helper.
+- **The two submit buttons are answered in words, not by a self-submitting checkbox.** The row offered either. A checkbox that submits itself needs JavaScript, and this checkout works without it — the accessibility statement says so. So the step says plainly that changing the tick does nothing until Save is pressed, and that paying below without saving keeps the setting as it reads. The risk being closed is a renter who unticks, goes straight to the card, and is enrolled in the thing they just declined.
+- **4.1.3 was already met and is left alone.** `setAutopayAction` returns a branched, worded outcome and `AdminForm`'s `role="status"` region is in the DOM before submit (B-184). The row asked for an announcement in words rather than a silently re-rendered checkbox; that already existed, and claiming this row added it would be the overstatement this repo keeps catching.
+
+**One runnable check, and it is pure for a reason that matters.** `tests/recurring.test.ts` asserts the portal's figure equals the checkout disclosure across five rates × three protection values × three tax mixes, and pins the magnitude: at $140 rent and 6.25%, the portal promised **$155.00** and autopay took **$163.75** — the gap is exactly the tax on rent. **The demo seed writes no `TaxComponent` rows, so the gap is $0 in every e2e run and this defect was invisible to the entire suite for as long as it existed.** An end-to-end test against demo data would have passed on the bug. Verified by reverting `totalCents` to the old sum: five tests fail, including the cross-surface equality.
+
+**What it left behind.**
+
+- **The demo seed still has no tax components**, so no e2e exercises a non-zero tax anywhere — this row's defect, B-226's, and any future one of the same shape stay invisible to the browser suite. Seeding one would change money assertions across many specs and is its own item, not a change to smuggle in here.
+- **`recurringParts` decides the wording from non-zero amounts**, so a facility with a 0%-rate tax component prints no "tax" — correct for the reader, and it means the sentence describes the money rather than the configuration.
+- **Nothing asserts the branched disclosure end to end.** The copy change is verified by reading; no spec unticks autopay at checkout and re-reads the paragraph.
+- **A rate increase landing between now and the next bill still makes the figure stale.** The row asked for that to be said plainly where it cannot be known; the figure is the lease's current rate, and no screen warns that a scheduled increase will move it.
+
 ## B-226 — The facility page advertised a discount, said it was already in the total, and left it out
 
 `71b9233`
