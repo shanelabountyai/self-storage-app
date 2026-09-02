@@ -301,11 +301,6 @@ export const SCAN_EXCEPTIONS: readonly ScanException[] = [
     reason: 'a single month\u2019s statement, which needs a real statement on a real account',
   },
   {
-    route: '/admin/[section]',
-    audience: 'admin',
-    reason: 'staff-only placeholder sections',
-  },
-  {
     route: '/admin/auctions/[caseId]',
     audience: 'admin',
     reason: 'a staff-only auction case, which needs a live case',

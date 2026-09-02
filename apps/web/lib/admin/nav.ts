@@ -2,9 +2,15 @@ import type { PermissionKey } from '@storage/db/rbac-catalog'
 import type { Actor } from '@/lib/rbac/actor'
 import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
 
-// Left nav catalog, per PRD 02 FR-2. Every item beyond Dashboard is a
-// placeholder route until its own backlog item builds the real screen — see
-// app/admin/[section]/page.tsx.
+// Left nav catalog, per PRD 02 FR-2.
+//
+// B-229: every item here now has its own route. `app/admin/[section]/page.tsx`
+// — the one dynamic placeholder that told staff "This screen is built in a
+// later backlog item" — is DELETED rather than reworded, along with the
+// `navItemForSection` lookup that only it used: a static route exists for every
+// href below, so Next.js resolved those before the dynamic segment and the
+// placeholder had been unreachable for some time. A nav item added without its
+// screen now 404s, which is the honest failure.
 export type NavGroup = 'today' | 'property' | 'money' | 'admin'
 
 export type NavItem = {
@@ -87,8 +93,4 @@ export function groupedNavItems(actor: Actor): VisibleNavGroup[] {
     label: NAV_GROUP_LABELS[key],
     items: visible.filter((item) => item.group === key),
   })).filter((group) => group.items.length > 0)
-}
-
-export function navItemForSection(section: string): NavItem | undefined {
-  return NAV_ITEMS.find((item) => item.href === `/admin/${section}`)
 }

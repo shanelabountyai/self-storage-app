@@ -334,6 +334,27 @@ export const TASK_TYPES = [
     requiredProofFields: ["note"],
     sensitive: false,
   },
+  {
+    // B-229. PRD 02 FR-1/FR-4. A nightly job that ends `failed` or `partial`
+    // wrote a `JobRun` row and told nobody: the only surface was
+    // `/admin/billing`, which somebody has to decide to go and read. So
+    // `billing.generate-invoices` throwing on a Tuesday at one site was a month
+    // of unbilled rent, invisible until an owner asked why revenue was down,
+    // and a failed `delinquency.timeline` stopped the lien clock in a way
+    // `auctionReadiness` would later refuse every sale for, untraceably.
+    //
+    // The subject is the run itself (`entityType: "JobRun"`), so the card links
+    // to the Billing runs screen where the error and the per-item outcomes are,
+    // and `detail` carries the one sentence — which job, and what it said.
+    //
+    // Sensitive: what somebody did about a failed money job — re-ran it,
+    // invoiced by hand, decided it did not matter — is exactly the question
+    // asked when the month does not reconcile.
+    type: "job_failed",
+    label: "A nightly job did not finish",
+    requiredProofFields: ["note"],
+    sensitive: true,
+  },
 ] as const satisfies readonly TaskTypeSpec[];
 
 export type TaskType = (typeof TASK_TYPES)[number]["type"];

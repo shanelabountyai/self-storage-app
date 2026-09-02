@@ -290,7 +290,17 @@ export async function facilityTasks(
   }))
 }
 
-export type FacilityRollup = { facilityId: string; facilityName: string; openCount: number; overdueCount: number }
+export type FacilityRollup = {
+  facilityId: string
+  facilityName: string
+  openCount: number
+  overdueCount: number
+  /// B-229. Open `job_failed` tasks, called out separately in the roll-up
+  /// because "12 open" at a site whose biller has not run is the same number as
+  /// "12 open" at a site with twelve overlocks to fit, and only one of them is
+  /// a month of rent.
+  jobFailureCount: number
+}
 
 /// The regional roll-up: open-task counts per facility, for an actor who can
 /// see more than one. A facility a single-site manager cannot see never
@@ -305,14 +315,17 @@ export async function taskRollup(actor: Actor): Promise<FacilityRollup[]> {
 
   const openTasks = await prisma.task.findMany({
     where: { facilityId: { in: facilities.map((f) => f.id) }, status: 'open' },
-    select: { facilityId: true, businessDate: true },
+    select: { facilityId: true, businessDate: true, type: true },
   })
 
-  const byFacility = new Map(facilities.map((f) => [f.id, { open: 0, overdue: 0, timezone: f.timezone }]))
+  const byFacility = new Map(
+    facilities.map((f) => [f.id, { open: 0, overdue: 0, jobFailures: 0, timezone: f.timezone }]),
+  )
   for (const task of openTasks) {
     const bucket = byFacility.get(task.facilityId)
     if (!bucket) continue
     bucket.open += 1
+    if (task.type === 'job_failed') bucket.jobFailures += 1
     const today = businessDateFor(new Date(), bucket.timezone)
     if (task.businessDate.getTime() < today.getTime()) bucket.overdue += 1
   }
@@ -322,6 +335,7 @@ export async function taskRollup(actor: Actor): Promise<FacilityRollup[]> {
     facilityName: facility.name,
     openCount: byFacility.get(facility.id)?.open ?? 0,
     overdueCount: byFacility.get(facility.id)?.overdue ?? 0,
+    jobFailureCount: byFacility.get(facility.id)?.jobFailures ?? 0,
   }))
 }
 

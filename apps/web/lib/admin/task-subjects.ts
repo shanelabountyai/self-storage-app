@@ -1,4 +1,5 @@
 import { prisma } from "@storage/db";
+import { scheduledJobLabel } from "@/lib/jobs/registry";
 
 // PRD 02 §4.9 US-41, §4.6 US-26, §5.5 FR-22 (B-115, UX review 2026-08-12
 // finding 9). `Task` has carried `entityType`/`entityId` since B-095 and
@@ -108,6 +109,37 @@ export async function resolveTaskSubjects(
     }
   }
 
+  // B-229. `billing.autopay` records a payment-plan installment by the plan's
+  // id, which is the one money-path identifier the Billing runs screen could
+  // not name. Same shape as `Invoice` above — the plan's lease is the subject
+  // anybody actually wants.
+  const paymentPlanIds = byType.get("PaymentPlan");
+  if (paymentPlanIds) {
+    const plans = await prisma.paymentPlan.findMany({
+      where: { id: { in: [...paymentPlanIds] } },
+      select: {
+        id: true,
+        lease: {
+          select: {
+            tenantId: true,
+            tenant: { select: { firstName: true, lastName: true } },
+            unit: { select: { number: true } },
+          },
+        },
+      },
+    });
+    for (const plan of plans) {
+      result.set(
+        key("PaymentPlan", plan.id),
+        leaseSubject(
+          plan.lease.tenantId,
+          plan.lease.tenant,
+          plan.lease.unit.number,
+        ),
+      );
+    }
+  }
+
   const leadIds = byType.get("Lead");
   if (leadIds) {
     const leads = await prisma.lead.findMany({
@@ -178,6 +210,40 @@ export async function resolveTaskSubjects(
           ? `${name} — “${truncate(payload.body, 80)}”`
           : name,
         href: payload.tenantId ? `/admin/tenants/${payload.tenantId}` : null,
+      });
+    }
+  }
+
+  // B-229. `job_failed`'s subject is the nightly run that did not finish.
+  // Named from the registry rather than from a query — `JobRun.jobName` is a
+  // codebase identifier (`billing.generate-invoices`), which is the thing
+  // B-109 says a staff screen may not render.
+  const jobRunIds = byType.get("JobRun");
+  if (jobRunIds) {
+    const runs = await prisma.jobRun.findMany({
+      where: { id: { in: [...jobRunIds] } },
+      select: { id: true, jobName: true, businessDate: true },
+    });
+    const byId = new Map(runs.map((run) => [run.id, run]));
+    for (const entityId of jobRunIds) {
+      const run = byId.get(entityId);
+      result.set(key("JobRun", entityId), {
+        label: run
+          ? `${scheduledJobLabel(run.jobName)} — ${run.businessDate.toISOString().slice(0, 10)}`
+          : "This job run no longer exists.",
+        href: "/admin/billing",
+      });
+    }
+  }
+
+  // B-229's escalation names no run — that a money job has produced none for
+  // two days is the finding. The entity is the job at a facility.
+  const scheduledJobIds = byType.get("ScheduledJob");
+  if (scheduledJobIds) {
+    for (const entityId of scheduledJobIds) {
+      result.set(key("ScheduledJob", entityId), {
+        label: scheduledJobLabel(entityId.split("@")[0]),
+        href: "/admin/billing",
       });
     }
   }
@@ -308,10 +374,14 @@ const MISSING_SUBJECT_LABEL: Record<string, string> = {
   Tenant: "This tenant no longer exists.",
   Invoice: "This invoice no longer exists.",
   Payment: "This payment no longer exists.",
+  PaymentPlan: "This payment plan no longer exists.",
   Lead: "This inquiry no longer exists.",
   GateCommand: "This access change no longer exists.",
   Facility: "This facility no longer exists.",
+  JobRun: "This job run no longer exists.",
+  ScheduledJob: "This job is no longer registered.",
 };
+
 
 export function fallbackSubject(entityType: string): TaskSubject {
   return {

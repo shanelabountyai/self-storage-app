@@ -2,6 +2,7 @@ import { prisma } from '@storage/db'
 import { facilityAccess } from '@/lib/rbac/authorize'
 import type { Actor } from '@/lib/rbac/actor'
 import { delinquencyReport } from '@/lib/admin/reports'
+import { taskRollup } from '@/lib/admin/tasks'
 import { formatCents } from '@/lib/format'
 import type { RollupRow } from '@/components/admin/facility-rollup'
 
@@ -89,16 +90,30 @@ export async function moneyOwedRollup(actor: Actor): Promise<RollupRow[]> {
 /// and a roll-up that answers neither is the "pick a facility" message with
 /// extra steps.
 export async function dashboardRollup(actor: Actor): Promise<RollupRow[]> {
-  const [units, owed] = await Promise.all([unitRollup(actor), moneyOwedRollup(actor)])
+  const [units, owed, tasks] = await Promise.all([
+    unitRollup(actor),
+    moneyOwedRollup(actor),
+    taskRollup(actor),
+  ])
   const owedBy = new Map(owed.map((row) => [row.facilityId, row.summary]))
+  // B-229. A third figure, and only when it is not zero: a site whose nightly
+  // biller failed reads as a perfectly healthy site on the two above — the
+  // units are still rentable and yesterday's balances are still what they were.
+  const failuresBy = new Map(tasks.map((row) => [row.facilityId, row.jobFailureCount]))
 
   return units.map((row) => ({
     ...row,
     href: `/admin?facility=${row.facilityId}`,
     // `moneyOwedRollup` is gated on `reports:financial`, so a manager without
     // it simply sees the units half rather than a blank or an error.
-    summary: owedBy.has(row.facilityId)
-      ? `${row.summary} · ${owedBy.get(row.facilityId)} owed`
-      : row.summary,
+    summary: [
+      row.summary,
+      owedBy.has(row.facilityId) ? `${owedBy.get(row.facilityId)} owed` : '',
+      (failuresBy.get(row.facilityId) ?? 0) > 0
+        ? `${failuresBy.get(row.facilityId)} nightly job failure${failuresBy.get(row.facilityId) === 1 ? '' : 's'}`
+        : '',
+    ]
+      .filter(Boolean)
+      .join(' · '),
   }))
 }

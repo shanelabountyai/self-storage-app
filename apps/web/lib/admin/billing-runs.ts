@@ -1,8 +1,10 @@
 import { prisma } from '@storage/db'
-import { runJob, type JobItemOutcome } from '@storage/core/jobs'
+import { type JobItemOutcome } from '@storage/core/jobs'
 import { can, facilityAccess, ForbiddenError, hasPermissionAnywhere } from '@/lib/rbac/authorize'
 import type { Actor } from '@/lib/rbac/actor'
-import { SCHEDULED_JOBS } from '@/lib/jobs/registry'
+import { SCHEDULED_JOBS, scheduledJobLabel } from '@/lib/jobs/registry'
+import { runScheduledJob } from '@/lib/jobs/run'
+import { resolveTaskSubjects, type TaskSubject } from '@/lib/admin/task-subjects'
 
 // PRD 02 FR-4: "logged to a Billing Runs screen with per-item outcomes, and
 // manually re-runnable by admin."
@@ -11,9 +13,17 @@ import { SCHEDULED_JOBS } from '@/lib/jobs/registry'
 // B-006 built the row and B-043's catch-up filled in the history. Nothing new
 // is stored for this screen.
 
+/// B-229. A failed item's subject, resolved the way a task card's is — a
+/// tenant name and a unit number, linked to the profile — instead of the raw
+/// cuid `recordItem` was handed.
+export type BillingRunItem = JobItemOutcome & { subject: TaskSubject }
+
 export type BillingRunRow = {
   id: string
   jobName: string
+  /// What an operator would call this job. `jobName` is kept alongside it for
+  /// the re-run form and the screen-reader sentence, never rendered on its own.
+  jobLabel: string
   facilityId: string | null
   facilityName: string
   businessDate: Date
@@ -22,7 +32,7 @@ export type BillingRunRow = {
   finishedAt: Date | null
   itemsOk: number
   itemsFailed: number
-  items: JobItemOutcome[]
+  items: BillingRunItem[]
   lastError: string | null
   /// False for a job whose handler is no longer registered — the row is still
   /// history worth reading, it just cannot be re-run.
@@ -50,10 +60,13 @@ export async function recentRuns(actor: Actor, limit = 100): Promise<BillingRunR
   })
 
   const registered = new Set(SCHEDULED_JOBS.map((job) => job.name))
+  const rows = runs.map((run) => ({ run, items: itemsOf(run.details) }))
+  const subjects = await resolveFailedItemSubjects(rows)
 
-  return runs.map((run) => ({
+  return rows.map(({ run, items }) => ({
     id: run.id,
     jobName: run.jobName,
+    jobLabel: scheduledJobLabel(run.jobName),
     facilityId: run.facilityId,
     facilityName: run.facility?.name ?? 'All facilities',
     businessDate: run.businessDate,
@@ -62,10 +75,70 @@ export async function recentRuns(actor: Actor, limit = 100): Promise<BillingRunR
     finishedAt: run.finishedAt,
     itemsOk: run.itemsOk,
     itemsFailed: run.itemsFailed,
-    items: itemsOf(run.details),
+    items: items.map((item) => ({
+      ...item,
+      subject: item.ok
+        ? { label: item.itemId, href: null }
+        : (subjects.get(item.itemId) ?? UNKNOWN_SUBJECT),
+    })),
     lastError: run.lastError,
     rerunnable: registered.has(run.jobName),
   }))
+}
+
+/// B-229. What `recordItem` is handed is an entity id with no type attached —
+/// a lease, a tenant, an invoice, a payment plan or the facility, depending on
+/// the job. Rather than adding a type to forty call sites, every candidate type
+/// is offered to the one resolver both task screens already use and the first
+/// hit wins; ids are cuids, so a collision across tables is not a thing that
+/// happens.
+///
+/// FAILED items only. A nightly biller records one ok item per lease, so
+/// resolving every item would put every lease at every facility into an `IN`
+/// clause to label rows nobody reads — the failures are the three somebody
+/// actually has to go and look at.
+const CANDIDATE_TYPES = ['Lease', 'Invoice', 'Tenant', 'PaymentPlan'] as const
+
+/// The honest fallback for an id nothing claims — a payment-plan installment
+/// whose plan was deleted, or a job recording something these types do not
+/// cover. Never the raw cuid, which is what this replaced.
+const UNKNOWN_SUBJECT: TaskSubject = { label: 'Unknown record', href: null }
+
+async function resolveFailedItemSubjects(
+  rows: readonly { run: { facilityId: string | null }; items: readonly JobItemOutcome[] }[],
+): Promise<Map<string, TaskSubject>> {
+  const resolved = new Map<string, TaskSubject>()
+  const unresolved = new Set<string>()
+
+  for (const { run, items } of rows) {
+    for (const item of items) {
+      if (item.ok) continue
+      // Two ids a job records that are not entity rows: a per-facility job
+      // reporting on the facility as a whole, and a global one on the portfolio.
+      // The Facility column already names the first, so this is an
+      // acknowledgement rather than a repeat.
+      if (item.itemId === 'global') resolved.set(item.itemId, { label: 'All facilities', href: null })
+      else if (item.itemId === run.facilityId) resolved.set(item.itemId, { label: 'This facility', href: null })
+      else unresolved.add(item.itemId)
+    }
+  }
+  if (unresolved.size === 0) return resolved
+
+  const candidates = [...unresolved].flatMap((entityId) =>
+    CANDIDATE_TYPES.map((entityType) => ({ entityType, entityId })),
+  )
+  const found = await resolveTaskSubjects(candidates)
+
+  for (const entityId of unresolved) {
+    for (const entityType of CANDIDATE_TYPES) {
+      const subject = found.get(`${entityType}:${entityId}`)
+      if (subject) {
+        resolved.set(entityId, subject)
+        break
+      }
+    }
+  }
+  return resolved
 }
 
 /// `JobRun.details` is `{ items: [...] }` written by the runner. Read
@@ -109,10 +182,10 @@ export async function rerunJobRun(actor: Actor, runId: string): Promise<RerunRes
   const job = SCHEDULED_JOBS.find((candidate) => candidate.name === run.jobName)
   if (!job) return { ok: false, reason: 'unknown_job' }
 
-  const result = await runJob(
-    { jobName: run.jobName, facilityId: run.facilityId, businessDate: run.businessDate, force: true },
-    async ({ facilityId, recordItem }) =>
-      job.handler({ facilityId, businessDate: run.businessDate, recordItem }),
-  )
+  const result = await runScheduledJob(job, {
+    facilityId: run.facilityId,
+    businessDate: run.businessDate,
+    force: true,
+  })
   return { ok: true, status: result.status === 'skipped' ? `skipped:${result.reason}` : result.run.status }
 }

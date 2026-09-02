@@ -56,10 +56,11 @@ const SCANNED_URLS = [...PUBLIC_SCAN_ROUTES, ...PORTAL_SCAN_ROUTES, ...ADMIN_SCA
 /// Whether a scanned URL exercises this route pattern.
 ///
 /// A dynamic pattern is only satisfied by a URL that is NOT itself a static
-/// route — otherwise `/admin/units` would count as coverage of
-/// `/admin/[section]`, and the catch-all placeholder would read as scanned when
-/// nothing has ever rendered it. That is the same "covered by something nearby"
-/// mistake this whole item exists to stop.
+/// route — otherwise `/admin/units` would have counted as coverage of the
+/// `/admin/[section]` catch-all (deleted in B-229), and a placeholder nothing
+/// had ever rendered would read as scanned. That is the same "covered by
+/// something nearby" mistake this whole item exists to stop, and the rule stays
+/// whether or not a catch-all is currently in the tree.
 function matches(pattern: string, url: string): boolean {
   if (pattern === url) return true
   if (!pattern.includes('[')) return false

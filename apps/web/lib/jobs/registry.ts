@@ -147,6 +147,14 @@ export const CONSUMERS: readonly Consumer[] = [
 
 export type ScheduledJob = {
   name: string
+  /// B-229. What an operator would call this out loud. `/admin/billing` used
+  /// to render `name` verbatim — `billing.assess-late-fees`,
+  /// `field-ops.raise-walkthrough` — on the one screen that exists so a 2am
+  /// failure is not indistinguishable from a quiet night, which is B-109's
+  /// rule (admin may use the industry's vocabulary, never the codebase's
+  /// identifiers) unswept. Sentence case, no trailing period: it is read as a
+  /// table cell and as the subject of a task card.
+  label: string
   /// Facility-local hour this runs at, 0–23. Jobs that are not per-facility use
   /// `scope: 'global'` and run at this hour UTC.
   localHour: number
@@ -173,6 +181,7 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
     // missed run means a unit stays held slightly too long — never that an
     // expired hold keeps blocking a sale invisibly.
     name: 'reservation.expire',
+    label: 'Expire reservation holds',
     localHour: 0,
     scope: 'per_facility',
     handler: async ({ facilityId, recordItem }) => {
@@ -199,6 +208,7 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
     // an expired person is silently permanent — the row stays due and the next
     // run takes it.
     name: 'access.expire-shared',
+    label: 'Expire shared access codes',
     localHour: 0,
     scope: 'per_facility',
     handler: async ({ facilityId, recordItem }) => {
@@ -223,6 +233,7 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
     // verifiable. Skipping it would let a site quietly go six months without
     // anybody noticing it was never being checked.
     name: 'access.reconcile',
+    label: 'Check gate codes against the controller',
     localHour: 3,
     scope: 'per_facility',
     handler: async ({ facilityId, recordItem }) => {
@@ -249,6 +260,7 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
     // directly after provisioning, and this scheduled pass is what catches
     // commands whose retries have come due since.
     name: 'access.drain-commands',
+    label: 'Send queued gate commands',
     localHour: 1,
     scope: 'global',
     handler: async ({ recordItem }) => {
@@ -275,6 +287,7 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
     // all this does is settle the row's status and free the FK. If that ever
     // stops being true, the fix is the derivation, not a faster job.
     name: 'checkout.expire',
+    label: 'Release expired checkout locks',
     localHour: 0,
     scope: 'global',
     handler: async ({ recordItem }) => {
@@ -296,6 +309,7 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
     // invoice reads it. Doing it the other way round would mean every
     // increase landed one billing period late, silently.
     name: 'pricing.apply-rate-increases',
+    label: 'Apply scheduled rate increases',
     localHour: 0,
     scope: 'per_facility',
     handler: async ({ facilityId, businessDate, recordItem }) => {
@@ -310,6 +324,7 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
     // other way round and every change a tenant made would arrive one whole
     // month after the date they were promised.
     name: 'protection.apply-changes',
+    label: 'Apply scheduled protection changes',
     localHour: 0,
     scope: 'per_facility',
     handler: async ({ facilityId, businessDate, recordItem }) => {
@@ -326,6 +341,7 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
     // that arrives during business hours — when they can ring the office
     // about it and somebody is there.
     name: 'pricing.send-rate-increase-notices',
+    label: 'Send rate-increase notices',
     localHour: 10,
     scope: 'per_facility',
     handler: async ({ facilityId, businessDate, recordItem }) => {
@@ -343,6 +359,7 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
     // unique constraint on (leaseId, periodStart), so a caught-up date for
     // last Tuesday generates exactly what Tuesday would have.
     name: 'billing.generate-invoices',
+    label: 'Generate invoices',
     localHour: 1,
     scope: 'per_facility',
     handler: async ({ facilityId, businessDate, recordItem }) => {
@@ -363,6 +380,7 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
     // is B-057 in Phase 2 — this is the MVP path, and B-057 drives the same
     // functions from a timeline stage rather than reimplementing them.
     name: 'billing.assess-late-fees',
+    label: 'Assess late fees',
     localHour: 2,
     scope: 'per_facility',
     handler: async ({ facilityId, businessDate, recordItem }) => {
@@ -382,6 +400,7 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
     // and the dunning ladder above stands down for any facility that HAS one —
     // otherwise both chase on day 1.
     name: 'delinquency.timeline',
+    label: 'Advance the delinquency timeline',
     localHour: 6,
     scope: 'per_facility',
     handler: async ({ facilityId, businessDate, recordItem }) => {
@@ -401,6 +420,7 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
     // releases its own lock in its own transaction, and this is what catches
     // the ones that did not.
     name: 'delinquency.stuck-overlocks',
+    label: 'Check for overlocks nobody fitted',
     localHour: 6,
     scope: 'per_facility',
     handler: async ({ facilityId, recordItem }) => {
@@ -418,6 +438,7 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
     // is CN-3's requirement that the ladder be driven by billing rather than by
     // a calendar of its own.
     name: 'billing.dunning',
+    label: 'Send past-due reminders',
     localHour: 5,
     scope: 'per_facility',
     handler: async ({ facilityId, businessDate, recordItem }) => {
@@ -438,6 +459,7 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
     // a plan broken here resumes collections the same night rather than one
     // run late.
     name: 'delinquency.payment-plan-breach',
+    label: 'Check payment plans for missed installments',
     localHour: 4,
     scope: 'per_facility',
     handler: async ({ facilityId, businessDate, recordItem }) => {
@@ -459,6 +481,7 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
     // restore is called inline from the payment paths (see
     // lib/access/delinquency-gate.ts).
     name: 'access.evaluate-suspensions',
+    label: 'Suspend and restore gate access for past-due tenants',
     localHour: 4,
     scope: 'per_facility',
     handler: async ({ facilityId, businessDate, recordItem }) => {
@@ -477,6 +500,7 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
     // makes the run's read-then-charge safe from a second concurrent run of
     // itself. See the four guards documented in lib/billing/autopay.ts.
     name: 'billing.autopay',
+    label: 'Charge autopay',
     localHour: 3,
     scope: 'per_facility',
     handler: async ({ facilityId, businessDate, recordItem }) => {
@@ -495,6 +519,7 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
     // person opening the facility, and it should be waiting before the office
     // does rather than landing mid-morning.
     name: 'field-ops.raise-walkthrough',
+    label: 'Raise the daily walkthrough',
     localHour: 7,
     scope: 'per_facility',
     handler: async ({ facilityId, businessDate, recordItem }) => {
@@ -509,6 +534,7 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
     // an ask that lands at 3am reads as a robot rather than a facility that
     // noticed they settled in well.
     name: 'reviews.raise-requests',
+    label: 'Ask recent movers-in for a review',
     localHour: 9,
     scope: 'per_facility',
     handler: async ({ facilityId, businessDate, recordItem }) => {
@@ -524,6 +550,7 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
     // an existing tenant, and still comfortably inside FR-MSG-5's 8am–9pm
     // window with room for the dispatcher to catch up behind it.
     name: 'leads.raise-drip-steps',
+    label: 'Raise follow-up steps for inquiries',
     localHour: 11,
     scope: 'per_facility',
     handler: async ({ facilityId, businessDate, recordItem }) => {
@@ -545,6 +572,7 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
     // same facility cannot race, and there is one place to look when an email
     // did not arrive.
     name: 'reports.email',
+    label: 'Email scheduled reports',
     localHour: 6,
     scope: 'per_facility',
     handler: async ({ facilityId, recordItem }) => {
@@ -571,6 +599,7 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
     // the lead was taken, so an 8am sweep catches yesterday afternoon's calls
     // on the morning somebody can do something about them.
     name: 'leads.follow-up',
+    label: 'Raise follow-ups for inquiries nobody answered',
     localHour: 8,
     scope: 'per_facility',
     handler: async ({ facilityId, recordItem }) => {
@@ -585,6 +614,7 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
     // "pre-emptive scans" job, because a JobRun row per scan is what makes the
     // Billing Runs screen able to say which one failed.
     name: 'billing.scan-expiring-cards',
+    label: 'Look for cards about to expire',
     localHour: 2,
     scope: 'per_facility',
     handler: async ({ facilityId, businessDate, recordItem }) => {
@@ -595,6 +625,7 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
     // B-043 / PRD 02 US-44, D-17. Proof of insurance expiring within 30 days,
     // and enrolment into the facility's default tier once it lapses.
     name: 'billing.scan-protection-proofs',
+    label: 'Look for protection proof about to lapse',
     localHour: 2,
     scope: 'per_facility',
     handler: async ({ facilityId, businessDate, recordItem }) => {
@@ -607,6 +638,7 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
     // reads has had all day to run, so the day it checks is a settled one
     // rather than one still in flight.
     name: 'comms.detect-daily-failure-rate',
+    label: 'Check yesterday’s message delivery rate',
     localHour: 23,
     scope: 'per_facility',
     handler: async ({ facilityId, businessDate, recordItem }) => {
@@ -640,6 +672,7 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
     // sitemap; the upgrade is a derived last-changed date per facility that
     // takes the newest of the facility row and its rate records.
     name: 'marketing.indexnow-submit',
+    label: 'Tell search engines about changed pages',
     localHour: 5,
     scope: 'global',
     handler: async ({ businessDate, recordItem }) => {
@@ -688,6 +721,7 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
     // become tasks and the rest become an email would mean two channels for one
     // problem, and the half nobody watches is always the one that matters.
     name: 'marketing.structured-data-monitor',
+    label: 'Check structured data on public pages',
     localHour: 6,
     scope: 'global',
     handler: async ({ businessDate, recordItem }) => {
@@ -735,3 +769,24 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
     },
   },
 ]
+/// B-229. The operator-facing name of a job, for the two screens that show one
+/// (`/admin/billing`, and a `job_failed` task card). Falls back to the raw name
+/// for a `JobRun` row whose job has since been unregistered — history worth
+/// reading, and there is nothing better left to call it.
+export function scheduledJobLabel(jobName: string): string {
+  return SCHEDULED_JOBS.find((job) => job.name === jobName)?.label ?? jobName
+}
+
+/// B-229. The jobs whose SILENCE is money, as opposed to whose failure is.
+///
+/// A failed run raises a task (`runScheduledJob`), but a job that never starts
+/// writes no row at all, so there is nothing to alarm on: a facility whose
+/// timezone or hour is wrong, or that was created and never reached its hour,
+/// simply stops being invoiced. These four are the ones where two days of that
+/// is unrecoverable revenue or a stopped lien clock rather than an inconvenience.
+export const MONEY_JOBS = [
+  'billing.generate-invoices',
+  'billing.assess-late-fees',
+  'billing.autopay',
+  'delinquency.timeline',
+] as const

@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { taskTypeSpec } from '@storage/core/tasks'
 import { getSwitcherData } from '@/lib/admin/context'
 import { resolveSelectedFacility } from '@/lib/admin/facility-selection-logic'
-import { facilityTasks, taskRollup } from '@/lib/admin/tasks'
+import { facilityTasks, taskRollup, type FacilityRollup as TaskRollupRow } from '@/lib/admin/tasks'
 import { FacilityRollup } from '@/components/admin/facility-rollup'
 import { AnnounceRegion } from '@/components/admin/announce'
 import { TaskCompleteForm } from '@/components/admin/task-complete-form'
@@ -12,14 +12,23 @@ export const metadata = { title: 'Tasks' }
 /// B-113 made the roll-up one shared component, since the dashboard, Units,
 /// Delinquency and Inquiries all needed the shape this screen arrived at first.
 /// This maps the task counts into it.
-function rollupRows(
-  rows: { facilityId: string; facilityName: string; openCount: number; overdueCount: number }[],
-) {
+function rollupRows(rows: TaskRollupRow[]) {
   return rows.map((row) => ({
     facilityId: row.facilityId,
     facilityName: row.facilityName,
     href: `/admin/tasks?facility=${row.facilityId}`,
-    summary: `${row.openCount} open${row.overdueCount > 0 ? ` · ${row.overdueCount} overdue` : ''}`,
+    // B-229. A failed nightly job is called out by name rather than folded into
+    // "open": a site that has stopped invoicing looks exactly like a busy site
+    // once the count is a single number.
+    summary: [
+      `${row.openCount} open`,
+      row.overdueCount > 0 ? `${row.overdueCount} overdue` : '',
+      row.jobFailureCount > 0
+        ? `${row.jobFailureCount} nightly job failure${row.jobFailureCount === 1 ? '' : 's'}`
+        : '',
+    ]
+      .filter(Boolean)
+      .join(' · '),
   }))
 }
 

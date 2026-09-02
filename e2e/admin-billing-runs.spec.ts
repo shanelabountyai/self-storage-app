@@ -28,10 +28,9 @@ test.describe('signed in as the demo owner', () => {
     await assertNoAxeViolations(page)
   })
 
-  test('replaces the placeholder section with the real screen', async ({ page }) => {
+  test('renders the real screen, in words rather than job identifiers', async ({ page }) => {
     await page.goto('/admin/billing')
     await expect(page.getByRole('heading', { name: 'Billing runs' })).toBeVisible()
-    await expect(page.getByText('This screen is built in a later backlog item')).toHaveCount(0)
     // The demo database has no JobRun history — the cron route only writes one
     // when it actually runs — so either the table or the explicit empty state
     // is correct here. Asserting the table alone would be asserting on seeded
@@ -39,5 +38,9 @@ test.describe('signed in as the demo owner', () => {
     await expect(
       page.getByRole('table').or(page.getByText('No runs recorded yet.')),
     ).toBeVisible()
+    // B-229. Whatever history happens to be here, no dotted registry key
+    // reaches the page — that is B-109's rule, and this screen was the last
+    // place in admin still breaking it.
+    await expect(page.getByText(/\b(billing|delinquency|access|pricing)\.[a-z-]+\b/)).toHaveCount(0)
   })
 })

@@ -1,14 +1,17 @@
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { Actor, Assignment } from '../apps/web/lib/rbac/actor'
 import {
   NAV_GROUP_ORDER,
   NAV_ITEMS,
   groupedNavItems,
-  navItemForSection,
   visibleNavItems,
 } from '../apps/web/lib/admin/nav'
 import { ROLES } from '../packages/db/rbac-catalog'
 import type { PermissionKey } from '@storage/db/rbac-catalog'
+
+const ADMIN_APP_DIR = join(import.meta.dirname, '../apps/web/app/admin')
 
 function assignmentFor(roleKey: string, facilityId: string | null): Assignment {
   const role = ROLES.find((r) => r.key === roleKey)!
@@ -66,10 +69,17 @@ describe('nav catalog', () => {
     expect(labels).not.toContain('Audit Log')
   })
 
-  it('resolves a section slug back to its nav item, and falls through cleanly for one removed', () => {
-    expect(navItemForSection('units')?.label).toBe('Units')
-    expect(navItemForSection('audit-log')).toBeUndefined()
-    expect(navItemForSection('nonexistent')).toBeUndefined()
+  // B-229. The `app/admin/[section]` placeholder — "This screen is built in a
+  // later backlog item" — is deleted, so a nav item without a route now 404s
+  // instead of rendering an apology. This is the check that keeps that honest:
+  // add a link here without its folder and the suite says so, rather than a
+  // staff member finding out.
+  it('every destination has a real route, not a placeholder', () => {
+    for (const item of NAV_ITEMS) {
+      const segments = item.href.replace(/^\/admin\/?/, '')
+      const dir = segments ? join(ADMIN_APP_DIR, segments) : ADMIN_APP_DIR
+      expect(existsSync(join(dir, 'page.tsx')), `${item.href} has no page.tsx`).toBe(true)
+    }
   })
 
   it('every item belongs to exactly one of the four groups, in the fixed display order', () => {

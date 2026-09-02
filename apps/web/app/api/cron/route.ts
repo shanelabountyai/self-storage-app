@@ -1,12 +1,13 @@
 import { timingSafeEqual } from 'node:crypto'
 import { prisma } from '@storage/db'
 import { dispatchEvents } from '@storage/core/events'
-import { facilitiesDueAt, lastSuccessfulRun, missedBusinessDates, runJob } from '@storage/core/jobs'
+import { facilitiesDueAt, lastSuccessfulRun, missedBusinessDates } from '@storage/core/jobs'
 import { sendExpiringSoonReminders } from '@/lib/reservations/reserve'
 import { raiseAbandonmentFollowUps } from '@/lib/checkout/abandonment-job'
 import { retryDeferredSmsMessages } from '@/lib/comms/service'
 import { detectConsumerLag } from '@/lib/comms/detectors'
 import { CONSUMERS, SCHEDULED_JOBS } from '@/lib/jobs/registry'
+import { raiseStaleMoneyJobTasks, runScheduledJob } from '@/lib/jobs/run'
 import { sweepWaitlists } from '@/lib/waitlist/service'
 
 // Vercel Cron hits this hourly (see vercel.json). Master PRD §5 lists Vercel
@@ -74,7 +75,7 @@ export async function GET(request: Request) {
 
   const facilities = await prisma.facility.findMany({
     where: { status: 'active' },
-    select: { id: true, timezone: true },
+    select: { id: true, timezone: true, createdAt: true },
   })
 
   const jobResults: {
@@ -109,11 +110,10 @@ export async function GET(request: Request) {
       const dates = missedBusinessDates(previous?.businessDate ?? null, now, timezone)
 
       for (const date of dates) {
-        const result = await runJob(
-          { jobName: job.name, facilityId: facility?.id ?? null, businessDate: date },
-          async ({ facilityId, recordItem }) =>
-            job.handler({ facilityId, businessDate: date, recordItem }),
-        )
+        const result = await runScheduledJob(job, {
+          facilityId: facility?.id ?? null,
+          businessDate: date,
+        })
         jobResults.push({
           job: job.name,
           facilityId: facility?.id ?? null,
@@ -126,6 +126,12 @@ export async function GET(request: Request) {
     }
   }
 
+  // B-229. A money job that FAILS raises its own task above. This is the other
+  // half: a money job that never ran at all writes no row, so there is nothing
+  // for the loop above to notice. Last, so a facility whose run has just been
+  // caught up is not alarmed on for the two days it was behind.
+  const staleMoneyJobs = await raiseStaleMoneyJobTasks(now, facilities)
+
   return Response.json({
     ranAt: now.toISOString(),
     durationMs: Date.now() - started,
@@ -136,5 +142,6 @@ export async function GET(request: Request) {
     waitlist,
     consumerLag,
     jobs: jobResults,
+    staleMoneyJobs,
   })
 }

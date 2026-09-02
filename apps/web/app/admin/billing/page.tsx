@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { getAdminActor } from '@/lib/admin/context'
 import { recentRuns } from '@/lib/admin/billing-runs'
 import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
@@ -20,6 +21,15 @@ function formatBusinessDate(date: Date): string {
 function formatInstant(date: Date | null): string {
   if (!date) return '—'
   return new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' }).format(date)
+}
+
+const itemsId = (runId: string) => `items-${runId}`
+
+/// B-229. "OK 412 / Failed 3" links straight to the three, so the failures are
+/// what the reader lands on rather than what they scroll for. Stable sort, so
+/// the runner's own order survives within each group.
+function failuresFirst<T extends { ok: boolean }>(items: readonly T[]): T[] {
+  return [...items].sort((a, b) => Number(a.ok) - Number(b.ok))
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -68,10 +78,18 @@ export default async function BillingRunsPage() {
             <tbody>
               {runs.map((run) => (
                 <tr key={run.id} className="border-b align-top">
-                  <td className="py-2">
-                    <span className="font-medium">{run.jobName}</span>
+                  {/* 1.3.1: headers on both axes — the job names the row the
+                      way the thead names the column. */}
+                  <th scope="row" className="py-2 text-left font-normal">
+                    {/* B-229. The operator's name for the job, never
+                        `billing.assess-late-fees`. B-109's rule: admin may use
+                        the industry's vocabulary, not the codebase's. */}
+                    <span className="font-medium">{run.jobLabel}</span>
                     {(run.items.length > 0 || run.lastError) && (
-                      <details className="mt-1">
+                      /* Open by default when something failed, so the anchor in
+                         the Failed column lands on a visible list rather than
+                         on a closed disclosure. */
+                      <details className="mt-1" id={itemsId(run.id)} open={run.itemsFailed > 0}>
                         <summary className="cursor-pointer text-xs underline underline-offset-2">
                           {run.items.length} item{run.items.length === 1 ? '' : 's'}
                           {run.lastError ? ' and an error' : ''}
@@ -82,23 +100,43 @@ export default async function BillingRunsPage() {
                           </p>
                         )}
                         <ul className="mt-1 flex flex-col gap-0.5 text-xs">
-                          {run.items.map((item, index) => (
+                          {failuresFirst(run.items).map((item, index) => (
                             <li key={`${item.itemId}-${index}`}>
                               {/* 1.4.1: the outcome is a word, never a colour. */}
                               <span className="font-medium">{item.ok ? 'OK' : 'Failed'}</span> ·{' '}
-                              {item.itemId}
+                              {/* B-229. A failed item names its subject the way
+                                  a task card does. An OK one keeps its raw id:
+                                  resolving eight hundred of them to label rows
+                                  nobody opens is the query this screen should
+                                  not run. */}
+                              {item.subject.href ? (
+                                <Link href={item.subject.href} className="underline underline-offset-2">
+                                  {item.subject.label}
+                                </Link>
+                              ) : (
+                                item.subject.label
+                              )}
                               {item.message ? ` — ${item.message}` : ''}
                             </li>
                           ))}
                         </ul>
                       </details>
                     )}
-                  </td>
+                  </th>
                   <td className="py-2">{run.facilityName}</td>
                   <td className="py-2 tabular-nums">{formatBusinessDate(run.businessDate)}</td>
                   <td className="py-2">{STATUS_LABEL[run.status] ?? run.status}</td>
                   <td className="py-2 text-right tabular-nums">{run.itemsOk}</td>
-                  <td className="py-2 text-right tabular-nums">{run.itemsFailed}</td>
+                  <td className="py-2 text-right tabular-nums">
+                    {run.itemsFailed > 0 ? (
+                      <a href={`#${itemsId(run.id)}`} className="underline underline-offset-2">
+                        {run.itemsFailed}
+                        <span className="sr-only"> failed items on this run — see the list</span>
+                      </a>
+                    ) : (
+                      run.itemsFailed
+                    )}
+                  </td>
                   <td className="py-2">{formatInstant(run.finishedAt)}</td>
                   {canRerun && (
                     <td className="py-2">
@@ -112,7 +150,7 @@ export default async function BillingRunsPage() {
                             Re-run
                             <span className="sr-only">
                               {' '}
-                              {run.jobName} for {run.facilityName} on {formatBusinessDate(run.businessDate)}
+                              {run.jobLabel} for {run.facilityName} on {formatBusinessDate(run.businessDate)}
                             </span>
                           </button>
                         </form>
