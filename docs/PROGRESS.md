@@ -7276,7 +7276,7 @@ The three measurements moved into `measureThreeWays` so both loops share one cop
 
 ## B-227 — Three screens promised a monthly charge with the tax left out, and the payment step said "Autopay is on" after the renter turned it off
 
-`PENDING`
+`dd92b8c`
 
 **What it built.** The portal dashboard and `/portal/methods` each summed `monthlyRateCents + protectionCents` and printed it as what recurs. Rent is taxable and protection is not (`invoices.ts` `chargesFor` — Texas taxes self-storage as a taxable service), so the invoice that arrives is rent + tax on rent + protection. **The portal's figure was lower than the one the renter authorised at checkout**, and `/portal/methods` states it as *"We charge $155.00 on day 1"* — the sentence a tenant screenshots when the charge does not match. "You said $155 and took $163.75" is a disputed autopay charge.
 
