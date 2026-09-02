@@ -7891,7 +7891,7 @@ The reports were deliberately not touched, per the row: eight columns of figures
 
 ## B-229 — A failed nightly job now wakes somebody, and the screen that shows it stopped speaking in cuids
 
-`PENDING`
+`49b6d76`
 
 **What it built.** The alarm first, then the screen the alarm points at.
 
