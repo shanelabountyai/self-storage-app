@@ -1395,6 +1395,30 @@ const LAST_REVIEWED = '19 August 2026'
 // the same posture as `/portal/pay/done` (only its not-found state is
 // reachable without a real card payment). Neither is on this page's own
 // coverage claim, which covers the public site and the portal.
+//
+// Re-read 2026-09-02, at B-231 (the counter now sees what the tenant owes, and
+// a former tenant can hand over cash). **Staff-only throughout** — `/admin/pos`
+// and `/admin/tenants/former`. Nothing customer-facing changed, no public route
+// was added, so the generated coverage claim, the route-keyed exception list
+// and `LAST_REVIEWED` are all untouched, and no claim on this page needed to
+// move in either direction.
+//
+// What the item's own screens gained, recorded because it is the kind of thing
+// this log exists to keep honest: the balance and its aging are TEXT beside the
+// control ("$312.40, 41 days past due"), not colour and not position, and the
+// same figures are repeated in the `<option>` labels — so the picker is usable
+// without reading the paragraph above it. "Pay in full" is a real
+// `<button type="button">` at the 44px target, and it PREFILLS an editable
+// field rather than acting as a second submit. `/admin/pos` keeps its existing
+// axe pass in `e2e/admin-pos.spec.ts`.
+//
+// The item also fixed a pre-existing e2e defect that was NOT an accessibility
+// one despite reading like it: `admin-move-out.spec.ts`'s
+// `toHaveAccessibleName` check on the notice-date field was failing on `main`
+// as a strict-mode violation — a page-wide locator matching both the tenant
+// profile's per-lease field and the move-out screen's during the App Router's
+// client transition. The accessible name it was asserting was correct all
+// along; only the locator was wrong.
 
 export default function AccessibilityPage() {
   return (

@@ -114,7 +114,15 @@ test.describe('signed in as the demo owner', () => {
     await page.getByRole('link', { name: 'Dana Delinquent' }).click()
     await page.getByRole('link', { name: 'Move out' }).first().click()
 
-    const notice = page.locator('input[name="noticeGivenAt"]')
+    // Scoped to THIS screen's form, not to the page. The profile has a
+    // `noticeGivenAt` field of its own per lease, and during the App Router's
+    // client transition both trees are briefly mounted — a page-wide locator
+    // resolved to two elements and the test failed as a strict-mode violation
+    // rather than on anything it asserts. Found while building B-231; it was
+    // already failing on `main`, on both projects.
+    const notice = page
+      .locator('form[aria-label="Record the notice date"]')
+      .locator('input[name="noticeGivenAt"]')
     await expect(notice).toHaveAccessibleName('Notice given on')
     await expect(notice).toHaveAccessibleDescription(/at the counter, by phone, by mail/)
 

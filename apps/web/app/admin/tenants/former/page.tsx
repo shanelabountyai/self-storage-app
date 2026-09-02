@@ -58,6 +58,7 @@ export default async function FormerTenantsPage() {
                 <th scope="col" className="py-2 font-medium">Unit</th>
                 <th scope="col" className="py-2 font-medium">Moved out</th>
                 <th scope="col" className="py-2 text-right font-medium">Balance</th>
+                <th scope="col" className="py-2 font-medium"><span className="sr-only">Actions</span></th>
               </tr>
             </thead>
             <tbody>
@@ -72,6 +73,19 @@ export default async function FormerTenantsPage() {
                   <td className="py-2">{formatDate(row.moveOutDate)}</td>
                   <td className="py-2 text-right font-medium tabular-nums text-red-800">
                     {formatCents(row.balanceCents)}
+                  </td>
+                  {/* B-231. The other half of "a read, not a queue": it was a
+                      read of money that could not be collected anywhere in the
+                      product, because the counter's unit picker excluded ended
+                      leases. This lands on POS with the right tenant AND the
+                      right unit already chosen. */}
+                  <td className="py-2">
+                    <Link
+                      href={`/admin/pos?tenant=${row.tenantId}&lease=${row.leaseId}`}
+                      className="underline underline-offset-2"
+                    >
+                      Take payment
+                    </Link>
                   </td>
                 </tr>
               ))}

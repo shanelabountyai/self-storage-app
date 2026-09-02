@@ -23,6 +23,8 @@ import {
   createCustomerSession,
 } from "@/lib/payments/intents";
 import { paymentsEnabled } from "@/lib/payments/stripe";
+import { OCCUPYING_LEASE_STATUSES } from "@storage/core/inventory";
+import { daysPastDue } from "@storage/core/metrics";
 
 // PRD 02 §4.8 US-32. Money taken across the counter.
 //
@@ -696,4 +698,93 @@ export async function chargeCardOnFile(
       message: error instanceof Error ? error.message : undefined,
     };
   }
+}
+
+export type CounterPayableLease = {
+  leaseId: string;
+  unitNumber: string;
+  balanceCents: number;
+  /// From the OLDEST unpaid RENT invoice, the same definition the access gate
+  /// suspends on — so the aging printed beside the amount is the figure that
+  /// decides whether this tenant is about to be overlocked, and not a second
+  /// number that disagrees with it.
+  daysPastDue: number;
+  /// An ended lease that still owes money. It is here because the person is at
+  /// the desk with cash; `/admin/tenants/former` links straight to it.
+  isFormer: boolean;
+  moveOutDate: Date | null;
+};
+
+/// What this tenant can be given a receipt for at THIS facility, with what
+/// each unit owes. Oldest debt first.
+///
+/// D-110(A), 2026-09-02: the balance on one account in front of the counter is
+/// not a financial report, so this is gated on `tenants:view` — the same
+/// permission that already shows this same person `lease.balanceCents` on the
+/// tenant profile one screen away. `reports:financial` keeps gating aggregate
+/// and portfolio figures. `formerTenantDebts` reached the same conclusion in
+/// code before the decision existed, and accepts either.
+///
+/// ENDED leases with a balance are included, which is the half B-231 existed
+/// for: the picker scoped itself to `OCCUPYING_LEASE_STATUSES` and made the AR
+/// that `/admin/tenants/former` lists 100% uncollectable inside the product,
+/// while `recordCounterPayment` has no status filter and would have taken the
+/// money any day. An ended lease at $0 stays out — there is nothing to pay.
+export async function counterPayableLeases(
+  actor: Actor,
+  tenantId: string,
+  facilityId: string,
+): Promise<CounterPayableLease[]> {
+  if (actor.kind !== "staff") throw new ForbiddenError("Staff access required");
+  assertFacilityAccess(actor, facilityId);
+  if (!can(actor, "tenants:view", facilityId)) {
+    throw new ForbiddenError(
+      "Missing permission tenants:view",
+      "tenants:view",
+      facilityId,
+    );
+  }
+
+  const leases = await prisma.lease.findMany({
+    where: {
+      tenantId,
+      facilityId,
+      status: { in: [...OCCUPYING_LEASE_STATUSES, "ended"] },
+    },
+    select: {
+      id: true,
+      status: true,
+      moveOutDate: true,
+      unit: { select: { number: true } },
+      invoices: {
+        where: { kind: "rent" },
+        select: { dueDate: true, totalCents: true, amountPaidCents: true },
+      },
+    },
+  });
+  if (leases.length === 0) return [];
+
+  const balances = await prisma.ledgerEntry.groupBy({
+    by: ["leaseId"],
+    where: { leaseId: { in: leases.map((lease) => lease.id) } },
+    _sum: { amountCents: true },
+  });
+  const byLease = new Map(
+    balances.map((row) => [row.leaseId, row._sum.amountCents ?? 0]),
+  );
+
+  const now = new Date();
+  return leases
+    .map((lease) => ({
+      leaseId: lease.id,
+      unitNumber: lease.unit.number,
+      balanceCents: byLease.get(lease.id) ?? 0,
+      daysPastDue: daysPastDue(lease.invoices, now),
+      isFormer: lease.status === "ended",
+      moveOutDate: lease.moveOutDate,
+    }))
+    .filter((lease) => !lease.isFormer || lease.balanceCents > 0)
+    .sort(
+      (a, b) => b.daysPastDue - a.daysPastDue || b.balanceCents - a.balanceCents,
+    );
 }

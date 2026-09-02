@@ -1,13 +1,13 @@
 import Link from 'next/link'
 import { prisma } from '@storage/db'
-import { OCCUPYING_LEASE_STATUSES } from '@storage/core/inventory'
 import { getSwitcherData } from '@/lib/admin/context'
 import { resolveSelectedFacility } from '@/lib/admin/facility-selection-logic'
 import { searchTenants } from '@/lib/admin/tenants'
+import { counterPayableLeases } from '@/lib/admin/pos'
 import { currentRatesForFacility } from '@/lib/pricing/unit-type-rates'
 import { formatCents } from '@/lib/format'
-import { AdminForm, Field } from '@/components/admin/form'
-import { startWalkInMoveInAction, takePaymentAction } from './actions'
+import { CounterPaymentForm } from '@/components/admin/counter-payment-form'
+import { startWalkInMoveInAction } from './actions'
 
 export const metadata = { title: 'POS' }
 
@@ -15,14 +15,15 @@ export const metadata = { title: 'POS' }
 // rents. Drawer sessions (open float, close-out, over/short) are B-078 per
 // D-1 — this screen is a payment recorder and a read over `Payment`.
 
-const FIELD_CLASS = 'flex flex-col gap-1 text-sm'
-
 export default async function PosPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; tenant?: string; soldOut?: string }>
+  searchParams: Promise<{ q?: string; tenant?: string; lease?: string; soldOut?: string }>
 }) {
-  const { q, tenant: tenantId, soldOut } = await searchParams
+  // B-231. `lease` preselects a unit, so `/admin/tenants/former`'s "Take
+  // payment" link lands on the right one rather than on whichever the sort
+  // happened to put first.
+  const { q, tenant: tenantId, lease: preselectedLeaseId, soldOut } = await searchParams
   const { actor, facilities, cookieValue, canSeeAll } = await getSwitcherData()
   const selected = resolveSelectedFacility(cookieValue, facilities, canSeeAll)
 
@@ -40,21 +41,14 @@ export default async function PosPage({
   const facilityId = selected.facility.id
 
   const results = q ? await searchTenants(actor, q) : []
-  const [selectedTenant, unitTypes, rates] = await Promise.all([
+  const [selectedTenant, payableLeases, unitTypes, rates] = await Promise.all([
     tenantId
       ? prisma.tenant.findUnique({
           where: { id: tenantId },
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            leases: {
-              where: { facilityId, status: { in: [...OCCUPYING_LEASE_STATUSES] } },
-              select: { id: true, unit: { select: { number: true } } },
-            },
-          },
+          select: { id: true, firstName: true, lastName: true },
         })
       : null,
+    tenantId ? counterPayableLeases(actor, tenantId, facilityId) : [],
     prisma.unitType.findMany({
       where: { facilityId },
       orderBy: { name: 'asc' },
@@ -140,68 +134,18 @@ export default async function PosPage({
             <p className="text-sm font-medium">
               {selectedTenant.firstName} {selectedTenant.lastName}
             </p>
-            {selectedTenant.leases.length === 0 ? (
+            {payableLeases.length === 0 ? (
               <p className="text-muted-foreground mt-2 text-sm">
-                No active unit at this facility, so there is nothing to post a payment against.
+                No unit at this facility with anything to pay — no open lease, and no ended
+                one still owing.
               </p>
             ) : (
-              <AdminForm
-                action={takePaymentAction}
-                label="Take a payment"
-                className="mt-3 grid max-w-lg grid-cols-2 gap-3"
-              >
-                <input type="hidden" name="facilityId" value={facilityId} />
-                <input type="hidden" name="tenantId" value={selectedTenant.id} />
-                <Field name="leaseId" label="Unit" as="select" required className={FIELD_CLASS}>
-                  {selectedTenant.leases.map((lease) => (
-                    <option key={lease.id} value={lease.id}>
-                      {lease.unit.number}
-                    </option>
-                  ))}
-                </Field>
-                <Field name="method" label="Method" as="select" defaultValue="cash" required className={FIELD_CLASS}>
-                  <option value="cash">Cash</option>
-                  <option value="check">Check</option>
-                  <option value="money_order">Money order</option>
-                  {/* B-230. Card goes to /admin/pos/card, carrying the amount
-                      typed here — Stripe's Element takes the details there and
-                      no card number ever reaches this form (US-601's SAQ-A
-                      boundary). The hint says so, because a staffer who sees
-                      "Card" on a form with an Amount box will otherwise expect
-                      a number field to appear. */}
-                  <option value="card">Card</option>
-                </Field>
-                <Field
-                  name="amount"
-                  label="Amount ($)"
-                  inputMode="decimal"
-                  required
-                  className={FIELD_CLASS}
-                />
-                <Field
-                  name="tendered"
-                  label="Cash tendered ($)"
-                  inputMode="decimal"
-                  hint="Cash only — change is worked out for you."
-                  className={FIELD_CLASS}
-                />
-                <Field
-                  name="checkNumber"
-                  label="Check / money-order number"
-                  hint="Required for check and money order."
-                  className={`${FIELD_CLASS} col-span-2`}
-                />
-                <p className="text-muted-foreground col-span-2 text-xs text-pretty">
-                  Card takes you to the card screen with this amount, where the tenant enters
-                  their own details — or you can charge the card they have on file.
-                </p>
-                <button
-                  type="submit"
-                  className="bg-primary text-primary-foreground col-span-2 inline-flex min-h-11 items-center justify-center self-start rounded-md px-4 text-sm font-medium"
-                >
-                  Record payment
-                </button>
-              </AdminForm>
+              <CounterPaymentForm
+                facilityId={facilityId}
+                tenantId={selectedTenant.id}
+                leases={payableLeases}
+                defaultLeaseId={preselectedLeaseId}
+              />
             )}
           </div>
         )}

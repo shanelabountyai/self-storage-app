@@ -7969,3 +7969,37 @@ Three defects on one code path, and the fix is the tender step each of them was 
 - **The counter card screen still shows no itemisation of what the balance is made of** — that is B-231's row, which owns "the counter takes payments on a screen that never shows what the tenant owes".
 
 **Test verification.** Typecheck (including `tsconfig.tests.json`) clean; lint clean (7 pre-existing warnings, unrelated); `prisma migrate diff --exit-code` reports **no difference** — no schema change, since the source lives in the checkout session's existing `data` JSON and the audit action is a catalog entry. Full unit suite **4,012 passed, 8 skipped of 4,020** (240 files passed, 1 skipped), exit 0, **run twice** with the same result, including the new `tests/counter-move-in-db.test.ts` (7 tests) and `tests/counter-card-db.test.ts` (10 tests). e2e on `desktop-chrome`: `admin-pos` + `a11y-own-spec-routes` + `portal` **95 passed**, and `admin-pos` + `checkout` + `a11y` **135 passed**, both exit 0 — including the new axe pass on `/admin/pos/card` and the two contrast-affected suites. The full sweep is CI's.
+
+## B-231 — The counter can see what the tenant owes, and a former tenant can finally hand over cash
+
+`PENDING`
+
+D-110 was answered first, because this row was blocked on a permission policy and not on code.
+
+**What it built.**
+
+1. **`counterPayableLeases`** (`apps/web/lib/admin/pos.ts`) — what this tenant can be given a receipt for at this facility, with each unit's balance, its `daysPastDue`, and whether the lease has ended. Oldest debt first. Gated on `tenants:view` per **D-110(A)**.
+2. **`/admin/pos`'s payment form is now `CounterPaymentForm`** (`apps/web/components/admin/counter-payment-form.tsx`). The unit `<option>` labels carry the money (`10x10-006 — $312.40 due`); the aging is stated in words beside them (`$312.40, 41 days past due`); and a **Pay in full — $312.40** button fills the Amount field and leaves it editable, which is `PaymentPlanBuilder`'s even-split control applied to the same problem.
+3. **Ended leases with a balance appear in the picker**, visually labelled as a former tenant. This is the half the row existed for: the picker scoped itself to `OCCUPYING_LEASE_STATUSES`, so the AR that `/admin/tenants/former` lists under its own header — *"A read, not a queue"* — was 100% uncollectable inside the product, while `recordCounterPayment` has no status filter and would have taken the money any day.
+4. **`/admin/tenants/former` gains a "Take payment" link per row**, landing on POS with the tenant *and* the unit already chosen (`?tenant=…&lease=…`).
+
+**What it decided.**
+
+- **D-110(A): the balance on one account in front of the counter is not a financial report.** It reads under `tenants:view` — the same permission that already showed this same person `lease.balanceCents` on the tenant profile one screen away (`page.tsx:505`). `reports:financial` keeps gating aggregate and portfolio figures. The omission on the payment screen was an accident rather than a policy, and `formerTenantDebts` had already reached the same conclusion in code (it accepts either permission) before the decision existed. What (A) accepts is written on the D-110 row.
+- **The aging uses the SAME `daysPastDue` the access gate suspends on** — oldest unpaid **rent** invoice, `kind: 'rent'`, matching `delinquency-gate.ts`. The row asked for the figure so the person taking the cash knows whether to mention the overlock; a second definition that disagreed with the gate would have answered that question wrongly.
+- **"Pay in full" is a prefill and never a second way of deciding the amount.** Part payment at a counter is the normal case. The button writes into the field; `takePaymentAction` still reads whatever is in the box, so no branch here can post a figure the staffer did not see.
+- **An ended lease at $0.00 stays out of the picker.** A closed lease in the unit list with nothing to pay is a way to misapply a payment, not a feature.
+- **A former tenant cannot pay by CARD at the counter, and the option is withheld rather than offered.** `chargeableLease` scopes the card screen to leases that have not ended, so a `card` selection on an ended lease would have redirected to a dead end — the exact failure mode this row was raised about. The method select drops `Card` for a former tenant and the hint says why. Widening the card path to closed leases is a change to the money path, which this row says twice it is not, and it belongs with **D-112**.
+- **`recordCounterPayment` is unchanged.** This was a screen fix throughout: the service would have taken every one of these payments before the row was written.
+
+**A pre-existing e2e failure found and fixed.** `admin-move-out.spec.ts:110` ("the notice-date field is named by its label and described by its hint") was **already failing on `main`, on both projects** — verified by stashing this item's changes and re-running it. `page.locator('input[name="noticeGivenAt"]')` is page-wide, and the tenant profile has one of those fields per lease; during the App Router's client transition off the profile both trees are briefly mounted, so the locator resolved to two elements and the test died as a strict-mode violation before asserting anything. Scoped to `form[aria-label="Record the notice date"]`, which only the move-out screen has. Nothing in the product was wrong.
+
+**Accessibility.** WCAG 2.1 AA. The balance and its aging are text beside the control, not colour or position; the "Pay in full" button is a real `<button type="button">` at the 44px target size; the option labels carry the same figures the summary line does, so the picker is usable without reading the paragraph. `/admin/pos` keeps its existing axe pass. **`LAST_REVIEWED` on the public accessibility statement does not move and the statement is unedited — every screen this item touched is a staff one**, and re-read before the commit as the repo requires.
+
+**What it left behind.**
+
+- **No itemisation of what the balance is made of.** The counter sees `$312.40, 41 days past due`, not rent-plus-late-fee-plus-tax. That is the same gap B-230's entry noted, and the portal half of it is **B-232**.
+- **The card path for a former tenant**, above — D-112's neighbourhood.
+- **The search-result line still reads "no active unit" for a former tenant.** It is true, and it is now followed by a screen that can take their money, so it understates rather than misleads.
+
+**Test verification.** Typecheck (including `tsconfig.tests.json`) clean; lint clean (7 pre-existing warnings, unrelated); no schema change, so no migration and no drift. Full unit suite **4,015 passed, 8 skipped of 4,023** (241 files passed, 1 skipped), exit 0, including the new `tests/counter-payable-leases-db.test.ts` (3 tests). e2e `admin-pos` + `admin-move-out` on `desktop-chrome` and `mobile-chrome`: **40 passed**, exit 0, **run twice** with the same result — the second run against the database the first one had already taken payments in. The full sweep is CI's.
