@@ -9,6 +9,7 @@ import {
   hasPermissionAnywhere,
 } from "@/lib/rbac/authorize";
 import { toAuditActor } from "@/lib/rbac/audit-actor";
+import { creditByTenant } from "@/lib/billing/credit";
 import type { Actor } from "@/lib/rbac/actor";
 import {
   addressHistory,
@@ -184,6 +185,16 @@ export type TenantLeaseSummary = {
   /// the plan form has to show it rather than let a staffer guess from the
   /// balance beside it.
   arrearsCents: number;
+  /// B-225. Money this tenant has handed over at THIS lease's facility that no
+  /// invoice has claimed. Held per tenant per facility, because `Payment`
+  /// carries no lease — so two leases at one facility legitimately show the
+  /// same figure, and it is the facility's credit rather than the unit's.
+  creditCents: number;
+  /// B-225. This lease's own unsettled invoices, oldest first — what the
+  /// counter's "apply the credit to..." control offers. Scoped to the lease so
+  /// a staffer choosing where money goes is choosing among the debts of the
+  /// unit they are looking at.
+  openInvoices: { id: string; number: string; outstandingCents: number; dueDate: Date }[];
   /// B-210. D-98's grace window at this lease's facility, so the plan builder
   /// states the rule the breach job actually runs rather than "miss it and the
   /// plan ends".
@@ -484,6 +495,44 @@ export async function tenantProfile(
     leases.map((lease) => planCapFor(lease.id, lease.facility)),
   );
 
+  // B-225. One query for every facility this tenant holds a lease at, rather
+  // than one per lease — a tenant with six units at one site would otherwise
+  // run the same aggregate six times.
+  const openInvoiceRows = await prisma.invoice.findMany({
+    where: { leaseId: { in: leases.map((lease) => lease.id) } },
+    orderBy: { dueDate: "asc" },
+    select: {
+      id: true,
+      leaseId: true,
+      number: true,
+      dueDate: true,
+      totalCents: true,
+      amountPaidCents: true,
+    },
+  });
+  const openByLease = new Map<string, TenantLeaseSummary["openInvoices"]>();
+  for (const invoice of openInvoiceRows) {
+    const outstandingCents = invoice.totalCents - invoice.amountPaidCents;
+    if (outstandingCents <= 0) continue;
+    openByLease.set(invoice.leaseId, [
+      ...(openByLease.get(invoice.leaseId) ?? []),
+      {
+        id: invoice.id,
+        number: invoice.number,
+        outstandingCents,
+        dueDate: invoice.dueDate,
+      },
+    ]);
+  }
+
+  const creditByFacility = new Map<string, number>();
+  for (const facilityId of new Set(leases.map((lease) => lease.facilityId))) {
+    creditByFacility.set(
+      facilityId,
+      (await creditByTenant(facilityId, [tenantId])).get(tenantId) ?? 0,
+    );
+  }
+
   const leaseSummaries: TenantLeaseSummary[] = leases.map((lease, index) => ({
     leaseId: lease.id,
     facilityId: lease.facilityId,
@@ -493,6 +542,8 @@ export async function tenantProfile(
     monthlyRateCents: lease.monthlyRateCents,
     balanceCents: leaseBalances[index]._sum.amountCents ?? 0,
     arrearsCents: leaseArrears[index].outstandingCents,
+    creditCents: creditByFacility.get(lease.facilityId) ?? 0,
+    openInvoices: openByLease.get(lease.id) ?? [],
     planGraceDays: lease.facility.planGraceDays,
     planCap: leasePlanCaps[index],
     startDate: lease.startDate,

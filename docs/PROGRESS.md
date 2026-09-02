@@ -7274,6 +7274,47 @@ The three measurements moved into `measureThreeWays` so both loops share one cop
 - **Verified on `desktop-chrome` only.** The spec sets its own viewport in every pass, so `mobile-chrome` would measure the same three CSS viewports; the device scale factor is a rendering concern and not a layout one, as the file's existing comment says.
 - Unit suite green end to end: 3916 passed, 8 skipped, reconciled to 3924. The touched e2e file: 11 passed, 0 failed. Lint and typecheck clean. No schema change, so no migration and nothing for the drift check to see.
 
+## B-225 — Money paid ahead had nowhere to live, so the tenant who prepaid was fee'd and then charged again
+
+`PENDING`
+
+**What it built.** `applyPayment` has returned `unappliedCents` since B-044 and **nothing downstream read it.** A tenant hands the counter $600 in December for six months: $150 settles the open invoice and $450 sits nowhere. In January the new invoice is issued at full value, `assessLateFees` charges a fee, and `runAutopay` takes another $150 from their card — a chargeback and a lost tenant, produced by their own money. The month-end journal had already posted the $450 to Customer Deposits, so the liability was on the books with nothing anywhere that could discharge it, and the portal meanwhile **refused the same overpayment outright** with a comment promising prepayment "comes back with B-044". B-044 shipped without it.
+
+Five points, all of them:
+
+1. **Invoice generation sweeps** a tenant's credit onto each new invoice, inside the transaction that creates it.
+2. **Late-fee assessment nets credit off** what is overdue before the fee is sized.
+3. **Autopay spends credit before reaching for the card**, in its own committed transaction, then re-reads the invoice.
+4. **The tenant profile shows "Credit on account"** with a control that puts it against a named invoice.
+5. **The portal's overpayment refusal is lifted**, behind a ceiling.
+
+**What it decided.**
+
+- **No migration, and no `creditCents` column.** The figure is already derivable — what we took, less what sits against an invoice, less what went back out — and `lib/admin/revenue-report.ts` has computed exactly it for months to fill an "Unapplied" column that was reported and never acted on. A stored balance would be a second copy of a number the allocations already determine, and the two would drift the first time a refund or reversal moved without it.
+- **The derivation is only correct because a refund unwinds allocations FIRST.** `refunds.ts` walks the allocation rows before anything else, so `amount − allocated − refunded` does not double-count. That was checked in the code rather than assumed; it looks like double-counting until you see the unwind order.
+- **Scope is TENANT × FACILITY, not lease, and the row's "lease-level credit" is narrower than the data can honestly support.** `Payment` has no `leaseId` — money arrives from a tenant at a facility — and `applyPayment` already spreads a payment across that tenant's invoices there in the facility's allocation order. Same grain means prepaid money behaves exactly like the payment it came from. Anchoring to a lease would invent an attribution the payment never carried, and a tenant with two units would find their own money refusing to pay the unit it was not labelled for.
+- **One function spends credit, and only one.** `applyCreditToInvoice` is what the sweep, autopay and the counter control all call, so there is one definition of what spending credit means. It does not invent a ledger entry or a payment event: no money moved, the cash was recorded when the tenant handed it over, and this only decides which invoice it was for.
+- **Credit is spent oldest payment first**, which is what a statement reads like and what an operator explains at a counter.
+- **The late-fee ladder reads credit but never spends it.** A fee assessment quietly writing payment allocations would be money moving in a job whose name says it charges. Spending belongs to the two jobs that run in a transaction which can record it.
+- **`age` is not netted, only the amount.** How late a tenant is, is a fact about dates; a partial credit must not reset a ladder three steps in.
+- **The staff control is gated on `payments:take`, not `credits:manual`, and carries no monetary limit.** A manual credit posts value that did not exist and is capped by role authority; this moves money the tenant already handed over onto their own invoice. Capping it would mean a counter staffer could take $600 at the desk and then need a manager to let the tenant spend it.
+- **The amount is not a field.** It is min(what the invoice owes, what the tenant has). A typed figure would invent a third quantity that can disagree with both.
+- **The portal refusal became a ceiling rather than a deletion.** Twelve months of rent — a fat-finger guard, not a policy about how far ahead somebody may pay. $1,610.00 typed for $16.10 is still refused, and with a different problem code and sentence, because "enter your balance or less" is false advice once paying ahead is supported. The ceiling defaults to **zero**, so every caller that has not thought about prepayment keeps today's behaviour: **the pay-link surface passes none on purpose**, since a link is raised for a specific balance and sent to somebody who may not be the tenant.
+
+**Runnable checks, and every one verified by breaking the code first.** `tests/credit.test.ts` covers the arithmetic (including the floor at zero — a negative credit would *add* to what a tenant owes in all three subtractions that consume it). `tests/credit-db.test.ts` covers the sweep, its idempotency, the two late-fee cases and both permission branches against real rows. `tests/portal-payment.test.ts` gains prepayment.
+
+**One of those tests was vacuous and passed on the defect.** "Sizes a fee on what credit does NOT cover" originally used `DEFAULT_LATE_FEE_STEPS`, whose step is `basis: 'greater'` of a $20 flat and 10% — so on a $150 invoice the flat wins at $20 whether credit is netted or not, and the assertion could not move. It uses a percentage ladder now and asserts $5.00 rather than $15.00. It was caught only by reverting the fix and watching what did *not* fail — the third time in this session that running against a broken build caught a guard that certified the bug.
+
+**A spec had been asserting the defect.** `e2e/portal.spec.ts`'s "an over-payment is refused server-side and falls back to the balance" passed for months and was correct about the code the whole time — refusing was exactly the behaviour, and exactly the bug. It now asserts both halves of what replaced it: a dollar more than the balance is banked, and $999,999.00 is still refused with the ceiling's own sentence. The balance is read off the pay link rather than hard-coded, so the demo seed stays free to change.
+
+**What it left behind.**
+
+- **Autopay's netting has no automated test.** The sweep it calls is covered directly, and the invoice it re-reads is the mechanism, but the charge path itself needs Stripe mocking and is verified by reading rather than by a test. It is the most expensive path in the row and it is the one least covered — say so rather than imply otherwise.
+- **Move-out disposition is untouched, and deliberately.** What happens to credit when a tenant leaves is **D-113** — an unclaimed-property question that a build session does not settle, the same reasoning PRD 10 §11 already carries for referral credits. A tenant can currently move out with credit on account and nothing refunds it.
+- **A refund still unwinds allocations before it touches unapplied money**, so refunding a tenant who has credit un-pays an invoice first rather than taking the refund from the credit. Arguably wrong, not this row's, and not raised as its own item.
+- **The twelve-month ceiling is a judgement, not a policy.** Nothing in the PRDs says how far ahead a tenant may pay, and D-113 is the row that would settle it.
+- **Credit is shown per lease card but is a facility-level figure**, so a tenant with two units at one site sees the same number twice. Correct, and it reads as double until you know why.
+
 ## B-251 — A "you are here" state made of a 1.09:1 tint and a font-weight bump
 
 `3c3ca7d`

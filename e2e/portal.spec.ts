@@ -149,23 +149,42 @@ test.describe('signed in as the demo tenant', () => {
     await assertNoAxeViolations(page)
   })
 
-  test('an over-payment is refused server-side and falls back to the balance', async ({ page }) => {
-    // The amount is a query param, so this is a crafted request rather than
-    // one the form would produce — which is exactly the case that has to hold.
+  // B-225. This test asserted for months that an over-payment was REFUSED.
+  // That was true, and it was the defect: the portal would not take money a
+  // tenant was trying to give it, because credit had nowhere to live. It now
+  // asserts the two halves of the behaviour that replaced the blanket rule —
+  // a real prepayment is banked, an absurd one is still refused.
+  test('banks a payment ahead of the balance, and still refuses a fat finger', async ({ page }) => {
     await page.goto('/portal')
-    await page.getByRole('link', { name: /pay \$.* now/i }).first().click()
+    const payLink = page.getByRole('link', { name: /pay \$.* now/i }).first()
+    // The balance, read off the control the tenant would actually press, so
+    // this does not hard-code a figure the demo seed is free to change.
+    const balance = Number(
+      ((await payLink.textContent()) ?? '').replace(/[^0-9.]/g, '') || '0',
+    )
+    expect(balance, 'the demo tenant owes something to pay ahead of').toBeGreaterThan(0)
+    await payLink.click()
     await expect(page).toHaveURL(/\/portal\/pay\?lease=/)
     const leaseId = new URL(page.url()).searchParams.get('lease')
 
-    await page.goto(`/portal/pay?lease=${leaseId}&amount=999999`)
-    // Scoped to THIS alert: the Payment Element renders an (empty) alert region
-    // of its own once Stripe is configured, so an unscoped `getByRole('alert')`
-    // matches two and fails on strict mode rather than on behaviour.
+    // A dollar more than is owed. Comfortably inside the twelve-months-of-rent
+    // ceiling for any plausible rate, and refused outright before this row.
+    await page.goto(`/portal/pay?lease=${leaseId}&amount=${(balance + 1).toFixed(2)}`)
     await expect(
       page.getByRole('main').getByRole('alert').filter({ hasText: 'more than you owe' }),
+    ).toHaveCount(0)
+
+    // The amount is a query param, so this is a crafted request rather than one
+    // the form would produce — which is exactly the case that has to hold.
+    // $999,999.00 is past twelve months of rent on any unit in the demo seed,
+    // and is the fat-finger shape the old blanket refusal existed to catch:
+    // $1,610.00 typed for $16.10.
+    await page.goto(`/portal/pay?lease=${leaseId}&amount=999999`)
+    await expect(
+      page.getByRole('main').getByRole('alert').filter({ hasText: /year of rent/i }),
     ).toBeVisible()
     // And it did not quietly prepare a charge for the crafted amount.
-    await expect(page.getByText('$9,999.99')).toHaveCount(0)
+    await expect(page.getByText('$999,999.00')).toHaveCount(0)
   })
 
   test('/portal/methods lists autopay per unit and has no WCAG 2.1 AA violations', async ({

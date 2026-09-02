@@ -7,6 +7,7 @@ import { daysBetween } from '@storage/core/jobs'
 import { createTask } from '@/lib/admin/tasks'
 import { effectsByLease } from '@/lib/admin/holds'
 import { createChargeIntent } from '@/lib/payments/intents'
+import { applyCreditToInvoice } from '@/lib/billing/credit'
 import { stripeClient } from '@/lib/payments/stripe'
 
 // PRD 02 US-19 (B-045) and US-20's retry schedule (B-046). The nightly autopay
@@ -201,6 +202,39 @@ export async function runAutopay(
         message: `${invoice.number} skipped — ${SKIP_MESSAGE.lease_on_hold}`,
       })
       continue
+    }
+
+    // B-225. Spend the tenant's own money before reaching for their card.
+    //
+    // This is the charge the row is named for: a tenant who prepaid $600 in
+    // December had $150 taken again in January, because `outstanding` was read
+    // straight off the invoice and credit existed nowhere. The sweep at invoice
+    // generation covers the ordinary case; this covers a payment taken AFTER
+    // the invoice was raised, which is most counter prepayments.
+    //
+    // In its own transaction, and before `outstanding` is computed rather than
+    // subtracted from it afterwards: the allocation rows have to be committed
+    // before a PaymentIntent is created, or a crash between the two charges a
+    // card for money that was already settled. Re-reading the invoice is what
+    // makes this correct rather than clever.
+    const swept = await prisma.$transaction((tx) =>
+      applyCreditToInvoice(tx, {
+        tenantId: invoice.lease.tenantId,
+        facilityId,
+        invoiceId: invoice.id,
+      }),
+    )
+    if (swept > 0) {
+      const settled = await prisma.invoice.findUniqueOrThrow({
+        where: { id: invoice.id },
+        select: { totalCents: true, amountPaidCents: true },
+      })
+      invoice.amountPaidCents = settled.amountPaidCents
+      recordItem({
+        itemId: invoice.id,
+        ok: true,
+        message: `${invoice.number} — ${formatCents(swept)} of credit on account applied before charging`,
+      })
     }
 
     const outstanding = invoice.totalCents - invoice.amountPaidCents

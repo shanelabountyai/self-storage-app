@@ -1,4 +1,5 @@
 import { ScrollRegion } from "@/components/ui/scroll-region"
+import { ApplyCreditForm } from "@/components/admin/apply-credit-form";
 import Link from "next/link";
 import { getAdminActor } from "@/lib/admin/context";
 import {
@@ -546,6 +547,22 @@ export default async function TenantProfilePage({
                   >
                     {formatCents(lease.balanceCents)}
                   </dd>
+                  {/* B-225. Money the tenant has handed over that no invoice
+                      has claimed. Rendered only when there is some — a
+                      permanent "Credit on account: $0.00" row would be noise on
+                      every profile in the product, and the figure only matters
+                      when it is not zero. Green rather than the red the balance
+                      uses: this is the one money figure on this screen that is
+                      in the tenant's favour, and showing it in the same colour
+                      as arrears is how a staffer reads it as another debt. */}
+                  {lease.creditCents > 0 && (
+                    <>
+                      <dt className="text-muted-foreground">Credit on account</dt>
+                      <dd className="font-medium tabular-nums text-green-800">
+                        {formatCents(lease.creditCents)}
+                      </dd>
+                    </>
+                  )}
                   <dt className="text-muted-foreground">Rate</dt>
                   <dd>{formatCents(lease.monthlyRateCents)}/mo</dd>
                   <dt className="text-muted-foreground">Started</dt>
@@ -1768,6 +1785,23 @@ export default async function TenantProfilePage({
                   </AdminForm>
                 </div>
               </details>
+            ))}
+
+          {/* B-225. Credit on account, with the control that spends it. Before
+              the payment-plan disclosure because it is the cheaper answer to
+              the same conversation: a tenant who is behind and has money on
+              account should have it applied before anyone discusses a plan. */}
+          {profile.leases
+            .filter((lease) => lease.status !== "ended")
+            .filter((lease) => lease.creditCents > 0 && lease.openInvoices.length > 0)
+            .filter((lease) => can(actor, "payments:take", lease.facilityId))
+            .map((lease) => (
+              <ApplyCreditForm
+                key={lease.leaseId}
+                tenantId={profile.tenantId}
+                creditCents={lease.creditCents}
+                openInvoices={lease.openInvoices}
+              />
             ))}
 
           {profile.leases

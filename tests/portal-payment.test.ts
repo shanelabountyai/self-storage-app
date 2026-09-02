@@ -39,10 +39,15 @@ describe('validatePaymentAmount', () => {
     expect(validatePaymentAmount('1.1', BALANCE)).toEqual({ ok: true, amountCents: 110 })
   })
 
-  it('refuses more than is owed', () => {
+  it('refuses more than is owed when no prepayment ceiling is offered', () => {
     // The fat-finger case: $1,610.00 typed for $16.10. Refusing is the cheap
-    // direction to be wrong in, and a credit balance has nothing to spend it
-    // on until invoicing exists.
+    // direction to be wrong in.
+    //
+    // B-225 updated the second half of this comment, which had gone false: it
+    // said "a credit balance has nothing to spend it on until invoicing
+    // exists". Credit exists now and three jobs spend it, so a caller that
+    // passes a ceiling banks the overpayment — see "paying ahead" below. This
+    // case is the caller that passes none, which is still refused.
     expect(validatePaymentAmount('1610', BALANCE)).toEqual({ ok: false, problem: 'above_balance' })
     expect(validatePaymentAmount('161.01', BALANCE)).toEqual({ ok: false, problem: 'above_balance' })
   })
@@ -332,6 +337,60 @@ describeDb('portal payment against real records', () => {
         },
       })
       expect(await paymentReceipt(otherTenantId, payment.id)).toBeNull()
+    })
+  })
+})
+
+// B-225. Prepayment, which this file has asserted was refused since B-044.
+//
+// The old refusal's own comment promised it "comes back with B-044". B-044
+// shipped without it, and the rule outlived its reason by long enough to become
+// the reason the product would not take money a tenant was trying to give it.
+describe('paying ahead', () => {
+  const BALANCE = 16_100
+  const RATE = 16_100
+  const CEILING = RATE * 12
+
+  it('takes six months up front', () => {
+    // The row's own scenario, from the tenant's side: $600 handed over against
+    // a $161 balance. It was `above_balance` until this row.
+    expect(validatePaymentAmount('600', BALANCE, CEILING)).toEqual({
+      ok: true,
+      amountCents: 60_000,
+    })
+  })
+
+  it('still refuses the fat finger, which is why a ceiling replaced the rule', () => {
+    // $1,610.00 typed for $16.10 is the expensive direction to get wrong, and
+    // deleting the check outright would have taken it silently. Twelve months
+    // of rent is far past any real prepayment and still well under this.
+    expect(validatePaymentAmount('1000000', BALANCE, CEILING)).toEqual({
+      ok: false,
+      problem: 'above_prepay_ceiling',
+    })
+  })
+
+  it('lets a tenant who owes nothing pay ahead anyway', () => {
+    // `nothing_owed` used to fire on a zero balance regardless. A tenant who is
+    // paid up is exactly the person most likely to be prepaying.
+    expect(validatePaymentAmount('600', 0, CEILING)).toEqual({ ok: true, amountCents: 60_000 })
+  })
+
+  it('keeps every caller that passes no ceiling exactly as it was', () => {
+    // The pay-link surface passes none on purpose — a link is raised for a
+    // specific balance and sent to somebody who may not be the tenant. The
+    // default has to be zero or that surface changes by accident.
+    expect(validatePaymentAmount('600', BALANCE)).toEqual({ ok: false, problem: 'above_balance' })
+    expect(validatePaymentAmount('50', 0)).toEqual({ ok: false, problem: 'nothing_owed' })
+  })
+
+  it('refuses above the ceiling with a different problem than above the balance', () => {
+    // Two refusals because they need two sentences. "Enter your balance or
+    // less" is false advice once paying ahead is supported.
+    expect(validatePaymentAmount('999999', BALANCE, CEILING).ok).toBe(false)
+    expect(validatePaymentAmount('600', BALANCE, 0)).toEqual({
+      ok: false,
+      problem: 'above_balance',
     })
   })
 })

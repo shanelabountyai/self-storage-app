@@ -1288,6 +1288,26 @@ const LAST_REVIEWED = '19 August 2026'
 // re-verification. The date stands at 19 August 2026 with twenty-one merged
 // items behind it, and **B-254** owns moving it.
 
+// Re-read 2026-09-01, at B-225 (money paid ahead had nowhere to live).
+// **Customer-facing** — `/portal/pay` gains a new refusal sentence and now
+// accepts an amount larger than the balance. **No claim on this page changes
+// and `LAST_REVIEWED` does not move.**
+//
+// Checked rather than waved through, because a money form is where a wrong
+// error message costs most. The new copy replaces nothing: `above_balance`
+// keeps its wording for the surfaces that still refuse overpayment, and
+// `above_prepay_ceiling` is a second sentence for a second situation. That
+// distinction is an accessibility one as much as a content one — 3.3.3 Error
+// Suggestion asks that a message say what to DO, and telling a tenant who is
+// deliberately paying six months ahead to "enter your balance or less" is
+// advice that would make their task impossible.
+//
+// The field, its label, its error wiring and the live region around it are all
+// unchanged; this row changed which sentence appears in a `<p>` that was
+// already correctly associated. So there is nothing here to add or retract —
+// and, as at B-245 and B-249, the reason there is no new claim to make is that
+// this page has never claimed anything about error-message wording.
+
 export default function AccessibilityPage() {
   return (
     <ProsePage

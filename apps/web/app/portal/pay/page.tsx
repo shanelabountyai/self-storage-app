@@ -6,6 +6,7 @@ import {
   payableLease,
   startPortalPayment,
   validatePaymentAmount,
+  prepayCeilingFor,
   type AmountProblem,
 } from '@/lib/portal/payment'
 import { formatRate } from '@/lib/format'
@@ -27,6 +28,11 @@ const AMOUNT_PROBLEM_COPY: Record<AmountProblem, string> = {
   not_a_number: 'Enter an amount like 75 or 75.50.',
   below_minimum: `The smallest payment we can take online is ${formatRate(MIN_PAYMENT_CENTS)}.`,
   above_balance: 'That is more than you owe. Enter your balance or less.',
+  // B-225. Paying ahead is supported now, so this refusal is about a LIMIT
+  // rather than about the tenant having done something wrong — and it must not
+  // read like "enter your balance or less", which would be false.
+  above_prepay_ceiling:
+    'That is much more than a year of rent. Call the office and we will take it over the phone.',
   nothing_owed: 'There is nothing to pay right now.',
 }
 
@@ -85,7 +91,16 @@ export default async function PortalPayPage({
   // No amount in the URL means "the whole balance", which is what the
   // dashboard button asks for and what almost everyone wants.
   const requested = amount ?? String(lease.balanceCents / 100)
-  const checked = validatePaymentAmount(requested, lease.balanceCents)
+  // B-225. Money paid past the balance is banked as credit on account and spent
+  // on the next invoice raised. Until this row it was refused outright, with a
+  // comment promising prepayment "comes back with B-044" — B-044 shipped
+  // without it, and the refusal became the reason the product would not take
+  // money a tenant was trying to give it.
+  const checked = validatePaymentAmount(
+    requested,
+    lease.balanceCents,
+    prepayCeilingFor(lease),
+  )
   const amountCents = checked.ok ? checked.amountCents : lease.balanceCents
   const setup = await startPortalPayment(actor.tenantId, lease, amountCents)
 

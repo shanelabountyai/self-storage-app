@@ -1,4 +1,6 @@
 import { prisma } from '@storage/db'
+
+import { creditByTenant } from '@/lib/billing/credit'
 import { effectiveByGroup } from '@storage/core/facility-settings'
 import { OCCUPYING_LEASE_STATUSES } from '@storage/core/inventory'
 import { daysPastDue, outstandingCents } from '@storage/core/metrics'
@@ -75,6 +77,8 @@ export async function assessLateFees(
     where: { facilityId, status: { in: [...OCCUPYING_LEASE_STATUSES] } },
     select: {
       id: true,
+      // B-225. Credit is held per tenant at a facility, not per lease.
+      tenantId: true,
       invoices: {
         select: {
           id: true,
@@ -97,6 +101,20 @@ export async function assessLateFees(
 
   // B-103. A bank debit that has been accepted but has not settled yet.
   const settling = await leasesWithSettlingPayment(facilityId)
+
+  // B-225. Money already in hand that no invoice has claimed.
+  //
+  // Invoice generation sweeps credit onto an invoice as it is issued, so in the
+  // ordinary course this is zero by the time the ladder runs. It is read here
+  // anyway because the two jobs are not ordered with respect to a payment taken
+  // BETWEEN them: a tenant who pays at the counter on the 3rd, after the 1st's
+  // invoice was raised, would otherwise be fee'd on the 5th for rent their
+  // money already covers. Fee-ing somebody who has overpaid is the single worst
+  // outcome in this file, so it is checked rather than assumed.
+  const creditByTenantId = await creditByTenant(
+    facilityId,
+    leases.map((lease) => lease.tenantId),
+  )
 
   // B-138. Which ladder steps have already been charged is read back from the
   // lease's own fee invoices — and a PAID one does not move through a transfer,
@@ -151,6 +169,33 @@ export async function assessLateFees(
       .reduce((sum, invoice) => sum + outstandingCents(invoice), 0)
     if (overdue <= 0) continue
 
+    // B-225. Credit nets off what is overdue BEFORE the fee is sized, not just
+    // before it is skipped. A percentage step charged on the gross would bill a
+    // tenant 10% of rent they have already handed over — a smaller version of
+    // the same wrong, and the one that would have survived a "skip if fully
+    // covered" guard.
+    //
+    // Read-only on purpose: the ladder does not SPEND credit, it declines to
+    // charge for money it can see. Spending is the invoice sweep's job and
+    // autopay's, both of which run in a transaction that can record it; a fee
+    // assessment quietly writing payment allocations would be money moving in a
+    // job whose name says it charges rather than settles.
+    //
+    // `age` is deliberately NOT netted. How late a tenant is, is a fact about
+    // dates; credit changes what they owe, not how long it has been owed, and a
+    // partial credit must not reset a ladder that is three steps in.
+    const credit = creditByTenantId.get(lease.tenantId) ?? 0
+    const chargeable = overdue - credit
+    if (chargeable <= 0) {
+      result.skipped += 1
+      recordItem({
+        itemId: lease.id,
+        ok: true,
+        message: 'late fee skipped — credit on account covers what is overdue',
+      })
+      continue
+    }
+
     const age = daysPastDue(rentInvoices, businessDate)
     const alreadyCharged = chargedSteps([
       ...lease.invoices,
@@ -160,7 +205,7 @@ export async function assessLateFees(
     if (due.length === 0) continue
 
     const lines = due
-      .map((step) => ({ step, amountCents: lateFeeAmount(step, overdue) }))
+      .map((step) => ({ step, amountCents: lateFeeAmount(step, chargeable) }))
       .filter((line) => line.amountCents > 0)
     if (lines.length === 0) {
       result.skipped += 1

@@ -1,4 +1,6 @@
 import { prisma } from '@storage/db'
+
+import { applyCreditToInvoice } from '@/lib/billing/credit'
 import { emitEvent } from '@storage/core/events'
 import { effectiveByGroup } from '@storage/core/facility-settings'
 import { OCCUPYING_LEASE_STATUSES } from '@storage/core/inventory'
@@ -73,6 +75,10 @@ export async function generateInvoices(
       where: { facilityId, status: { in: [...OCCUPYING_LEASE_STATUSES] } },
       select: {
         id: true,
+        // B-225. Credit on account belongs to the TENANT at a facility —
+        // `Payment` carries no lease — so sweeping it onto a new invoice needs
+        // the tenant this lease bills.
+        tenantId: true,
         startDate: true,
         billingDay: true,
         monthlyRateCents: true,
@@ -215,6 +221,7 @@ type CreateInput = {
   facilityId: string
   lease: {
     id: string
+    tenantId: string
     monthlyRateCents: number
     protectionCents: number
     protectionPlanName: string | null
@@ -325,6 +332,30 @@ async function createInvoiceForPeriod(input: CreateInput): Promise<string | 'ski
           occurredAt: businessDate,
           invoiceId: invoice.id,
         },
+      })
+
+      // B-225. Money the tenant has already handed over, spent on the invoice
+      // the moment it is issued.
+      //
+      // This is the sweep that closes the oldest money gap in the tree.
+      // `applyPayment` has returned `unappliedCents` since B-044 and nothing
+      // read it: a tenant who paid $600 in December for six months was issued
+      // January's invoice at full value, charged a late fee on it, and had
+      // their card charged again — a chargeback produced by their own money.
+      //
+      // INSIDE the transaction, and after the ledger entry, on purpose. A
+      // rolled-back invoice must not leave allocations pointing at an invoice
+      // that does not exist, and the charge has to be on the books before the
+      // credit can settle it — the same ordering the promotion and referral
+      // marks below rely on, and for the same reason.
+      //
+      // It does not emit a payment event or write a ledger entry of its own:
+      // no money moved. The cash arrived, and was recorded, when the tenant
+      // handed it over; this only decides which invoice it was for.
+      await applyCreditToInvoice(tx, {
+        tenantId: lease.tenantId,
+        facilityId,
+        invoiceId: invoice.id,
       })
 
       await emitEvent(

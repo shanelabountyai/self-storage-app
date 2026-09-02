@@ -11,7 +11,12 @@ import { paymentsEnabled } from '@/lib/payments/stripe'
 /// amount worth the interchange on either side of it.
 export const MIN_PAYMENT_CENTS = 100
 
-export type AmountProblem = 'not_a_number' | 'below_minimum' | 'above_balance' | 'nothing_owed'
+export type AmountProblem =
+  | 'not_a_number'
+  | 'below_minimum'
+  | 'above_balance'
+  | 'above_prepay_ceiling'
+  | 'nothing_owed'
 
 export type AmountCheck = { ok: true; amountCents: number } | { ok: false; problem: AmountProblem }
 
@@ -20,13 +25,29 @@ export type AmountCheck = { ok: true; amountCents: number } | { ok: false; probl
 /// Pure, so every boundary is testable without a database or a Stripe key —
 /// this is the function that decides how much money moves.
 ///
-/// Overpayment is refused rather than banked. A credit balance has nowhere to
-/// go until invoicing exists (B-044): nothing would consume it, and the
-/// dashboard would show a negative balance it has no wording for. Refusing
-/// also catches the fat-finger case — $1,610.00 typed for $16.10 — which is
-/// the expensive direction to get wrong. Prepayment comes back with B-044.
-export function validatePaymentAmount(input: string, balanceCents: number): AmountCheck {
-  if (balanceCents <= 0) return { ok: false, problem: 'nothing_owed' }
+/// **B-225 lifted the blanket refusal on overpayment.** The old comment here
+/// read: *"a credit balance has nowhere to live… Prepayment comes back with
+/// B-044"*. B-044 shipped without it, and the refusal outlived its reason by
+/// long enough to become the reason the product would not take money a tenant
+/// was trying to give it. Credit now exists, three jobs spend it, and the
+/// counter can direct it — so a tenant paying six months up front is a
+/// supported thing rather than an error message.
+///
+/// **The fat-finger case is still refused, and that is why a ceiling replaces
+/// the rule rather than deleting it.** $1,610.00 typed for $16.10 is the
+/// expensive direction to get wrong, and "any amount at all" would take it
+/// silently. `prepayCeilingCents` is what the caller is willing to bank beyond
+/// the balance; it defaults to ZERO, so every caller that has not thought about
+/// prepayment keeps exactly today's behaviour and no screen changes by accident.
+export function validatePaymentAmount(
+  input: string,
+  balanceCents: number,
+  prepayCeilingCents = 0,
+): AmountCheck {
+  // Nothing owed AND nothing bankable. A tenant who is paid up can still pay
+  // ahead where the caller allows it — refusing that is the same defect one
+  // step along.
+  if (balanceCents <= 0 && prepayCeilingCents <= 0) return { ok: false, problem: 'nothing_owed' }
 
   // Accept "161", "161.00", "$161.00", "1,610.50" — a human typing a number of
   // dollars, not a machine posting cents.
@@ -41,7 +62,16 @@ export function validatePaymentAmount(input: string, balanceCents: number): Amou
 
   if (!Number.isSafeInteger(amountCents)) return { ok: false, problem: 'not_a_number' }
   if (amountCents < MIN_PAYMENT_CENTS) return { ok: false, problem: 'below_minimum' }
-  if (amountCents > balanceCents) return { ok: false, problem: 'above_balance' }
+  if (amountCents > balanceCents + prepayCeilingCents) {
+    // Two different refusals, because they need two different sentences. With
+    // no ceiling the answer is "pay what you owe"; with one, the tenant is
+    // doing something we support and has simply gone past the limit, and
+    // telling them to "enter your balance or less" would be wrong.
+    return {
+      ok: false,
+      problem: prepayCeilingCents > 0 ? 'above_prepay_ceiling' : 'above_balance',
+    }
+  }
   return { ok: true, amountCents }
 }
 
@@ -52,6 +82,20 @@ export type PayableLease = {
   facilityPhone: string | null
   unitNumber: string
   balanceCents: number
+  /// B-225. What a month costs, so a prepayment ceiling can be stated in months
+  /// rather than as a bare number of dollars nobody can justify.
+  monthlyRateCents: number
+}
+
+/// B-225. How far past the balance a tenant may pay from the portal.
+///
+/// Twelve months of rent. It is a FAT-FINGER GUARD, not a policy about how far
+/// ahead somebody may pay — the number is deliberately far past any real
+/// prepayment so that it never refuses a genuine one, while still catching
+/// $1,610.00 typed for $16.10 on a $161 unit. A tenant who really wants to pay
+/// two years up front is a conversation with the office, and the screen says so.
+export function prepayCeilingFor(lease: { monthlyRateCents: number }): number {
+  return lease.monthlyRateCents * 12
 }
 
 /// The lease a tenant is allowed to pay, or null.
@@ -68,6 +112,7 @@ export async function payableLease(tenantId: string, leaseId: string): Promise<P
       facilityId: true,
       facility: { select: { name: true, phone: true } },
       unit: { select: { number: true } },
+      monthlyRateCents: true,
     },
   })
   if (!lease) return null
@@ -84,6 +129,7 @@ export async function payableLease(tenantId: string, leaseId: string): Promise<P
     facilityPhone: lease.facility.phone,
     unitNumber: lease.unit.number,
     balanceCents: balance._sum.amountCents ?? 0,
+    monthlyRateCents: lease.monthlyRateCents,
   }
 }
 

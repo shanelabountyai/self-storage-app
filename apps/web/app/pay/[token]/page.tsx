@@ -31,6 +31,12 @@ const AMOUNT_PROBLEM_COPY: Record<AmountProblem, string> = {
   not_a_number: 'Enter an amount like 75 or 75.50.',
   below_minimum: 'The smallest payment we can take online is $1.00.',
   above_balance: 'That is more than you owe. Enter your balance or less.',
+  // B-225. Unreachable here on purpose, and kept for the exhaustive Record. A
+  // pay link is raised for a SPECIFIC balance and sent to somebody who may not
+  // be the tenant — it is the one payment surface where "pay more than this"
+  // is not a feature — so it passes no prepayment ceiling and keeps the
+  // blanket refusal above.
+  above_prepay_ceiling: 'That is more than this payment link is for.',
   nothing_owed: 'There is nothing to pay right now.',
 }
 

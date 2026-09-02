@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { applyCreditByStaff } from "@/lib/billing/credit";
 import { requireStaffActor } from "@/lib/rbac/session";
 import {
   addTenantNote,
@@ -844,4 +845,58 @@ export async function setExtendedHoursAction(
 
   await setExtendedHours(grantId, formData.get("extendedHours") === "on");
   revalidatePath(`/admin/tenants/${tenantId}`);
+}
+
+/// B-225. Put a tenant's credit on account against one of their invoices.
+///
+/// The invoice id is the only input: how much to apply is never a typed number.
+/// The amount is min(what the invoice still owes, what the tenant has), and
+/// letting a staffer type a figure would invent a third quantity that could
+/// disagree with both — the shape that produces a payment for money nobody has.
+export async function applyCreditAction(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const actor = await requireStaffActor();
+  const tenantId = String(formData.get("tenantId") ?? "");
+  const invoiceId = String(formData.get("invoiceId") ?? "");
+
+  if (!invoiceId) {
+    return fieldError({ invoiceId: "Choose which invoice to put the credit on." });
+  }
+
+  const result = await applyCreditByStaff(actor, { invoiceId });
+
+  if (!result.ok) {
+    switch (result.reason) {
+      case "forbidden":
+        return {
+          status: "error",
+          message: "You do not have permission to apply payments at this facility.",
+          fieldErrors: {},
+        };
+      case "no_credit":
+        return {
+          status: "error",
+          message:
+            "This tenant has no credit on account. It may have been applied to another invoice already.",
+          fieldErrors: {},
+        };
+      case "nothing_owed":
+        return {
+          status: "error",
+          message: "That invoice is already settled.",
+          fieldErrors: {},
+        };
+      default:
+        return {
+          status: "error",
+          message: "That invoice could not be found.",
+          fieldErrors: {},
+        };
+    }
+  }
+
+  revalidateProfile(tenantId);
+  return success(`${formatCents(result.appliedCents)} of credit applied.`);
 }
