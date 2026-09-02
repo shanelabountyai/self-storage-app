@@ -1,3 +1,4 @@
+import { ScrollRegion } from '@/components/ui/scroll-region'
 import Link from 'next/link'
 import { getAdminActor } from '@/lib/admin/context'
 import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
@@ -145,7 +146,7 @@ export default async function IndexationPage() {
             </p>
           )}
 
-          <div tabIndex={0} className="overflow-x-auto">
+          <ScrollRegion aria-label="Sitemap URLs">
             <table className="w-full min-w-2xl border-collapse text-sm">
               <caption className="sr-only">
                 Every URL in the sitemap with its Search Console index status, pages needing
@@ -185,7 +186,7 @@ export default async function IndexationPage() {
                 ))}
               </tbody>
             </table>
-          </div>
+          </ScrollRegion>
         </>
       )}
 

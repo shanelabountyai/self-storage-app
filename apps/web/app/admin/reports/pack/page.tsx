@@ -5,6 +5,7 @@ import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
 import { managementPack } from '@/lib/admin/management-pack'
 import { periodsFor } from '@/lib/admin/accounting-close'
 import { businessDateFor } from '@storage/core/jobs'
+import { ScrollRegion } from '@/components/ui/scroll-region'
 
 export const metadata = { title: 'Management pack' }
 
@@ -149,7 +150,7 @@ export default async function ManagementPackPage({
             </p>
           ))}
           {section.table && (
-            <div tabIndex={0} className="overflow-x-auto">
+            <ScrollRegion aria-label={section.table.caption}>
               <table className="w-full text-left text-sm">
                 <caption className="sr-only">{section.table.caption}</caption>
                 <thead>
@@ -180,7 +181,7 @@ export default async function ManagementPackPage({
                   ))}
                 </tbody>
               </table>
-            </div>
+            </ScrollRegion>
           )}
         </section>
       ))}

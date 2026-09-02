@@ -13,6 +13,7 @@ import {
 } from '@storage/core/pricing'
 import { rateSuggestionsForFacility, type RateSuggestionRow } from '@/lib/pricing/rate-suggestions'
 import { applySuggestedRateAction } from './actions'
+import { ScrollRegion } from '@/components/ui/scroll-region'
 
 export const metadata = { title: 'Street rates' }
 
@@ -156,7 +157,7 @@ export default async function AdminStreetRatesPage() {
         </p>
       )}
 
-      <div tabIndex={0} className="overflow-x-auto">
+      <ScrollRegion aria-label="Street rates by unit type">
         <table className="w-full min-w-3xl text-left text-sm">
           <caption className="sr-only">
             Every unit type at {selected.facility.name}, its occupancy, its current street rate and
@@ -208,7 +209,7 @@ export default async function AdminStreetRatesPage() {
             )}
           </tbody>
         </table>
-      </div>
+      </ScrollRegion>
     </div>
   )
 }

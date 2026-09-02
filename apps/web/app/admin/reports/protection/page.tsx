@@ -3,6 +3,7 @@ import { getSwitcherData } from '@/lib/admin/context'
 import { resolveSelectedFacility } from '@/lib/admin/facility-selection-logic'
 import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
 import { coverageGaps } from '@/lib/protection/coverage'
+import { ScrollRegion } from '@/components/ui/scroll-region'
 
 export const metadata = { title: 'Uncovered units' }
 
@@ -93,7 +94,7 @@ export default async function ProtectionCoveragePage({
           Every occupied unit here carries a plan or a current certificate. Nothing to chase.
         </p>
       ) : (
-        <div tabIndex={0} className="overflow-x-auto">
+        <ScrollRegion aria-label="Uncovered units">
           <table className="w-full min-w-2xl border-collapse text-sm">
             <caption className="sr-only">
               Occupied units with no protection plan and no unexpired proof of insurance, longest
@@ -153,7 +154,7 @@ export default async function ProtectionCoveragePage({
               ))}
             </tbody>
           </table>
-        </div>
+        </ScrollRegion>
       )}
     </div>
   )

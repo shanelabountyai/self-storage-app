@@ -13,6 +13,7 @@ import {
 } from '@/lib/impersonation/oversight'
 import { forceEndImpersonationAction } from './actions'
 import { reportRangeForActor } from '@/lib/admin/reports'
+import { ScrollRegion } from '@/components/ui/scroll-region'
 
 export const metadata = { title: 'Support sessions' }
 
@@ -255,7 +256,7 @@ export default async function ImpersonationOversightPage({
         {rows.length === 0 ? (
           <p className="text-muted-foreground text-sm">No support sessions match.</p>
         ) : (
-          <div tabIndex={0} className="overflow-x-auto">
+          <ScrollRegion aria-label="Support sessions">
             <table className="w-full min-w-3xl text-left text-sm">
               <caption className="sr-only">
                 Support sessions started {range.label}, newest first
@@ -299,7 +300,7 @@ export default async function ImpersonationOversightPage({
                 ))}
               </tbody>
             </table>
-          </div>
+          </ScrollRegion>
         )}
       </section>
     </div>

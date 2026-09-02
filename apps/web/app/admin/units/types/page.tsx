@@ -7,6 +7,7 @@ import { listUnitTypes } from '@/lib/admin/unit-types'
 import { currentRatesForFacility, rateHistoryForUnitType } from '@/lib/pricing/unit-type-rates'
 import { formatCents } from '@/lib/format'
 import { createUnitTypeAction, updateUnitTypeAction, cloneUnitTypeAction, publishRateAction } from './actions'
+import { ScrollRegion } from '@/components/ui/scroll-region'
 
 type UnitTypeRow = Awaited<ReturnType<typeof listUnitTypes>>[number]
 
@@ -178,7 +179,7 @@ export default async function AdminUnitTypesPage({
       {/* B-116. Neither table on this page had the overflow-x-auto wrapper the
           units screen's table gets — a 522px table scrolled the whole document
           sideways at 320px rather than just itself. */}
-      <div tabIndex={0} className="overflow-x-auto">
+      <ScrollRegion aria-label="Unit types">
       <table className="w-full min-w-max text-left text-sm">
         <thead>
           <tr className="text-muted-foreground">
@@ -269,7 +270,7 @@ export default async function AdminUnitTypesPage({
           )}
         </tbody>
       </table>
-      </div>
+      </ScrollRegion>
 
       {historyFor && (
         <section aria-labelledby="rates-heading" className="flex flex-col gap-3 rounded-md border p-3">
@@ -285,7 +286,7 @@ export default async function AdminUnitTypesPage({
             existing lease&apos;s rent (US-9). Future-dated rows take effect on their own date.
           </p>
 
-          <div tabIndex={0} className="overflow-x-auto">
+          <ScrollRegion aria-label="Rate history">
           <table className="w-full min-w-max text-left text-sm">
             <thead>
               <tr className="text-muted-foreground">
@@ -309,7 +310,7 @@ export default async function AdminUnitTypesPage({
               )}
             </tbody>
           </table>
-          </div>
+          </ScrollRegion>
 
           <form action={publishRateAction} className="flex flex-wrap items-end gap-3">
             <input type="hidden" name="facilityId" value={facilityId} />

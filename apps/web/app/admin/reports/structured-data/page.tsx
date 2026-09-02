@@ -5,6 +5,7 @@ import type { PageCheck } from '@storage/core/marketing'
 import { indexNowConfig, indexNowKeyPath } from '@/lib/marketing/indexnow'
 import { siteOrigin } from '@/lib/marketing/origin'
 import { CHECK_LIMIT, runStructuredDataMonitor } from '@/lib/marketing/structured-data-monitor'
+import { ScrollRegion } from '@/components/ui/scroll-region'
 
 export const metadata = { title: 'Structured data' }
 
@@ -108,7 +109,7 @@ export default async function StructuredDataPage() {
           contract — the homepage, the legal pages, the search page — aren&apos;t checked.
         </p>
       ) : (
-        <div tabIndex={0} className="overflow-x-auto">
+        <ScrollRegion aria-label="Pages needing attention">
           <table className="w-full min-w-2xl border-collapse text-sm">
             <caption className="sr-only">
               Pages whose structured data needs attention, unreachable pages first
@@ -125,7 +126,7 @@ export default async function StructuredDataPage() {
               ))}
             </tbody>
           </table>
-        </div>
+        </ScrollRegion>
       )}
 
       <section aria-labelledby="indexnow-heading" className="flex flex-col gap-2">

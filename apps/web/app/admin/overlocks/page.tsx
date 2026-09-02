@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { getSwitcherData } from '@/lib/admin/context'
 import { resolveSelectedFacility } from '@/lib/admin/facility-selection-logic'
 import { overlockReconciliation } from '@/lib/delinquency/overlock-reconciliation'
+import { ScrollRegion } from '@/components/ui/scroll-region'
 
 export const metadata = { title: 'Overlocks' }
 
@@ -84,7 +85,7 @@ export default async function OverlocksPage() {
       {rows.length === 0 ? (
         <p className="text-muted-foreground text-sm">No live overlocks at this facility.</p>
       ) : (
-        <div tabIndex={0} className="overflow-x-auto">
+        <ScrollRegion aria-label="Live overlocks">
           <table className="w-full min-w-max text-left text-sm">
             <thead>
               <tr className="text-muted-foreground">
@@ -114,7 +115,7 @@ export default async function OverlocksPage() {
               ))}
             </tbody>
           </table>
-        </div>
+        </ScrollRegion>
       )}
     </div>
   )

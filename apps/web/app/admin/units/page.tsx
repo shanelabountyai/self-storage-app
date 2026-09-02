@@ -17,6 +17,7 @@ import { previewBulkOperation, type BulkUnitOperation } from '@/lib/admin/units-
 import type { UnitFilters } from '@/lib/admin/unit-query'
 import { formatCents } from '@/lib/format'
 import { applyBulkAction, setUnitStatusAction } from './actions'
+import { ScrollRegion } from '@/components/ui/scroll-region'
 
 // B-169. A unit reading `overlocked` with nobody in it is not a tenant behind
 // on rent — it is a lock left on after the lease ended, and it is out of
@@ -243,7 +244,7 @@ export default async function AdminUnitsPage({
       </p>
 
       {view === 'list' ? (
-        <div tabIndex={0} className="overflow-x-auto">
+        <ScrollRegion aria-label="Units">
         <table className="hidden w-full min-w-max text-left text-sm sm:table">
           <thead>
             <tr className="text-muted-foreground">
@@ -326,7 +327,7 @@ export default async function AdminUnitsPage({
             ))}
           </tbody>
         </table>
-        </div>
+        </ScrollRegion>
       ) : (
         <div className="flex flex-col gap-6">
           {[...groups.entries()].map(([label, groupUnits]) => (
@@ -515,7 +516,7 @@ export default async function AdminUnitsPage({
               )}
             </p>
 
-            <div tabIndex={0} className="overflow-x-auto">
+            <ScrollRegion aria-label="Bulk edit preview">
             <table className="w-full min-w-max text-left text-xs">
               <thead>
                 <tr className="text-muted-foreground">
@@ -537,7 +538,7 @@ export default async function AdminUnitsPage({
                 ))}
               </tbody>
             </table>
-            </div>
+            </ScrollRegion>
 
             {preview.applyCount > 0 && (
               <form action={applyBulkAction} className="flex flex-wrap items-end gap-3">

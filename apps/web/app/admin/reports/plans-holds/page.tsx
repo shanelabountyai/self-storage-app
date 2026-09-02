@@ -3,6 +3,7 @@ import { getAdminActor } from '@/lib/admin/context'
 import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
 import { plansAndHoldsReport, type HaltedLeaseRow } from '@/lib/admin/plans-holds-report'
 import { formatCents } from '@/lib/format'
+import { ScrollRegion } from '@/components/ui/scroll-region'
 
 export const metadata = { title: 'Plans & holds' }
 
@@ -227,7 +228,7 @@ export default async function PlansHoldsPage({
                   {facility.rows.length === 1 ? 'lease' : 'leases'} halted,{' '}
                   {formatCents(facility.deferredCents)} deferred
                 </summary>
-                <div tabIndex={0} className="mt-3 overflow-x-auto">
+                <ScrollRegion aria-label="Halted leases" className="mt-3">
                   <table className="w-full min-w-4xl border-collapse text-sm">
                     <caption className="sr-only">
                       Leases halted at {facility.facilityName}, longest halted first
@@ -314,7 +315,7 @@ export default async function PlansHoldsPage({
                       ))}
                     </tbody>
                   </table>
-                </div>
+                </ScrollRegion>
               </details>
             ))
         )}
@@ -335,7 +336,7 @@ export default async function PlansHoldsPage({
           which is why a broken plan is counted in the month it broke rather than the month it was
           agreed.
         </p>
-        <div tabIndex={0} className="overflow-x-auto">
+        <ScrollRegion aria-label="Payment plan outcomes">
           <table className="w-full min-w-3xl border-collapse text-sm">
             <caption className="sr-only">
               Payment plans agreed, collected, waived, broken and completed in {label}, per facility
@@ -430,7 +431,7 @@ export default async function PlansHoldsPage({
               )}
             </tbody>
           </table>
-        </div>
+        </ScrollRegion>
       </section>
     </div>
   )

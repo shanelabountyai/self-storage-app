@@ -1,5 +1,6 @@
 import { AR_BUCKETS, type ArAging, type ArAgingSplit } from '@storage/core/metrics'
 import { formatCents } from '@/lib/format'
+import { ScrollRegion } from '@/components/ui/scroll-region'
 
 // B-195 built the chased/halted split; B-207 made it reach every screen that
 // shows aging rather than only the tenant-level drill-down. One table, used by
@@ -67,7 +68,7 @@ export function ArAgingSplitTable({
   describedBy?: string
 }) {
   return (
-    <div tabIndex={0} className="overflow-x-auto">
+    <ScrollRegion aria-label={caption}>
       <table className="w-full min-w-3xl border-collapse text-sm" aria-describedby={describedBy}>
         <caption className="sr-only">{caption}</caption>
         <thead>
@@ -132,6 +133,6 @@ export function ArAgingSplitTable({
           </tfoot>
         )}
       </table>
-    </div>
+    </ScrollRegion>
   )
 }

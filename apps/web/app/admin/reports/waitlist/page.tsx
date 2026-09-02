@@ -3,6 +3,7 @@ import { getSwitcherData } from '@/lib/admin/context'
 import { resolveSelectedFacility } from '@/lib/admin/facility-selection-logic'
 import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
 import { waitlistDemand, WAITLIST_CLAIM_WINDOW_HOURS } from '@/lib/waitlist/admin'
+import { ScrollRegion } from '@/components/ui/scroll-region'
 
 export const metadata = { title: 'Waitlist' }
 
@@ -90,7 +91,7 @@ export default async function WaitlistPage({
             </div>
           </dl>
 
-          <div tabIndex={0} className="overflow-x-auto">
+          <ScrollRegion aria-label="Waitlist by unit type">
             <table className="w-full min-w-2xl border-collapse text-sm">
               <caption className="sr-only">
                 Waitlist by unit type, longest queue first
@@ -173,7 +174,7 @@ export default async function WaitlistPage({
                 })}
               </tbody>
             </table>
-          </div>
+          </ScrollRegion>
         </>
       )}
     </div>

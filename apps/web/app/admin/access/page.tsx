@@ -4,6 +4,7 @@ import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
 import { accessEventLog, summariseFlags } from '@/lib/access/event-log'
 import { ACCESS_FLAGS, ACCESS_FLAG_LABELS, isAccessFlag } from '@storage/core/access'
 import { reportRangeForActor } from '@/lib/admin/reports'
+import { ScrollRegion } from '@/components/ui/scroll-region'
 
 export const metadata = { title: 'Gate activity' }
 
@@ -141,7 +142,7 @@ export default async function AccessEventsPage({
         </section>
       )}
 
-      <div tabIndex={0} className="overflow-x-auto">
+      <ScrollRegion aria-label="Gate attempts">
         <table className="w-full min-w-3xl border-collapse text-sm">
           <caption className="sr-only">Gate attempts for {range.label}, newest first</caption>
           <thead>
@@ -216,7 +217,7 @@ export default async function AccessEventsPage({
             )}
           </tbody>
         </table>
-      </div>
+      </ScrollRegion>
     </div>
   )
 }

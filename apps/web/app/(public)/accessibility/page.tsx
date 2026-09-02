@@ -1202,6 +1202,35 @@ const LAST_REVIEWED = '19 August 2026'
 // because this page has never said anything about announcements — the silence
 // B-245 recorded as correct is what kept it out.
 
+// Re-read 2026-09-01, at B-249 (fifty-six focusable scroll regions with no
+// role and no name). **Customer-facing** — two of the fifty-six are on
+// `/portal`, the same two B-217's note names: the referrals table and the
+// notification-preferences table. **No claim on this page changes and
+// `LAST_REVIEWED` does not move.**
+//
+// The reason it does not move is the same one as B-245's, and it is worth
+// saying plainly because this row is the largest single a11y change the repo
+// has made: **this page has never claimed anything about scroll regions**, so
+// there was no false sentence while fifty-six of them announced nothing, and
+// there is no sentence to strengthen now that they are named. The shortfall
+// list was read and had nothing to remove.
+//
+// **The conformance call is carried as the reviewer wrote it and NOT
+// upgraded.** Whether a scroll container is a "user interface component" under
+// SC 4.1.2 is genuinely contested; the reviewer declined to inflate it and so
+// does this note. What is not contested, and what the fix is actually for, is
+// that each one was a focus stop that announced nothing.
+//
+// Recorded because it is the fourth row running where the defect was invisible
+// to the tooling rather than subtle — and this one is the sharpest case yet.
+// **axe has a rule that looks straight at these elements and passes them**:
+// `scrollable-region-focusable` checks only that a scroll container IS
+// focusable, so a focusable one with no name is a pass. Every scan in this repo
+// ran over all fifty-six and reported nothing, for as long as they have
+// existed. B-244's was a fixture gap, B-245's a navigation gap, B-247's a
+// closed disclosure; this one was in every scan's reach the whole time and the
+// rule was not asking the question.
+
 export default function AccessibilityPage() {
   return (
     <ProsePage

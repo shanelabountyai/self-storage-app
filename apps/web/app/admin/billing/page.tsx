@@ -2,6 +2,7 @@ import { getAdminActor } from '@/lib/admin/context'
 import { recentRuns } from '@/lib/admin/billing-runs'
 import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
 import { rerunAction } from './actions'
+import { ScrollRegion } from '@/components/ui/scroll-region'
 
 export const metadata = { title: 'Billing runs' }
 
@@ -49,7 +50,7 @@ export default async function BillingRunsPage() {
       {runs.length === 0 ? (
         <p className="text-muted-foreground text-sm">No runs recorded yet.</p>
       ) : (
-        <div tabIndex={0} className="overflow-x-auto">
+        <ScrollRegion aria-label="Nightly job runs">
           <table className="w-full min-w-2xl text-sm">
             <caption className="sr-only">Recent nightly job runs with their per-item outcomes</caption>
             <thead>
@@ -124,7 +125,7 @@ export default async function BillingRunsPage() {
               ))}
             </tbody>
           </table>
-        </div>
+        </ScrollRegion>
       )}
     </div>
   )

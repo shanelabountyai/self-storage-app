@@ -15,6 +15,7 @@ import { saveChartAction } from './actions'
 import { driftSummary, type DriftRow } from '@storage/core/accounting'
 import { formatCents } from '@/lib/format'
 import { closePeriodAction, reopenPeriodAction } from './actions'
+import { ScrollRegion } from '@/components/ui/scroll-region'
 
 export const metadata = { title: 'Monthly close' }
 
@@ -216,7 +217,7 @@ export default async function MonthlyClosePage() {
                   </p>
 
                   {drift.length > 0 && (
-                    <div tabIndex={0} className="mt-3 overflow-x-auto">
+                    <ScrollRegion aria-label="Restated figures" className="mt-3">
                       <table className="w-full text-left text-sm">
                         <caption className="sr-only">
                           Figures that no longer match what was filed for {period.label}
@@ -260,7 +261,7 @@ export default async function MonthlyClosePage() {
                           ))}
                         </tbody>
                       </table>
-                    </div>
+                    </ScrollRegion>
                   )}
                 </div>
               )}

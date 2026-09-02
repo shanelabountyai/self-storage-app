@@ -7,6 +7,7 @@ import { startStaffImpersonationAction } from '@/app/admin/impersonation/actions
 import { IMPERSONATION_TTL_MINUTES } from '@/lib/impersonation/service'
 import { staffSecurityRows } from '@/lib/admin/staff-security'
 import { resetStaffMfaAction } from './actions'
+import { ScrollRegion } from '@/components/ui/scroll-region'
 
 export const metadata = { title: 'Staff security' }
 
@@ -54,7 +55,7 @@ export default async function StaffSecurityPage() {
         </p>
       )}
 
-      <div tabIndex={0} className="overflow-x-auto">
+      <ScrollRegion aria-label="Staff accounts">
         <table className="w-full min-w-2xl text-left text-sm">
           <caption className="sr-only">
             Staff accounts, their two-factor status and remaining recovery codes
@@ -100,7 +101,7 @@ export default async function StaffSecurityPage() {
             ))}
           </tbody>
         </table>
-      </div>
+      </ScrollRegion>
 
       {hasPermissionAnywhere(actor, ['impersonation:staff']) && (
         // PRD 09 FR-1 (B-091 part 2). This screen is the only staff-user list

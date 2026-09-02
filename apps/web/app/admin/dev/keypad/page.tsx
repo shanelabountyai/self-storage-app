@@ -5,6 +5,7 @@ import { getSwitcherData } from '@/lib/admin/context'
 import { resolveSelectedFacility } from '@/lib/admin/facility-selection-logic'
 import { simulatorConfigFor } from '@/lib/access/simulator'
 import { enterKeypadCodeAction, replayBacklogAction, updateSimulatorConfigAction } from './actions'
+import { ScrollRegion } from '@/components/ui/scroll-region'
 
 // PRD 03 US-7 / FR-8. The virtual keypad: run the entire access lifecycle
 // with no hardware. Not in the nav catalog — this is developer/demo tooling
@@ -121,7 +122,7 @@ export default async function KeypadDevPage() {
         {recentEvents.length === 0 ? (
           <p className="text-muted-foreground text-sm">Nothing yet — try a code above.</p>
         ) : (
-          <div tabIndex={0} className="overflow-x-auto">
+          <ScrollRegion aria-label="Recent access events">
             <table className="w-full text-left text-sm">
               <thead>
                 <tr className="text-muted-foreground">
@@ -146,7 +147,7 @@ export default async function KeypadDevPage() {
                 ))}
               </tbody>
             </table>
-          </div>
+          </ScrollRegion>
         )}
       </section>
     </div>

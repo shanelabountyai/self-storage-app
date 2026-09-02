@@ -1,3 +1,4 @@
+import { ScrollRegion } from '@/components/ui/scroll-region'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { getAdminActor } from '@/lib/admin/context'
@@ -126,7 +127,7 @@ export default async function AuctionCasePage({
         {view.steps.length === 0 ? (
           <p className="text-muted-foreground text-sm">No timeline is pinned to this case.</p>
         ) : (
-          <div tabIndex={0} className="overflow-x-auto">
+          <ScrollRegion aria-label="Step history">
             <table className="w-full min-w-max text-left text-sm">
               <thead>
                 <tr className="text-muted-foreground">
@@ -155,7 +156,7 @@ export default async function AuctionCasePage({
                 ))}
               </tbody>
             </table>
-          </div>
+          </ScrollRegion>
         )}
       </section>
 

@@ -8,6 +8,7 @@ import { siteOrigin } from '@/lib/marketing/origin'
 import { formatRate } from '@/lib/format'
 import { mintInviteAction } from './actions'
 import { referralsForTenant, REFERRAL_STATE_LABELS } from '@/lib/referrals/portal'
+import { ScrollRegion } from '@/components/ui/scroll-region'
 
 export const metadata: Metadata = { title: 'Refer a friend' }
 
@@ -148,7 +149,7 @@ export default async function ReferPage() {
               // <div> grid gives a screen-reader user no way to associate a
               // cell with its column, and this table's whole content is
               // "which friend, what state, when".
-              <div tabIndex={0} className="overflow-x-auto">
+              <ScrollRegion aria-label="Your referrals">
                 <table className="w-full border-collapse text-sm">
                   <caption className="sr-only">
                     Every friend you have referred, what state their referral is in, and when the
@@ -208,7 +209,7 @@ export default async function ReferPage() {
                     ))}
                   </tbody>
                 </table>
-              </div>
+              </ScrollRegion>
             )}
           </section>
 

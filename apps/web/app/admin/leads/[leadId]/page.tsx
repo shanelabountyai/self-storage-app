@@ -8,6 +8,7 @@ import { getAdminActor } from '@/lib/admin/context'
 import { facilityLeads, quoteForFacility } from '@/lib/admin/inquiries'
 import { formatCents } from '@/lib/format'
 import { holdForLeadAction, joinWaitlistForLeadAction, setLeadStatusAction } from '../actions'
+import { ScrollRegion } from '@/components/ui/scroll-region'
 
 export const metadata = { title: 'Inquiry' }
 
@@ -126,7 +127,7 @@ export default async function LeadPage({ params }: { params: Promise<{ leadId: s
           </AdminForm>
         )}
 
-        <div tabIndex={0} className="overflow-x-auto">
+        <ScrollRegion aria-label="Sizes and prices">
           <table className="w-full min-w-2xl border-collapse text-sm">
             <caption className="sr-only">Sizes, prices and what today would cost</caption>
             <thead>
@@ -208,7 +209,7 @@ export default async function LeadPage({ params }: { params: Promise<{ leadId: s
               )}
             </tbody>
           </table>
-        </div>
+        </ScrollRegion>
         <p className="text-muted-foreground text-xs text-pretty">
           A hold is free, needs no card and no account, and goes through the same service the
           website uses. It expires on its own — nothing is charged either way. A size with none

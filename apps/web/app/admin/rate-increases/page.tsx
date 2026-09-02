@@ -1,3 +1,4 @@
+import { ScrollRegion } from '@/components/ui/scroll-region'
 import Link from 'next/link'
 import { AdminForm, Field } from '@/components/admin/form'
 import { Button } from '@/components/ui/button'
@@ -194,7 +195,7 @@ export default async function RateIncreasesPage({
         {review.rows.length === 0 ? (
           <p className="text-muted-foreground text-sm">Nothing scheduled.</p>
         ) : (
-          <div tabIndex={0} className="overflow-x-auto">
+          <ScrollRegion aria-label="Scheduled rate increases">
             <table className="w-full min-w-2xl border-collapse text-sm">
               <caption className="sr-only">
                 Scheduled tenant rate increases with their current and new rates, dates and status
@@ -294,7 +295,7 @@ export default async function RateIncreasesPage({
                 ))}
               </tbody>
             </table>
-          </div>
+          </ScrollRegion>
         )}
 
         {heldCount > 0 && canRaise && (
@@ -374,7 +375,7 @@ export default async function RateIncreasesPage({
         {eligible.length === 0 ? (
           <p className="text-muted-foreground text-sm">No lease meets the rule right now.</p>
         ) : (
-          <div tabIndex={0} className="overflow-x-auto">
+          <ScrollRegion aria-label="Eligible leases">
             <table className="w-full min-w-2xl border-collapse text-sm">
               <caption className="sr-only">Leases eligible for a rule-based rate increase</caption>
               <thead>
@@ -437,7 +438,7 @@ export default async function RateIncreasesPage({
                 ))}
               </tbody>
             </table>
-          </div>
+          </ScrollRegion>
         )}
 
         <AdminForm action={scheduleBatchAction} label="Schedule the whole eligible batch" className="flex flex-wrap items-end gap-3">

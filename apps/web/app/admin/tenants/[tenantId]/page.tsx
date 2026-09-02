@@ -1,3 +1,4 @@
+import { ScrollRegion } from "@/components/ui/scroll-region"
 import Link from "next/link";
 import { getAdminActor } from "@/lib/admin/context";
 import {
@@ -453,7 +454,7 @@ export default async function TenantProfilePage({
              repeating them, because two copies of a four-link action set is
              how one of them acquires a fifth link the other never gets. */
           <>
-          <div tabIndex={0} className="hidden overflow-x-auto sm:block">
+          <ScrollRegion aria-label="Leases" className="hidden sm:block">
             <table className="w-full min-w-2xl text-sm">
               <caption className="sr-only">Leases held by this tenant</caption>
               <thead>
@@ -520,7 +521,7 @@ export default async function TenantProfilePage({
                 ))}
               </tbody>
             </table>
-          </div>
+          </ScrollRegion>
 
           <ul className="flex flex-col gap-3 sm:hidden">
             {profile.leases.map((lease) => (
@@ -1006,7 +1007,7 @@ export default async function TenantProfilePage({
           <h2 id="referrals-heading" className="font-medium">
             Referrals
           </h2>
-          <div tabIndex={0} className="overflow-x-auto">
+          <ScrollRegion aria-label="Referrals">
             <table className="w-full border-collapse text-sm">
               <caption className="sr-only">
                 Referrals this tenant made or arrived on, with the reward state
@@ -1068,7 +1069,7 @@ export default async function TenantProfilePage({
                 ))}
               </tbody>
             </table>
-          </div>
+          </ScrollRegion>
         </section>
       )}
 

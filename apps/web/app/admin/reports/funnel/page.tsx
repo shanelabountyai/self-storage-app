@@ -3,6 +3,7 @@ import { getAdminActor } from '@/lib/admin/context'
 import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
 import { funnelReport } from '@/lib/analytics/funnel'
 import { reportRangeForActor } from '@/lib/admin/reports'
+import { ScrollRegion } from '@/components/ui/scroll-region'
 
 export const metadata = { title: 'Funnel' }
 
@@ -150,7 +151,7 @@ export default async function FunnelPage({
         </button>
       </form>
 
-      <div tabIndex={0} className="overflow-x-auto">
+      <ScrollRegion aria-label="Funnel steps">
         <table className="w-full min-w-2xl border-collapse text-sm">
           <caption className="sr-only">
             Funnel steps with conversion rates for {range.label}
@@ -182,7 +183,7 @@ export default async function FunnelPage({
             ))}
           </tbody>
         </table>
-      </div>
+      </ScrollRegion>
 
       <p className="text-muted-foreground max-w-prose text-xs text-pretty">
         Counted from this site&apos;s own server-side log, one session per step rather than one
@@ -205,7 +206,7 @@ export default async function FunnelPage({
             Nothing in this range to break down.
           </p>
         ) : (
-          <div tabIndex={0} className="overflow-x-auto">
+          <ScrollRegion aria-label="Funnel by source and medium">
             <table className="w-full min-w-2xl border-collapse text-sm">
               <caption className="sr-only">
                 Funnel steps by campaign source and medium for {range.label}. Rows total the
@@ -245,7 +246,7 @@ export default async function FunnelPage({
                 ))}
               </tbody>
             </table>
-          </div>
+          </ScrollRegion>
         )}
       </section>
 

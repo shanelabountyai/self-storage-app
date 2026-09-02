@@ -8,6 +8,7 @@ import { facilityProducts } from '@/lib/admin/merchandise'
 import { searchTenants } from '@/lib/admin/tenants'
 import { formatCents } from '@/lib/format'
 import { adjustStockAction, saveProductAction, sellAction } from './actions'
+import { ScrollRegion } from '@/components/ui/scroll-region'
 
 export const metadata = { title: 'Merchandise' }
 
@@ -75,7 +76,7 @@ export default async function MerchandisePage({
         {products.length === 0 ? (
           <p className="text-muted-foreground text-sm">Nothing set up yet.</p>
         ) : (
-          <div tabIndex={0} className="overflow-x-auto">
+          <ScrollRegion aria-label="Products">
             <table className="w-full min-w-2xl border-collapse text-sm">
               <caption className="sr-only">Products, prices and stock counts at this facility</caption>
               <thead>
@@ -118,7 +119,7 @@ export default async function MerchandisePage({
                 ))}
               </tbody>
             </table>
-          </div>
+          </ScrollRegion>
         )}
       </section>
 

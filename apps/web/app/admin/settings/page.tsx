@@ -30,6 +30,7 @@ import {
 } from "./actions";
 
 import { ALLOCATION_CATEGORIES } from "@storage/core/billing";
+import { ScrollRegion } from "@/components/ui/scroll-region"
 
 const ALLOCATION_LABELS: Record<string, string> = {
   tax: "Tax",
@@ -244,7 +245,7 @@ export default async function AdminSettingsPage() {
 
           <div>
             <h3 className="mb-2 text-sm font-medium">Office hours</h3>
-            <div tabIndex={0} className="overflow-x-auto">
+            <ScrollRegion aria-label="Office hours">
               <table className="w-full min-w-max text-left">
                 <thead className="sr-only">
                   <tr>
@@ -265,12 +266,12 @@ export default async function AdminSettingsPage() {
                   ))}
                 </tbody>
               </table>
-            </div>
+            </ScrollRegion>
           </div>
 
           <div>
             <h3 className="mb-2 text-sm font-medium">Gate hours</h3>
-            <div tabIndex={0} className="overflow-x-auto">
+            <ScrollRegion aria-label="Gate hours">
               <table className="w-full min-w-max text-left">
                 <thead className="sr-only">
                   <tr>
@@ -291,7 +292,7 @@ export default async function AdminSettingsPage() {
                   ))}
                 </tbody>
               </table>
-            </div>
+            </ScrollRegion>
             <p className="text-muted-foreground mt-2 text-xs">
               Exposed at{" "}
               <code className="break-all">
@@ -317,7 +318,7 @@ export default async function AdminSettingsPage() {
         </p>
 
         {settings.currentTaxComponents.length > 0 && (
-          <div tabIndex={0} className="overflow-x-auto">
+          <ScrollRegion aria-label="Tax components">
             <table className="w-full text-left text-sm">
               <thead>
                 <tr className="text-muted-foreground">
@@ -351,7 +352,7 @@ export default async function AdminSettingsPage() {
                 ))}
               </tbody>
             </table>
-          </div>
+          </ScrollRegion>
         )}
 
         <AdminForm
@@ -404,7 +405,7 @@ export default async function AdminSettingsPage() {
         </p>
 
         {settings.currentFeeSchedule.length > 0 && (
-          <div tabIndex={0} className="overflow-x-auto">
+          <ScrollRegion aria-label="Fee schedule">
             <table className="w-full text-left text-sm">
               <thead>
                 <tr className="text-muted-foreground">
@@ -436,7 +437,7 @@ export default async function AdminSettingsPage() {
                 ))}
               </tbody>
             </table>
-          </div>
+          </ScrollRegion>
         )}
 
         <AdminForm
@@ -730,7 +731,7 @@ export default async function AdminSettingsPage() {
         </p>
 
         {lateFeeSteps.length > 0 && (
-          <div tabIndex={0} className="overflow-x-auto">
+          <ScrollRegion aria-label="Late-fee ladder">
             <table className="w-full text-left text-sm">
               <caption className="sr-only">
                 The late-fee ladder in force today
@@ -774,7 +775,7 @@ export default async function AdminSettingsPage() {
                 ))}
               </tbody>
             </table>
-          </div>
+          </ScrollRegion>
         )}
 
         <AdminForm
@@ -1458,7 +1459,7 @@ export default async function AdminSettingsPage() {
         </p>
 
         {plans.length > 0 && (
-          <div tabIndex={0} className="overflow-x-auto">
+          <ScrollRegion aria-label="Protection plans">
             <table className="w-full text-left text-sm">
               <thead>
                 <tr className="text-muted-foreground">
@@ -1490,7 +1491,7 @@ export default async function AdminSettingsPage() {
                 ))}
               </tbody>
             </table>
-          </div>
+          </ScrollRegion>
         )}
 
         <AdminForm

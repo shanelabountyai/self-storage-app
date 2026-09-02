@@ -4,6 +4,7 @@ import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
 import { reportRangeForActor } from '@/lib/admin/reports'
 import { depositsReport } from '@/lib/admin/deposits-report'
 import { formatCents } from '@/lib/format'
+import { ScrollRegion } from '@/components/ui/scroll-region'
 
 export const metadata = { title: 'Deposits' }
 
@@ -69,7 +70,7 @@ export default async function DepositsPage({
         </p>
       )}
 
-      <div tabIndex={0} className="overflow-x-auto">
+      <ScrollRegion aria-label="Deposits by method">
         <table className="w-full min-w-2xl border-collapse text-sm">
           <caption className="sr-only">
             Recorded payments by method against drawer close-outs, per facility per day
@@ -116,7 +117,7 @@ export default async function DepositsPage({
             ))}
           </tbody>
         </table>
-      </div>
+      </ScrollRegion>
 
       <p className="text-muted-foreground max-w-prose text-xs text-pretty">
         The card column is what this system recorded, not what the processor says it paid out — no

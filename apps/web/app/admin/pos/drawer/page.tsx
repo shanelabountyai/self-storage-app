@@ -7,6 +7,7 @@ import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
 import { drawerView, openSessionFor } from '@/lib/admin/drawer'
 import { formatCents } from '@/lib/format'
 import { closeDrawerAction, openDrawerAction } from './actions'
+import { ScrollRegion } from '@/components/ui/scroll-region'
 
 export const metadata = { title: 'Drawer' }
 
@@ -118,7 +119,7 @@ export default async function DrawerPage() {
             </dl>
 
             {view.checks.length > 0 && (
-              <div tabIndex={0} className="overflow-x-auto">
+              <ScrollRegion aria-label="Checks and money orders">
                 <table className="w-full border-collapse text-sm">
                   <caption className="sr-only">Checks and money orders in this drawer session</caption>
                   <thead>
@@ -140,7 +141,7 @@ export default async function DrawerPage() {
                     ))}
                   </tbody>
                 </table>
-              </div>
+              </ScrollRegion>
             )}
           </section>
 

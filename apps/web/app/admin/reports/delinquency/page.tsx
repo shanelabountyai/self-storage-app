@@ -4,6 +4,7 @@ import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
 import { agingByFacility, delinquencyDetail } from '@/lib/admin/delinquency-detail'
 import { ArAgingSplitTable, AR_BUCKET_LABELS } from '@/components/admin/ar-aging-split-table'
 import { formatCents } from '@/lib/format'
+import { ScrollRegion } from '@/components/ui/scroll-region'
 
 export const metadata = { title: 'Delinquency aging' }
 
@@ -163,7 +164,7 @@ export default async function DelinquencyPage() {
         <h2 id="detail-heading" className="font-medium">
           Tenant detail
         </h2>
-        <div tabIndex={0} className="overflow-x-auto">
+        <ScrollRegion aria-label="Leases carrying a balance">
           <table className="w-full min-w-4xl border-collapse text-sm">
             <caption className="sr-only">
               Every lease carrying a balance, oldest debt first
@@ -258,7 +259,7 @@ export default async function DelinquencyPage() {
               )}
             </tbody>
           </table>
-        </div>
+        </ScrollRegion>
       </section>
     </div>
   )

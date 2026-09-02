@@ -3,6 +3,7 @@ import { getAdminActor } from '@/lib/admin/context'
 import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
 import { DUPLICATE_THRESHOLD, duplicateReport } from '@storage/core/marketing'
 import { KIND, contentCorpus } from '@/lib/marketing/content-corpus'
+import { ScrollRegion } from '@/components/ui/scroll-region'
 
 export const metadata = { title: 'Duplicate content' }
 
@@ -58,7 +59,7 @@ export default async function DuplicateContentPage() {
             {percent(DUPLICATE_THRESHOLD)} alike, out of {report.compared} pieces of text.
           </p>
 
-          <div tabIndex={0} className="overflow-x-auto">
+          <ScrollRegion aria-label="Similar page pairs">
             <table className="w-full min-w-2xl border-collapse text-sm">
               <caption className="sr-only">
                 Pairs of pages with similar text, authored collisions first
@@ -137,7 +138,7 @@ export default async function DuplicateContentPage() {
                 ))}
               </tbody>
             </table>
-          </div>
+          </ScrollRegion>
         </>
       )}
 

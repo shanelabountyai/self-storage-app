@@ -4,6 +4,7 @@ import { getSwitcherData } from '@/lib/admin/context'
 import { resolveSelectedFacility } from '@/lib/admin/facility-selection-logic'
 import { dailyPaymentsSummary } from '@/lib/admin/pos'
 import { formatCents } from '@/lib/format'
+import { ScrollRegion } from '@/components/ui/scroll-region'
 
 export const metadata = { title: 'Daily payments' }
 
@@ -115,7 +116,7 @@ export default async function DailyPaymentsPage({
               </tbody>
             </table>
 
-            <div tabIndex={0} className="overflow-x-auto">
+            <ScrollRegion aria-label="Payments taken">
               <table className="w-full min-w-2xl text-sm">
                 <caption className="sr-only">
                   Every payment taken on {summary.businessDate}, with who took it
@@ -147,7 +148,7 @@ export default async function DailyPaymentsPage({
                   ))}
                 </tbody>
               </table>
-            </div>
+            </ScrollRegion>
           </>
         )}
       </section>

@@ -5,6 +5,7 @@ import { requireTenantActor } from '@/lib/rbac/session'
 import { currentPreferences, NOTIFICATION_CATEGORIES, smsConsentView } from '@/lib/portal/notifications'
 import { MARKETING_SMS_DISCLOSURE } from '@/lib/checkout/details'
 import { revokeSmsAction, setMarketingSmsAction, setPreferencesAction } from './actions'
+import { ScrollRegion } from '@/components/ui/scroll-region'
 
 export const metadata: Metadata = { title: 'Notification preferences' }
 
@@ -43,7 +44,7 @@ export default async function NotificationsPage() {
           What we send, and how
         </h2>
         <AdminForm action={setPreferencesAction} label="Notification preferences" className="flex flex-col gap-4">
-          <div tabIndex={0} className="overflow-x-auto">
+          <ScrollRegion aria-label="Notification preferences">
             <table className="w-full min-w-md border-collapse text-sm">
               <thead>
                 <tr className="border-input border-b text-left">
@@ -81,7 +82,7 @@ export default async function NotificationsPage() {
                 ))}
               </tbody>
             </table>
-          </div>
+          </ScrollRegion>
           <button
             type="submit"
             className="bg-primary text-primary-foreground inline-flex min-h-11 items-center justify-center self-start rounded-md px-4 text-sm font-medium"

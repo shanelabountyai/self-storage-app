@@ -5,6 +5,7 @@ import { billedTotal, collectedTotal, revenueReport, type RevenueRow } from '@/l
 import { REVENUE_CATEGORIES } from '@storage/core/metrics'
 import { formatCents } from '@/lib/format'
 import { reportRangeForActor } from '@/lib/admin/reports'
+import { ScrollRegion } from '@/components/ui/scroll-region'
 
 export const metadata = { title: 'Revenue' }
 
@@ -121,7 +122,7 @@ export default async function RevenuePage({
         </dl>
       </section>
 
-      <div tabIndex={0} className="overflow-x-auto">
+      <ScrollRegion aria-label="Billed and collected">
         <table className="w-full min-w-4xl border-collapse text-sm">
           <caption className="sr-only">
             Billed and collected by category, per facility, for {range.label}
@@ -156,7 +157,7 @@ export default async function RevenuePage({
             No facilities you can see financial reports for.
           </p>
         )}
-      </div>
+      </ScrollRegion>
 
       <section aria-labelledby="adjustments-heading" className="flex flex-col gap-3">
         <h2 id="adjustments-heading" className="font-medium">

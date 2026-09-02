@@ -174,8 +174,14 @@
    still appears only when the content actually overflows.
 
    Done here rather than per-wrapper for the reason the reduce-motion block
-   above is: there are forty of these regions and a forty-first will be added
-   without remembering. Not a background gradient — axe cannot resolve text
+   above is: there are fifty-six of these regions and a fifty-seventh will be
+   added without remembering.
+
+   B-249: they are all `<ScrollRegion>` now, and that component has to keep
+   `tabIndex={0}` and `overflow-x-auto` ON THE SAME NODE or this selector
+   silently stops matching — the region would still scroll and still focus, so
+   nothing would look broken. `tests/scroll-regions.test.ts` asserts the pair
+   from both ends. Not a background gradient — axe cannot resolve text
    contrast over a background image and reports every cell in the region as
    `color-contrast` incomplete, which would bury the real hand checks. */
 [tabindex="0"].overflow-x-auto {

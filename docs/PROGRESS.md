@@ -7274,6 +7274,32 @@ The three measurements moved into `measureThreeWays` so both loops share one cop
 - **Verified on `desktop-chrome` only.** The spec sets its own viewport in every pass, so `mobile-chrome` would measure the same three CSS viewports; the device scale factor is a rendering concern and not a layout one, as the file's existing comment says.
 - Unit suite green end to end: 3916 passed, 8 skipped, reconciled to 3924. The touched e2e file: 11 passed, 0 failed. Lint and typecheck clean. No schema change, so no migration and nothing for the drift check to see.
 
+## B-249 — Fifty-six focusable scroll regions that announced nothing, and the axe rule that looks at them and passes
+
+`PENDING`
+
+**What it built.** Fifty-six horizontally-scrolling wrappers across 41 files were `<div tabIndex={0} className="overflow-x-auto">` and nothing else. B-217 had given every one a visible scrollbar and a `:focus-visible` outline — the sighted half. None had a role or a name, so tabbing through `/admin/reports` landed on a bare `<div>`: VoiceOver read the first cell and no role, NVDA typically said nothing, and the region was absent from the landmark rotor, so there was no way to reach a table but to read to it.
+
+One `apps/web/components/ui/scroll-region.tsx` — `role="region"`, `tabIndex={0}`, `overflow-x-auto`, and a **required `aria-label` typed as a string**. All 56 sites are now `<ScrollRegion aria-label="…">`.
+
+**What it decided.**
+
+- **The name is a short noun phrase, not the table's `<caption>`.** The row suggested taking the caption text, and the captions are where the wording came from — but they are full sentences ("Occupied units at X, with in-place rate against current street rate, sorted by the largest gap"). This name is what appears in the **landmark rotor**, and a rotor listing four one-line sentences is harder to scan than the table was. The caption still says the long version on entering the table, so nothing is lost and nothing is said twice. Two regions keep a dynamic name because theirs is a prop or a section field (`ar-aging-split-table`, `reports/pack`).
+- **`aria-label` is a required prop, not an optional one with a default.** The defect is fifty-six regions nobody named; a fifty-seventh must not compile without one.
+- **The conformance call is carried as the reviewer wrote it and NOT upgraded.** Whether a scroll container is a "user interface component" under SC 4.1.2 is genuinely contested. What is not contested is that each one was a focus stop that announced nothing.
+- **`tabIndex={0}` and `overflow-x-auto` stay on the same node.** `globals.css` keys B-217's scrollbar rule on the `[tabindex="0"].overflow-x-auto` pair. Split them and the visible affordance silently stops matching while the region still scrolls and still focuses — nothing would look broken. The test asserts the pair from both ends and the CSS comment now says so too.
+
+**One runnable check.** `tests/scroll-regions.test.ts`: `git grep` for any focusable element carrying an `overflow-*-auto` class, excluding comment lines, and assert none survives outside `ScrollRegion`. **Verified by reverting the rent-roll wrapper to a bare `<div>` and watching it fail by name.** The typed `aria-label` and this test cover different halves: the type stops a *nameless ScrollRegion* compiling, the test stops the next one being *hand-rolled as a `<div>`* — which is how all fifty-six arrived.
+
+Comments are excluded rather than files whitelisted, because two of them legitimately quote the shape they replaced and a whitelist would go stale the moment a third did.
+
+**What it left behind.**
+
+- **56 new landmarks in the rotor, and nothing measures whether that is an improvement or a crowd.** Most pages gain one or two; `/admin/settings` gains six and `/admin/reports/deliverability` four. No screen-reader pass has been run over a page with six.
+- **Nothing checks a name is a *good* one.** The test proves every region has a name and that no page names two the same (all 56 are already distinct per file) — but "Products" on the merchandise screen is only meaningful because a human picked it, and nothing stops the next one being "Table".
+- **No announcement is asserted and none was observed** — B-216's standard. `role="region"` with a name is the structurally correct answer; what any given screen reader says on arriving at one has not been measured here.
+- **`aria-labelledby` pointing at the existing `<caption>` was not used**, which would have kept name and caption in sync automatically. It needs an id on 43 captions and produces the long-sentence rotor this entry argues against.
+
 ## B-248 — A comment claimed polite regions coalesce, and the money form spoke six sentences per number typed
 
 `2e12613`

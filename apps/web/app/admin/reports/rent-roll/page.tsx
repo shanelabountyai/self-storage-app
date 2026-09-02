@@ -3,6 +3,7 @@ import { getSwitcherData } from '@/lib/admin/context'
 import { resolveSelectedFacility } from '@/lib/admin/facility-selection-logic'
 import { rentRoll } from '@/lib/admin/reports'
 import { formatCents } from '@/lib/format'
+import { ScrollRegion } from '@/components/ui/scroll-region'
 
 export const metadata = { title: 'Rent roll' }
 
@@ -69,7 +70,7 @@ export default async function RentRollPage({
       {rows.length === 0 ? (
         <p className="text-muted-foreground text-sm">No occupied units at this facility.</p>
       ) : (
-        <div tabIndex={0} className="overflow-x-auto">
+        <ScrollRegion aria-label="Rent roll">
           <table className="w-full min-w-max text-sm">
             <caption className="sr-only">
               Occupied units at {selected.facility.name}, with in-place rate against current street
@@ -109,7 +110,7 @@ export default async function RentRollPage({
               ))}
             </tbody>
           </table>
-        </div>
+        </ScrollRegion>
       )}
     </div>
   )

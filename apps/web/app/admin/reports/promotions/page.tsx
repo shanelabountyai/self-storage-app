@@ -5,6 +5,7 @@ import { formatCents } from '@/lib/format'
 import { promoRoiReport } from '@/lib/analytics/promo-roi'
 import { paybackMonths } from '@storage/core/promotions'
 import { reportRangeForActor } from '@/lib/admin/reports'
+import { ScrollRegion } from '@/components/ui/scroll-region'
 
 export const metadata = { title: 'Promotions' }
 
@@ -80,7 +81,7 @@ export default async function PromotionsReportPage({
           No promotions were redeemed in this range.
         </p>
       ) : (
-        <div tabIndex={0} className="overflow-x-auto">
+        <ScrollRegion aria-label="Promotions redeemed">
           <table className="w-full min-w-4xl border-collapse text-sm">
             <caption className="sr-only">
               Promotions redeemed in {range.label}, with discount given, discount still owed, what
@@ -177,7 +178,7 @@ export default async function PromotionsReportPage({
               </tr>
             </tfoot>
           </table>
-        </div>
+        </ScrollRegion>
       )}
 
       <div className="text-muted-foreground flex max-w-prose flex-col gap-2 text-xs text-pretty">

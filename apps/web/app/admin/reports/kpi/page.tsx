@@ -3,6 +3,7 @@ import { getAdminActor } from '@/lib/admin/context'
 import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
 import { formatCents } from '@/lib/format'
 import { DEFAULT_MONTHS, delta, kpiTrend, type KpiPoint } from '@/lib/admin/kpi-trend'
+import { ScrollRegion } from '@/components/ui/scroll-region'
 
 export const metadata = { title: 'KPI trend' }
 
@@ -164,7 +165,7 @@ export default async function OwnerKpiPage() {
             <h2 id="trend-heading" className="font-medium">
               Month by month
             </h2>
-            <div tabIndex={0} className="overflow-x-auto">
+            <ScrollRegion aria-label="Closed-month figures">
               <table className="w-full min-w-3xl text-left text-sm">
                 <caption className="sr-only">
                   Closed-month figures across the portfolio, oldest first
@@ -199,7 +200,7 @@ export default async function OwnerKpiPage() {
                   ))}
                 </tbody>
               </table>
-            </div>
+            </ScrollRegion>
           </section>
         </>
       )}

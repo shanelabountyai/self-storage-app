@@ -12,6 +12,7 @@ import {
   type RoleLimitRow,
 } from '@/lib/admin/role-limits'
 import { saveRoleLimitsAction } from './actions'
+import { ScrollRegion } from '@/components/ui/scroll-region'
 
 export const metadata = { title: 'Role limits' }
 
@@ -71,7 +72,7 @@ export default async function RoleLimitsPage() {
         <h2 id="current-heading" className="text-base font-medium">
           Today&apos;s limits
         </h2>
-        <div tabIndex={0} className="overflow-x-auto">
+        <ScrollRegion aria-label="Roles and authority limits">
           <table className="w-full min-w-2xl text-left text-sm">
             <caption className="sr-only">
               Every staff role with the most it may waive, refund, credit and defer onto a payment
@@ -115,7 +116,7 @@ export default async function RoleLimitsPage() {
               ))}
             </tbody>
           </table>
-        </div>
+        </ScrollRegion>
       </section>
 
       <section aria-labelledby="edit-heading" className="flex flex-col gap-6">

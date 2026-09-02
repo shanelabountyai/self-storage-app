@@ -3,6 +3,7 @@ import { getAdminActor } from '@/lib/admin/context'
 import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
 import { commsDashboard, type RateRow } from '@/lib/admin/comms-dashboard'
 import { reportRangeForActor } from '@/lib/admin/reports'
+import { ScrollRegion } from '@/components/ui/scroll-region'
 
 export const metadata = { title: 'Deliverability' }
 
@@ -99,7 +100,7 @@ export default async function DeliverabilityPage({
         <h2 id="overall-heading" className="font-medium">
           Overall
         </h2>
-        <div tabIndex={0} className="overflow-x-auto">
+        <ScrollRegion aria-label="Deliverability summary">
           <table className="w-full min-w-md border-collapse text-sm">
             <caption className="sr-only">Sends, delivery rate, bounce rate and SMS failure rate for {range.label}</caption>
             <thead>
@@ -114,14 +115,14 @@ export default async function DeliverabilityPage({
               <tr>{rateCells(report.overall, true)}</tr>
             </tbody>
           </table>
-        </div>
+        </ScrollRegion>
       </section>
 
       <section aria-labelledby="templates-heading" className="flex flex-col gap-3">
         <h2 id="templates-heading" className="font-medium">
           By template
         </h2>
-        <div tabIndex={0} className="overflow-x-auto">
+        <ScrollRegion aria-label="By template and channel">
           <table className="w-full min-w-2xl border-collapse text-sm">
             <caption className="sr-only">Sends and delivery outcomes broken down by template and channel</caption>
             <thead>
@@ -151,14 +152,14 @@ export default async function DeliverabilityPage({
               ))}
             </tbody>
           </table>
-        </div>
+        </ScrollRegion>
       </section>
 
       <section aria-labelledby="daily-heading" className="flex flex-col gap-3">
         <h2 id="daily-heading" className="font-medium">
           By day
         </h2>
-        <div tabIndex={0} className="overflow-x-auto">
+        <ScrollRegion aria-label="Sends per day">
           <table className="w-full min-w-md border-collapse text-sm">
             <caption className="sr-only">Sends per day for {range.label}</caption>
             <thead>
@@ -193,7 +194,7 @@ export default async function DeliverabilityPage({
               ))}
             </tbody>
           </table>
-        </div>
+        </ScrollRegion>
       </section>
 
       <section aria-labelledby="failures-heading" className="flex flex-col gap-3">
@@ -215,7 +216,7 @@ export default async function DeliverabilityPage({
             Nothing has exhausted its retries and needed a human — this is the state to expect.
           </p>
         ) : (
-          <div tabIndex={0} className="overflow-x-auto">
+          <ScrollRegion aria-label="Exhausted retries">
             <table className="w-full min-w-2xl border-collapse text-sm">
               <caption className="sr-only">Events that exhausted every retry attempt and need a human look</caption>
               <thead>
@@ -247,7 +248,7 @@ export default async function DeliverabilityPage({
                 ))}
               </tbody>
             </table>
-          </div>
+          </ScrollRegion>
         )}
       </section>
 

@@ -1,5 +1,6 @@
 import { formatCents } from '@/lib/format'
 import type { LeaseStatement } from '@/lib/billing/statements'
+import { ScrollRegion } from '@/components/ui/scroll-region'
 
 // PRD 01 US-705 (B-102). The statement itself, rendered once and used by both
 // the tenant portal and the admin.
@@ -77,7 +78,7 @@ export function StatementView({ statement }: { statement: LeaseStatement }) {
             Nothing was charged or paid on this unit in {statement.label}.
           </p>
         ) : (
-          <div tabIndex={0} className="overflow-x-auto">
+          <ScrollRegion aria-label="Statement">
             <table className="w-full min-w-lg text-left text-sm">
               <caption className="sr-only">
                 Charges and payments for unit {statement.unitNumber} in {statement.label}
@@ -112,7 +113,7 @@ export function StatementView({ statement }: { statement: LeaseStatement }) {
                 ))}
               </tbody>
             </table>
-          </div>
+          </ScrollRegion>
         )}
       </section>
 

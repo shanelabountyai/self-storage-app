@@ -11,6 +11,7 @@ import {
 import { ArAgingSplitTable } from '@/components/admin/ar-aging-split-table'
 import { formatCents } from '@/lib/format'
 import { UNASSIGNED_STAFF, type AttachRateBucket } from '@storage/core/metrics'
+import { ScrollRegion } from '@/components/ui/scroll-region'
 
 export const metadata = { title: 'Reports' }
 
@@ -382,7 +383,7 @@ export default async function ReportsPage({
         <p id="occupancy-as-at" className="text-sm text-muted-foreground">
           {unitOccupancyNote(occupancy.total.unitOccupancy, label)}
         </p>
-        <div tabIndex={0} className="overflow-x-auto">
+        <ScrollRegion aria-label="Occupancy per facility">
           <table className="w-full min-w-2xl text-sm" aria-describedby="occupancy-as-at">
             <caption className="sr-only">
               Unit occupancy, square-foot occupancy and economic occupancy per facility for {label}
@@ -428,14 +429,14 @@ export default async function ReportsPage({
               </tr>
             </tbody>
           </table>
-        </div>
+        </ScrollRegion>
       </section>
 
       <section aria-labelledby="moves-heading" className="flex flex-col gap-3">
         <h2 id="moves-heading" className="font-medium">
           Move-ins and move-outs
         </h2>
-        <div tabIndex={0} className="overflow-x-auto">
+        <ScrollRegion aria-label="Move-ins and move-outs">
           <table className="w-full min-w-2xl text-sm">
             <caption className="sr-only">Move-ins, move-outs, net and reservation conversion per facility for {label}</caption>
             <thead>
@@ -480,7 +481,7 @@ export default async function ReportsPage({
               </tr>
             </tbody>
           </table>
-        </div>
+        </ScrollRegion>
         {/* B-082 part 1. Two splits of the SAME move-ins, which is why they are
             two tables and not one: they are different questions, and a reader
             who takes them for one breakdown will double-count. `bySource` has

@@ -10,6 +10,7 @@ import {
   type TenantFilter,
 } from '@/lib/admin/tenant-list'
 import { formatCents } from '@/lib/format'
+import { ScrollRegion } from '@/components/ui/scroll-region'
 
 export const metadata = { title: 'Tenants' }
 
@@ -181,7 +182,7 @@ export default async function TenantsPage({
             Showing {from}–{to} of {list.total}
           </p>
 
-          <div tabIndex={0} className="overflow-x-auto">
+          <ScrollRegion aria-label="Tenants">
             <table className="w-full min-w-2xl text-sm">
               <caption className="sr-only">
                 Tenants, newest lease first, filtered to {TENANT_FILTER_LABELS[filter]}
@@ -246,7 +247,7 @@ export default async function TenantsPage({
                 })}
               </tbody>
             </table>
-          </div>
+          </ScrollRegion>
 
           {lastPage > 1 && (
             <nav aria-label="Pages" className="flex flex-wrap items-center gap-3 text-sm">
