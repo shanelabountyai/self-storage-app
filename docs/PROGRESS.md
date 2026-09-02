@@ -8046,7 +8046,7 @@ The screen that asks a past-due tenant for money was "Balance $487.50 / Paying t
 
 ## B-233 — A task can be taken, given back, and filtered to yours
 
-`SHA_PENDING`
+`ab0ef59`
 
 `assignTask` shipped with B-095, permission-checked and unit-tested, and **its only callers were those tests**. Both queues rendered `Assigned to X` / `Unassigned` as static prose for a column nothing in the product could write, so US-41's "my day" was the facility's day: two staff on a Saturday work one undifferentiated list and either cut the same lock twice or both skip it — on the queue that drives the lien clock.
 
