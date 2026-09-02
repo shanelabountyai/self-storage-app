@@ -8006,7 +8006,7 @@ D-110 was answered first, because this row was blocked on a permission policy an
 
 ## B-232 — The portal says what the balance is for, and what paying it buys
 
-`PENDING`
+`2f7d524`
 
 The screen that asks a past-due tenant for money was "Balance $487.50 / Paying today $487.50" and nothing else, and the two sentences about gate access on either side of it were both wrong.
 
