@@ -22,7 +22,17 @@ const repoRoot = fileURLToPath(new URL('..', import.meta.url))
 /// `.next`, `node_modules` and the build cache cannot produce a phantom hit.
 function gitGrep(pattern: string): string[] {
   try {
-    return execFileSync('git', ['grep', '-n', '-E', pattern, '--', 'apps/web/**/*.tsx'], {
+    // `--untracked` is not optional. Without it `git grep` searches only
+    // COMMITTED files, so a bare region in a file you have just written passes
+    // — which is exactly when this test is supposed to speak. It is also how
+    // this test first went green: `scroll-region.tsx` was still untracked, so
+    // its own implementation line was invisible, and the hole only appeared
+    // once B-249 was committed.
+    //
+    // `:(exclude)` on the component itself, because it is the one sanctioned
+    // implementation of the shape and would otherwise report itself forever.
+    return execFileSync('git', ['grep', '--untracked', '-n', '-E', pattern, '--', 'apps/web/**/*.tsx',
+      ':(exclude)apps/web/components/ui/scroll-region.tsx'], {
       cwd: repoRoot,
       encoding: 'utf8',
     })

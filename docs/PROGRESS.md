@@ -7274,6 +7274,32 @@ The three measurements moved into `measureThreeWays` so both loops share one cop
 - **Verified on `desktop-chrome` only.** The spec sets its own viewport in every pass, so `mobile-chrome` would measure the same three CSS viewports; the device scale factor is a rendering concern and not a layout one, as the file's existing comment says.
 - Unit suite green end to end: 3916 passed, 8 skipped, reconciled to 3924. The touched e2e file: 11 passed, 0 failed. Lint and typecheck clean. No schema change, so no migration and nothing for the drift check to see.
 
+## B-250 — The log that catches stale claims missed one, and the date it dates has not moved in twenty-one items
+
+`PENDING`
+
+**What it built.** Two halves with different owners; this is the one that needed no decision.
+
+**The missing B-218 entry.** The accessibility statement's "How we check" says automated tests run *"on every push to our main branch, and on every pull request that is open for review"*. The second half was **false for the entire life of the split CI lanes** — `ready_for_review` is not a default `pull_request` activity type, so `gh pr ready` fired no workflow event and sixteen PRs reported `e2e=skipping`. B-218 added the trigger and the sentence became true. Neither the falsehood nor the fix was recorded in the page's comment log, which is the one case that log exists to catch. It is entered now, backdated and labelled as backdated.
+
+**The first full re-read of "Where we fall short" that was not a side effect of another row.** All three entries are still true: the no-JavaScript hold countdown still does not tick, Tasks/Leads/Delinquency/Support sessions are still unpaginated, and the two embedded maps are unchanged.
+
+**What it decided.**
+
+- **A prediction in B-250's own row and in D-115 was wrong, and it is recorded rather than quietly dropped.** Both say B-244, B-245, B-247 and B-249 "change the 'Where we fall short' list rather than `LAST_REVIEWED`". They changed **neither**. All four fixed customer-facing defects the list had never named, because nobody knew about them until the review that raised them — a shortfall list can only shorten when a problem it *admits to* gets fixed. That sharpens the case for a cadence rather than weakening it: four unknown customer-facing defects were found and fixed in a single day, and the page did not move at all.
+- **`LAST_REVIEWED` still does not move, and this row could not make it.** The cadence half is blocked on **D-115**, an owner decision about somebody's recurring or one-off time. A build session may not settle that, so it is split to **B-254** rather than guessed at. The date stands at 19 August 2026 with twenty-one merged items behind it.
+- **A backdated entry is labelled as backdated.** The log's value is that it says when something was known, so an entry written a fortnight late that reads like a contemporaneous one is worse than none.
+
+**One runnable check.** `tests/accessibility-statement.test.ts`: if the page keeps the "every pull request that is open for review" claim, `ci.yml` must carry `ready_for_review` in its `pull_request` `types:`. That is the exact shape of the defect — **a sentence on a public page whose truth lives in a config file nobody re-reads when they edit it.** Both polarities verified against real edits.
+
+**The first version of that test did not work and passed anyway.** It used `workflow.includes('ready_for_review')`, which matched the *comment* in `ci.yml` explaining why `ready_for_review` is not a default type — so deleting the trigger left the test green. It parses the `types:` line now. A guard a comment can satisfy is not a guard, and it is the second time in two days that checking the alarm against a real failing run was what caught it.
+
+**What it left behind.**
+
+- **`LAST_REVIEWED` is still structurally frozen.** That is **B-254**, blocked on **D-115**. Nothing here improves it; the row is honest about which half shipped.
+- **Only one sentence on the page is guarded.** The CI claim now has a test because its truth lives in a file. Every other claim on the page still depends on a human re-reading it, which is the whole problem D-115 is about.
+- **The §6.8 manual screen-reader pass on the two golden paths still has never been carried out.** The page says so honestly. It is option (B) in D-115 and would convert the largest unverified claim in this codebase into a verified one.
+
 ## B-249 — Fifty-six focusable scroll regions that announced nothing, and the axe rule that looks at them and passes
 
 `1577e22`
@@ -7292,6 +7318,8 @@ One `apps/web/components/ui/scroll-region.tsx` — `role="region"`, `tabIndex={0
 **One runnable check.** `tests/scroll-regions.test.ts`: `git grep` for any focusable element carrying an `overflow-*-auto` class, excluding comment lines, and assert none survives outside `ScrollRegion`. **Verified by reverting the rent-roll wrapper to a bare `<div>` and watching it fail by name.** The typed `aria-label` and this test cover different halves: the type stops a *nameless ScrollRegion* compiling, the test stops the next one being *hand-rolled as a `<div>`* — which is how all fifty-six arrived.
 
 Comments are excluded rather than files whitelisted, because two of them legitimately quote the shape they replaced and a whitelist would go stale the moment a third did.
+
+**A real bug in that test, found one item later and fixed in `bea0f7e`.** `git grep` searches **committed** files only. `scroll-region.tsx` was still untracked when the test first ran, so its own implementation line was invisible and the test went green for the wrong reason — then failed on `main` the moment B-249 was committed. Worse than the false green: without `--untracked` the guard **cannot see a bare region in a file you have just written**, which is precisely when it is supposed to speak. It passes `--untracked` and `:(exclude)` on the component itself now, and was re-verified by dropping a bare `<div tabIndex={0} className="overflow-x-auto">` into an uncommitted file and watching it fail by path.
 
 **What it left behind.**
 
