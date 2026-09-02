@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { expect, test } from '@playwright/test'
+import { expect, test, type Locator } from '@playwright/test'
 import { LEGAL_PAGES } from '../apps/web/lib/site-config'
 import { DEMO_PROMO_CODE } from '../apps/web/scripts/demo-credentials'
 import { GUIDES } from '../apps/web/lib/guides/catalog'
@@ -571,6 +571,59 @@ test('a promo code applies from the facility page and shows its terms (B-122)', 
   // Shareable and survives a reload, because it is in the URL.
   await expect(page).toHaveURL(new RegExp(`promo=${DEMO_PROMO_CODE}`, 'i'))
 })
+
+// B-226 / PRD 01 US-301. **The assertion US-301 claims exists and did not.**
+//
+// The criterion is that the browse estimate and the money path come from one
+// shared calculation, and that a disagreement between them is release-blocking.
+// Nothing had ever compared the two numbers. They differed by exactly the
+// promotion for as long as promotions have existed on this page: the card said
+// "it is already in the total below" and the total below was computed without
+// it, while checkout applied it correctly.
+//
+// Read-only against the shared fixture (B-120): it browses and starts a
+// checkout session, which the sandbox facility exists for.
+test('the promo\'d facility-page total equals what checkout charges (B-226)', async ({ page }) => {
+  await page.goto('/storage/tx/houston/demo-e2e')
+  await page.getByLabel('Have a promo code?').fill(DEMO_PROMO_CODE)
+  await page.getByRole('button', { name: 'Apply code' }).click()
+  await expect(page.getByRole('status').filter({ hasText: /Code applied/ })).toBeVisible()
+
+  const card = page.getByRole('listitem').filter({ hasText: 'Half off your first month' }).first()
+  await card.getByText("What you'd pay today").click()
+
+  // The discount is a LINE with its terms as the label, inside the same
+  // expander as every other figure — not a badge colour and not a tooltip
+  // (1.4.1, and US-301's "named and explained, never silently omitted").
+  await expect(card).toContainText('Half off your first month')
+
+  const browsed = await totalDueToday(card)
+  expect(browsed, 'the expander states a total due today').toBeGreaterThan(0)
+
+  // A BUTTON, not a link: starting a checkout takes a unit off the market, so
+  // it is a POST that must not fire on a prefetch or a back-button visit
+  // (B-020). The code rides along in a hidden field, which is the whole reason
+  // the two surfaces can be compared at all.
+  await card.getByRole('button', { name: /Rent now/i }).click()
+  await expect(page).toHaveURL(/\/checkout\?token=/)
+
+  const quoted = await totalDueToday(page.getByRole('main'))
+  // The whole point of the row. A mismatch here is the defect returning, and
+  // it returns silently — both screens look perfectly reasonable alone.
+  expect(quoted, 'checkout charges what the facility page advertised').toBe(browsed)
+})
+
+/// The "Total due today" figure, in cents, from whichever surface is passed.
+///
+/// Both screens render it as text beside that label rather than in a testable
+/// attribute, so this reads what a renter reads — which is the right thing to
+/// compare when the complaint is that two screens disagree.
+async function totalDueToday(scope: Locator): Promise<number> {
+  const text = (await scope.textContent()) ?? ''
+  const match = /Total due today[^$]*\$([\d,]+\.\d{2})/.exec(text)
+  if (!match) throw new Error(`no "Total due today" in: ${text.slice(0, 400)}`)
+  return Math.round(Number(match[1].replace(/,/g, '')) * 100)
+}
 
 test('a refused code says WHICH rule refused it, not just that it failed (B-122)', async ({ page }) => {
   // The seeded promotion is scoped to the sandbox facility, so the same code

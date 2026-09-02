@@ -1308,6 +1308,29 @@ const LAST_REVIEWED = '19 August 2026'
 // and, as at B-245 and B-249, the reason there is no new claim to make is that
 // this page has never claimed anything about error-message wording.
 
+// Re-read 2026-09-01, at B-226 (the facility page's promo was missing from its
+// own total). **Customer-facing** — the public facility page, under a badge a
+// comparison shopper is reading. **No claim on this page changes and
+// `LAST_REVIEWED` does not move.**
+//
+// Worth recording because the row carries WCAG acceptance criteria and every
+// one of them was **already met before the fix**, which is a distinction this
+// page exists to keep straight. The discount is a line of text with its terms
+// as the label, inside the same expander as the other figures, so no meaning
+// is carried by the badge colour (1.4.1) and the expander keeps a name that
+// says what it opens (2.4.6). None of that changed here — `calculateMoveInCost`
+// has emitted the line, the note and the reduced taxable base since B-070, and
+// the markup around it was correct the whole time.
+//
+// **What was wrong was the number, and a wrong number is not an accessibility
+// defect.** It is worth being exact about that on this page rather than
+// claiming an a11y improvement the row did not make: the figure was equally
+// wrong for every reader, in the same way, whatever they were reading it with.
+// The nearest thing to a criterion it touched is 3.3.3-adjacent — a sentence
+// asserting "it is already in the total below" when it was not — and that is a
+// truthfulness defect, which this repo has been careful all week not to file
+// under conformance.
+
 export default function AccessibilityPage() {
   return (
     <ProsePage

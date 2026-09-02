@@ -195,18 +195,42 @@ function sizeHint(sqFt: number): string {
 function CostBreakdown({
   unitType,
   pricing,
+  promo,
 }: {
   unitType: PublicUnitType
   pricing: PublicPricingContext
+  promo: { terms: string; firstPeriodCents: number; fromCode: boolean } | null
 }) {
   // The one shared calculation (US-301). B-020's checkout stepper calls the
   // same function with the same inputs; a disagreement between the two is a
   // release-blocking defect, not a rounding issue.
+  //
+  // B-226. **The promotion was missing from these inputs, and that is precisely
+  // the disagreement the shared calculation exists to prevent** — reappearing
+  // on the other side of the same function. The card rendered a *First month
+  // free* badge and the sentence "it is already in the total below", and the
+  // total below was computed without the discount; checkout applied it. So the
+  // browse estimate and the money path differed by exactly the promotion, and a
+  // comparison shopper who opened "What you'd pay today" under that badge and
+  // saw full rent could only conclude the discount was fake.
+  //
+  // `calculateMoveInCost` has understood `promoDiscountCents` since B-070 —
+  // it emits the line, its terms, and the reduced taxable base. Nothing needed
+  // teaching; the value simply never arrived.
   const cost = calculateMoveInCost({
     webRateCents: unitType.webRateCents,
     streetRateCents: unitType.streetRateCents,
     adminFeeCents: pricing.adminFeeCents,
     taxRates: pricing.taxRates,
+    // Positive cents off the first period. `firstPeriodCents` is what the
+    // renter pays for month one, so the discount is the gap — floored, because
+    // an offer that somehow priced above the web rate must not become a charge.
+    ...(promo
+      ? {
+          promoDiscountCents: Math.max(0, unitType.webRateCents - promo.firstPeriodCents),
+          promoTerms: promo.terms,
+        }
+      : {}),
   })
 
   return (
@@ -355,7 +379,12 @@ function UnitTypeCard({
                 renter typed the thing it says there is nothing to type. */}
             {promo.fromCode
               ? 'Applied to your first invoice. Your code carries through to checkout.'
-              : 'Applied to your first invoice. Nothing to enter — it is already in the total below.'}
+              : /* B-226. This sentence was FALSE until this row: the total below
+                   was computed without the discount. It is kept, rather than
+                   softened, because the fix made it true — and a claim that a
+                   figure includes something is exactly the kind a reader
+                   should be able to check by opening the expander. */
+                'Applied to your first invoice. Nothing to enter — it is already in the total below.'}
           </span>
         </p>
       )}
@@ -392,7 +421,9 @@ function UnitTypeCard({
 
       {unitType.description && <p className="mt-3 text-sm text-pretty">{unitType.description}</p>}
 
-      {available > 0 && <CostBreakdown unitType={unitType} pricing={pricing} />}
+      {available > 0 && (
+        <CostBreakdown unitType={unitType} pricing={pricing} promo={promo} />
+      )}
 
       {available > 0 && (
         <div className="mt-4">

@@ -7274,6 +7274,34 @@ The three measurements moved into `measureThreeWays` so both loops share one cop
 - **Verified on `desktop-chrome` only.** The spec sets its own viewport in every pass, so `mobile-chrome` would measure the same three CSS viewports; the device scale factor is a rendering concern and not a layout one, as the file's existing comment says.
 - Unit suite green end to end: 3916 passed, 8 skipped, reconciled to 3924. The touched e2e file: 11 passed, 0 failed. Lint and typecheck clean. No schema change, so no migration and nothing for the drift check to see.
 
+## B-226 — The facility page advertised a discount, said it was already in the total, and left it out
+
+`PENDING`
+
+**What it built.** On any unit type with a live promotion, the facility page rendered the badge, the terms, and the sentence *"Applied to your first invoice. Nothing to enter — it is already in the total below."* The total below was `CostBreakdown`, which called `calculateMoveInCost` with **no `promoDiscountCents` and no `promoTerms`**. Checkout applied the discount correctly. So the browse estimate and the money path disagreed by exactly the promotion, and a comparison shopper who opened "What you'd pay today" under a *Half off your first month* badge and saw full rent could only conclude the discount was fake.
+
+Measured on the real build, with the fix reverted: the facility page said **$166.71** and checkout charged **$96.88**.
+
+**Two props.** `CostBreakdown` takes the card's promo and passes `promoDiscountCents: webRateCents - promo.firstPeriodCents` and `promoTerms`. Nothing needed teaching — `calculateMoveInCost` has emitted the discount line, its terms and the reduced taxable base since B-070. The value simply never arrived.
+
+**What it decided.**
+
+- **This is US-301's own release-blocking defect, reappearing on the other side of the same function.** The criterion exists because the facility page once advertised a discount checkout did not charge; the fix was to teach the one shared implementation about promotions. This was the mirror image — the implementation knew, and one of its two callers did not tell it.
+- **`firstPeriodCents` now has exactly one consumer**, which the row required and which is the actual root cause. It was computed, put in a map, passed into `UnitTypeCard`, and read by nothing: **an unread money field on a card is how this happened**, and leaving a second consumer would leave the same trap set.
+- **The reassurance sentence is kept rather than softened.** It was false, and the fix made it true. A claim that a figure already includes something is exactly the kind a reader should be able to check by opening the expander — weakening the wording would have hidden the defect instead of fixing it.
+- **The discount is floored at zero.** An offer that somehow priced above the web rate must not become a charge.
+- **The code-gated branch was already correct** and is untouched; only the automatic branch's sentence depended on this.
+
+**One runnable check, and it is the one US-301 claimed to have.** `e2e/smoke.spec.ts` applies the demo code, opens the expander, reads "Total due today" off the card, presses Rent now, and asserts checkout's figure is the same number. **Nothing had ever compared the two.** Both screens look perfectly reasonable alone, which is why this survived: the defect is only visible in the difference. **Verified by reverting the two props and watching it fail `Expected: 16671, Received: 9688`.**
+
+The comparison reads the rendered text on both surfaces rather than an attribute, because "two screens disagree" is a complaint about what a renter sees.
+
+**What it left behind.**
+
+- **The assertion covers the code-gated promotion only**, because that is what the demo seed has — `displayMode: 'code'`. An automatic promotion takes the same path through the same function, but no fixture exercises it, so the branch whose sentence this row made true is the one not asserted end to end.
+- **`Rent now` is a POST**, so the test consumes a checkout session on the sandbox facility each run. That is what the sandbox exists for (B-120), and no other spec asserts a fixed value against it.
+- **Only "Total due today" is compared.** `monthlyRecurringCents` is computed by the same call and could drift on its own; nothing checks it across the two surfaces.
+
 ## B-225 — Money paid ahead had nowhere to live, so the tenant who prepaid was fee'd and then charged again
 
 `a323791`
