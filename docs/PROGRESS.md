@@ -7276,7 +7276,7 @@ The three measurements moved into `measureThreeWays` so both loops share one cop
 
 ## B-250 — The log that catches stale claims missed one, and the date it dates has not moved in twenty-one items
 
-`PENDING`
+`47e38fd`
 
 **What it built.** Two halves with different owners; this is the one that needed no decision.
 
