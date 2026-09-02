@@ -478,6 +478,17 @@ export const SCANNED_STATES: readonly ScannedState[] = [
     layoutException:
       "B-221 gave this its own per-worker fixture; the card sits inside the queue list the admin route loop measures, and the refusal adds a summary rather than a grid.",
   },
+  // B-233. The claimed state of a task card: the same card, with "Take this"
+  // replaced by "Give back" and a live-region announcement of the change.
+  // Driven against the same per-worker fixture as the refusal above.
+  {
+    route: '/admin/tasks',
+    state: 'task claimed',
+    spec: 'e2e/admin-tasks.spec.ts',
+    layout: 'excepted',
+    layoutException:
+      'Shares B-221\'s per-worker fixture with the refusal state above, and for the same reason: the card sits inside the queue list the admin route loop already measures.',
+  },
   // B-174. The one portal refusal that IS scanned — the sibling stale-preview
   // mismatch below is not (see STATE_EXCEPTIONS).
   {

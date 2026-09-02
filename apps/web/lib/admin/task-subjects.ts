@@ -248,6 +248,34 @@ export async function resolveTaskSubjects(
     }
   }
 
+  // B-234. A held surplus. The subject is the tenant the money is owed TO —
+  // "former tenant" only in the sense that their lease ended at a sale, and the
+  // person a staffer has to reach. Linked to the tenant record rather than to
+  // the auctions screen: the card's own `resolvedByAction` already points
+  // there, and what somebody needs first is an address of record.
+  const auctionCaseIds = byType.get("AuctionCase");
+  if (auctionCaseIds) {
+    const cases = await prisma.auctionCase.findMany({
+      where: { id: { in: [...auctionCaseIds] } },
+      select: {
+        id: true,
+        unit: { select: { number: true } },
+        lease: {
+          select: {
+            tenantId: true,
+            tenant: { select: { firstName: true, lastName: true } },
+          },
+        },
+      },
+    });
+    for (const row of cases) {
+      result.set(
+        key("AuctionCase", row.id),
+        leaseSubject(row.lease.tenantId, row.lease.tenant, row.unit.number),
+      );
+    }
+  }
+
   const facilityIds = byType.get("Facility");
   if (facilityIds) {
     // `gate_drift_review` and `daily_walkthrough` are the whole facility's
@@ -380,6 +408,7 @@ const MISSING_SUBJECT_LABEL: Record<string, string> = {
   Facility: "This facility no longer exists.",
   JobRun: "This job run no longer exists.",
   ScheduledJob: "This job is no longer registered.",
+  AuctionCase: "This auction case no longer exists.",
 };
 
 

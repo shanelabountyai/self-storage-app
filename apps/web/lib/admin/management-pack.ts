@@ -1,6 +1,7 @@
 import { prisma } from '@storage/db'
 import { buildPack, periodDrift, type PeriodSnapshot } from '@storage/core/accounting'
 import { monthBounds } from '@storage/core/billing'
+import { surplusObligation } from '@storage/core/auctions'
 import { renderReportEmail, type EmailDocument, type RenderedEmail } from '@storage/core/comms'
 import { requirePermission, assertFacilityAccess } from '@/lib/rbac/authorize'
 import type { Actor } from '@/lib/rbac/actor'
@@ -78,6 +79,25 @@ export async function buildManagementPack(
       )
     : []
 
+  // B-234. Point-in-time, deliberately not month-scoped: a surplus held today
+  // is a liability today, and the pack says so in the section itself. Read
+  // here rather than through `outstandingSurpluses` because that call takes an
+  // actor and this path has none by design (D-67) — the subscription job was
+  // authorized at subscribe time. The FILTER is the same one, and it has to
+  // stay so: sold, still `held`.
+  const held = await prisma.auctionCase.findMany({
+    where: { facilityId, status: 'sold', surplusDisposition: 'held', surplusCents: { gt: 0 } },
+    orderBy: { surplusHoldUntil: 'asc' },
+    select: {
+      surplusCents: true,
+      surplusHoldUntil: true,
+      surplusTenantNotifiedAt: true,
+      unit: { select: { number: true } },
+      lease: { select: { tenant: { select: { firstName: true, lastName: true } } } },
+    },
+  })
+  const now = new Date()
+
   const document = buildPack(
     {
       facilityName: facility.name,
@@ -86,6 +106,22 @@ export async function buildManagementPack(
       periodDerived: figures.periodDerived,
       filed,
       driftLabels: drift.map((row) => row.label),
+      heldSurpluses: held.map((row) => ({
+        unitNumber: row.unit.number,
+        tenantName: `${row.lease.tenant.firstName} ${row.lease.tenant.lastName}`,
+        amountCents: row.surplusCents ?? 0,
+        holdUntil: row.surplusHoldUntil,
+        overdue: surplusObligation(
+          {
+            surplusCents: row.surplusCents ?? 0,
+            disposition: 'held',
+            holdUntil: row.surplusHoldUntil,
+            notifiedAt: row.surplusTenantNotifiedAt,
+          },
+          now,
+        ).overdue,
+        notified: row.surplusTenantNotifiedAt !== null,
+      })),
       links: [
         { label: 'Open the monthly close', url: `${siteOrigin()}/admin/reports/close` },
         { label: 'Open the revenue report', url: `${siteOrigin()}/admin/reports/revenue` },

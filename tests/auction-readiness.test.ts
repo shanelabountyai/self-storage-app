@@ -8,6 +8,7 @@ import {
 } from '../packages/core/auctions/readiness'
 import {
   canRecordDisposition,
+  surplusDispositionDue,
   surplusHoldUntil,
   surplusObligation,
 } from '../packages/core/auctions/surplus'
@@ -269,6 +270,24 @@ describe('surplus — a liability with a statutory life', () => {
     )
     expect(obligation.overdue).toBe(true)
     expect(obligation.outstandingActions.join(' ')).toContain('remitted to the state')
+  })
+
+  // B-234. The lead window: when the alarm starts, and that it does not go
+  // quiet at the exact moment it starts mattering most.
+  it('starts asking for a disposition a configured lead before the deadline', () => {
+    const holdUntil = surplusHoldUntil(soldAt, 365) // 2027-08-01
+
+    expect(surplusDispositionDue(holdUntil, 30, new Date('2027-07-01T00:00:00Z'))).toBe(false)
+    expect(surplusDispositionDue(holdUntil, 30, new Date('2027-07-02T00:00:00Z'))).toBe(true)
+    // Overdue counts as due — the whole failure this alarm exists for.
+    expect(surplusDispositionDue(holdUntil, 30, new Date('2028-01-01T00:00:00Z'))).toBe(true)
+    // A longer lead opens the window earlier, which is the point of it being
+    // configuration rather than a constant.
+    expect(surplusDispositionDue(holdUntil, 90, new Date('2027-06-01T00:00:00Z'))).toBe(true)
+  })
+
+  it('has nothing to be due when no deadline was ever recorded', () => {
+    expect(surplusDispositionDue(null, 30, new Date('2099-01-01T00:00:00Z'))).toBe(false)
   })
 
   it('is settled once claimed or remitted', () => {

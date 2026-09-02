@@ -680,6 +680,12 @@ model Facility {
   /// duration needs an attorney pass under D-10. The default is a placeholder
   /// of the right order of magnitude, and the settings screen says so.
   surplusHoldDays              Int                  @default(365)
+  /// B-234. How long before `surplusHoldUntil` the nightly job starts asking
+  /// for a disposition. The hold above says when the money must be gone; this
+  /// says how much warning a person gets, and it is separate because the two
+  /// answer to different things — the hold to a statute, this to how long a
+  /// cheque or a comptroller filing takes at this site.
+  surplusNoticeLeadDays        Int                  @default(30)
   /// What counts as a qualifying payment for automatic restore.
   ///
   /// Zero — the default and D-16's decision — means the balance must reach

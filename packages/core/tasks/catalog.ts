@@ -355,6 +355,57 @@ export const TASK_TYPES = [
     requiredProofFields: ["note"],
     sensitive: true,
   },
+  {
+    // PRD 02 §4.6 US-28 (B-234). A sale left money over and the former tenant
+    // has not been told it is being held for them.
+    //
+    // The arithmetic for this existed from B-062 — `surplusObligation` has
+    // always returned the un-notified state — and the only thing reading it was
+    // one facility's auctions screen, which nobody opens at a site with no live
+    // cases. So the surplus sat, correctly computed, unread, for the year the
+    // hold runs. The alarm is what was missing, not the maths.
+    //
+    // No note can close it: a surplus stays un-notified whatever anybody types,
+    // and a closed card would mean the queue had forgotten a liability rather
+    // than that anyone had discharged it. Recording the notice on the auctions
+    // screen cancels it.
+    //
+    // Sensitive: whether the former tenant was told, and when, is the first
+    // question asked when a retained surplus turns into a claim.
+    type: "surplus_notice_due",
+    label: "Tell the former tenant a sale surplus is being held",
+    requiredProofFields: ["note"],
+    sensitive: true,
+    resolvedByAction: {
+      sentence:
+        "Record the notice on the auctions screen — a note cannot close this, because the surplus stays un-notified either way.",
+      href: "/admin/auctions",
+      linkLabel: "Open auctions",
+    },
+  },
+  {
+    // PRD 02 §4.6 US-28 / US-29 (B-234). The holding period is running out, or
+    // has run out, and no disposition has been recorded.
+    //
+    // Raised `surplusNoticeLeadDays` before the deadline and escalated to
+    // `high` once it passes — the row's own state, not a second task type,
+    // because the action does not change when it goes overdue. Only the answer
+    // to "how long has this been true" does.
+    //
+    // The duration it counts against is configuration and stays labelled as an
+    // example configuration (US-29, D-10). This alarms on whatever the facility
+    // is set to and asserts nothing about what any state requires.
+    type: "surplus_disposition_due",
+    label: "Sale surplus must be paid out or remitted",
+    requiredProofFields: ["note"],
+    sensitive: true,
+    resolvedByAction: {
+      sentence:
+        "Record the disposition on the auctions screen — a note cannot close this, because the surplus stays held either way.",
+      href: "/admin/auctions",
+      linkLabel: "Open auctions",
+    },
+  },
 ] as const satisfies readonly TaskTypeSpec[];
 
 export type TaskType = (typeof TASK_TYPES)[number]["type"];

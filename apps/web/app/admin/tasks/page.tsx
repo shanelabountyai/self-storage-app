@@ -27,6 +27,11 @@ function rollupRows(rows: TaskRollupRow[]) {
       row.jobFailureCount > 0
         ? `${row.jobFailureCount} nightly job failure${row.jobFailureCount === 1 ? '' : 's'}`
         : '',
+      // B-234. Same rule: a surplus past its holding period is a liability, not
+      // one more card, and a single "open" count hides it completely.
+      row.overdueSurplusCount > 0
+        ? `${row.overdueSurplusCount} overdue sale surplus${row.overdueSurplusCount === 1 ? '' : 'es'}`
+        : '',
     ]
       .filter(Boolean)
       .join(' · '),

@@ -25,7 +25,23 @@ export type PackInput = {
   /// When a filed month's figures no longer match what the same query returns
   /// today. Empty is not the same as absent — see `provenance`.
   driftLabels: string[]
+  /// B-234. Auction surpluses still held, read AT THE MOMENT THE PACK IS BUILT
+  /// rather than for the month — see the section's own paragraph. Empty means
+  /// there are none, and the section is omitted entirely.
+  heldSurpluses: HeldSurplus[]
   links: { label: string; url: string }[]
+}
+
+/// One held surplus, as the pack states it.
+export type HeldSurplus = {
+  unitNumber: string
+  tenantName: string
+  amountCents: number
+  /// When the holding period runs out. Null only for a row whose sale predates
+  /// the deadline being recorded.
+  holdUntil: Date | null
+  overdue: boolean
+  notified: boolean
 }
 
 /// The sentence that says how much the numbers below can be trusted.
@@ -160,6 +176,49 @@ export function buildPack(input: PackInput, money: (cents: number) => string): E
       },
     },
   ]
+
+  // B-234. Only when there are any, and last: a pack that opens with an empty
+  // liability table teaches an owner to scroll past the section, which is the
+  // habit that let a surplus sit unread for the year its hold ran.
+  //
+  // US-28's own words: a surplus is a liability with a statutory life, not
+  // revenue. It is in the pack rather than only on one facility's auctions
+  // screen because a single-facility screen is exactly what failed — nobody
+  // opens it at a site with no live cases, and the pack is the document an
+  // owner actually reads.
+  if (input.heldSurpluses.length > 0) {
+    const overdue = input.heldSurpluses.filter((row) => row.overdue)
+    sections.push({
+      heading: 'Sale money still being held',
+      paragraphs: [
+        // Said plainly, because everything else in this pack is as-at-the-month
+        // and this is not. A liability read for a closed month would be a
+        // figure that is already wrong on the day the pack is opened.
+        'Read at the moment this pack was built, not as at the end of the month — unlike every figure above. A surplus is a liability with a statutory life, not revenue.',
+        overdue.length > 0
+          ? `${overdue.length} of these are past the holding period this facility is set to and must be paid out or remitted now.`
+          : 'None of these are past the holding period this facility is set to yet.',
+        'The holding period is this facility’s own configuration, not a legal figure. Ask your attorney what your state requires.',
+      ],
+      table: {
+        caption: 'Auction surpluses not yet paid out or remitted',
+        columns: ['Unit', 'Former tenant', 'Amount', 'Hold ends', 'Status'],
+        rows: input.heldSurpluses.map((row) => [
+          row.unitNumber,
+          row.tenantName,
+          money(row.amountCents),
+          row.holdUntil ? row.holdUntil.toISOString().slice(0, 10) : 'Not recorded',
+          // The words, never a colour (FR-9a), and both facts on one line:
+          // an overdue surplus the former tenant was never told about is a
+          // worse position than an overdue one they have been chasing.
+          [
+            row.overdue ? 'Past the holding period' : 'Within the holding period',
+            row.notified ? 'former tenant notified' : 'former tenant NOT yet notified',
+          ].join(' — '),
+        ]),
+      },
+    })
+  }
 
   return {
     title: `Management pack — ${input.facilityName}, ${input.periodLabel}`,

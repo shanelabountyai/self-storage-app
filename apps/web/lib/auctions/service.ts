@@ -25,6 +25,7 @@ import { effectsByLease } from '@/lib/admin/holds'
 import { allChainIds, leaseSuccessorIds } from '@/lib/billing/transfer-chain'
 import { storeGeneratedDocument } from '@/lib/documents/store'
 import { formatCents } from '@/lib/format'
+import { cancelOpenTask } from '@/lib/admin/tasks'
 
 // PRD 02 §4.6 US-28 (B-062). The auction pipeline.
 //
@@ -1031,6 +1032,10 @@ export async function recordSurplusNotified(actor: Actor, caseId: string): Promi
     where: { id: caseId },
     data: { surplusTenantNotifiedAt: row.surplusTenantNotifiedAt ?? new Date() },
   })
+  // B-234. `surplus_notice_due` is `resolvedByAction` — no note closes it — so
+  // this is the only thing that can, and it has to run here or the card
+  // survives the very action it was asking for.
+  await cancelOpenTask('surplus_notice_due', caseId)
   return { ok: true }
 }
 
@@ -1074,6 +1079,10 @@ export async function recordSurplusDisposition(
       },
       tx,
     )
+    await cancelOpenTask('surplus_disposition_due', caseId, tx)
+    // The notice card too: a surplus that has been paid out or remitted is not
+    // one anybody still has to be told about.
+    await cancelOpenTask('surplus_notice_due', caseId, tx)
   })
   return { ok: true }
 }

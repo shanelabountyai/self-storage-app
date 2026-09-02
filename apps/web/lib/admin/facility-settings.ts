@@ -325,6 +325,10 @@ export type BillingPolicyInput = {
   /// dispositioned. Configuration, not law — the durations need an attorney
   /// pass under D-10, which is why it is a field and not a constant.
   surplusHoldDays: number;
+  /// B-234. How long before that deadline the nightly alarm starts asking for a
+  /// disposition. Separate from the hold because the two answer to different
+  /// things: the hold to a statute, this to how long the paperwork takes here.
+  surplusNoticeLeadDays: number;
   /// US-22's allocation order, as category keys.
   paymentAllocationOrder: string[];
   /// CN-3's ladder: days past due at which the tenant is chased.
@@ -429,6 +433,7 @@ export async function updateBillingPolicy(
       paymentRetryDays: before.paymentRetryDays,
       accessSuspendDaysPastDue: before.accessSuspendDaysPastDue,
       surplusHoldDays: before.surplusHoldDays,
+      surplusNoticeLeadDays: before.surplusNoticeLeadDays,
       accessRestoreAtOrBelowCents: before.accessRestoreAtOrBelowCents,
       planMaxDays: before.planMaxDays,
       planMaxPerRollingYear: before.planMaxPerRollingYear,
@@ -447,6 +452,7 @@ export async function updateBillingPolicy(
       paymentRetryDays: after.paymentRetryDays,
       accessSuspendDaysPastDue: after.accessSuspendDaysPastDue,
       surplusHoldDays: after.surplusHoldDays,
+      surplusNoticeLeadDays: after.surplusNoticeLeadDays,
       accessRestoreAtOrBelowCents: after.accessRestoreAtOrBelowCents,
       planMaxDays: after.planMaxDays,
       planMaxPerRollingYear: after.planMaxPerRollingYear,

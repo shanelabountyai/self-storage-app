@@ -100,6 +100,11 @@ export async function dashboardRollup(actor: Actor): Promise<RollupRow[]> {
   // biller failed reads as a perfectly healthy site on the two above — the
   // units are still rentable and yesterday's balances are still what they were.
   const failuresBy = new Map(tasks.map((row) => [row.facilityId, row.jobFailureCount]))
+  // B-234. A fourth, on the same "only when it is not zero" rule. An overdue
+  // surplus is money the business is holding past its own deadline, and it is
+  // invisible on the three above — the units are rentable and nobody owes us
+  // anything, because we owe THEM.
+  const surplusesBy = new Map(tasks.map((row) => [row.facilityId, row.overdueSurplusCount]))
 
   return units.map((row) => ({
     ...row,
@@ -111,6 +116,9 @@ export async function dashboardRollup(actor: Actor): Promise<RollupRow[]> {
       owedBy.has(row.facilityId) ? `${owedBy.get(row.facilityId)} owed` : '',
       (failuresBy.get(row.facilityId) ?? 0) > 0
         ? `${failuresBy.get(row.facilityId)} nightly job failure${failuresBy.get(row.facilityId) === 1 ? '' : 's'}`
+        : '',
+      (surplusesBy.get(row.facilityId) ?? 0) > 0
+        ? `${surplusesBy.get(row.facilityId)} overdue sale surplus${surplusesBy.get(row.facilityId) === 1 ? '' : 'es'}`
         : '',
     ]
       .filter(Boolean)

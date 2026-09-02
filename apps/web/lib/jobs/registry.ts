@@ -16,6 +16,7 @@ import { prisma } from '@storage/db'
 import { runDunning } from '@/lib/billing/dunning'
 import { createTask } from '@/lib/admin/tasks'
 import { raiseLeadFollowUps } from '@/lib/admin/lead-follow-up'
+import { raiseSurplusAlarms } from '@/lib/auctions/surplus-alarms'
 import { runDelinquencyTimeline } from '@/lib/delinquency/engine'
 import { emitInstallmentReminders, evaluatePaymentPlanBreaches } from '@/lib/delinquency/payment-plan-breach'
 import { releaseStuckOverlocks } from '@/lib/delinquency/overlock'
@@ -604,6 +605,22 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
     scope: 'per_facility',
     handler: async ({ facilityId, recordItem }) => {
       await raiseLeadFollowUps(facilityId!, new Date(), recordItem)
+    },
+  },
+  {
+    // B-234 / PRD 02 US-28, US-29. Held auction surpluses nobody has notified
+    // or dispositioned.
+    //
+    // 8am local, the same reasoning as `leads.follow-up` above: this raises
+    // work for a person, and the work is off-system — post a notice, write a
+    // cheque, file with the comptroller — so a card created at 2am is one that
+    // sat six hours before anyone could act on it.
+    name: 'auctions.surplus-alarms',
+    label: 'Chase auction surpluses that are still held',
+    localHour: 8,
+    scope: 'per_facility',
+    handler: async ({ facilityId, recordItem }) => {
+      await raiseSurplusAlarms(facilityId!, new Date(), recordItem)
     },
   },
   {

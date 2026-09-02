@@ -461,6 +461,12 @@ export async function updateBillingPolicyAction(
     max: 3_650,
     unit: "days",
   });
+  // B-234. Warning, not law. Floor of 1: a lead of zero is the deadline
+  // itself, which is the state this row exists to stop happening unannounced.
+  const surplusNoticeLeadDays = parseScaled(
+    formData.get("surplusNoticeLeadDays"),
+    { scale: 1, min: 1, max: 365, unit: "days" },
+  );
   // D-98 (B-190). Three numbers that together decide whether a payment plan is
   // forbearance or a lien clock that never runs. Bounds are wide because they
   // are configuration, not law (D-10) — but each has a floor that means
@@ -514,6 +520,8 @@ export async function updateBillingPolicyAction(
     errors.accessSuspendDaysPastDue = suspendDays.error;
   if ("error" in surplusHoldDays)
     errors.surplusHoldDays = surplusHoldDays.error;
+  if ("error" in surplusNoticeLeadDays)
+    errors.surplusNoticeLeadDays = surplusNoticeLeadDays.error;
   if ("error" in restoreAtOrBelow)
     errors.accessRestoreAtOrBelowDollars = restoreAtOrBelow.error;
   if ("error" in planMaxDays) errors.planMaxDays = planMaxDays.error;
@@ -546,6 +554,7 @@ export async function updateBillingPolicyAction(
     "error" in leadDays ||
     "error" in suspendDays ||
     "error" in surplusHoldDays ||
+    "error" in surplusNoticeLeadDays ||
     "error" in restoreAtOrBelow ||
     "error" in planMaxDays ||
     "error" in planMaxPerRollingYear ||
@@ -563,6 +572,7 @@ export async function updateBillingPolicyAction(
       paymentRetryDays: retryDays,
       accessSuspendDaysPastDue: suspendDays.value,
       surplusHoldDays: surplusHoldDays.value,
+      surplusNoticeLeadDays: surplusNoticeLeadDays.value,
       accessRestoreAtOrBelowCents: restoreAtOrBelow.value,
       planMaxDays: planMaxDays.value,
       planMaxPerRollingYear: planMaxPerRollingYear.value,

@@ -50,6 +50,7 @@ function input(overrides: Partial<PackInput> = {}): PackInput {
     periodDerived: DERIVED,
     filed: true,
     driftLabels: [],
+    heldSurpluses: [],
     links: [{ label: 'Open the monthly close', url: 'https://example.com/admin/reports/close' }],
     ...overrides,
   }

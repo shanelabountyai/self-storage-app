@@ -306,6 +306,12 @@ export type FacilityRollup = {
   /// "12 open" at a site with twelve overlocks to fit, and only one of them is
   /// a month of rent.
   jobFailureCount: number
+  /// B-234. Open `surplus_disposition_due` tasks that have gone `high` — the
+  /// hold has run out and the money is still here. Its own figure for the same
+  /// reason `jobFailureCount` is: it is the one number on this screen that is a
+  /// statutory liability rather than a chore, and folding it into "open" is
+  /// exactly how it went unseen for a year.
+  overdueSurplusCount: number
 }
 
 /// The regional roll-up: open-task counts per facility, for an actor who can
@@ -321,17 +327,26 @@ export async function taskRollup(actor: Actor): Promise<FacilityRollup[]> {
 
   const openTasks = await prisma.task.findMany({
     where: { facilityId: { in: facilities.map((f) => f.id) }, status: 'open' },
-    select: { facilityId: true, businessDate: true, type: true },
+    select: { facilityId: true, businessDate: true, type: true, priority: true },
   })
 
   const byFacility = new Map(
-    facilities.map((f) => [f.id, { open: 0, overdue: 0, jobFailures: 0, timezone: f.timezone }]),
+    facilities.map((f) => [
+      f.id,
+      { open: 0, overdue: 0, jobFailures: 0, overdueSurpluses: 0, timezone: f.timezone },
+    ]),
   )
   for (const task of openTasks) {
     const bucket = byFacility.get(task.facilityId)
     if (!bucket) continue
     bucket.open += 1
     if (task.type === 'job_failed') bucket.jobFailures += 1
+    // `high` is what `raiseSurplusAlarms` escalates to when the hold has
+    // actually run out — before that the same type sits at `normal` and is an
+    // ordinary piece of work, not a liability past its deadline.
+    if (task.type === 'surplus_disposition_due' && task.priority === 'high') {
+      bucket.overdueSurpluses += 1
+    }
     const today = businessDateFor(new Date(), bucket.timezone)
     if (task.businessDate.getTime() < today.getTime()) bucket.overdue += 1
   }
@@ -342,6 +357,7 @@ export async function taskRollup(actor: Actor): Promise<FacilityRollup[]> {
     openCount: byFacility.get(facility.id)?.open ?? 0,
     overdueCount: byFacility.get(facility.id)?.overdue ?? 0,
     jobFailureCount: byFacility.get(facility.id)?.jobFailures ?? 0,
+    overdueSurplusCount: byFacility.get(facility.id)?.overdueSurpluses ?? 0,
   }))
 }
 

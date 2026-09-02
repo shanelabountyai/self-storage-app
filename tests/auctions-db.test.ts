@@ -18,6 +18,7 @@ import {
   setGoodsDescription,
 } from '../apps/web/lib/auctions/service'
 import { updateAuctionSaleTerms } from '../apps/web/lib/admin/facility-settings'
+import { raiseSurplusAlarms } from '../apps/web/lib/auctions/surplus-alarms'
 import { verifyDocument } from '../apps/web/lib/documents/store'
 import type { Actor } from '../apps/web/lib/rbac/actor'
 import type { PermissionKey } from '@storage/db/rbac-catalog'
@@ -930,6 +931,93 @@ describeDb('the auction pipeline', () => {
 
       await recordSurplusDisposition(regional(), caseId, 'claimed', 'Cheque 1042 to Ada Renter')
       expect(await outstandingSurpluses(regional(), facilityId)).toHaveLength(0)
+    })
+
+    // B-234. The alarm, not the arithmetic. `surplusObligation` has computed
+    // all of this since B-062 and the only reader was one facility's auctions
+    // screen, so a surplus went overdue a year after the sale with nothing
+    // anywhere saying so.
+    describe('the nightly alarm', () => {
+      const openTasks = (caseId: string) =>
+        prisma.task.findMany({
+          where: { entityId: caseId, status: 'open' },
+          orderBy: { type: 'asc' },
+          select: { type: true, priority: true, detail: true, entityType: true },
+        })
+
+      it('raises a notice task within days of the sale, carrying the amount and the tenant', async () => {
+        const caseId = await sellFor(100_000)
+
+        // The day after the sale — nowhere near the 90-day deadline.
+        await raiseSurplusAlarms(facilityId, new Date(saleDay().getTime() + 86_400_000))
+
+        const tasks = await openTasks(caseId)
+        expect(tasks.map((t) => t.type)).toEqual(['surplus_notice_due'])
+        expect(tasks[0].entityType).toBe('AuctionCase')
+        // The action is off-system, so the card has to say how much and to whom
+        // before anybody opens anything.
+        expect(tasks[0].detail).toContain('$400.00')
+        expect(tasks[0].detail).toContain('Ada')
+      })
+
+      it('does not raise a second card the next night', async () => {
+        const caseId = await sellFor(100_000)
+        const day = (n: number) => new Date(saleDay().getTime() + n * 86_400_000)
+
+        await raiseSurplusAlarms(facilityId, day(1))
+        const second = await raiseSurplusAlarms(facilityId, day(2))
+
+        expect(second.raised).toBe(0)
+        expect(await openTasks(caseId)).toHaveLength(1)
+      })
+
+      it('asks for a disposition inside the lead window and escalates once the hold runs out', async () => {
+        const caseId = await sellFor(100_000)
+        await recordSurplusNotified(regional(), caseId)
+        const day = (n: number) => new Date(saleDay().getTime() + n * 86_400_000)
+
+        // The facility holds for 90 days; the default lead is 30. Day 55 is
+        // outside the window, day 65 inside it.
+        await raiseSurplusAlarms(facilityId, day(55))
+        expect(await openTasks(caseId)).toHaveLength(0)
+
+        await raiseSurplusAlarms(facilityId, day(65))
+        let tasks = await openTasks(caseId)
+        expect(tasks.map((t) => [t.type, t.priority])).toEqual([
+          ['surplus_disposition_due', 'normal'],
+        ])
+
+        // Past the deadline: the SAME row goes high, rather than a duplicate
+        // arriving beside it.
+        const escalation = await raiseSurplusAlarms(facilityId, day(120))
+        expect(escalation.escalated).toBe(1)
+        tasks = await openTasks(caseId)
+        expect(tasks.map((t) => [t.type, t.priority])).toEqual([
+          ['surplus_disposition_due', 'high'],
+        ])
+        expect(tasks[0].detail).toContain('holding period has run out')
+      })
+
+      it('closes both cards when the surplus is actually dispositioned', async () => {
+        const caseId = await sellFor(100_000)
+        await raiseSurplusAlarms(facilityId, new Date(saleDay().getTime() + 120 * 86_400_000))
+        expect(await openTasks(caseId)).toHaveLength(2)
+
+        // Neither type takes a note — `resolvedByAction` — so this is the only
+        // thing that can close them.
+        await recordSurplusDisposition(regional(), caseId, 'remitted', 'Comptroller filing 88-2')
+        expect(await openTasks(caseId)).toHaveLength(0)
+      })
+
+      it('raises nothing for a sale that produced no surplus', async () => {
+        const caseId = await sellFor(50_000)
+        const result = await raiseSurplusAlarms(
+          facilityId,
+          new Date(saleDay().getTime() + 400 * 86_400_000),
+        )
+        expect(result.raised).toBe(0)
+        expect(await openTasks(caseId)).toHaveLength(0)
+      })
     })
 
     it('records no surplus, and nothing outstanding, when the sale raised none', async () => {

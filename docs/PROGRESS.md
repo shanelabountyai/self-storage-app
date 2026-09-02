@@ -8078,3 +8078,41 @@ The screen that asks a past-due tenant for money was "Balance $487.50 / Paying t
 - **Nothing notifies the person whose task was taken**, and nothing shows a facility-wide "who has what" view. Claiming is the 90% case; a roster is a different screen.
 
 **Test verification.** Typecheck (including `tsconfig.tests.json`) clean; lint clean (7 pre-existing warnings, unrelated); no schema change, so no migration and no drift. Full unit suite **4,033 passed, 8 skipped of 4,041** (242 files passed, 1 skipped), exit 0 — including three new `assignTask` cases in `tests/tasks-db.test.ts`: the losing claim is refused and names the winner, giving back what you do not hold changes nothing, assigning to somebody else throws, and a view-only actor is refused. e2e `admin-tasks` **11 passed** then **10 passed, 1 skipped** on an immediate re-run against the same database (the skip is the returned-mail test's own same-day idempotency guard, as designed), and `admin` **265 passed**, all exit 0. The new claim spec reuses B-221's per-worker fixture task and follows B-120 discipline (2): it gives the task back before taking it, so a run that died holding the claim self-heals, and it puts the task back at the end.
+
+---
+
+## B-234 — A held auction surplus gets an alarm, not a screen
+
+`PENDING`
+
+`surplusObligation` has computed both dated obligations a surplus carries since B-062 — the former tenant not yet notified, and the holding period run out — and the only thing reading it was `outstandingSurpluses`, rendered on `/admin/auctions` for the one facility the switcher happened to be on. Nobody opens that screen at a site with no live cases, so a surplus set to `sale + 365 days` sat correctly computed and unread for the whole year of its hold. US-28's own words are that a surplus is a liability with a statutory life, and that quietly retaining one is how a routine auction becomes a class-action-shaped problem. **What was missing was the alarm, not the arithmetic.**
+
+**What it built.**
+
+1. **`auctions.surplus-alarms`** (`apps/web/lib/auctions/surplus-alarms.ts`), per facility at 8am facility-local. The same hour as `leads.follow-up` and for the same reason: this raises off-system work — post a notice, write a cheque, file with the comptroller — and a card created at 2am is one that sat six hours before anybody could act on it.
+2. **Two task types** in the catalog. `surplus_notice_due` while `surplusTenantNotifiedAt` is null, raised within days of the sale rather than a year later. `surplus_disposition_due` from `surplusNoticeLeadDays` before `surplusHoldUntil`, at `normal`, **escalated to `high` on the row already standing** once the deadline passes.
+3. **`Facility.surplusNoticeLeadDays`** (default 30) with its settings field in the same item, beside the hold it counts back from.
+4. **`overdueSurplusCount`** on `taskRollup`, rendered on the `/admin` dashboard roll-up and the `/admin/tasks` roll-up, across facilities, on the same "only when it is not zero" rule B-229 established for job failures.
+5. **A held-surplus section in the management pack** (`packages/core/accounting/pack.ts`) — unit, former tenant, amount, deadline, and whether they have been told — appended only when there is something in it.
+6. **An `AuctionCase` subject resolver**, so a card reads `Unit 104 — Ada Renter` and links to the tenant record.
+
+**What it decided.**
+
+- **Two task types, not three.** The row asked for a notice alarm, a deadline alarm and an escalating one. The third is not a separate type: the action does not change when a hold runs out — record the disposition — only how long it has been true. That is a priority, and it goes on the row that is already there rather than beside it as a duplicate.
+- **Guarded on an open task, not on `createTask`'s per-business-date key.** The idempotency key is per business day, so the `leads.follow-up` shape would raise a fresh card every night for the entire year a hold runs. The `insurance_proof_lapsed` pattern — `findFirst` on an open task of the same type for the same entity — is what stops a queue nobody opens. Escalation is an `update` on that row.
+- **Escalation is one-way.** A card a person deliberately set to `high` is not something a later quiet night demotes.
+- **Both types are `resolvedByAction`.** A note cannot close either: the surplus stays un-notified, or stays held, whatever anybody types, and a completed card would mean the queue had forgotten a liability rather than that anyone had discharged it. `recordSurplusNotified` and `recordSurplusDisposition` cancel them, and dispositioning cancels the notice card too — a surplus that has been paid out is not one anybody still has to be told about.
+- **The pack's surplus section is labelled as read at build time, not as at the month.** Every other figure in that pack is month-scoped and the provenance sentence is the most important line in it. A liability read for a closed month would be wrong on the day the pack is opened, so the section says so in its own words rather than borrowing the pack's.
+- **`overdueSurplusCount` counts the escalated priority, not the type.** A `surplus_disposition_due` at `normal` is ordinary work inside the lead window; the roll-up figure is for the ones past the deadline.
+- **The durations stay configuration and stay labelled as example configuration** (US-29, D-10). This alarms on whatever the facility is set to and asserts nothing about what any state requires. The lead has a floor of 1 — a lead of zero is the deadline itself, which is the state the row exists to stop arriving unannounced.
+
+**A real bug found on the way.** **`main` was red.** B-233 added an `a11y-state: /admin/tasks | task claimed` comment to `e2e/admin-tasks.spec.ts` without the matching `SCANNED_STATES` entry, so `tests/a11y-scan-coverage.test.ts` failed on a clean checkout (`expected [ '/admin/tasks | task claimed' ] to deeply equal []`). Confirmed pre-existing by stashing this branch. The entry is added here.
+
+**What it left behind.**
+
+- **Nothing sends the surplus notice.** The task says a person must; the letter itself is off-system, as US-28 describes it. Wiring it to the comms catalog is not this row.
+- **A surplus with no recorded deadline gets the notice card but never a disposition card.** `surplusDispositionDue` returns false on a null `surplusHoldUntil`, deliberately: there is no date to count back from, and inventing one would be the alarm asserting a deadline nobody set. Such a row still appears in `outstandingSurpluses` and in the pack, where the deadline column reads "Not recorded".
+- **The management pack section is per facility**, because the pack is. The cross-facility view of overdue surpluses is the dashboard roll-up.
+- **`db:status` exits non-zero against the Neon dev branch** (`P3005`, the schema is not empty and has no migration history). Pre-existing and unrelated to this item — that branch has never been baselined, and baselining shared cloud infrastructure is a deliberate decision, not a side effect of a backlog item. Local and `storage_test` are both up to date and the CI-shaped drift check reports no difference.
+
+**Test verification.** Typecheck (including `tsconfig.tests.json`) clean; lint clean (7 pre-existing warnings, unrelated); `prisma migrate diff` against the local `public` schema — the CI check's shape — reports no difference. Two new pure cases in `tests/auction-readiness.test.ts` for the lead window (it opens on the lead day, overdue still counts as due, a longer lead opens it earlier, a null deadline is never due) and five new database cases in `tests/auctions-db.test.ts`: the notice card is raised the day after the sale carrying the amount and the tenant, a second night raises nothing, the disposition card appears inside the lead window and the same row escalates to `high` past the deadline, dispositioning closes both, and a sale that raised no surplus raises nothing. `tests/auctions-db.test.ts` **55 passed**; `management-pack`, `tasks-db`, `golden-path-2` (which drives the real registry) and `facility-settings-db` **55 passed** together. Full unit suite **4,040 passed, 8 skipped of 4,048** (242 files passed, 1 skipped), exit 0 — against **4,039 passed, 8 skipped, 1 failed** before the `SCANNED_STATES` fix, the one failure being B-233's orphaned state above.

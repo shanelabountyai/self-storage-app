@@ -43,6 +43,21 @@ export function surplusHoldUntil(soldAt: Date, holdDays: number): Date {
   return new Date(soldAt.getTime() + holdDays * 86_400_000)
 }
 
+/// Whether the end of the holding period is close enough to act on.
+///
+/// `leadDays` is per-facility configuration for the same reason the hold
+/// itself is: how long a cheque or a comptroller filing takes is a fact about
+/// a site, not about a statute. Overdue counts as due — the alarm must not go
+/// quiet at the exact moment it starts mattering most.
+export function surplusDispositionDue(
+  holdUntil: Date | null,
+  leadDays: number,
+  now: Date,
+): boolean {
+  if (holdUntil === null) return false
+  return now.getTime() >= holdUntil.getTime() - leadDays * 86_400_000
+}
+
 export type SurplusObligation = {
   /// Something is owed and outstanding.
   outstanding: boolean

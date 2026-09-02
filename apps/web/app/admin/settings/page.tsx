@@ -652,6 +652,15 @@ export default async function AdminSettingsPage() {
             hint="Days after a lien sale before the surplus must be paid out or remitted to the state. This is a placeholder, not a legal figure — ask your attorney what your state requires."
           />
           <Field
+            name="surplusNoticeLeadDays"
+            label="Start chasing the surplus this many days before that"
+            type="number"
+            min={1}
+            max={365}
+            defaultValue={facility.surplusNoticeLeadDays}
+            hint="How much warning staff get before the hold above runs out. A cheque or a comptroller filing takes time, so this is about your office, not about the law."
+          />
+          <Field
             name="accessRestoreAtOrBelowDollars"
             label="Restore access once the balance is at or below ($)"
             type="text"
