@@ -5,6 +5,8 @@ import { Button } from '@/components/ui/button'
 import { getSwitcherData } from '@/lib/admin/context'
 import { resolveSelectedFacility } from '@/lib/admin/facility-selection-logic'
 import { can, hasPermissionAnywhere } from '@/lib/rbac/authorize'
+import { rateIncreaseApprovalRollup } from '@/lib/admin/rollups'
+import { FacilityRollup } from '@/components/admin/facility-rollup'
 import { formatCents } from '@/lib/format'
 import { earliestEffectiveDate } from '@storage/core/pricing'
 import {
@@ -92,7 +94,7 @@ function leaseOptions(options: LeaseOption[]) {
 export default async function RateIncreasesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ raise?: string; lower?: string; rate?: string }>
+  searchParams: Promise<{ raise?: string; lower?: string; rate?: string; facility?: string }>
 }) {
   const params = await searchParams
   const { actor, facilities, cookieValue, canSeeAll } = await getSwitcherData()
@@ -105,13 +107,23 @@ export default async function RateIncreasesPage({
     return <p className="text-muted-foreground text-sm">You don&apos;t have access to rate changes.</p>
   }
 
-  const selected = resolveSelectedFacility(cookieValue, facilities, canSeeAll)
+  // B-235. Same drill-in as the other roll-up screens.
+  const requested = params.facility ? facilities.find((one) => one.id === params.facility) : undefined
+  const selected = requested
+    ? { mode: 'single' as const, facility: requested }
+    : resolveSelectedFacility(cookieValue, facilities, canSeeAll)
   if (selected.mode !== 'single') {
     return (
-      <p className="text-muted-foreground text-sm">
-        Pick a single facility above — the notice period a rate increase has to give is a
-        per-facility setting.
-      </p>
+      <div className="flex flex-col gap-4">
+        <FacilityRollup
+          heading="Rate changes waiting for approval"
+          rows={await rateIncreaseApprovalRollup(actor)}
+        />
+        <p className="text-muted-foreground text-sm">
+          Open a facility to approve its batch — the notice period a rate increase has to give is a
+          per-facility setting, so there is no combined worklist.
+        </p>
+      </div>
     )
   }
 

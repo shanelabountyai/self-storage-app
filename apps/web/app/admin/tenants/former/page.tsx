@@ -2,6 +2,8 @@ import Link from 'next/link'
 import { getSwitcherData } from '@/lib/admin/context'
 import { resolveSelectedFacility } from '@/lib/admin/facility-selection-logic'
 import { formerTenantDebts } from '@/lib/admin/move-out'
+import { formerTenantRollup } from '@/lib/admin/rollups'
+import { FacilityRollup } from '@/components/admin/facility-rollup'
 import { formatCents } from '@/lib/format'
 
 export const metadata = { title: 'Former tenants owing' }
@@ -16,15 +18,28 @@ function formatDate(date: Date | null): string {
   return new Intl.DateTimeFormat('en-US', { day: 'numeric', month: 'short', year: 'numeric' }).format(date)
 }
 
-export default async function FormerTenantsPage() {
+export default async function FormerTenantsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ facility?: string }>
+}) {
+  const { facility: facilityParam } = await searchParams
   const { actor, facilities, cookieValue, canSeeAll } = await getSwitcherData()
-  const selected = resolveSelectedFacility(cookieValue, facilities, canSeeAll)
+  // B-235. Drill in from the roll-up without switching the persistent context.
+  const requested = facilityParam ? facilities.find((one) => one.id === facilityParam) : undefined
+  const selected = requested
+    ? { mode: 'single' as const, facility: requested }
+    : resolveSelectedFacility(cookieValue, facilities, canSeeAll)
 
   if (selected.mode !== 'single') {
     return (
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-4">
         <h1 className="text-lg font-semibold">Former tenants owing</h1>
-        <p className="text-muted-foreground text-sm">Choose a single facility in the switcher above.</p>
+        <FacilityRollup heading="Balances left behind, by facility" rows={await formerTenantRollup(actor)} />
+        <p className="text-muted-foreground text-sm">
+          Open a facility to see who owes what — a balance belongs to the lease that left it, at one
+          site.
+        </p>
       </div>
     )
   }

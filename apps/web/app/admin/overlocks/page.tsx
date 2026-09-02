@@ -2,6 +2,8 @@ import Link from 'next/link'
 import { getSwitcherData } from '@/lib/admin/context'
 import { resolveSelectedFacility } from '@/lib/admin/facility-selection-logic'
 import { overlockReconciliation } from '@/lib/delinquency/overlock-reconciliation'
+import { overlockRollup } from '@/lib/admin/rollups'
+import { FacilityRollup } from '@/components/admin/facility-rollup'
 import { ScrollRegion } from '@/components/ui/scroll-region'
 
 export const metadata = { title: 'Overlocks' }
@@ -26,15 +28,28 @@ function formatHours(hours: number): string {
   return `${whole} hour${whole === 1 ? '' : 's'}`
 }
 
-export default async function OverlocksPage() {
+export default async function OverlocksPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ facility?: string }>
+}) {
+  const { facility: facilityParam } = await searchParams
   const { actor, facilities, cookieValue, canSeeAll } = await getSwitcherData()
-  const selected = resolveSelectedFacility(cookieValue, facilities, canSeeAll)
+  // B-235. Drill in from the roll-up without switching the persistent context.
+  const requested = facilityParam ? facilities.find((one) => one.id === facilityParam) : undefined
+  const selected = requested
+    ? { mode: 'single' as const, facility: requested }
+    : resolveSelectedFacility(cookieValue, facilities, canSeeAll)
 
   if (selected.mode !== 'single') {
     return (
-      <p className="text-muted-foreground text-sm">
-        Pick a single facility above — overlock reconciliation is per-site.
-      </p>
+      <div className="flex flex-col gap-4">
+        <FacilityRollup heading="Overlocks to reconcile" rows={await overlockRollup(actor)} />
+        <p className="text-muted-foreground text-sm">
+          Open a facility to reconcile its locks — a lock is on a unit at one site, so there is no
+          combined list.
+        </p>
+      </div>
     )
   }
 

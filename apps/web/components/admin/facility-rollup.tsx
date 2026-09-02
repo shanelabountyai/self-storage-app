@@ -44,7 +44,17 @@ export function FacilityRollup({
       <ul className="mt-2 flex flex-col gap-1 text-sm">
         {rows.map((row) => (
           <li key={row.facilityId} className="flex flex-wrap justify-between gap-x-4">
-            <Link href={row.href} className="underline underline-offset-2">
+            {/* B-235. The link's accessible name carries the figure beside it,
+                not just the site's name (2.4.4/2.4.6): read out of context — a
+                screen reader's link list, or one row at a time — "Cedar Park"
+                does not say what is waiting there, which is the whole reason a
+                person is on this screen. The visible text is contained in the
+                accessible name, so 2.5.3 holds. */}
+            <Link
+              href={row.href}
+              aria-label={`${row.facilityName} — ${row.summary}`}
+              className="underline underline-offset-2"
+            >
               {row.facilityName}
             </Link>
             <span className="text-muted-foreground tabular-nums">{row.summary}</span>

@@ -4,6 +4,8 @@ import { getSwitcherData } from '@/lib/admin/context'
 import { resolveSelectedFacility } from '@/lib/admin/facility-selection-logic'
 import { facilityTasks } from '@/lib/admin/tasks'
 import { delinquencyQueue } from '@/lib/admin/delinquency-queue'
+import { walkthroughRollup } from '@/lib/admin/rollups'
+import { FacilityRollup } from '@/components/admin/facility-rollup'
 import { AnnounceRegion } from '@/components/admin/announce'
 import { TaskCompleteForm } from '@/components/admin/task-complete-form'
 import { reportFindingAction } from './actions'
@@ -24,15 +26,28 @@ function formatDate(date: Date): string {
   return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(date)
 }
 
-export default async function WalkthroughPage() {
+export default async function WalkthroughPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ facility?: string }>
+}) {
+  const { facility: facilityParam } = await searchParams
   const { actor, facilities, cookieValue, canSeeAll } = await getSwitcherData()
-  const selected = resolveSelectedFacility(cookieValue, facilities, canSeeAll)
+  // B-235. Drill in from the roll-up without switching the persistent context.
+  const requested = facilityParam ? facilities.find((one) => one.id === facilityParam) : undefined
+  const selected = requested
+    ? { mode: 'single' as const, facility: requested }
+    : resolveSelectedFacility(cookieValue, facilities, canSeeAll)
 
   if (selected.mode !== 'single') {
     return (
-      <p className="text-muted-foreground text-sm">
-        Pick a single facility above — the walkthrough is a per-site checklist.
-      </p>
+      <div className="flex flex-col gap-4">
+        <FacilityRollup heading="Today’s walk, by facility" rows={await walkthroughRollup(actor)} />
+        <p className="text-muted-foreground text-sm">
+          Open a facility to walk it — the checklist is the property in front of you, so there is no
+          combined version.
+        </p>
+      </div>
     )
   }
 

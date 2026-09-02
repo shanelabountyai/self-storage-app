@@ -443,6 +443,40 @@ test.describe('the dashboard (B-113)', () => {
     await expect(page.getByRole('heading', { level: 1 })).not.toHaveText('All facilities')
   })
 
+  // B-235. The two screens the operator review named: a regional over ten
+  // sites who has to approve every lien sale and every ECRI batch was
+  // switching facility ten times a morning to find out which sites had
+  // anything waiting.
+  for (const screen of [
+    { path: '/admin/auctions', heading: 'Lien sales waiting for approval' },
+    { path: '/admin/rate-increases', heading: 'Rate changes waiting for approval' },
+  ]) {
+    test(`${screen.path} rolls up the approvals waiting across facilities`, async ({ page }) => {
+      await page.goto('/admin')
+      await page.getByLabel('Switch facility').selectOption('all')
+      await page.getByRole('button', { name: 'Switch', exact: true }).click()
+      // Await the switch landing before navigating — the cookie is set by the
+      // server action, and a `goto` racing it lands on the single-facility page.
+      await expect(page.getByRole('heading', { name: 'All facilities' })).toBeVisible()
+
+      await page.goto(screen.path)
+      const rollup = page.getByRole('region', { name: screen.heading })
+      await expect(rollup).toBeVisible()
+
+      const first = rollup.getByRole('link').first()
+      // The link's accessible name carries the figure, not just the site's
+      // name: read out of context, "Cedar Park" does not say what is waiting
+      // there (2.4.4/2.4.6). A zero is stated in words, never an em dash.
+      await expect(first).toHaveAccessibleName(/ — (Nothing waiting for approval|\d+ waiting for approval)$/)
+      await expect(first).toHaveAttribute('href', new RegExp(`${screen.path}\\?facility=`))
+
+      // A router, not a merged list: the drill-in leaves the switcher alone.
+      await first.click()
+      await expect(rollup).toHaveCount(0)
+      await expect(page.getByLabel('Switch facility')).toHaveValue('all')
+    })
+  }
+
   test('New inquiry opens with a facility selector rather than refusing', async ({ page }) => {
     // The screen exists so a ringing phone costs one click, and the target is
     // sixty seconds end to end. "Pick a specific facility above" spent that

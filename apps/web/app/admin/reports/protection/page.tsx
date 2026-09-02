@@ -3,6 +3,8 @@ import { getSwitcherData } from '@/lib/admin/context'
 import { resolveSelectedFacility } from '@/lib/admin/facility-selection-logic'
 import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
 import { coverageGaps } from '@/lib/protection/coverage'
+import { protectionGapRollup } from '@/lib/admin/rollups'
+import { FacilityRollup } from '@/components/admin/facility-rollup'
 import { ScrollRegion } from '@/components/ui/scroll-region'
 
 export const metadata = { title: 'Uncovered units' }
@@ -47,11 +49,12 @@ export default async function ProtectionCoveragePage({
 
   if (selected.mode !== 'single') {
     return (
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-4">
         <h1 className="text-lg font-semibold">Uncovered units</h1>
+        <FacilityRollup heading="Uncovered units, by facility" rows={await protectionGapRollup(actor)} />
         <p className="text-muted-foreground text-sm">
-          Choose a single facility in the switcher above — the protection policy is a per-facility
-          setting, so a combined list would mix sites that require cover with sites that do not.
+          Open a facility to see which units — the protection policy is a per-facility setting, so a
+          combined list would mix sites that require cover with sites that do not.
         </p>
       </div>
     )

@@ -3,6 +3,8 @@ import { getSwitcherData } from '@/lib/admin/context'
 import { resolveSelectedFacility } from '@/lib/admin/facility-selection-logic'
 import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
 import { auctionCasesFor, auctionLotSheet, outstandingSurpluses } from '@/lib/auctions/service'
+import { auctionApprovalRollup } from '@/lib/admin/rollups'
+import { FacilityRollup } from '@/components/admin/facility-rollup'
 import { formatCents } from '@/lib/format'
 
 export const metadata = { title: 'Auctions' }
@@ -21,19 +23,39 @@ function formatDate(date: Date | null): string {
   return new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeZone: 'UTC' }).format(date)
 }
 
-export default async function AuctionsPage() {
+export default async function AuctionsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ facility?: string }>
+}) {
+  const { facility: facilityParam } = await searchParams
   const { actor, facilities, cookieValue, canSeeAll } = await getSwitcherData()
 
   if (!hasPermissionAnywhere(actor, ['auctions:approve'])) {
     return <p className="text-muted-foreground text-sm">You don&apos;t have access to auctions.</p>
   }
 
-  const selected = resolveSelectedFacility(cookieValue, facilities, canSeeAll)
+  // B-235. `?facility=` drills in from the roll-up below without switching the
+  // persistent context, so a regional checking one site's approvals does not
+  // have to remember to switch back.
+  const requested = facilityParam ? facilities.find((one) => one.id === facilityParam) : undefined
+  const selected = requested
+    ? { mode: 'single' as const, facility: requested }
+    : resolveSelectedFacility(cookieValue, facilities, canSeeAll)
   if (selected.mode !== 'single') {
+    // B-235. The refusal keeps its reason — a merged list really would mix
+    // states — and gains the router it was missing.
     return (
-      <p className="text-muted-foreground text-sm">
-        Pick a single facility above — a lien sale is governed by the state its facility is in.
-      </p>
+      <div className="flex flex-col gap-4">
+        <FacilityRollup
+          heading="Lien sales waiting for approval"
+          rows={await auctionApprovalRollup(actor)}
+        />
+        <p className="text-muted-foreground text-sm">
+          Open a facility to work its cases — a lien sale is governed by the state its facility is
+          in, so there is no combined list.
+        </p>
+      </div>
     )
   }
 
