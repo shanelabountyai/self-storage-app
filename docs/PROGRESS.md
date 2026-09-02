@@ -7276,7 +7276,7 @@ The three measurements moved into `measureThreeWays` so both loops share one cop
 
 ## B-226 — The facility page advertised a discount, said it was already in the total, and left it out
 
-`PENDING`
+`71b9233`
 
 **What it built.** On any unit type with a live promotion, the facility page rendered the badge, the terms, and the sentence *"Applied to your first invoice. Nothing to enter — it is already in the total below."* The total below was `CostBreakdown`, which called `calculateMoveInCost` with **no `promoDiscountCents` and no `promoTerms`**. Checkout applied the discount correctly. So the browse estimate and the money path disagreed by exactly the promotion, and a comparison shopper who opened "What you'd pay today" under a *Half off your first month* badge and saw full rent could only conclude the discount was fake.
 
