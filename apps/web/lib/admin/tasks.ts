@@ -111,6 +111,10 @@ export type TaskRow = {
   /// the type could not say.
   detail: string | null
   assigneeName: string | null
+  /// B-233. Who holds it, as an id — `assigneeName` says it to a reader, this
+  /// is what a list compares against the reader to decide between "Take this"
+  /// and "Give back", and what the Mine / Unassigned filter groups on.
+  assigneeStaffId: string | null
   status: 'open' | 'completed' | 'cancelled'
   /// The proof gate for this task, so a list can render the right fields (e.g.
   /// a photo for `overlock_apply`) instead of a note-only form that
@@ -257,6 +261,7 @@ export async function facilityTasks(
       status: true,
       detail: true,
       createdAt: true,
+      assigneeStaffId: true,
       assignee: { select: { firstName: true, lastName: true } },
     },
   })
@@ -283,6 +288,7 @@ export async function facilityTasks(
     }),
     detail: task.detail,
     assigneeName: task.assignee ? `${task.assignee.firstName} ${task.assignee.lastName}` : null,
+    assigneeStaffId: task.assigneeStaffId,
     status: task.status,
     requiredProofFields: required.get(task.id) ?? requiredProofFieldsForType(task.type),
     resolvedByAction: taskTypeResolvedByAction(task.type),
@@ -433,13 +439,62 @@ export async function completeTask(
 /// `completeTask` because picking up a task and finishing it are different
 /// acts, and a "my day" list needs to be able to do the first without the
 /// second.
-export async function assignTask(actor: Actor, taskId: string, staffUserId: string | null): Promise<void> {
-  const task = await prisma.task.findUniqueOrThrow({ where: { id: taskId } })
+///
+/// B-233. Two rules, both enforced here rather than by whichever screen drew
+/// the button, because this is the only place every caller routes through.
+///
+/// **You may only claim what nobody holds, and only give back what you hold.**
+/// Manager reassignment to a third person is deliberately not a thing this
+/// function does yet (B-233 names it out of scope), so "assign" means "claim"
+/// and there is no case where overwriting somebody else's name is correct.
+///
+/// **The check is the `where` clause, not a read followed by a write.** Two
+/// staff pressing "Take this" on the same overlock within the same second is
+/// the exact failure this row exists to stop — read-then-update lets both
+/// succeed and the loser walks out to cut a lock somebody else is already
+/// cutting. `updateMany` with the expected holder in the filter makes the
+/// database settle it: one row updated, or none and a named refusal.
+export async function assignTask(
+  actor: Actor,
+  taskId: string,
+  staffUserId: string | null,
+): Promise<{ ok: true } | { ok: false; reason: string }> {
+  if (actor.kind !== 'staff') throw new ForbiddenError('Staff access required')
+
+  const task = await prisma.task.findUniqueOrThrow({
+    where: { id: taskId },
+    select: {
+      facilityId: true,
+      assigneeStaffId: true,
+      assignee: { select: { firstName: true, lastName: true } },
+    },
+  })
   assertFacilityAccess(actor, task.facilityId)
   if (!can(actor, 'tenants:edit', task.facilityId)) {
     throw new ForbiddenError('Missing permission to assign tasks', 'tenants:edit', task.facilityId)
   }
-  await prisma.task.update({ where: { id: taskId }, data: { assigneeStaffId: staffUserId } })
+  if (staffUserId !== null && staffUserId !== actor.staffUserId) {
+    throw new ForbiddenError('Tasks can only be claimed for yourself', 'tenants:edit', task.facilityId)
+  }
+
+  // Claiming expects nobody; giving back expects you.
+  const expected = staffUserId === null ? actor.staffUserId : null
+  const { count } = await prisma.task.updateMany({
+    where: { id: taskId, assigneeStaffId: expected },
+    data: { assigneeStaffId: staffUserId },
+  })
+  if (count > 0) return { ok: true }
+
+  // Nothing changed, so say who holds it — "could not be assigned" sends
+  // somebody to look for a bug that is really a colleague.
+  const holder = task.assignee ? `${task.assignee.firstName} ${task.assignee.lastName}` : null
+  if (task.assigneeStaffId === staffUserId) return { ok: true }
+  return {
+    ok: false,
+    reason: holder
+      ? `${holder} has this one — ask them before starting it.`
+      : 'Nobody has this one now. Reload and take it if you still want it.',
+  }
 }
 
 /// Withdraws an open task without completing it — the request it was about

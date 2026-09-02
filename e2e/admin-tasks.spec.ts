@@ -220,6 +220,69 @@ test.describe('signed in as the demo owner', () => {
     await prisma.task.deleteMany({ where: { id: refusalTaskId } })
   })
 
+  // B-233. `assignTask` shipped in B-095 with tests and no caller, so both
+  // queues rendered "Unassigned" as a fact nobody could act on and "my day" was
+  // the facility's day. Driven against the SAME per-worker fixture the refusal
+  // test owns — assignment does not gate completion, so the two do not
+  // interfere, and this one puts the task back the way it found it.
+  //
+  // B-120 discipline (2): the round trip is idempotent per run, and the test
+  // self-heals rather than failing if a previous run died holding the claim —
+  // it gives back first and then takes it, so the starting state does not
+  // matter.
+  // a11y-state: /admin/tasks | task claimed
+  test('a task can be claimed and given back, and the claim is announced', async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'desktop-chrome', 'owns a shared-database fixture — see note')
+    expect(refusalTaskId, 'the fixture task was created').not.toBe('')
+
+    await page.goto('/admin')
+    await page.getByLabel('Switch facility').selectOption(refusalFacilityId)
+    await page.getByRole('button', { name: 'Switch', exact: true }).click()
+
+    await page.goto(`/admin/tasks?type=${REFUSAL_TASK_TYPE}`)
+    const card = page.locator('li').filter({ hasText: refusalMarker })
+    await expect(card, "this worker's fixture is on the queue").toHaveCount(1)
+
+    // Left held by a run that died mid-test: hand it back before starting.
+    const giveBack = card.getByRole('button', { name: /^Give back/ })
+    if (await giveBack.count()) {
+      await giveBack.click()
+      await expect(card.getByText('Unassigned')).toBeVisible()
+    }
+
+    // Captured BEFORE the submit — the region has to pre-exist the event it
+    // reports (FR-20), which is the whole reason `AnnounceRegion` exists.
+    const region = page.locator('p[role="status"][tabindex="-1"]')
+    await expectPreexisting(region)
+
+    // The accessible name carries the card's own subject, not a bare verb
+    // repeated once per row (2.4.6, 4.1.3).
+    const take = card.getByRole('button', { name: new RegExp(`^Take this: .*Insurance`, 'i') })
+    await expect(take).toBeVisible()
+    await take.click()
+
+    await expect(card.getByText('Assigned to you')).toBeVisible()
+    await expectAnnounced(region, /You took:/s, { focused: true })
+
+    // The filter the claim exists for: Mine now contains it, and the list's
+    // new length is stated in words rather than silently re-rendered.
+    await page.goto(`/admin/tasks?type=${REFUSAL_TASK_TYPE}&assignee=mine`)
+    await expect(page.locator('li').filter({ hasText: refusalMarker })).toHaveCount(1)
+    await expect(page.getByText(/Showing \d+ tasks? assigned to you\./)).toBeVisible()
+
+    await assertNoAxeViolations(page)
+
+    // Put it back, so a re-run starts where this one did.
+    await page
+      .locator('li')
+      .filter({ hasText: refusalMarker })
+      .getByRole('button', { name: /^Give back/ })
+      .click()
+    await expect(page.getByText(/Showing 0 tasks assigned to you\./)).toBeVisible()
+  })
+
   test('a refused completion says why, rather than re-rendering identically', async ({
     page,
   }, testInfo) => {

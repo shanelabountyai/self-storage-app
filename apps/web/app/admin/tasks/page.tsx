@@ -6,6 +6,7 @@ import { facilityTasks, taskRollup, type FacilityRollup as TaskRollupRow } from 
 import { FacilityRollup } from '@/components/admin/facility-rollup'
 import { AnnounceRegion } from '@/components/admin/announce'
 import { TaskCompleteForm } from '@/components/admin/task-complete-form'
+import { TaskAssignment } from '@/components/admin/task-assignment'
 
 export const metadata = { title: 'Tasks' }
 
@@ -32,6 +33,35 @@ function rollupRows(rows: TaskRollupRow[]) {
   }))
 }
 
+// B-233. The three views, in the order a person works: what is already mine,
+// then what nobody has taken, then the whole site. `all` is the DEFAULT — an
+// unknown or absent `assignee` lands here — because this is the queue that
+// drives the lien clock, and a screen that opens hiding eleven unassigned
+// notices is a worse first day than one that opens showing all fifteen.
+const ASSIGNEE_VIEWS = [
+  {
+    key: 'mine',
+    label: 'Mine',
+    match: (task: { assigneeStaffId: string | null }, staffUserId: string) =>
+      task.assigneeStaffId === staffUserId,
+    showing: (n: number) =>
+      n === 1 ? 'Showing 1 task assigned to you.' : `Showing ${n} tasks assigned to you.`,
+  },
+  {
+    key: 'unassigned',
+    label: 'Unassigned',
+    match: (task: { assigneeStaffId: string | null }) => task.assigneeStaffId === null,
+    showing: (n: number) =>
+      n === 1 ? 'Showing 1 unassigned task.' : `Showing ${n} unassigned tasks.`,
+  },
+  {
+    key: 'all',
+    label: 'Everyone',
+    match: () => true,
+    showing: (n: number) => (n === 1 ? 'Showing 1 open task.' : `Showing all ${n} open tasks.`),
+  },
+] as const
+
 // PRD 02 §4.9 US-41 (B-095). "My day": one facility's open tasks, oldest
 // business day first. Mobile-first — a single column of cards, not a wide
 // table, because this is the screen someone checks from a phone on the floor.
@@ -43,9 +73,9 @@ function formatDate(date: Date): string {
 export default async function TasksPage({
   searchParams,
 }: {
-  searchParams: Promise<{ facility?: string; type?: string }>
+  searchParams: Promise<{ facility?: string; type?: string; assignee?: string }>
 }) {
-  const { facility: facilityParam, type: typeParam } = await searchParams
+  const { facility: facilityParam, type: typeParam, assignee: assigneeParam } = await searchParams
   const { actor, facilities, cookieValue, canSeeAll } = await getSwitcherData()
   // The roll-up below links to a single facility's list without changing the
   // switcher's persistent choice — a regional manager peeking at one
@@ -66,11 +96,26 @@ export default async function TasksPage({
     )
   }
 
-  const tasks = await facilityTasks(actor, selected.facility.id, { type: typeParam })
+  const open = await facilityTasks(actor, selected.facility.id, { type: typeParam })
+
+  // B-233. Filtered in memory, not in the query, so the heading can name what
+  // the reader is NOT looking at — a count of yours taken from a list already
+  // narrowed to yours is always the length of the list.
+  const mineCount = open.filter((task) => task.assigneeStaffId === actor.staffUserId).length
+  const unassignedCount = open.filter((task) => task.assigneeStaffId === null).length
+  const view = ASSIGNEE_VIEWS.find((v) => v.key === assigneeParam) ?? ASSIGNEE_VIEWS[2]
+  const tasks = open.filter((task) => view.match(task, actor.staffUserId))
+  const filterHref = (key: string) =>
+    `/admin/tasks?facility=${selected.facility.id}${typeParam ? `&type=${typeParam}` : ''}${key === 'all' ? '' : `&assignee=${key}`}`
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-lg font-semibold">Tasks — {selected.facility.name}</h1>
+      <h1 className="text-lg font-semibold">
+        {/* The count the reader is responsible for, in the heading — "11 open"
+            at a site where four are already somebody's is a different Saturday
+            from one where none are. */}
+        Tasks — {selected.facility.name} · {mineCount} yours, {unassignedCount} unassigned
+      </h1>
 
       {typeParam && (
         // B-115, UX review 2026-08-12 finding 9: the catalog label, never the
@@ -85,6 +130,35 @@ export default async function TasksPage({
         </p>
       )}
 
+      {/* B-233. A named group (2.4.6), Mine first and Unassigned second because
+          that is the order a person works — and `aria-current` rather than a
+          border alone, so which view is showing is not colour (1.4.1). Links,
+          not a select: each view is a place, bookmarkable and back-navigable,
+          and there is no submit to forget. */}
+      <nav aria-label="Show tasks by who they are assigned to" className="flex flex-wrap gap-2">
+        {ASSIGNEE_VIEWS.map((option) => (
+          <Link
+            key={option.key}
+            href={filterHref(option.key)}
+            aria-current={option.key === view.key ? 'true' : undefined}
+            className={
+              option.key === view.key
+                ? 'border-input bg-accent inline-flex min-h-11 items-center rounded-md border px-3 text-sm font-medium'
+                : 'border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-3 text-sm'
+            }
+          >
+            {option.label}
+          </Link>
+        ))}
+      </nav>
+
+      {/* The list's new length in words, because following one of those links
+          re-renders the list under a heading that did not change and announces
+          nothing on its own. */}
+      <p className="text-muted-foreground text-sm">
+        {view.showing(tasks.length)}
+      </p>
+
       {rollup.length > 1 && (
         <FacilityRollup heading="Across your facilities" rows={rollupRows(rollup)} />
       )}
@@ -95,7 +169,23 @@ export default async function TasksPage({
       <AnnounceRegion>
       {tasks.length === 0 ? (
         <p className="text-muted-foreground text-sm">
-          {typeParam ? 'None open of this type right now.' : 'Nothing open right now.'}
+          {/* B-233. "Nothing open right now" is a lie under a filter — a
+              site with eleven unassigned notices said it to anyone who
+              picked Mine. Say what is empty, and that the rest is a link
+              away. */}
+          {view.key !== 'all' ? (
+            <>
+              Nothing here under this filter.{' '}
+              <Link href={filterHref('all')} className="underline underline-offset-2">
+                Show everyone&apos;s
+              </Link>
+              .
+            </>
+          ) : typeParam ? (
+            'None open of this type right now.'
+          ) : (
+            'Nothing open right now.'
+          )}
         </p>
       ) : (
         <ul className="flex flex-col gap-3">
@@ -136,9 +226,13 @@ export default async function TasksPage({
                 )}
               </div>
 
-              <p className="text-muted-foreground mt-1 text-sm">
-                {task.assigneeName ? `Assigned to ${task.assigneeName}` : 'Unassigned'}
-              </p>
+              <TaskAssignment
+                taskId={task.id}
+                subjectLabel={`${task.label}, ${task.subject.label}`}
+                assigneeName={task.assigneeName}
+                assigneeStaffId={task.assigneeStaffId}
+                viewerStaffId={actor.staffUserId}
+              />
 
               {/* B-166. A task whose truth is a record's state is not
                   closeable by typing — the card says what closes it and sends

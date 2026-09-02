@@ -8,6 +8,7 @@ import { moneyOwedRollup } from '@/lib/admin/rollups'
 import { FacilityRollup } from '@/components/admin/facility-rollup'
 import { AnnounceRegion } from '@/components/admin/announce'
 import { TaskCompleteForm } from '@/components/admin/task-complete-form'
+import { TaskAssignment } from '@/components/admin/task-assignment'
 import { formatCents } from '@/lib/format'
 
 export const metadata = { title: 'Delinquency queue' }
@@ -148,9 +149,16 @@ export default async function DelinquencyQueuePage({
                     )}
                   </div>
 
-                  <p className="text-muted-foreground mt-1 text-sm">
-                    {task.assigneeName ? `Assigned to ${task.assigneeName}` : 'Unassigned'}
-                  </p>
+                  {/* B-233. The assignee line and the claim control, together —
+                      this queue's steps are the lien clock, and it is the one
+                      two people are most likely to work at once. */}
+                  <TaskAssignment
+                    taskId={task.id}
+                    subjectLabel={`${task.label}, ${task.subject.label}`}
+                    assigneeName={task.assigneeName}
+                    assigneeStaffId={task.assigneeStaffId}
+                    viewerStaffId={actor.staffUserId}
+                  />
 
                   <TaskCompleteForm
                     taskId={task.id}

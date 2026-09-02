@@ -377,6 +377,60 @@ describeDb('task queue', () => {
       await assignTask(actorAt(counterId, facilityId), id, null)
       expect((await prisma.task.findUniqueOrThrow({ where: { id } })).assigneeStaffId).toBeNull()
     })
+
+    // B-233. The whole point of the claim button: two staff pressing it on the
+    // same overlock is the case that sends somebody out to cut a lock a
+    // colleague is already cutting. Second claim loses, and is TOLD who won —
+    // "could not be assigned" sends a person looking for a bug.
+    it('refuses a claim on a task somebody else already holds, naming them', async () => {
+      const { id } = await createTask({
+        facilityId,
+        type: 'overlock_apply',
+        entityType: 'Lease',
+        entityId: `${leaseId}-claim-race`,
+      })
+      const rival = await prisma.staffUser.create({
+        data: { email: `tasks-rival-${suffix}@example.com`, firstName: 'Ada', lastName: 'Second' },
+      })
+
+      expect(await assignTask(actorAt(counterId, facilityId), id, counterId)).toEqual({ ok: true })
+      const refusal = await assignTask(actorAt(rival.id, facilityId), id, rival.id)
+      expect(refusal.ok).toBe(false)
+      expect(refusal.ok === false && refusal.reason).toContain('Cal Counter')
+      expect((await prisma.task.findUniqueOrThrow({ where: { id } })).assigneeStaffId).toBe(counterId)
+
+      // And giving back what you do not hold changes nothing either.
+      const notYours = await assignTask(actorAt(rival.id, facilityId), id, null)
+      expect(notYours.ok).toBe(false)
+      expect((await prisma.task.findUniqueOrThrow({ where: { id } })).assigneeStaffId).toBe(counterId)
+    })
+
+    it('refuses to assign a task to anyone but the actor', async () => {
+      const { id } = await createTask({
+        facilityId,
+        type: 'overlock_remove',
+        entityType: 'Lease',
+        entityId: `${leaseId}-claim-other`,
+      })
+      const other = await prisma.staffUser.create({
+        data: { email: `tasks-other-${suffix}@example.com`, firstName: 'Bo', lastName: 'Third' },
+      })
+      await expect(assignTask(actorAt(counterId, facilityId), id, other.id)).rejects.toThrow(
+        ForbiddenError,
+      )
+    })
+
+    it('refuses a view-only actor', async () => {
+      const { id } = await createTask({
+        facilityId,
+        type: 'overlock_apply',
+        entityType: 'Lease',
+        entityId: `${leaseId}-claim-viewonly`,
+      })
+      await expect(
+        assignTask(actorAt(counterId, facilityId, ['tenants:view']), id, counterId),
+      ).rejects.toThrow(ForbiddenError)
+    })
   })
 
   describe('real consumers', () => {

@@ -220,7 +220,11 @@ export function AdminForm({
           >
             <p className="font-medium">{state.message}</p>
 
-            {state.status === 'error' && (
+            {/* B-233. Only when there ARE field errors. A refusal with no field
+                to hang it on — a task somebody else claimed first — carries its
+                whole meaning in `message`, and an empty <ul> under it is
+                announced as "list, 0 items" for nothing. */}
+            {state.status === 'error' && Object.keys(state.fieldErrors).length > 0 && (
               <ul className="mt-1 list-disc pl-5">
                 {Object.entries(state.fieldErrors).map(([field, message]) => (
                   <li key={field}>{message}</li>
