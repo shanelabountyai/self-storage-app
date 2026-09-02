@@ -7274,6 +7274,40 @@ The three measurements moved into `measureThreeWays` so both loops share one cop
 - **Verified on `desktop-chrome` only.** The spec sets its own viewport in every pass, so `mobile-chrome` would measure the same three CSS viewports; the device scale factor is a rendering concern and not a layout one, as the file's existing comment says.
 - Unit suite green end to end: 3916 passed, 8 skipped, reconciled to 3924. The touched e2e file: 11 passed, 0 failed. Lint and typecheck clean. No schema change, so no migration and nothing for the drift check to see.
 
+## B-251 — A "you are here" state made of a 1.09:1 tint and a font-weight bump
+
+`PENDING`
+
+**What it built.** The selected state on the management pack's month chips was `bg-accent` plus `font-medium` and nothing else. `--accent` is `oklch(0.97 0 0)` against a white `--background` — **1.09:1**, and **1.31:1** in dark. Twelve chips of which one is "current", told apart by a tint below the threshold of visibility and a 500-vs-400 weight difference at 14px, is not a state a reader with reduced contrast sensitivity can pick out.
+
+**1.4.1 Use of Colour was met the whole time** (weight is a non-colour signal) and `aria-current="page"` told assistive technology correctly, so this was a **sighted low-vision problem specifically** — which is why neither a scan nor a screen-reader pass would ever have surfaced it.
+
+Three sites now carry `border-2 border-foreground` on the selected state, with the unselected state carrying `border-2` in `border-input` or `border-transparent` so the geometry does not move: `reports/pack`, `settings/templates` and the admin `side-nav`.
+
+**What it decided.**
+
+- **Two of the four sites the row named were not defects, and were left alone.** `units-subnav` already uses `border-b-2 border-foreground`; `tenants/page` uses a solid `bg-primary` fill. Measured rather than assumed: `--primary` is **17.9:1** light and **15.7:1** dark against the background. Changing them to match a pattern would have been churn on working code.
+- **A fifth site the review did not name was found and fixed**, by sweeping every `aria-current` in the app rather than only the listed files: `admin/settings/templates` has the identical `bg-accent` + `font-medium` + shared `border-input` shape. Fixing three of four leaves the next reviewer re-finding the fourth.
+- **`--foreground` (19.8:1 / 19.0:1), not `--input` (3.6:1 / 3.3:1).** The row offered either, and `--input` clears the 3:1 floor. It is not used because **the unselected chip is already `border-input`** — reusing it would leave border *thickness* as the only difference between the two states, which is the same "technically a signal" trap as the font-weight bump this row exists to fix.
+- **Both states carry `border-2`, including the unselected one.** A border added to the selected state alone grows it by a pixel on each side and nudges its neighbours as you navigate.
+- **No shared class was extracted**, against the row's suggestion. The three sites' *unselected* states genuinely differ — a visible `border-input` chip, and a side-nav item with no border at all — so a single shared class would have had to be parameterised into something longer than the three class strings it replaced.
+
+**One runnable check, in two halves that cover different things.** `tests/contrast-tokens.test.ts` gains the arithmetic: `--accent` pinned as **failing** 3:1 in both themes (so darkening it later prompts a revisit rather than passing silently), and `--foreground` asserted as clearing it. `e2e/admin-reports.spec.ts` gains the half that arithmetic cannot reach — it reads the **rendered** `border-top-color` of the `aria-current` chip out of `getComputedStyle`, computes sRGB luminance against the body background in the browser, and asserts ≥3:1. The row's own note asked for this: *"the rendered appearance needs confirmation at build time"*, and a correct token in a class string that never reaches the element is exactly the gap between the two.
+
+**The rendered check was wrong three times before it was right, and every one was the check rather than the fix.** Recorded in full because the third is the instructive one.
+
+1. It read `document.body`'s background, which computes transparent here — comparing a near-black border against black, for 1.06:1.
+2. With the right element found it still reported **1.54:1 for a near-black border on white**: `getComputedStyle` returns these as `lab(2.75381 0 0)` in Chromium, because the tokens are oklch, and a hand-rolled `match(/[\d.]+/g)` read that as `rgb(2, 0, 0)`. It paints both colours onto a 1×1 canvas now and reads the bytes back, which converts anything the browser can parse and reports alpha, so "transparent" needs no string matching either.
+3. **Then it passed, and a revert run showed it also passed on the original defect** — which would have shipped a guard that certified the bug. The assertion was "the selected border clears 3:1 against the page", and **contrast against the page was never the failing quantity**: `border-input` is 3.64:1 and was already on both chips. What failed 1.4.11 was that the border was *identical* on selected and unselected, leaving a 1.09:1 fill and a weight bump as the whole of "you are here". It compares the selected chip against its **neighbours** now, which is the question the criterion actually asks, and that comparison is 1.00 on the original markup.
+
+**The failure messages carry the colours**, not just the ratios — a bare "expected >= 3, got 1.54" cannot tell a token that failed to resolve from a reading that was botched, and that distinction cost one of these rounds on its own.
+
+**What it left behind.**
+
+- **Only the pack's chips are checked at render time.** The templates picker and the side nav are covered by the token arithmetic and by review, not by a rendered assertion.
+- **`bg-accent` remains in use for hover states across the app**, which is fine — a hover is not a persistent state anyone has to find — but nothing distinguishes "accent as hover" from "accent as selected" mechanically, so the next selected state built from it will need a reviewer again.
+- **No hand check at a real reduced-contrast setting.** The fix is justified by arithmetic and by the rendered ratio; nobody has looked at it through a low-vision simulation, and this repo's standard is to say so rather than imply otherwise.
+
 ## B-250 — The log that catches stale claims missed one, and the date it dates has not moved in twenty-one items
 
 `47e38fd`

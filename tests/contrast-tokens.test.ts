@@ -115,3 +115,33 @@ describe('the focus indicator is declared, not inherited', () => {
     expect(declarations).not.toMatch(/outline-ring\/\d+/)
   })
 })
+
+// B-251 / SC 1.4.11. A "you are here" state has to be perceivable, and the two
+// signals this app reached for by default — a `bg-accent` tint and a
+// `font-medium` bump — are not. `--accent` is 1.09:1 against the light
+// background and 1.31:1 against the dark one; a 500-vs-400 weight difference at
+// 14px is not a state a reader with reduced contrast sensitivity picks out of
+// twelve chips. 1.4.1 Use of Colour was met the whole time (weight is a
+// non-colour signal) and `aria-current` told assistive technology correctly, so
+// this was a sighted low-vision problem specifically — which is why no scan and
+// no screen-reader check would ever have surfaced it.
+describe('1.4.11 — the selected-state indicator', () => {
+  it('cannot be carried by --accent, in either theme', () => {
+    // Pinned as a FAILING pair on purpose. This is the arithmetic that made
+    // B-251 a defect; if `--accent` is ever darkened enough to clear 3:1 on its
+    // own, this test failing is the prompt to revisit the borders below rather
+    // than a problem in itself.
+    expect(contrast(token(':root', 'accent'), token(':root', 'background'))).toBeLessThan(3)
+    expect(contrast(token('.dark', 'accent'), token('.dark', 'background'))).toBeLessThan(3)
+  })
+
+  it('uses --foreground, which clears 3:1 with room in both themes', () => {
+    // `--input` would clear the floor too (3.64:1 / 3.30:1) and the row offered
+    // it. It is not used, because the UNSELECTED chip is already `border-input`
+    // — reusing it would leave border THICKNESS as the only difference between
+    // the two states, which is the same "technically a signal" trap as the
+    // font-weight bump this row is fixing.
+    expect(contrast(token(':root', 'foreground'), token(':root', 'background'))).toBeGreaterThanOrEqual(3)
+    expect(contrast(token('.dark', 'foreground'), token('.dark', 'background'))).toBeGreaterThanOrEqual(3)
+  })
+})

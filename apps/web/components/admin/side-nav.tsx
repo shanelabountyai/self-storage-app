@@ -95,8 +95,15 @@ function NavLink({ href, label, active }: { href: string; label: string; active:
       <Link
         href={href}
         aria-current={active ? 'page' : undefined}
-        className={`block rounded-md px-3 py-2 text-sm whitespace-nowrap ${
-          active ? 'bg-accent text-accent-foreground font-medium' : 'text-foreground/80 hover:bg-accent/50'
+        // B-251. The active item was `bg-accent` (1.09:1 light, 1.31:1 dark)
+        // plus `font-medium` and nothing else. `border-transparent` on the
+        // inactive state rather than no border at all, so the whole nav keeps
+        // one geometry and the active item does not shift its neighbours by
+        // 4px when you navigate.
+        className={`block rounded-md border-2 px-3 py-2 text-sm whitespace-nowrap ${
+          active
+            ? 'bg-accent border-foreground text-accent-foreground font-medium'
+            : 'border-transparent text-foreground/80 hover:bg-accent/50'
         }`}
       >
         {label}

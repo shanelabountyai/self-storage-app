@@ -116,10 +116,25 @@ export default async function ManagementPackPage({
                 key={period.label}
                 href={`/admin/reports/pack?year=${period.year}&month=${period.month}`}
                 aria-current={current ? 'page' : undefined}
+                // B-251 / SC 1.4.11. `bg-accent` is `oklch(0.97 0 0)` on a white
+                // `--background` — **1.09:1**, and 1.31:1 in dark. Twelve month
+                // chips of which one was "current" at a 1.09:1 tint plus a
+                // 500-vs-400 weight bump at 14px is not a state a reader with
+                // reduced contrast sensitivity can pick out. 1.4.1 Use of Colour
+                // was met (weight is a non-colour signal) and `aria-current`
+                // tells assistive technology correctly, so this was a sighted
+                // low-vision problem specifically.
+                //
+                // `border-foreground` (19.8:1 light, 19.0:1 dark) rather than
+                // `border-input` (3.6:1 / 3.3:1, which would clear the floor):
+                // the UNSELECTED chip is already `border-input`, so reusing it
+                // would leave thickness as the only difference. Both states
+                // carry `border-2` so the selected one does not grow by a pixel
+                // and nudge the row.
                 className={
                   current
-                    ? 'bg-accent border-input inline-flex min-h-11 items-center rounded-md border px-3 text-sm font-medium'
-                    : 'border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-3 text-sm'
+                    ? 'bg-accent border-foreground inline-flex min-h-11 items-center rounded-md border-2 px-3 text-sm font-medium'
+                    : 'border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border-2 px-3 text-sm'
                 }
               >
                 {/* The word, not only the highlight (WCAG 1.4.1 / 4.1.2) —

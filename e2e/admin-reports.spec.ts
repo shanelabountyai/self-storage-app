@@ -690,6 +690,98 @@ test.describe('management pack', () => {
     await expect(nav.locator('[aria-current="page"]')).toHaveCount(1)
   })
 
+  // B-251 / SC 1.4.11. The companion to `tests/contrast-tokens.test.ts`, which
+  // can only prove the TOKENS are sound. This proves the chips actually render
+  // with them: the row's own note said the arithmetic was verified but "the
+  // rendered appearance needs confirmation at build time", and a class string
+  // that never reaches the element is exactly the gap between the two.
+  //
+  // **It compares the selected chip against its NEIGHBOURS, not against the
+  // page.** That is the difference between a test that passes on the original
+  // defect and one that does not. Before this row both states carried the same
+  // `border-input`, which is 3.64:1 against white and clears 1.4.11 on its own
+  // — the border was never the failing quantity. What failed was that it was
+  // IDENTICAL on both, leaving a 1.09:1 fill and a 500-vs-400 weight bump as
+  // the whole of "you are here". An against-the-background assertion passes
+  // happily on that, which is what a revert run proved before this was
+  // rewritten.
+  test('tells the current month apart from its neighbours by more than a tint', async ({
+    page,
+  }) => {
+    const nav = page.getByRole('navigation', { name: 'Other months' })
+    const current = nav.locator('[aria-current="page"]')
+    // There has to BE a neighbour for "told apart from its neighbours" to mean
+    // anything — a one-month nav would make the comparison vacuous.
+    await expect(nav.locator('a:not([aria-current])').first()).toBeVisible()
+
+    const measured = await current.evaluate((node, otherSelector) => {
+      // Colour parsing is the browser's job, not a regex's. `getComputedStyle`
+      // returns these as `lab(2.75381 0 0)` in Chromium — the tokens are oklch
+      // — and a hand-rolled `match(/[\d.]+/g)` reads that as rgb(2, 0, 0),
+      // which is how an earlier version of this test reported 1.54:1 for a
+      // near-black border on white. A canvas converts anything the browser can
+      // parse, and reports alpha, so "transparent" needs no string matching.
+      const context = document.createElement('canvas').getContext('2d')!
+      const paint = (colour: string) => {
+        context.clearRect(0, 0, 1, 1)
+        context.fillStyle = colour
+        context.fillRect(0, 0, 1, 1)
+        return Array.from(context.getImageData(0, 0, 1, 1).data)
+      }
+
+      // sRGB relative luminance, WCAG 2.x.
+      const luminance = (rgb: number[]) => {
+        const channel = (v: number) => {
+          const c = v / 255
+          return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
+        }
+        return 0.2126 * channel(rgb[0]) + 0.7152 * channel(rgb[1]) + 0.0722 * channel(rgb[2])
+      }
+      const ratio = (a: string, b: string) => {
+        const [hi, lo] = [luminance(paint(a)), luminance(paint(b))].sort((x, y) => y - x)
+        return (hi + 0.05) / (lo + 0.05)
+      }
+
+      // The first ancestor that actually PAINTS. `document.body` computes to a
+      // transparent background here — the page colour is set further up — so
+      // reading it would compare the border against black.
+      let behind = 'rgb(255, 255, 255)'
+      for (let el = node.parentElement; el; el = el.parentElement) {
+        const colour = getComputedStyle(el).backgroundColor
+        if (paint(colour)[3] > 0) {
+          behind = colour
+          break
+        }
+      }
+
+      const mine = getComputedStyle(node).borderTopColor
+      const theirs = getComputedStyle(
+        node.closest('nav')!.querySelector(otherSelector)!,
+      ).borderTopColor
+
+      return {
+        mine,
+        theirs,
+        behind,
+        againstNeighbour: ratio(mine, theirs),
+        againstPage: ratio(mine, behind),
+      }
+    }, 'a:not([aria-current])')
+
+    // The colours are in the messages, not just the ratios. A bare "expected
+    // >= 3, got 1.54" cannot tell a token that failed to resolve from a reading
+    // that was botched, and that distinction cost a verification round.
+    expect(
+      measured.againstNeighbour,
+      `selected border ${measured.mine} vs unselected ${measured.theirs}`,
+    ).toBeGreaterThanOrEqual(3)
+
+    expect(
+      measured.againstPage,
+      `selected border ${measured.mine} against ${measured.behind}`,
+    ).toBeGreaterThanOrEqual(3)
+  })
+
   test('offers to have it emailed every month', async ({ page }) => {
     await page.getByRole('link', { name: 'Have this emailed every month' }).click()
     await expect(page).toHaveURL('/admin/reports/subscriptions')

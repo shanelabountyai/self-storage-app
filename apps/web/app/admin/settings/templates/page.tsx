@@ -67,8 +67,12 @@ export default async function TemplatesPage({
             aria-current={template.key === active?.key ? 'page' : undefined}
             className={
               template.key === active?.key
-                ? 'border-input bg-accent rounded-md border px-3 py-2 text-sm font-medium'
-                : 'border-input hover:bg-accent rounded-md border px-3 py-2 text-sm'
+                // B-251. Same 1.09:1 selected state as the management pack's
+                // month chips, on a screen the review did not name — found by
+                // sweeping every `aria-current` in the app rather than only the
+                // four sites the row listed. Same fix, same reasoning.
+                ? 'border-foreground bg-accent rounded-md border-2 px-3 py-2 text-sm font-medium'
+                : 'border-input hover:bg-accent rounded-md border-2 px-3 py-2 text-sm'
             }
           >
             {template.key}
