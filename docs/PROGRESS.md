@@ -7276,7 +7276,7 @@ The three measurements moved into `measureThreeWays` so both loops share one cop
 
 ## B-249 — Fifty-six focusable scroll regions that announced nothing, and the axe rule that looks at them and passes
 
-`PENDING`
+`1577e22`
 
 **What it built.** Fifty-six horizontally-scrolling wrappers across 41 files were `<div tabIndex={0} className="overflow-x-auto">` and nothing else. B-217 had given every one a visible scrollbar and a `:focus-visible` outline — the sighted half. None had a role or a name, so tabbing through `/admin/reports` landed on a bare `<div>`: VoiceOver read the first cell and no role, NVDA typically said nothing, and the region was absent from the landmark rotor, so there was no way to reach a table but to read to it.
 
