@@ -7319,7 +7319,7 @@ One `apps/web/components/ui/scroll-region.tsx` — `role="region"`, `tabIndex={0
 
 Comments are excluded rather than files whitelisted, because two of them legitimately quote the shape they replaced and a whitelist would go stale the moment a third did.
 
-**A real bug in that test, found one item later and fixed in `bea0f7e`.** `git grep` searches **committed** files only. `scroll-region.tsx` was still untracked when the test first ran, so its own implementation line was invisible and the test went green for the wrong reason — then failed on `main` the moment B-249 was committed. Worse than the false green: without `--untracked` the guard **cannot see a bare region in a file you have just written**, which is precisely when it is supposed to speak. It passes `--untracked` and `:(exclude)` on the component itself now, and was re-verified by dropping a bare `<div tabIndex={0} className="overflow-x-auto">` into an uncommitted file and watching it fail by path.
+**A real bug in that test, found one item later and fixed in `b4bcef6`.** `git grep` searches **committed** files only. `scroll-region.tsx` was still untracked when the test first ran, so its own implementation line was invisible and the test went green for the wrong reason — then failed on `main` the moment B-249 was committed. Worse than the false green: without `--untracked` the guard **cannot see a bare region in a file you have just written**, which is precisely when it is supposed to speak. It passes `--untracked` and `:(exclude)` on the component itself now, and was re-verified by dropping a bare `<div tabIndex={0} className="overflow-x-auto">` into an uncommitted file and watching it fail by path.
 
 **What it left behind.**
 
