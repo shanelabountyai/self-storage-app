@@ -7276,7 +7276,7 @@ The three measurements moved into `measureThreeWays` so both loops share one cop
 
 ## B-248 — A comment claimed polite regions coalesce, and the money form spoke six sentences per number typed
 
-`PENDING`
+`2e12613`
 
 **What it built.** The payment-plan builder's running total — the "$1,837.42 still to allocate" figure a counter staffer reads while agreeing a plan in front of a tenant — was a `role="status"` region rendering the live figure, under a comment asserting that *"a polite region coalesces, so typing an amount announces the figure once the typing stops rather than once per keystroke."* Coalescing is not a property polite regions have: NVDA queues each text change and JAWS speaks them. Typing one amount produced a queue of full sentences of money owed.
 
