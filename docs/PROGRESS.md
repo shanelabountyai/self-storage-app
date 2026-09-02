@@ -7274,6 +7274,36 @@ The three measurements moved into `measureThreeWays` so both loops share one cop
 - **Verified on `desktop-chrome` only.** The spec sets its own viewport in every pass, so `mobile-chrome` would measure the same three CSS viewports; the device scale factor is a rendering concern and not a layout one, as the file's existing comment says.
 - Unit suite green end to end: 3916 passed, 8 skipped, reconciled to 3924. The touched e2e file: 11 passed, 0 failed. Lint and typecheck clean. No schema change, so no migration and nothing for the drift check to see.
 
+## B-248 — A comment claimed polite regions coalesce, and the money form spoke six sentences per number typed
+
+`PENDING`
+
+**What it built.** The payment-plan builder's running total — the "$1,837.42 still to allocate" figure a counter staffer reads while agreeing a plan in front of a tenant — was a `role="status"` region rendering the live figure, under a comment asserting that *"a polite region coalesces, so typing an amount announces the figure once the typing stops rather than once per keystroke."* Coalescing is not a property polite regions have: NVDA queues each text change and JAWS speaks them. Typing one amount produced a queue of full sentences of money owed.
+
+Three changes in `apps/web/components/admin/payment-plan-builder.tsx`:
+
+- The region's text now settles **700ms after the last keystroke** (`settled`, a debounced copy of the computed `summary`), so one field edit is one text change. Measured on the real build: typing `12.34` produced **four** distinct values before and **one** after.
+- The twelve `Field`s carry an `aria-label` naming the ordinal — "Installment 3 due date", "Installment 3 amount ($)" — while the visible `<label>` stays "Due" and "Amount ($)". `<legend>` is announced on *entering* a group; a rotor jump straight to control seventeen enters nothing, and that list was twenty-four entries reading "Due"/"Amount ($)" twelve times over.
+- The comment was rewritten to B-216's standard.
+
+**What it decided.**
+
+- **The visible figure lags by 700ms, deliberately, and there is only one element.** The alternative — a live visible `<p>` plus an `sr-only role="status"` — puts the same sentence in the accessibility tree twice, and avoiding that costs an `aria-hidden` on visible content. A running total is read *after* a number is typed, not during it, so the delay is not perceptible in the workflow the figure exists for (B-212).
+- **`aria-label` was kept a superset of the visible label** ("Installment 3 due date" contains "due"), because it overrides the visible name and 2.5.3 Label in Name applies.
+- **The `<details>` insertion problem is a declared limitation, not a fix.** The whole component lives inside the closed disclosure on the tenant profile, so the region enters the accessibility tree already populated when the staffer opens it — the same shape as B-245. Hoisting the region out would split the figure from the fields it counts. The comment says so, and the figure is plain page content in reading order either way.
+- **No announcement is asserted and none was observed** — B-216's standard, which this comment predated and broke. The 700ms settle removes a known defect; it does not buy a guarantee about what any screen reader says.
+
+**One runnable check.** `e2e/admin-tenants.spec.ts`: a `MutationObserver` on the region collects its **distinct text values** while `12.34` is typed a character at a time, and asserts exactly one. Distinct values rather than mutation records, because that is what an assistive technology queues and it does not depend on how React applies the change. **Verified by reverting the region to render `summary` and watching it fail with the defect itself:** `["$160.00 still to allocate.", "$149.00 still to allocate.", "$148.70 still to allocate.", "$148.66 still to allocate."]`.
+
+The amount typed is deliberately small so the assertion does not depend on the demo seed's arrears figure — the first draft used `306.23` from the row's own example and failed against Dana's $161.00 by landing in the "too much" branch.
+
+**What it left behind.**
+
+- **700ms is a chosen number, not a measured one.** Nothing establishes it as the right settle for a typist slower than the test's 40ms-per-character.
+- **The region still enters the tree populated**, per the decision above. If B-245's insertion work ever gets a general remedy, this is a caller for it.
+- **Nothing tests the `aria-label`s directly** — the e2e addresses the controls *by* those names, so the names must exist for the suite to pass, but no assertion says the twenty-four are distinct.
+- **The accessibility statement is untouched and `LAST_REVIEWED` does not move.** Admin-only, and this page has never claimed anything about announcements. The re-read is recorded in the file's comment log; that the rule guarantees the date never moves is still **B-250**.
+
 ## B-247 — The menu built for a phone revealed 20px tap targets
 
 `fbd3a4f`

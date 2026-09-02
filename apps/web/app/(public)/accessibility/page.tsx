@@ -1181,6 +1181,27 @@ const LAST_REVIEWED = '19 August 2026'
 // defect survived by being invisible to the tooling rather than by being
 // subtle.
 
+// Re-read 2026-09-01, at B-248 (the payment-plan builder's running total).
+// **Admin-only** — `/admin/tenants/[tenantId]`, behind `tenants:view` and
+// `delinquency:execute_step`. **No claim on this page changes and
+// `LAST_REVIEWED` does not move.**
+//
+// Recorded because the defect was a COMMENT, not markup. The region asserted
+// that "a polite region coalesces, so typing an amount announces the figure
+// once the typing stops" — which is not a property polite regions have, on the
+// one form in the product whose figure is money owed. B-216's standard ("no
+// announcement is asserted and none was observed") exists precisely so a
+// comment cannot quietly become a conformance claim nobody measured, and this
+// one predated it. The fix settles the region's text 700ms after the last
+// keystroke so one field edit is one text change; what a screen reader then
+// says is still unobserved and is still not asserted anywhere.
+//
+// The direction matters for this page: an unmeasured claim living in a source
+// comment is the same failure mode as an unmeasured claim living in this
+// file's prose, one audience narrower. Nothing here needed retracting only
+// because this page has never said anything about announcements — the silence
+// B-245 recorded as correct is what kept it out.
+
 export default function AccessibilityPage() {
   return (
     <ProsePage

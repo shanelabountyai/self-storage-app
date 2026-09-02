@@ -368,10 +368,14 @@ test.describe('payment plans on the tenant profile', () => {
     // against the SECOND one — an installment, not one of its two fields — and
     // the sum will not match either, which is a plan-level problem and belongs
     // in the summary rather than on a row.
-    await details.getByLabel('Due', { exact: true }).nth(0).fill('2027-03-01')
-    await details.getByLabel('Amount ($)').nth(0).fill('80.00')
-    await details.getByLabel('Due', { exact: true }).nth(1).fill('2027-02-01')
-    await details.getByLabel('Amount ($)').nth(1).fill('80.00')
+    // B-248. The accessible name carries the ordinal now, because <legend> is
+    // announced on entering the group and a rotor jump enters nothing — so
+    // these are addressed by name rather than by `.nth()` off a name twelve
+    // controls share.
+    await details.getByLabel('Installment 1 due date').fill('2027-03-01')
+    await details.getByLabel('Installment 1 amount ($)').fill('80.00')
+    await details.getByLabel('Installment 2 due date').fill('2027-02-01')
+    await details.getByLabel('Installment 2 amount ($)').fill('80.00')
     await details.getByRole('button', { name: /^Agree the plan for unit/ }).click()
 
     // The summary names WHERE to go, which is the one thing an error summary
@@ -390,7 +394,7 @@ test.describe('payment plans on the tenant profile', () => {
     // invalid, so a jump straight to either one still carries it. Before this
     // they carried neither: the error is keyed `installment_2` while they are
     // named `dueDate_2` and `amount_2`.
-    for (const field of ['Due', 'Amount ($)']) {
+    for (const field of ['Installment 2 due date', 'Installment 2 amount ($)']) {
       const control = group.getByLabel(field, { exact: true })
       await expect(control).toHaveAccessibleDescription(/must be in date order/)
       await expect(control).toHaveAttribute('aria-invalid', 'true')
@@ -435,13 +439,55 @@ test.describe('payment plans on the tenant profile', () => {
 
     // Monthly, with the day of month clamped rather than rolled forward —
     // naive month arithmetic puts installments 2 and 3 both in March.
-    await expect(details.getByLabel('Due', { exact: true }).nth(0)).toHaveValue('2027-01-31')
-    await expect(details.getByLabel('Due', { exact: true }).nth(1)).toHaveValue('2027-02-28')
-    await expect(details.getByLabel('Due', { exact: true }).nth(2)).toHaveValue('2027-03-31')
+    await expect(details.getByLabel('Installment 1 due date')).toHaveValue('2027-01-31')
+    await expect(details.getByLabel('Installment 2 due date')).toHaveValue('2027-02-28')
+    await expect(details.getByLabel('Installment 3 due date')).toHaveValue('2027-03-31')
 
     // Editing after the fill is the point of a suggestion: the total follows.
-    await details.getByLabel('Amount ($)').nth(0).fill('1.00')
+    await details.getByLabel('Installment 1 amount ($)').fill('1.00')
     await expect(total).toContainText('still to allocate')
+  })
+
+  // B-248 / SC 4.1.3. The region used to render the live figure, and the
+  // comment above it claimed a polite region "coalesces" so typing announces
+  // once. It does not — NVDA queues each text change and JAWS speaks them —
+  // so typing `306.23` into one of twelve amount fields was six full
+  // sentences of money owed. Counting the region's DISTINCT text values is
+  // exactly what an assistive technology queues, and is what fails if the
+  // 700ms settle is removed: six values before, one now.
+  //
+  // Read-only against the shared fixture (B-120): nothing is submitted.
+  test('one field edit changes the running total once, not once per keystroke', async ({
+    page,
+  }) => {
+    await page.goto('/admin/tenants?q=dana@demo.example.com')
+    await page.getByRole('link', { name: 'Dana Delinquent' }).click()
+    await openDisclosure(page, 'Set up a payment plan')
+
+    const details = page.locator('details').filter({ hasText: 'Set up a payment plan' })
+    const total = details.getByRole('status').first()
+    await expect(total).toContainText(/to allocate\.$/)
+
+    await total.evaluate((node) => {
+      const seen: string[] = []
+      ;(window as unknown as { __b248: string[] }).__b248 = seen
+      new MutationObserver(() => {
+        const text = node.textContent ?? ''
+        if (seen[seen.length - 1] !== text) seen.push(text)
+      }).observe(node, { characterData: true, childList: true, subtree: true })
+    })
+
+    // Typed a character at a time, the way a person types it. Deliberately a
+    // SMALL amount: it only has to stay under whatever the fixture's arrears
+    // is for the figure to read "still to allocate", so this does not break
+    // the day the demo seed's past-due number moves. `12.34` is still four
+    // distinct running totals before the settle ($1.00, $12.00, $12.30,
+    // $12.34) — the `12.` keystroke parses to the same cents as `12`.
+    await details.getByLabel('Installment 1 amount ($)').pressSequentially('12.34', { delay: 40 })
+    await expect(total).toContainText('still to allocate')
+
+    const seen = await page.evaluate(() => (window as unknown as { __b248: string[] }).__b248)
+    expect(seen).toHaveLength(1)
   })
 
   // B-212. The builder used to render for every non-ended lease with no active

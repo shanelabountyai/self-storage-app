@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { AdminForm, Field, FieldSet } from '@/components/admin/form'
 import { createPaymentPlanAction } from '@/app/admin/tenants/[tenantId]/actions'
 import { formatCents } from '@/lib/format'
@@ -59,6 +59,28 @@ export function PaymentPlanBuilder({
 
   const allocatedCents = rows.reduce((sum, row) => sum + typedCents(row.amount), 0)
   const remainingCents = arrearsCents - allocatedCents
+
+  const summary =
+    allocatedCents === 0
+      ? `${formatCents(arrearsCents)} to allocate.`
+      : remainingCents > 0
+        ? `${formatCents(remainingCents)} still to allocate.`
+        : remainingCents < 0
+          ? `${formatCents(-remainingCents)} too much — the installments come to ${formatCents(allocatedCents)} against ${formatCents(arrearsCents)} past due.`
+          : `Adds up exactly to ${formatCents(arrearsCents)}.`
+
+  // B-248. The region's text, one settling behind `summary`. Typing `306.23`
+  // into an amount field mutates `summary` six times; a polite region does NOT
+  // coalesce those — NVDA queues each text change and JAWS speaks them — so
+  // the region was six full sentences per number entered, on the one form in
+  // the product where the number is money owed. The delay is what makes one
+  // field edit one announcement. It is not perceptible on screen either: the
+  // figure is read after a number is typed, not during it.
+  const [settled, setSettled] = useState(summary)
+  useEffect(() => {
+    const timer = setTimeout(() => setSettled(summary), 700)
+    return () => clearTimeout(timer)
+  }, [summary])
 
   function fill() {
     if (!start) return
@@ -161,17 +183,24 @@ export function PaymentPlanBuilder({
           Monthly from that date, adding up to {formatCents(arrearsCents)} exactly.
           Every field stays editable afterwards.
         </p>
-        {/* The running total. `role="status"` so it is not sighted-only: a
-            polite region coalesces, so typing an amount announces the figure
-            once the typing stops rather than once per keystroke. */}
+        {/* The running total, `role="status"` so it is not sighted-only.
+            B-248, and B-216's standard for what a comment here may claim: the
+            region is polite and its text settles 700ms after the last
+            keystroke, so ONE field edit produces one text change. Whether any
+            screen reader then speaks it has not been observed here, and no
+            announcement is asserted — the delay removes a known defect (six
+            sentences per number typed), it does not buy a guarantee.
+
+            Declared limitation, per B-248 and the same insertion problem as
+            B-245: this whole component lives inside the closed <details> at
+            the tenant profile's `page.tsx`, so the region enters the
+            accessibility tree already populated when the staffer opens the
+            disclosure. Hoisting it out would mean splitting the figure away
+            from the fields it counts. The figure is also plain page content in
+            reading order, so it is reachable by browsing whatever the live
+            region does or does not do. */}
         <p role="status" className="text-sm font-medium tabular-nums">
-          {allocatedCents === 0
-            ? `${formatCents(arrearsCents)} to allocate.`
-            : remainingCents > 0
-              ? `${formatCents(remainingCents)} still to allocate.`
-              : remainingCents < 0
-                ? `${formatCents(-remainingCents)} too much — the installments come to ${formatCents(allocatedCents)} against ${formatCents(arrearsCents)} past due.`
-                : `Adds up exactly to ${formatCents(arrearsCents)}.`}
+          {settled}
         </p>
       </div>
 
@@ -212,9 +241,22 @@ export function PaymentPlanBuilder({
               legend={<span className="text-xs">Installment {index + 1}</span>}
               className="border-input flex min-w-0 flex-col gap-1 rounded-md border p-2"
             >
+              {/* B-248. The visible <label> stays "Due" and "Amount ($)" —
+                  under the <legend> that is what the column reads as, and
+                  twelve fields called "Installment 3 due date" would be a
+                  wall of repeated words on screen. The ORDINAL has to be in
+                  the accessible name as well, because <legend> is announced
+                  on ENTERING the group and a rotor jump straight to control
+                  seventeen enters nothing: without it that list is
+                  twenty-four entries reading "Due", "Amount ($)", twelve
+                  times over (1.3.1, 3.3.2, and B-192's finding one level
+                  down). `aria-label` overrides the visible name, so the two
+                  must stay a superset of it — "Installment 3 due date"
+                  contains "due" (2.5.3 Label in Name). */}
               <Field
                 name={`dueDate_${index + 1}`}
                 label="Due"
+                aria-label={`Installment ${index + 1} due date`}
                 type="date"
                 value={row.dueDate}
                 onChange={(event) => edit(index, { dueDate: event.target.value })}
@@ -223,6 +265,7 @@ export function PaymentPlanBuilder({
               <Field
                 name={`amount_${index + 1}`}
                 label="Amount ($)"
+                aria-label={`Installment ${index + 1} amount ($)`}
                 type="text"
                 inputMode="decimal"
                 value={row.amount}
