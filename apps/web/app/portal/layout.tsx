@@ -3,6 +3,9 @@ import { redirect } from 'next/navigation'
 import { auth, signOut } from '@/auth'
 import { requireTenantActor } from '@/lib/rbac/session'
 import { hasAnyPaymentPlan } from '@/lib/portal/payment-plan'
+import { owingLeases } from '@/lib/portal/dashboard'
+import { formatRate } from '@/lib/format'
+import { PortalNav } from '@/components/portal/portal-nav'
 import { ForbiddenError } from '@/lib/rbac/authorize'
 import { currentImpersonation, hasStaleImpersonationCookie } from '@/lib/impersonation/context'
 import { ImpersonationBanner } from '@/components/impersonation/banner'
@@ -45,6 +48,25 @@ export default async function PortalLayout({ children }: { children: React.React
   const showPaymentPlan = await hasAnyPaymentPlan(tenantId)
   const userName = impersonation?.subjectName ?? session?.user?.name ?? 'your account'
 
+  // B-239. Paying was reachable only from the lease card on Overview, so the
+  // one thing collections depends on had no permanent route while Move out —
+  // the only irreversible destination in the product — held a top-level slot.
+  //
+  // The amount is on the control, not merely implied by it: "Pay $487.50" is
+  // the whole of what a past-due tenant came here to find out. Several owing
+  // leases go to Overview rather than to `/portal/pay`, which takes exactly one
+  // lease — Overview already renders a "Pay $X now" per unit, so it is the
+  // chooser, and the total is still the honest figure to put on the link.
+  const owing = await owingLeases(tenantId)
+  const owedCents = owing.reduce((sum, lease) => sum + lease.balanceCents, 0)
+  const pay =
+    owing.length === 0
+      ? null
+      : {
+          href: owing.length === 1 ? `/portal/pay?lease=${owing[0].leaseId}` : '/portal',
+          label: `Pay ${formatRate(owedCents)}`,
+        }
+
   return (
     <div className="flex min-h-screen flex-col">
       <ImpersonationBanner />
@@ -58,77 +80,11 @@ export default async function PortalLayout({ children }: { children: React.React
       <header className="border-b">
         <div className="mx-auto flex w-full max-w-4xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
           <span className="mr-auto text-sm font-medium">{userName}</span>
-          {/* B-117 (UX review 2026-08-12, finding 16). Nine links in one flat
-              row wrapped to four lines above the balance at 360px. Ordered by
-              how often somebody actually comes here — the four a tenant
-              checks routinely stay one tap away; the once-a-while errands
-              sit behind Manage (five since B-090 part 2); Move out is on its
-              own, because it is the one irreversible destination in the
-              list and does not belong beside "check my statement."
-
-              B-247. Every link here carries `min-h-11`, not just the `Manage`
-              summary. PRD 01 §6.2 asks for tap targets of at least 44×44px
-              with 8px between them on the customer site, and the six links
-              Manage REVEALS had only `underline underline-offset-2` — roughly
-              20px tall, on the phone the menu exists for. B-117 moved those
-              errands behind the disclosure precisely because this row is read
-              at 360px, and the height reached the disclosure and not its
-              contents.
-
-              **This is a §6.2 shipping-gate miss and NOT a WCAG 2.1 AA
-              failure**, and the distinction is kept deliberately: 2.5.5 Target
-              Size is AAA in WCAG 2.1 and 2.5.8 is WCAG 2.2. Nothing here
-              claims a conformance defect that does not exist. The admin side
-              nav has the same shape and is out of §6.2's scope, which is the
-              customer site — that is desk work and stays as it is. */}
-          <nav aria-label="Your account" className="flex flex-wrap items-center gap-4 text-sm">
-            <Link href="/portal" className="inline-flex min-h-11 items-center underline underline-offset-2">
-              Overview
-            </Link>
-            <Link href="/portal/methods" className="inline-flex min-h-11 items-center underline underline-offset-2">
-              Payment methods
-            </Link>
-            <Link href="/portal/statements" className="inline-flex min-h-11 items-center underline underline-offset-2">
-              Statements
-            </Link>
-            <Link href="/portal/documents" className="inline-flex min-h-11 items-center underline underline-offset-2">
-              Documents
-            </Link>
-            {showPaymentPlan && (
-              <Link href="/portal/payment-plan" className="inline-flex min-h-11 items-center underline underline-offset-2">
-                Payment plan
-              </Link>
-            )}
-            <details className="text-sm">
-              <summary className="inline-flex min-h-11 cursor-pointer items-center underline underline-offset-2">
-                Manage
-              </summary>
-              <div className="flex flex-col gap-2 pt-2">
-                <Link href="/portal/transfer" className="inline-flex min-h-11 items-center underline underline-offset-2">
-                  Move to another unit
-                </Link>
-                <Link href="/portal/access" className="inline-flex min-h-11 items-center underline underline-offset-2">
-                  Who can get in
-                </Link>
-                <Link href="/portal/protection" className="inline-flex min-h-11 items-center underline underline-offset-2">
-                  Protection
-                </Link>
-                <Link href="/portal/contact" className="inline-flex min-h-11 items-center underline underline-offset-2">
-                  Contact details
-                </Link>
-                <Link href="/portal/notifications" className="inline-flex min-h-11 items-center underline underline-offset-2">
-                  Notifications
-                </Link>
-                <Link href="/portal/refer" className="inline-flex min-h-11 items-center underline underline-offset-2">
-                  Refer a friend
-                </Link>
-              </div>
-            </details>
-            <span aria-hidden="true" className="border-muted-foreground/40 h-4 border-l" />
-            <Link href="/portal/move-out" className="inline-flex min-h-11 items-center underline underline-offset-2">
-              Move out
-            </Link>
-          </nav>
+          {/* B-239. The nav moved into a client component so it can read
+              `usePathname()` — see the note there for what changed and why.
+              What stays here is the DATA: which links to show, and what the
+              Pay action points at. */}
+          <PortalNav pay={pay} showPaymentPlan={showPaymentPlan} />
           {/* FR-13's courtesy half. Hiding is not the control — the write
               block in proxy.ts refuses the POST either way — but "Sign out"
               during a support session would sign the STAFF member out of their
@@ -150,9 +106,36 @@ export default async function PortalLayout({ children }: { children: React.React
         </div>
       </header>
 
-      <main id="main" tabIndex={-1} className="mx-auto w-full max-w-4xl flex-1 p-6">
+      <main
+        id="main"
+        tabIndex={-1}
+        // B-239 / SC 1.4.10 Reflow. The sticky pay bar is `position: fixed`, so
+        // it is out of flow and would sit ON TOP of the last thing on the page
+        // at 320px — where the last thing is often the "call the office"
+        // number. The padding is the reflow fix, and it exists only while the
+        // bar does.
+        className={`mx-auto w-full max-w-4xl flex-1 p-6 ${pay ? 'pb-24 sm:pb-6' : ''}`}
+      >
         {children}
       </main>
+
+      {/* B-239. The phone-only half. A past-due tenant reads this product on a
+          phone, and on a phone the nav row scrolls off the top — so the pay
+          action is pinned instead of merely present. LAST in the DOM on
+          purpose (SC 2.4.3): a keyboard user meets it after the page content
+          rather than being teleported to a fixed element mid-page, and the nav
+          link above is the route they reach first. `sm:hidden` because at
+          desktop width the nav never leaves the viewport's top. */}
+      {pay && (
+        <div className="bg-background fixed inset-x-0 bottom-0 border-t p-3 sm:hidden">
+          <Link
+            href={pay.href}
+            className="bg-primary text-primary-foreground flex min-h-11 items-center justify-center rounded-md px-4 text-sm font-medium"
+          >
+            {pay.label}
+          </Link>
+        </div>
+      )}
     </div>
   )
 }

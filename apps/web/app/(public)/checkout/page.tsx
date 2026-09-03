@@ -6,7 +6,7 @@ import { LockWarning } from '@/components/checkout/lock-warning'
 import { BackControl } from '@/components/checkout/back-control'
 import { labelForStep, stepAnnouncement, Stepper } from '@/components/checkout/stepper'
 import { SITE } from '@/lib/site-config'
-import { formatCents } from '@/lib/format'
+import { formatCalendarDate, formatCents, formatRate } from '@/lib/format'
 import { prisma } from '@storage/db'
 import { billingDayFor } from '@storage/core/billing'
 import { isoDate, startDateWindow } from '@storage/core/checkout'
@@ -38,6 +38,7 @@ import { bodyOf, renderTemplate } from '@/lib/documents/render'
 import { LEASE_SUMMARY_TEMPLATE } from '@/lib/lease/template'
 import { leaseValuesFor } from '@/lib/lease/build'
 import { leaseIdForSession } from '@/lib/checkout/provision'
+import { nextChargeForLease } from '@/lib/portal/dashboard'
 import { codeForLease } from '@/lib/access/provision'
 import {
   directionsUrl,
@@ -225,10 +226,21 @@ export default async function CheckoutPage({
   // "texted within 15 minutes" either way rather than distinguishing why.
   let confirmationCode: string | null = null
   let confirmationFacility = null
+  // B-239 / US-601. The next charge, which this screen was required to restate
+  // and did not — the welcome email carried it and the page did not.
+  let nextCharge: Awaited<ReturnType<typeof nextChargeForLease>> = null
   if (session.step === 'provisioned') {
     const leaseId = await leaseIdForSession(session.id)
     confirmationCode = leaseId ? await codeForLease(leaseId) : null
     confirmationFacility = facility ? await publicFacilityBySlug(facility.slug) : null
+    // Reckoned from TOMORROW, not from today. `nextBillingDate` returns today
+    // when today is the billing day, which is what the dashboard wants and the
+    // opposite of what this screen means: under anniversary billing the
+    // billing day IS the move-in day, so "your next payment" would name the
+    // charge the renter has just paid.
+    const tomorrow = new Date()
+    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1)
+    nextCharge = leaseId ? await nextChargeForLease(leaseId, tomorrow) : null
   }
 
   // B-106. The window the unit step's picker is bounded by, and the sentence
@@ -663,6 +675,15 @@ export default async function CheckoutPage({
                 Your unit is yours. We have emailed your lease and receipt to{' '}
                 <strong>{session.email}</strong>.
               </p>
+              {/* B-239. The email is the only copy of the lease the renter has,
+                  and "it never arrived" is the commonest first support call
+                  after a move-in. One sentence, beside the claim it qualifies,
+                  rather than a support page to find. */}
+              <p className="text-muted-foreground mt-1 text-sm text-pretty">
+                Didn&apos;t arrive? Check your spam folder, or{' '}
+                <CallLink phone={lostPhone} className="underline underline-offset-4" /> and we will
+                send it again.
+              </p>
 
               {/* US-501 step 7. `confirmationCode` is null whenever there is
                   nothing to reveal yet (no encryption key configured, or
@@ -687,6 +708,51 @@ export default async function CheckoutPage({
                   and we will read it to you — you can move in either way.
                 </p>
               )}
+
+              {/* B-239 / US-601. The three facts this screen was required to
+                  restate and never did: the next charge amount, its date, and
+                  the autopay state. The words are the payment step's own — a
+                  renter who read "we will email you two days before every
+                  charge" there must not meet a different promise here — and the
+                  opt-out branch is real: `autopayEnabled` is read back from the
+                  lease that was actually written, not from the session's
+                  intention. */}
+              {nextCharge && (
+                <p className="mt-4 text-pretty">
+                  Your next payment is{' '}
+                  <strong className="tabular-nums">{formatRate(nextCharge.totalCents)}</strong> on{' '}
+                  {formatCalendarDate(nextCharge.dueDate, { month: 'long', day: 'numeric' })}.{' '}
+                  {nextCharge.autopayEnabled
+                    ? 'Autopay is on — we will email you two days before every charge.'
+                    : 'Autopay is off, so you pay it yourself. We will email you when it is due.'}
+                </p>
+              )}
+
+              {/* B-239. The renter has just been told "This is your account —
+                  no password needed" on the details step, and then never shown
+                  it: the words "portal", "account" and "password" appeared
+                  nowhere on this screen, so reaching the place they pay from
+                  depended entirely on an email being opened. A real link whose
+                  name says where it goes (SC 2.4.4). Signed-out visits to
+                  /portal land on /login, which sends a sign-in link to the
+                  address above — no password to invent at the counter. */}
+              <p className="mt-4">
+                <Link
+                  href="/portal"
+                  className="bg-primary text-primary-foreground inline-flex min-h-11 items-center rounded-md px-4 text-sm font-medium"
+                >
+                  Go to my account
+                </Link>
+              </p>
+
+              {/* B-239. The top post-move-in call, and the one thing that stops
+                  a renter driving back. Not a link: whether this facility sells
+                  locks is a merchandise question this screen does not read, and
+                  "or buy one at the office" is true wherever the counter has
+                  them. */}
+              <p className="text-muted-foreground mt-3 text-sm text-pretty">
+                Bring your own lock, or buy one at the office.
+              </p>
 
               {confirmationFacility && (
                 <div className="mt-4 text-sm text-pretty">

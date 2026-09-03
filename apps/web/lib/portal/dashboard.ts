@@ -265,3 +265,70 @@ function installmentFact(
     ? { dueDate: found.dueDate, amountCents: found.amountCents, payByDate: found.graceEndsOn }
     : null
 }
+
+/// B-239. What the nav's Pay link needs, and nothing else.
+///
+/// `portalDashboardForTenant` answers the same question, but it decrypts a gate
+/// code, reads a payment plan and aggregates a settling total PER LEASE — far
+/// too much work for a link that renders on every route under `/portal`. Two
+/// queries: the occupying leases, and one grouped sum over their ledger.
+///
+/// Only leases that actually owe come back, so an empty array is "nothing to
+/// pay" and the caller does not have to re-test the sign.
+export async function owingLeases(
+  tenantId: string,
+): Promise<{ leaseId: string; balanceCents: number }[]> {
+  const leases = await prisma.lease.findMany({
+    where: { tenantId, status: { in: [...OCCUPYING_LEASE_STATUSES] } },
+    select: { id: true },
+  })
+  if (leases.length === 0) return []
+
+  const totals = await prisma.ledgerEntry.groupBy({
+    by: ['leaseId'],
+    where: { leaseId: { in: leases.map((lease) => lease.id) } },
+    _sum: { amountCents: true },
+  })
+  return totals
+    .map((row) => ({ leaseId: row.leaseId, balanceCents: row._sum.amountCents ?? 0 }))
+    .filter((row) => row.balanceCents > 0)
+}
+
+/// B-239 / US-601. The next charge, for the move-in confirmation screen.
+///
+/// US-601 has always asked the confirmation to restate the autopay state, the
+/// next charge date and the next charge amount, and it showed none of the
+/// three — the welcome EMAIL carried them (`billing.first_charge_line`) and the
+/// screen the renter is actually looking at did not, so the one fact everybody
+/// wants after paying depended on an inbox.
+///
+/// The same three fields `portalDashboardForTenant` computes per lease, from
+/// the same two shared reckonings — `monthlyRecurring` so the tax is in the
+/// figure (B-227's defect), and `nextBillingDate` so the day matches the
+/// anniversary the invoice will carry. Null when the lease has gone, which on
+/// this path means provisioning has not landed yet.
+export async function nextChargeForLease(
+  leaseId: string,
+  now: Date = new Date(),
+): Promise<{ totalCents: number; dueDate: Date; autopayEnabled: boolean } | null> {
+  const lease = await prisma.lease.findUnique({
+    where: { id: leaseId },
+    select: {
+      billingDay: true,
+      autopayEnabled: true,
+      monthlyRateCents: true,
+      protectionCents: true,
+      facility: { select: { taxComponents: { select: { jurisdiction: true, rateBasisPoints: true } } } },
+    },
+  })
+  if (!lease) return null
+  return {
+    totalCents: monthlyRecurring({
+      monthlyRateCents: lease.monthlyRateCents,
+      protectionCents: lease.protectionCents,
+      taxRates: lease.facility.taxComponents,
+    }).totalCents,
+    dueDate: nextBillingDate(lease.billingDay, now),
+    autopayEnabled: lease.autopayEnabled,
+  }
+}

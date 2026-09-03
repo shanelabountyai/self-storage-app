@@ -1,7 +1,12 @@
 import { randomUUID } from 'node:crypto'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { prisma } from '../packages/db'
-import { nextBillingDate, portalDashboardForTenant } from '../apps/web/lib/portal/dashboard'
+import {
+  nextBillingDate,
+  nextChargeForLease,
+  owingLeases,
+  portalDashboardForTenant,
+} from '../apps/web/lib/portal/dashboard'
 
 // B-034 / PRD 01 §4.7 US-702. lib/portal/dashboard.ts imports nothing from
 // `@/auth` (only prisma and lib/access/provision.ts), so it — unlike the
@@ -350,5 +355,119 @@ describeDb('portalDashboardForTenant', () => {
     await prisma.leaseHold.delete({ where: { id: hold.id } })
     await prisma.lease.delete({ where: { id: lease.id } })
     await prisma.staffUser.delete({ where: { id: staff.id } })
+  })
+  // ── B-239 ────────────────────────────────────────────────────────────────
+  //
+  // The nav's Pay link renders on every route under /portal, so what feeds it
+  // has to be cheap — two queries, not `portalDashboardForTenant`'s per-lease
+  // gate-code decrypt and payment-plan read. These cover what the link decides:
+  // whether to appear at all, and whether it points at one lease's payment page
+  // or at the dashboard chooser.
+  it('owingLeases returns only the leases that actually owe, and nothing at zero or in credit', async () => {
+    const lease = await prisma.lease.create({
+      data: {
+        facilityId,
+        tenantId,
+        unitId,
+        status: 'active',
+        startDate: new Date(),
+        monthlyRateCents: 12_900,
+        billingDay: 10,
+      },
+    })
+
+    // No ledger at all — the state a lease is in the moment it is created.
+    expect(await owingLeases(tenantId)).toEqual([])
+
+    await prisma.ledgerEntry.create({
+      data: { facilityId, leaseId: lease.id, type: 'charge', amountCents: 12_900, description: 'Rent' },
+    })
+    expect(await owingLeases(tenantId)).toEqual([{ leaseId: lease.id, balanceCents: 12_900 }])
+
+    // Paid in full: no link, rather than a "Pay $0" one.
+    await prisma.ledgerEntry.create({
+      data: { facilityId, leaseId: lease.id, type: 'payment', amountCents: -12_900, description: 'Paid' },
+    })
+    expect(await owingLeases(tenantId)).toEqual([])
+
+    // In credit. A negative balance is money the tenant is owed, not a bill.
+    await prisma.ledgerEntry.create({
+      data: { facilityId, leaseId: lease.id, type: 'credit', amountCents: -5_000, description: 'Credit' },
+    })
+    expect(await owingLeases(tenantId)).toEqual([])
+  })
+
+  it('owingLeases reports each owing lease separately, which is what sends the link to the chooser', async () => {
+    const secondUnit = await prisma.unit.create({
+      data: { facilityId, unitTypeId: (await prisma.unitType.findFirstOrThrow({ where: { facilityId } })).id, number: 'A-9' },
+    })
+    const leases = await Promise.all(
+      [unitId, secondUnit.id].map((id) =>
+        prisma.lease.create({
+          data: {
+            facilityId,
+            tenantId,
+            unitId: id,
+            status: 'active',
+            startDate: new Date(),
+            monthlyRateCents: 12_900,
+            billingDay: 10,
+          },
+        }),
+      ),
+    )
+    await prisma.ledgerEntry.createMany({
+      data: leases.map((lease) => ({
+        facilityId,
+        leaseId: lease.id,
+        type: 'charge' as const,
+        amountCents: 12_900,
+        description: 'Rent',
+      })),
+    })
+
+    const owing = await owingLeases(tenantId)
+    expect(owing).toHaveLength(2)
+    expect(owing.reduce((sum, row) => sum + row.balanceCents, 0)).toBe(25_800)
+
+    await prisma.ledgerEntry.deleteMany({ where: { leaseId: { in: leases.map((l) => l.id) } } })
+    await prisma.lease.deleteMany({ where: { id: { in: leases.map((l) => l.id) } } })
+    await prisma.unit.delete({ where: { id: secondUnit.id } })
+  })
+
+  // US-601's three facts, which the move-in confirmation screen never showed.
+  // The TOTAL, not the rent: B-227's defect was a "next payment" figure with
+  // the tax left out, and this is the same sentence on an earlier screen.
+  it('nextChargeForLease states the taxed total, the anniversary and the autopay state', async () => {
+    const tax = await prisma.taxComponent.create({
+      data: { facilityId, jurisdiction: 'TX state', rateBasisPoints: 825, effectiveFrom: new Date(0) },
+    })
+    const lease = await prisma.lease.create({
+      data: {
+        facilityId,
+        tenantId,
+        unitId,
+        status: 'active',
+        startDate: new Date(),
+        monthlyRateCents: 12_900,
+        protectionCents: 1_200,
+        billingDay: 10,
+        autopayEnabled: true,
+      },
+    })
+
+    const charge = await nextChargeForLease(lease.id, new Date(Date.UTC(2026, 6, 1)))
+    // 12_900 rent + 1_064 tax on rent (8.25%, rounded) + 1_200 protection.
+    expect(charge).toEqual({
+      totalCents: 12_900 + Math.round(12_900 * 0.0825) + 1_200,
+      dueDate: new Date(Date.UTC(2026, 6, 10)),
+      autopayEnabled: true,
+    })
+
+    await prisma.taxComponent.delete({ where: { id: tax.id } })
+  })
+
+  it('nextChargeForLease is null for a lease that is not there — provisioning that has not landed', async () => {
+    expect(await nextChargeForLease('lease-that-does-not-exist')).toBeNull()
   })
 })

@@ -1496,6 +1496,41 @@ const LAST_REVIEWED = '19 August 2026'
 // `layout: 'reached'` and NOT excepted, because six `<dl>` rows of long values
 // (a full address, a web address) is not the tax step's two short ones.
 
+// Re-read 2026-09-03, at B-239 (the move-in confirmation hands the renter
+// something to do next, and Pay replaces Move out in the portal nav).
+// **Customer-facing twice over** — the checkout confirmation screen and the
+// nav on every route under `/portal`. **No claim on this page changes and
+// `LAST_REVIEWED` does not move.**
+//
+// The "Where we fall short" list was re-read against this build and all three
+// entries are still true, unchanged and unchanged in scope: the no-JavaScript
+// hold countdown still does not tick, the four staff lists are still
+// unpaginated, and the two embedded maps are untouched by this row.
+//
+// **Nothing here is a new claim, and one thing is worth saying about why.**
+// This row ADDS `aria-current="page"` to eleven portal links that carried it
+// on none — so it fixes a real defect on a customer surface, and the list
+// above never named it, for the same reason B-250 recorded about B-244/245/
+// 247/249: a shortfall list records KNOWN problems, and this one was found by
+// a review rather than by the list. The list shortening is not what happened.
+//
+// Two things this row deliberately does not let the page claim:
+//
+// **(1) `aria-current` is SC 2.4.8 Location, which is AAA.** This page claims
+// WCAG 2.1 AA and must keep claiming exactly that. The fix was taken because
+// it is one attribute on a pattern already written in
+// `components/admin/side-nav.tsx`, not because conformance required it — and
+// a AAA courtesy must never be written up as an AA obligation met.
+//
+// **(2) The sticky pay bar's non-obstruction at 320px is asserted by
+// construction, not by measurement.** `expectNoHorizontalOverflow` — which is
+// what the portal reflow loop actually runs — measures horizontal overflow and
+// cannot see a fixed element sitting on top of the last paragraph on the page.
+// The `pb-24` on `<main>` is the fix, and nothing automated will notice if a
+// later change removes it. Said here rather than left implicit, because the
+// page's own text is careful that automated coverage is "a floor, not a
+// ceiling" and this is precisely one of the gaps that phrase is about.
+
 export default function AccessibilityPage() {
   return (
     <ProsePage

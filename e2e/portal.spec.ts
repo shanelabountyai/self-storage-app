@@ -326,7 +326,7 @@ test.describe('signed in as the demo tenant', () => {
   // demo tenant — see PROGRESS.md's B-034 entry.
 })
 
-test.describe('the account nav (B-117)', () => {
+test.describe('the account nav (B-117, B-239)', () => {
   test.beforeEach(async ({ page }) => {
     await signInAsDemoTenant(page)
   })
@@ -340,20 +340,56 @@ test.describe('the account nav (B-117)', () => {
     }
     // Not rendered until Manage opens — a closed <details> keeps its content
     // out of the accessibility tree entirely, not merely hidden from view.
-    for (const label of ['Who can get in', 'Protection', 'Contact details', 'Notifications']) {
+    // B-239 moved Move out in here beside "Move to another unit".
+    for (const label of ['Who can get in', 'Protection', 'Contact details', 'Notifications', 'Move out']) {
       await expect(nav.getByRole('link', { name: label })).toHaveCount(0)
     }
 
     await nav.getByText('Manage').click()
-    for (const label of ['Who can get in', 'Protection', 'Contact details', 'Notifications']) {
+    for (const label of ['Who can get in', 'Protection', 'Contact details', 'Notifications', 'Move out']) {
       await expect(nav.getByRole('link', { name: label })).toBeVisible()
     }
   })
 
-  test('Move out stays reachable without opening Manage — it is not one of the four errands', async ({ page }) => {
+  // B-239. Dana owes money on every run — the past-due fixture the delinquency
+  // specs, the dunning specs and the banner all depend on — so the Pay link is
+  // the deterministic state here, and the "nothing owed" branch is a unit test
+  // rather than a second demo tenant.
+  test('Pay is the first thing in the nav and carries the amount', async ({ page }) => {
     await page.goto('/portal')
     const nav = page.getByRole('navigation', { name: 'Your account' })
-    await expect(nav.getByRole('link', { name: 'Move out' })).toBeVisible()
+
+    const pay = nav.getByRole('link', { name: /^Pay \$/ })
+    await expect(pay).toBeVisible()
+    // First in the DOM, ahead of Overview — the whole point of the row.
+    const labels = await nav.getByRole('link').allInnerTexts()
+    expect(labels[0]).toMatch(/^Pay \$/)
+
+    await pay.click()
+    await page.waitForURL(/\/portal\/pay\?lease=/)
+    await expect(page.getByRole('heading', { name: 'Pay your balance' })).toBeVisible()
+  })
+
+  // B-239 / SC 2.4.8. No link in this nav carried `aria-current` at all, so a
+  // tenant inside the collapsed Manage menu had no programmatic indication of
+  // where they were. Asserted on a route BEHIND the disclosure, because that is
+  // the one that had no other signal — and the disclosure being open on arrival
+  // is the same fix.
+  test('the current page is marked, and Manage is open when the current page is inside it', async ({
+    page,
+  }) => {
+    await page.goto('/portal/refer')
+    const nav = page.getByRole('navigation', { name: 'Your account' })
+
+    const current = nav.getByRole('link', { name: 'Refer a friend' })
+    await expect(current).toBeVisible()
+    await expect(current).toHaveAttribute('aria-current', 'page')
+    await expect(nav.getByRole('link', { name: 'Overview' })).not.toHaveAttribute('aria-current', 'page')
+
+    await page.goto('/portal')
+    await expect(nav.getByRole('link', { name: 'Overview' })).toHaveAttribute('aria-current', 'page')
+    // Closed again once the active route is not one of Manage's seven.
+    await expect(nav.getByRole('link', { name: 'Refer a friend' })).toHaveCount(0)
   })
 })
 
