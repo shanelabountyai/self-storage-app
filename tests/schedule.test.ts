@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   businessDateFor,
   daysBetween,
-  facilitiesDueAt,
+  facilitiesDueSince,
   localDayBounds,
   localParts,
   missedBusinessDates,
@@ -70,43 +70,71 @@ describe('local day bounds', () => {
 
 describe('daylight saving', () => {
   const facilities = [{ id: 'chi', timezone: CHICAGO }]
+  const dayOfTicks = (year: number, month: number, day: number) =>
+    Array.from({ length: 24 }, (_, hour) => new Date(Date.UTC(year, month, day, hour)))
 
-  it('fires exactly once on the spring-forward day', () => {
-    // 2026-03-08: US clocks jump 02:00 -> 03:00 CST/CDT. A 2am job would never
-    // run if it were scheduled by wall clock alone.
-    const ticks = Array.from(
-      { length: 24 },
-      (_, hour) => new Date(Date.UTC(2026, 2, 8, hour)),
+  // B-236 changed the question these ask, and the change is worth stating
+  // rather than editing quietly past.
+  //
+  // Under the old exact-hour rule the safety property was "fires exactly once
+  // a day", and these tests asserted the count of ticks. Dueness is now "the
+  // local hour has been reached", so a job is due at MANY ticks in a day by
+  // design — that is what stops a dropped run vanishing. The property that
+  // actually prevents double-billing was never the tick count: it is that every
+  // tick within one facility-local day resolves to the SAME business date,
+  // because `JobRun`'s unique constraint is keyed on (job, facility, date).
+  // These now assert that, which is the thing the money depends on.
+
+  /// The distinct business dates a facility is offered, for the ticks that fall
+  /// on one particular local calendar day. A 24-hour UTC window straddles two
+  /// local days in a US zone, so filtering by the local day is the whole point.
+  const datesOnLocalDay = (ticks: readonly Date[], targetLocalHour: number, localDay: number) =>
+    new Set(
+      ticks
+        .filter((tick) => localParts(tick, CHICAGO).day === localDay)
+        .flatMap((tick) =>
+          facilitiesDueSince(facilities, targetLocalHour, tick).map((due) => iso(due.businessDate)),
+        ),
     )
-    const fired = ticks.filter((tick) => facilitiesDueAt(facilities, 3, tick).length > 0)
-    expect(fired).toHaveLength(1)
+
+  it('resolves to exactly one business date on the spring-forward day', () => {
+    // 2026-03-08: US clocks jump 02:00 -> 03:00 CST/CDT.
+    const dates = datesOnLocalDay(dayOfTicks(2026, 2, 8), 3, 8)
+    expect(dates.size).toBe(1)
+    expect([...dates]).toEqual(['2026-03-08'])
   })
 
-  it('fires exactly once on the fall-back day, when 1am happens twice', () => {
+  it('runs a 2am job on the spring-forward day, which the exact-hour form never did', () => {
+    // The bug B-236 turned up by measurement rather than reasoning: local hour
+    // 2 DOES NOT EXIST on 2026-03-08, so an `=== 2` test matched zero ticks and
+    // `billing.assess-late-fees` (plus both card/proof scans) simply did not
+    // run that day at any US facility. The catch-up reached them the next
+    // night, a day late, once a year.
+    const ticks = dayOfTicks(2026, 2, 8)
+    expect(
+      ticks.some((tick) => localParts(tick, CHICAGO).hour === 2),
+      'local 2am existed on the spring-forward day',
+    ).toBe(false)
+    expect(datesOnLocalDay(ticks, 2, 8)).toEqual(new Set(['2026-03-08']))
+  })
+
+  it('resolves to one business date on the fall-back day, when 1am happens twice', () => {
     // 2026-11-01: 02:00 CDT -> 01:00 CST, so local hour 1 occurs in two
-    // separate UTC hours. Firing twice would double-bill.
-    const ticks = Array.from(
-      { length: 24 },
-      (_, hour) => new Date(Date.UTC(2026, 10, 1, hour)),
-    )
-    const fired = ticks.filter((tick) => facilitiesDueAt(facilities, 1, tick).length > 0)
-    expect(fired.length).toBeGreaterThanOrEqual(1)
-
-    // Both occurrences of local 1am fall on the same business date, so the
-    // JobRun unique constraint collapses them into one run.
-    const dates = fired.flatMap((tick) =>
-      facilitiesDueAt(facilities, 1, tick).map((d) => iso(d.businessDate)),
-    )
-    expect(new Set(dates).size).toBe(1)
+    // separate UTC hours. Two runs on one date would double-bill; one date
+    // across both is what the unique constraint collapses.
+    const ticks = dayOfTicks(2026, 10, 1)
+    expect(ticks.filter((tick) => localParts(tick, CHICAGO).hour === 1)).toHaveLength(2)
+    expect(datesOnLocalDay(ticks, 1, 1)).toEqual(new Set(['2026-11-01']))
   })
 
-  it('fires once a day in a zone with no DST at all', () => {
+  it('resolves to one business date in a zone with no DST at all', () => {
     const phoenix = [{ id: 'phx', timezone: PHOENIX }]
-    const ticks = Array.from(
-      { length: 24 },
-      (_, hour) => new Date(Date.UTC(2026, 2, 8, hour)),
+    const dates = new Set(
+      dayOfTicks(2026, 2, 8)
+        .filter((tick) => localParts(tick, PHOENIX).day === 8)
+        .flatMap((tick) => facilitiesDueSince(phoenix, 2, tick).map((due) => iso(due.businessDate))),
     )
-    expect(ticks.filter((t) => facilitiesDueAt(phoenix, 2, t).length > 0)).toHaveLength(1)
+    expect(dates).toEqual(new Set(['2026-03-08']))
   })
 })
 
@@ -117,36 +145,64 @@ describe('selecting facilities due now', () => {
     { id: 'phx', timezone: PHOENIX },
   ]
 
-  it('picks only the facilities at the target local hour', () => {
-    // 07:00 UTC on 2026-07-30 = 02:00 CDT, 03:00 EDT, 00:00 MST.
-    const due = facilitiesDueAt(facilities, 2, new Date('2026-07-30T07:00:00Z'))
-    expect(due.map((d) => d.facility.id)).toEqual(['chi'])
+  it('picks the facilities that have reached the target local hour', () => {
+    // 07:00 UTC on 2026-07-30 = 02:00 CDT, 03:00 EDT, 00:00 MST. Phoenix has
+    // not reached 2am yet; the other two have.
+    const due = facilitiesDueSince(facilities, 2, new Date('2026-07-30T07:00:00Z'))
+    expect(due.map((entry) => entry.facility.id)).toEqual(['chi', 'nyc'])
   })
 
-  it('gives each facility its own business date', () => {
-    // 05:00 UTC = midnight CDT on the 30th, but 01:00 EDT on the 30th too.
-    const due = facilitiesDueAt(facilities, 0, new Date('2026-07-30T05:00:00Z'))
-    expect(due.map((d) => [d.facility.id, iso(d.businessDate)])).toEqual([
+  it('keeps a facility due for the rest of its local day, which is B-236', () => {
+    // The whole point: a tick that ran out of budget at 2am must not make the
+    // work disappear. At 6am local the same facility is still due, on the same
+    // business date, so the next tick picks it up rather than dropping it.
+    const early = facilitiesDueSince(facilities, 2, new Date('2026-07-30T07:00:00Z'))
+    const later = facilitiesDueSince(facilities, 2, new Date('2026-07-30T11:00:00Z'))
+    const chicago = (list: typeof early) => list.find((entry) => entry.facility.id === 'chi')
+    expect(chicago(early)).toBeDefined()
+    expect(chicago(later)).toBeDefined()
+    expect(iso(chicago(later)!.businessDate)).toBe(iso(chicago(early)!.businessDate))
+  })
+
+  it('gives each facility the business date of ITS OWN local day', () => {
+    // 05:00 UTC = midnight CDT on the 30th and 01:00 EDT on the 30th — but
+    // 22:00 MST on the 29th. Phoenix reached its midnight twenty-two hours
+    // ago, so it is due for the 29th, not the 30th. Under the exact-hour rule
+    // Phoenix simply did not appear, which is the same thing said as silence.
+    const due = facilitiesDueSince(facilities, 0, new Date('2026-07-30T05:00:00Z'))
+    expect(due.map((entry) => [entry.facility.id, iso(entry.businessDate)])).toEqual([
       ['chi', '2026-07-30'],
+      ['nyc', '2026-07-30'],
+      ['phx', '2026-07-29'],
     ])
   })
 
-  it('returns nothing when no facility is at that hour', () => {
-    expect(facilitiesDueAt(facilities, 9, new Date('2026-07-30T07:00:00Z'))).toEqual([])
+  it('returns nothing before any facility has reached that hour', () => {
+    // 07:00 UTC is 02:00/03:00/00:00 local — nobody is at 9am yet.
+    expect(facilitiesDueSince(facilities, 9, new Date('2026-07-30T07:00:00Z'))).toEqual([])
   })
 
-  it('covers every facility exactly once across a full day of ticks', () => {
-    const seen = new Map<string, number>()
-    for (let hour = 0; hour < 24; hour++) {
-      for (const { facility } of facilitiesDueAt(
+  it('offers each facility one business date per local day, never two', () => {
+    // The invariant that replaced "fires exactly once". A facility may be due
+    // at a dozen ticks; every tick inside one of its local days must name the
+    // same date, or the unique constraint is not what collapses them.
+    const perLocalDay = new Map<string, Set<string>>()
+    for (let hour = 0; hour < 48; hour++) {
+      for (const { facility, businessDate } of facilitiesDueSince(
         facilities,
         2,
         new Date(Date.UTC(2026, 6, 30, hour)),
       )) {
-        seen.set(facility.id, (seen.get(facility.id) ?? 0) + 1)
+        const key = `${facility.id}:${iso(businessDate)}`
+        perLocalDay.set(key, (perLocalDay.get(key) ?? new Set()).add(iso(businessDate)))
       }
     }
-    expect([...seen.values()]).toEqual([1, 1, 1])
+    expect([...new Set([...perLocalDay.keys()].map((key) => key.split(':')[0]))].sort()).toEqual([
+      'chi',
+      'nyc',
+      'phx',
+    ])
+    expect([...perLocalDay.values()].every((dates) => dates.size === 1)).toBe(true)
   })
 })
 

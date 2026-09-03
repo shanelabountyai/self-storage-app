@@ -60,15 +60,33 @@ export function reminderStage(daysUntil: number, thresholds: readonly number[]):
 
 export type SchedulableFacility = { id: string; timezone: string }
 
-/// Facilities whose local time is currently the target hour. Called once per
-/// hourly cron tick; each facility matches exactly once per local day.
-export function facilitiesDueAt<T extends SchedulableFacility>(
+/// Facilities whose local clock has REACHED the target hour today, with the
+/// business date the run belongs to.
+///
+/// `>=`, not `==`, and that is B-236's fix rather than a loosening. Dueness has
+/// to outlive the hour it started in: the exact-hour form meant a tick that ran
+/// out of its 300 seconds — or never fired at all — dropped that facility's work
+/// silently and PERMANENTLY, because the next tick asked "is it hour 0?" and it
+/// no longer was. Nothing runs twice as a result. `missedBusinessDates` returns
+/// nothing once the date has a successful run, so the widened window costs one
+/// cheap lookup and no work, and `JobRun`'s unique constraint is the backstop.
+///
+/// It also closes a bug the exact-hour form had all along, measured rather than
+/// reasoned: **local hour 2 does not exist on the US spring-forward day**, so a
+/// job at `localHour: 2` had zero matching ticks that day. Three do —
+/// `billing.assess-late-fees` and the two card/proof scans — and the catch-up
+/// only reached them the following night. `>=` gives them the same day.
+///
+/// Still DST-safe in the direction that matters: this compares the facility's
+/// own local hour, and the 1am that happens twice in autumn resolves to one
+/// business date either way.
+export function facilitiesDueSince<T extends SchedulableFacility>(
   facilities: readonly T[],
   targetLocalHour: number,
   now: Date,
 ): { facility: T; businessDate: Date }[] {
   return facilities
-    .filter((facility) => localParts(now, facility.timezone).hour === targetLocalHour)
+    .filter((facility) => localParts(now, facility.timezone).hour >= targetLocalHour)
     .map((facility) => ({
       facility,
       businessDate: businessDateFor(now, facility.timezone),
@@ -95,7 +113,7 @@ function tzOffsetMs(instant: Date, timezone: string): number {
 // guess instant, which can be off by the DST shift (~1h) on the two transition
 // days a year. Fine for a "what happened today" dashboard tile; never use this
 // for billing math — invoice due dates need the exact-day guarantees in
-// facilitiesDueAt/businessDateFor instead.
+// facilitiesDueSince/businessDateFor instead.
 export function localDayBounds(instant: Date, timezone: string): { start: Date; end: Date } {
   const { year, month, day } = localParts(instant, timezone)
   const utcGuess = new Date(Date.UTC(year, month - 1, day))
@@ -108,6 +126,21 @@ export function localDayBounds(instant: Date, timezone: string): { start: Date; 
 /// Business dates between the last completed run and now, so a job that missed
 /// ticks during an outage can be caught up rather than silently skipped
 /// (PRD 02 FR-4, FR-14).
+///
+/// `lastCompleted` is a BUSINESS DATE (`JobRun.businessDate`, a DATE column at
+/// UTC midnight), not an instant. `through` is an instant. They are read
+/// differently on purpose, and that asymmetry is B-236's second fix: this used
+/// to run `businessDateFor(lastCompleted, timezone)` over the business date as
+/// though it were a moment in time, which in any zone west of UTC shifted it
+/// back a day — 2026-07-15T00:00Z is the evening of the 14th in Chicago. The
+/// completed date therefore came back due, every tick, at every US facility.
+///
+/// It was invisible while the only caller was the runner, because `runJob`
+/// skipped it as `already_ran` at the cost of one wasted round trip. It stopped
+/// being invisible when B-236 made the same list the answer to "what is still
+/// waiting?" on /admin/billing — every finished job would have been reported as
+/// outstanding forever. Zones east of UTC never had it, which is the tell that
+/// it was a bug rather than a margin.
 export function missedBusinessDates(
   lastCompleted: Date | null,
   through: Date,
@@ -118,7 +151,13 @@ export function missedBusinessDates(
   if (!lastCompleted) return [target]
 
   const dates: Date[] = []
-  const cursor = new Date(businessDateFor(lastCompleted, timezone))
+  const cursor = new Date(
+    Date.UTC(
+      lastCompleted.getUTCFullYear(),
+      lastCompleted.getUTCMonth(),
+      lastCompleted.getUTCDate(),
+    ),
+  )
   cursor.setUTCDate(cursor.getUTCDate() + 1)
 
   while (cursor <= target && dates.length < maxDays) {

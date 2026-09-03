@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { getAdminActor } from '@/lib/admin/context'
-import { recentRuns } from '@/lib/admin/billing-runs'
+import { outstandingRuns, recentRuns } from '@/lib/admin/billing-runs'
 import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
 import { rerunAction } from './actions'
 import { ScrollRegion } from '@/components/ui/scroll-region'
@@ -45,7 +45,7 @@ export default async function BillingRunsPage() {
     return <p className="text-muted-foreground text-sm">You don&apos;t have access to Billing.</p>
   }
 
-  const runs = await recentRuns(actor)
+  const [runs, outstanding] = await Promise.all([recentRuns(actor), outstandingRuns(actor)])
   const canRerun = hasPermissionAnywhere(actor, ['facility:settings'])
 
   return (
@@ -55,6 +55,32 @@ export default async function BillingRunsPage() {
         Every nightly job, per facility, for the business date it ran for. Runs happen in each
         facility&apos;s own local time, and a date missed during an outage is caught up on the next
         tick rather than skipped.
+      </p>
+
+      {/* B-236. A run that FAILED is a row below with a status and an error. A
+          run that has not HAPPENED writes no row at all, so until now it looked
+          exactly like a quiet night — which is what a serial tick running out
+          of its 300 seconds, or a cron that stopped firing, actually looks
+          like. This is that state, said in words.
+
+          1.4.1: the count and the date carry the meaning; nothing here is a
+          colour or an icon. A zero is stated rather than left blank (B-235). */}
+      <p className="max-w-prose text-sm text-pretty">
+        {outstanding.total === 0 ? (
+          'Nothing waiting: every run due so far today has happened.'
+        ) : (
+          <>
+            <span className="font-medium">
+              {outstanding.total} run{outstanding.total === 1 ? '' : 's'} due so far today{' '}
+              {outstanding.total === 1 ? 'has' : 'have'} not run yet
+            </span>
+            {outstanding.facilities > 0 &&
+              `, across ${outstanding.facilities} facilit${outstanding.facilities === 1 ? 'y' : 'ies'}`}
+            . The oldest is for {formatBusinessDate(outstanding.oldest!)}. Each one stays due
+            until it runs, so the next hourly tick picks it up — a date earlier than today
+            means ticks have been missing, not that one is in progress.
+          </>
+        )}
       </p>
 
       {runs.length === 0 ? (

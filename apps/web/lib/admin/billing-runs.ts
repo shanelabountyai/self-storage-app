@@ -3,6 +3,7 @@ import { type JobItemOutcome } from '@storage/core/jobs'
 import { can, facilityAccess, ForbiddenError, hasPermissionAnywhere } from '@/lib/rbac/authorize'
 import type { Actor } from '@/lib/rbac/actor'
 import { SCHEDULED_JOBS, scheduledJobLabel } from '@/lib/jobs/registry'
+import { dueRunQueue } from '@/lib/jobs/queue'
 import { runScheduledJob } from '@/lib/jobs/run'
 import { resolveTaskSubjects, type TaskSubject } from '@/lib/admin/task-subjects'
 
@@ -84,6 +85,46 @@ export async function recentRuns(actor: Actor, limit = 100): Promise<BillingRunR
     lastError: run.lastError,
     rerunnable: registered.has(run.jobName),
   }))
+}
+
+/// B-236. What the scheduler still owes, right now.
+///
+/// The load-bearing half of B-236, and deliberately DERIVED rather than
+/// recorded. A tick that runs out of its budget could report "I deferred 40
+/// runs" — but a tick that never fires at all reports nothing, and that is the
+/// failure an operator most needs to see. Asking `dueRunQueue` the same
+/// question the scheduler asks answers both, and cannot drift from it.
+///
+/// This is what makes B-229's alarm mean something: a run that FAILED is a row
+/// on the table below with a status and an error, a run that has not happened
+/// YET is this line, and until now the second looked exactly like a quiet
+/// night. `oldest` is the tell that separates the two — today's date is a tick
+/// still in progress, an earlier one is a backlog.
+export type OutstandingRuns = { total: number; facilities: number; oldest: Date | null }
+
+export async function outstandingRuns(actor: Actor, now = new Date()): Promise<OutstandingRuns> {
+  if (!hasPermissionAnywhere(actor, READ_PERMISSIONS)) {
+    throw new ForbiddenError('Missing permission to read billing runs', 'reports:financial')
+  }
+  const access = facilityAccess(actor)
+
+  const facilities = await prisma.facility.findMany({
+    where: { status: 'active', ...(access.all ? {} : { id: { in: access.facilityIds } }) },
+    select: { id: true, timezone: true },
+  })
+  // A single-site manager sees their own sites' backlog and not the global
+  // jobs' — same rule as `recentRuns`, and for the same reason: there is no
+  // facility to scope the portfolio-wide outbox drain to.
+  const groups = (await dueRunQueue(facilities, now)).filter(
+    (group) => access.all || group.facilityId !== null,
+  )
+
+  const runs = groups.flatMap((group) => group.runs)
+  const oldest = runs.reduce<Date | null>(
+    (earliest, run) => (!earliest || run.businessDate < earliest ? run.businessDate : earliest),
+    null,
+  )
+  return { total: runs.length, facilities: groups.filter((g) => g.facilityId !== null).length, oldest }
 }
 
 /// B-229. What `recordItem` is handed is an entity id with no type attached —

@@ -38,6 +38,18 @@ test.describe('signed in as the demo owner', () => {
     await expect(
       page.getByRole('table').or(page.getByText('No runs recorded yet.')),
     ).toBeVisible()
+    // B-236. What the scheduler still OWES, which is the state a failed run
+    // never covered: a run that failed is a row in the table with a status, a
+    // run that has not happened writes nothing at all and used to be
+    // indistinguishable from a quiet night. Either wording is correct here for
+    // the same reason the table-or-empty-state assertion above is — the demo
+    // database's job history is not this screen's to seed.
+    await expect(
+      page
+        .getByText('Nothing waiting: every run due so far today has happened.')
+        .or(page.getByText(/run(s)? due so far today ha(s|ve) not run yet/)),
+    ).toBeVisible()
+
     // B-229. Whatever history happens to be here, no dotted registry key
     // reaches the page — that is B-109's rule, and this screen was the last
     // place in admin still breaking it.
