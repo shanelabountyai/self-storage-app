@@ -8241,7 +8241,7 @@ US-2's own criterion is that in the All facilities context every roll-up-capable
 
 ## B-239 — the move-in confirmation says what happens next, and Pay replaces Move out in the portal nav
 
-`SHA-PENDING`
+`2fdc885`
 
 Two surfaces, one complaint: the product told a renter where the money goes and never told them where they go. The checkout confirmation showed the gate code, the unit, the address, today's gate hours and directions — and the words "portal", "account" and "password" appeared nowhere in the file, nor did the next charge, although the welcome email carried both and the details step had already promised *"This is your account… no password needed"*. US-601's criterion that the confirmation restate the autopay state, the next charge date and the next charge amount had never been met. One screen later the persistent portal nav was Overview · Payment methods · Statements · Documents · Manage ▾ · **Move out**: the one irreversible destination in the product held permanent top-level space, and paying was reachable only from a card on Overview.
 
