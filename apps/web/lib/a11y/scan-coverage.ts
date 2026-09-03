@@ -215,6 +215,9 @@ export const ADMIN_SCAN_ROUTES = [
   '/admin/impersonation',
   '/admin/settings',
   '/admin/settings/delinquency',
+  // B-237. The largest new form in this block, and the one that commits a site
+  // to billing real tenants.
+  '/admin/settings/facilities/new',
   '/admin/settings/marketing',
   // B-128. A page not on this list is a page nobody scans.
   '/admin/settings/marketing/cities',
@@ -422,6 +425,27 @@ export const SCANNED_STATES: readonly ScannedState[] = [
     layout: 'excepted',
     layoutException:
       "The admin route loop measures `/admin/settings` at all three widths, and a refused submit adds `AdminForm`'s summary to that same measured container.",
+  },
+  // B-237. The new-facility form refused, and the same confirm-and-echo step
+  // as the tax rate below — reused rather than reinvented, which is what the
+  // backlog row asked for and what keeps 3.3.4 one pattern instead of two.
+  {
+    route: '/admin/settings/facilities/new',
+    state: 'new facility submit refused',
+    spec: 'e2e/admin.spec.ts',
+    layout: 'excepted',
+    layoutException:
+      "The admin route loop measures this page at all three widths, and a refused submit adds `AdminForm`'s summary to that same measured container.",
+  },
+  {
+    route: '/admin/settings/facilities/new',
+    state: 'new facility confirm-and-echo',
+    spec: 'e2e/admin.spec.ts',
+    // NOT excepted: the echo is a six-row `<dl>` of long values — a full
+    // address and a web address among them — which is a different shape from
+    // the tax step's two short rows, and 320px is exactly where a `<dl>` of
+    // long values stops being one.
+    layout: 'reached',
   },
   // B-184 (T5). The confirm-and-echo step 3.3.4 depends on — the one place in
   // the product where an append-only row is agreed to before it publishes.

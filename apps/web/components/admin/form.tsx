@@ -238,7 +238,13 @@ export function AdminForm({
                   {state.echo.map((row) => (
                     <div key={row.label} className="contents">
                       <dt className="text-muted-foreground">{row.label}</dt>
-                      <dd className="font-medium">{row.value}</dd>
+                      {/* B-237. `min-w-0` + `break-words`, because a grid item
+                          defaults to `min-width: auto` and a single long
+                          unbroken value — a URL, a slug — widens the `1fr`
+                          track rather than wrapping inside it. The tax step's
+                          two short rows never showed it; a facility's web
+                          address does, at 320px. */}
+                      <dd className="min-w-0 font-medium break-words">{row.value}</dd>
                     </div>
                   ))}
                 </dl>

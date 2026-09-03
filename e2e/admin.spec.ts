@@ -234,6 +234,79 @@ test.describe('signed in as the demo owner', () => {
   // is unit-tested directly in tests/form-state.test.ts.
 })
 
+// B-237. The create-facility flow.
+//
+// NEITHER test presses the commit button, and that is deliberate rather than
+// laziness: the e2e suite runs against shared demo data, and a spec that
+// created a facility on every run would be exactly the unscoped mutation B-120
+// forbids — it would accumulate sites the roll-ups and switcher assert against.
+// The refusal and the confirm step are the two states nothing else scans, and
+// both are reachable without writing a row. What the create actually WRITES —
+// the facility, and the org defaults pushed into it — is covered in
+// tests/facility-create-db.test.ts, where the fixture is disposable.
+test.describe('adding a facility, given an owner', () => {
+  test.beforeEach(async ({ page }) => {
+    await signInAsDemoOwner(page)
+  })
+
+  // a11y-state: /admin/settings/facilities/new | new facility submit refused
+  test('a bad web address is refused beside the field, not after the site exists', async ({
+    page,
+  }) => {
+    await page.goto('/admin/settings/facilities/new')
+
+    await page.getByLabel('Name').fill('E2E Check Facility')
+    // Spaces and capitals — the commonest thing somebody types into a field
+    // labelled "Web address", and a slug that would 404 every printed sign.
+    await page.getByLabel('Web address').fill('E2E Check')
+    await page.getByLabel('Address line 1', { exact: true }).fill('1 Test Road')
+    await page.getByLabel('City').fill('Austin')
+    await page.getByLabel('State').fill('TX')
+    await page.getByLabel('Postal code').fill('78704')
+    await page.getByRole('button', { name: 'Review this facility' }).click()
+
+    // Scoped to <main>: Next ships its own empty role="alert" route announcer.
+    const alert = page.getByRole('main').getByRole('alert')
+    await expect(alert).toBeVisible()
+    await expect(alert).toContainText('lowercase letters')
+    await expect(page.getByLabel('Web address')).toHaveAttribute('aria-invalid', 'true')
+
+    await assertNoAxeViolations(page)
+  })
+
+  // a11y-state: /admin/settings/facilities/new | new facility confirm-and-echo
+  test('the site is echoed back before it is created', async ({ page }) => {
+    // 3.3.4 Error Prevention (Legal, Financial). The SAME confirm-and-echo step
+    // as the tax rate above, reused rather than reinvented — a facility is what
+    // every lease, invoice and lien notice hangs off, and its state decides
+    // which compliance rules it can ever run.
+    await page.goto('/admin/settings/facilities/new')
+
+    const form = page.getByRole('form', { name: 'Add a facility' })
+    const status = form.getByRole('status')
+    await expectPreexisting(status)
+
+    await form.getByLabel('Name').fill('E2E Check Facility')
+    await form.getByLabel('Web address').fill('e2e-check-facility')
+    await form.getByLabel('Address line 1', { exact: true }).fill('1 Test Road')
+    await form.getByLabel('City').fill('Austin')
+    await form.getByLabel('State').fill('TX')
+    await form.getByLabel('Postal code').fill('78704')
+    await form.getByRole('button', { name: 'Review this facility' }).click()
+
+    await expect(status).toHaveText(/hard to change later/)
+    await expect(page.getByRole('button', { name: 'Yes, create this facility' })).toBeVisible()
+    // The web address it would publish, and the postal code's centre standing
+    // in for a position nobody typed — both things a person can disagree with
+    // before the row exists.
+    await expect(page.getByText('/storage/tx/…/e2e-check-facility')).toBeVisible()
+    await expect(page.getByText(/centre of 78704/)).toBeVisible()
+
+    // And nothing was written: the commit button is still waiting.
+    await assertNoAxeViolations(page)
+  })
+})
+
 test.describe('billing settings, given a screen', () => {
   test.beforeEach(async ({ page }) => {
     await signInAsDemoOwner(page)

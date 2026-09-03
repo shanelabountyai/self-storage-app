@@ -8,6 +8,8 @@ import { formatCents } from '@/lib/format'
 import { delinquencyReport } from '@/lib/admin/reports'
 import { dashboardRollup } from '@/lib/admin/rollups'
 import { FacilityRollup } from '@/components/admin/facility-rollup'
+import { FacilityReadinessBanner } from '@/components/admin/facility-readiness-banner'
+import { can } from '@/lib/rbac/authorize'
 
 /// PRD 02 US-2: every metric links to its facility-scoped detail. A tile with
 /// no destination makes the reader's next question — "which ones?" — a dead
@@ -79,6 +81,21 @@ export default async function AdminDashboardPage({
             Reports
           </Link>
           .
+          {/* B-237. The only screen an owner with no facility at all can reach,
+              since `/admin/settings` asks for one to be picked first. */}
+          {can(actor, 'org:defaults', null) && (
+            <>
+              {' '}
+              To take on a new site,{' '}
+              <Link
+                href="/admin/settings/facilities/new"
+                className="underline underline-offset-4"
+              >
+                add a facility
+              </Link>
+              .
+            </>
+          )}
         </p>
       </div>
     )
@@ -166,6 +183,11 @@ export default async function AdminDashboardPage({
   return (
     <div>
       <h1 className="text-lg font-semibold">{facility.name}</h1>
+      {/* B-237. A site that bills rent and collects nothing else looks healthy
+          on exactly this screen for a month — the tiles all read normally. */}
+      <div className="mt-4">
+        <FacilityReadinessBanner facilityId={facilityId} />
+      </div>
       <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
         {/* "Available now" leads: it is the number the person at the counter
             needs most, and the public site is already computing it. */}

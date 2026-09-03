@@ -75,6 +75,25 @@ function asFormError(error: unknown, fallback: string): FormState {
   return { status: "error", message, fieldErrors: {} };
 }
 
+/// B-237. A latitude or longitude typed by hand. Blank is a real answer and
+/// means "no position", so it is not an error — it is a readiness gap the
+/// banner names.
+function parseCoordinate(
+  raw: FormDataEntryValue | null,
+  bound: number,
+  name: string,
+): { value: number | null } | { error: string } {
+  const text = String(raw ?? "").trim();
+  if (text === "") return { value: null };
+  const parsed = Number(text);
+  if (!Number.isFinite(parsed) || Math.abs(parsed) > bound) {
+    return {
+      error: `${name} must be a number between -${bound} and ${bound}, or blank for no position.`,
+    };
+  }
+  return { value: parsed };
+}
+
 export async function updateFacilityDetailsAction(
   _prev: FormState,
   formData: FormData,
@@ -91,7 +110,14 @@ export async function updateFacilityDetailsAction(
   if (String(formData.get("name") ?? "").trim() === "") {
     errors.name = "Enter the facility name as customers should see it.";
   }
+  // B-237. Blank is a real answer and clears the position; anything else has to
+  // be a number in range, or the site silently drops out of renter search.
+  const latitude = parseCoordinate(formData.get("latitude"), 90, "Latitude");
+  const longitude = parseCoordinate(formData.get("longitude"), 180, "Longitude");
+  if ("error" in latitude) errors.latitude = latitude.error;
+  if ("error" in longitude) errors.longitude = longitude.error;
   if (Object.keys(errors).length > 0) return fieldError(errors);
+  if ("error" in latitude || "error" in longitude) return fieldError(errors);
 
   try {
     await updateFacilityDetails(actor, facilityId, {
@@ -104,6 +130,8 @@ export async function updateFacilityDetailsAction(
       timezone: String(formData.get("timezone")),
       phone: String(formData.get("phone") || "") || null,
       email: String(formData.get("email") || "") || null,
+      latitude: latitude.value,
+      longitude: longitude.value,
     });
   } catch (error) {
     return asFormError(error, "Could not save the facility details.");

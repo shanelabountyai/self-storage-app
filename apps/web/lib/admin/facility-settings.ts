@@ -1,5 +1,6 @@
 import { prisma } from "@storage/db";
 import { recordAudit } from "@storage/core/audit";
+import { ORG_DEFAULT_SCOPES, type OrgDefaultScope } from "@storage/core/org";
 import {
   effectiveByGroup,
   parseWeeklySchedule,
@@ -8,6 +9,7 @@ import {
 import { propagateGateHours } from "@/lib/access/time-windows";
 import { switchGateAdapter } from "@/lib/access/manual-adapter";
 import { recordFacilityMove } from "@/lib/marketing/redirects";
+import { pushOrgDefault } from "@/lib/admin/org-defaults";
 import { requirePermission } from "@/lib/rbac/authorize";
 import type { Actor } from "@/lib/rbac/actor";
 import { toAuditActor } from "@/lib/rbac/audit-actor";
@@ -111,7 +113,26 @@ export type FacilityDetailsInput = {
   timezone: string;
   phone: string | null;
   email: string | null;
+  /// B-237. Geo had no control anywhere in the product, and it is not
+  /// cosmetic: `searchFacilities` filters to facilities that have both, so a
+  /// site with either missing is invisible to every renter search.
+  latitude: number | null;
+  longitude: number | null;
 };
+
+export class InvalidSlugError extends Error {
+  constructor(readonly slug: string) {
+    super(`"${slug}" is not a usable URL segment`);
+    this.name = "InvalidSlugError";
+  }
+}
+
+export class DuplicateSlugError extends Error {
+  constructor(readonly slug: string) {
+    super(`"${slug}" is already used by another facility`);
+    this.name = "DuplicateSlugError";
+  }
+}
 
 export class InvalidTimezoneError extends Error {
   readonly timezone: string;
@@ -166,6 +187,68 @@ export async function updateFacilityDetails(
     before,
     after,
   });
+}
+
+/// B-237. Creating a site, which until now was a database session.
+///
+/// Gated on `org:defaults` rather than `facility:settings`: there is no
+/// facility to be assigned to yet, and adding one to the portfolio is a
+/// portfolio-wide act. `can()` is asked with a null facilityId, which only an
+/// all-facilities assignment satisfies — the same shape `saveOrgDefault` uses.
+///
+/// The push is part of the create, not a thing to remember afterwards. A
+/// facility with no fee schedule, no ladder and no timeline invoices rent and
+/// does nothing else, silently, which is the failure this whole item is about.
+/// It is D-41's "pushed, never resolved" shape applied at birth: the new site
+/// owns ordinary effective-dated rows from day one, so nothing downstream has
+/// to know org defaults exist, and its own history says where the values came
+/// from.
+///
+/// A scope with no org default configured, or one whose push is refused, is
+/// left as a gap for `facilityReadiness` to name rather than being invented
+/// here. Creating the facility still succeeds: an operator who has bought a
+/// site needs it in the system today, and the banner is what stops the gap
+/// going unnoticed.
+export async function createFacility(
+  actor: Actor,
+  input: FacilityDetailsInput & { slug: string },
+): Promise<{ id: string; pushed: OrgDefaultScope[] }> {
+  requirePermission(actor, "org:defaults", null);
+  assertValidTimezone(input.timezone);
+
+  const slug = input.slug.trim().toLowerCase();
+  if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(slug)) throw new InvalidSlugError(slug);
+  if (await prisma.facility.findUnique({ where: { slug }, select: { id: true } })) {
+    throw new DuplicateSlugError(slug);
+  }
+
+  const facility = await prisma.facility.create({
+    data: { ...input, slug, state: input.state.toUpperCase() },
+  });
+
+  await recordAudit({
+    actor: toAuditActor(actor),
+    action: "facility.created",
+    entityType: "Facility",
+    entityId: facility.id,
+    facilityId: facility.id,
+    after: facility,
+  });
+
+  // Effective from today, not from the epoch: the rows are the facility's real
+  // history and it has none before today.
+  const effectiveFrom = new Date();
+  const pushed: OrgDefaultScope[] = [];
+  for (const scope of ORG_DEFAULT_SCOPES) {
+    const results = await pushOrgDefault(actor, {
+      scope,
+      facilityIds: [facility.id],
+      effectiveFrom,
+    });
+    if (results.some((result) => result.outcome === "pushed")) pushed.push(scope);
+  }
+
+  return { id: facility.id, pushed };
 }
 
 export type FacilityHoursInput = {

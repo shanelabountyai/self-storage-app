@@ -198,6 +198,26 @@ const STATE_REACH: Record<string, { audience: Audience; go: (page: Page) => Prom
       ).toBeVisible()
     },
   },
+  // B-237. Six `<dl>` rows of long values — a full address and a web address
+  // among them. The tax step's exception does not carry over: two short rows
+  // and six long ones are not the same layout question at 320px.
+  '/admin/settings/facilities/new | new facility confirm-and-echo': {
+    audience: 'admin',
+    async go(page) {
+      await page.goto('/admin/settings/facilities/new')
+      const form = page.getByRole('form', { name: 'Add a facility' })
+      await form.getByLabel('Name').fill('E2E Layout Facility')
+      await form.getByLabel('Web address').fill('e2e-layout-facility')
+      await form.getByLabel('Address line 1', { exact: true }).fill('1 Very Long Test Road, Suite 200')
+      await form.getByLabel('City').fill('Austin')
+      await form.getByLabel('State').fill('TX')
+      await form.getByLabel('Postal code').fill('78704')
+      await form.getByRole('button', { name: 'Review this facility' }).click()
+      // The echo, not the form it replaced — measuring the page before the step
+      // arrives is the failure this key exists to catch.
+      await expect(page.getByRole('button', { name: 'Yes, create this facility' })).toBeVisible()
+    },
+  },
   // B-246. The two states B-215 left with axe and no width measurement at all,
   // and which were declared in neither list — the exact hole this row closed in
   // `SCANNED_STATES`. Both are on the tenant profile, which B-217 established

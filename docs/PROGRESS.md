@@ -8190,3 +8190,51 @@ US-2's own criterion is that in the All facilities context every roll-up-capable
 - **No alarm on a persistent backlog.** The line on `/admin/billing` is a screen somebody has to open. B-229's 48-hour stale-money-job task is still the only thing that reaches a person, and it only covers the four money jobs.
 
 **Test verification.** Typecheck (including `tsconfig.tests.json`) clean; lint clean (7 pre-existing warnings, unrelated); no schema change, so no migration. New `tests/cron-queue-db.test.ts` — **11 passed**: the queue holds every job whose local hour has been reached in registry order, a run stays due at every later hour of the same day until it runs (the B-236 property), a succeeded run leaves the queue and a *failed* one does not, the catch-up dates come back oldest-first with everything but today flagged, the global jobs form their own group, and `inParallel` covers every item without exceeding its limit or hanging on an empty queue. `tests/schedule.test.ts` rewritten for the new semantics — **28 passed**. Full unit suite **4,060 passed, 8 skipped of 4,068** (244 files passed, 1 skipped), exit 0, and **run twice with identical totals** because the new suite creates and drops a facility. `db:status` exits non-zero against the Neon dev branch, which is behind by B-219's two `clock_timestamp()` migrations — pre-existing, unrelated, and CI's `verify` lane builds its own database so the drift check passes there. **`main`'s CI is red for an unrelated reason**: `e2e/impersonation.spec.ts` fails on both projects in the last run on `main`, and this item does not touch impersonation.
+
+## B-237 — a facility can be created, and one that is not ready says so
+
+`SHA_PLACEHOLDER`
+
+`prisma.facility.create` existed nowhere in the application — only in seeds and test fixtures — so onboarding a site an operator had just bought was a database session. `/admin/settings` is read-and-update against a facility that already exists; B-008's row said "Facility settings CRUD" and what shipped was RU.
+
+**The silent half was the one that mattered.** A hand-inserted facility has no `DelinquencyTimeline`, no `LateFeeRule`, no `FeeSchedule` and no tax component, so it invoices rent, charges no late fee however far past due a tenant runs, executes no dunning step, and `auctionReadiness` blocks every sale with `no_timeline` — without an error anywhere. The dashboard tiles read normally the whole time.
+
+**What it built.**
+
+1. **`createFacility`** (`apps/web/lib/admin/facility-settings.ts`), gated on `org:defaults` asked with a **null facilityId** — only an all-facilities assignment satisfies it. There is no facility to be scoped to yet, and adding one to the portfolio is a portfolio-wide act, the same shape `saveOrgDefault` uses.
+2. **The org-default push happens inside the create**, not as a thing to remember afterwards: all three scopes are pushed through B-079's existing `pushOrgDefault`, so the new site owns ordinary effective-dated rows from day one. D-41's "pushed, never resolved" applied at birth.
+3. **`/admin/settings/facilities/new`** — the form, with the confirm-and-echo step reused from `/admin/settings`.
+4. **`facilityReadiness`** (`apps/web/lib/admin/facility-readiness.ts`) and **`FacilityReadinessBanner`**, on both `/admin` and `/admin/settings`.
+5. **Latitude and longitude got controls**, on the create form and on `/admin/settings`' existing details form. They had none anywhere, and they are not cosmetic.
+
+**What it decided.**
+
+- **A failed or unconfigured push does not fail the create.** An operator who has bought a site needs it in the system today; the banner is what stops the gap going unnoticed. `createFacility` returns which scopes were actually pushed, and the rest become gaps.
+- **A gap is an EMPTY table, never a value somebody chose.** A zero-dollar late fee is a real operator decision and is not reported; no ladder at all is. That is why readiness is a query rather than a comparison against the org default.
+- **"Configured" means in force, not "a row exists".** All four money tables are effective-dated, so a rate filed for next quarter bills nothing today and is still a gap. Pinned by a test.
+- **The banner renders nothing once the list is empty.** A permanent "all good" on a screen somebody opens daily is how they learn to skip the region it lives in.
+- **Notice templates resolve org-level**, so an inherited template is not a gap — the readiness query uses the same precedence `effectiveNoticeTemplate` applies at generate time, rather than asking whether the facility has its own.
+- **The create sets the facility-switcher cookie and redirects to `/admin/settings`, with no success message.** The readiness banner is the message, and it says what is still missing rather than "Facility created."
+- **A blank coordinate derives from the postal code's centre** via the bundled dataset D-14 settled on, and the confirm step says so in those words. A centroid is a documented approximation of the place the postal code names, not a guess at the building — and a zip the dataset does not know leaves it null and becomes a gap.
+
+**Accessibility (the row's own criteria).**
+
+- **3.3.4 is the confirm-and-echo step already shipped at `/admin/settings`, reused rather than reinvented** — same `FormState` `confirm` branch, same pre-mounted status region, `confirmLabel` of "Yes, create this facility".
+- **The readiness banner is text and links** (1.4.1): each gap names what is missing, what silently does not happen, and links to the control that fixes it.
+- **Every control goes through `Field`**, so `aria-invalid`/`aria-describedby` cannot be omitted and the timezone `<select>` gets `max-w-full` (from `CONTROL_CLASS`) and `min-w-0` (from `Field`'s wrapper) — B-201's exact defect.
+- **The route joined `ADMIN_SCAN_ROUTES` and both new states joined `SCANNED_STATES` in the same commit.** The refusal is `layout: 'excepted'` against the admin loop's own measurement; the confirm step is **`layout: 'reached'` and deliberately not excepted**, because six `<dl>` rows of long values is not the tax step's two short ones.
+
+**One real defect found and fixed at the root.** `AdminForm`'s echo `<dl>` is `grid-cols-[auto_1fr]`, and a grid item defaults to `min-width: auto` — so a single long unbroken value widens the track instead of wrapping in it. The tax step's two short rows never showed it; a facility's web address does. Fixed on the shared component (`min-w-0 break-words` on the `<dd>`), so every confirm step in the product gets it, not just this one.
+
+**What it left behind.**
+
+- **No unit types, units or office hours are created.** A site still needs B-009's unit setup before it can rent anything; readiness names the money and compliance gaps the row named, not the whole onboarding.
+- **No bulk import.** Taking on a portfolio is still one form per site.
+- **`slug` is typed, not suggested.** Deriving it from the name would be one line, and it would silently produce a public URL nobody chose — the field is required and hinted instead.
+- **Nothing deletes or archives a facility.** `FacilityStatus` has the states; no screen sets them, and `audit_log`'s RESTRICT foreign key means a hard delete was never available anyway.
+
+**Test verification.** Typecheck (including `tsconfig.tests.json`) clean; lint clean (7 pre-existing warnings, unrelated); no schema change, so no migration. New `tests/facility-create-db.test.ts` — **9 passed**: the permission refusal, an unusable slug, a slug another site already holds, an unreal timezone, the state normalized to upper case (compliance config is keyed on it), the map-position gap appearing only when a coordinate is genuinely absent, a gap disappearing once the setting exists, a rate effective next quarter still counting as a gap, and the audit row. `tests/org-defaults-db.test.ts` gained two — **13 passed**. Full unit suite **4,073 passed, 8 skipped of 4,081** (245 files passed, 1 skipped), exit 0. Production build clean, with `/admin/settings/facilities/new` in the route table. `e2e/admin.spec.ts` + `e2e/a11y-own-spec-routes.spec.ts` — **572 passed, exit 0**, reconciled against the per-test ✓ count; that includes the new route's axe scan on both projects and all three new tests.
+
+**One red run, and what it was.** The new DB test cleared `OrgDefault` in its `beforeEach` and raced `org-defaults-db.test.ts`, which failed as `expected undefined to deeply equal [ 'admin' ]`. **`OrgDefault` is keyed on `scope` alone — three rows for the whole database — so any suite that sets or clears one is mutating global state**, and two suites doing it concurrently is a race rather than a test. The two push assertions moved into the file that already owns that table and resets it between tests; `facility-create-db.test.ts` now only ever READS it, through `createFacility`. It is the shared-fixture rule this repo already writes down for e2e, one level down: this is a `vitest` suite, and the discipline is the same.
+
+**Neither new e2e test presses the commit button, deliberately.** The suite runs against shared demo data, so a spec that created a facility on every run is exactly the unscoped mutation B-120 forbids — it would accumulate sites the roll-ups and the switcher assert against. The refusal and the confirm step are the two states nothing else scans and both are reachable without writing a row; what the create actually WRITES is covered where the fixture is disposable. That is the same posture the tax-rate confirm test has always had.

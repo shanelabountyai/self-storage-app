@@ -8,6 +8,8 @@ import {
   saveOrgDefault,
   templateOverrides,
 } from '../apps/web/lib/admin/org-defaults'
+import { createFacility } from '../apps/web/lib/admin/facility-settings'
+import { facilityReadiness } from '../apps/web/lib/admin/facility-readiness'
 import { ForbiddenError } from '../apps/web/lib/rbac/authorize'
 import type { Actor } from '../apps/web/lib/rbac/actor'
 import type { PermissionKey } from '@storage/db/rbac-catalog'
@@ -45,6 +47,24 @@ function actor(options: { allFacilities?: boolean; facilityIds?: string[] } = {}
       limits: { maxFeeWaiverCents: null, maxRefundCents: null, maxCreditCents: null },
     })),
   }
+}
+
+/// B-237. A brand-new site, created the way the admin screen creates one.
+function newFacility(who: Actor, key: string) {
+  return createFacility(who, {
+    name: `Born ${key} ${suffix}`,
+    slug: `born-${key}-${suffix}`,
+    addressLine1: '1 Storage Way',
+    addressLine2: null,
+    city: 'Austin',
+    state: 'TX',
+    postalCode: '78704',
+    timezone: 'America/Chicago',
+    phone: null,
+    email: null,
+    latitude: 30.2453,
+    longitude: -97.7714,
+  })
 }
 
 describeDb('org defaults (US-4)', () => {
@@ -300,6 +320,40 @@ describeDb('org defaults (US-4)', () => {
       })
       expect(entry?.facilityId).toBe(facilityId)
     }
+  })
+
+  // B-237. Creating a facility pushes the org defaults into it at birth, which
+  // is the same table this file owns — `OrgDefault` has one row per scope for
+  // the whole database, so these two live here rather than beside the rest of
+  // `createFacility`'s tests, where they raced this suite's `beforeEach`.
+  it('pushes the org defaults into a facility as it is created', async () => {
+    const owner = actor({ allFacilities: true })
+    await saveOrgDefault(owner, { scope: 'fee_schedule', label: 'Org fees', payload: FEES })
+
+    const site = await newFacility(owner, 'pushed')
+
+    expect(site.pushed).toContain('fee_schedule')
+    // Ordinary effective-dated rows in the facility's OWN tables — D-41's
+    // "pushed, never resolved". Nothing downstream has to know org defaults
+    // exist, and the new site's history says where its values came from.
+    const fees = await prisma.feeSchedule.findMany({ where: { facilityId: site.id } })
+    expect(fees.map((row) => row.feeType).sort()).toEqual(['admin', 'nsf'])
+  })
+
+  it('still creates the facility with no org default set, and names what is missing', async () => {
+    // The half that carries B-237: a site with nothing behind it invoices rent
+    // perfectly and collects nothing else, without a single error anywhere.
+    const site = await newFacility(actor({ allFacilities: true }), 'bare')
+    expect(site.pushed).toEqual([])
+
+    const kinds = (await facilityReadiness(site.id)).map((gap) => gap.kind)
+    expect(kinds).toContain('fee_schedule')
+    expect(kinds).toContain('late_fee_ladder')
+    expect(kinds).toContain('delinquency_timeline')
+    expect(kinds).toContain('tax')
+    // Geo WAS given, so it must not be reported — a banner that complains about
+    // a field somebody filled in is one people stop reading.
+    expect(kinds).not.toContain('geo')
   })
 
   it('lists which facilities override a message template', async () => {

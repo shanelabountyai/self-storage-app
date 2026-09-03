@@ -118,6 +118,8 @@ describe.skipIf(!hasDatabase)('updateFacilityDetails', () => {
       timezone: 'America/Chicago',
       phone: '512-555-0100',
       email: 'a@example.com',
+      latitude: 30.2672,
+      longitude: -97.7431,
     })
 
     const facility = await prisma.facility.findUniqueOrThrow({ where: { id: facilityAId } })
@@ -145,6 +147,8 @@ describe.skipIf(!hasDatabase)('updateFacilityDetails', () => {
         timezone: 'Mars/Olympus_Mons',
         phone: null,
         email: null,
+        latitude: null,
+        longitude: null,
       }),
     ).rejects.toBeInstanceOf(InvalidTimezoneError)
   })
@@ -162,6 +166,8 @@ describe.skipIf(!hasDatabase)('updateFacilityDetails', () => {
         timezone: 'America/Chicago',
         phone: null,
         email: null,
+        latitude: null,
+        longitude: null,
       }),
     ).rejects.toBeInstanceOf(ForbiddenError)
   })
@@ -179,6 +185,8 @@ describe.skipIf(!hasDatabase)('updateFacilityDetails', () => {
         timezone: 'America/Chicago',
         phone: null,
         email: null,
+        latitude: null,
+        longitude: null,
       }),
     ).rejects.toBeInstanceOf(ForbiddenError)
 

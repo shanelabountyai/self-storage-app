@@ -31,6 +31,7 @@ import {
 
 import { ALLOCATION_CATEGORIES } from "@storage/core/billing";
 import { ScrollRegion } from "@/components/ui/scroll-region"
+import { FacilityReadinessBanner } from "@/components/admin/facility-readiness-banner";
 
 const ALLOCATION_LABELS: Record<string, string> = {
   tax: "Tax",
@@ -146,6 +147,10 @@ export default async function AdminSettingsPage() {
     <div className="flex max-w-3xl flex-col gap-8">
       <h1 className="text-lg font-semibold">{facility.name} settings</h1>
 
+      {/* B-237. Every link below points into this page or a sibling of it, so
+          the fix is one click from the sentence that says why it matters. */}
+      <FacilityReadinessBanner facilityId={facilityId} />
+
       <section
         aria-labelledby="details-heading"
         className="flex flex-col gap-3"
@@ -213,6 +218,20 @@ export default async function AdminSettingsPage() {
               </option>
             ))}
           </Field>
+          {/* B-237. Geo had no control anywhere in the product, and a site
+              with either coordinate missing is skipped by renter search
+              entirely. */}
+          <Field
+            name="latitude"
+            label="Latitude"
+            defaultValue={facility.latitude ?? ""}
+            hint="Leave both blank to use the centre of the postal code. Without a position this site is left out of renter searches."
+          />
+          <Field
+            name="longitude"
+            label="Longitude"
+            defaultValue={facility.longitude ?? ""}
+          />
           <Field
             name="phone"
             label="Phone"
@@ -936,6 +955,12 @@ export default async function AdminSettingsPage() {
             className="underline underline-offset-2"
           >
             Reviews — manual entry and the review-request link
+          </Link>
+          <Link
+            href="/admin/settings/facilities/new"
+            className="underline underline-offset-2"
+          >
+            Add a facility — a new site, with your org defaults pushed into it
           </Link>
           <Link
             href="/admin/settings/org"

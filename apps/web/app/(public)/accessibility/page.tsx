@@ -1461,6 +1461,41 @@ const LAST_REVIEWED = '19 August 2026'
 // is three screens re-checked and one new pattern scanned, not a re-review of
 // the page's claims, and no screen-reader pass was recorded.
 
+// Re-read 2026-09-02, at B-237 (there was no way to create a facility, and one
+// created by hand took rent and did nothing else). **Staff-only throughout** —
+// `/admin/settings/facilities/new`, plus a readiness banner on `/admin` and
+// `/admin/settings`. No public route was added, so the generated coverage
+// claim, the route-keyed exception list and `LAST_REVIEWED` are all untouched,
+// and no claim on this page moved in either direction.
+//
+// What the item's own screens carry, recorded because four of the row's
+// acceptance criteria were accessibility ones:
+//
+// **(1) The readiness banner is text and links, not a colour badge** (1.4.1).
+// Each gap names what is missing, what silently does not happen while it is,
+// and links to the control that fixes it. A red dot would carry none of the
+// three, and the whole point of the banner is that the failure it describes
+// raises no error anywhere.
+//
+// **(2) 3.3.4 is the confirm-and-echo step already shipped at
+// `/admin/settings`, reused rather than reinvented** — the same `FormState`
+// `confirm` branch, the same pre-mounted status region, a `confirmLabel` of
+// "Yes, create this facility". A facility that will invoice real tenants is a
+// financial and legal commitment, and its state decides which compliance rules
+// it can ever run (D-10, US-29).
+//
+// **(3) Every control goes through `Field`**, so `aria-invalid` and
+// `aria-describedby` cannot be omitted, and the timezone `<select>` gets
+// `max-w-full` (from `CONTROL_CLASS`) and `min-w-0` (from `Field`'s own
+// wrapper) — B-201's exact defect, which a hand-rolled control would have
+// reproduced.
+//
+// **(4) The route joined `ADMIN_SCAN_ROUTES` and both of its states joined
+// `SCANNED_STATES` in the same commit**, not a follow-up. The refusal is
+// `layout: 'excepted'` on the admin loop's own measurement; the confirm step is
+// `layout: 'reached'` and NOT excepted, because six `<dl>` rows of long values
+// (a full address, a web address) is not the tax step's two short ones.
+
 export default function AccessibilityPage() {
   return (
     <ProsePage
