@@ -8193,7 +8193,7 @@ US-2's own criterion is that in the All facilities context every roll-up-capable
 
 ## B-237 — a facility can be created, and one that is not ready says so
 
-`SHA_PLACEHOLDER`
+`6e6144f`
 
 `prisma.facility.create` existed nowhere in the application — only in seeds and test fixtures — so onboarding a site an operator had just bought was a database session. `/admin/settings` is read-and-update against a facility that already exists; B-008's row said "Facility settings CRUD" and what shipped was RU.
 
