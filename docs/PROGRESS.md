@@ -8154,7 +8154,7 @@ US-2's own criterion is that in the All facilities context every roll-up-capable
 
 ## B-236 — the hourly tick bounds its work, and what it cannot reach stays due
 
-`PENDING`
+`ce675c1`
 
 `/api/cron` looped `SCHEDULED_JOBS` × facilities × missed business dates, serially, against a remote Postgres, inside one request capped at 300 seconds. FR-13 states a 30-minute budget for 20 facilities and FR-14 promises catch-up runs; neither was bounded by anything in the code. The reviewer asked for a measurement before the fix was sized, and the measurement changed what the fix is about.
 
