@@ -8274,7 +8274,7 @@ Two surfaces, one complaint: the product told a renter where the money goes and 
 
 ## B-240 — the tenant profile answers the four questions at the top, and every section is one click away
 
-`SHA_PLACEHOLDER`
+`18cfa93`
 
 Fourteen sections in one column, 2,154 lines, no in-page navigation and no summary. "Waive this fee for the person in front of me" was a scroll past referral history and gate events, worst on the phone viewport B-217 established is real counter work.
 
