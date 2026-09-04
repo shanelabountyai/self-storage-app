@@ -54,9 +54,10 @@ async function addPricedType(
   name: string,
   webRateCents: number,
   availableCount: number,
+  size: { widthFt: number; lengthFt: number } = { widthFt: 10, lengthFt: 10 },
 ) {
   const unitType = await prisma.unitType.create({
-    data: { facilityId, name: `${name} ${suffix}`, widthFt: 10, lengthFt: 10 },
+    data: { facilityId, name: `${name} ${suffix}`, ...size },
   })
   await prisma.unitTypeRate.create({
     data: {
@@ -91,10 +92,13 @@ beforeAll(async () => {
   await makeFacility('nocoords', { latitude: null, longitude: null })
 
   // 'near' is cheapest at $99 among types that actually have a unit free.
-  await addPricedType(ids.near, 'ten', 12_900, 2)
-  await addPricedType(ids.near, 'five', 9_900, 1)
-  // A cheaper type with nothing available must not set the "from" price.
-  await addPricedType(ids.near, 'sold-out', 4_900, 0)
+  // The three sizes differ so "the price names ITS size" is falsifiable — with
+  // every type 10×10 the assertion would pass on the wrong type (B-242).
+  await addPricedType(ids.near, 'ten', 12_900, 2, { widthFt: 10, lengthFt: 20 })
+  await addPricedType(ids.near, 'five', 9_900, 1, { widthFt: 5, lengthFt: 10 })
+  // A cheaper type with nothing available must not set the "from" price, nor
+  // its size, nor be counted as an available size.
+  await addPricedType(ids.near, 'sold-out', 4_900, 0, { widthFt: 5, lengthFt: 5 })
   // 'mid' is priced but has nothing rentable at all.
   await addPricedType(ids.mid, 'none-free', 8_900, 0)
 })
@@ -223,9 +227,27 @@ describeDb('units from $X/mo', () => {
     expect(mid.fromWebRateCents).toBeNull()
   })
 
+  it('carries the size that price belongs to, and the real counts (B-242)', async () => {
+    const outcome = await searchFacilities({ q: '78704' })
+    if (outcome.status !== 'ok') throw new Error('expected results')
+
+    const near = outcome.results.find((r) => r.id === ids.near)!
+    // The $99 type is the 5×10, not the cheaper sold-out 5×5 and not the 10×20.
+    // A price quoted against the wrong size is the defect, not a rounding one.
+    expect(near.from).toMatchObject({ webRateCents: 9_900, widthFt: 5, lengthFt: 10 })
+    // Two types have a unit free; the sold-out one is neither a size nor a unit.
+    expect(near.from!.availableSizes).toBe(2)
+    expect(near.from!.availableUnits).toBe(3)
+
+    const mid = outcome.results.find((r) => r.id === ids.mid)!
+    // Null in lockstep with the rate: a size with no price, or a price with no
+    // size, is what the card must never be able to render.
+    expect(mid.from).toBeNull()
+  })
+
   it('answers for many facilities without a query per facility', async () => {
     const lowest = await lowestAvailableWebRateByFacility([ids.near, ids.mid, ids.far])
-    expect(lowest.get(ids.near)).toBe(9_900)
+    expect(lowest.get(ids.near)?.webRateCents).toBe(9_900)
     // Absent rather than present-and-zero, so a caller cannot render "$0".
     expect(lowest.has(ids.mid)).toBe(false)
     expect(lowest.has(ids.far)).toBe(false)

@@ -1531,6 +1531,43 @@ const LAST_REVIEWED = '19 August 2026'
 // page's own text is careful that automated coverage is "a floor, not a
 // ceiling" and this is precisely one of the gaps that phrase is about.
 
+// Re-read 2026-09-04, at B-242 (a search result names the size its price
+// belongs to, and carries a photo). **Customer-facing**, on `/storage/search`,
+// which is already in `SCANNED_ROUTES` — no route added, no state added, so the
+// generated coverage claim and both exception lists are untouched. **No claim
+// on this page changes and `LAST_REVIEWED` does not move.**
+//
+// The "Where we fall short" list was re-read against this build and all three
+// entries are still true and unchanged in scope: the no-JavaScript hold
+// countdown still does not tick, the four staff lists are still unpaginated,
+// and the two embedded maps are untouched by this row — in particular the
+// search map's price markers are not what this changes; the card underneath it
+// is.
+//
+// Three things this row adds that the page must not be read as claiming more
+// about than is true:
+//
+// **(1) The thumbnail is `alt=""` and is not a link.** It sits beside a link
+// that already names the facility, so a repeated name would be noise rather
+// than a text alternative (1.1.1). `FacilityPhoto.alt` is required and is
+// populated — the decision to render the empty string is about this placement
+// specifically, and the facility gallery still renders the stored alt.
+//
+// **(2) The size and the price are ONE accessible sentence, not two nodes.**
+// U+00D7 announces as a multiplication operator, which is why the sighted
+// compact form (`5×10`) and the spoken one ("5 foot by 10 foot from $99 per
+// month") are separate spans — the pattern B-016 shipped, and this is the
+// fourth surface to need it. Rendering "5×10" and "Units from $99/mo" as
+// adjacent nodes would have satisfied a scan and told a screen-reader user
+// nothing about which price belongs to which size.
+//
+// **(3) The distance moved INTO the link's accessible name (2.4.4) and out of
+// the assistive-technology tree beside it.** The visible distance is now
+// `aria-hidden`, because carrying it in both places reads it twice. That is a
+// judgement about announcement order that no automated check can make — axe
+// sees a named link either way — so it is recorded here rather than left to a
+// green scan.
+
 export default function AccessibilityPage() {
   return (
     <ProsePage

@@ -1,5 +1,8 @@
 import { prisma } from '@storage/db'
-import { lowestAvailableWebRateByFacility } from '@/lib/inventory/public-inventory'
+import {
+  lowestAvailableWebRateByFacility,
+  type FacilityFromRate,
+} from '@/lib/inventory/public-inventory'
 import { distanceMiles, geocodeQuery, type GeoPoint } from './geocode'
 
 // PRD 01 US-101 / FR-1.1. Radius search over facility coordinates, ranked by
@@ -40,6 +43,14 @@ export type FacilityResult = {
   /// Lowest current web rate among unit types with a unit available.
   /// Null when nothing is rentable — never 0, which would read as free.
   fromWebRateCents: number | null
+  /// The size that `fromWebRateCents` belongs to, and what else is free.
+  /// Null on exactly the same facilities as the rate: one absent and the other
+  /// present would let a card quote a size at no price or a price at no size,
+  /// which is the defect B-242 is about.
+  from: FacilityFromRate | null
+  /// The facility's first gallery photo, or null when it has none. B-118's rule
+  /// applies here too: no photo means no frame, never a placeholder.
+  photo: { url: string } | null
 }
 
 export type SearchOutcome =
@@ -76,16 +87,36 @@ async function rankFacilities(point: GeoPoint): Promise<FacilityResult[]> {
     },
   })
 
-  const fromRates = await lowestAvailableWebRateByFacility(facilities.map((f) => f.id))
+  const ids = facilities.map((f) => f.id)
+  const [fromRates, photos] = await Promise.all([
+    lowestAvailableWebRateByFacility(ids),
+    // One row per facility rather than the whole gallery: `distinct` on a
+    // sorted read is Postgres's DISTINCT ON, so this stays a single query
+    // however many facilities rank. Only the url is selected — the thumbnail is
+    // decorative beside a link that already names the facility, so it renders
+    // `alt=""` (WCAG 1.1.1) and the stored alt text would be dead weight.
+    prisma.facilityPhoto.findMany({
+      where: { facilityId: { in: ids } },
+      orderBy: [{ facilityId: 'asc' }, { position: 'asc' }],
+      distinct: ['facilityId'],
+      select: { facilityId: true, url: true },
+    }),
+  ])
+  const photoByFacility = new Map(photos.map((photo) => [photo.facilityId, { url: photo.url }]))
 
   return facilities
-    .map(({ latitude, longitude, ...facility }) => ({
-      ...facility,
-      latitude: latitude!,
-      longitude: longitude!,
-      distanceMiles: distanceMiles(point, { latitude: latitude!, longitude: longitude! }),
-      fromWebRateCents: fromRates.get(facility.id) ?? null,
-    }))
+    .map(({ latitude, longitude, ...facility }) => {
+      const from = fromRates.get(facility.id) ?? null
+      return {
+        ...facility,
+        latitude: latitude!,
+        longitude: longitude!,
+        distanceMiles: distanceMiles(point, { latitude: latitude!, longitude: longitude! }),
+        fromWebRateCents: from?.webRateCents ?? null,
+        from,
+        photo: photoByFacility.get(facility.id) ?? null,
+      }
+    })
     .sort((a, b) => a.distanceMiles - b.distanceMiles)
 }
 

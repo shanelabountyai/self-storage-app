@@ -100,52 +100,112 @@ function facilityHref(facility: FacilityResult, query: string, filters: string):
 }
 
 function ResultCard({ facility, href }: { facility: FacilityResult; href: string }) {
+  const from = facility.from
   return (
     <li className="rounded-lg border p-4">
-      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <h3 className="text-lg font-medium">
-          {/* The name is the link rather than the whole card: a card-wide click
-              target swallows the address text a user may want to select, and
-              gives screen readers one enormous link name (US-103). */}
-          <Link href={href} className="underline underline-offset-4">
-            {facility.name}
-          </Link>
-        </h3>
-        <p className="text-muted-foreground text-sm">{formatMiles(facility.distanceMiles)}</p>
-      </div>
-
-      <address className="text-muted-foreground mt-1 text-sm not-italic">
-        {formatAddress(facility)}
-      </address>
-
-      {facility.amenities.length > 0 && (
-        <ul className="mt-3 flex flex-wrap gap-2">
-          {facility.amenities.map((amenity) => (
-            <li key={amenity} className="bg-muted rounded-full px-3 py-1 text-xs">
-              {amenity}
-            </li>
-          ))}
-        </ul>
-      )}
-
-      <p className="mt-3 font-medium">
-        {facility.fromWebRateCents === null ? (
-          // Never render a price for a facility with nothing rentable, and never
-          // render $0. Saying so plainly beats an empty space the reader has to
-          // interpret (§6.7).
-          <>
-            No units available right now —{' '}
-            <a href={`tel:${SITE.phone.href}`} className="underline underline-offset-4">
-              call {SITE.phone.display}
-            </a>
-          </>
-        ) : (
-          <>
-            Units from {formatRate(facility.fromWebRateCents)}
-            <span className="text-muted-foreground font-normal">/mo</span>
-          </>
+      {/* B-118 established that a renter comparing three sites judges "clean,
+          lit, not a dump" from a photo; the facility page got that treatment
+          and the list that ranks facilities did not. Same rule as there: a
+          facility with no photo renders no frame, because there is nothing
+          honest to reserve the space for. */}
+      <div className="flex gap-4">
+        {facility.photo && (
+          /* eslint-disable-next-line @next/next/no-img-element */
+          <img
+            src={facility.photo.url}
+            // Decorative: it sits beside a link that already names the
+            // facility, so a repeated name is noise rather than information
+            // (WCAG 1.1.1). It is deliberately not a link either — the name
+            // above is the one target.
+            alt=""
+            loading="lazy"
+            decoding="async"
+            // The aspect ratio for the browser's CLS reservation, matching
+            // `aspect-4/3` below, exactly as the facility gallery does —
+            // FacilityPhoto stores no pixel dimensions.
+            width={800}
+            height={600}
+            className="aspect-4/3 w-24 shrink-0 rounded-md border object-cover sm:w-32"
+          />
         )}
-      </p>
+
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+            <h3 className="text-lg font-medium">
+              {/* The name is the link rather than the whole card: a card-wide click
+                  target swallows the address text a user may want to select, and
+                  gives screen readers one enormous link name (US-103). The
+                  distance rides inside the accessible name (WCAG 2.4.4) rather
+                  than being read twice — the visible copy below is hidden from
+                  assistive technology for exactly that reason. */}
+              <Link href={href} className="underline underline-offset-4">
+                {facility.name}
+                <span className="sr-only">, {formatMiles(facility.distanceMiles)}</span>
+              </Link>
+            </h3>
+            <p className="text-muted-foreground text-sm" aria-hidden="true">
+              {formatMiles(facility.distanceMiles)}
+            </p>
+          </div>
+
+          <address className="text-muted-foreground mt-1 text-sm not-italic">
+            {formatAddress(facility)}
+          </address>
+
+          {facility.amenities.length > 0 && (
+            <ul className="mt-3 flex flex-wrap gap-2">
+              {facility.amenities.map((amenity) => (
+                <li key={amenity} className="bg-muted rounded-full px-3 py-1 text-xs">
+                  {amenity}
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <p className="mt-3 font-medium">
+            {from === null ? (
+              // Never render a price for a facility with nothing rentable, and never
+              // render $0. Saying so plainly beats an empty space the reader has to
+              // interpret (§6.7).
+              <>
+                No units available right now —{' '}
+                <a href={`tel:${SITE.phone.href}`} className="underline underline-offset-4">
+                  call {SITE.phone.display}
+                </a>
+              </>
+            ) : (
+              // B-242: the price names the size it belongs to, and the two are ONE
+              // sentence in the accessible name. "Units from $60/mo" and "5×5" read
+              // as separate nodes tell a renter nothing about the relationship
+              // between them. U+00D7 announces as a multiplication operator, so the
+              // sighted compact form and the spoken sentence are separate spans —
+              // the pattern B-016 shipped and this is the fourth surface to need.
+              <>
+                <span aria-hidden="true">
+                  {from.widthFt}×{from.lengthFt} from {formatRate(from.webRateCents)}
+                  <span className="text-muted-foreground font-normal">/mo</span>
+                </span>
+                <span className="sr-only">
+                  {from.widthFt} foot by {from.lengthFt} foot from{' '}
+                  {formatRate(from.webRateCents)} per month
+                </span>
+              </>
+            )}
+          </p>
+
+          {/* §6.6 / US-201: scarcity language only ever comes from the real count,
+              in the vocabulary the facility page already uses. There is no
+              countdown and no "in demand" — the number is the whole claim, and a
+              badge without one would be fabricated scarcity. */}
+          {from !== null && (
+            <p className="text-muted-foreground mt-1 text-sm">
+              {from.availableUnits <= 3
+                ? `Only ${from.availableUnits} unit${from.availableUnits === 1 ? '' : 's'} left`
+                : `${from.availableSizes} size${from.availableSizes === 1 ? '' : 's'} available`}
+            </p>
+          )}
+        </div>
+      </div>
     </li>
   )
 }

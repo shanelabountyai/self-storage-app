@@ -189,22 +189,42 @@ export async function publicInventoryForFacility(
 }
 
 /// US-101's "units from $X/mo" — the lowest current web rate across unit types
-/// that actually have a unit available, for many facilities at once.
+/// that actually have a unit available, for many facilities at once, plus the
+/// size that rate belongs to and what else is free there.
 ///
-/// Two queries regardless of how many facilities are passed, because a search
-/// result list would otherwise fan out into one rate query per facility.
+/// The size travels with the price because a price without one is not a
+/// comparison (B-242): a 5×5 at $60 and a 10×10 at $60 are different decisions,
+/// and the list that ranks facilities is the denominator of every rate below
+/// it. This function already had to pick a winning unit type to find the
+/// cheapest rate — it used to throw the identity away.
+///
+/// Three queries regardless of how many facilities are passed, because a search
+/// result list would otherwise fan out into one query per facility.
 ///
 /// A facility is absent from the map when nothing is rentable there, which is
 /// not the same as $0 — callers must render "call for availability" rather than
 /// a price. `null`-vs-absent is the same distinction `currentRatesForFacility`
 /// makes for unpriced types.
+export type FacilityFromRate = {
+  webRateCents: number
+  /// The dimensions of the type that rate belongs to. Rendered with the price,
+  /// never apart from it.
+  widthFt: number
+  lengthFt: number
+  /// Distinct sizes with at least one unit free, and units free across all of
+  /// them. Both are real counts — US-201 permits a scarcity label only when it
+  /// is driven by one, and there is no other source for one here.
+  availableSizes: number
+  availableUnits: number
+}
+
 export async function lowestAvailableWebRateByFacility(
   facilityIds: string[],
   asOf: Date = new Date(),
-): Promise<Map<string, number>> {
+): Promise<Map<string, FacilityFromRate>> {
   if (facilityIds.length === 0) return new Map()
 
-  const [availability, rateRows] = await Promise.all([
+  const [availability, rateRows, unitTypes] = await Promise.all([
     prisma.unit.groupBy({
       by: ['facilityId', 'unitTypeId'],
       where: { facilityId: { in: facilityIds }, status: 'available' },
@@ -214,21 +234,45 @@ export async function lowestAvailableWebRateByFacility(
       where: { facilityId: { in: facilityIds } },
       select: { unitTypeId: true, streetRateCents: true, webRateCents: true, effectiveFrom: true },
     }),
+    prisma.unitType.findMany({
+      where: { facilityId: { in: facilityIds } },
+      select: { id: true, widthFt: true, lengthFt: true },
+    }),
   ])
 
   const rates = effectiveByGroup(rateRows, asOf, (row) => row.unitTypeId)
+  const sizes = new Map(unitTypes.map((type) => [type.id, type]))
 
-  const lowest = new Map<string, number>()
+  const lowest = new Map<string, FacilityFromRate>()
   for (const row of availability) {
     if (row._count._all === 0) continue
     const rate = rates.get(row.unitTypeId)
     // An available unit whose type has no rate in effect is not sellable, so
     // it must not set the "from" price — same rule as the facility feed.
     if (!rate) continue
+    const size = sizes.get(row.unitTypeId)
+    // Unreachable in practice (the type is what the units hang off), but a
+    // missing row must not invent dimensions.
+    if (!size) continue
 
     const current = lowest.get(row.facilityId)
-    if (current === undefined || rate.webRateCents < current) {
-      lowest.set(row.facilityId, rate.webRateCents)
+    if (current === undefined) {
+      lowest.set(row.facilityId, {
+        webRateCents: rate.webRateCents,
+        widthFt: size.widthFt,
+        lengthFt: size.lengthFt,
+        availableSizes: 1,
+        availableUnits: row._count._all,
+      })
+      continue
+    }
+
+    current.availableSizes += 1
+    current.availableUnits += row._count._all
+    if (rate.webRateCents < current.webRateCents) {
+      current.webRateCents = rate.webRateCents
+      current.widthFt = size.widthFt
+      current.lengthFt = size.lengthFt
     }
   }
   return lowest

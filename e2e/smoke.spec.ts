@@ -39,7 +39,9 @@ test('search ranks real facilities with distance and a from-price', async ({ pag
   const first = page.getByRole('listitem').filter({ hasText: 'Demo — Austin South' }).first()
   await expect(first).toBeVisible()
   await expect(first).toContainText('mi')
-  await expect(first).toContainText(/Units from \$\d/)
+  // B-242: the from-price names the size it belongs to. A price with no size is
+  // the defect — "$60" against a 5×5 and against a 10×20 are different offers.
+  await expect(first).toContainText(/\d+×\d+ from \$\d/)
 })
 
 test('a search with nothing nearby offers the closest facilities instead', async ({ page }) => {

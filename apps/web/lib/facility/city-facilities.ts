@@ -87,7 +87,7 @@ export const facilitiesInCity = cache(async function facilitiesInCity(
   return inCity
     .map((facility) => ({
       ...facility,
-      fromWebRateCents: fromRates.get(facility.id) ?? null,
+      fromWebRateCents: fromRates.get(facility.id)?.webRateCents ?? null,
       rating: ratings.get(facility.id) ?? null,
     }))
     .sort((a, b) => {
