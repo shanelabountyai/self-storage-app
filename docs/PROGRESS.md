@@ -8349,7 +8349,7 @@ Sixteen equally weighted chips in one `<nav aria-label="Financial reports">`. Si
 
 ## B-242 — a search result names the size its price belongs to, and carries a photo
 
-`PENDING`
+`00664ee`
 
 `apps/web/app/(public)/storage/search/page.tsx` rendered *"Units from $60/mo"* with no size attached and no image. US-101's criterion was met literally and the renter's question was not: a 5×5 at $60 and a 10×10 at $60 are different decisions, and a site whose cheapest unit is a locker read as cheaper than one whose cheapest is a garage — on the list that is the denominator of every rate below it. `FacilityPhoto` rows existed and B-118 had already established that a renter comparing three sites judges "clean, lit, not a dump" from an image; the facility page got that treatment and the list that ranks facilities did not.
 
