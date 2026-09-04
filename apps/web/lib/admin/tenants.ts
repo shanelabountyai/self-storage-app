@@ -23,6 +23,7 @@ import {
   type FieldProblems,
 } from "@/lib/portal/contact";
 import { maskAddress } from "@storage/core/comms";
+import { daysPastDue } from "@storage/core/metrics";
 import { tenantAccessHistory } from "@/lib/access/event-log";
 import { logManualDocument, type DocumentType } from "@/lib/documents/store";
 import { createTask } from "@/lib/admin/tasks";
@@ -185,6 +186,12 @@ export type TenantLeaseSummary = {
   /// the plan form has to show it rather than let a staffer guess from the
   /// balance beside it.
   arrearsCents: number;
+  /// B-240. Days past due on THIS lease, from `@storage/core/metrics` (D-25) —
+  /// the same one definition the late-fee run and the access gate use, so the
+  /// figure in the profile's sticky summary cannot disagree with the ladder
+  /// that acted on it. Computed here rather than in the page because it reads
+  /// the clock, which a server component may not do during render.
+  daysPastDue: number;
   /// B-225. Money this tenant has handed over at THIS lease's facility that no
   /// invoice has claimed. Held per tenant per facility, because `Payment`
   /// carries no lease — so two leases at one facility legitimately show the
@@ -525,6 +532,21 @@ export async function tenantProfile(
     ]);
   }
 
+  // B-240. Every invoice for these leases is already in hand above, unpaid or
+  // not — `daysPastDue` does its own outstanding filter, so it takes the rows
+  // as they came back rather than the trimmed `openByLease` view.
+  const now = new Date();
+  const pastDueByLease = new Map<string, number>();
+  for (const lease of leases) {
+    pastDueByLease.set(
+      lease.id,
+      daysPastDue(
+        openInvoiceRows.filter((invoice) => invoice.leaseId === lease.id),
+        now,
+      ),
+    );
+  }
+
   const creditByFacility = new Map<string, number>();
   for (const facilityId of new Set(leases.map((lease) => lease.facilityId))) {
     creditByFacility.set(
@@ -542,6 +564,7 @@ export async function tenantProfile(
     monthlyRateCents: lease.monthlyRateCents,
     balanceCents: leaseBalances[index]._sum.amountCents ?? 0,
     arrearsCents: leaseArrears[index].outstandingCents,
+    daysPastDue: pastDueByLease.get(lease.id) ?? 0,
     creditCents: creditByFacility.get(lease.facilityId) ?? 0,
     openInvoices: openByLease.get(lease.id) ?? [],
     planGraceDays: lease.facility.planGraceDays,

@@ -38,6 +38,7 @@ import { chargeableFees, chargeableLeases } from "@/lib/billing/charges";
 import { RETURN_FEE_CHOICES } from "@/lib/billing/reversals";
 import { scheduledFeeCents } from "@/lib/billing/fee-invoice";
 import { HOLD_TYPES, type HoldEffect } from "@storage/core/holds";
+import { OCCUPYING_LEASE_STATUSES } from "@storage/core/inventory";
 import { leaseStatusLabel } from "@storage/core/labels";
 import {
   referralsForStaff,
@@ -290,9 +291,53 @@ export default async function TenantProfilePage({
       </li>
     );
 
+  // B-240. The worst figure across this tenant's leases: one lease current and
+  // another 40 days behind is a tenant 40 days behind, and the bar answers the
+  // question the counter asks about the PERSON.
+  const maxDaysPastDue = profile.leases.reduce(
+    (worst, lease) => Math.max(worst, lease.daysPastDue),
+    0,
+  );
+
+  // `leases` is every lease this tenant has ever held, ended ones included —
+  // the section below deliberately shows the lot. "Units" in the bar is what
+  // they have NOW, so it counts the occupying statuses, the same set the unit
+  // board and the portal scope themselves on.
+  const currentUnitCount = profile.leases.filter((lease) =>
+    (OCCUPYING_LEASE_STATUSES as readonly string[]).includes(lease.status),
+  ).length;
+
+  // The order a counter uses, per the row — not the reading order of the page
+  // below it, which stays D-95's. Two sections render conditionally, and an
+  // anchor to an id that is not on the page is a link that does nothing.
+  const sectionLinks = [
+    { href: "#leases-heading", label: "Balance & leases" },
+    { href: "#actions-heading", label: "Take action" },
+    ...(profile.paymentPlans.length > 0
+      ? [{ href: "#payment-plans-heading", label: "Payment plans" }]
+      : []),
+    ...(profile.waivableFees.length > 0
+      ? [{ href: "#fees-heading", label: "Fees" }]
+      : []),
+    { href: "#contact-heading", label: "Contact" },
+    { href: "#gate-history-heading", label: "History" },
+  ];
+
   return (
     <div className="flex flex-col gap-8">
-      <div>
+      {/* B-240. Fourteen sections in fixed order, no in-page navigation and no
+          summary: "waive this fee for the person in front of me" was a scroll
+          past referral history and gate events, worst on the phone viewport
+          B-217 established is real counter work. This bar is the four facts
+          every visit starts with plus one click to each section; D-95's SECTION
+          ORDER is untouched — reversing it is D-114's, not this row's.
+
+          `sticky` only where there is vertical room: `sticky-when-tall` in
+          `globals.css` turns it static below 640px of viewport height, because
+          a bar that pins itself to the top of a 512px-tall viewport (a
+          1280×1024 desktop at 200% zoom) is eating the content it sits over —
+          1.4.4 and 1.4.10 failing rather than a design choice. */}
+      <div className="bg-background sticky-when-tall sticky top-0 z-10 border-b pb-3">
         <Link
           href="/admin/tenants"
           className="text-sm underline underline-offset-2"
@@ -304,15 +349,68 @@ export default async function TenantProfilePage({
         </h1>
         {/* "Profile shows delinquency status prominently" — but nothing sets
             Lease.status to delinquent yet (B-057), so the real signal today is
-            the ledger, same as the portal dashboard. */}
-        {profile.totalBalanceCents > 0 && (
-          <p
-            role="alert"
-            className="mt-2 inline-block rounded-md border border-red-300 bg-red-50 px-3 py-1 text-sm text-red-900"
-          >
-            Balance due: {formatCents(profile.totalBalanceCents)}
-          </p>
-        )}
+            the ledger, same as the portal dashboard.
+
+            A `<dl>` of labelled pairs rather than bare numbers, and NOT a live
+            region (B-245): these are the facts the page opens with, not an
+            announcement that something changed. The `role="alert"` this
+            replaced fired on every load for a balance nobody had just altered. */}
+        <dl className="mt-2 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-sm">
+          <div className="flex items-baseline gap-1.5">
+            <dt className="text-muted-foreground">Balance due</dt>
+            <dd
+              className={
+                profile.totalBalanceCents > 0
+                  ? "font-semibold text-red-900"
+                  : "font-medium"
+              }
+            >
+              {formatCents(profile.totalBalanceCents)}
+            </dd>
+          </div>
+          <div className="flex items-baseline gap-1.5">
+            <dt className="text-muted-foreground">Days past due</dt>
+            <dd className={maxDaysPastDue > 0 ? "font-semibold text-red-900" : "font-medium"}>
+              {maxDaysPastDue === 0 ? "None" : maxDaysPastDue}
+            </dd>
+          </div>
+          <div className="flex items-baseline gap-1.5">
+            <dt className="text-muted-foreground">Units</dt>
+            <dd className="font-medium">{currentUnitCount}</dd>
+          </div>
+          <div className="flex items-baseline gap-1.5">
+            <dt className="text-muted-foreground">Hold</dt>
+            <dd className={profile.holds.length > 0 ? "font-semibold text-amber-900" : "font-medium"}>
+              {profile.holds.length === 0
+                ? "None"
+                : profile.holds.length === 1
+                  ? profile.holds[0].label
+                  : `${profile.holds.length} in force`}
+            </dd>
+          </div>
+        </dl>
+        {/* A real <nav> of real links (1.3.1), named for what it navigates.
+            Each target heading carries `tabIndex={-1}`, so the browser moves
+            FOCUS there rather than only scrolling — a scroll-only jump leaves a
+            screen-reader user's virtual cursor exactly where it was (2.4.3).
+            That is the same mechanism the layout's own skip link relies on, and
+            it needs no script.
+
+            `scroll-mt-48` on each target: a fragment jump puts the heading at
+            the very top of the viewport, which is where this bar is — so
+            without it the link focuses a heading the bar is sitting on top of
+            (2.4.11 Focus Not Obscured). */}
+        <nav aria-label="On this profile" className="mt-2">
+          <ul className="flex flex-wrap gap-x-3 gap-y-1 text-sm">
+            {sectionLinks.map((link) => (
+              <li key={link.href}>
+                <a href={link.href} className="underline underline-offset-2">
+                  {link.label}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </nav>
       </div>
 
       {/* US-45's plain-English access line. Beside the hold banner because
@@ -447,7 +545,7 @@ export default async function TenantProfilePage({
       )}
 
       <section aria-labelledby="leases-heading" className="flex flex-col gap-3">
-        <h2 id="leases-heading" className="font-medium">
+        <h2 id="leases-heading" tabIndex={-1} className="scroll-mt-48 font-medium">
           Leases
         </h2>
         {profile.leases.length === 0 ? (
@@ -609,7 +707,7 @@ export default async function TenantProfilePage({
           Every chain comes from a plan, so `paymentPlans` is the whole test. */}
       {profile.paymentPlans.length > 0 && (
       <section aria-labelledby="payment-plans-heading" className="flex flex-col gap-3">
-        <h2 id="payment-plans-heading" className="font-medium">
+        <h2 id="payment-plans-heading" tabIndex={-1} className="scroll-mt-48 font-medium">
           Payment plans
         </h2>
 
@@ -748,7 +846,7 @@ export default async function TenantProfilePage({
 
       {profile.waivableFees.length > 0 && (
         <section aria-labelledby="fees-heading" className="flex flex-col gap-3">
-          <h2 id="fees-heading" className="font-medium">
+          <h2 id="fees-heading" tabIndex={-1} className="scroll-mt-48 font-medium">
             Outstanding fees
           </h2>
           <p className="text-muted-foreground max-w-prose text-xs text-pretty">
@@ -821,7 +919,7 @@ export default async function TenantProfilePage({
         aria-labelledby="contact-heading"
         className="flex flex-col gap-3"
       >
-        <h2 id="contact-heading" className="font-medium">
+        <h2 id="contact-heading" tabIndex={-1} className="scroll-mt-48 font-medium">
           Contact
         </h2>
         {/* B-181. Read first. What a staffer reads down a phone line is four
@@ -1271,7 +1369,7 @@ export default async function TenantProfilePage({
         aria-labelledby="gate-history-heading"
         className="flex flex-col gap-3"
       >
-        <h2 id="gate-history-heading" className="font-medium">
+        <h2 id="gate-history-heading" tabIndex={-1} className="scroll-mt-48 font-medium">
           Recent gate activity
         </h2>
         <ul className="flex flex-col gap-2">
@@ -1339,7 +1437,7 @@ export default async function TenantProfilePage({
         aria-labelledby="actions-heading"
         className="flex flex-col gap-3"
       >
-        <h2 id="actions-heading" className="font-medium">
+        <h2 id="actions-heading" tabIndex={-1} className="scroll-mt-48 font-medium">
           Actions
         </h2>
         {hasPermissionAnywhere(actor, ["impersonation:tenant"]) && (

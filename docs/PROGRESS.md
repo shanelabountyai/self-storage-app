@@ -8271,3 +8271,43 @@ Two surfaces, one complaint: the product told a renter where the money goes and 
 **Test verification.** Typecheck (including `tsconfig.tests.json`) clean; lint clean (7 pre-existing warnings, unrelated); no schema change, so no migration and no drift. Full unit suite **4077 passed, 8 skipped, 0 failed**. `e2e/a11y-own-spec-routes.spec.ts` and `e2e/pay-link.spec.ts` **38 passed** — the two states the nav change could have broken: the `/portal/pay` reach, which clicks the Overview card button and not the new nav link, and `/portal | manage menu open`. Four new tests in `tests/portal-dashboard.test.ts` — `owingLeases` at no ledger, owing, paid off and in credit; two owing leases summing to the link's total; `nextChargeForLease`'s taxed total, anniversary and autopay flag; and its null for a lease that is not there. `e2e/portal.spec.ts` **144 passed**, with its two nav tests rewritten (Move out is now behind Manage) and two added: Pay is first in the nav and reaches `/portal/pay?lease=…`, and `aria-current` plus the open disclosure on `/portal/refer`.
 
 **One thing that cost a run and is worth knowing.** The first draft of the two-lease test created a unit numbered `A-2` in the shared test facility — a number `portal-dashboard.test.ts` already uses 200 lines above, in the transfer-hold test. `Unit` is unique on `(facilityId, number)`, and the fixtures in that file share one facility for the whole run, so the collision is between two tests rather than between two runs. It is the same class of thing as B-185's audit rows: a file-scoped fixture is shared state whether or not it looks like it.
+
+## B-240 — the tenant profile answers the four questions at the top, and every section is one click away
+
+`SHA_PLACEHOLDER`
+
+Fourteen sections in one column, 2,154 lines, no in-page navigation and no summary. "Waive this fee for the person in front of me" was a scroll past referral history and gate events, worst on the phone viewport B-217 established is real counter work.
+
+**What it built.**
+
+1. **A sticky summary under the name** — Balance due, Days past due, Units, Hold. A `<dl>` of labelled pairs, and it **replaces** the old `role="alert"` balance banner rather than sitting beside it.
+2. **`<nav aria-label="On this profile">`** — six anchors in the order a counter uses them: Balance & leases · Take action · Payment plans · Fees · Contact · History. Two of the six render conditionally and the list is built from what actually painted, so no anchor can point at an id nothing rendered.
+3. **`TenantLeaseSummary.daysPastDue`** (`apps/web/lib/admin/tenants.ts`), from `@storage/core/metrics` — D-25's one definition, the same one the late-fee run and the access gate use. Computed in the query layer off invoice rows already in hand (no new query), because it reads the clock and a server component may not do that during render.
+4. **`.sticky-when-tall`** in `globals.css` — the bar goes `static` below 640px of viewport height.
+
+**What it decided.**
+
+- **D-95's section ORDER is untouched.** The reversal ("money and actions near the top") is D-114's to settle, and an anchor list is the answer that does not need it: one click to Actions with the read stack intact.
+- **The bar is not a live region, and the `role="alert"` it replaced is gone.** B-245's rule: these are the facts the page opens with, not an announcement that something changed. The old alert fired on every load for a balance nobody had just altered, and keeping both would have announced the same number twice.
+- **Days past due is the WORST figure across the tenant's leases.** One lease current and another 40 days behind is a tenant 40 days behind; the bar answers the question the counter asks about the person, not about a unit.
+- **"Units" counts the leases in force, not every lease on file.** `tenantProfile.leases` is the whole history and the section below deliberately shows it; the bar filters to `OCCUPYING_LEASE_STATUSES`, the same set the unit board and the portal scope on. A tenant who moved out of two units last year has one unit, and a bar that said three would be the first wrong number on the screen.
+- **`sticky` only where there is vertical room.** 640×512 is a 1280×1024 desktop at 200% zoom, and a bar pinned to the top of that is obscuring the content it sits over — 1.4.4 and 1.4.10 failing rather than a design choice. Written as a hand-authored media query in `globals.css` rather than a Tailwind arbitrary variant, because **nothing in this suite measures a page vertically**: a variant that silently failed to compile would leave the bar pinned at every height with every check still green.
+- **`scroll-mt-48` on each anchor target.** A fragment jump puts the heading at the very top of the viewport, which is exactly where the bar is — without it the link focuses a heading the bar is sitting on top of (2.4.11).
+- **Gate-event and message counts are deliberately NOT in the bar**, which the row asked for as an alternative to adding a second disclosure. No second disclosure was added — D-95's "show five, hide the rest" **had** shipped on both lists, and each `<summary>` already states its own count in words ("Show 7 older gate events"). Putting two more pairs into a one-line bar is the reflow risk the row's own first criterion forbids, on the viewport it names.
+
+**Accessibility (the row's own criteria).**
+
+- **The nav is a real `<nav>` of real links** (1.3.1), named for what it navigates rather than for the page.
+- **Activating one moves FOCUS to the target heading**, not just the scroll position (2.4.3) — `tabIndex={-1}` on the six headings, which is what makes the native fragment jump focus them. No script; the same mechanism the admin layout's own skip link relies on. Pinned by an e2e assertion, because nothing else in the repo would notice if the attribute were dropped.
+- **The summary is a `<dl>` of labelled pairs, not bare numbers**, and is not a live region.
+- **`/admin/tenants/[tenantId] | sticky summary` joined `SCANNED_STATES` and `STATE_REACH` in the same commit**, reached SCROLLED — the route's own entry in `SCANNED_BY_OWN_SPEC` measures this page at the top of the document, where a sticky element is indistinguishable from a static one.
+
+**One real defect found, and fixed at the root.** The first e2e run failed on an unrelated state — `payment plan builder refused per installment` — with `color-contrast: Element's background color could not be determined because it partially overlaps other elements [h1]`. B-196's `VERIFIED_BY_HIT_TEST` exists for exactly this question and performs the check rather than remembering it, but it carried axe's `elmPartiallyObscured` and `shortTextContent` phrasings and not its `bgOverlap` one — so the first sticky element in the product hit a third wording nothing matched. The fix is the pattern, not a route-scoped waiver: `/partially overlaps other elements/i` joins the list, the hit test answers the same question for all three, and a real overlay over the bar still fails anywhere in the product. A route-keyed waiver here would have been the understatement B-196 built that mechanism to avoid.
+
+**What it left behind.**
+
+- **The section order is still D-95's**, and D-114 is still open. If it is reversed, the anchor list's order should be re-read against it — the two are the same argument.
+- **The bar carries no unit numbers**, only a count. A tenant with six units still has to reach the leases table to know which one is behind; `daysPastDue` is now per lease in the data and nothing renders it per lease yet.
+- **Nothing measures a page vertically.** `measureThreeWays` is a horizontal-overflow check, so `.sticky-when-tall`'s threshold is enforced by a hand-authored media query and by reading, not by a test. A vertical-obscuring assertion would be its own row.
+
+**Test verification.** Typecheck (including `tsconfig.tests.json`) clean; lint clean (7 pre-existing warnings, unrelated); no schema change, so no migration and no drift. Full unit suite **4,077 passed, 8 skipped of 4,085** (245 files passed, 1 skipped), exit 0 — `tests/a11y-scan-coverage.test.ts` among them, which is what holds the new `SCANNED_STATES` ↔ `STATE_REACH` pair in step from both directions. `e2e/admin-tenants.spec.ts` + `e2e/a11y-own-spec-routes.spec.ts` — **88 passed, exit 0**, reconciled against the per-test ✓ count, on both projects; that includes the new axe scan of the scrolled bar, the new layout measurement of it at 320px, 200% zoom and forced text spacing, and the assertion that every anchor lands on a heading that is on the page and takes focus when it does. Nothing here is customer-facing, so `apps/web/app/(public)/accessibility/page.tsx` needed no re-read.

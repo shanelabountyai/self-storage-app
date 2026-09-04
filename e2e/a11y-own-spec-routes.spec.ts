@@ -222,6 +222,21 @@ const STATE_REACH: Record<string, { audience: Audience; go: (page: Page) => Prom
   // and which were declared in neither list — the exact hole this row closed in
   // `SCANNED_STATES`. Both are on the tenant profile, which B-217 established
   // is real phone work for counter staff.
+  // B-240. The profile scrolled, so the sticky summary is pinned over the
+  // sections beneath it. `expectNoHorizontalOverflow` is a width check and the
+  // bar's risk is vertical, so what this actually holds is the shape that makes
+  // the vertical risk manageable: four labelled pairs and six links that wrap
+  // rather than push the page sideways at 320px and at 200% zoom. The bar goes
+  // static below 640px of viewport height, which is why the 640×512 pass here
+  // measures it unpinned and the 320×800 pass measures it pinned.
+  '/admin/tenants/[tenantId] | sticky summary': {
+    audience: 'admin',
+    async go(page) {
+      await openDanasProfile(page)
+      await expect(page.getByRole('navigation', { name: 'On this profile' })).toBeVisible()
+      await page.mouse.wheel(0, 2000)
+    },
+  },
   '/admin/tenants/[tenantId] | payment plan schedule': {
     audience: 'admin',
     async go(page) {

@@ -151,9 +151,21 @@ function routeMatches(pattern: string, pathname: string): boolean {
 /// it. A real overlay over a real cell still fails, anywhere in the product,
 /// which is more than a route-keyed waiver could promise — the check is
 /// performed rather than remembered.
+///
+/// B-240 added the third pattern. It is axe's SIBLING phrasing for the same
+/// question — `bgOverlap` where the two above are `elmPartiallyObscured` and
+/// `shortTextContent` — and the tenant profile's new sticky summary is what
+/// surfaced it: a bar pinned over scrolled content means every node in it
+/// genuinely has other elements at its coordinates, so axe stops resolving a
+/// background and the two existing patterns do not match the words it uses to
+/// say so. The hit test answers exactly the question the message asks (is
+/// anything actually ON TOP of this?) and answers it the same way for all
+/// three, so waiving it by route would have been the understatement this
+/// mechanism exists to avoid. A real overlay over the bar still fails.
 const VERIFIED_BY_HIT_TEST = [
   /partially obscured by another element/i,
   /too short to determine if it is actual text content/i,
+  /partially overlaps other elements/i,
 ]
 
 async function nothingOverlaps(page: Page, selector: string): Promise<boolean> {

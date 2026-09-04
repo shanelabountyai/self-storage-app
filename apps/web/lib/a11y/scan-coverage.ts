@@ -614,6 +614,16 @@ export const SCANNED_STATES: readonly ScannedState[] = [
   // builder — twelve fields called "Due" and "Amount ($)", scanned until now
   // only pristine. Two tenants: the schedule needs a lease WITH a plan, and the
   // builder is deliberately hidden on one, so the refusal happens on Dana's.
+  // B-240. The sticky summary and the in-page nav, SCROLLED — which is the
+  // only state in which the bar overlays anything. The route's own entry in
+  // `SCANNED_BY_OWN_SPEC` measures this page at the top of the document, where
+  // a sticky element is indistinguishable from a static one.
+  {
+    route: '/admin/tenants/[tenantId]',
+    state: 'sticky summary',
+    spec: 'e2e/admin-tenants.spec.ts',
+    layout: 'reached',
+  },
   {
     route: '/admin/tenants/[tenantId]',
     state: 'payment plan schedule',

@@ -117,6 +117,46 @@ test.describe('signed in as the demo owner', () => {
     await assertNoAxeViolations(page, { state: 'disclosure open' })
   })
 
+  // a11y-state: /admin/tenants/[tenantId] | sticky summary
+  //
+  // B-240. Two claims in one pass, because reaching the page is the expensive
+  // half. (1) Every anchor in the new nav lands on a heading that is actually
+  // on the page — two of the six sections render conditionally, so a link to an
+  // id nothing painted is the failure mode this list invites. (2) Activating
+  // one moves FOCUS to that heading rather than only scrolling (2.4.3); the
+  // `tabIndex={-1}` on the target is what makes the native fragment jump do it,
+  // and nothing else in the repo would notice if it were dropped.
+  //
+  // Read-only against the shared fixture (B-120): nothing here submits.
+  test('the profile summary and its in-page nav reach every section they name', async ({
+    page,
+  }) => {
+    await page.goto('/admin/tenants?q=dana@demo.example.com')
+    await page.getByRole('link', { name: 'Dana Delinquent' }).click()
+    await expect(page.getByRole('main')).toBeVisible()
+
+    // The four facts, as labelled pairs rather than bare numbers.
+    await expect(page.getByText('Balance due')).toBeVisible()
+    await expect(page.getByText('Days past due')).toBeVisible()
+
+    const nav = page.getByRole('navigation', { name: 'On this profile' })
+    const links = await nav.getByRole('link').all()
+    expect(links.length).toBeGreaterThan(3)
+    for (const link of links) {
+      const href = await link.getAttribute('href')
+      await expect(page.locator(href!), `${href} names a heading this page does not render`).toHaveCount(1)
+    }
+
+    await nav.getByRole('link', { name: 'Take action' }).click()
+    await expect(page.locator('#actions-heading')).toBeFocused()
+
+    // Scanned where the bar is actually STUCK — at the top of the document it
+    // is an ordinary block, and the state this key names is the one where it
+    // overlays the sections below it.
+    await page.mouse.wheel(0, 2000)
+    await assertNoAxeViolations(page, { state: 'sticky summary' })
+  })
+
   test('the military-service control states its consequences before it is used (B-121)', async ({
     page,
   }) => {
