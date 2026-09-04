@@ -25,6 +25,53 @@ test.describe('signed in as the demo owner', () => {
     })
   }
 
+  // B-241. The old markup was one `<nav aria-label="Financial reports">` over
+  // all sixteen links, six of which are not financial reports — indexation,
+  // structured data, duplicate content, deliverability, the waitlist and
+  // uncovered units. A landmark whose accessible name does not describe its
+  // contents is SC 4.1.2 (A) and SC 2.4.6 (AA), which is why this asserts the
+  // NAMING and not the styling: what must not be possible is reaching a
+  // marketing report from a group called Money.
+  test('the report links are grouped under headings that describe them', async ({ page }) => {
+    await page.goto('/admin/reports')
+    await expect(page.getByRole('main')).toBeVisible()
+
+    await expect(page.getByRole('navigation', { name: 'Financial reports' })).toHaveCount(0)
+    const nav = page.getByRole('navigation', { name: 'All reports' })
+
+    for (const [heading, inside, outside] of [
+      ['Money', 'Revenue — billed vs collected', 'Deliverability — sends, bounces, failure queue'],
+      [
+        'Operations',
+        'Waitlist — who is waiting for a size you are full on',
+        'Revenue — billed vs collected',
+      ],
+      [
+        'Marketing & comms',
+        'Deliverability — sends, bounces, failure queue',
+        'Deposits — recorded vs counted',
+      ],
+    ] as const) {
+      // A real heading, not a styled div — and the list that takes its name
+      // from it, so the group's contents are what the name claims.
+      await expect(nav.getByRole('heading', { level: 2, name: heading })).toBeVisible()
+      const list = nav.getByRole('list', { name: heading })
+      await expect(list.getByRole('link', { name: inside })).toBeVisible()
+      await expect(list.getByRole('link', { name: outside })).toHaveCount(0)
+    }
+
+    // The other half of the row: the links are navigation, the numbers are the
+    // answer. Occupancy and outstanding balances render above the link wall.
+    const navIsBelow = await page.evaluate(() =>
+      ['occupancy-heading', 'ar-heading'].map((id) => {
+        const links = document.querySelector('nav[aria-label="All reports"]')!
+        // 4 is DOCUMENT_POSITION_FOLLOWING — the nav comes after the heading.
+        return Boolean(document.getElementById(id)!.compareDocumentPosition(links) & 4)
+      }),
+    )
+    expect(navIsBelow).toEqual([true, true])
+  })
+
   // B-196 (gap 3). B-195 shipped this report and declared its populated state
   // as a STATE_EXCEPTION in the same breath: nothing in the demo seed placed a
   // hold or agreed a plan, so the route loop scanned the headings, the month

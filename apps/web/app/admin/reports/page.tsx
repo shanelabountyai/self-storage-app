@@ -196,6 +196,82 @@ function currentMonth(): string {
   return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`
 }
 
+// B-241. The reports index's three groups, each named for what is genuinely in
+// it. Sixteen links in one flat run under a single false label is what this
+// replaces; the grouping is the answer to "what is owed and what is empty"
+// meeting a wall of chips with no ranking.
+//
+// A link's group is decided by the question it answers, not by which team
+// built it: the waitlist and uncovered units are worklists an operator works
+// through, and the four marketing reports are about whether what we publish
+// reaches a search engine intact — neither is a financial report, which is the
+// claim the old label made about all sixteen.
+const REPORT_GROUPS = [
+  {
+    id: 'reports-money',
+    heading: 'Money',
+    links: [
+      // The two on their own pages because both need a date range rather than
+      // a month, and the aging one is a per-lease list that would swamp the
+      // overview above.
+      { href: '/admin/reports/revenue', label: 'Revenue — billed vs collected' },
+      { href: '/admin/reports/delinquency', label: 'Delinquency aging — tenant detail' },
+      // B-195. The half of the aging report that has no answer inside it:
+      // which of the receivable is halted, behind what, and whether the plans
+      // that halted it are being kept.
+      { href: '/admin/reports/plans-holds', label: 'Plans & holds — what is not being chased' },
+      { href: '/admin/reports/deposits', label: 'Deposits — recorded vs counted' },
+      { href: '/admin/reports/close', label: 'Monthly close — file a month so its figures stop moving' },
+      { href: '/admin/reports/pack', label: 'Management pack — the whole month on one page' },
+      // B-088 part 2. Last of the money group rather than first of the old flat
+      // run, but for the same reason it led there: it is the only one that
+      // answers "is this getting better" rather than "what happened".
+      { href: '/admin/reports/kpi', label: 'KPI trend — the direction, not just this month' },
+    ],
+  },
+  {
+    id: 'reports-operations',
+    heading: 'Operations',
+    links: [
+      { href: '/admin/reports/funnel', label: 'Funnel — looking to moved in' },
+      { href: '/admin/reports/promotions', label: 'Promotions — what each discount bought' },
+      // B-090 part 1. Demand for inventory that does not exist — the one thing
+      // no other report here can show.
+      { href: '/admin/reports/waitlist', label: 'Waitlist — who is waiting for a size you are full on' },
+      // B-163. Beside the waitlist because both are worklists rather than
+      // period metrics — the attach-rate table below says how last month's
+      // move-ins were sold, this says which units are uninsured today, and a
+      // tenant who waived two years ago and lapsed appears only here.
+      {
+        href: '/admin/reports/protection',
+        label: 'Uncovered units — occupied, with no plan and no current certificate',
+      },
+      {
+        href: '/admin/reports/subscriptions',
+        label: 'Scheduled reports — send a report by email without opening this',
+      },
+    ],
+  },
+  {
+    id: 'reports-marketing',
+    heading: 'Marketing & comms',
+    links: [
+      { href: '/admin/reports/indexation', label: 'Indexation — what Google has indexed' },
+      // B-087 part 1. Next to indexation and duplicate content: all three are
+      // about whether what we publish is reaching search engines intact.
+      {
+        href: '/admin/reports/structured-data',
+        label: 'Structured data — markup a page has stopped emitting',
+      },
+      {
+        href: '/admin/reports/duplicate-content',
+        label: 'Duplicate content — pages that say the same thing',
+      },
+      { href: '/admin/reports/deliverability', label: 'Deliverability — sends, bounces, failure queue' },
+    ],
+  },
+]
+
 export default async function ReportsPage({
   searchParams,
 }: {
@@ -236,123 +312,6 @@ export default async function ReportsPage({
           </button>
         </form>
       </div>
-
-      {/* The two money reports live on their own pages: both need a date range
-          rather than a month, and the aging one is a per-lease list that would
-          swamp this overview. */}
-      <nav aria-label="Financial reports" className="flex flex-wrap gap-3">
-        <Link
-          href="/admin/reports/revenue"
-          className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
-        >
-          Revenue — billed vs collected
-        </Link>
-        <Link
-          href="/admin/reports/delinquency"
-          className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
-        >
-          Delinquency aging — tenant detail
-        </Link>
-        {/* B-195. The half of the aging report that has no answer inside it:
-            which of the receivable is halted, behind what, and whether the
-            plans that halted it are being kept. */}
-        <Link
-          href="/admin/reports/plans-holds"
-          className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
-        >
-          Plans &amp; holds — what is not being chased
-        </Link>
-        <Link
-          href="/admin/reports/funnel"
-          className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
-        >
-          Funnel — looking to moved in
-        </Link>
-        <Link
-          href="/admin/reports/promotions"
-          className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
-        >
-          Promotions — what each discount bought
-        </Link>
-        <Link
-          href="/admin/reports/indexation"
-          className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
-        >
-          Indexation — what Google has indexed
-        </Link>
-        {/* B-088 part 2. First of the month-level links, because it is the
-            only one that answers "is this getting better" rather than "what
-            happened". */}
-        <Link
-          href="/admin/reports/kpi"
-          className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
-        >
-          KPI trend — the direction, not just this month
-        </Link>
-        <Link
-          href="/admin/reports/pack"
-          className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
-        >
-          Management pack — the whole month on one page
-        </Link>
-        <Link
-          href="/admin/reports/subscriptions"
-          className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
-        >
-          Scheduled reports — send a report by email without opening this
-        </Link>
-        <Link
-          href="/admin/reports/close"
-          className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
-        >
-          Monthly close — file a month so its figures stop moving
-        </Link>
-        {/* B-090 part 1. Demand for inventory that does not exist — the one
-            thing no other report here can show. */}
-        <Link
-          href="/admin/reports/waitlist"
-          className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
-        >
-          Waitlist — who is waiting for a size you are full on
-        </Link>
-        {/* B-163. Beside the waitlist because both are worklists rather than
-            period metrics — the attach-rate table above says how last month's
-            move-ins were sold, this says which units are uninsured today, and
-            a tenant who waived two years ago and lapsed appears only here. */}
-        <Link
-          href="/admin/reports/protection"
-          className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
-        >
-          Uncovered units — occupied, with no plan and no current certificate
-        </Link>
-        {/* B-087 part 1. Next to indexation and duplicate content: all three
-            are about whether what we publish is reaching search engines
-            intact. */}
-        <Link
-          href="/admin/reports/structured-data"
-          className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
-        >
-          Structured data — markup a page has stopped emitting
-        </Link>
-        <Link
-          href="/admin/reports/duplicate-content"
-          className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
-        >
-          Duplicate content — pages that say the same thing
-        </Link>
-        <Link
-          href="/admin/reports/deliverability"
-          className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
-        >
-          Deliverability — sends, bounces, failure queue
-        </Link>
-        <Link
-          href="/admin/reports/deposits"
-          className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
-        >
-          Deposits — recorded vs counted
-        </Link>
-      </nav>
 
       <section aria-labelledby="occupancy-heading" className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -431,6 +390,100 @@ export default async function ReportsPage({
           </table>
         </ScrollRegion>
       </section>
+
+      {/* Financial only. `delinquencyReport` scopes to the facilities the
+          actor holds `reports:financial` at, so a counter agent with only the
+          operational key gets an empty table rather than the portfolio's AR —
+          this hides the empty table too. */}
+      <section aria-labelledby="ar-heading" className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 id="ar-heading" className="font-medium">
+            Outstanding balances by age
+          </h2>
+          <Link href="/admin/reports/delinquency" className="text-sm underline underline-offset-2">
+            Tenant detail and CSV
+          </Link>
+        </div>
+        {/* B-150. The same defect B-131 fixed in the section directly above,
+            in the same file (it was two sections up until B-241 moved the two
+            figures an owner opens this page for, occupancy and AR, together
+            above the link wall): the picker above implies these buckets answer for the month
+            chosen, and they never have. D-65 rules out making them, so the
+            sentence names the instant they DO answer for. `aria-describedby`
+            rather than a bare paragraph, for B-131's reason — a reader who
+            jumps to the table by table navigation still gets it.
+            B-183: AR aging never answers for the period (D-65), so unlike the
+            occupancy note above this heading is unconditional — and the
+            sentence itself dropped its "because…" justification, which argued
+            where a reader needed a fact. */}
+        <h3 className="text-sm font-medium">As of right now</h3>
+        <p id="ar-as-at" className="text-muted-foreground text-sm text-pretty">
+          {arAgingNote(delinquency.asOf, delinquency.timezone, label)}
+        </p>
+        {/* B-207. The same table the delinquency drill-down renders, and the
+            same component — B-195's chased/halted split existed for months and
+            reached only that one screen, while this table, the dashboard tile,
+            the scheduled email and the close pack (the four an owner actually
+            gets forwarded) still showed one undifferentiated figure. Sharing
+            the component is what stops them diverging again.
+            Wide table: scrolls inside its own container rather than pushing the
+            page sideways. */}
+        <ArAgingSplitTable
+          rows={delinquency.rows}
+          total={delinquency.totalSplit}
+          caption="Outstanding balances per facility, aged into 0–10, 11–30, 31–60, 61–90 and over-90-day buckets, split into money being chased, money halted behind a hold, and the total of the two"
+          describedBy="ar-as-at"
+        />
+        <p className="text-muted-foreground max-w-prose text-sm text-pretty">
+          Halted means a hold has stopped the collections ladder — an agreed payment plan, a
+          bankruptcy, a deployment, a death. Nothing is being sent about it.{' '}
+          <Link href="/admin/reports/plans-holds" className="underline underline-offset-2">
+            Who, and why
+          </Link>
+          .
+        </p>
+        <p className="text-muted-foreground text-sm text-pretty">
+          Days past due are counted from the oldest unpaid invoice&apos;s original due date — not
+          from the last card retry, so a lease that has declined several times keeps ageing instead
+          of resetting to current.
+        </p>
+      </section>
+
+      {/* B-241. Sixteen equally weighted chips sat here under one
+          `<nav aria-label="Financial reports">`, and that label was false for
+          six of them — indexation, structured data, duplicate content,
+          deliverability, the waitlist and uncovered units are not financial
+          reports. A landmark whose accessible name does not describe its
+          contents is 4.1.2 and 2.4.6, which is why this is a naming defect and
+          not a layout preference.
+
+          Three groups, each named for what is actually in it, Money first
+          because "what is owed" is the question an owner opens this page with.
+          Deliberately NOT `<details>`: the row permits it, but a collapsed
+          group is markup axe cannot see, and `/admin/reports` is scanned as a
+          single state — collapsing two thirds of the links would take fourteen
+          of them out of coverage to save a screenful of scrolling. */}
+      <nav aria-label="All reports" className="flex flex-col gap-6">
+        {REPORT_GROUPS.map((group) => (
+          <div key={group.id} className="flex flex-col gap-3">
+            <h2 id={group.id} className="font-medium">
+              {group.heading}
+            </h2>
+            <ul aria-labelledby={group.id} className="flex flex-wrap gap-3">
+              {group.links.map((link) => (
+                <li key={link.href}>
+                  <Link
+                    href={link.href}
+                    className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
+                  >
+                    {link.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </nav>
 
       <section aria-labelledby="moves-heading" className="flex flex-col gap-3">
         <h2 id="moves-heading" className="font-medium">
@@ -537,62 +590,6 @@ export default async function ReportsPage({
             rowHeading="Staff"
           />
         </div>
-      </section>
-
-      {/* Financial only. `delinquencyReport` scopes to the facilities the
-          actor holds `reports:financial` at, so a counter agent with only the
-          operational key gets an empty table rather than the portfolio's AR —
-          this hides the empty table too. */}
-      <section aria-labelledby="ar-heading" className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 id="ar-heading" className="font-medium">
-            Outstanding balances by age
-          </h2>
-          <Link href="/admin/reports/delinquency" className="text-sm underline underline-offset-2">
-            Tenant detail and CSV
-          </Link>
-        </div>
-        {/* B-150. The same defect B-131 fixed two sections up, in the same
-            file: the picker above implies these buckets answer for the month
-            chosen, and they never have. D-65 rules out making them, so the
-            sentence names the instant they DO answer for. `aria-describedby`
-            rather than a bare paragraph, for B-131's reason — a reader who
-            jumps to the table by table navigation still gets it.
-            B-183: AR aging never answers for the period (D-65), so unlike the
-            occupancy note above this heading is unconditional — and the
-            sentence itself dropped its "because…" justification, which argued
-            where a reader needed a fact. */}
-        <h3 className="text-sm font-medium">As of right now</h3>
-        <p id="ar-as-at" className="text-muted-foreground text-sm text-pretty">
-          {arAgingNote(delinquency.asOf, delinquency.timezone, label)}
-        </p>
-        {/* B-207. The same table the delinquency drill-down renders, and the
-            same component — B-195's chased/halted split existed for months and
-            reached only that one screen, while this table, the dashboard tile,
-            the scheduled email and the close pack (the four an owner actually
-            gets forwarded) still showed one undifferentiated figure. Sharing
-            the component is what stops them diverging again.
-            Wide table: scrolls inside its own container rather than pushing the
-            page sideways. */}
-        <ArAgingSplitTable
-          rows={delinquency.rows}
-          total={delinquency.totalSplit}
-          caption="Outstanding balances per facility, aged into 0–10, 11–30, 31–60, 61–90 and over-90-day buckets, split into money being chased, money halted behind a hold, and the total of the two"
-          describedBy="ar-as-at"
-        />
-        <p className="text-muted-foreground max-w-prose text-sm text-pretty">
-          Halted means a hold has stopped the collections ladder — an agreed payment plan, a
-          bankruptcy, a deployment, a death. Nothing is being sent about it.{' '}
-          <Link href="/admin/reports/plans-holds" className="underline underline-offset-2">
-            Who, and why
-          </Link>
-          .
-        </p>
-        <p className="text-muted-foreground text-sm text-pretty">
-          Days past due are counted from the oldest unpaid invoice&apos;s original due date — not
-          from the last card retry, so a lease that has declined several times keeps ageing instead
-          of resetting to current.
-        </p>
       </section>
     </div>
   )
