@@ -8314,7 +8314,7 @@ Fourteen sections in one column, 2,154 lines, no in-page navigation and no summa
 
 ## B-241 — the reports index says what each group of reports actually is
 
-`PENDING`
+`76edeef`
 
 Sixteen equally weighted chips in one `<nav aria-label="Financial reports">`. Six of them are not financial reports — indexation, structured data, duplicate content, deliverability, the waitlist, uncovered units — so the landmark's accessible name was false, which is **SC 4.1.2 (A)** on the landmark and **SC 2.4.6 (AA)** on the label rather than a layout preference. An owner opening Reports to ask "what is owed and what is empty" met the wall of chips first, while the two figures the page already computes sat below it.
 
