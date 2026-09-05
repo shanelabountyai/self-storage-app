@@ -8388,7 +8388,7 @@ Sixteen equally weighted chips in one `<nav aria-label="Financial reports">`. Si
 
 ## B-255 — a web move-in's payment reaches the ledger
 
-`PENDING-SHA`
+`7c9350f`
 
 `openingLedger`'s docstring promised both halves of a move-in's opening ledger — *"what was owed today, and the payment that cleared it. Both entries, not just the payment."* — and wrote only the charge. The payment side is `postPaymentToLedger`, which runs **inside** the `payment_intent.succeeded` transaction, and `provisionMoveIn` runs **after** that transaction commits (`apps/web/lib/payments/reconcile.ts`), so at the moment it looked for a lease to post against there was none and it returned. Nothing wrote the entry afterwards. A redelivery could not repair it either: the handler short-circuits on `payment.status === 'succeeded'` before reaching the post. Every lease created by a card move-in therefore carried a phantom balance equal to the full move-in total, forever — read by the arrears reports, the delinquency ladder and every statement a tenant has been shown. B-230's counter path is what made it visible: a cash move-in provisions first and records second, so it nets to zero on the same screen where a card one does not.
 
