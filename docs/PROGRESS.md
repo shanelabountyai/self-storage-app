@@ -8632,7 +8632,7 @@ The half of US-8 that was still a question. `AccessCredentialType.mobile_key` ha
 
 ## B-090f — Spanish on the move-in path (B-090 part 6) (2026-09-05)
 
-**Commit:** `PENDING`
+**Commit:** `aba7a48`
 
 The last unbuilt part of B-090, and the only backlog row left that is not blocked on a partner agreement, an owner decision or a person running a screen reader. PRD 01 §9 Phase 2 has said "Spanish-language support (highest-impact i18n)" since the PRD was written and has never said anything else, so this item settled the two questions that decide the shape before writing any code.
 
