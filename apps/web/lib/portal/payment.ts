@@ -4,7 +4,7 @@ import { createChargeIntent, createCustomerSession } from '@/lib/payments/intent
 import { paymentsEnabled } from '@/lib/payments/stripe'
 import {
   payableLeaseWhere,
-  portalAccountsForPayer,
+  portalAccountsFor,
   type AccountLease,
 } from '@/lib/billing/accounts'
 
@@ -218,9 +218,16 @@ export async function payableLease(tenantId: string, leaseId: string): Promise<P
 /// B-256. The whole of a business account, as one thing to pay.
 ///
 /// Authorization and lookup in one call, the same way `payableLease` does it:
-/// `portalAccountsForPayer` selects on `payerTenantId`, so an account id in a
-/// URL that belongs to somebody else comes back as null rather than as a
-/// balance. The tenant id comes from the session, never from the request.
+/// `portalAccountsFor` returns only accounts this tenant may reach, so an
+/// account id in a URL that belongs to somebody else comes back as null rather
+/// than as a balance. The tenant id comes from the session, never from the
+/// request.
+///
+/// B-258. `payable` is tested as well as the id. That read model now also
+/// returns accounts this tenant is an authorized MEMBER of — sight of an
+/// account, deliberately without the ability to pay it — and this is the money
+/// path, so a member who types the account's own URL gets the same null a
+/// stranger does.
 ///
 /// The returned `leaseId` is an ANCHOR, not the unit being paid. A payment is
 /// allocated across every claimable lease in the facility's own order however
@@ -233,7 +240,9 @@ export async function payableAccount(
   tenantId: string,
   accountId: string,
 ): Promise<PayableLease | null> {
-  const account = (await portalAccountsForPayer(tenantId)).find((row) => row.id === accountId)
+  const account = (await portalAccountsFor(tenantId)).find(
+    (row) => row.id === accountId && row.payable,
+  )
   if (!account) return null
   const anchor = account.units[0]
   if (!anchor) return null

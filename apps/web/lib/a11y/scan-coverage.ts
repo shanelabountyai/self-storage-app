@@ -423,6 +423,15 @@ export const SCANNED_STATES: readonly ScannedState[] = [
     spec: 'e2e/portal-billing-account.spec.ts',
     layout: 'reached',
   },
+  // B-258. The MEMBER's half of that card is different markup, not a subset of
+  // it: no Pay button, one fewer column in the units table, and a paragraph
+  // saying who does pay. A scan of the payer's card measures none of it.
+  {
+    route: '/portal',
+    state: 'business account card, member',
+    spec: 'e2e/portal-billing-account.spec.ts',
+    layout: 'reached',
+  },
   // B-090 part 1's waitlist form, opened. The route loop scans the closed
   // disclosure; nothing inside it is in the accessibility tree until a click.
   {

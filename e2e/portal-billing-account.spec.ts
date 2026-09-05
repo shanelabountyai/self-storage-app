@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { signInAsBusinessPayer } from './sign-in'
+import { signInAsBusinessMember, signInAsBusinessPayer } from './sign-in'
 import { assertNoAxeViolations } from './a11y-helpers'
 import { DEMO_BUSINESS_ACCOUNT_NAME } from '../apps/web/scripts/demo-credentials'
 
@@ -129,5 +129,53 @@ test.describe('signed in as the business account payer', () => {
     await expect(page.getByRole('link', { name: /^Unit / }).first()).toBeVisible()
 
     await assertNoAxeViolations(page)
+  })
+})
+
+// B-258 / PRD 01 §12. The other half of the same card: somebody who may SEE the
+// account and may not pay it.
+//
+// Robin Bookkeeper holds no lease and is not the payer, so their portal is the
+// read-only account card and nothing else — the exact state the row is about.
+//
+// **Shared-fixture discipline (B-120).** Mutates nothing: it reads the
+// dashboard and asserts two absences. It depends on the membership existing,
+// which is seeded state nothing in the suite removes — the one spec that
+// removes a member is the unit suite's, against its own fixture.
+test.describe('signed in as an authorized member of the business account', () => {
+  // a11y-state: /portal | business account card, member
+  test('sees the account and is offered nothing that pays it', async ({ page }) => {
+    await signInAsBusinessMember(page)
+    await page.goto('/portal')
+    await expect(page.getByRole('main')).toBeVisible()
+
+    const card = page.getByRole('region', { name: DEMO_BUSINESS_ACCOUNT_NAME })
+    await expect(card).toBeVisible()
+    // The units and their money are there — sight of the account is the point.
+    await expect(card.locator('tbody tr')).not.toHaveCount(0)
+
+    // No Pay button anywhere on the page — the body's and the NAV's, which the
+    // payer's own test has to exclude and this one must not: the nav link
+    // (B-239) reads `owingLeases`, and a member owes nothing and pays nothing,
+    // so its absence is part of the boundary rather than incidental.
+    //
+    // Anchored `/^Pay \$/` rather than `/Pay/`: the nav also carries "Payment
+    // methods", which a member legitimately keeps — they have a card of their
+    // own if they ever rent a unit.
+    await expect(page.getByRole('link', { name: /^Pay \$/ })).toHaveCount(0)
+
+    // Said in words rather than by an absent control, so the person who was
+    // told they now have access does not read the missing button as a bug.
+    await expect(card).toContainText(/is the payer/)
+
+    // The renters' names are the payer's disclosure, not a member's, and the
+    // whole column goes rather than its cells emptying.
+    await expect(card.getByRole('columnheader', { name: 'Rented by' })).toHaveCount(0)
+
+    // The account's statements stay the payer's: no link is offered, and the
+    // statements screen itself has nothing on it for a member.
+    await expect(card.getByRole('link', { name: /Statements for this account/ })).toHaveCount(0)
+
+    await assertNoAxeViolations(page, { state: 'business account card, member' })
   })
 })

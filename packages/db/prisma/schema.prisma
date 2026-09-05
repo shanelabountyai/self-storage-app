@@ -1199,6 +1199,9 @@ model Tenant {
   /// payer on several — one per facility their company rents at — and can hold
   /// leases of their own that are on none of them.
   billingAccountsPaid     BillingAccount[]         @relation("BillingAccountPayer")
+  /// B-258. Accounts this tenant may SEE but does not pay for — the office
+  /// manager, the second director, the bookkeeper.
+  billingAccountMemberships BillingAccountMember[]
 
   @@index([lastName, firstName])
   @@map("tenant")
@@ -1473,6 +1476,7 @@ model BillingAccount {
   facility Facility @relation(fields: [facilityId], references: [id], onDelete: Restrict)
   payer    Tenant   @relation("BillingAccountPayer", fields: [payerTenantId], references: [id], onDelete: Restrict)
   leases   Lease[]
+  members  BillingAccountMember[]
 
   @@unique([facilityId, name])
   /// Not redundant with the primary key: it is the target of `Lease`'s
@@ -1481,6 +1485,43 @@ model BillingAccount {
   @@unique([id, facilityId])
   @@index([payerTenantId])
   @@map("billing_account")
+}
+
+/// B-258 / PRD 01 §12. A person allowed to SEE an account they do not pay for.
+///
+/// **A member is a `Tenant` holding no lease**, which is the shape the payer
+/// already is — so this is not a new identity. A Tenant row carries the
+/// password, so a member can sign in and `resolveAudience` (D-47) resolves them
+/// as a tenant with no change: being a member is a fact about what their
+/// portal shows, never about who they are.
+///
+/// **Look-only, deliberately.** Membership is NOT part of `payableLeaseWhere`
+/// — a member who could pay is a second person who can move money on an
+/// account, and B-256's Pay button is the payer's. What a member may see is
+/// therefore a strict superset of what they may pay for (nothing), which is the
+/// safe direction: the drift B-256's one definition exists to prevent is
+/// paying for a unit you cannot see, and that stays impossible.
+///
+/// **`Tenant.email` being unique and required is the ceiling here**, not a
+/// question this table answers: two people at one household address cannot both
+/// be tenants, so they cannot both be members. That is D-111/B-238's question
+/// and B-258 deliberately invents no second answer to it.
+model BillingAccountMember {
+  id        String   @id @default(cuid())
+  accountId String
+  tenantId  String
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  /// Cascade, unlike the payer's Restrict: a membership without its account is
+  /// nothing, whereas an account without its payer is a bill nobody owns.
+  account BillingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  /// Restrict, exactly as the payer is — a tenant who can see an account is not
+  /// deleted out from under it silently.
+  tenant  Tenant         @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@unique([accountId, tenantId])
+  @@index([tenantId])
+  @@map("billing_account_member")
 }
 
 model Invoice {

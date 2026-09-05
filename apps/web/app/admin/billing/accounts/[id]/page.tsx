@@ -7,7 +7,12 @@ import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
 import { accountDetail } from '@/lib/billing/accounts'
 import { formatCents } from '@/lib/format'
 import { ScrollRegion } from '@/components/ui/scroll-region'
-import { attachLeaseAction, detachLeaseAction } from '../actions'
+import {
+  addMemberAction,
+  attachLeaseAction,
+  detachLeaseAction,
+  removeMemberAction,
+} from '../actions'
 
 export const metadata = { title: 'Business account' }
 
@@ -136,6 +141,89 @@ export default async function BillingAccountPage({
             </table>
           </ScrollRegion>
         )}
+
+        {/* B-258 / PRD 01 §12. Who may SEE this account. Before this, the only
+            way to give the office manager or the bookkeeper sight of it was to
+            make them the payer — a money change to solve a visibility problem.
+            A member is a tenant record holding no lease, which is the shape the
+            payer already is, so nothing here mints an identity. */}
+        <section className="flex flex-col gap-4 border-t pt-6">
+          <div>
+            <h2 className="text-base font-semibold">Who can see this account</h2>
+            <p className="text-muted-foreground text-sm text-pretty">
+              {account.payerName} sees it as the payer and is the only person who can pay it.
+              Anyone added here sees the account&apos;s units and what it owes in their own portal,
+              and cannot pay it or see the renters&apos; names.
+            </p>
+          </div>
+
+          {account.members.length === 0 ? (
+            <p className="text-muted-foreground text-sm">
+              Nobody else can see this account yet.
+            </p>
+          ) : (
+            <ul className="flex max-w-md flex-col gap-2">
+              {account.members.map((member) => (
+                <li
+                  key={member.tenantId}
+                  className="flex flex-wrap items-center justify-between gap-2 border-b pb-2 text-sm"
+                >
+                  <span>
+                    {member.name}{' '}
+                    <span className="text-muted-foreground">({member.email})</span>
+                  </span>
+                  {canManage && (
+                    // `announceOutside` for the same reason the unit rows use
+                    // it: a successful removal revalidates this list, so the
+                    // row is unmounted in the commit that would have populated
+                    // a live region inside it (B-170).
+                    <AdminForm
+                      action={removeMemberAction}
+                      label={`Remove ${member.name} from ${account.name}`}
+                      announceOutside
+                    >
+                      <input type="hidden" name="accountId" value={account.id} />
+                      <input type="hidden" name="tenantId" value={member.tenantId} />
+                      <button
+                        type="submit"
+                        className="border-input inline-flex h-8 items-center rounded-md border px-3 text-sm font-medium"
+                      >
+                        Remove
+                        <span className="sr-only">
+                          {' '}
+                          {member.name}&apos;s access to {account.name}
+                        </span>
+                      </button>
+                    </AdminForm>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {canManage && (
+            <AdminForm
+              action={addMemberAction}
+              label={`Give somebody access to ${account.name}`}
+              className="flex max-w-md flex-col gap-4"
+            >
+              <input type="hidden" name="accountId" value={account.id} />
+              <Field
+                name="email"
+                label="Email address"
+                type="email"
+                required
+                hint="Somebody who is already a tenant here. They see the account when they sign in to the portal; they cannot pay it."
+              />
+              <button
+                type="submit"
+                className="border-input inline-flex h-9 items-center self-start rounded-md border px-4 text-sm font-medium"
+              >
+                Give access
+              </button>
+            </AdminForm>
+          )}
+        </section>
 
         {canManage && (
           <AdminForm

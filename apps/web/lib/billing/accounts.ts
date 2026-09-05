@@ -46,6 +46,23 @@ export function payableLeaseWhere(tenantId: string): Prisma.LeaseWhereInput {
   return { OR: [{ tenantId }, { billingAccount: { payerTenantId: tenantId } }] }
 }
 
+/// **B-258 deliberately did not widen the fragment above.** An account's
+/// authorized members can SEE the account and cannot pay it, so membership is a
+/// fact about a read model (`portalAccountsFor`) rather than about the money
+/// path. The invariant B-256 extracted this function to protect is intact and
+/// is now a strict containment rather than an equality: everything payable is
+/// visible, and the dangerous direction — paying for a unit you cannot see —
+/// remains impossible by construction. A member who may pay would be a second
+/// person able to move money on somebody else's account, which is an owner
+/// decision and not a default.
+
+export type AccountMember = {
+  tenantId: string
+  name: string
+  email: string
+  since: Date
+}
+
 export type AccountLease = {
   leaseId: string
   unitNumber: string
@@ -146,6 +163,8 @@ export type AccountDetail = AccountSummary & {
   facilityId: string
   facilityName: string
   leases: AccountLease[]
+  /// B-258. The people who may see this account without paying for it.
+  members: AccountMember[]
 }
 
 export async function accountDetail(
@@ -169,6 +188,14 @@ export async function accountDetail(
           unit: { select: { number: true } },
           tenant: { select: { firstName: true, lastName: true } },
         },
+      },
+      members: {
+        select: {
+          tenantId: true,
+          createdAt: true,
+          tenant: { select: { firstName: true, lastName: true, email: true } },
+        },
+        orderBy: { createdAt: 'asc' },
       },
     },
   })
@@ -198,7 +225,44 @@ export async function accountDetail(
     monthlyRateCents: leases.reduce((sum, lease) => sum + lease.monthlyRateCents, 0),
     balanceCents: leases.reduce((sum, lease) => sum + lease.balanceCents, 0),
     leases,
+    members: account.members.map((member) => ({
+      tenantId: member.tenantId,
+      name: `${member.tenant.firstName} ${member.tenant.lastName}`,
+      email: member.tenant.email,
+      since: member.createdAt,
+    })),
   }
+}
+
+/// The one rule both the payer field and the member field enforce: the person
+/// has to be an existing tenant record already.
+///
+/// Creating one from either form would mint an identity that can sign in and
+/// see other people's balances, which is a move-in's job and not this screen's.
+///
+/// **This is also where D-111 lands, and B-258 deliberately leaves it there.**
+/// `Tenant.email` is required and unique, so two people sharing one household
+/// address cannot both be tenants and therefore cannot both be members. That is
+/// the same constraint that stops a husband and wife each having an account;
+/// B-238 owns it, and a second answer invented here would be a second answer to
+/// contradict.
+async function existingTenantByEmail(
+  raw: string,
+  field: string,
+  then: string,
+): Promise<{ id: string; email: string }> {
+  const email = raw.trim().toLowerCase()
+  const tenant = await prisma.tenant.findUnique({
+    where: { email },
+    select: { id: true, deletedAt: true },
+  })
+  if (!tenant || tenant.deletedAt) {
+    throw new AccountError(
+      field,
+      `No tenant here has the email ${email}. Add them as a tenant first, then ${then}.`,
+    )
+  }
+  return { id: tenant.id, email }
 }
 
 export async function createAccount(
@@ -213,20 +277,11 @@ export async function createAccount(
     throw new AccountError('name', `Keep the name to ${NAME_MAX} characters or fewer.`)
   }
 
-  const email = input.payerEmail.trim().toLowerCase()
-  const payer = await prisma.tenant.findUnique({
-    where: { email },
-    select: { id: true, deletedAt: true },
-  })
-  // The payer has to be an existing tenant record. Creating one from this form
-  // would mint an identity that can sign in and see other people's balances,
-  // which is a move-in's job and not this screen's.
-  if (!payer || payer.deletedAt) {
-    throw new AccountError(
-      'payerEmail',
-      `No tenant here has the email ${email}. Add them as a tenant first, then create the account.`,
-    )
-  }
+  const { id: payerId, email } = await existingTenantByEmail(
+    input.payerEmail,
+    'payerEmail',
+    'create the account',
+  )
 
   const duplicate = await prisma.billingAccount.findUnique({
     where: { facilityId_name: { facilityId: input.facilityId, name } },
@@ -237,7 +292,7 @@ export async function createAccount(
   }
 
   const created = await prisma.billingAccount.create({
-    data: { facilityId: input.facilityId, name, payerTenantId: payer.id },
+    data: { facilityId: input.facilityId, name, payerTenantId: payerId },
     select: { id: true, name: true },
   })
 
@@ -247,7 +302,7 @@ export async function createAccount(
     entityType: 'BillingAccount',
     entityId: created.id,
     facilityId: input.facilityId,
-    context: { name, payerTenantId: payer.id, payerEmail: email },
+    context: { name, payerTenantId: payerId, payerEmail: email },
   })
 
   return created
@@ -374,15 +429,124 @@ export async function detachLease(
   return { unitNumber: lease.unit.number }
 }
 
-/// B-256. What the PAYER sees in the portal: one card per account they pay for.
+/// B-258 / PRD 01 §12. Lets somebody SEE an account without making them pay it.
+///
+/// The office manager, the second director, the bookkeeper: until this existed
+/// the only way to give any of them sight of the account was to make them its
+/// payer, which is a money change made to solve a visibility problem — it moves
+/// who the consolidated Pay button belongs to and who a receipt names.
+///
+/// **Look-only.** A member gets the account card and nothing that moves money;
+/// see the note on `payableLeaseWhere`.
+export async function addMember(
+  actor: Actor,
+  input: { accountId: string; email: string },
+): Promise<{ tenantId: string; name: string }> {
+  const account = await prisma.billingAccount.findUnique({
+    where: { id: input.accountId },
+    select: { id: true, name: true, facilityId: true, payerTenantId: true },
+  })
+  if (!account) throw new AccountError('email', 'That account no longer exists.')
+  assertMayManage(actor, account.facilityId)
+
+  const { id: tenantId, email } = await existingTenantByEmail(
+    input.email,
+    'email',
+    'add them here',
+  )
+
+  // The payer already sees the account, and rather more of it. Adding them
+  // would leave a row that grants nothing and a list that implies it does.
+  if (tenantId === account.payerTenantId) {
+    throw new AccountError('email', `${email} is the payer, so they already see this account.`)
+  }
+
+  const tenant = await prisma.tenant.findUniqueOrThrow({
+    where: { id: tenantId },
+    select: { firstName: true, lastName: true },
+  })
+  const name = `${tenant.firstName} ${tenant.lastName}`
+
+  const existing = await prisma.billingAccountMember.findUnique({
+    where: { accountId_tenantId: { accountId: account.id, tenantId } },
+    select: { id: true },
+  })
+  if (existing) {
+    throw new AccountError('email', `${name} can already see this account.`)
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.billingAccountMember.create({ data: { accountId: account.id, tenantId } })
+    await recordAudit(
+      {
+        actor: toAuditActor(actor),
+        action: 'billing_account.member_added',
+        entityType: 'BillingAccount',
+        entityId: account.id,
+        facilityId: account.facilityId,
+        context: { accountName: account.name, tenantId, email },
+      },
+      tx,
+    )
+  })
+
+  return { tenantId, name }
+}
+
+export async function removeMember(
+  actor: Actor,
+  input: { accountId: string; tenantId: string },
+): Promise<{ name: string }> {
+  const member = await prisma.billingAccountMember.findUnique({
+    where: { accountId_tenantId: { accountId: input.accountId, tenantId: input.tenantId } },
+    select: {
+      account: { select: { id: true, name: true, facilityId: true } },
+      tenant: { select: { firstName: true, lastName: true, email: true } },
+    },
+  })
+  if (!member) throw new AccountError('tenantId', 'That person no longer sees this account.')
+  assertMayManage(actor, member.account.facilityId)
+
+  const name = `${member.tenant.firstName} ${member.tenant.lastName}`
+  await prisma.$transaction(async (tx) => {
+    await tx.billingAccountMember.delete({
+      where: { accountId_tenantId: { accountId: input.accountId, tenantId: input.tenantId } },
+    })
+    await recordAudit(
+      {
+        actor: toAuditActor(actor),
+        action: 'billing_account.member_removed',
+        entityType: 'BillingAccount',
+        entityId: member.account.id,
+        facilityId: member.account.facilityId,
+        context: {
+          accountName: member.account.name,
+          tenantId: input.tenantId,
+          email: member.tenant.email,
+        },
+      },
+      tx,
+    )
+  })
+
+  return { name }
+}
+
+/// B-256. What the payer sees in the portal: one card per account they pay for.
+/// B-258. And what an authorized MEMBER sees: the same card, read-only.
 ///
 /// A separate read model from `accountsFor`, which is a staff screen scoped by
 /// facility and gated on `billing_accounts:manage`. This one is scoped by who
 /// is signed in, spans every facility, and is reached by a tenant — so it takes
 /// a `tenantId` rather than an `Actor` and there is no permission to check: the
-/// only thing that makes these leases visible is being the account's payer,
-/// which is the same fact that makes their money settle them
-/// (`payableLeaseWhere`).
+/// two things that make an account visible are being its payer and being one of
+/// its members, and both are facts about this tenant's own row.
+///
+/// **`payable` is the whole of the difference and every caller must read it.**
+/// It is true only for the payer, and it gates the Pay button, the link into
+/// the consolidated statement, and the renters' names — a member is one step
+/// further from the money than the payer is, and the payer's disclosure is not
+/// automatically theirs (see `tenantName`).
 ///
 /// Occupying leases only by default — this feeds a Pay button, and a unit
 /// somebody moved out of is not something to bill for.
@@ -408,18 +572,29 @@ export type PortalAccount = {
   units: AccountLease[]
   monthlyRateCents: number
   balanceCents: number
+  /// B-258. True for the payer, false for a member. The Pay button, the
+  /// statement link and the renters' names all hang off it.
+  payable: boolean
+  /// B-258. Who settles this account, so a member who cannot pay it is not left
+  /// wondering who does. Always the account's payer, including on the payer's
+  /// own card, where it is simply not rendered.
+  payerName: string
 }
 
-export async function portalAccountsForPayer(
+export async function portalAccountsFor(
   tenantId: string,
   { includeEndedLeases = false }: { includeEndedLeases?: boolean } = {},
 ): Promise<PortalAccount[]> {
   const accounts = await prisma.billingAccount.findMany({
-    where: { payerTenantId: tenantId },
+    where: {
+      OR: [{ payerTenantId: tenantId }, { members: { some: { tenantId } } }],
+    },
     select: {
       id: true,
       name: true,
       facilityId: true,
+      payerTenantId: true,
+      payer: { select: { firstName: true, lastName: true } },
       facility: { select: { name: true, phone: true, timezone: true } },
       leases: {
         where: includeEndedLeases ? {} : { status: { in: [...OCCUPYING_LEASE_STATUSES] } },
@@ -444,11 +619,17 @@ export async function portalAccountsForPayer(
     // because the staff screen is where an empty one is dealt with.
     .filter((account) => account.leases.length > 0)
     .map((account) => {
+      const payable = account.payerTenantId === tenantId
       const units: AccountLease[] = account.leases
         .map((lease) => ({
           leaseId: lease.id,
           unitNumber: lease.unit.number,
-          tenantName: `${lease.tenant.firstName} ${lease.tenant.lastName}`,
+          // B-258. Empty for a member, and the card renders no column for it.
+          // The payer is told whose unit their money settles because they are
+          // settling it; a member was added to see what the account owes, and
+          // the renters' names are not part of that answer. Widening it is an
+          // owner decision, not a default.
+          tenantName: payable ? `${lease.tenant.firstName} ${lease.tenant.lastName}` : '',
           monthlyRateCents: lease.monthlyRateCents,
           balanceCents: balances.get(lease.id) ?? 0,
         }))
@@ -464,6 +645,8 @@ export async function portalAccountsForPayer(
         units,
         monthlyRateCents: units.reduce((sum, unit) => sum + unit.monthlyRateCents, 0),
         balanceCents: units.reduce((sum, unit) => sum + unit.balanceCents, 0),
+        payable,
+        payerName: `${account.payer.firstName} ${account.payer.lastName}`,
       }
     })
 }

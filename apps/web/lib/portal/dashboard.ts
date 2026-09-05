@@ -147,7 +147,7 @@ export async function portalDashboardForTenant(
     // widening it to what the viewer merely PAYS for would hand a payer a
     // credential for somebody else's unit, which PRD 03 SR-2 makes a separately
     // audited permission even for staff. A business account's units are their
-    // own read model (`portalAccountsForPayer`), and it carries money only.
+    // own read model (`portalAccountsFor`), and it carries money only.
     prisma.lease.findMany({
       where: { tenantId, status: { in: [...OCCUPYING_LEASE_STATUSES] } },
       orderBy: { startDate: 'asc' },

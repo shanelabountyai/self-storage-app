@@ -4,7 +4,7 @@ import { listParts, recurringParts } from '@storage/core/pricing'
 import Link from 'next/link'
 import { requireTenantActor } from '@/lib/rbac/session'
 import { portalDashboardForTenant, type PortalLeaseSummary } from '@/lib/portal/dashboard'
-import { portalAccountsForPayer, type PortalAccount } from '@/lib/billing/accounts'
+import { portalAccountsFor, type PortalAccount } from '@/lib/billing/accounts'
 import { formatCalendarDate, formatCents, formatRate } from '@/lib/format'
 import { GateCodePanel } from '@/components/portal/gate-code-panel'
 import { currentImpersonation } from '@/lib/impersonation/context'
@@ -472,7 +472,32 @@ function AccountCard({ account }: { account: PortalAccount }) {
         </p>
       </div>
 
-      {owesMoney ? (
+      {/* B-258. A member is shown the same money and offered none of the
+          buttons. Said in words rather than by an absent control: a screen that
+          silently drops the Pay button reads as a bug to the person who was
+          told they now have access to the account. */}
+      {!account.payable ? (
+        <div className="border-input rounded-md border p-3 text-sm text-pretty">
+          <p>
+            {owesMoney ? (
+              <>
+                This account owes <strong>{formatRate(account.balanceCents)}</strong> across{' '}
+                {account.units.length === 1 ? 'its unit' : 'its units'}.
+              </>
+            ) : (
+              <>Nothing is owed on this account right now.</>
+            )}
+          </p>
+          <p className="mt-2">
+            You can see this account. {account.payerName} is the payer and settles it, so there is
+            nothing here for you to pay. To pay it another way, call{' '}
+            <a href={telHref} className="underline underline-offset-4">
+              {phone}
+            </a>
+            .
+          </p>
+        </div>
+      ) : owesMoney ? (
         <div className="border-input rounded-md border p-3 text-sm text-pretty">
           <p>
             This account owes <strong>{formatRate(account.balanceCents)}</strong> across{' '}
@@ -515,9 +540,16 @@ function AccountCard({ account }: { account: PortalAccount }) {
               <th scope="col" className="py-2 font-medium">
                 Unit
               </th>
-              <th scope="col" className="py-2 font-medium">
-                Rented by
-              </th>
+              {/* B-258. The renters' names are the payer's to see, not a
+                  member's — a member was added to see what the account owes.
+                  The whole column goes rather than its cells emptying, so the
+                  table a screen reader announces has three headers or two and
+                  never a header with nothing under it. */}
+              {account.payable && (
+                <th scope="col" className="py-2 font-medium">
+                  Rented by
+                </th>
+              )}
               <th scope="col" className="py-2 text-right font-medium">
                 Balance
               </th>
@@ -529,7 +561,9 @@ function AccountCard({ account }: { account: PortalAccount }) {
                 <th scope="row" className="py-2 text-left font-normal">
                   {unit.unitNumber}
                 </th>
-                <td className="text-muted-foreground py-2">{unit.tenantName}</td>
+                {account.payable && (
+                  <td className="text-muted-foreground py-2">{unit.tenantName}</td>
+                )}
                 <td className="py-2 text-right tabular-nums">
                   {unit.balanceCents < 0
                     ? `${formatCents(-unit.balanceCents)} in credit`
@@ -542,17 +576,24 @@ function AccountCard({ account }: { account: PortalAccount }) {
       </div>
 
       {/* D-119. Stated because the opposite is the natural assumption, and
-          because the consequence of assuming it is a bill nobody paid. */}
-      <p className="text-muted-foreground text-sm text-pretty">
-        Autopay is set up per unit and charges the card that unit&apos;s own renter has on file.
-        Paying through this account does not change that.
-      </p>
+          because the consequence of assuming it is a bill nobody paid. Only for
+          the payer: to a member it is a paragraph about a payment method that is
+          not theirs. B-258's statements gap is the same shape — the account's
+          statements stay the payer's, so a member is not offered the link. */}
+      {account.payable && (
+        <>
+          <p className="text-muted-foreground text-sm text-pretty">
+            Autopay is set up per unit and charges the card that unit&apos;s own renter has on
+            file. Paying through this account does not change that.
+          </p>
 
-      <p className="text-sm">
-        <Link href="/portal/statements" className="underline underline-offset-4">
-          Statements for this account
-        </Link>
-      </p>
+          <p className="text-sm">
+            <Link href="/portal/statements" className="underline underline-offset-4">
+              Statements for this account
+            </Link>
+          </p>
+        </>
+      )}
     </section>
   )
 }
@@ -561,7 +602,7 @@ export default async function PortalHomePage() {
   const actor = await requireTenantActor()
   const [leases, accounts, impersonation] = await Promise.all([
     portalDashboardForTenant(actor.tenantId),
-    portalAccountsForPayer(actor.tenantId),
+    portalAccountsFor(actor.tenantId),
     currentImpersonation(),
   ])
   const impersonated = Boolean(impersonation)

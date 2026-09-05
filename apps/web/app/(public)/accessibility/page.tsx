@@ -1632,6 +1632,32 @@ const LAST_REVIEWED = '19 August 2026'
 // countdown, the staff screens, and the embedded maps. None of them is
 // touched by an account card. `LAST_REVIEWED` is not bumped, per D-115.
 
+// Re-verified 2026-09-04, at B-258 (authorized users on a business account —
+// the people allowed to SEE it). Customer-facing, and this page again renders
+// byte-identically, which is the outcome to check rather than assume.
+//
+// No route is added: the member's portal is `/portal`, which is already in the
+// scan lists. What IS new is a second STATE of that route, and it went into the
+// contract rather than around it — `/portal | business account card, member` is
+// in `SCANNED_STATES` as `reached` with a `STATE_REACH` key, so it is measured
+// at 320px, 200% zoom and forced text spacing rather than only scanned. That
+// mattered more than it looks: the member's card is a DIFFERENT table from the
+// payer's — one fewer column, no Pay button — so a scan of the payer's state
+// measures none of it, and the contract test refused the `reached` claim until
+// the reach entry existed. No `SCAN_EXCEPTIONS` row was added, so the generated
+// coverage claim below is untouched.
+//
+// The staff side (`/admin/billing/accounts/[id]` gains a list and two forms) is
+// covered by the second shortfall bullet's admission the way every admin screen
+// is, and it is not one of the four unpaginated lists that bullet names — an
+// account's authorized users is a handful of rows by construction — so the
+// bullet's scope is unchanged.
+//
+// The "Where we fall short" list was re-read against this build and all three
+// entries are still true and unchanged in scope: the no-JavaScript hold
+// countdown, the staff screens, and the embedded maps. A read-only account card
+// touches none of them. `LAST_REVIEWED` is not bumped, per D-115.
+
 export default function AccessibilityPage() {
   return (
     <ProsePage

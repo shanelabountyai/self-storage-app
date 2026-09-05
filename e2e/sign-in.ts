@@ -5,6 +5,7 @@ import { SESSION_COOKIE } from '../apps/web/auth.config'
 import { base32Decode, TOTP_STEP_SECONDS, totpCode } from '../packages/core/auth/totp'
 import {
   DEMO_BUSINESS_PAYER_EMAIL,
+  DEMO_BUSINESS_MEMBER_EMAIL,
   DEMO_PLAN_TENANT_EMAIL,
   DEMO_STAFF_EMAIL,
   DEMO_STAFF_PASSWORD,
@@ -163,6 +164,18 @@ export async function signInAsBusinessPayer(page: Page): Promise<void> {
   await signInWithPassword(
     page,
     { email: DEMO_BUSINESS_PAYER_EMAIL, password: DEMO_TENANT_PASSWORD, audience: 'tenant' },
+    '/portal',
+  )
+}
+
+/// B-258. An authorized MEMBER of the demo business account: Robin Bookkeeper,
+/// who holds no lease and cannot pay the account — so their portal is the
+/// read-only account card and nothing else, which is the state this row is
+/// about and the one nothing had ever scanned.
+export async function signInAsBusinessMember(page: Page): Promise<void> {
+  await signInWithPassword(
+    page,
+    { email: DEMO_BUSINESS_MEMBER_EMAIL, password: DEMO_TENANT_PASSWORD, audience: 'tenant' },
     '/portal',
   )
 }

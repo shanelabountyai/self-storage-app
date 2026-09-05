@@ -54,8 +54,19 @@ test.describe('signed in as the demo owner', () => {
     // The point of the screen: the lease's own tenant is named beside the unit,
     // because the payer and the person whose goods are in it are different
     // people and the operator has to see both.
-    await expect(page.getByText('Casey Contractor')).toBeVisible()
+    // B-258 named the payer a second time, in the "who can see this account"
+    // section, so this is anchored to the header line rather than to the name.
+    await expect(page.getByText('paid by Casey Contractor')).toBeVisible()
     await expect(page.getByRole('table')).toContainText('Alex Active')
     await expect(page.getByRole('rowheader', { name: 'Total' })).toBeVisible()
+
+    // B-258. Who may SEE the account, beside who pays it. Read-only here: the
+    // add and remove controls are exercised by the unit suite against its own
+    // fixture, because a member added or removed on the shared demo account is
+    // exactly the unscoped mutation B-120's rule forbids.
+    await expect(
+      page.getByRole('heading', { name: 'Who can see this account' }),
+    ).toBeVisible()
+    await expect(page.getByRole('listitem').filter({ hasText: 'Robin Bookkeeper' })).toBeVisible()
   })
 })

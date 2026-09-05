@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test'
 import { SCANNED_BY_OWN_SPEC, SCANNED_STATES } from '../apps/web/lib/a11y/scan-coverage'
 import { DEMO_BUSINESS_ACCOUNT_NAME } from '../apps/web/scripts/demo-credentials'
 import {
+  signInAsBusinessMember,
   signInAsBusinessPayer,
   signInAsDemoOwner,
   signInAsDemoTenant,
@@ -34,7 +35,7 @@ import { expectNoHorizontalOverflow, TEXT_SPACING } from './a11y-helpers'
 // in those files because it is the thing being shared; the axe scans stay
 // where they are, beside the behaviour they were written next to.
 
-type Audience = 'admin' | 'tenant' | 'plan-tenant' | 'business-payer'
+type Audience = 'admin' | 'tenant' | 'plan-tenant' | 'business-payer' | 'business-member'
 
 async function signIn(page: Page, audience: Audience): Promise<void> {
   if (audience === 'admin') await signInAsDemoOwner(page)
@@ -42,6 +43,9 @@ async function signIn(page: Page, audience: Audience): Promise<void> {
   // B-256. Casey Contractor holds no lease, so this is the only session in
   // which the account card and the consolidated pay screen render at all.
   else if (audience === 'business-payer') await signInAsBusinessPayer(page)
+  // B-258. Robin Bookkeeper sees the account and cannot pay it, which is a
+  // different card — one fewer column and no Pay button.
+  else if (audience === 'business-member') await signInAsBusinessMember(page)
   else await signInAsDemoTenant(page)
 }
 
@@ -226,6 +230,19 @@ const STATE_REACH: Record<string, { audience: Audience; go: (page: Page) => Prom
       // The TABLE, not the heading above it: measuring the page before the
       // units render is the failure this key exists to catch.
       await expect(page.getByRole('columnheader', { name: 'Rented by' })).toBeVisible()
+    },
+  },
+  // B-258. The member's card: the same table minus its "Rented by" column and
+  // minus the Pay button, which is a different layout at the same width and is
+  // measured here or nowhere.
+  '/portal | business account card, member': {
+    audience: 'business-member',
+    async go(page) {
+      await page.goto('/portal')
+      // The TABLE, not the heading above it — and keyed on a cell rather than
+      // on "Rented by", which is the header this state deliberately has not
+      // got.
+      await expect(page.getByRole('columnheader', { name: 'Balance' })).toBeVisible()
     },
   },
   // And the same table again under the bill, where it sits beside the Payment

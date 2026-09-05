@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import type Stripe from 'stripe'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { prisma } from '../packages/db'
-import { attachLease, createAccount, portalAccountsForPayer } from '../apps/web/lib/billing/accounts'
+import { attachLease, createAccount, portalAccountsFor } from '../apps/web/lib/billing/accounts'
 import { payableAccount, payableLease } from '../apps/web/lib/portal/payment'
 import { owingLeases } from '../apps/web/lib/portal/dashboard'
 import { statementsForTenant, tenantMayViewLease } from '../apps/web/lib/billing/statements'
@@ -187,7 +187,7 @@ describeDb('the business account portal', () => {
   })
 
   it('gives the payer one card totalling the account, and gives nobody else one', async () => {
-    const [account] = await portalAccountsForPayer(payerId)
+    const [account] = await portalAccountsFor(payerId)
     expect(account.name).toBe(`Acme Portal ${suffix}`)
     // The account's units only. The payer's OWN $60 unit is not on the
     // account, so it must not be in this total — it has its own lease card.
@@ -196,8 +196,8 @@ describeDb('the business account portal', () => {
     expect(account.units[0].tenantName).toBe('foreman Renter')
 
     // Being billed FOR something does not make the account yours.
-    expect(await portalAccountsForPayer(foremanId)).toEqual([])
-    expect(await portalAccountsForPayer(strangerId)).toEqual([])
+    expect(await portalAccountsFor(foremanId)).toEqual([])
+    expect(await portalAccountsFor(strangerId)).toEqual([])
   })
 
   it('offers the payer the account total to pay, and refuses somebody else the account', async () => {
@@ -267,10 +267,10 @@ describeDb('the business account portal', () => {
       data: { billingAccountId: accountId, status: 'ended' },
     })
 
-    const [payable] = await portalAccountsForPayer(payerId)
+    const [payable] = await portalAccountsFor(payerId)
     expect(payable.units.map((unit) => unit.leaseId)).not.toContain(endedLeaseId)
 
-    const [forStatement] = await portalAccountsForPayer(payerId, { includeEndedLeases: true })
+    const [forStatement] = await portalAccountsFor(payerId, { includeEndedLeases: true })
     expect(forStatement.units.map((unit) => unit.leaseId)).toContain(endedLeaseId)
 
     // And the Pay screen is the first question, so it agrees with the first
@@ -324,6 +324,6 @@ describeDb('the business account portal', () => {
     expect(byLease.get(foremanLeaseId)).toBe(-19_000)
     expect(byLease.get(payerLeaseId)).toBe(-6_000)
     expect([...byLease.values()].reduce((sum, cents) => sum + cents, 0)).toBe(-25_000)
-    expect((await portalAccountsForPayer(payerId))[0].balanceCents).toBe(-4_000)
+    expect((await portalAccountsFor(payerId))[0].balanceCents).toBe(-4_000)
   })
 })

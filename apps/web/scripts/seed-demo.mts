@@ -17,6 +17,7 @@ import {
   DEMO_TENANT_PASSWORD,
   DEMO_POS_TENANT_EMAIL,
   DEMO_BUSINESS_PAYER_EMAIL,
+  DEMO_BUSINESS_MEMBER_EMAIL,
   DEMO_BUSINESS_ACCOUNT_NAME,
   DEMO_PLAN_TENANT_EMAIL,
   DEMO_PROMO_CODE,
@@ -57,7 +58,7 @@ export const DEMO_PREFIX = 'demo-'
 /// `npm run db:reset-link -- --email dana@demo.example.com --tenant` mints a
 /// password-reset link for a demo tenant without sending mail anywhere.
 const NO_LOGINS = process.argv.includes('--no-logins')
-export { DEMO_EMAIL_DOMAIN, DEMO_STAFF_EMAIL, DEMO_STAFF_PASSWORD, DEMO_TENANT_EMAIL, DEMO_TENANT_PASSWORD, DEMO_POS_TENANT_EMAIL, DEMO_PLAN_TENANT_EMAIL, DEMO_BUSINESS_PAYER_EMAIL, DEMO_BUSINESS_ACCOUNT_NAME }
+export { DEMO_EMAIL_DOMAIN, DEMO_STAFF_EMAIL, DEMO_STAFF_PASSWORD, DEMO_TENANT_EMAIL, DEMO_TENANT_PASSWORD, DEMO_POS_TENANT_EMAIL, DEMO_PLAN_TENANT_EMAIL, DEMO_BUSINESS_PAYER_EMAIL, DEMO_BUSINESS_MEMBER_EMAIL, DEMO_BUSINESS_ACCOUNT_NAME }
 
 /// A signed-in staff account for the e2e suite.
 ///
@@ -846,13 +847,33 @@ async function seedLifecycleStates(
       // The account is created here because the PAYER is, and its units are
       // attached on the next two iterations — see the note above for why the
       // POS lease this block used to attach is deliberately not on it any more.
-      await prisma.billingAccount.create({
+      const businessAccount = await prisma.billingAccount.create({
         data: {
           facilityId: facility.id,
           name: DEMO_BUSINESS_ACCOUNT_NAME,
           payerTenantId: payer.id,
         },
       })
+      // B-258. The office manager: sees the account, cannot pay it. Holds no
+      // lease, so signing in as them lands on a portal whose only content is
+      // the read-only account card — which is the state the row is about and
+      // the one that has to be scannable.
+      const member = await prisma.tenant.create({
+        data: {
+          email: DEMO_BUSINESS_MEMBER_EMAIL,
+          firstName: 'Robin',
+          lastName: 'Bookkeeper',
+          phone: '512-555-0198',
+          addressLine1: '900 Demo Street',
+          city: 'Austin',
+          state: 'TX',
+          postalCode: '78701',
+        },
+      })
+      await prisma.billingAccountMember.create({
+        data: { accountId: businessAccount.id, tenantId: member.id },
+      })
+      if (!NO_LOGINS) await setPassword(member.id, 'tenant', DEMO_TENANT_PASSWORD)
       // B-256. A known password on the PAYER, for the same reason B-034 put one
       // on Dana: the account card, the consolidated pay screen and the account
       // statement are portal surfaces, and a portal surface with no session

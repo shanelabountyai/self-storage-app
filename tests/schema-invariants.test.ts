@@ -74,6 +74,8 @@ const NO_FACILITY_ID: Record<string, string> = {
     'a support session is about a SUBJECT, and a subject spans facilities \u2014 a tenant with leases at two sites, or an all-facilities staff user, belongs to no single one. What the session does carry is `facilityScopeSnapshot`, the impersonator\u2019s reach at the instant it started, which is the fact an investigation actually asks for and is a set rather than a column (PRD 09 \u00a76.1, B-091)',
   OrgDefault:
     'is the org-level default, by definition — it exists precisely to be the value BEFORE any facility has one, and a facilityId here would make it a facility setting (PRD 02 US-4, B-079)',
+  BillingAccountMember:
+    'scoped through the account it belongs to, which carries the facilityId — the same reasoning PaymentPlanInstallment and AuctionAdvertisement are exempt. A copy here would be worse than absent: `BillingAccount` is pinned to one facility by a composite foreign key precisely so a lease and its account cannot disagree about the site, and a second column nothing pins could (PRD 01 §12, B-258)',
 }
 
 /// Calendar dates, not instants. A business date is a facility-local day with

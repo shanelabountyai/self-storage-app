@@ -93,3 +93,17 @@ export const DEMO_PROMO_CODE = 'E2ESAVE'
 // STATE_EXCEPTIONS. The published tenant password is reused; there is nothing
 // this account can do that Dana's cannot.
 export const DEMO_PLAN_TENANT_EMAIL = `pia@${DEMO_EMAIL_DOMAIN}`
+
+// B-258. An authorized MEMBER of the demo business account: somebody who sees
+// the account and cannot pay it.
+//
+// A separate tenant from DEMO_BUSINESS_PAYER_EMAIL because the two halves of
+// this row are exactly what one is allowed to do and the other is not, and the
+// member's card renders differently from the payer's — no Pay button, no
+// "Rented by" column, no statements link. A portal surface with no session
+// cannot be accessibility-scanned, so this one carries DEMO_TENANT_PASSWORD for
+// the same reason the payer does.
+//
+// Holds no lease, which is the shape the row is about: an office manager who
+// does not rent a unit and does not sign the cheques.
+export const DEMO_BUSINESS_MEMBER_EMAIL = `bookkeeper@${DEMO_EMAIL_DOMAIN}`

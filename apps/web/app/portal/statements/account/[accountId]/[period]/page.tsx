@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { requireTenantActor } from '@/lib/rbac/session'
-import { portalAccountsForPayer } from '@/lib/billing/accounts'
+import { portalAccountsFor } from '@/lib/billing/accounts'
 import { leaseStatement } from '@/lib/billing/statements'
 import { parseStatementPeriod, statementPeriodSegment } from '@/lib/billing/statement-period'
 import { formatCents } from '@/lib/format'
@@ -46,17 +46,24 @@ export default async function AccountStatementPage({
   const parsed = parseStatementPeriod(period)
   if (!parsed) notFound()
 
-  // Authorization and lookup in one call: `portalAccountsForPayer` selects on
-  // `payerTenantId`, so an account id in the URL that is somebody else's comes
-  // back as nothing rather than as a month of their money.
+  // Authorization and lookup in one call: `portalAccountsFor` returns only
+  // accounts this tenant may reach, so an account id in the URL that is
+  // somebody else's comes back as nothing rather than as a month of their
+  // money.
+  //
+  // B-258. `payable` is tested too, so this stays the PAYER's document. An
+  // authorized member sees the account card and its total; this page is a row
+  // per unit naming that unit's renter, and every row links to that renter's
+  // own full financial history — which is a wider disclosure than sight of an
+  // account, and its own decision rather than a side effect of this one.
   //
   // `includeEndedLeases`, because this is the bookkeeping document rather than
   // the Pay button: a unit the company moved out of in April was still on the
   // account in March, and a March statement that dropped it would not add up to
   // the March row on the list this page was reached from.
   const account = (
-    await portalAccountsForPayer(actor.tenantId, { includeEndedLeases: true })
-  ).find((row) => row.id === accountId)
+    await portalAccountsFor(actor.tenantId, { includeEndedLeases: true })
+  ).find((row) => row.id === accountId && row.payable)
   if (!account) notFound()
 
   const statements = await Promise.all(
