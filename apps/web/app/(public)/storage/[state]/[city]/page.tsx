@@ -74,9 +74,9 @@ export async function generateMetadata({
   if (!resolved) return { title: 'City not found' }
 
   const { first, facilities, canonical } = resolved
-  const title = cityTitle(first.city, first.state)
-  const description = cityDescription(first.city, first.state, facilities)
   const locale = await getLocale()
+  const title = cityTitle(first.city, first.state, locale)
+  const description = cityDescription(first.city, first.state, facilities, locale)
   const url = absoluteUrl(siteOrigin(), localePath(locale, canonical))
 
   return {
@@ -193,7 +193,8 @@ export default async function CityPage({
     first.city,
     first.state,
     facilities,
-    await authoredCityIntro(first.state, first.city),
+    await authoredCityIntro(first.state, first.city, locale),
+    locale,
   )
   const amenities = cityAmenities(facilities)
   const canonicalUrl = localeUrl(locale, canonical)

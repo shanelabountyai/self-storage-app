@@ -19,6 +19,7 @@ import {
   UNIT_SIZE_ORDER,
 } from '@storage/core/marketing'
 import { getLocale } from '@/lib/i18n/server'
+import { dictionaryFor, translate, LOCALES, type Locale } from '@/lib/i18n'
 import { OPEN_GRAPH_LOCALE } from '@/lib/i18n/routing'
 import { localeAlternates, localeUrl } from '@/lib/marketing/alternates'
 import { citySizePath, citySlugPath } from '@/lib/marketing/paths'
@@ -46,7 +47,7 @@ export const revalidate = 300
 
 /// One resolution of the URL segments, shared by the metadata and the page so
 /// they cannot disagree about whether this page exists.
-async function resolve(state: string, city: string, dimension: string) {
+async function resolve(state: string, city: string, dimension: string, locale: Locale) {
   const canonical = canonicalDimension(dimension)
   if (!canonical) return null
 
@@ -60,17 +61,43 @@ async function resolve(state: string, city: string, dimension: string) {
   const [first] = size.facilities
   const path = citySizePath(first.state, first.city, canonical)
 
-  // Every sibling's intro, from the same load. This is what the gate scores
-  // against, and building it here rather than per-page is the reason the gate
-  // costs no extra queries.
-  const intros = new Map(
-    [...sizes.values()].map((sibling) => [
-      sibling.dimension,
-      citySizeIntro(sibling.widthFt, sibling.lengthFt, first.city, first.state, sibling.facilities),
-    ]),
-  )
+  // Every sibling's intro, from the same load, in every language. This is what
+  // the gate scores against, and building it here rather than per-page is the
+  // reason the gate costs no extra queries.
+  //
+  // B-262 made it per language, and the gate now has to pass in ALL of them for
+  // the page to be indexed. Two reasons, and the first is the one that decides
+  // it: `/storage/…/size/10x10` and `/es/storage/…/size/10x10` are one hreflang
+  // cluster, and a cluster whose members disagree about `noindex` is a cluster
+  // Google discards — so a per-language verdict would silently cost the English
+  // page its Spanish alternate. The second is that translation FLATTENS
+  // distinctions: two sizes whose English intros differ enough can come out
+  // closer in Spanish, and that page is thin content in Spanish whatever the
+  // English scored.
+  const introsFor = (target: Locale) =>
+    new Map(
+      [...sizes.values()].map((sibling) => [
+        sibling.dimension,
+        citySizeIntro(
+          sibling.widthFt,
+          sibling.lengthFt,
+          first.city,
+          first.state,
+          sibling.facilities,
+          target,
+        ),
+      ]),
+    )
 
-  return { size, sizes, first, canonical, path, intros, gate: sizeIndexGate(canonical, intros) }
+  const intros = introsFor(locale)
+  const gates = LOCALES.map((candidate) =>
+    sizeIndexGate(canonical, candidate === locale ? intros : introsFor(candidate)),
+  )
+  // The first refusal, so the reason a reader or the duplicate report is given
+  // names the language that actually failed rather than the one being rendered.
+  const gate = gates.find((verdict) => !verdict.indexable) ?? gates[0]
+
+  return { size, sizes, first, canonical, path, intros, gate }
 }
 
 export async function generateMetadata({
@@ -79,18 +106,21 @@ export async function generateMetadata({
   params: Promise<{ state: string; city: string; dimension: string }>
 }) {
   const { state, city, dimension } = await params
-  const resolved = await resolve(state, city, dimension)
-  if (!resolved) return { title: 'Size not found' }
+  const locale = await getLocale()
+  const resolved = await resolve(state, city, dimension, locale)
+  if (!resolved) {
+    return { title: translate(dictionaryFor(locale), 'size.notFound') }
+  }
 
   const { size, first, path, gate } = resolved
-  const locale = await getLocale()
-  const title = citySizeTitle(size.widthFt, size.lengthFt, first.city, first.state)
+  const title = citySizeTitle(size.widthFt, size.lengthFt, first.city, first.state, locale)
   const description = citySizeDescription(
     size.widthFt,
     size.lengthFt,
     first.city,
     first.state,
     size.facilities,
+    locale,
   )
 
   return {
@@ -164,7 +194,8 @@ export default async function CitySizePage({
   params: Promise<{ state: string; city: string; dimension: string }>
 }) {
   const { state, city, dimension } = await params
-  const resolved = await resolve(state, city, dimension)
+  const locale = await getLocale()
+  const resolved = await resolve(state, city, dimension, locale)
   if (!resolved) notFound()
 
   const { size, sizes, first, canonical, path, intros } = resolved
@@ -176,11 +207,10 @@ export default async function CitySizePage({
     permanentRedirect(path)
   }
 
-  const locale = await getLocale()
   const label = dimensionLabel(size.widthFt, size.lengthFt)
   const place = `${first.city}, ${first.state.toUpperCase()}`
   const intro = intros.get(canonical) ?? []
-  const facts = sizeFacts(size.widthFt, size.lengthFt)
+  const facts = sizeFacts(size.widthFt, size.lengthFt, locale)
   const canonicalUrl = localeUrl(locale, path)
 
   // Sibling sizes, in the guide's order — smallest first — with anything the

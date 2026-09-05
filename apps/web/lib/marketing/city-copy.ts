@@ -1,4 +1,5 @@
 import { formatRate } from '@/lib/format'
+import { DEFAULT_LOCALE, type Locale } from '@/lib/i18n'
 
 // PRD 04 §3.2 US-4 AC1 (B-082 part 2). The city page's own words.
 //
@@ -25,8 +26,22 @@ import { formatRate } from '@/lib/format'
 // names and the price floor — exactly the facts that go stale when typed.
 //
 // Pure, so the wording is testable without a database.
-
-const list = new Intl.ListFormat('en-US', { style: 'long', type: 'conjunction' })
+//
+// B-262: generated per language, with the templates written here rather than in
+// the message catalogue. They read as prose with four or five interpolations
+// each and belong beside the logic that decides WHICH sentence is used — a
+// dictionary key per branch would put the choice in one file and the wording in
+// another, which is how the "everything is rented" sentence ends up in a page
+// that has inventory.
+//
+// The authored override (D-62) is untouched by this and deliberately so: an
+// operator's own words are their own words, and B-262 adds a SECOND authored
+// column so a city can be written in each language rather than having one
+// language's prose machine-mangled into the other.
+const LIST_FORMATS: Record<Locale, Intl.ListFormat> = {
+  en: new Intl.ListFormat('en-US', { style: 'long', type: 'conjunction' }),
+  es: new Intl.ListFormat('es-MX', { style: 'long', type: 'conjunction' }),
+}
 
 export type CityFacilitySummary = {
   name: string
@@ -44,8 +59,9 @@ export function cityLabel(city: string, state: string): string {
 
 /// FR-SEO-3's title shape, for a city rather than a facility. The layout
 /// appends the site name, so this must not.
-export function cityTitle(city: string, state: string): string {
-  return `Storage Units in ${cityLabel(city, state)}`
+export function cityTitle(city: string, state: string, locale: Locale = DEFAULT_LOCALE): string {
+  const label = cityLabel(city, state)
+  return locale === 'es' ? `Bodegas en ${label}` : `Storage Units in ${label}`
 }
 
 /// The lowest advertised rate anywhere in the city, or null when nothing in it
@@ -64,12 +80,20 @@ export function cityDescription(
   city: string,
   state: string,
   facilities: readonly CityFacilitySummary[],
+  locale: Locale = DEFAULT_LOCALE,
 ): string {
   const label = cityLabel(city, state)
   const count = facilities.length
-  const places = count === 1 ? '1 location' : `${count} locations`
   const from = cityFromRateCents(facilities)
 
+  if (locale === 'es') {
+    const sucursales = count === 1 ? '1 sucursal' : `${count} sucursales`
+    return from === null
+      ? `Bodegas en ${label}. ${sucursales}, mes con mes y sin contrato de largo plazo. Compare tamaños y vea qué hay disponible hoy.`
+      : `Bodegas en ${label}. ${sucursales}, unidades desde ${formatRate(from)} al mes en línea, mes con mes y sin contrato de largo plazo.`
+  }
+
+  const places = count === 1 ? '1 location' : `${count} locations`
   return from === null
     ? `Self-storage in ${label}. ${places}, month-to-month with no long-term contract. Compare sizes and check what is open today.`
     : `Self-storage in ${label}. ${places}, units from ${formatRate(from)}/mo online, month-to-month with no long-term contract.`
@@ -100,6 +124,7 @@ export function cityIntro(
   state: string,
   facilities: readonly CityFacilitySummary[],
   authored?: string | null,
+  locale: Locale = DEFAULT_LOCALE,
 ): string[] {
   if (facilities.length === 0) return []
 
@@ -107,10 +132,30 @@ export function cityIntro(
   if (written.length > 0) return written
 
   const label = cityLabel(city, state)
-  const names = list.format(facilities.map((facility) => facility.name))
+  const names = LIST_FORMATS[locale].format(facilities.map((facility) => facility.name))
   const from = cityFromRateCents(facilities)
 
   const paragraphs: string[] = []
+
+  if (locale === 'es') {
+    paragraphs.push(
+      facilities.length === 1
+        ? `Tenemos una sucursal de bodegas en ${label}: ${names}.`
+        : `Tenemos ${facilities.length} sucursales de bodegas en ${label}: ${names}.`,
+    )
+
+    if (from !== null) {
+      paragraphs.push(
+        `Las unidades empiezan en ${formatRate(from)} al mes al precio en línea — lo que usted paga rentando en esta página, que es más bajo que el precio en tienda. Todas las unidades son mes con mes, así que no hay contrato de largo plazo que firmar.`,
+      )
+    } else {
+      paragraphs.push(
+        `Ahora mismo todo en ${label} está rentado. Vale la pena llamar a las sucursales de abajo — casi cada semana se desocupan unidades, y le decimos qué va a quedar libre.`,
+      )
+    }
+
+    return paragraphs
+  }
 
   // The count and the names, which is the fact a prospect came for. Names are
   // printed rather than described — the list below links them, and a reader

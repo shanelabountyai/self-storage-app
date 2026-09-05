@@ -3,6 +3,7 @@ import { recordAudit } from '@storage/core/audit'
 import { citySlug } from '@storage/core/marketing'
 import { citiesWithFacilities, facilitiesInCity } from '@/lib/facility/city-facilities'
 import { cityIntro } from '@/lib/marketing/city-copy'
+import { LOCALES, type Locale } from '@/lib/i18n'
 import { requirePermission } from '@/lib/rbac/authorize'
 import { toAuditActor } from '@/lib/rbac/audit-actor'
 import type { Actor } from '@/lib/rbac/actor'
@@ -18,13 +19,17 @@ import type { Actor } from '@/lib/rbac/actor'
 // The list of cities comes from the FACILITIES, never from the `city` table. A
 // row can only be created for a city a facility puts on the map, so this screen
 // cannot become a way to publish copy about a place we do not operate in.
+//
+// B-262 gave the page a second language, so this screen has a box per language
+// rather than one box. They are INDEPENDENT: writing English does not oblige
+// anybody to write Spanish, and each language falls back to its own generated
+// intro on its own. That is this repo's "a new column that configures behaviour
+// gets its control in the same item" rule — `City.introEs` and the field that
+// writes it ship together, because the alternative is a column reachable only
+// from a database client, which took two clean-up passes to close last time.
 
-export type CityCopyRow = {
-  state: string
-  /// The stored spelling, for display and for the URL.
-  city: string
-  slug: string
-  facilityCount: number
+/// One language's worth of a city page's intro.
+export type CityCopyLocale = {
   /// What has been written, or null when nobody has.
   authored: string | null
   /// What the page shows today — the authored paragraphs, or the generated
@@ -33,31 +38,54 @@ export type CityCopyRow = {
   rendered: string[]
 }
 
+export type CityCopyRow = {
+  state: string
+  /// The stored spelling, for display and for the URL.
+  city: string
+  slug: string
+  facilityCount: number
+  /// B-262: keyed by language, so the screen renders one box per language from
+  /// the list rather than from two hard-coded halves that a third language
+  /// would silently not reach.
+  copy: Record<Locale, CityCopyLocale>
+}
+
 export async function cityCopyRows(actor: Actor): Promise<CityCopyRow[]> {
   requirePermission(actor, 'marketing:city_copy', null)
 
   const cities = await citiesWithFacilities()
-  const rows = await prisma.city.findMany({ select: { state: true, slug: true, intro: true } })
+  const rows = await prisma.city.findMany({
+    select: { state: true, slug: true, intro: true, introEs: true },
+  })
   // Keyed the way `authoredCityIntro` queries — lower-cased state and slug —
   // so the editor and the public page cannot disagree about which row belongs
   // to which page.
   const authoredBy = new Map(
-    rows.map((row) => [`${row.state.toLowerCase()}/${row.slug}`, row.intro?.trim() || null]),
+    rows.map((row) => [
+      `${row.state.toLowerCase()}/${row.slug}`,
+      { en: row.intro?.trim() || null, es: row.introEs?.trim() || null },
+    ]),
   )
 
   return Promise.all(
     cities.map(async (city) => {
       const slug = citySlug(city.city)
-      const authored = authoredBy.get(`${city.state.toLowerCase()}/${slug}`) ?? null
+      const stored = authoredBy.get(`${city.state.toLowerCase()}/${slug}`)
       const facilities = await facilitiesInCity(city.state, city.city)
-      return {
-        state: city.state,
-        city: city.city,
-        slug,
-        facilityCount: facilities.length,
-        authored,
-        rendered: cityIntro(city.city, city.state, facilities, authored),
-      }
+      const copy = Object.fromEntries(
+        LOCALES.map((locale) => {
+          const authored = stored?.[locale] ?? null
+          return [
+            locale,
+            {
+              authored,
+              rendered: cityIntro(city.city, city.state, facilities, authored, locale),
+            },
+          ]
+        }),
+      ) as Record<Locale, CityCopyLocale>
+
+      return { state: city.state, city: city.city, slug, facilityCount: facilities.length, copy }
     }),
   )
 }
@@ -70,11 +98,22 @@ export type CityCopyResult = { ok: true } | { ok: false; field: string; problem:
 /// editor follows.
 export const CITY_INTRO_HARD_MAX = 4_000
 
+/// Which column each language writes.
+///
+/// A map rather than a ternary at the two call sites, so adding a language is a
+/// line here and a typecheck failure everywhere it is missed — the same reason
+/// `Dictionary` is keyed rather than optional.
+const INTRO_COLUMN: Record<Locale, 'intro' | 'introEs'> = {
+  en: 'intro',
+  es: 'introEs',
+}
+
 export async function saveCityCopy(
   actor: Actor,
   state: string,
   city: string,
   intro: string,
+  locale: Locale,
 ): Promise<CityCopyResult> {
   requirePermission(actor, 'marketing:city_copy', null)
 
@@ -103,16 +142,21 @@ export async function saveCityCopy(
   // Empty means "use the generated intro", never "publish an empty page".
   const after = intro.trim() === '' ? null : intro.trim()
   const key = { state: state.toUpperCase(), slug }
+  const column = INTRO_COLUMN[locale]
   const before = await prisma.city.findUnique({
     where: { state_slug: key },
-    select: { intro: true },
+    select: { intro: true, introEs: true },
   })
 
   await prisma.$transaction(async (tx) => {
     await tx.city.upsert({
       where: { state_slug: key },
-      create: { ...key, intro: after, updatedByStaffId: staffIdOf(actor) },
-      update: { intro: after, updatedByStaffId: staffIdOf(actor) },
+      // Only the language being saved is written. Spelling it as a computed key
+      // rather than two branches is what stops a Spanish save from clearing the
+      // English column via an `intro: undefined` that Prisma would ignore on
+      // `update` but write as null on `create`.
+      create: { ...key, [column]: after, updatedByStaffId: staffIdOf(actor) },
+      update: { [column]: after, updatedByStaffId: staffIdOf(actor) },
     })
     await recordAudit(
       {
@@ -122,8 +166,16 @@ export async function saveCityCopy(
         // The slug, not a cuid: the row may not have existed a statement ago,
         // and the identity a person searching the audit log has is the URL.
         entityId: `${key.state.toLowerCase()}/${slug}`,
-        before: { intro: before?.intro ?? null },
-        after: { intro: after },
+        before: { [column]: before?.[column] ?? null },
+        after: { [column]: after },
+        // The language goes in `context`, not in the before/after pair, and the
+        // reason is `diffSnapshots`: it keeps only the keys that CHANGED, so a
+        // locale present and identical on both sides is dropped before the row
+        // is written. `context` is merged into `after` unconditionally, which
+        // is what this field is for. An auditor reading "city.copy_changed"
+        // needs to know WHICH page moved — `/storage/tx/austin` and
+        // `/es/storage/tx/austin` are two pages.
+        context: { locale },
       },
       tx,
     )

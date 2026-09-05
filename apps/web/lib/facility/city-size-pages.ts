@@ -2,6 +2,7 @@ import { cache } from 'react'
 import { prisma } from '@storage/db'
 import { effectiveByGroup } from '@storage/core/facility-settings'
 import { citySizeIntro, citySlug, dimensionKey, sizeIndexGate } from '@storage/core/marketing'
+import { LOCALES } from '@/lib/i18n'
 
 // PRD 00 §6 Phase 3 (B-089). What sizes a city actually has, and at what price.
 //
@@ -227,15 +228,25 @@ export async function citySizePages(): Promise<
   const pages: Awaited<ReturnType<typeof citySizePages>> = []
   for (const { state, city } of cities.values()) {
     const sizes = await sizesInCity(state, city)
-    const intros = new Map(
-      [...sizes.values()].map((size) => [
-        size.dimension,
-        citySizeIntro(size.widthFt, size.lengthFt, city, state, size.facilities),
-      ]),
+    // B-262. The gate is computed in EVERY language and a page is indexable
+    // only where all of them pass, which is exactly what the page itself does —
+    // and the two agreeing is the whole point of this function. The sitemap
+    // lists one entry per URL carrying its `hreflang` alternates, so a page
+    // this said was indexable while the page served `noindex` would advertise a
+    // URL and then tell the crawler to discard it.
+    const introsByLocale = LOCALES.map(
+      (locale) =>
+        new Map(
+          [...sizes.values()].map((size) => [
+            size.dimension,
+            citySizeIntro(size.widthFt, size.lengthFt, city, state, size.facilities, locale),
+          ]),
+        ),
     )
 
     for (const size of sizes.values()) {
-      const gate = sizeIndexGate(size.dimension, intros)
+      const verdicts = introsByLocale.map((intros) => sizeIndexGate(size.dimension, intros))
+      const gate = verdicts.find((verdict) => !verdict.indexable) ?? verdicts[0]
       pages.push({
         state,
         city,

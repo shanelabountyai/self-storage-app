@@ -818,7 +818,10 @@ export default async function FacilityPage({
   const { state, city, slug } = await params
   const query = await searchParams
   const filters = parseFilters(query)
-  const dict = dictionaryFor(await getLocale())
+  // B-262: the locale itself is kept, not just the dictionary — the generated
+  // FAQs and the JSON-LD URLs below are built from it too.
+  const locale = await getLocale()
+  const dict = dictionaryFor(locale)
   const t = (key: MessageKey, vars?: Record<string, string | number>) =>
     translate(dict, key, vars)
 
@@ -933,7 +936,13 @@ export default async function FacilityPage({
   // this page says, and quietly padding it back to five with boilerplate would
   // put words in their mouth. US-1 AC2's "at least 5" is why the generated set
   // is still the fallback when they have written none.
-  const faqs = facility.faqs.length > 0 ? facility.faqs : defaultFacilityFaqs(facility)
+  // B-262: the generated set follows the language. A marketer's OWN answers
+  // (`facility.faqs`) are not translated — they are somebody's own words, the
+  // same rule D-122 puts on facility copy and amenities — so a facility that
+  // has written its own FAQ shows it in English on both URLs. That is a real
+  // gap and it is named in PROGRESS.md rather than papered over by
+  // machine-translating an operator's answer about their own site.
+  const faqs = facility.faqs.length > 0 ? facility.faqs : defaultFacilityFaqs(facility, locale)
   const schema = [
     selfStorageJsonLd({
       facility,

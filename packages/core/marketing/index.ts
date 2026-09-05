@@ -1,3 +1,4 @@
+export * from './locale.ts'
 export * from './nap.ts'
 export * from './structured-data.ts'
 export * from './urls.ts'

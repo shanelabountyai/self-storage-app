@@ -1,4 +1,5 @@
 import { DUPLICATE_THRESHOLD, similarity } from './profile.ts'
+import { DEFAULT_MARKETING_LOCALE, type MarketingLocale } from './locale.ts'
 import { dimensionLabel, sizeFacts } from './unit-sizes.ts'
 
 // PRD 00 §6 Phase 3 / PRD 04 §7 (B-089). The per-city/size landing page's words.
@@ -19,6 +20,19 @@ import { dimensionLabel, sizeFacts } from './unit-sizes.ts'
 // instead of being published as thin content (D-77).
 //
 // Pure, so both the wording and the gate are testable without a database.
+//
+// B-262: generated per language. The templates are HERE rather than in the
+// app's message catalogue, and the package boundary is the whole reason —
+// nothing in `packages/core` can import `apps/web/lib/i18n`, and inverting that
+// to make a pure copy generator depend on a UI dictionary would be the wrong
+// dependency for the sake of putting all the strings in one file. What the two
+// share is the LIST of languages (`./locale.ts`), so a locale cannot exist in
+// one and not the other.
+//
+// The gate below is unchanged and deliberately so: `sizeIndexGate` scores a
+// page against its siblings IN THE SAME LANGUAGE, because that is what
+// `citySizeIntro` is called with. Scoring a Spanish intro against an English
+// one would measure the language gap and pass everything.
 
 export type SizeFacilitySummary = {
   name: string
@@ -51,9 +65,20 @@ export function sizeAvailableCount(facilities: readonly SizeFacilitySummary[]): 
 /// FR-SEO-3's title shape. The layout appends the site name, so this must not.
 ///
 /// The dimension leads, because it is the term the query carries — somebody
-/// searching "10x10 storage austin" is looking for the number first.
-export function citySizeTitle(widthFt: number, lengthFt: number, city: string, state: string): string {
-  return `${dimensionLabel(widthFt, lengthFt)} Storage Units in ${city}, ${state.toUpperCase()}`
+/// searching "10x10 storage austin", or "bodegas 10x10 austin", is looking for
+/// the number first, and that is true in both languages.
+export function citySizeTitle(
+  widthFt: number,
+  lengthFt: number,
+  city: string,
+  state: string,
+  locale: MarketingLocale = DEFAULT_MARKETING_LOCALE,
+): string {
+  const label = dimensionLabel(widthFt, lengthFt)
+  const place = `${city}, ${state.toUpperCase()}`
+  return locale === 'es'
+    ? `Bodegas de ${label} en ${place}`
+    : `${label} Storage Units in ${place}`
 }
 
 export function citySizeDescription(
@@ -62,11 +87,18 @@ export function citySizeDescription(
   city: string,
   state: string,
   facilities: readonly SizeFacilitySummary[],
+  locale: MarketingLocale = DEFAULT_MARKETING_LOCALE,
 ): string {
   const label = dimensionLabel(widthFt, lengthFt)
   const place = `${city}, ${state.toUpperCase()}`
   const from = sizeFromRateCents(facilities)
   const sqFt = widthFt * lengthFt
+
+  if (locale === 'es') {
+    return from === null
+      ? `Bodegas de ${label} (${sqFt} pies cuadrados) en ${place}. Ahora mismo todas las de ${label} están rentadas — vea qué sucursales tienen una y qué más está libre.`
+      : `Bodegas de ${label} (${sqFt} pies cuadrados) en ${place} desde ${formatDollars(from)} al mes en línea. Compare lo que cobra cada sucursal y aparte en unos minutos.`
+  }
 
   return from === null
     ? `${label} storage units (${sqFt} sq ft) in ${place}. Every ${label} is rented right now — see which locations have one and what else is free.`
@@ -84,16 +116,47 @@ export function citySizeIntro(
   city: string,
   state: string,
   facilities: readonly SizeFacilitySummary[],
+  locale: MarketingLocale = DEFAULT_MARKETING_LOCALE,
 ): string[] {
   if (facilities.length === 0) return []
 
   const label = dimensionLabel(widthFt, lengthFt)
   const place = `${city}, ${state.toUpperCase()}`
   const sqFt = widthFt * lengthFt
-  const facts = sizeFacts(widthFt, lengthFt)
+  const facts = sizeFacts(widthFt, lengthFt, locale)
   const from = sizeFromRateCents(facilities)
   const available = sizeAvailableCount(facilities)
   const paragraphs: string[] = []
+
+  if (locale === 'es') {
+    paragraphs.push(
+      facts
+        ? `Una unidad de ${label} tiene ${sqFt} pies cuadrados. ${facts.comparison} ${facts.typical}`
+        : `Una unidad de ${label} tiene ${sqFt} pies cuadrados.`,
+    )
+
+    const sucursales =
+      facilities.length === 1 ? 'una sucursal' : `${facilities.length} sucursales`
+    if (from !== null) {
+      paragraphs.push(
+        `Tenemos unidades de ${label} en ${sucursales} en ${place}, desde ${formatDollars(from)} al mes al precio en línea — lo que usted paga rentando en esta página, que es más bajo que el precio en tienda. Todas las unidades son mes con mes, así que no hay contrato de largo plazo que firmar.`,
+      )
+    } else {
+      paragraphs.push(
+        `Tenemos unidades de ${label} en ${sucursales} en ${place}, y hoy todas están rentadas. Vale la pena llamar a las sucursales de abajo — casi cada semana se desocupa alguna, y puede haber un tamaño parecido que le sirva.`,
+      )
+    }
+
+    if (available > 0 && available <= 3) {
+      paragraphs.push(
+        available === 1
+          ? `Hoy queda una unidad de ${label} en ${place}.`
+          : `Hoy quedan ${available} unidades de ${label} en ${place}.`,
+      )
+    }
+
+    return paragraphs
+  }
 
   // What the size IS. Two sentences from the guide catalogue, and they are the
   // ones that differ most between sibling pages — which is the entire reason a

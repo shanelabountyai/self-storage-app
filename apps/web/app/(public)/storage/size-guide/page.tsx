@@ -1,7 +1,8 @@
 import { LocaleLink } from '@/components/site/locale-link'
 import { SITE } from '@/lib/site-config'
-import { dimensionSpoken, parseDimension, UNIT_SIZES, UNIT_SIZE_ORDER } from '@storage/core/marketing'
+import { dimensionSpoken, parseDimension, sizeFacts, UNIT_SIZE_ORDER } from '@storage/core/marketing'
 import { getLocale } from '@/lib/i18n/server'
+import { dictionaryFor, translate, type Locale, type MessageKey } from '@/lib/i18n'
 import { localeAlternates } from '@/lib/marketing/alternates'
 
 // B-262: `generateMetadata` rather than a static `metadata`, so the page can
@@ -9,11 +10,12 @@ import { localeAlternates } from '@/lib/marketing/alternates'
 // English here — the size table itself is translated in the same item, but the
 // tab title follows it rather than leading.
 export async function generateMetadata() {
+  const locale = await getLocale()
+  const dict = dictionaryFor(locale)
   return {
-    title: 'What size storage unit do I need?',
-    description:
-      'What fits in a 5x5, 10x10 or 10x20 storage unit, in plain terms — with real-world comparisons for every size we rent.',
-    alternates: localeAlternates(await getLocale(), '/storage/size-guide'),
+    title: translate(dict, 'sizeGuide.title'),
+    description: translate(dict, 'sizeGuide.meta'),
+    alternates: localeAlternates(locale, '/storage/size-guide'),
   }
 }
 
@@ -40,21 +42,31 @@ export async function generateMetadata() {
 // D-60 still holds. That decision is about not RE-PUBLISHING the guide, and a
 // landing page takes two sentences about its own size and links here for the
 // rest — it does not reproduce this page's seven entries.
-const SIZES = UNIT_SIZE_ORDER.map((key) => {
-  const { widthFt, lengthFt } = parseDimension(key)!
-  return { ...UNIT_SIZES[key]!, spoken: dimensionSpoken(widthFt, lengthFt) }
-})
+//
+// B-262: built per request rather than at module scope, because the comparison
+// sentences are now per language. The ORDER and the measurements are still
+// derived from the catalogue, so a size cannot be in the guide and absent from
+// the landing pages, or the reverse.
+function sizesFor(locale: Locale) {
+  return UNIT_SIZE_ORDER.map((key) => {
+    const { widthFt, lengthFt } = parseDimension(key)!
+    return {
+      ...sizeFacts(widthFt, lengthFt, locale)!,
+      spoken: dimensionSpoken(widthFt, lengthFt),
+    }
+  })
+}
 
-export default function SizeGuidePage() {
+export default async function SizeGuidePage() {
+  const locale = await getLocale()
+  const dict = dictionaryFor(locale)
+  const t = (key: MessageKey) => translate(dict, key)
+  const SIZES = sizesFor(locale)
+
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-12">
-      <h1 className="text-3xl font-semibold tracking-tight text-balance">
-        What size storage unit do I need?
-      </h1>
-      <p className="text-muted-foreground mt-4 text-lg text-pretty">
-        Sizes are given in feet — a 10 × 10 unit is ten feet by ten feet. Every unit is the same
-        height unless the facility page says otherwise.
-      </p>
+      <h1 className="text-3xl font-semibold tracking-tight text-balance">{t('sizeGuide.title')}</h1>
+      <p className="text-muted-foreground mt-4 text-lg text-pretty">{t('sizeGuide.intro')}</p>
 
       <div className="mt-8 flex flex-col gap-6">
         {SIZES.map((size) => (
@@ -72,12 +84,14 @@ export default function SizeGuidePage() {
                 <span aria-hidden="true">{size.label}</span>
                 <span className="sr-only">{size.spoken}</span>
               </h2>
-              <p className="text-muted-foreground text-sm">{size.sqFt} sq ft</p>
+              <p className="text-muted-foreground text-sm">
+                {size.sqFt} {t('sizeGuide.sqFt')}
+              </p>
             </div>
 
             <p className="mt-2 font-medium text-pretty">{size.comparison}</p>
 
-            <h3 className="mt-3 text-sm font-medium">Usually holds</h3>
+            <h3 className="mt-3 text-sm font-medium">{t('sizeGuide.usuallyHolds')}</h3>
             <ul className="mt-1 list-disc pl-5 text-sm">
               {size.fits.map((item) => (
                 <li key={item}>{item}</li>
@@ -91,25 +105,19 @@ export default function SizeGuidePage() {
 
       <section aria-labelledby="between" className="mt-10">
         <h2 id="between" className="text-xl font-medium">
-          If you are between two sizes
+          {t('sizeGuide.betweenHeading')}
         </h2>
-        <p className="mt-2 text-pretty">
-          Take the larger one. The difference in rent is usually a few dollars a month, and it is a
-          great deal cheaper than discovering on moving day that the last of it does not fit. You can
-          move to a different size later if you get it wrong.
-        </p>
+        <p className="mt-2 text-pretty">{t('sizeGuide.betweenBody')}</p>
         <p className="mt-4">
-          Still not sure?{' '}
+          {t('sizeGuide.stillUnsure')}{' '}
           <a href={`tel:${SITE.phone.href}`} className="font-medium underline underline-offset-4">
-            Call {SITE.phone.display}
+            {t('sizeGuide.callPrefix')} {SITE.phone.display}
           </a>{' '}
-          <span className="text-muted-foreground">
-            and describe what you have — it takes about a minute.
-          </span>
+          <span className="text-muted-foreground">{t('sizeGuide.describeWhat')}</span>
         </p>
         <p className="mt-4">
           <LocaleLink href="/storage/search" className="underline underline-offset-4">
-            Find storage near you
+            {t('sizeGuide.findStorage')}
           </LocaleLink>
         </p>
         {/* B-082 part 3. This page is the fifth guide in the hub's launch set

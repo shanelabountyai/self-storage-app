@@ -1,3 +1,4 @@
+import { MARKETING_LOCALES, type MarketingLocale } from '@storage/core/marketing'
 import { en } from './en'
 import { es } from './es'
 
@@ -15,8 +16,12 @@ import { es } from './es'
 // anything that needs a request (`next/headers`) lives in `server.ts` and
 // anything the Edge proxy needs lives in `routing.ts`.
 
-export const LOCALES = ['en', 'es'] as const
-export type Locale = (typeof LOCALES)[number]
+/// B-262: re-exported from `packages/core` rather than declared here, because
+/// the generated SEO copy lives in that package and is generated per language.
+/// One list, so a third language cannot reach the dictionaries without reaching
+/// the city intros as well.
+export const LOCALES = MARKETING_LOCALES
+export type Locale = MarketingLocale
 
 export const DEFAULT_LOCALE: Locale = 'en'
 

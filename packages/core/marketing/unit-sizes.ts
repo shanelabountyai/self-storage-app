@@ -14,10 +14,18 @@
 // own size and links to the guide for the rest; it does not reproduce the seven
 // entries, the `fits` lists or the comparisons of sizes it is not about.
 
-export type UnitSizeFacts = {
-  /// "10 × 10", with the spacing the guide prints. Not the URL form.
-  label: string
-  sqFt: number
+/// B-262. The words about a size, in one language.
+///
+/// Split from the measurements for the same reason `GuideCopy` was: the
+/// measurement is a fact and the sentence about it is prose. A `Record<
+/// MarketingLocale, …>` makes a half-translated size a typecheck failure rather
+/// than a Spanish landing page with an English comparison in the middle of it —
+/// and these two sentences are the ONLY thing that makes sibling size pages
+/// differ enough to clear D-77's duplicate gate, so a fallback to English here
+/// would quietly hand every Spanish size page the same intro.
+import { DEFAULT_MARKETING_LOCALE, type MarketingLocale } from './locale.ts'
+
+export type UnitSizeCopy = {
   /// One sentence a reader can picture. Unique per size, which is what makes a
   /// per-size page worth publishing.
   comparison: string
@@ -25,57 +33,164 @@ export type UnitSizeFacts = {
   typical: string
 }
 
+export type UnitSizeFacts = {
+  /// "10 × 10", with the spacing the guide prints. Not the URL form.
+  label: string
+  sqFt: number
+  comparison: string
+  fits: string[]
+  typical: string
+}
+
+type UnitSize = {
+  label: string
+  sqFt: number
+  copy: Record<MarketingLocale, UnitSizeCopy>
+}
+
 /// Keyed by `dimensionKey` so a facility's width and length find their entry
 /// without a linear scan at every call site.
-export const UNIT_SIZES: Record<string, UnitSizeFacts> = {
+export const UNIT_SIZES: Record<string, UnitSize> = {
   '5x5': {
     label: '5 × 5',
     sqFt: 25,
-    comparison: 'A large closet.',
-    fits: ['Boxes and files', 'Seasonal decorations', 'A bike', 'A few small pieces of furniture'],
-    typical: 'Students between terms, or clearing one room.',
+    copy: {
+      en: {
+        comparison: 'A large closet.',
+        fits: [
+          'Boxes and files',
+          'Seasonal decorations',
+          'A bike',
+          'A few small pieces of furniture',
+        ],
+        typical: 'Students between terms, or clearing one room.',
+      },
+      es: {
+        comparison: 'Un clóset grande.',
+        fits: ['Cajas y archivos', 'Adornos de temporada', 'Una bicicleta', 'Unos cuantos muebles pequeños'],
+        typical: 'Estudiantes entre ciclos, o vaciar un cuarto.',
+      },
+    },
   },
   '5x10': {
     label: '5 × 10',
     sqFt: 50,
-    comparison: 'A walk-in wardrobe, or half a single garage.',
-    fits: ['A mattress set', 'A chest of drawers', 'Boxes', 'A small sofa'],
-    typical: 'A studio flat, or one bedroom of furniture.',
+    copy: {
+      en: {
+        comparison: 'A walk-in wardrobe, or half a single garage.',
+        fits: ['A mattress set', 'A chest of drawers', 'Boxes', 'A small sofa'],
+        typical: 'A studio flat, or one bedroom of furniture.',
+      },
+      es: {
+        comparison: 'Un vestidor, o medio garaje sencillo.',
+        fits: ['Un colchón con su base', 'Una cómoda', 'Cajas', 'Un sofá chico'],
+        typical: 'Un departamento de un ambiente, o los muebles de una recámara.',
+      },
+    },
   },
   '5x15': {
     label: '5 × 15',
     sqFt: 75,
-    comparison: 'A large walk-in wardrobe.',
-    fits: ['The contents of a large bedroom', 'A sofa and armchair', 'Twenty or so boxes'],
-    typical: 'A one-bedroom flat without appliances.',
+    copy: {
+      en: {
+        comparison: 'A large walk-in wardrobe.',
+        fits: ['The contents of a large bedroom', 'A sofa and armchair', 'Twenty or so boxes'],
+        typical: 'A one-bedroom flat without appliances.',
+      },
+      es: {
+        comparison: 'Un vestidor grande.',
+        fits: ['Lo que hay en una recámara grande', 'Un sofá y un sillón', 'Unas veinte cajas'],
+        typical: 'Un departamento de una recámara sin electrodomésticos.',
+      },
+    },
   },
   '10x10': {
     label: '10 × 10',
     sqFt: 100,
-    comparison: 'About half a standard garage.',
-    fits: ['A full one-bedroom apartment', 'A sofa, mattress set and dining set', 'A washer and dryer'],
-    typical: 'The most-rented size. A one-bedroom home, or a serious declutter.',
+    copy: {
+      en: {
+        comparison: 'About half a standard garage.',
+        fits: [
+          'A full one-bedroom apartment',
+          'A sofa, mattress set and dining set',
+          'A washer and dryer',
+        ],
+        typical: 'The most-rented size. A one-bedroom home, or a serious declutter.',
+      },
+      es: {
+        comparison: 'Como la mitad de un garaje normal.',
+        fits: [
+          'Un departamento completo de una recámara',
+          'Un sofá, una cama con su base y un comedor',
+          'Una lavadora y una secadora',
+        ],
+        typical: 'El tamaño que más se renta. Una casa de una recámara, o una limpia a fondo.',
+      },
+    },
   },
   '10x15': {
     label: '10 × 15',
     sqFt: 150,
-    comparison: 'A large single garage.',
-    fits: ['A two-bedroom home', 'Major appliances', 'Boxed contents of a loft'],
-    typical: 'Moving out of a two-bedroom home.',
+    copy: {
+      en: {
+        comparison: 'A large single garage.',
+        fits: ['A two-bedroom home', 'Major appliances', 'Boxed contents of a loft'],
+        typical: 'Moving out of a two-bedroom home.',
+      },
+      es: {
+        comparison: 'Un garaje sencillo grande.',
+        fits: ['Una casa de dos recámaras', 'Electrodomésticos grandes', 'Lo del tapanco, en cajas'],
+        typical: 'Mudarse de una casa de dos recámaras.',
+      },
+    },
   },
   '10x20': {
     label: '10 × 20',
     sqFt: 200,
-    comparison: 'A standard single garage.',
-    fits: ['A three-bedroom house', 'A car, with room around it', 'Appliances and garden equipment'],
-    typical: 'A whole-house move, or storing a vehicle.',
+    copy: {
+      en: {
+        comparison: 'A standard single garage.',
+        fits: [
+          'A three-bedroom house',
+          'A car, with room around it',
+          'Appliances and garden equipment',
+        ],
+        typical: 'A whole-house move, or storing a vehicle.',
+      },
+      es: {
+        comparison: 'Un garaje sencillo normal.',
+        fits: [
+          'Una casa de tres recámaras',
+          'Un carro, con lugar alrededor',
+          'Electrodomésticos y herramienta de jardín',
+        ],
+        typical: 'Mudar una casa entera, o guardar un vehículo.',
+      },
+    },
   },
   '10x30': {
     label: '10 × 30',
     sqFt: 300,
-    comparison: 'A two-car garage.',
-    fits: ['A four- or five-bedroom house', 'Commercial stock or equipment', 'A vehicle plus contents'],
-    typical: 'Large family moves, and small businesses.',
+    copy: {
+      en: {
+        comparison: 'A two-car garage.',
+        fits: [
+          'A four- or five-bedroom house',
+          'Commercial stock or equipment',
+          'A vehicle plus contents',
+        ],
+        typical: 'Large family moves, and small businesses.',
+      },
+      es: {
+        comparison: 'Un garaje para dos carros.',
+        fits: [
+          'Una casa de cuatro o cinco recámaras',
+          'Mercancía o equipo de un negocio',
+          'Un vehículo y además sus cosas',
+        ],
+        typical: 'Mudanzas de familias grandes, y negocios chicos.',
+      },
+    },
   },
 }
 
@@ -140,6 +255,12 @@ export function dimensionSpoken(widthFt: number, lengthFt: number): string {
 /// and the guide has seven standard sizes. The page renders without the
 /// comparison sentences rather than inventing them — and is then likelier to
 /// trip the duplicate gate, which is the honest outcome.
-export function sizeFacts(widthFt: number, lengthFt: number): UnitSizeFacts | null {
-  return UNIT_SIZES[dimensionKey(widthFt, lengthFt)] ?? null
+export function sizeFacts(
+  widthFt: number,
+  lengthFt: number,
+  locale: MarketingLocale = DEFAULT_MARKETING_LOCALE,
+): UnitSizeFacts | null {
+  const size = UNIT_SIZES[dimensionKey(widthFt, lengthFt)]
+  if (!size) return null
+  return { label: size.label, sqFt: size.sqFt, ...size.copy[locale] }
 }

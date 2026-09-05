@@ -1295,4 +1295,34 @@ export const en = {
   'guide.hubReadMore': 'Read',
   'guide.notFound': 'Guide not found',
 
+
+  // --- Size guide (B-262, PRD 01 US-202) ---------------------------------
+  // The comparison sentences themselves live in `UNIT_SIZES` in
+  // `packages/core/marketing` — they are shared with the per-city/size landing
+  // pages, and they are what makes those pages differ from each other enough to
+  // clear D-77's gate. Only the frame is here.
+  'sizeGuide.title': 'What size storage unit do I need?',
+  'sizeGuide.meta':
+    'What fits in a 5x5, 10x10 or 10x20 storage unit, in plain terms — with real-world comparisons for every size we rent.',
+  'sizeGuide.intro':
+    'Sizes are given in feet — a 10 × 10 unit is ten feet by ten feet. Every unit is the same height unless the facility page says otherwise.',
+  'sizeGuide.sqFt': 'sq ft',
+  'sizeGuide.usuallyHolds': 'Usually holds',
+  'sizeGuide.betweenHeading': 'If you are between two sizes',
+  'sizeGuide.betweenBody':
+    'Take the larger one. The difference in rent is usually a few dollars a month, and it is a great deal cheaper than discovering on moving day that the last of it does not fit. You can move to a different size later if you get it wrong.',
+  'sizeGuide.stillUnsure': 'Still not sure?',
+  'sizeGuide.callPrefix': 'Call',
+  'sizeGuide.describeWhat': 'and describe what you have — it takes about a minute.',
+  'sizeGuide.findStorage': 'Find storage near you',
+
+
+  // --- City and size landing pages (B-262, PRD 04 US-4 / B-089) ----------
+  // The generated PROSE for these pages lives with the logic that decides which
+  // sentence applies — `lib/marketing/city-copy.ts` and
+  // `packages/core/marketing/size-copy.ts` — because a dictionary key per
+  // branch would separate the wording from the choice. These are the frame.
+  'city.notFound': 'City not found',
+  'size.notFound': 'Size not found',
+
 } as const

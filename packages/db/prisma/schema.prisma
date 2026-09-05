@@ -2800,10 +2800,23 @@ model City {
   /// `citySlug(city)` — "fort-worth". The URL segment, which is the only
   /// spelling both this table and the facility records agree on.
   slug             String
-  /// The authored intro. Null or blank means the generated intro renders, so
-  /// clearing the box is a real way back rather than a way to publish an empty
-  /// page.
+  /// The authored intro, in English. Null or blank means the generated intro
+  /// renders, so clearing the box is a real way back rather than a way to
+  /// publish an empty page.
   intro            String?
+  /// B-262. The authored intro in Spanish, for `/es/storage/{state}/{city}`.
+  ///
+  /// A SECOND COLUMN rather than a translation of the first, and that is the
+  /// decision rather than a schema detail: `intro` is somebody's own words
+  /// (D-122's rule about operator-typed copy), and machine-translating it would
+  /// have this product publish claims about a city on the operator's behalf.
+  /// Each language falls back to its own generated intro independently, so a
+  /// city written in English and not in Spanish gets authored English and
+  /// generated Spanish — which is the honest state, not a broken one.
+  ///
+  /// It has its own field in the editor in the same item, per this repo's rule
+  /// that a new column configuring behaviour ships with its control.
+  introEs          String?
   updatedByStaffId String?
   createdAt        DateTime @default(now()) @db.Timestamptz(6)
   updatedAt        DateTime @updatedAt @db.Timestamptz(6)

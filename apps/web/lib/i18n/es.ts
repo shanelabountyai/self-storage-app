@@ -1340,4 +1340,26 @@ export const es: Dictionary = {
   'guide.hubReadMore': 'Leer',
   'guide.notFound': 'No encontramos esa guía',
 
+
+  // --- Guía de tamaños (B-262) -------------------------------------------
+  'sizeGuide.title': '¿Qué tamaño de unidad necesito?',
+  'sizeGuide.meta':
+    'Qué cabe en una unidad de 5x5, 10x10 o 10x20, en palabras sencillas — con una comparación de la vida real para cada tamaño que rentamos.',
+  'sizeGuide.intro':
+    'Los tamaños vienen en pies — una unidad de 10 × 10 mide diez pies por diez pies. Todas las unidades tienen la misma altura, a menos que la página de la sucursal diga otra cosa.',
+  'sizeGuide.sqFt': 'pies cuadrados',
+  'sizeGuide.usuallyHolds': 'Normalmente guarda',
+  'sizeGuide.betweenHeading': 'Si está entre dos tamaños',
+  'sizeGuide.betweenBody':
+    'Quédese con el más grande. La diferencia de renta suele ser de unos cuantos dólares al mes, y sale mucho más barata que descubrir el día de la mudanza que lo último ya no cabe. Si se equivoca, después puede cambiarse a otro tamaño.',
+  'sizeGuide.stillUnsure': '¿Todavía no está seguro?',
+  'sizeGuide.callPrefix': 'Llame al',
+  'sizeGuide.describeWhat': 'y díganos qué tiene — toma como un minuto.',
+  'sizeGuide.findStorage': 'Busque bodegas cerca de usted',
+
+
+  // --- Páginas de ciudad y de tamaño (B-262) -----------------------------
+  'city.notFound': 'No encontramos esa ciudad',
+  'size.notFound': 'No encontramos ese tamaño',
+
 }
