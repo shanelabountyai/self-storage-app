@@ -475,3 +475,60 @@ export const TEXT_SPACING = `* {
   word-spacing: 0.16em !important;
 }
 p { margin-bottom: 2em !important; }`
+
+// B-262. Every data table has as many cells as it has column headers.
+//
+// **Found a real bug that axe reports only as UNDECIDABLE.** `/admin/access`
+// declared seven column headers — When, Facility, Who, Unit, How, Result,
+// Flags — and rendered six cells: the `Unit` cell was never written, though
+// `AccessEventRow.unitNumber` had always carried the value. Everything from
+// Unit rightward therefore rendered one column to the left (the result under
+// "How", the flags under "Result") and "Flags" was empty on every row, on the
+// screen a manager reads after a theft claim.
+//
+// axe's `th-has-data-cells` noticed — as an `incomplete`, which this suite
+// fails on, which is the only reason anyone saw it. But it fired on ONE route,
+// because a header pointing at nothing is the only shape of this bug axe can
+// see: a table missing a MIDDLE cell still has every header referring to some
+// cell, so axe passes it and every column after the gap is silently mislabelled.
+// This checks the shape directly instead, on every admin route the loop
+// already visits.
+//
+// Counted in SLOTS rather than elements, so `colspan` and `rowspan` are both
+// handled without building a grid: a correct table's cells occupy exactly
+// `headers × body rows` slots. That is what lets an empty-state
+// `<td colSpan={7}>` row pass (7 slots for 7 headers) and the delinquency
+// report's `rowspan` facility column pass (its one cell fills three rows).
+export async function assertTableShape(page: Page, pathname: string): Promise<void> {
+  const problems = await page.evaluate(() =>
+    [...document.querySelectorAll('table')].flatMap((table, index) => {
+      const headers = table.querySelectorAll(':scope > thead > tr > th').length
+      const rows = [...table.querySelectorAll(':scope > tbody > tr')]
+      // A table with no column headers is a layout or key/value table and this
+      // rule does not apply to it.
+      if (headers === 0 || rows.length === 0) return []
+
+      let slots = 0
+      for (const row of rows) {
+        for (const cell of row.querySelectorAll(':scope > td, :scope > th')) {
+          const colSpan = Number((cell as HTMLTableCellElement).colSpan) || 1
+          const rowSpan = Number((cell as HTMLTableCellElement).rowSpan) || 1
+          slots += colSpan * rowSpan
+        }
+      }
+
+      const expected = headers * rows.length
+      if (slots === expected) return []
+      const caption = table.querySelector(':scope > caption')?.textContent?.trim() ?? ''
+      return [
+        `table #${index}${caption ? ` ("${caption.slice(0, 60)}")` : ''}: ` +
+          `${headers} column headers over ${rows.length} rows needs ${expected} cell slots, found ${slots}`,
+      ]
+    }),
+  )
+
+  expect(
+    problems,
+    `${pathname} has a table whose cells do not line up with its headers — every column after the gap is under the wrong heading`,
+  ).toEqual([])
+}
