@@ -8526,7 +8526,7 @@ Found while starting B-256, and **verified by reproduction before any code was c
 
 ## B-256 — The business account's portal half: one card, one Pay button (2026-09-04)
 
-**Commit:** `PENDING`
+**Commit:** `d357e28`
 
 B-090 part 5's portal side, split out because that part is L. B-090e built the payer, the consolidated allocation and the admin screen and **changed no portal file** — so a payer still saw one card and one Pay button per lease, and a payer holding no lease of their own saw *"We don't see an active unit on this account yet."* The row named three parts; two shipped, the third turned out to be a decision rather than a gap, and a fourth thing was a defect found on the way.
 
