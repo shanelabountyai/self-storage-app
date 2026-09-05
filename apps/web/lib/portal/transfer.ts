@@ -11,7 +11,6 @@ import {
   previewTransferFor,
   transferHoldFor,
   TRANSFER_LEASE_SELECT,
-  TRANSFER_PROBLEM_COPY,
   type TransferPreview,
   type TransferProblem,
 } from '@/lib/admin/transfer'
@@ -23,6 +22,7 @@ import {
   newToken,
   MAX_MOVE_IN_DAYS_AHEAD,
 } from '@/lib/reservations/reserve'
+import { translate, type Dictionary, type MessageKey } from '@/lib/i18n'
 
 // PRD 01 §9 / PRD 02 §4.3 US-14 (B-090 part 2). The tenant's own transfer
 // request: pick a unit at the same site, see what the swap settles to, ask.
@@ -52,17 +52,29 @@ import {
 // — used by both the page (preview failures) and `actions.ts` (request
 // failures). Lives here rather than in `actions.ts` because a `'use server'`
 // file may only export async functions; a plain lib module has no such limit.
-export const PORTAL_TRANSFER_PROBLEM_COPY: Record<string, string> = {
-  ...TRANSFER_PROBLEM_COPY,
-  not_found: 'We couldn’t find that unit on your account.',
-  date_in_past: 'Pick today or a later date.',
-  date_too_far_out: `Pick a date within the next ${MAX_MOVE_IN_DAYS_AHEAD} days.`,
-  already_requested: 'You’ve already asked to move to another unit at this site. Cancel that first.',
-  // D-85: the portal never arranges a lien-pipeline move. Named plainly rather
-  // than dressed up — the tenant has had a notice about this unit, and copy
-  // that talks around it helps nobody.
-  lien_pipeline:
-    'This unit is in the lien process, so a move has to be arranged with the office rather than online. Please call them.',
+// B-260 (D-122). The PORTAL's own key map rather than a spread of the ADMIN
+// copy it used to inherit, and that is a correctness change as well as a
+// language one: several of those strings are written for staff — "Moving a
+// tenant out of it needs a facility manager or above" is not a sentence to
+// show the tenant it is about. The portal now says every refusal in the second
+// person, in the reader's language.
+export const PORTAL_TRANSFER_PROBLEM_KEYS: Record<string, MessageKey> = {
+  lease_not_occupying: 'tr.problem.lease_not_occupying',
+  unit_not_available: 'tr.problem.unit_not_available',
+  unit_different_facility: 'tr.problem.unit_different_facility',
+  same_unit: 'tr.problem.same_unit',
+  no_rate_for_unit_type: 'tr.problem.no_rate_for_unit_type',
+  // D-85: the portal never arranges a lien-pipeline move. The two
+  // manager-authority refusals are staff-only by construction — the portal
+  // never offers the action — so they map onto the one thing true for a
+  // tenant: it is arranged with the office.
+  lien_transfer_needs_manager: 'tr.problem.lien_pipeline',
+  lien_transfer_needs_reason: 'tr.problem.lien_pipeline',
+  lien_pipeline: 'tr.problem.lien_pipeline',
+  not_found: 'tr.problem.not_found',
+  date_in_past: 'tr.problem.date_in_past',
+  date_too_far_out: 'tr.problem.date_too_far_out',
+  already_requested: 'tr.problem.already_requested',
 }
 
 /// B-182 (D-15: US register — "call", never "ring"). The list and full-page
@@ -71,8 +83,8 @@ export const PORTAL_TRANSFER_PROBLEM_COPY: Record<string, string> = {
 /// screen renders it through `phoneFor`/`CallLink`, which falls back to the
 /// org line when a facility has none and makes it a real `tel:` link, rather
 /// than the page building its own "on {phone}" text with no fallback.
-export function lienTransferRefusal(unitNumber: string): string {
-  return `Unit ${unitNumber} is in the lien process, so a move has to be arranged with the office rather than online. They'll go through your options with you.`
+export function lienTransferRefusal(unitNumber: string, dict: Dictionary): string {
+  return translate(dict, 'tr.lienRefusal', { unit: unitNumber })
 }
 
 export type PortalTransferLease = {

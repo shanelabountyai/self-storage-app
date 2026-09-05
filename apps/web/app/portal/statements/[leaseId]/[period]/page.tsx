@@ -6,8 +6,12 @@ import { leaseStatement, tenantMayViewLease } from '@/lib/billing/statements'
 import { StatementView } from '@/components/statement-view'
 import { parseStatementPeriod } from '@/lib/billing/statement-period'
 import { SITE } from '@/lib/site-config'
+import { dictionaryFor, translate } from '@/lib/i18n'
+import { getLocale } from '@/lib/i18n/server'
 
-export const metadata: Metadata = { title: 'Statement' }
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: translate(dictionaryFor(await getLocale()), 'sv.title') }
+}
 
 // PRD 01 US-705 (B-102). One lease, one month, for the tenant it belongs to.
 
@@ -27,31 +31,46 @@ export default async function StatementPage({
   // would hand one tenant another's.
   if (!(await tenantMayViewLease(actor.tenantId, leaseId))) notFound()
 
-  const statement = await leaseStatement({ leaseId, year: parsed.year, month: parsed.month })
+  const locale = await getLocale()
+  const dict = dictionaryFor(locale)
+  const t = (key: Parameters<typeof translate>[1], vars?: Record<string, string | number>) =>
+    translate(dict, key, vars)
+  const statement = await leaseStatement({
+    leaseId,
+    year: parsed.year,
+    month: parsed.month,
+    // B-260: the month name in the reader's language, on the document as well
+    // as in the list that links to it.
+    locale,
+  })
 
   return (
     <div className="flex max-w-3xl flex-col gap-6">
       <p className="text-sm">
         <Link href="/portal/statements" className="underline underline-offset-4">
-          ← All statements
+          {t('sv.allStatements')}
         </Link>
       </p>
 
       <header className="flex flex-col gap-1">
-        <h1 className="text-xl font-semibold">Statement — {statement.label}</h1>
+        <h1 className="text-xl font-semibold">
+          {t('sv.pageTitle', { label: statement.label })}
+        </h1>
         <p className="text-muted-foreground text-sm">
-          Unit {statement.unitNumber} · {statement.facilityName}
+          {t('sv.unitFacility', {
+            unit: statement.unitNumber,
+            facility: statement.facilityName,
+          })}
         </p>
         <p className="text-muted-foreground text-sm">
           {statement.tenantName} · {SITE.name}
         </p>
       </header>
 
-      <StatementView statement={statement} />
+      <StatementView statement={statement} dict={dict} locale={locale} />
 
       <p className="text-muted-foreground text-xs text-pretty">
-        Dates are shown in {statement.facilityName}&apos;s local time. Use your browser&apos;s print
-        option to save or print this statement.
+        {t('sv.printNote', { facility: statement.facilityName })}
       </p>
     </div>
   )

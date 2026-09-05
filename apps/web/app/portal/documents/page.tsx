@@ -5,6 +5,8 @@ import { portalDocuments, portalPayments } from "@/lib/portal/documents";
 import { formatRate } from "@/lib/format";
 import { SITE } from "@/lib/site-config";
 import { CallLink, phoneFor } from "@/components/marketing/call-link";
+import { dictionaryFor, translate, type MessageKey } from '@/lib/i18n'
+import { getLocale } from '@/lib/i18n/server'
 
 export const metadata: Metadata = { title: "Documents and receipts" };
 
@@ -24,19 +26,21 @@ export default async function DocumentsPage() {
     portalDocuments(actor.tenantId),
     portalPayments(actor.tenantId),
   ]);
+  const dict = dictionaryFor(await getLocale());
+  const t = (key: MessageKey, vars?: Record<string, string | number>) =>
+    translate(dict, key, vars);
 
   return (
     <div className="flex flex-col gap-8">
-      <h1 className="text-xl font-semibold">Documents and receipts</h1>
+      <h1 className="text-xl font-semibold">{t('docs.title')}</h1>
 
       <section aria-labelledby="docs-heading" className="flex flex-col gap-3">
         <h2 id="docs-heading" className="font-medium">
-          Your documents
+          {t('docs.yourDocuments')}
         </h2>
         {documents.length === 0 ? (
           <p className="text-muted-foreground text-sm text-pretty">
-            You don&apos;t have any documents on file yet. Your signed agreement
-            appears here once you&apos;ve moved in.
+            {t('docs.none')}
           </p>
         ) : (
           <ul className="flex flex-col gap-2">
@@ -50,7 +54,7 @@ export default async function DocumentsPage() {
                   {document.unitNumber && (
                     <span className="text-muted-foreground">
                       {" "}
-                      · Unit {document.unitNumber}
+                      {t('docs.unitSuffix', { unit: document.unitNumber })}
                     </span>
                   )}
                   <span className="text-muted-foreground">
@@ -66,7 +70,7 @@ export default async function DocumentsPage() {
                     href={`/portal/documents/${document.id}/file`}
                     className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
                   >
-                    Download
+                    {t('docs.download')}
                   </a>
                 )}
                 {document.viewable && (
@@ -74,7 +78,7 @@ export default async function DocumentsPage() {
                     href={`/portal/documents/${document.id}`}
                     className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
                   >
-                    View
+                    {t('docs.view')}
                   </Link>
                 )}
               </li>
@@ -88,27 +92,27 @@ export default async function DocumentsPage() {
         className="flex flex-col gap-3"
       >
         <h2 id="payments-heading" className="font-medium">
-          Payments
+          {t('docs.payments')}
         </h2>
         {payments.length === 0 ? (
           <p className="text-muted-foreground text-sm text-pretty">
-            No payments yet.
+            {t('docs.noPayments')}
           </p>
         ) : (
           <table className="w-full text-sm">
             <caption className="sr-only">
-              Payments on your account, most recent first
+              {t('docs.paymentsCaption')}
             </caption>
             <thead>
               <tr className="border-b text-left">
                 <th scope="col" className="py-2 font-medium">
-                  Date
+                  {t('docs.colDate')}
                 </th>
                 <th scope="col" className="py-2 font-medium">
-                  Unit
+                  {t('docs.colUnit')}
                 </th>
                 <th scope="col" className="py-2 text-right font-medium">
-                  Amount
+                  {t('docs.colAmount')}
                 </th>
               </tr>
             </thead>
@@ -128,10 +132,11 @@ export default async function DocumentsPage() {
                         are about to pay. */}
                     {payment.returned && (
                       <span className="text-muted-foreground block text-pretty">
-                        Returned unpaid by the bank, so this amount is owed
-                        again
+                        {t('docs.returned')}
                         {payment.return && payment.return.feeCents > 0
-                          ? `, along with a ${formatRate(payment.return.feeCents)} returned-payment fee`
+                          ? t('docs.returnedFee', {
+                              fee: formatRate(payment.return.feeCents),
+                            })
                           : ""}
                         .
                       </span>
@@ -142,18 +147,25 @@ export default async function DocumentsPage() {
                           <>
                             <Link
                               href={`/portal/pay?lease=${payment.return.leaseId}`}
-                              aria-label={`Pay ${formatRate(payment.return.payableCents)} now${
+                              aria-label={
                                 payment.unitNumber
-                                  ? ` on unit ${payment.unitNumber}`
-                                  : ""
-                              }`}
+                                  ? t('docs.payReturnedLabel', {
+                                      amount: formatRate(payment.return.payableCents),
+                                      unit: payment.unitNumber,
+                                    })
+                                  : t('docs.payReturnedLabelNoUnit', {
+                                      amount: formatRate(payment.return.payableCents),
+                                    })
+                              }
                               className="font-medium underline underline-offset-4"
                             >
-                              Pay {formatRate(payment.return.payableCents)} now
+                              {t('docs.payReturned', {
+                                amount: formatRate(payment.return.payableCents),
+                              })}
                             </Link>
                             <span className="text-muted-foreground">
                               {" "}
-                              or{" "}
+                              {t('docs.or')}{" "}
                               <CallLink
                                 phone={phoneFor(
                                   payment.return.facilityPhone ?? null,
@@ -175,7 +187,7 @@ export default async function DocumentsPage() {
                               )}
                               className="underline underline-offset-4"
                             />{" "}
-                            about this.
+                            {t('docs.aboutThis')}
                           </span>
                         )}
                       </span>
@@ -189,7 +201,7 @@ export default async function DocumentsPage() {
                         is on the number itself now, in words. */}
                     {payment.returned && (
                       <span className="text-muted-foreground block text-xs font-normal">
-                        returned
+                        {t('docs.returnedShort')}
                       </span>
                     )}
                   </td>
@@ -199,20 +211,19 @@ export default async function DocumentsPage() {
           </table>
         )}
         <p className="text-muted-foreground text-sm text-pretty">
-          Need a receipt for one of these, or a statement for your accounts?
-          Call{" "}
+          {t('docs.needReceipt')}{" "}
           <a
             href={`tel:${SITE.phone.href}`}
             className="underline underline-offset-4"
           >
             {SITE.phone.display}
           </a>{" "}
-          and we&apos;ll send it over.
+          {t('docs.needReceiptAfter')}
         </p>
       </section>
 
       <Link href="/portal" className="text-sm underline underline-offset-4">
-        Back to my account
+        {t('paypg.backToAccount')}
       </Link>
     </div>
   );

@@ -4,6 +4,7 @@ import { presetFor, SHARED_ACCESS_PRESETS } from '@storage/core/access'
 import { parseWeeklySchedule } from '@storage/core/facility-settings'
 import { businessDateFor } from '@storage/core/jobs'
 import { accessCodeEncryptionKey, decryptCode } from '@/lib/access/secret'
+import type { MessageKey } from '@/lib/i18n'
 
 // PRD 03 US-9 AC4 (B-105). What the tenant sees on their own authorized-access
 // list.
@@ -28,7 +29,8 @@ export type AuthorizedPersonView = {
   suspended: boolean
   /// US-8 AC1's scope, rendered back. A control whose value never appears on
   /// the screen again is one a tenant cannot check, correct, or trust.
-  hoursLabel: string
+  /// B-260: a message key, rendered by the page in the reader's language.
+  hoursLabel: MessageKey
   /// The last day they can get in, as a facility-local `YYYY-MM-DD`, or null
   /// for no limit.
   ///
@@ -159,9 +161,7 @@ function localDate(instant: Date, timezone: string): string {
 /// vague "limited hours" where it is not — a manager's custom window has no
 /// short honest name, and inventing one that is subtly wrong about when
 /// somebody can reach their own belongings is worse than saying to ring.
-function hoursLabel(accessHours: unknown): string {
+function hoursLabel(accessHours: unknown): MessageKey {
   const preset = presetFor(parseWeeklySchedule(accessHours ?? null))
-  return preset === 'custom'
-    ? 'Limited hours — call the office'
-    : SHARED_ACCESS_PRESETS[preset].label
+  return preset === 'custom' ? 'acc.hours.custom' : SHARED_ACCESS_PRESETS[preset].labelKey
 }

@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { useT } from '@/components/i18n/locale-provider'
 
 // PRD 01 §6.5/§6.8.1. Hidden behind a tap to reduce shoulder-surfing
 // (§6.5), with the specific accessibility contract §6.8.1 names for this
@@ -19,12 +20,13 @@ import { Button } from '@/components/ui/button'
 // footprint on its own, so nothing is gained by hiding it.
 
 export function GateCodePanel({ code }: { code: string }) {
+  const t = useT()
   const [revealed, setRevealed] = useState(false)
   const [copyStatus, setCopyStatus] = useState('')
 
   async function handleCopy() {
     await navigator.clipboard.writeText(code)
-    setCopyStatus('Copied')
+    setCopyStatus(t('gate.copied'))
   }
 
   return (
@@ -37,7 +39,7 @@ export function GateCodePanel({ code }: { code: string }) {
         onClick={() => setRevealed((value) => !value)}
         className="self-start"
       >
-        {revealed ? 'Hide gate code' : 'Show gate code'}
+        {revealed ? t('gate.hide') : t('gate.show')}
       </Button>
 
       {revealed && (
@@ -49,7 +51,7 @@ export function GateCodePanel({ code }: { code: string }) {
               the whole string as one large number. */}
           <span className="sr-only">{code.split('').join(' ')}</span>
           <Button type="button" variant="ghost" size="sm" onClick={handleCopy}>
-            Copy
+            {t('gate.copy')}
           </Button>
         </div>
       )}

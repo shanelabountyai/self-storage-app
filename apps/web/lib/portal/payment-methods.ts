@@ -1,5 +1,5 @@
 import { prisma } from '@storage/db'
-import { monthlyRecurring, recurringParts } from '@storage/core/pricing'
+import { monthlyRecurring, recurringParts, type RecurringPart } from '@storage/core/pricing'
 import { OCCUPYING_LEASE_STATUSES } from '@storage/core/inventory'
 import { ensureStripeCustomer } from '@/lib/payments/customers'
 import { stripeClient } from '@/lib/payments/stripe'
@@ -67,7 +67,10 @@ export type AutopayLease = {
   /// is the sentence a tenant screenshots when the charge does not match.
   monthlyChargeCents: number
   /// What that figure is made of, for the sentence beside it (US-301).
-  chargeParts: string[]
+  /// B-260: tokens from `recurringParts`, named in the reader's language
+  /// by `chargePartsSentence` — not words, so this type cannot go stale
+  /// against the dictionaries.
+  chargeParts: RecurringPart[]
   billingDay: number
 }
 

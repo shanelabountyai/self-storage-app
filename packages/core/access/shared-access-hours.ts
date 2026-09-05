@@ -11,10 +11,13 @@ import { DAYS_OF_WEEK, type WeeklySchedule } from '../facility-settings/weekly-s
 // weekend". Every preset narrows against the facility's own hours anyway
 // (`narrowSchedule`), so the exact minutes matter less than the shape.
 
+// B-260 (D-122): `labelKey` names the dictionary entry rather than the words.
+// This package must not grow a dictionary — it holds the schedules the access
+// tests pin — so it says WHICH label and `apps/web` says what it reads.
 export const SHARED_ACCESS_PRESETS = {
-  anytime: { label: 'Any time the gate is open', schedule: null },
-  weekdays: { label: 'Weekdays only', schedule: weekly({ weekdays: true, weekend: false }) },
-  weekends: { label: 'Weekends only', schedule: weekly({ weekdays: false, weekend: true }) },
+  anytime: { labelKey: 'acc.hours.anytime', schedule: null },
+  weekdays: { labelKey: 'acc.hours.weekdays', schedule: weekly({ weekdays: true, weekend: false }) },
+  weekends: { labelKey: 'acc.hours.weekends', schedule: weekly({ weekdays: false, weekend: true }) },
 } as const
 
 export type SharedAccessPreset = keyof typeof SHARED_ACCESS_PRESETS

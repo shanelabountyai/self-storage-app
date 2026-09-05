@@ -44,6 +44,7 @@ import {
   referralsForStaff,
   REFERRAL_STATE_LABELS,
 } from "@/lib/referrals/portal";
+import { en } from '@/lib/i18n/en'
 
 /// The effects in an operator's words, on the banner. The catalog names them
 /// for code; a staffer needs to know what stopped.
@@ -1175,7 +1176,7 @@ export default async function TenantProfilePage({
                     <td className="py-2 pr-4">
                       {/* In words, never a colour alone — the same 1.4.1 rule
                           the portal table follows. */}
-                      {REFERRAL_STATE_LABELS[referral.state]}
+                      {en[REFERRAL_STATE_LABELS[referral.state]]}
                       {referral.refusedReason && (
                         <>
                           <span className="text-muted-foreground mt-1 block text-xs text-pretty">

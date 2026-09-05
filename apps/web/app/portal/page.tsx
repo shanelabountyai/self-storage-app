@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import { restoreShortfallCents } from '@storage/core/access'
-import { listParts, recurringParts } from '@storage/core/pricing'
+import { recurringParts } from '@storage/core/pricing'
 import Link from 'next/link'
 import { requireTenantActor } from '@/lib/rbac/session'
 import { portalDashboardForTenant, type PortalLeaseSummary } from '@/lib/portal/dashboard'
@@ -9,8 +9,13 @@ import { formatCalendarDate, formatCents, formatRate } from '@/lib/format'
 import { GateCodePanel } from '@/components/portal/gate-code-panel'
 import { currentImpersonation } from '@/lib/impersonation/context'
 import { SITE } from '@/lib/site-config'
+import { dictionaryFor, plural, translate, type Dictionary, type MessageKey } from '@/lib/i18n'
+import { getLocale } from '@/lib/i18n/server'
+import { chargePartsSentence } from '@/lib/pricing/charge-parts'
 
-export const metadata: Metadata = { title: 'My account' }
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: translate(dictionaryFor(await getLocale()), 'dash.title') }
+}
 
 // PRD 01 §4.7 US-702, §6.5, §6.8.1. "What do I owe, when is it due, what's my
 // gate code" in one glance. The past-due banner and the gate panel's
@@ -46,18 +51,28 @@ function formatExpiry(date: Date, timezone: string): string {
   }).format(date)
 }
 
-function PayNowButton({ lease }: { lease: PortalLeaseSummary }) {
+function PayNowButton({ lease, dict }: { lease: PortalLeaseSummary; dict: Dictionary }) {
   return (
     <Link
       href={`/portal/pay?lease=${lease.leaseId}`}
       className="bg-primary text-primary-foreground mt-2 inline-flex min-h-11 items-center justify-center rounded-md px-4 text-sm font-medium"
     >
-      Pay {formatRate(lease.balanceCents)} now
+      {translate(dict, 'dash.payNow', { amount: formatRate(lease.balanceCents) })}
     </Link>
   )
 }
 
-function LeaseCard({ lease, impersonated }: { lease: PortalLeaseSummary; impersonated: boolean }) {
+function LeaseCard({
+  lease,
+  impersonated,
+  dict,
+}: {
+  lease: PortalLeaseSummary
+  impersonated: boolean
+  dict: Dictionary
+}) {
+  const t = (key: MessageKey, vars?: Record<string, string | number>) =>
+    translate(dict, key, vars)
   // B-256. The viewer is this unit's tenant (the dashboard reads their own
   // leases) — so `youArePayer` means they hold the unit AND pay for it through
   // their own business account, and the account card below already carries this
@@ -97,16 +112,17 @@ function LeaseCard({ lease, impersonated }: { lease: PortalLeaseSummary; imperso
     >
       <div>
         <h2 id={headingId} className="font-medium">
-          {lease.facilityName} — Unit {lease.unitNumber}
+          {t('dash.unitHeading', { facility: lease.facilityName, unit: lease.unitNumber })}
         </h2>
         <p className="text-muted-foreground text-sm">
           <span aria-hidden="true">
             {lease.widthFt}×{lease.lengthFt}
           </span>
           <span className="sr-only">
-            {lease.widthFt} foot by {lease.lengthFt} foot
+            {t('facility.footBy', { width: lease.widthFt, length: lease.lengthFt })}
           </span>{' '}
-          · {formatRate(lease.monthlyRateCents)}/mo
+          · {formatRate(lease.monthlyRateCents)}
+          {t('card.perMonth')}
         </p>
       </div>
 
@@ -122,15 +138,9 @@ function LeaseCard({ lease, impersonated }: { lease: PortalLeaseSummary; imperso
       {lease.billedTo && (
         <div className="border-input rounded-md border p-3 text-sm text-pretty">
           {lease.billedTo.youArePayer ? (
-            <p>
-              This unit is billed to <strong>{lease.billedTo.accountName}</strong>. Its balance is
-              part of the account total below, where you can pay for every unit at once.
-            </p>
+            <p>{t('dash.billedToPayer', { account: lease.billedTo.accountName })}</p>
           ) : (
-            <p>
-              This unit is billed to <strong>{lease.billedTo.accountName}</strong>. You can still
-              pay it yourself &mdash; check with them first so it isn&apos;t paid twice.
-            </p>
+            <p>{t('dash.billedToOther', { account: lease.billedTo.accountName })}</p>
           )}
         </div>
       )}
@@ -148,8 +158,7 @@ function LeaseCard({ lease, impersonated }: { lease: PortalLeaseSummary; imperso
               Where the threshold is 0 and there is one unit — every facility
               today — this reads exactly as it did. */}
           <p>
-            Your account is past due. Your gate code won&apos;t open the gate until the balance is
-            paid. Pay{' '}
+            {t('dash.pastDueBefore')}{' '}
             <strong>
               {formatRate(
                 restoreShortfallCents({
@@ -158,20 +167,20 @@ function LeaseCard({ lease, impersonated }: { lease: PortalLeaseSummary; imperso
                 }),
               )}
             </strong>{' '}
-            and your gate code starts working again, usually within a couple of minutes.
+            {t('dash.pastDueAfter')}
           </p>
-          <PayNowButton lease={lease} />
+          <PayNowButton lease={lease} dict={dict} />
           {/* B-232. One clause from a finding that otherwise stays declined: it
               describes what the office can already do under D-98's plan
               builder, and commits the product to no tenant-initiated request
               flow — that remains declined exactly as it was in the B-187–B-196
               block, and PRD 01 §9 still carries it as an open gap. */}
           <p className="mt-2">
-            Or call{' '}
+            {t('dash.orCall')}{' '}
             <a href={telHref} className="underline underline-offset-4">
               {lease.facilityPhone}
             </a>{' '}
-            to pay by phone, or to ask about splitting it into payments.
+            {t('dash.orCallToPayOrSplit')}
           </p>
         </div>
       )}
@@ -184,24 +193,22 @@ function LeaseCard({ lease, impersonated }: { lease: PortalLeaseSummary; imperso
       {lease.settlingCents > 0 && (
         <div className="border-input rounded-md border p-3 text-sm text-pretty">
           <p>
-            <strong>{formatRate(lease.settlingCents)}</strong> is on its way from your bank. Bank
-            payments take about four business days to clear. Your balance updates when it arrives,
-            and you won&apos;t be charged a late fee while it&apos;s in transit.
+            <strong>{formatRate(lease.settlingCents)}</strong> {t('dash.settlingAfter')}
           </p>
         </div>
       )}
       {owesMoney && !lease.accessSuspended && (
         <div className="border-input rounded-md border p-3 text-sm text-pretty">
           <p>
-            You have a balance of <strong>{formatRate(lease.balanceCents)}</strong>.
+            {t('dash.balanceBefore')} <strong>{formatRate(lease.balanceCents)}</strong>.
           </p>
-          <PayNowButton lease={lease} />
+          <PayNowButton lease={lease} dict={dict} />
           <p className="mt-2">
-            Or call{' '}
+            {t('dash.orCall')}{' '}
             <a href={telHref} className="underline underline-offset-4">
               {lease.facilityPhone}
             </a>{' '}
-            to pay by phone.
+            {t('dash.orCallToPay')}
           </p>
         </div>
       )}
@@ -212,12 +219,15 @@ function LeaseCard({ lease, impersonated }: { lease: PortalLeaseSummary; imperso
       {lease.pendingTransfer && (
         <div className="border-input rounded-md border p-3 text-sm text-pretty">
           <p>
-            You asked to move to <strong>Unit {lease.pendingTransfer.toUnitNumber}</strong> on{' '}
-            {formatDueDate(lease.pendingTransfer.transferDate)}. We&apos;re
-            holding it until{' '}
+            {t('dash.transferBefore')}{' '}
+            <strong>
+              {t('dash.unitNumber', { unit: lease.pendingTransfer.toUnitNumber })}
+            </strong>{' '}
+            {t('dash.transferOn')} {formatDueDate(lease.pendingTransfer.transferDate)}.{' '}
+            {t('dash.transferHolding')}{' '}
             {formatExpiry(lease.pendingTransfer.expiresAt, lease.facilityTimezone)}.{' '}
             <Link href="/portal/transfer" className="underline underline-offset-4">
-              Manage this request
+              {t('dash.manageRequest')}
             </Link>
             .
           </p>
@@ -255,12 +265,11 @@ function LeaseCard({ lease, impersonated }: { lease: PortalLeaseSummary; imperso
         <div className="border-input rounded-md border p-3 text-sm text-pretty">
           {lease.paymentPlan.status === 'broken' ? (
             <p>
-              <strong>Your payment plan has ended</strong> because a payment was missed. The full
-              balance above is due now, and late fees and gate access go back to normal.{' '}
+              <strong>{t('dash.planEndedStrong')}</strong> {t('dash.planEndedBody')}{' '}
               <Link href="/portal/payment-plan" className="underline underline-offset-4">
-                See the plan and what happened
+                {t('dash.planSeeWhatHappened')}
               </Link>
-              , or call {lease.facilityPhone}.
+              , {t('dash.orCallNumber', { phone: lease.facilityPhone })}
             </p>
           ) : (
             <>
@@ -274,10 +283,11 @@ function LeaseCard({ lease, impersonated }: { lease: PortalLeaseSummary; imperso
                   replace (the same correction B-193 made on the plan page). */}
               {lease.paymentPlan.late && (
                 <p>
-                  <strong>A payment on your plan is late.</strong>{' '}
-                  {formatRate(lease.paymentPlan.late.amountCents)} was due on{' '}
-                  {formatDueDate(lease.paymentPlan.late.dueDate)}. Your plan
-                  carries on if you pay it by{' '}
+                  <strong>{t('dash.planLateStrong')}</strong>{' '}
+                  {t('dash.planLateBody', {
+                    amount: formatRate(lease.paymentPlan.late.amountCents),
+                    date: formatDueDate(lease.paymentPlan.late.dueDate),
+                  })}{' '}
                   <strong>
                     {formatDueDate(lease.paymentPlan.late.payByDate)}
                   </strong>
@@ -286,38 +296,44 @@ function LeaseCard({ lease, impersonated }: { lease: PortalLeaseSummary; imperso
                     href={`/portal/pay?lease=${lease.leaseId}&amount=${lease.paymentPlan.late.amountCents / 100}`}
                     className="underline underline-offset-4"
                   >
-                    Pay {formatRate(lease.paymentPlan.late.amountCents)} now
+                    {t('dash.payNow', {
+                      amount: formatRate(lease.paymentPlan.late.amountCents),
+                    })}
                   </Link>
-                  , or call {lease.facilityPhone}.
+                  , {t('dash.orCallNumber', { phone: lease.facilityPhone })}
                 </p>
               )}
               {lease.paymentPlan.missed && (
                 <p>
-                  <strong>A payment on your plan was missed.</strong>{' '}
-                  {formatRate(lease.paymentPlan.missed.amountCents)} was due on{' '}
-                  {formatDueDate(lease.paymentPlan.missed.dueDate)}.{' '}
+                  <strong>{t('dash.planMissedStrong')}</strong>{' '}
+                  {t('dash.planMissedBody', {
+                    amount: formatRate(lease.paymentPlan.missed.amountCents),
+                    date: formatDueDate(lease.paymentPlan.missed.dueDate),
+                  })}{' '}
                   <Link
                     href={`/portal/pay?lease=${lease.leaseId}&amount=${lease.paymentPlan.missed.amountCents / 100}`}
                     className="underline underline-offset-4"
                   >
-                    Pay {formatRate(lease.paymentPlan.missed.amountCents)} now
+                    {t('dash.payNow', {
+                      amount: formatRate(lease.paymentPlan.missed.amountCents),
+                    })}
                   </Link>{' '}
-                  to keep the plan, or call {lease.facilityPhone}.
+                  {t('dash.planKeepIt', { phone: lease.facilityPhone })}
                 </p>
               )}
               <p>
-                You&apos;re on a payment plan.{' '}
+                {t('dash.onAPlan')}{' '}
                 {lease.paymentPlan.next ? (
                   <>
-                    Your next payment is{' '}
-                    <strong>{formatRate(lease.paymentPlan.next.amountCents)}</strong> on{' '}
-                    {formatDueDate(lease.paymentPlan.next.dueDate)}.{' '}
+                    {t('dash.planNextBefore')}{' '}
+                    <strong>{formatRate(lease.paymentPlan.next.amountCents)}</strong>{' '}
+                    {t('dash.planNextOn')} {formatDueDate(lease.paymentPlan.next.dueDate)}.{' '}
                   </>
                 ) : (
-                  <>There are no payments left to make on it. </>
+                  <>{t('dash.planNoneLeft')} </>
                 )}
                 <Link href="/portal/payment-plan" className="underline underline-offset-4">
-                  See the full schedule
+                  {t('dash.planSeeSchedule')}
                 </Link>
                 .
               </p>
@@ -328,10 +344,10 @@ function LeaseCard({ lease, impersonated }: { lease: PortalLeaseSummary; imperso
       {lease.pendingMoveOutDate && (
         <div className="border-input rounded-md border p-3 text-sm text-pretty">
           <p>
-            You asked to move out on{' '}
+            {t('dash.moveOutBefore')}{' '}
             <strong>{formatDueDate(lease.pendingMoveOutDate)}</strong>.{' '}
             <Link href="/portal/move-out" className="underline underline-offset-4">
-              Manage this request
+              {t('dash.manageRequest')}
             </Link>
             .
           </p>
@@ -340,55 +356,55 @@ function LeaseCard({ lease, impersonated }: { lease: PortalLeaseSummary; imperso
 
       <dl className="grid grid-cols-2 gap-4 text-sm">
         <div>
-          <dt className="text-muted-foreground">Current balance</dt>
+          <dt className="text-muted-foreground">{t('dash.currentBalance')}</dt>
           {/* A negative ledger sum is a credit, not a debt of minus-something:
               formatRate would render it "$-39", which reads as an amount owed
               with a typo. Nothing writes a credit today (payments are capped
               at the balance), but a refund can, so it renders honestly. */}
           <dd className="font-medium">
             {lease.balanceCents < 0
-              ? `${formatRate(-lease.balanceCents)} in credit`
+              ? t('dash.inCredit', { amount: formatRate(-lease.balanceCents) })
               : formatRate(lease.balanceCents)}
           </dd>
         </div>
         <div>
-          <dt className="text-muted-foreground">Next payment</dt>
+          <dt className="text-muted-foreground">{t('dash.nextPayment')}</dt>
           <dd className="font-medium">
-            {formatRate(nextPaymentCents)} on {dueDate}
+            {t('dash.nextPaymentOn', { amount: formatRate(nextPaymentCents), date: dueDate })}
             {/* B-227 / US-301: a total nobody can decompose is one that stayed
                 wrong for months without anybody noticing. The parts are listed
                 from what is actually non-zero, so a lease with no protection
                 plan does not claim one. */}
             <span className="text-muted-foreground block text-xs font-normal">
-              {listParts(recurringParts(lease.recurring))}
+              {chargePartsSentence(dict, recurringParts(lease.recurring))}
             </span>
           </dd>
         </div>
         <div>
-          <dt className="text-muted-foreground">Autopay</dt>
+          <dt className="text-muted-foreground">{t('dash.autopay')}</dt>
           <dd className="font-medium">
-            {lease.autopayEnabled ? 'On' : 'Off'}{' '}
+            {lease.autopayEnabled ? t('dash.on') : t('dash.off')}{' '}
             <Link href="/portal/methods" className="font-normal underline underline-offset-4">
-              Change
+              {t('dash.change')}
             </Link>
           </dd>
           {lease.autopayNeedsCard && (
             <p className="mt-1 text-sm text-pretty text-red-800">
-              No card on file — nothing will be charged automatically.
+              {t('dash.autopayNeedsCard')}
             </p>
           )}
         </div>
       </dl>
 
       <div>
-        <h3 className="text-muted-foreground text-sm">Gate code</h3>
+        <h3 className="text-muted-foreground text-sm">{t('dash.gateCode')}</h3>
         {lease.accessSuspended ? (
           <p className="mt-1 text-sm text-pretty">
-            Access is suspended until the balance is paid. Call{' '}
+            {t('dash.accessSuspended')}{' '}
             <a href={telHref} className="underline underline-offset-4">
               {lease.facilityPhone}
             </a>{' '}
-            with questions.
+            {t('dash.withQuestions')}
           </p>
         ) : impersonated ? (
           // PRD 09 FR-12 + SR-2 (B-091 part 2). "Revealing an unmasked gate
@@ -402,17 +418,17 @@ function LeaseCard({ lease, impersonated }: { lease: PortalLeaseSummary; imperso
           // is a client component, so a `hidden` code would still be serialised
           // into the page and readable in the HTML source.
           <p className="mt-1 text-sm text-pretty">
-            The gate code is hidden during a support session. The tenant sees it here.
+            {t('dash.gateCodeHiddenImpersonation')}
           </p>
         ) : lease.gateCode ? (
           <GateCodePanel code={lease.gateCode} />
         ) : (
           <p className="mt-1 text-sm text-pretty">
-            Your gate code isn&apos;t ready yet. Call{' '}
+            {t('dash.gateCodeNotReady')}{' '}
             <a href={telHref} className="underline underline-offset-4">
               {lease.facilityPhone}
             </a>{' '}
-            and we&apos;ll get you in.
+            {t('dash.gateCodeNotReadyAfter')}
           </p>
         )}
       </div>
@@ -447,7 +463,9 @@ function LeaseCard({ lease, impersonated }: { lease: PortalLeaseSummary; imperso
 // `portalDashboardForTenant` still reads `{ tenantId }` alone, so a lease the
 // viewer merely pays for never reaches that component. Widening that query is
 // what would break it.
-function AccountCard({ account }: { account: PortalAccount }) {
+function AccountCard({ account, dict }: { account: PortalAccount; dict: Dictionary }) {
+  const t = (key: MessageKey, vars?: Record<string, string | number>) =>
+    translate(dict, key, vars)
   const headingId = `account-${account.id}-heading`
   const owesMoney = account.balanceCents > 0
   // The same fallback `portalDashboardForTenant` gives a lease card: a facility
@@ -466,9 +484,10 @@ function AccountCard({ account }: { account: PortalAccount }) {
           {account.name}
         </h2>
         <p className="text-muted-foreground text-sm">
-          {account.facilityName} · {account.units.length}{' '}
-          {account.units.length === 1 ? 'unit' : 'units'} ·{' '}
-          {formatRate(account.monthlyRateCents)}/mo
+          {plural(dict, account.units.length, 'acct.summaryOne', 'acct.summaryOther', {
+            facility: account.facilityName,
+            rate: `${formatRate(account.monthlyRateCents)}${t('card.perMonth')}`,
+          })}
         </p>
       </div>
 
@@ -479,18 +498,14 @@ function AccountCard({ account }: { account: PortalAccount }) {
       {!account.payable ? (
         <div className="border-input rounded-md border p-3 text-sm text-pretty">
           <p>
-            {owesMoney ? (
-              <>
-                This account owes <strong>{formatRate(account.balanceCents)}</strong> across{' '}
-                {account.units.length === 1 ? 'its unit' : 'its units'}.
-              </>
-            ) : (
-              <>Nothing is owed on this account right now.</>
-            )}
+            {owesMoney
+              ? plural(dict, account.units.length, 'acct.owesOne', 'acct.owesOther', {
+                  amount: formatRate(account.balanceCents),
+                })
+              : t('acct.nothingOwed')}
           </p>
           <p className="mt-2">
-            You can see this account. {account.payerName} is the payer and settles it, so there is
-            nothing here for you to pay. To pay it another way, call{' '}
+            {t('acct.memberNote', { payer: account.payerName })}{' '}
             <a href={telHref} className="underline underline-offset-4">
               {phone}
             </a>
@@ -500,31 +515,27 @@ function AccountCard({ account }: { account: PortalAccount }) {
       ) : owesMoney ? (
         <div className="border-input rounded-md border p-3 text-sm text-pretty">
           <p>
-            This account owes <strong>{formatRate(account.balanceCents)}</strong> across{' '}
-            {account.units.length === 1 ? 'its unit' : 'its units'}.
+            {plural(dict, account.units.length, 'acct.owesOne', 'acct.owesOther', {
+              amount: formatRate(account.balanceCents),
+            })}
           </p>
           <Link
             href={`/portal/pay?account=${account.id}`}
             className="bg-primary text-primary-foreground mt-2 inline-flex min-h-11 items-center justify-center rounded-md px-4 text-sm font-medium"
           >
-            Pay {formatRate(account.balanceCents)} now
+            {t('acct.payNow', { amount: formatRate(account.balanceCents) })}
           </Link>
+          <p className="mt-2">{t('acct.allocationNote')}</p>
           <p className="mt-2">
-            One payment covers the whole account. It goes to the oldest amounts owed first, across
-            every unit below, rather than to one unit in particular.
-          </p>
-          <p className="mt-2">
-            Or call{' '}
+            {t('dash.orCall')}{' '}
             <a href={telHref} className="underline underline-offset-4">
               {phone}
             </a>{' '}
-            to pay by phone.
+            {t('dash.orCallToPay')}
           </p>
         </div>
       ) : (
-        <p className="text-sm text-pretty">
-          Nothing is owed on this account right now.
-        </p>
+        <p className="text-sm text-pretty">{t('acct.nothingOwed')}</p>
       )}
 
       {/* A real table, not a visual list: "Unit 12 — Dana Foreman" and "$200.00"
@@ -534,11 +545,11 @@ function AccountCard({ account }: { account: PortalAccount }) {
           the next "$20.00" is harder to check. */}
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
-          <caption className="sr-only">Units billed to {account.name}</caption>
+          <caption className="sr-only">{t('acct.tableCaption', { account: account.name })}</caption>
           <thead>
             <tr className="text-left">
               <th scope="col" className="py-2 font-medium">
-                Unit
+                {t('acct.colUnit')}
               </th>
               {/* B-258. The renters' names are the payer's to see, not a
                   member's — a member was added to see what the account owes.
@@ -547,11 +558,11 @@ function AccountCard({ account }: { account: PortalAccount }) {
                   never a header with nothing under it. */}
               {account.payable && (
                 <th scope="col" className="py-2 font-medium">
-                  Rented by
+                  {t('acct.colRentedBy')}
                 </th>
               )}
               <th scope="col" className="py-2 text-right font-medium">
-                Balance
+                {t('acct.colBalance')}
               </th>
             </tr>
           </thead>
@@ -566,7 +577,7 @@ function AccountCard({ account }: { account: PortalAccount }) {
                 )}
                 <td className="py-2 text-right tabular-nums">
                   {unit.balanceCents < 0
-                    ? `${formatCents(-unit.balanceCents)} in credit`
+                    ? t('dash.inCredit', { amount: formatCents(-unit.balanceCents) })
                     : formatCents(unit.balanceCents)}
                 </td>
               </tr>
@@ -583,13 +594,12 @@ function AccountCard({ account }: { account: PortalAccount }) {
       {account.payable && (
         <>
           <p className="text-muted-foreground text-sm text-pretty">
-            Autopay is set up per unit and charges the card that unit&apos;s own renter has on
-            file. Paying through this account does not change that.
+            {t('acct.autopayNote')}
           </p>
 
           <p className="text-sm">
             <Link href="/portal/statements" className="underline underline-offset-4">
-              Statements for this account
+              {t('acct.statementsLink')}
             </Link>
           </p>
         </>
@@ -600,16 +610,18 @@ function AccountCard({ account }: { account: PortalAccount }) {
 
 export default async function PortalHomePage() {
   const actor = await requireTenantActor()
-  const [leases, accounts, impersonation] = await Promise.all([
+  const [leases, accounts, impersonation, locale] = await Promise.all([
     portalDashboardForTenant(actor.tenantId),
     portalAccountsFor(actor.tenantId),
     currentImpersonation(),
+    getLocale(),
   ])
   const impersonated = Boolean(impersonation)
+  const dict = dictionaryFor(locale)
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-xl font-semibold">My account</h1>
+      <h1 className="text-xl font-semibold">{translate(dict, 'dash.title')}</h1>
 
       {/* B-256. The units this tenant HOLDS come first, then the accounts they
           PAY FOR. That order because the first group is where their own gate
@@ -620,15 +632,20 @@ export default async function PortalHomePage() {
           balance from being offered twice. */}
       {leases.length === 0 && accounts.length === 0 ? (
         <p className="text-muted-foreground text-sm text-pretty">
-          We don&apos;t see an active unit on this account yet.
+          {translate(dict, 'dash.noUnits')}
         </p>
       ) : (
         <>
           {leases.map((lease) => (
-            <LeaseCard key={lease.leaseId} lease={lease} impersonated={impersonated} />
+            <LeaseCard
+              key={lease.leaseId}
+              lease={lease}
+              impersonated={impersonated}
+              dict={dict}
+            />
           ))}
           {accounts.map((account) => (
-            <AccountCard key={account.id} account={account} />
+            <AccountCard key={account.id} account={account} dict={dict} />
           ))}
         </>
       )}

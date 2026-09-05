@@ -14,8 +14,12 @@ import {
   revokePersonAction,
   unlockGateAction,
 } from './actions'
+import { dictionaryFor, translate, type Dictionary, type MessageKey } from '@/lib/i18n'
+import { getLocale } from '@/lib/i18n/server'
 
-export const metadata: Metadata = { title: 'Who can get in' }
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: translate(dictionaryFor(await getLocale()), 'acc.title') }
+}
 
 // PRD 03 US-9 AC4 (B-105). The tenant's own authorized-access list.
 //
@@ -40,19 +44,21 @@ export default async function AccessPage() {
   const units = impersonation
     ? loaded.map((unit) => ({ ...unit, people: unit.people.map((p) => ({ ...p, code: null })) }))
     : loaded
+  const locale = await getLocale()
+  const dict = dictionaryFor(locale)
+  const t = (key: MessageKey, vars?: Record<string, string | number>) =>
+    translate(dict, key, vars)
 
   return (
     <div className="flex flex-col gap-8">
       <header className="flex flex-col gap-2">
-        <h1 className="text-xl font-semibold">Who can get in</h1>
+        <h1 className="text-xl font-semibold">{t('acc.title')}</h1>
         <p className="text-muted-foreground max-w-prose text-sm text-pretty">
-          Open the gate from your phone, and give the people you trust their <strong>own</strong>{' '}
-          gate code rather than a copy of yours. The gate log records who actually came in, and you
-          can withdraw any one of them at any time without changing your own code.
+          {t('acc.introBefore')} <strong>{t('acc.own')}</strong> {t('acc.introAfter')}
         </p>
       </header>
 
-      <PhoneUnlockSection keys={mobileKeys} impersonated={Boolean(impersonation)} />
+      <PhoneUnlockSection keys={mobileKeys} impersonated={Boolean(impersonation)} dict={dict} />
 
       {/* Wrapped and named, and the unit headings drop to h3 with it. Before
           this row the units were the page's only h2s; adding the phone-unlock
@@ -61,11 +67,11 @@ export default async function AccessPage() {
           phone" rather than a child of the list it belongs to. */}
       <section aria-labelledby="authorized-people" className="flex flex-col gap-8">
       <h2 id="authorized-people" className="text-lg font-semibold">
-        Who else can get in
+        {t('acc.whoElse')}
       </h2>
 
       {units.length === 0 && (
-        <p className="text-muted-foreground text-sm">You don&apos;t have any units right now.</p>
+        <p className="text-muted-foreground text-sm">{t('acc.noUnits')}</p>
       )}
 
       {units.map((unit) => (
@@ -75,8 +81,10 @@ export default async function AccessPage() {
           className="border-input flex flex-col gap-4 rounded-lg border p-4"
         >
           <h3 id={`unit-${unit.leaseId}`} className="font-medium">
-            Unit {unit.unitNumber}
-            <span className="text-muted-foreground font-normal"> · {unit.facilityName}</span>
+            {t('dash.unitNumber', { unit: unit.unitNumber })}
+            <span className="text-muted-foreground font-normal">
+              {t('acc.unitFacility', { facility: unit.facilityName })}
+            </span>
           </h3>
 
           {unit.tenantSuspended && (
@@ -84,15 +92,13 @@ export default async function AccessPage() {
             // now starts suspended, and letting somebody hand out a code that
             // does not work is worse than telling them why.
             <p role="alert" className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-pretty text-red-900">
-              Access to this unit is switched off while the balance is unpaid. Anyone you add now
-              will not be able to get in until it is cleared — and neither can the people already on
-              this list.
+              {t('acc.unitSuspended')}
             </p>
           )}
 
           {unit.people.length === 0 ? (
             <p className="text-muted-foreground text-sm">
-              Nobody else can get into this unit at the moment.
+              {t('acc.nobodyElse')}
             </p>
           ) : (
             <ul className="flex flex-col gap-3">
@@ -107,35 +113,37 @@ export default async function AccessPage() {
                       {person.relationship} · {person.phone}
                     </p>
                     <p className="text-muted-foreground">
-                      {person.hoursLabel}
-                      {person.expiresOn && ` · until ${formatDay(person.expiresOn)}`}
+                      {t(person.hoursLabel)}
+                      {person.expiresOn &&
+                        t('acc.untilDay', { date: formatDay(person.expiresOn, locale) })}
                     </p>
                     {person.code ? (
                       <p className="mt-1">
-                        Their code: <span className="font-mono font-medium">{person.code}</span>
+                        {t('acc.theirCode')}{' '}
+                        <span className="font-mono font-medium">{person.code}</span>
                       </p>
                     ) : impersonation ? (
                       <p className="text-muted-foreground mt-1">
-                        Codes are hidden during a support session.
+                        {t('acc.codesHiddenSupport')}
                       </p>
                     ) : (
                       <p className="text-muted-foreground mt-1">
-                        Call the office for their code.
+                        {t('acc.callForCode')}
                       </p>
                     )}
                     {person.suspended && !unit.tenantSuspended && (
-                      <p className="mt-1 text-amber-700">Their code is switched off.</p>
+                      <p className="mt-1 text-amber-700">{t('acc.codeSwitchedOff')}</p>
                     )}
                     {!person.addedByTenant && (
-                      <p className="text-muted-foreground mt-1 text-xs">Added at the office.</p>
+                      <p className="text-muted-foreground mt-1 text-xs">{t('acc.addedAtOffice')}</p>
                     )}
                   </div>
 
-                  <AdminForm action={revokePersonAction} label={`Withdraw access for ${person.name}`}>
+                  <AdminForm action={revokePersonAction} label={t('acc.withdrawFor', { name: person.name })}>
                     <input type="hidden" name="personId" value={person.id} />
                     <input type="hidden" name="name" value={person.name} />
                     <button type="submit" className="text-sm underline underline-offset-4">
-                      Withdraw access
+                      {t('acc.withdraw')}
                     </button>
                   </AdminForm>
                 </li>
@@ -145,25 +153,23 @@ export default async function AccessPage() {
 
           {unit.people.length >= unit.cap ? (
             <p className="text-muted-foreground text-sm text-pretty">
-              You have the most people this facility allows ({unit.cap}). Withdraw somebody to add
-              another, or call the office.
+              {t('acc.atCap', { cap: unit.cap })}
             </p>
           ) : (
             <details className="border-input rounded-lg border p-4">
-              <summary className="cursor-pointer text-sm font-medium">Add someone</summary>
+              <summary className="cursor-pointer text-sm font-medium">{t('acc.addSomeone')}</summary>
               <p className="text-muted-foreground mt-2 text-sm text-pretty">
-                They will get their own code, which we will show you once you add them. You can have
-                up to {unit.cap} people on this unit.
+                {t('acc.addSomeoneBody', { cap: unit.cap })}
               </p>
               <AdminForm
                 action={addPersonAction}
-                label={`Add someone to unit ${unit.unitNumber}`}
+                label={t('acc.addFormLabel', { unit: unit.unitNumber })}
                 className="mt-3 grid gap-3 sm:grid-cols-3"
               >
                 <input type="hidden" name="leaseId" value={unit.leaseId} />
                 <Field
                   name="name"
-                  label="Full name"
+                  label={t('acc.fullName')}
                   type="text"
                   required
                   autoComplete="off"
@@ -171,7 +177,7 @@ export default async function AccessPage() {
                 />
                 <Field
                   name="phone"
-                  label="Phone"
+                  label={t('acc.phone')}
                   type="tel"
                   required
                   autoComplete="off"
@@ -179,11 +185,11 @@ export default async function AccessPage() {
                 />
                 <Field
                   name="relationship"
-                  label="Who they are to you"
+                  label={t('acc.relationship')}
                   type="text"
                   required
                   autoComplete="off"
-                  hint="For example: spouse, employee, brother."
+                  hint={t('acc.relationshipHint')}
                   className="flex flex-col gap-1 text-sm"
                 />
                 {/* US-8 AC1's scope. Both optional and both defaulted to the
@@ -192,24 +198,24 @@ export default async function AccessPage() {
                     did not ask goes back to texting their own code. */}
                 <Field
                   name="accessHours"
-                  label="When they can get in"
+                  label={t('acc.whenTheyCanGetIn')}
                   as="select"
                   defaultValue="anytime"
                   className="flex flex-col gap-1 text-sm"
                 >
                   {Object.entries(SHARED_ACCESS_PRESETS).map(([value, preset]) => (
                     <option key={value} value={value}>
-                      {preset.label}
+                      {t(preset.labelKey)}
                     </option>
                   ))}
                 </Field>
                 <Field
                   name="expiresOn"
-                  label="Last day (optional)"
+                  label={t('acc.lastDay')}
                   type="date"
                   min={unit.today}
                   autoComplete="off"
-                  hint="Leave blank and their code works until you withdraw it."
+                  hint={t('acc.lastDayHint')}
                   className="flex flex-col gap-1 text-sm"
                 />
                 <div className="sm:col-span-3">
@@ -217,7 +223,7 @@ export default async function AccessPage() {
                     type="submit"
                     className="bg-primary text-primary-foreground inline-flex min-h-11 items-center justify-center rounded-md px-4 text-sm font-medium"
                   >
-                    Add them
+                    {t('acc.addThem')}
                   </button>
                 </div>
               </AdminForm>
@@ -239,13 +245,23 @@ export default async function AccessPage() {
 // button. The three "unlock" buttons a per-lease rendering would have drawn are
 // the same mistake D-54 found in the three PINs a three-unit checkout used to
 // mint.
-function PhoneUnlockSection({ keys, impersonated }: { keys: MobileKey[]; impersonated: boolean }) {
+function PhoneUnlockSection({
+  keys,
+  impersonated,
+  dict,
+}: {
+  keys: MobileKey[]
+  impersonated: boolean
+  dict: Dictionary
+}) {
+  const t = (key: MessageKey, vars?: Record<string, string | number>) =>
+    translate(dict, key, vars)
   if (keys.length === 0) return null
 
   return (
     <section aria-labelledby="phone-unlock" className="flex flex-col gap-4">
       <h2 id="phone-unlock" className="text-lg font-semibold">
-        Open the gate from your phone
+        {t('acc.unlockHeading')}
       </h2>
       {/* B-170's case exactly, and it took an e2e failure to see it: turning
           phone unlock on or off revalidates the page, so the form that reports
@@ -260,14 +276,12 @@ function PhoneUnlockSection({ keys, impersonated }: { keys: MobileKey[]; imperso
           signal and no code — which is the failure this whole control has to be
           honest about (D-121). */}
       <p className="text-muted-foreground max-w-prose text-sm text-pretty">
-        Your gate code still works at the keypad and always will. Phone unlock needs a signal, so
-        keep the code where you can find it.
+        {t('acc.keypadStillWorks')}
       </p>
 
       {impersonated && (
         <p role="alert" className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-pretty text-amber-900">
-          The gate cannot be opened during a support session. The tenant can do it from this page
-          themselves.
+          {t('acc.impersonatedNoUnlock')}
         </p>
       )}
 
@@ -281,8 +295,7 @@ function PhoneUnlockSection({ keys, impersonated }: { keys: MobileKey[]; imperso
             <>
               {key.suspended && (
                 <p role="alert" className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-pretty text-red-900">
-                  Your access here is switched off while the balance is unpaid, so the gate will not
-                  open — from your phone or at the keypad.
+                  {t('acc.suspendedHere')}
                 </p>
               )}
               {/* Keyed, and this is not decoration. The enrol branch and this
@@ -294,33 +307,32 @@ function PhoneUnlockSection({ keys, impersonated }: { keys: MobileKey[]; imperso
               <AdminForm
                 key="unlock"
                 action={unlockGateAction}
-                label={`Open the gate at ${key.facilityName}`}
+                label={t('acc.openGateAt', { facility: key.facilityName })}
               >
                 <input type="hidden" name="facilityId" value={key.facilityId} />
-                <UnlockButton label="Open the gate" />
+                <UnlockButton label={t('acc.openGate')} />
               </AdminForm>
               <AdminForm
                 key="revoke"
                 action={revokeMobileKeyAction}
-                label={`Turn off phone unlock at ${key.facilityName}`}
+                label={t('acc.turnOffAt', { facility: key.facilityName })}
                 announceOutside
               >
                 <input type="hidden" name="facilityId" value={key.facilityId} />
                 <button type="submit" className="self-start text-sm underline underline-offset-4">
-                  Turn off phone unlock — I lost this phone
+                  {t('acc.turnOffLostPhone')}
                 </button>
               </AdminForm>
             </>
           ) : (
             <>
               <p className="text-muted-foreground text-sm text-pretty">
-                Not switched on. Turning it on gives this account its own key, separate from your
-                gate code — losing your phone means switching this off, not changing your code.
+                {t('acc.notSwitchedOn')}
               </p>
               <AdminForm
                 key="enroll"
                 action={enrollMobileKeyAction}
-                label={`Turn on phone unlock at ${key.facilityName}`}
+                label={t('acc.turnOnAt', { facility: key.facilityName })}
                 announceOutside
               >
                 <input type="hidden" name="facilityId" value={key.facilityId} />
@@ -328,14 +340,14 @@ function PhoneUnlockSection({ keys, impersonated }: { keys: MobileKey[]; imperso
                   type="submit"
                   className="bg-primary text-primary-foreground inline-flex min-h-11 items-center justify-center self-start rounded-md px-4 text-sm font-medium"
                 >
-                  Turn on phone unlock
+                  {t('acc.turnOn')}
                 </button>
               </AdminForm>
             </>
           )}
 
           <p className="text-muted-foreground text-sm">
-            Trouble at the gate? Call{' '}
+            {t('acc.troubleAtGate')}{' '}
             <a href={`tel:${key.facilityPhone.replace(/[^0-9+]/g, '')}`} className="underline underline-offset-4">
               {key.facilityPhone}
             </a>
@@ -350,9 +362,9 @@ function PhoneUnlockSection({ keys, impersonated }: { keys: MobileKey[]; imperso
 
 /// An absolute facility-local day, spelled out. Never a countdown — PRD 01
 /// §6.8.1.
-function formatDay(isoDate: string): string {
+function formatDay(isoDate: string, locale: string): string {
   const [year, month, day] = isoDate.split('-').map(Number)
-  return new Date(Date.UTC(year, month - 1, day)).toLocaleDateString('en-US', {
+  return new Date(Date.UTC(year, month - 1, day)).toLocaleDateString(locale, {
     timeZone: 'UTC',
     weekday: 'short',
     month: 'short',

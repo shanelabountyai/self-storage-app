@@ -6,8 +6,12 @@ import { currentPreferences, NOTIFICATION_CATEGORIES, smsConsentView } from '@/l
 import { MARKETING_SMS_DISCLOSURE } from '@/lib/checkout/details'
 import { revokeSmsAction, setMarketingSmsAction, setPreferencesAction } from './actions'
 import { ScrollRegion } from '@/components/ui/scroll-region'
+import { dictionaryFor, translate, type MessageKey } from '@/lib/i18n'
+import { getLocale } from '@/lib/i18n/server'
 
-export const metadata: Metadata = { title: 'Notification preferences' }
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: translate(dictionaryFor(await getLocale()), 'notif.title') }
+}
 
 // PRD 05 CN-13 (B-074). "As Tara, I control my channels in the portal."
 //
@@ -17,8 +21,8 @@ export const metadata: Metadata = { title: 'Notification preferences' }
 // it is described rather than offered as a control (AC's own instruction —
 // "the UI says so").
 
-function formatWhen(date: Date): string {
-  return new Intl.DateTimeFormat('en-US', {
+function formatWhen(date: Date, locale: string): string {
+  return new Intl.DateTimeFormat(locale, {
     day: 'numeric',
     month: 'long',
     year: 'numeric',
@@ -34,31 +38,37 @@ export default async function NotificationsPage() {
     smsConsentView(actor.tenantId),
     smsConsentView(actor.tenantId, 'marketing_sms'),
   ])
+  const locale = await getLocale()
+  const dict = dictionaryFor(locale)
+  const t = (key: MessageKey, vars?: Record<string, string | number>) =>
+    translate(dict, key, vars)
 
   return (
     <div className="flex flex-col gap-8">
-      <h1 className="text-xl font-semibold">Notification preferences</h1>
+      <h1 className="text-xl font-semibold">{t('notif.title')}</h1>
 
       <section aria-labelledby="grid-heading" className="flex flex-col gap-3">
         <h2 id="grid-heading" className="font-medium">
-          What we send, and how
+          {t('notif.gridHeading')}
         </h2>
-        <AdminForm action={setPreferencesAction} label="Notification preferences" className="flex flex-col gap-4">
-          <ScrollRegion aria-label="Notification preferences">
+        <AdminForm action={setPreferencesAction} label={t('notif.regionLabel')} className="flex flex-col gap-4">
+          <ScrollRegion aria-label={t('notif.regionLabel')}>
             <table className="w-full min-w-md border-collapse text-sm">
               <thead>
                 <tr className="border-input border-b text-left">
-                  <th scope="col" className="py-2 pr-4">Category</th>
-                  <th scope="col" className="py-2 pr-4">Email</th>
-                  <th scope="col" className="py-2 pr-4">Text</th>
+                  <th scope="col" className="py-2 pr-4">{t('notif.colCategory')}</th>
+                  <th scope="col" className="py-2 pr-4">{t('notif.colEmail')}</th>
+                  <th scope="col" className="py-2 pr-4">{t('notif.colText')}</th>
                 </tr>
               </thead>
               <tbody>
                 {NOTIFICATION_CATEGORIES.map((category) => (
                   <tr key={category.key} className="border-input border-b">
                     <th scope="row" className="py-3 pr-4 text-left font-normal align-top">
-                      <span className="font-medium">{category.label}</span>
-                      <p className="text-muted-foreground text-xs text-pretty">{category.description}</p>
+                      <span className="font-medium">{t(category.labelKey)}</span>
+                      <p className="text-muted-foreground text-xs text-pretty">
+                        {t(category.descriptionKey)}
+                      </p>
                     </th>
                     <td className="py-3 pr-4 align-top">
                       <input
@@ -66,7 +76,7 @@ export default async function NotificationsPage() {
                         name={`${category.key}:email`}
                         value="yes"
                         defaultChecked={grid[category.key].email}
-                        aria-label={`${category.label} by email`}
+                        aria-label={t('notif.byEmail', { category: t(category.labelKey) })}
                       />
                     </td>
                     <td className="py-3 pr-4 align-top">
@@ -75,7 +85,7 @@ export default async function NotificationsPage() {
                         name={`${category.key}:sms`}
                         value="yes"
                         defaultChecked={grid[category.key].sms}
-                        aria-label={`${category.label} by text`}
+                        aria-label={t('notif.byText', { category: t(category.labelKey) })}
                       />
                     </td>
                   </tr>
@@ -87,67 +97,64 @@ export default async function NotificationsPage() {
             type="submit"
             className="bg-primary text-primary-foreground inline-flex min-h-11 items-center justify-center self-start rounded-md px-4 text-sm font-medium"
           >
-            Save preferences
+            {t('notif.savePreferences')}
           </button>
         </AdminForm>
         <p className="text-muted-foreground max-w-prose text-xs text-pretty">
-          Payment reminders, receipts and account notices only — not everything we send. Delinquency
-          notices, lien-related mail and rate-increase notices always go by email; that is a legal
-          requirement, not a setting, and there is no control for it here.
+          {t('notif.mandatoryNote')}
         </p>
       </section>
 
       <section aria-labelledby="sms-consent-heading" className="flex flex-col gap-3">
         <h2 id="sms-consent-heading" className="font-medium">
-          Text message consent
+          {t('notif.smsHeading')}
         </h2>
         <p className="text-muted-foreground max-w-prose text-sm text-pretty">
-          What we send, when we send it and how to stop it is set out in our{' '}
+          {t('notif.smsIntroBefore')}{' '}
           <Link href="/messaging-policy" className="underline underline-offset-4">
-            text message policy
+            {t('notif.smsPolicyLink')}
           </Link>
           .
         </p>
         {consent.state ? (
           <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
-            <dt className="text-muted-foreground">Status</dt>
-            <dd>{consent.state === 'granted' ? 'Granted — texts are on' : 'Revoked — texts are off'}</dd>
+            <dt className="text-muted-foreground">{t('notif.status')}</dt>
+            <dd>{consent.state === 'granted' ? t('notif.granted') : t('notif.revoked')}</dd>
             {consent.capturedAt && (
               <>
-                <dt className="text-muted-foreground">As of</dt>
-                <dd>{formatWhen(consent.capturedAt)}</dd>
+                <dt className="text-muted-foreground">{t('notif.asOf')}</dt>
+                <dd>{formatWhen(consent.capturedAt, locale)}</dd>
               </>
             )}
             {consent.source && (
               <>
-                <dt className="text-muted-foreground">Recorded from</dt>
+                <dt className="text-muted-foreground">{t('notif.recordedFrom')}</dt>
                 <dd>{consent.source.replace(/_/g, ' ')}</dd>
               </>
             )}
             {consent.disclosureVersion && (
               <>
-                <dt className="text-muted-foreground">Disclosure version</dt>
+                <dt className="text-muted-foreground">{t('notif.disclosureVersion')}</dt>
                 <dd>{consent.disclosureVersion}</dd>
               </>
             )}
           </dl>
         ) : (
           <p className="text-muted-foreground text-sm">
-            We have never asked you about text messages, so none are sent.
+            {t('notif.neverAskedSms')}
           </p>
         )}
 
         {consent.state === 'granted' && (
-          <AdminForm action={revokeSmsAction} label="Turn off text messages" className="flex flex-col gap-2">
+          <AdminForm action={revokeSmsAction} label={t('notif.turnOffTexts')} className="flex flex-col gap-2">
             <p className="text-muted-foreground max-w-prose text-xs text-pretty">
-              This has the same effect as replying STOP to a text from us: every SMS to this number
-              stops, including account and payment texts, immediately.
+              {t('notif.stopNote')}
             </p>
             <button
               type="submit"
               className="border-input hover:bg-accent inline-flex min-h-11 items-center justify-center self-start rounded-md border px-4 text-sm font-medium"
             >
-              Turn off text messages
+              {t('notif.turnOffTexts')}
             </button>
           </AdminForm>
         )}
@@ -159,49 +166,48 @@ export default async function NotificationsPage() {
           make turning promotions off cost somebody their gate code. */}
       <section aria-labelledby="marketing-sms-heading" className="flex flex-col gap-3">
         <h2 id="marketing-sms-heading" className="font-medium">
-          Marketing text messages
+          {t('notif.marketingHeading')}
         </h2>
         <p className="text-muted-foreground max-w-prose text-sm text-pretty">
-          Separate from the account texts above. Turning these off never affects payment reminders
-          or gate codes, and turning them on is not required to rent.
+          {t('notif.marketingIntro')}
         </p>
 
         {marketingSms.state ? (
           <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
-            <dt className="text-muted-foreground">Status</dt>
+            <dt className="text-muted-foreground">{t('notif.status')}</dt>
             <dd>
               {marketingSms.state === 'granted'
-                ? 'Granted — marketing texts are on'
-                : 'Revoked — marketing texts are off'}
+                ? t('notif.marketingGranted')
+                : t('notif.marketingRevoked')}
             </dd>
             {marketingSms.capturedAt && (
               <>
-                <dt className="text-muted-foreground">As of</dt>
-                <dd>{formatWhen(marketingSms.capturedAt)}</dd>
+                <dt className="text-muted-foreground">{t('notif.asOf')}</dt>
+                <dd>{formatWhen(marketingSms.capturedAt, locale)}</dd>
               </>
             )}
             {marketingSms.source && (
               <>
-                <dt className="text-muted-foreground">Recorded from</dt>
+                <dt className="text-muted-foreground">{t('notif.recordedFrom')}</dt>
                 <dd>{marketingSms.source.replace(/_/g, ' ')}</dd>
               </>
             )}
             {marketingSms.disclosureVersion && (
               <>
-                <dt className="text-muted-foreground">Disclosure version</dt>
+                <dt className="text-muted-foreground">{t('notif.disclosureVersion')}</dt>
                 <dd>{marketingSms.disclosureVersion}</dd>
               </>
             )}
           </dl>
         ) : (
           <p className="text-muted-foreground text-sm">
-            We have never asked you about marketing texts, so none are sent.
+            {t('notif.neverAskedMarketing')}
           </p>
         )}
 
         <AdminForm
           action={setMarketingSmsAction}
-          label="Marketing text messages"
+          label={t('notif.marketingHeading')}
           className="flex flex-col gap-2"
         >
           {/* The disclosure is shown HERE, at the point of granting, not only
@@ -221,14 +227,14 @@ export default async function NotificationsPage() {
             className="border-input hover:bg-accent inline-flex min-h-11 items-center justify-center self-start rounded-md border px-4 text-sm font-medium"
           >
             {marketingSms.state === 'granted'
-              ? 'Turn off marketing texts'
-              : 'Turn on marketing texts'}
+              ? t('notif.turnOffMarketing')
+              : t('notif.turnOnMarketing')}
           </button>
         </AdminForm>
       </section>
 
       <Link href="/portal" className="text-sm underline underline-offset-4">
-        Back to my account
+        {t('paypg.backToAccount')}
       </Link>
     </div>
   )

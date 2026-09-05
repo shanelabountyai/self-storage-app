@@ -75,11 +75,18 @@ export function monthlyRecurring(input: RecurringInput): RecurringCharge {
 /// without anybody noticing. The list is built from what is actually non-zero,
 /// so a lease with no protection plan does not claim one and a facility with no
 /// tax component does not print the word "tax" beside a figure containing none.
-export function recurringParts(charge: RecurringCharge): string[] {
+/// B-260 (D-122): TOKENS, not words. This package holds the arithmetic the
+/// billing tests pin and must not grow a dictionary, so it names which parts
+/// are present and `apps/web` decides what they are called in the reader's
+/// language (`chargePartLabels`). The tokens are also what a caller wants for
+/// anything other than a sentence.
+export type RecurringPart = 'rent' | 'tax' | 'protection'
+
+export function recurringParts(charge: RecurringCharge): RecurringPart[] {
   return [
     'rent',
-    ...(charge.taxCents > 0 ? ['tax'] : []),
-    ...(charge.protectionCents > 0 ? ['your protection plan'] : []),
+    ...(charge.taxCents > 0 ? (['tax'] as const) : []),
+    ...(charge.protectionCents > 0 ? (['protection'] as const) : []),
   ]
 }
 
@@ -89,7 +96,15 @@ export function recurringParts(charge: RecurringCharge): string[] {
 /// Here rather than in either page: both `/portal` and `/portal/methods` print
 /// this sentence, and two copies of a joiner is how they end up phrasing the
 /// same figure differently.
-export function listParts(parts: readonly string[]): string {
+///
+/// B-260: `conjunction` defaults to "and" so every existing caller reads
+/// exactly as it did. Spanish passes "y" — and NOT through `Intl.ListFormat`,
+/// which is the tempting stdlib answer and the wrong one twice over: it would
+/// add an Oxford comma in `en-US`, which the line above says this deliberately
+/// does not have, and Spanish's real rule is "e" before a word starting with
+/// i- or hi-, which none of these parts do and which a list formatter would
+/// get right for the wrong reason on a list that can never contain one.
+export function listParts(parts: readonly string[], conjunction = 'and'): string {
   if (parts.length <= 1) return parts[0] ?? ''
-  return `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`
+  return `${parts.slice(0, -1).join(', ')} ${conjunction} ${parts[parts.length - 1]}`
 }

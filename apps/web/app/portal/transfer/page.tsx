@@ -5,15 +5,19 @@ import {
   tenantTransferLeases,
   transferOptionsFor,
   lienTransferRefusal,
-  PORTAL_TRANSFER_PROBLEM_COPY,
+  PORTAL_TRANSFER_PROBLEM_KEYS,
 } from '@/lib/portal/transfer'
 import { MAX_MOVE_IN_DAYS_AHEAD } from '@/lib/reservations/reserve'
 import { formatRate } from '@/lib/format'
 import { AdminForm, Field } from '@/components/admin/form'
 import { CallLink, phoneFor } from '@/components/marketing/call-link'
 import { cancelTransferAction, requestTransferAction } from './actions'
+import { dictionaryFor, translate, type MessageKey } from '@/lib/i18n'
+import { getLocale } from '@/lib/i18n/server'
 
-export const metadata = { title: 'Move to another unit' }
+export async function generateMetadata() {
+  return { title: translate(dictionaryFor(await getLocale()), 'tr.title') }
+}
 
 // PRD 01 §9 / US-14 (B-090 part 2). Pick a unit → pick a date → see what the
 // swap settles to → ask. Nothing here commits a transfer: that stays exactly
@@ -24,14 +28,14 @@ function isoDate(date: Date): string {
   return date.toISOString().slice(0, 10)
 }
 
-function formatDate(date: Date): string {
-  return new Intl.DateTimeFormat('en-US', { month: 'long', day: 'numeric', year: 'numeric' }).format(date)
+function formatDate(date: Date, locale: string): string {
+  return new Intl.DateTimeFormat(locale, { month: 'long', day: 'numeric', year: 'numeric' }).format(date)
 }
 
 // B-142 / PRD 02 §4.4 US-14: the hold's absolute facility-local expiry, never
 // a countdown.
-function formatExpiry(date: Date, timezone: string): string {
-  return new Intl.DateTimeFormat('en-US', {
+function formatExpiry(date: Date, timezone: string, locale: string): string {
+  return new Intl.DateTimeFormat(locale, {
     dateStyle: 'medium',
     timeStyle: 'short',
     timeZone: timezone,
@@ -59,14 +63,18 @@ export default async function PortalTransferPage({
   const { lease: leaseId, unit: toUnitId, date } = await searchParams
   const actor = await requireTenantActor()
   const leases = await tenantTransferLeases(actor.tenantId)
+  const locale = await getLocale()
+  const dict = dictionaryFor(locale)
+  const t = (key: MessageKey, vars?: Record<string, string | number>) =>
+    translate(dict, key, vars)
 
   if (leases.length === 0) {
     return (
       <Shell>
-        <h1 className="text-xl font-semibold">Move to another unit</h1>
-        <p className="text-sm text-pretty">We don&apos;t see an active unit on this account.</p>
+        <h1 className="text-xl font-semibold">{t('tr.title')}</h1>
+        <p className="text-sm text-pretty">{t('tr.noUnits')}</p>
         <Link href="/portal" className="text-sm underline underline-offset-4">
-          Back to my account
+          {t('paypg.backToAccount')}
         </Link>
       </Shell>
     )
@@ -77,8 +85,8 @@ export default async function PortalTransferPage({
   if (!selectedId) {
     return (
       <Shell>
-        <h1 className="text-xl font-semibold">Move to another unit</h1>
-        <p className="text-sm">Which unit are you moving out of?</p>
+        <h1 className="text-xl font-semibold">{t('tr.title')}</h1>
+        <p className="text-sm">{t('tr.whichUnit')}</p>
         <ul className="flex flex-col gap-2">
           {leases.map((lease) => (
             <li key={lease.leaseId}>
@@ -87,11 +95,18 @@ export default async function PortalTransferPage({
                   href={`/portal/transfer?lease=${lease.leaseId}`}
                   className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
                 >
-                  {lease.facilityName} — Unit {lease.unitNumber} ({lease.unitTypeName})
+                  {t('tr.unitOption', {
+                    facility: lease.facilityName,
+                    unit: lease.unitNumber,
+                    type: lease.unitTypeName,
+                  })}
                 </Link>
               ) : (
                 <p className="text-muted-foreground text-sm text-pretty">
-                  {lease.facilityName} — {lienTransferRefusal(lease.unitNumber)}{' '}
+                  {t('tr.lienListed', {
+                    facility: lease.facilityName,
+                    refusal: lienTransferRefusal(lease.unitNumber, dict),
+                  })}{' '}
                   <CallLink
                     phone={phoneFor(lease.facilityPhone || null)}
                     className="underline underline-offset-4"
@@ -109,10 +124,10 @@ export default async function PortalTransferPage({
   if (!lease) {
     return (
       <Shell>
-        <h1 className="text-xl font-semibold">Move to another unit</h1>
-        <p className="text-sm text-pretty">We couldn&apos;t find that unit on your account.</p>
+        <h1 className="text-xl font-semibold">{t('tr.title')}</h1>
+        <p className="text-sm text-pretty">{t('tr.notFound')}</p>
         <Link href="/portal/transfer" className="text-sm underline underline-offset-4">
-          Choose a unit
+          {t('tr.chooseAUnit')}
         </Link>
       </Shell>
     )
@@ -123,16 +138,19 @@ export default async function PortalTransferPage({
   if (!lease.transferable) {
     return (
       <Shell>
-        <h1 className="text-xl font-semibold">Move to another unit</h1>
+        <h1 className="text-xl font-semibold">{t('tr.title')}</h1>
         <p className="text-sm text-pretty">
-          {lease.facilityName} — {lienTransferRefusal(lease.unitNumber)}{' '}
+          {t('tr.lienListed', {
+            facility: lease.facilityName,
+            refusal: lienTransferRefusal(lease.unitNumber, dict),
+          })}{' '}
           <CallLink
             phone={phoneFor(lease.facilityPhone || null)}
             className="underline underline-offset-4"
           />
         </p>
         <Link href="/portal" className="text-sm underline underline-offset-4">
-          Back to my account
+          {t('paypg.backToAccount')}
         </Link>
       </Shell>
     )
@@ -143,36 +161,42 @@ export default async function PortalTransferPage({
   if (lease.pending) {
     return (
       <Shell>
-        <h1 className="text-xl font-semibold">Transfer requested</h1>
+        <h1 className="text-xl font-semibold">{t('tr.requestedTitle')}</h1>
         <p className="text-sm text-pretty">
-          We&apos;re holding <strong>Unit {lease.pending.unitNumber}</strong> at {lease.facilityName} for
-          you, for a move on <strong>{formatDate(lease.pending.transferDate)}</strong>, at{' '}
-          <strong>{formatRate(lease.pending.quotedRateCents)}/mo</strong> — the rate we quoted you,
-          held for this request. Nothing has changed yet — you still have Unit {lease.unitNumber},
-          your gate code still works, and your rent is unchanged until the team completes the move
-          with you.
+          {t('tr.holdingBefore')}{' '}
+          <strong>{t('tr.holdingUnit', { unit: lease.pending.unitNumber })}</strong>{' '}
+          {t('tr.holdingAtFor', { facility: lease.facilityName })}{' '}
+          <strong>{formatDate(lease.pending.transferDate, locale)}</strong>,{' '}
+          {t('tr.holdingAtRate')}{' '}
+          <strong>
+            {formatRate(lease.pending.quotedRateCents)}
+            {t('card.perMonth')}
+          </strong>{' '}
+          {t('tr.holdingRateNote', { unit: lease.unitNumber })}
         </p>
         <p className="text-sm text-pretty">
-          The hold lasts until{' '}
-          <strong>{formatExpiry(lease.pending.expiresAt, lease.facilityTimezone)}</strong>. If the team
-          hasn&apos;t reached you by then, call the office{' '}
-          <CallLink phone={phoneFor(lease.facilityPhone || null)} /> to keep it.
+          {t('tr.holdLastsBefore')}{' '}
+          <strong>
+            {formatExpiry(lease.pending.expiresAt, lease.facilityTimezone, locale)}
+          </strong>
+          . {t('tr.holdLastsAfter')}{' '}
+          <CallLink phone={phoneFor(lease.facilityPhone || null)} /> {t('tr.toKeepIt')}
         </p>
         <p className="text-sm text-pretty">
-          They&apos;ll call to arrange a time. If you need it sooner, call the office{' '}
+          {t('tr.theyWillCall')}{' '}
           <CallLink phone={phoneFor(lease.facilityPhone || null)} />.
         </p>
-        <AdminForm action={cancelTransferAction} label="Cancel transfer request">
+        <AdminForm action={cancelTransferAction} label={t('tr.cancelFormLabel')}>
           <input type="hidden" name="leaseId" value={lease.leaseId} />
           <button
             type="submit"
             className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
           >
-            Cancel this request
+            {t('tr.cancelThis')}
           </button>
         </AdminForm>
         <Link href="/portal" className="text-sm underline underline-offset-4">
-          Back to my account
+          {t('paypg.backToAccount')}
         </Link>
       </Shell>
     )
@@ -195,24 +219,26 @@ export default async function PortalTransferPage({
       <div>
         {leases.length > 1 && (
           <Link href="/portal/transfer" className="text-sm underline underline-offset-4">
-            ← Choose a different unit
+            {t('tr.chooseDifferent')}
           </Link>
         )}
         <h1 className="mt-1 text-xl font-semibold">
-          Move out of Unit {lease.unitNumber} into another unit
+          {t('tr.headingForUnit', { unit: lease.unitNumber })}
         </h1>
         <p className="text-muted-foreground mt-1 text-sm text-pretty">
-          You&apos;re paying {formatRate(lease.monthlyRateCents)} a month for Unit {lease.unitNumber} (
-          {lease.unitTypeName}) at {lease.facilityName}. Asking here holds the unit you pick — it
-          doesn&apos;t move anything. The team will call you to arrange the day and finish the swap.
+          {t('tr.payingNow', {
+            rate: formatRate(lease.monthlyRateCents),
+            unit: lease.unitNumber,
+            type: lease.unitTypeName,
+            facility: lease.facilityName,
+          })}
         </p>
       </div>
 
       {options.length === 0 ? (
         <p className="text-sm text-pretty">
-          There&apos;s nothing else free at {lease.facilityName} right now. Call the office{' '}
-          <CallLink phone={phoneFor(lease.facilityPhone || null)} /> and they&apos;ll let you know when
-          something opens up.
+          {t('tr.nothingFreeBefore', { facility: lease.facilityName })}{' '}
+          <CallLink phone={phoneFor(lease.facilityPhone || null)} /> {t('tr.nothingFreeAfter')}
         </p>
       ) : (
         <>
@@ -232,7 +258,7 @@ export default async function PortalTransferPage({
               the one case React hands back to the browser. */}
           <AdminForm
             action={requestTransferAction}
-            label="Request this transfer"
+            label={t('tr.formLabel')}
             className="flex flex-col gap-4"
           >
             <input type="hidden" name="leaseId" value={lease.leaseId} />
@@ -240,7 +266,7 @@ export default async function PortalTransferPage({
             <input type="hidden" name="previewed_unit" value={toUnitId ?? ''} />
             <input type="hidden" name="previewed_date" value={isoDate(transferDate)} />
             <fieldset className="flex flex-col gap-2">
-              <legend className="text-sm font-medium">Which unit would you like?</legend>
+              <legend className="text-sm font-medium">{t('tr.whichWouldYouLike')}</legend>
               {options.map((option) => (
                 <label
                   key={option.unitId}
@@ -253,23 +279,33 @@ export default async function PortalTransferPage({
                     defaultChecked={option.unitId === toUnitId}
                   />
                   <span className="flex flex-wrap items-baseline gap-x-2">
-                    <span className="font-medium">Unit {option.unitNumber}</span>
+                    <span className="font-medium">{t('tr.optionUnit', { unit: option.unitNumber })}</span>
                     <span className="text-muted-foreground">
                       {option.unitTypeName} ·{' '}
                       <span aria-hidden="true">
                         {option.widthFt}×{option.lengthFt}
                       </span>
                       <span className="sr-only">
-                        {option.widthFt} foot by {option.lengthFt} foot
+                        {t('facility.footBy', {
+                          width: option.widthFt,
+                          length: option.lengthFt,
+                        })}
                       </span>
                     </span>
-                    <span className="tabular-nums">{formatRate(option.rateCents)}/mo</span>
+                    <span className="tabular-nums">
+                      {formatRate(option.rateCents)}
+                      {t('card.perMonth')}
+                    </span>
                     <span className="text-muted-foreground tabular-nums">
                       {option.monthlyDifferenceCents === 0
-                        ? 'same as now'
+                        ? t('tr.sameAsNow')
                         : option.monthlyDifferenceCents > 0
-                          ? `${formatRate(option.monthlyDifferenceCents)} more a month`
-                          : `${formatRate(-option.monthlyDifferenceCents)} less a month`}
+                          ? t('tr.moreAMonth', {
+                              amount: formatRate(option.monthlyDifferenceCents),
+                            })
+                          : t('tr.lessAMonth', {
+                              amount: formatRate(-option.monthlyDifferenceCents),
+                            })}
                     </span>
                   </span>
                 </label>
@@ -278,7 +314,7 @@ export default async function PortalTransferPage({
 
             <Field
               name="date"
-              label="When would you like to move?"
+              label={t('tr.whenMove')}
               type="date"
               min={isoDate(new Date())}
               max={maxDateIso()}
@@ -292,12 +328,14 @@ export default async function PortalTransferPage({
               formAction="/portal/transfer"
               className="border-input hover:bg-accent inline-flex min-h-11 items-center self-start rounded-md border px-4 text-sm font-medium"
             >
-              Show me what it costs
+              {t('tr.showCost')}
             </button>
 
             {previewProblem && (
               <p role="alert" className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-900">
-                {PORTAL_TRANSFER_PROBLEM_COPY[previewProblem] ?? 'That preview could not be completed.'}
+                {t(PORTAL_TRANSFER_PROBLEM_KEYS[previewProblem] ?? 'tr.previewFailed', {
+                  days: MAX_MOVE_IN_DAYS_AHEAD,
+                })}
               </p>
             )}
 
@@ -305,34 +343,34 @@ export default async function PortalTransferPage({
               <>
                 <dl className="border-input flex flex-col gap-2 rounded-lg border p-4 text-sm">
                   <div className="flex justify-between gap-4">
-                    <dt>New monthly rent for Unit {preview.toUnitNumber}</dt>
+                    <dt>{t('tr.newRentFor', { unit: preview.toUnitNumber })}</dt>
                     <dd className="tabular-nums">{formatRate(preview.newRateCents)}</dd>
                   </div>
                   {preview.refundCents > 0 && (
                     <div className="flex justify-between gap-4">
-                      <dt>Credit for the days left on Unit {preview.fromUnitNumber}</dt>
+                      <dt>{t('tr.creditForDays', { unit: preview.fromUnitNumber })}</dt>
                       <dd className="tabular-nums">−{formatRate(preview.refundCents)}</dd>
                     </div>
                   )}
                   {preview.chargeCents > 0 && (
                     <div className="flex justify-between gap-4">
-                      <dt>Unit {preview.toUnitNumber} for {preview.dayRange}</dt>
+                      <dt>{t('tr.unitForRange', { unit: preview.toUnitNumber, range: preview.dayRange })}</dt>
                       <dd className="tabular-nums">{formatRate(preview.chargeCents)}</dd>
                     </div>
                   )}
                   {preview.transferFeeCents > 0 && (
                     <div className="flex justify-between gap-4">
-                      <dt>Transfer fee</dt>
+                      <dt>{t('tr.transferFee')}</dt>
                       <dd className="tabular-nums">{formatRate(preview.transferFeeCents)}</dd>
                     </div>
                   )}
                   <div className="flex justify-between gap-4 border-t pt-2 font-medium">
                     <dt>
                       {preview.totalDueTodayCents > 0
-                        ? 'To pay on the day'
+                        ? t('tr.toPayOnDay')
                         : preview.totalDueTodayCents < 0
-                          ? 'Credited to your account'
-                          : 'Nothing to pay on the day'}
+                          ? t('tr.creditedToAccount')
+                          : t('tr.nothingToPay')}
                     </dt>
                     <dd className="tabular-nums">
                       {formatRate(Math.abs(preview.totalDueTodayCents))}
@@ -342,9 +380,7 @@ export default async function PortalTransferPage({
 
                 <div className="flex flex-col gap-3">
                   <p className="text-muted-foreground text-sm text-pretty">
-                    We&apos;ll hold Unit {preview.toUnitNumber} for you and the team will call to arrange
-                    the move. Your current unit, gate code and rent stay exactly as they are until you
-                    and the team have actually done the swap — you can cancel any time before that.
+                    {t('tr.willHold', { unit: preview.toUnitNumber })}
                   </p>
                   {/* B-173. The unit and the day are in the button's own
                       accessible name, not only in controls the reader passed
@@ -353,7 +389,10 @@ export default async function PortalTransferPage({
                     type="submit"
                     className="bg-primary text-primary-foreground inline-flex min-h-11 items-center justify-center self-start rounded-md px-4 text-sm font-medium"
                   >
-                    Request Unit {preview.toUnitNumber} from {formatDate(transferDate)}
+                    {t('tr.requestFrom', {
+                      unit: preview.toUnitNumber,
+                      date: formatDate(transferDate, locale),
+                    })}
                   </button>
                 </div>
               </>

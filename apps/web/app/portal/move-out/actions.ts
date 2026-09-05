@@ -6,11 +6,14 @@ import { requireTenantActor } from '@/lib/rbac/session'
 import { checkFreshAuth } from '@/lib/auth/reauth'
 import {
   cancelMoveOutRequest,
-  PORTAL_MOVE_OUT_PROBLEM_COPY,
+  PORTAL_MOVE_OUT_PROBLEM_KEYS,
   requestMoveOut,
 } from '@/lib/portal/move-out'
 import { fieldError, stalePreview, success, type FormState } from '@/lib/admin/form-state'
 import { formatDay } from '@/lib/format'
+import { dictionaryFor, translate, type MessageKey } from '@/lib/i18n'
+import { getLocale } from '@/lib/i18n/server'
+import { MAX_MOVE_OUT_DAYS_AHEAD } from '@/lib/portal/move-out'
 
 // PRD 01 US-707, gated by US-701's re-auth rule — US-701's own examples of a
 // "sensitive action" name move-out explicitly. Split from
@@ -28,15 +31,16 @@ import { formatDay } from '@/lib/format'
 // reaching this means a post that skipped it — and the answer is still the true
 // one rather than "that request could not be completed", which tells a tenant
 // nothing and sends them to the phone anyway, angrier.
-const REQUEST_PROBLEM_COPY: Record<string, string> = {
-  ...PORTAL_MOVE_OUT_PROBLEM_COPY,
-  already_requested: 'A move-out is already scheduled for this unit.',
+// B-260 (D-122): keys, resolved per request against the tenant's dictionary.
+const REQUEST_PROBLEM_KEYS: Record<string, MessageKey> = {
+  ...PORTAL_MOVE_OUT_PROBLEM_KEYS,
+  already_requested: 'mo.problem.already_requested',
 }
 
-const CANCEL_PROBLEM_COPY: Record<string, string> = {
-  not_found: 'We couldn’t find that unit on your account.',
-  nothing_to_cancel: 'There’s no move-out scheduled to cancel.',
-  too_late: 'That move-out date has already arrived — call us to change anything now.',
+const CANCEL_PROBLEM_KEYS: Record<string, MessageKey> = {
+  not_found: 'mo.problem.not_found',
+  nothing_to_cancel: 'mo.problem.nothing_to_cancel',
+  too_late: 'mo.problem.too_late',
 }
 
 async function requireFresh(returnTo: string): Promise<void> {
@@ -63,7 +67,12 @@ export async function requestMoveOutAction(_prev: FormState, formData: FormData)
 
   const result = await requestMoveOut(actor.tenantId, leaseId, new Date(`${moveOutDate}T00:00:00.000Z`))
   if (!result.ok) {
-    return fieldError({ date: REQUEST_PROBLEM_COPY[result.reason] ?? 'That request could not be completed.' })
+    const dict = dictionaryFor(await getLocale())
+    return fieldError({
+      date: translate(dict, REQUEST_PROBLEM_KEYS[result.reason] ?? 'mo.problem.generic', {
+        days: MAX_MOVE_OUT_DAYS_AHEAD,
+      }),
+    })
   }
 
   revalidatePath('/portal/move-out')
@@ -79,7 +88,10 @@ export async function cancelMoveOutAction(_prev: FormState, formData: FormData):
 
   const result = await cancelMoveOutRequest(actor.tenantId, leaseId)
   if (!result.ok) {
-    return fieldError({ leaseId: CANCEL_PROBLEM_COPY[result.reason] ?? 'That could not be cancelled.' })
+    const dict = dictionaryFor(await getLocale())
+    return fieldError({
+      leaseId: translate(dict, CANCEL_PROBLEM_KEYS[result.reason] ?? 'mo.problem.generic'),
+    })
   }
 
   revalidatePath('/portal/move-out')

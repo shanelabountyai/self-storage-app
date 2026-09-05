@@ -56,9 +56,13 @@ export type StatementSummary = {
 /// year's statements, which is most of why this screen exists (persona P5's
 /// "receipts/statements for bookkeeping"). It is also the reason nothing here
 /// filters on lease status.
+/// B-260: `locale` names the months in the tenant's own language. Defaulted
+/// so the staff caller and the tests get English without asking, which is what
+/// every admin surface wants.
 export async function statementsForTenant(
   tenantId: string,
   now: Date = new Date(),
+  locale = 'en-US',
 ): Promise<StatementSummary[]> {
   const leases = await prisma.lease.findMany({
     // B-256. Widened to what this tenant may PAY, not only what they hold: a
@@ -136,7 +140,7 @@ export async function statementsForTenant(
       facilityName: lease.facility.name,
       year,
       month,
-      label: statementLabel(year, month),
+      label: statementLabel(year, month, locale),
       closingBalanceCents: closingByMonth.get(`${year}-${month}`) ?? 0,
       account,
     }))
@@ -165,6 +169,9 @@ export async function leaseStatement(input: {
   leaseId: string
   year: number
   month: number
+  /// B-260: names the month in the reader's language. Defaulted, so the admin
+  /// ledger and the tests get English without asking.
+  locale?: string
 }): Promise<LeaseStatement> {
   const lease = await prisma.lease.findUniqueOrThrow({
     where: { id: input.leaseId },
@@ -209,7 +216,7 @@ export async function leaseStatement(input: {
     ),
   })
 
-  const label = statementLabel(input.year, input.month)
+  const label = statementLabel(input.year, input.month, input.locale)
   if (!reconciles(statement)) throw new StatementDoesNotReconcileError(input.leaseId, label)
 
   return {

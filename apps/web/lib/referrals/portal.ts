@@ -1,5 +1,6 @@
 import { prisma } from '@storage/db'
 import { REFERRAL_REFUSAL_MESSAGES, type ReferralRefusal } from '@storage/core/referrals'
+import type { MessageKey } from '@/lib/i18n'
 
 // PRD 10 §5.6 (B-101). What a referrer may see of their own referrals.
 //
@@ -86,13 +87,15 @@ export async function referralsForTenant(tenantId: string): Promise<ReferralRow[
 /// "referral state carried in words, never a coloured pill alone" (1.4.1) —
 /// colour is never the only way this codebase says anything, and a pill with
 /// no text is exactly that failure.
-export const REFERRAL_STATE_LABELS: Record<ReferralRow['state'], string> = {
-  shared: 'Invite shared — not used yet',
-  pending: 'Moved in — waiting for their first payment to clear',
-  earned: 'Credit earned',
-  refused: 'No credit',
-  expired: 'Invite expired unused',
-  clawed_back: 'Credit reversed',
+// B-260 (D-122): keys, not words. The tenant's portal renders them in their
+// language; the staff screens resolve the same keys against English.
+export const REFERRAL_STATE_LABELS: Record<ReferralRow['state'], MessageKey> = {
+  shared: 'refer.state.shared',
+  pending: 'refer.state.pending',
+  earned: 'refer.state.earned',
+  refused: 'refer.state.refused',
+  expired: 'refer.state.expired',
+  clawed_back: 'refer.state.clawed_back',
 }
 
 export type StaffReferralRow = {

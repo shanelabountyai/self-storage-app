@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Elements, PaymentElement, useElements, useStripe } from '@stripe/react-stripe-js'
 import { loadStripe } from '@stripe/stripe-js'
+import { useLocale, useT } from '@/components/i18n/locale-provider'
 
 // PRD 01 US-703. The Payment Element for a portal one-time payment.
 //
@@ -35,6 +36,7 @@ const appearance = {
 
 function PayForm({ returnUrl, amountLabel }: { returnUrl: string; amountLabel: string }) {
   const stripe = useStripe()
+  const t = useT()
   const elements = useElements()
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -67,7 +69,9 @@ function PayForm({ returnUrl, amountLabel }: { returnUrl: string; amountLabel: s
     if (result.error) {
       // B-103: no longer necessarily a card. Stripe's own message is used
       // when there is one; the fallback stopped naming the method.
-      setError(result.error.message ?? 'That payment was declined. Try another payment method.')
+      // Stripe's own decline message is already localised by the Element's
+      // `locale`; ours is the fallback for a failure it did not describe.
+      setError(result.error.message ?? t('pay.declined'))
       inFlight.current = false
       setSubmitting(false)
       return
@@ -90,7 +94,7 @@ function PayForm({ returnUrl, amountLabel }: { returnUrl: string; amountLabel: s
           payment…" is not re-read to a screen reader, so paying was several
           seconds of silence — which reads as "it didn't work". */}
       <p role="status" className="text-muted-foreground mt-2 text-sm empty:mt-0">
-        {submitting ? 'Taking payment. This can take a few seconds.' : ''}
+        {submitting ? t('pay.takingPaymentStatus') : ''}
       </p>
 
       <PaymentElement options={{ layout: 'tabs' }} />
@@ -118,7 +122,7 @@ function PayForm({ returnUrl, amountLabel }: { returnUrl: string; amountLabel: s
         aria-busy={!stripe || submitting}
         className="bg-primary text-primary-foreground mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-md px-4 text-base font-medium sm:w-auto"
       >
-        {submitting ? 'Taking payment…' : `Pay ${amountLabel}`}
+        {submitting ? t('pay.takingPayment') : t('ppay.payAmount', { amount: amountLabel })}
       </button>
     </form>
   )
@@ -135,12 +139,17 @@ export function PortalPayment({
   returnUrl: string
   amountLabel: string
 }) {
+  // B-260. The Element renders its own labels and decline messages inside a
+  // cross-origin iframe we cannot reach, so this option is the only thing that
+  // makes them Spanish — the same reason checkout's own Element carries it.
+  const locale = useLocale()
   if (!stripePromise) return null
   return (
     <Elements
       stripe={stripePromise}
       options={{
         clientSecret,
+        locale,
         // What makes an already-saved card show up as an option instead of an
         // empty card form (US-703's "saved method or a new one").
         ...(customerSessionSecret ? { customerSessionClientSecret: customerSessionSecret } : {}),

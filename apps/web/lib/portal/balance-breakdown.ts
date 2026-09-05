@@ -23,7 +23,11 @@ import { openItems, type LedgerRow } from '@storage/core/billing'
 export type BreakdownLine = {
   /// What it is, in the tenant's words. Never a reason code, never a step
   /// number, never a bare invoice number.
-  label: string
+  /// Null when the label is generated rather than stored — see `lateFee`.
+  label: string | null
+  /// B-260. True when this line is a late fee whose wording this file
+  /// generates; the page prints it from the dictionary with `on`.
+  lateFee?: boolean
   /// The facility-local day it happened, already written out.
   on: string
   /// Signed cents, the ledger's own convention: charges positive, payments and
@@ -125,9 +129,14 @@ export async function balanceBreakdownFor(
         // whose job is to explain a figure.
         if (line.amountCents === 0) continue
         lines.push({
-          label: LATE_FEE_LINE.test(line.description)
-            ? `Late fee, assessed ${on}`
-            : line.description,
+          // B-260 (D-122): the "Late fee, assessed …" wording is GENERATED
+          // here, so it becomes a token the page renders in the reader's
+          // language. `line.description` beside it is not — it is what the
+          // billing engine wrote onto the invoice and what the statement, the
+          // receipt and every staff screen show, so translating it at display
+          // would make this screen disagree with the record it is itemising.
+          label: LATE_FEE_LINE.test(line.description) ? null : line.description,
+          lateFee: LATE_FEE_LINE.test(line.description),
           on,
           amountCents: line.amountCents,
           disputable: line.type === 'fee',
@@ -138,6 +147,7 @@ export async function balanceBreakdownFor(
 
     lines.push({
       label: describeEntry(item.kind, item.description),
+      lateFee: false,
       on,
       amountCents: item.amountCents,
       disputable: false,

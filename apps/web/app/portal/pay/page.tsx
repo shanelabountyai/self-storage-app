@@ -16,8 +16,12 @@ import { formatCents, formatRate } from '@/lib/format'
 import { SITE } from '@/lib/site-config'
 import { PortalPayment } from '@/components/portal/portal-payment'
 import { PayAmountForm } from '@/components/portal/pay-amount-form'
+import { dictionaryFor, translate, type Dictionary, type MessageKey } from '@/lib/i18n'
+import { getLocale } from '@/lib/i18n/server'
 
-export const metadata: Metadata = { title: 'Pay your balance' }
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: translate(dictionaryFor(await getLocale()), 'paypg.title') }
+}
 
 // PRD 01 §4.7 US-703. Pay the balance in ≤3 taps: "Pay $X" on the dashboard
 // lands here with the full balance already prepared, and confirming in the
@@ -28,27 +32,32 @@ export const metadata: Metadata = { title: 'Pay your balance' }
 // itself, which is Stripe's and needs JS by nature — that case falls back to
 // the phone number, same as everywhere else money is involved.
 
-const AMOUNT_PROBLEM_COPY: Record<AmountProblem, string> = {
-  not_a_number: 'Enter an amount like 75 or 75.50.',
-  below_minimum: `The smallest payment we can take online is ${formatRate(MIN_PAYMENT_CENTS)}.`,
-  above_balance: 'That is more than you owe. Enter your balance or less.',
-  // B-225. Paying ahead is supported now, so this refusal is about a LIMIT
-  // rather than about the tenant having done something wrong — and it must not
-  // read like "enter your balance or less", which would be false.
-  above_prepay_ceiling:
-    'That is much more than a year of rent. Call the office and we will take it over the phone.',
-  nothing_owed: 'There is nothing to pay right now.',
+// B-260: keys, not sentences. `below_minimum` interpolates the minimum, which
+// is why this is resolved through `translate` at render rather than being a
+// map of finished strings built once at module load — the old template literal
+// baked `MIN_PAYMENT_CENTS` in at import time, which was fine for one language
+// and is not for two.
+//
+// B-225's note still applies to `above_prepay_ceiling`: it is a refusal about a
+// LIMIT rather than about the tenant having done something wrong, and it must
+// not read like "enter your balance or less", which would be false.
+const AMOUNT_PROBLEM_KEYS: Record<AmountProblem, MessageKey> = {
+  not_a_number: 'amt.notANumber',
+  below_minimum: 'amt.belowMinimum',
+  above_balance: 'amt.aboveBalance',
+  above_prepay_ceiling: 'amt.abovePrepayCeiling',
+  nothing_owed: 'amt.nothingOwed',
 }
 
-function CallInstead({ phone }: { phone: string }) {
+function CallInstead({ phone, dict }: { phone: string; dict: Dictionary }) {
   const href = `tel:${phone.replace(/[^0-9+]/g, '')}`
   return (
     <p className="border-input rounded-lg border p-4 text-sm text-pretty">
-      We can&apos;t take card payments online just now. Call{' '}
+      {translate(dict, 'paypg.callInstead')}{' '}
       <a href={href} className="font-medium underline underline-offset-4">
         {phone}
       </a>{' '}
-      and we will take your payment over the phone.
+      {translate(dict, 'paypg.callInsteadAfter')}
     </p>
   )
 }
@@ -60,6 +69,9 @@ export default async function PortalPayPage({
 }) {
   const { lease: leaseId, account: accountId, amount } = await searchParams
   const actor = await requireTenantActor()
+  const dict = dictionaryFor(await getLocale())
+  const t = (key: MessageKey, vars?: Record<string, string | number>) =>
+    translate(dict, key, vars)
 
   // B-256. One unit, or a whole business account. `account` wins if both are
   // present — a link carries one or the other, and picking the larger subject
@@ -75,29 +87,30 @@ export default async function PortalPayPage({
     // else — there is nothing to tell apart from the outside.
     return (
       <div className="flex flex-col gap-4">
-        <h1 className="text-xl font-semibold">Pay your balance</h1>
+        <h1 className="text-xl font-semibold">{t('paypg.title')}</h1>
         <p className="text-sm text-pretty">
-          We couldn&apos;t find that {accountId ? 'account' : 'unit'} on your account.
+          {t(accountId ? 'paypg.notFoundAccount' : 'paypg.notFoundUnit')}
         </p>
         <Link href="/portal" className="text-sm underline underline-offset-4">
-          Back to my account
+          {t('paypg.backToAccount')}
         </Link>
       </div>
     )
   }
 
   const phone = lease.facilityPhone ?? SITE.phone.display
-  const subject = lease.account ? lease.account.name : `unit ${lease.unitNumber}`
 
   if (lease.balanceCents <= 0) {
     return (
       <div className="flex flex-col gap-4">
-        <h1 className="text-xl font-semibold">Pay your balance</h1>
+        <h1 className="text-xl font-semibold">{t('paypg.title')}</h1>
         <p className="text-sm text-pretty">
-          You&apos;re all paid up on {subject} — there&apos;s nothing to pay right now.
+          {lease.account
+            ? t('paypg.allPaidAccount', { name: lease.account.name })
+            : t('paypg.allPaidUnit', { unit: lease.unitNumber })}
         </p>
         <Link href="/portal" className="text-sm underline underline-offset-4">
-          Back to my account
+          {t('paypg.backToAccount')}
         </Link>
       </div>
     )
@@ -152,9 +165,17 @@ export default async function PortalPayPage({
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-xl font-semibold">Pay your balance</h1>
+        <h1 className="text-xl font-semibold">{t('paypg.title')}</h1>
         <p className="text-muted-foreground mt-1 text-sm">
-          {lease.facilityName} — {lease.account ? lease.account.name : `Unit ${lease.unitNumber}`}
+          {lease.account
+            ? t('paypg.subheadAccount', {
+                facility: lease.facilityName,
+                account: lease.account.name,
+              })
+            : t('paypg.subheadUnit', {
+                facility: lease.facilityName,
+                unit: lease.unitNumber,
+              })}
         </p>
       </div>
 
@@ -171,19 +192,19 @@ export default async function PortalPayPage({
         <table className="w-full text-sm">
           <caption className="px-4 pt-4 text-left font-medium">
             {lease.account
-              ? `What ${lease.account.name} owes`
-              : `What you owe on unit ${lease.unitNumber}`}
+              ? t('paypg.captionAccount', { account: lease.account.name })
+              : t('paypg.captionUnit', { unit: lease.unitNumber })}
           </caption>
           <thead>
             <tr className="text-left">
               <th scope="col" className="px-4 py-2 font-medium">
-                {lease.account ? 'Unit' : 'What'}
+                {t(lease.account ? 'paypg.colUnit' : 'paypg.colWhat')}
               </th>
               <th scope="col" className="px-4 py-2 font-medium">
-                {lease.account ? 'Rented by' : 'When'}
+                {t(lease.account ? 'paypg.colRentedBy' : 'paypg.colWhen')}
               </th>
               <th scope="col" className="px-4 py-2 text-right font-medium">
-                Amount
+                {t('paypg.colAmount')}
               </th>
             </tr>
           </thead>
@@ -210,9 +231,13 @@ export default async function PortalPayPage({
           {itemised.length > 0 && (
             <tbody>
               {itemised.map((line, index) => (
-                <tr key={`${line.label}-${index}`} className="border-t">
+                <tr key={`${line.label ?? 'late-fee'}-${index}`} className="border-t">
                   <td className="px-4 py-2">
-                    {line.label}
+                    {/* B-260: a generated label comes from the dictionary, a
+                        stored one is printed as the billing engine wrote it —
+                        translating a recorded invoice line would make this
+                        screen disagree with the statement it itemises. */}
+                    {line.lateFee ? t('paypg.lateFeeAssessed', { on: line.on }) : line.label}
                     {/* 2.4.4. The number to call about THIS charge, on the line
                         that carries it. A tenant who thinks a late fee is wrong
                         should not have to scroll past the pay button to find
@@ -224,7 +249,7 @@ export default async function PortalPayPage({
                           href={telHref}
                           className="text-muted-foreground whitespace-nowrap underline underline-offset-4"
                         >
-                          Query this — {phone}
+                          {t('paypg.queryThis', { phone })}
                         </a>
                       </>
                     )}
@@ -240,7 +265,7 @@ export default async function PortalPayPage({
           <tfoot>
             <tr className="border-t">
               <th scope="row" colSpan={2} className="px-4 py-2 text-left font-medium">
-                Balance
+                {t('paypg.balance')}
               </th>
               <td className="px-4 py-2 text-right font-medium tabular-nums">
                 {formatCents(lease.balanceCents)}
@@ -248,7 +273,7 @@ export default async function PortalPayPage({
             </tr>
             <tr className="border-t">
               <th scope="row" colSpan={2} className="px-4 py-2 pb-4 text-left text-base font-medium">
-                Paying today
+                {t('paypg.payingToday')}
               </th>
               <td className="px-4 py-2 pb-4 text-right text-base font-medium tabular-nums">
                 {formatCents(amountCents)}
@@ -270,16 +295,16 @@ export default async function PortalPayPage({
           them. */}
       {lease.accessSuspended && (
         <p className="border-input rounded-lg border p-4 text-sm text-pretty">
-          Your gate code is switched off.{' '}
+          {t('paypg.gateOff')}{' '}
           {amountCents >= shortfallCents ? (
             <>
-              Paying <strong>{formatCents(amountCents)}</strong> turns it back on, usually
-              within a couple of minutes.
+              {t('paypg.gateOnBefore')} <strong>{formatCents(amountCents)}</strong>{' '}
+              {t('paypg.gateOnAfter')}
             </>
           ) : (
             <>
-              <strong>{formatCents(shortfallCents)}</strong> turns it back on — paying{' '}
-              {formatCents(amountCents)} leaves it switched off.
+              <strong>{formatCents(shortfallCents)}</strong> {t('paypg.gateShortBefore')}{' '}
+              {formatCents(amountCents)} {t('paypg.gateShortAfter')}
             </>
           )}
         </p>
@@ -287,12 +312,15 @@ export default async function PortalPayPage({
 
       {!checked.ok && checked.problem !== 'nothing_owed' && (
         <p role="alert" className="border-input rounded-md border p-3 text-sm text-pretty">
-          {AMOUNT_PROBLEM_COPY[checked.problem]} We&apos;ve put your full balance back in for now.
+          {t(AMOUNT_PROBLEM_KEYS[checked.problem], {
+            min: formatRate(MIN_PAYMENT_CENTS),
+          })}{' '}
+          {t('paypg.balanceRestored')}
         </p>
       )}
 
       <details className="border-input rounded-lg border p-4" open={Boolean(amount) && !checked.ok}>
-        <summary className="cursor-pointer text-sm font-medium">Pay a different amount</summary>
+        <summary className="cursor-pointer text-sm font-medium">{t('paypg.payDifferent')}</summary>
         <PayAmountForm
           subject={
             lease.account
@@ -308,7 +336,7 @@ export default async function PortalPayPage({
 
       <section aria-labelledby="card-heading">
         <h2 id="card-heading" className="font-medium">
-          Card details
+          {t('paypg.cardDetails')}
         </h2>
         {setup.available ? (
           <PortalPayment
@@ -319,13 +347,13 @@ export default async function PortalPayPage({
           />
         ) : (
           <div className="mt-3">
-            <CallInstead phone={phone} />
+            <CallInstead phone={phone} dict={dict} />
           </div>
         )}
       </section>
 
       <Link href="/portal" className="text-sm underline underline-offset-4">
-        Back to my account
+        {t('paypg.backToAccount')}
       </Link>
     </div>
   )

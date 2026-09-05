@@ -1740,6 +1740,45 @@ const LAST_REVIEWED = '19 August 2026'
 // screen-reader pass was performed, and an axe run in a second language is
 // exactly the kind of evidence B-254 says cannot move that date.
 
+// Re-verified 2026-09-05, at B-260 (the portal in Spanish — D-122). The
+// second half of the language work, and the half that reaches a signed-in
+// tenant: all seventeen portal routes, their nav, and the components they
+// share with checkout.
+//
+// **The coverage sentence needed the same treatment as B-090f's and got it.**
+// The portal route loop signs a tenant in with no locale cookie, so it scans
+// English exactly as the public loop does. `SCANNED_STATES` gains `/portal` in
+// Spanish — scanned as Dana, who is seeded past-due with a suspended access
+// grant, so it is the money and access branches that are scanned rather than
+// an empty account — and `STATE_EXCEPTIONS` names the other ten portal routes
+// as English-only. Both render on this page. `/portal` is `layout: 'excepted'`
+// with its reason recorded: `portal.spec.ts` already measures that route as
+// the same tenant at every width, and what Spanish changes there is string
+// length inside the same single-column cards. The tightest translated layout
+// is the facility page, which IS measured at 320px (B-090f).
+//
+// **A pre-existing defect was found and fixed on the way**, and it is B-228's
+// class rather than a language one: `/portal/methods` formatted the next
+// autopay charge with a bare `Intl.DateTimeFormat('en-US', …)` and no
+// `timeZone`, against a date held at UTC midnight — so in every US timezone it
+// named the day BEFORE. Reproduced in America/Chicago: this screen said
+// "October 14" for a charge the dashboard, one tap away, dated "October 15",
+// about the same money on the same lease. It now uses `formatCalendarDate`,
+// which pins UTC like every other calendar day in this product.
+//
+// **What the English copy must not do is change, and it did.** Lifting portal
+// strings into the dictionary spelled 56 of them with a typographic
+// apostrophe where the JSX had written `&apos;` — a straight one. Three e2e
+// assertions caught it ("You're on a payment plan"), and it is a real change
+// rather than a nit: it breaks every by-text locator and every operator's
+// ⌘F. All 56 are restored, and `tests/i18n.test.ts` now fails on a curly
+// apostrophe in an English value so this cannot happen a third time.
+//
+// The "Where we fall short" list was re-read against this build and all three
+// entries are still true and unchanged in scope: the no-JavaScript hold
+// countdown, the staff screens, and the embedded maps. `LAST_REVIEWED` is not
+// bumped, per D-115 — no manual screen-reader pass was performed.
+
 export default function AccessibilityPage() {
   return (
     <ProsePage

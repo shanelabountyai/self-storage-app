@@ -4,9 +4,12 @@ import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { requireTenantActor } from '@/lib/rbac/session'
 import { checkFreshAuth } from '@/lib/auth/reauth'
-import { cancelTransferRequest, requestTransfer, PORTAL_TRANSFER_PROBLEM_COPY } from '@/lib/portal/transfer'
+import { cancelTransferRequest, requestTransfer, PORTAL_TRANSFER_PROBLEM_KEYS } from '@/lib/portal/transfer'
 import { fieldError, stalePreview, success, type FormState } from '@/lib/admin/form-state'
 import { formatDay } from '@/lib/format'
+import { dictionaryFor, translate } from '@/lib/i18n'
+import { getLocale } from '@/lib/i18n/server'
+import { MAX_MOVE_IN_DAYS_AHEAD } from '@/lib/reservations/reserve'
 
 // PRD 01 §9 (B-090 part 2), gated by US-701's re-auth rule. A transfer request
 // does not move money on its own, but it changes which unit a lease is for and
@@ -57,7 +60,11 @@ export async function requestTransferAction(_prev: FormState, formData: FormData
   )
   if (!result.ok) {
     return fieldError({
-      unit: PORTAL_TRANSFER_PROBLEM_COPY[result.problem] ?? 'That request could not be completed.',
+      unit: translate(
+        dictionaryFor(await getLocale()),
+        PORTAL_TRANSFER_PROBLEM_KEYS[result.problem] ?? 'tr.previewFailed',
+        { days: MAX_MOVE_IN_DAYS_AHEAD },
+      ),
     })
   }
 

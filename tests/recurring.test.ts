@@ -59,8 +59,13 @@ describe('what a lease charges every month', () => {
   })
 
   it('names only the parts that are actually there', () => {
+    // B-260 turned these into TOKENS: the words moved to the dictionaries so
+    // the sentence can be Spanish, and this package kept the arithmetic. The
+    // assertion is unchanged in what it checks — which parts are present —
+    // and `tests/i18n.test.ts` covers that each token has words in both
+    // languages.
     expect(recurringParts(monthlyRecurring({ monthlyRateCents: 14_000, protectionCents: 1_500, taxRates: TX })))
-      .toEqual(['rent', 'tax', 'your protection plan'])
+      .toEqual(['rent', 'tax', 'protection'])
     // No plan and no tax component: the sentence must not claim either.
     expect(recurringParts(monthlyRecurring({ monthlyRateCents: 14_000, protectionCents: 0 })))
       .toEqual(['rent'])

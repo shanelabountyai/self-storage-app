@@ -2,6 +2,8 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useT } from '@/components/i18n/locale-provider'
+import type { MessageKey } from '@/lib/i18n'
 
 // B-239. Lifted out of `app/portal/layout.tsx` so the nav can read
 // `usePathname()`. Three changes came with the move, and only the first is a
@@ -33,16 +35,19 @@ import { usePathname } from 'next/navigation'
 // PRD 01 §6.2's tap target, which is a shipping-gate rule rather than a WCAG
 // 2.1 AA one.
 
-type NavLink = { href: string; label: string }
+// B-260 (D-122): the KEY rather than the word, so the nav a tenant reads and
+// the `aria-current` a screen reader announces come from the same dictionary
+// entry and cannot drift by language.
+type NavLink = { href: string; labelKey: MessageKey }
 
 const MANAGE: NavLink[] = [
-  { href: '/portal/transfer', label: 'Move to another unit' },
-  { href: '/portal/access', label: 'Who can get in' },
-  { href: '/portal/protection', label: 'Protection' },
-  { href: '/portal/contact', label: 'Contact details' },
-  { href: '/portal/notifications', label: 'Notifications' },
-  { href: '/portal/refer', label: 'Refer a friend' },
-  { href: '/portal/move-out', label: 'Move out' },
+  { href: '/portal/transfer', labelKey: 'portal.transfer' },
+  { href: '/portal/access', labelKey: 'portal.access' },
+  { href: '/portal/protection', labelKey: 'portal.protection' },
+  { href: '/portal/contact', labelKey: 'portal.contact' },
+  { href: '/portal/notifications', labelKey: 'portal.notifications' },
+  { href: '/portal/refer', labelKey: 'portal.refer' },
+  { href: '/portal/move-out', labelKey: 'portal.moveOut' },
 ]
 
 const LINK_CLASS = 'inline-flex min-h-11 items-center underline underline-offset-2'
@@ -55,10 +60,15 @@ function isActive(pathname: string, href: string): boolean {
   return path === '/portal' ? pathname === '/portal' : pathname.startsWith(path)
 }
 
-function NavItem({ href, label, pathname }: NavLink & { pathname: string }) {
+function NavItem({
+  href,
+  labelKey,
+  pathname,
+  t,
+}: NavLink & { pathname: string; t: (key: MessageKey) => string }) {
   return (
     <Link href={href} aria-current={isActive(pathname, href) ? 'page' : undefined} className={LINK_CLASS}>
-      {label}
+      {t(labelKey)}
     </Link>
   )
 }
@@ -74,11 +84,12 @@ export function PortalNav({
   pay: { href: string; label: string } | null
   showPaymentPlan: boolean
 }) {
+  const t = useT()
   const pathname = usePathname()
   const manageIsActive = MANAGE.some((link) => isActive(pathname, link.href))
 
   return (
-    <nav aria-label="Your account" className="flex flex-wrap items-center gap-4 text-sm">
+    <nav aria-label={t('portal.nav')} className="flex flex-wrap items-center gap-4 text-sm">
       {pay && (
         <Link
           href={pay.href}
@@ -91,16 +102,18 @@ export function PortalNav({
           {pay.label}
         </Link>
       )}
-      <NavItem href="/portal" label="Overview" pathname={pathname} />
-      <NavItem href="/portal/methods" label="Payment methods" pathname={pathname} />
-      <NavItem href="/portal/statements" label="Statements" pathname={pathname} />
-      <NavItem href="/portal/documents" label="Documents" pathname={pathname} />
-      {showPaymentPlan && <NavItem href="/portal/payment-plan" label="Payment plan" pathname={pathname} />}
+      <NavItem href="/portal" labelKey="portal.overview" pathname={pathname} t={t} />
+      <NavItem href="/portal/methods" labelKey="portal.paymentMethods" pathname={pathname} t={t} />
+      <NavItem href="/portal/statements" labelKey="portal.statements" pathname={pathname} t={t} />
+      <NavItem href="/portal/documents" labelKey="portal.documents" pathname={pathname} t={t} />
+      {showPaymentPlan && (
+        <NavItem href="/portal/payment-plan" labelKey="portal.paymentPlan" pathname={pathname} t={t} />
+      )}
       <details open={manageIsActive} className="text-sm">
-        <summary className={`${LINK_CLASS} cursor-pointer`}>Manage</summary>
+        <summary className={`${LINK_CLASS} cursor-pointer`}>{t('portal.manage')}</summary>
         <div className="flex flex-col gap-2 pt-2">
           {MANAGE.map((link) => (
-            <NavItem key={link.href} {...link} pathname={pathname} />
+            <NavItem key={link.href} {...link} pathname={pathname} t={t} />
           ))}
         </div>
       </details>

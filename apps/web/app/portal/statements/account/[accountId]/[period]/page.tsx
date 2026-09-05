@@ -7,6 +7,8 @@ import { leaseStatement } from '@/lib/billing/statements'
 import { parseStatementPeriod, statementPeriodSegment } from '@/lib/billing/statement-period'
 import { formatCents } from '@/lib/format'
 import { SITE } from '@/lib/site-config'
+import { dictionaryFor, plural, translate, type Dictionary, type MessageKey } from '@/lib/i18n'
+import { getLocale } from '@/lib/i18n/server'
 
 export const metadata: Metadata = { title: 'Account statement' }
 
@@ -29,10 +31,12 @@ export const metadata: Metadata = { title: 'Account statement' }
 /// "-$129.00" in a column of money reads as an amount owed with a typo — the
 /// same reason the dashboard spells out "in credit" rather than negating a
 /// figure.
-function movement(openingCents: number, closingCents: number): string {
+function movement(openingCents: number, closingCents: number, dict: Dictionary): string {
   const change = closingCents - openingCents
-  if (change === 0) return 'No change'
-  return change > 0 ? `${formatCents(change)} added` : `${formatCents(-change)} cleared`
+  if (change === 0) return translate(dict, 'astmt.noChange')
+  return change > 0
+    ? translate(dict, 'astmt.added', { amount: formatCents(change) })
+    : translate(dict, 'astmt.cleared', { amount: formatCents(-change) })
 }
 
 export default async function AccountStatementPage({
@@ -42,6 +46,8 @@ export default async function AccountStatementPage({
 }) {
   const { accountId, period } = await params
   const actor = await requireTenantActor()
+  const locale = await getLocale()
+  const dict = dictionaryFor(locale)
 
   const parsed = parseStatementPeriod(period)
   if (!parsed) notFound()
@@ -88,22 +94,25 @@ export default async function AccountStatementPage({
     { opening: 0, closing: 0 },
   )
   const label = statements[0]?.label ?? period
+  const t = (key: MessageKey, vars?: Record<string, string | number>) =>
+    translate(dict, key, vars)
 
   return (
     <div className="flex max-w-3xl flex-col gap-6">
       <p className="text-sm">
         <Link href="/portal/statements" className="underline underline-offset-4">
-          ← All statements
+          {t('sv.allStatements')}
         </Link>
       </p>
 
       <header className="flex flex-col gap-1">
         <h1 className="text-xl font-semibold">
-          {account.name} — {label}
+          {t('astmt.heading', { account: account.name, label })}
         </h1>
         <p className="text-muted-foreground text-sm">
-          {account.units.length} {account.units.length === 1 ? 'unit' : 'units'} ·{' '}
-          {account.facilityName}
+          {plural(dict, account.units.length, 'astmt.unitsOne', 'astmt.unitsOther', {
+            facility: account.facilityName,
+          })}
         </p>
         <p className="text-muted-foreground text-sm">{SITE.name}</p>
       </header>
@@ -116,21 +125,21 @@ export default async function AccountStatementPage({
       <div className="border-input overflow-x-auto rounded-lg border">
         <table className="w-full text-sm">
           <caption className="px-4 pt-4 text-left font-medium">
-            Every unit billed to {account.name} in {label}
+            {t('astmt.caption', { account: account.name, label })}
           </caption>
           <thead>
             <tr className="text-left">
               <th scope="col" className="px-4 py-2 font-medium">
-                Unit
+                {t('astmt.colUnit')}
               </th>
               <th scope="col" className="px-4 py-2 text-right font-medium">
-                Owed at start
+                {t('astmt.colOwedStart')}
               </th>
               <th scope="col" className="px-4 py-2 text-right font-medium">
-                Change
+                {t('astmt.colChange')}
               </th>
               <th scope="col" className="px-4 py-2 text-right font-medium">
-                Owed at end
+                {t('astmt.colOwedEnd')}
               </th>
             </tr>
           </thead>
@@ -142,7 +151,7 @@ export default async function AccountStatementPage({
                     href={`/portal/statements/${statement.leaseId}/${statementPeriodSegment(statement.year, statement.month)}`}
                     className="underline underline-offset-4"
                   >
-                    Unit {statement.unitNumber}
+                    {t('dash.unitNumber', { unit: statement.unitNumber })}
                   </Link>
                   <span className="text-muted-foreground block text-xs">
                     {statement.tenantName}
@@ -152,7 +161,7 @@ export default async function AccountStatementPage({
                   {formatCents(statement.openingBalanceCents)}
                 </td>
                 <td className="px-4 py-2 text-right tabular-nums">
-                  {movement(statement.openingBalanceCents, statement.closingBalanceCents)}
+                  {movement(statement.openingBalanceCents, statement.closingBalanceCents, dict)}
                 </td>
                 <td className="px-4 py-2 text-right tabular-nums">
                   {formatCents(statement.closingBalanceCents)}
@@ -163,13 +172,13 @@ export default async function AccountStatementPage({
           <tfoot>
             <tr className="border-t">
               <th scope="row" className="px-4 py-2 pb-4 text-left font-medium">
-                All units
+                {t('astmt.allUnits')}
               </th>
               <td className="px-4 py-2 pb-4 text-right font-medium tabular-nums">
                 {formatCents(total.opening)}
               </td>
               <td className="px-4 py-2 pb-4 text-right font-medium tabular-nums">
-                {movement(total.opening, total.closing)}
+                {movement(total.opening, total.closing, dict)}
               </td>
               <td className="px-4 py-2 pb-4 text-right font-medium tabular-nums">
                 {formatCents(total.closing)}
@@ -180,9 +189,7 @@ export default async function AccountStatementPage({
       </div>
 
       <p className="text-muted-foreground text-xs text-pretty">
-        This is a summary. Each unit&apos;s own statement lists every charge and payment on it —
-        follow the unit number to see one. Dates are shown in {account.facilityName}&apos;s local
-        time. Use your browser&apos;s print option to save or print this page.
+        {t('astmt.note', { facility: account.facilityName })}
       </p>
     </div>
   )

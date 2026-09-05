@@ -426,6 +426,22 @@ export const SCANNED_STATES: readonly ScannedState[] = [
     spec: 'e2e/i18n.spec.ts',
     layout: 'reached',
   },
+  // B-260. The portal dashboard in Spanish. Dana is seeded past-due with a
+  // suspended access grant, so this scans the money and access branches rather
+  // than an empty account — the states a Spanish reader is most likely to be
+  // on this page for. `layout: 'excepted'` because `STATE_REACH` signs its
+  // audiences in through `signIn` and the reflow loops in `portal.spec.ts`
+  // already measure `/portal` as Dana at every width; what Spanish changes on
+  // this route is string length inside the same one-column cards, and the
+  // densest layout at 320px is the facility page, which IS measured above.
+  {
+    route: '/portal',
+    state: 'Spanish',
+    spec: 'e2e/i18n.spec.ts',
+    layout: 'excepted',
+    layoutException:
+      'the portal reflow loops measure /portal as the same tenant at every width; Spanish changes string length inside the same single-column cards, and the tightest translated layout — the facility page — is measured above',
+  },
   // B-256. The portal route loop scans `/portal` and `/portal/pay` as Dana,
   // who holds units of her own and pays for no account — so a business
   // account's card, its units table and the consolidated bill on the pay
@@ -747,6 +763,16 @@ export const STATE_EXCEPTIONS: readonly StateException[] = [
     audience: 'public',
     reason:
       'the a11y route loops carry no locale cookie, so every public route is scanned in English only; the facility page is scanned and measured in Spanish (above) and the rest of the public site, this route included, is not yet',
+  },
+  // B-260. The same gap one level in: the portal route loop signs a tenant in
+  // with no locale cookie, so it scans English. `/portal` itself is scanned in
+  // Spanish (above); the other ten portal routes are not yet.
+  {
+    route: '/portal/methods',
+    state: 'Spanish',
+    audience: 'portal',
+    reason:
+      'the portal a11y route loop carries no locale cookie, so every portal route but /portal is scanned in English only',
   },
   {
     route: '/checkout',

@@ -3,13 +3,18 @@ import Link from 'next/link'
 import { requireTenantActor } from '@/lib/rbac/session'
 import { autopayLeases, savedMethods } from '@/lib/portal/payment-methods'
 import { nextBillingDate } from '@/lib/portal/dashboard'
-import { listParts } from '@storage/core/pricing'
-import { formatRate } from '@/lib/format'
+
+import { formatCalendarDate, formatRate } from '@/lib/format'
 import { SITE } from '@/lib/site-config'
+import { dictionaryFor, translate, type MessageKey } from '@/lib/i18n'
+import { getLocale } from '@/lib/i18n/server'
+import { chargePartsSentence } from '@/lib/pricing/charge-parts'
 import { AdminForm } from '@/components/admin/form'
 import { removeMethodAction, setAutopayAction, setDefaultMethodAction } from './actions'
 
-export const metadata: Metadata = { title: 'Payment methods' }
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: translate(dictionaryFor(await getLocale()), 'meth.title') }
+}
 
 // PRD 01 §4.7 US-704. Cards on file, which unit charges itself, and what the
 // next charge will be.
@@ -28,28 +33,31 @@ export default async function PaymentMethodsPage() {
     autopayLeases(actor.tenantId),
   ])
   const hasMethod = Boolean(methods && methods.length > 0)
+  const dict = dictionaryFor(await getLocale())
+  const t = (key: MessageKey, vars?: Record<string, string | number>) =>
+    translate(dict, key, vars)
 
   return (
     <div className="flex flex-col gap-8">
-      <h1 className="text-xl font-semibold">Payment methods</h1>
+      <h1 className="text-xl font-semibold">{t('meth.title')}</h1>
 
       <section aria-labelledby="cards-heading" className="flex flex-col gap-3">
         <h2 id="cards-heading" className="font-medium">
-          Cards on file
+          {t('meth.cardsOnFile')}
         </h2>
 
         {methods === null ? (
           // Distinct from "no cards": we could not ask, so we do not claim.
           <p className="border-input rounded-lg border p-4 text-sm text-pretty">
-            We can&apos;t show your saved cards just now. Call{' '}
+            {t('meth.cannotShowCards')}{' '}
             <a href={`tel:${SITE.phone.href}`} className="font-medium underline underline-offset-4">
               {SITE.phone.display}
             </a>{' '}
-            and we can help.
+            {t('meth.cannotShowCardsAfter')}
           </p>
         ) : methods.length === 0 ? (
           <p className="text-muted-foreground text-sm text-pretty">
-            You don&apos;t have a card saved yet.
+            {t('meth.noCardSaved')}
           </p>
         ) : (
           <ul className="flex flex-col gap-3">
@@ -57,15 +65,18 @@ export default async function PaymentMethodsPage() {
               <li key={method.id} className="border-input rounded-lg border p-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="text-sm font-medium">
-                    {formatCard(method.brand)} ending {method.last4}
+                    {t('meth.cardEnding', { brand: formatCard(method.brand), last4: method.last4 })}
                     {method.isDefault && (
                       <span className="text-muted-foreground ml-2 font-normal">
-                        · charged for automatic payments
+                        {t('meth.isDefault')}
                       </span>
                     )}
                   </span>
                   <span className="text-muted-foreground text-sm">
-                    Expires {String(method.expMonth).padStart(2, '0')}/{method.expYear}
+                    {t('meth.expires', {
+                      month: String(method.expMonth).padStart(2, '0'),
+                      year: method.expYear,
+                    })}
                   </span>
                 </div>
 
@@ -73,27 +84,27 @@ export default async function PaymentMethodsPage() {
                   {!method.isDefault && (
                     <AdminForm
                       action={setDefaultMethodAction}
-                      label={`Use the card ending ${method.last4} for automatic payments`}
+                      label={t('meth.useCardLabel', { last4: method.last4 })}
                     >
                       <input type="hidden" name="methodId" value={method.id} />
                       <button
                         type="submit"
                         className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
                       >
-                        Use this card
+                        {t('meth.useThisCard')}
                       </button>
                     </AdminForm>
                   )}
                   <AdminForm
                     action={removeMethodAction}
-                    label={`Remove the card ending ${method.last4}`}
+                    label={t('meth.removeCardLabel', { last4: method.last4 })}
                   >
                     <input type="hidden" name="methodId" value={method.id} />
                     <button
                       type="submit"
                       className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
                     >
-                      Remove
+                      {t('meth.remove')}
                     </button>
                   </AdminForm>
                 </div>
@@ -103,7 +114,7 @@ export default async function PaymentMethodsPage() {
         )}
 
         <p className="text-muted-foreground text-sm text-pretty">
-          To add a card, pay a balance with it and choose to keep it on file, or call{' '}
+          {t('meth.addACard')}{' '}
           <a href={`tel:${SITE.phone.href}`} className="underline underline-offset-4">
             {SITE.phone.display}
           </a>
@@ -113,12 +124,12 @@ export default async function PaymentMethodsPage() {
 
       <section aria-labelledby="autopay-heading" className="flex flex-col gap-3">
         <h2 id="autopay-heading" className="font-medium">
-          Automatic payments
+          {t('meth.autopayHeading')}
         </h2>
 
         {leases.length === 0 ? (
           <p className="text-muted-foreground text-sm text-pretty">
-            We don&apos;t see an active unit on this account.
+            {t('meth.noActiveUnit')}
           </p>
         ) : (
           leases.map((lease) => {
@@ -126,7 +137,10 @@ export default async function PaymentMethodsPage() {
             return (
               <div key={lease.leaseId} className="border-input rounded-lg border p-4">
                 <p className="text-sm font-medium">
-                  {lease.facilityName} — Unit {lease.unitNumber}
+                  {t('meth.unitHeading', {
+                    facility: lease.facilityName,
+                    unit: lease.unitNumber,
+                  })}
                 </p>
 
                 {/* §4.6: the amount and the date, next to the control that
@@ -134,38 +148,50 @@ export default async function PaymentMethodsPage() {
                 <p className="text-muted-foreground mt-1 text-sm text-pretty">
                   {lease.autopayEnabled ? (
                     <>
-                      We charge <strong>{formatRate(lease.monthlyChargeCents)}</strong>{' '}
+                      {t('meth.autopayOnBefore')}{' '}
+                      <strong>{formatRate(lease.monthlyChargeCents)}</strong>{' '}
                       {/* B-227 / US-301. The figure states what it contains.
                           It was rent plus protection with the tax on rent
                           missing, so it was LOWER than what autopay actually
                           took — and this is the sentence a tenant screenshots
                           when the two do not match. */}
-                      ({listParts(lease.chargeParts)}) on day {lease.billingDay} of each month —
-                      next on{' '}
-                      {new Intl.DateTimeFormat('en-US', { month: 'long', day: 'numeric' }).format(
-                        next,
-                      )}
-                      . We email you two days before every charge.
+                      {/* B-260 found a real defect here, and it is B-228's
+                          exactly. This read `new Intl.DateTimeFormat('en-US',
+                          …)` with NO `timeZone`, and `nextBillingDate` returns
+                          a calendar day held at UTC midnight — so in every US
+                          timezone it rendered the day BEFORE. Reproduced in
+                          America/Chicago: this screen said "October 14" for a
+                          charge the dashboard, one tap away, dated "October
+                          15", about the same money on the same lease.
+                          `formatCalendarDate` pins UTC, which is what every
+                          other calendar day in this product is formatted
+                          with. */}
+                      {t('meth.autopayOnAfter', {
+                        parts: chargePartsSentence(dict, lease.chargeParts),
+                        day: lease.billingDay,
+                        next: formatCalendarDate(next, { month: 'long', day: 'numeric' }),
+                      })}
                     </>
                   ) : (
                     <>
-                      Off. {formatRate(lease.monthlyChargeCents)} ({listParts(lease.chargeParts)})
-                      is due on day {lease.billingDay} of
-                      each month and you pay it yourself.
+                      {t('meth.autopayOff', {
+                        amount: formatRate(lease.monthlyChargeCents),
+                        parts: chargePartsSentence(dict, lease.chargeParts),
+                        day: lease.billingDay,
+                      })}
                     </>
                   )}
                 </p>
 
                 {lease.autopayEnabled && !hasMethod && (
                   <p role="alert" className="mt-2 text-sm text-pretty text-red-800">
-                    There&apos;s no card on file for this to charge, so nothing will be taken
-                    automatically. Add a card, or turn this off so you get a reminder instead.
+                    {t('meth.noCardWarning')}
                   </p>
                 )}
 
                 <AdminForm
                   action={setAutopayAction}
-                  label={`Automatic payments for unit ${lease.unitNumber}`}
+                  label={t('meth.autopayFormLabel', { unit: lease.unitNumber })}
                   className="mt-3"
                 >
                   <input type="hidden" name="leaseId" value={lease.leaseId} />
@@ -174,7 +200,7 @@ export default async function PaymentMethodsPage() {
                     type="submit"
                     className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
                   >
-                    {lease.autopayEnabled ? 'Turn off automatic payments' : 'Turn on automatic payments'}
+                    {lease.autopayEnabled ? t('meth.turnOff') : t('meth.turnOn')}
                   </button>
                 </AdminForm>
               </div>
@@ -184,7 +210,7 @@ export default async function PaymentMethodsPage() {
       </section>
 
       <Link href="/portal" className="text-sm underline underline-offset-4">
-        Back to my account
+        {t('paypg.backToAccount')}
       </Link>
     </div>
   )

@@ -9,6 +9,7 @@ import { billingPeriodFor } from "@storage/core/billing";
 import { createTask, cancelOpenTask } from "@/lib/admin/tasks";
 import { recaptureForLease } from "@/lib/promotions/billing";
 import type { Recapture } from "@storage/core/promotions";
+import { translate, type Dictionary, type MessageKey } from '@/lib/i18n'
 
 // PRD 01 US-707. The tenant's own move-out request: pick a date, see what it
 // settles to, confirm. Nothing here finalizes a lease — that stays exactly
@@ -130,12 +131,15 @@ export type PortalMoveOutProblem =
 /// "Request this move-out" stayed live and pressable beside it (3.3.1). Ported
 /// from `PORTAL_TRANSFER_PROBLEM_COPY`, which B-142 built one file over for the
 /// same defect on the sibling screen.
-export const PORTAL_MOVE_OUT_PROBLEM_COPY: Record<PortalMoveOutProblem, string> = {
-  not_found: "We couldn’t find that unit on your account.",
-  lien_pipeline:
-    "This unit is in the lien process, so a move-out has to be arranged with the office rather than online. Please call them.",
-  date_too_soon: "That date is before the notice this unit requires. Pick a later date.",
-  date_too_far_out: `Pick a date within the next ${MAX_MOVE_OUT_DAYS_AHEAD} days.`,
+// B-260 (D-122): keys, not sentences. `date_too_far_out` interpolates the
+// ceiling, which is why the page resolves these at render rather than this
+// being a map of finished strings — the template literal baked the number in at
+// import time, which is fine for one language and not for two.
+export const PORTAL_MOVE_OUT_PROBLEM_KEYS: Record<PortalMoveOutProblem, MessageKey> = {
+  not_found: 'mo.problem.not_found',
+  lien_pipeline: 'mo.problem.lien_pipeline',
+  date_too_soon: 'mo.problem.date_too_soon',
+  date_too_far_out: 'mo.problem.date_too_far_out',
 };
 
 export type PreviewResult =
@@ -154,8 +158,8 @@ export type PreviewResult =
 /// `phoneFor`/`CallLink`, which falls back to the org line when a facility has
 /// none and makes it a real `tel:` link — a refusal whose only next step is a
 /// phone call must not be able to ship without a number to call.
-export function lienMoveOutRefusal(unitNumber: string): string {
-  return `Unit ${unitNumber} is in the lien process, so a move-out has to be arranged with the office rather than online. They'll go through what you owe and what happens next with you.`;
+export function lienMoveOutRefusal(unitNumber: string, dict: Dictionary): string {
+  return translate(dict, 'mo.lienRefusal', { unit: unitNumber });
 }
 
 /// B-174. The window a tenant may schedule inside, in one place.

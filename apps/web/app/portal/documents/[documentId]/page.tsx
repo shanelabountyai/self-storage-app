@@ -2,6 +2,8 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { requireTenantActor } from '@/lib/rbac/session'
 import { portalDocument } from '@/lib/portal/documents'
+import { dictionaryFor, translate } from '@/lib/i18n'
+import { getLocale } from '@/lib/i18n/server'
 
 export const metadata: Metadata = {
   title: 'Document',
@@ -27,14 +29,16 @@ export default async function DocumentPage({
   const { documentId } = await params
   const actor = await requireTenantActor()
   const document = await portalDocument(actor.tenantId, documentId)
+  const dict = dictionaryFor(await getLocale())
+  const t = (key: Parameters<typeof translate>[1]) => translate(dict, key)
 
   if (!document) {
     return (
       <div className="flex flex-col gap-4">
-        <h1 className="text-xl font-semibold">Document</h1>
-        <p className="text-sm text-pretty">We couldn&apos;t find that document on your account.</p>
+        <h1 className="text-xl font-semibold">{t('doc.title')}</h1>
+        <p className="text-sm text-pretty">{t('doc.notFound')}</p>
         <Link href="/portal/documents" className="text-sm underline underline-offset-4">
-          Back to documents
+          {t('doc.backToDocuments')}
         </Link>
       </div>
     )
@@ -48,7 +52,7 @@ export default async function DocumentPage({
         dangerouslySetInnerHTML={{ __html: document.content }}
       />
       <Link href="/portal/documents" className="text-sm underline underline-offset-4">
-        Back to documents
+        {t('doc.backToDocuments')}
       </Link>
     </div>
   )

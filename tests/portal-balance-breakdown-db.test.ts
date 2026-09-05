@@ -3,6 +3,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { prisma } from '../packages/db'
 import { balanceBreakdownFor, reconciles } from '../apps/web/lib/portal/balance-breakdown'
 import { payableLease } from '../apps/web/lib/portal/payment'
+import { translate } from '../apps/web/lib/i18n'
+import { en } from '../apps/web/lib/i18n/en'
 
 // PRD 01 US-702/US-703 §6.7 (B-232). What `/portal/pay` shows a tenant before
 // it asks them for money.
@@ -190,11 +192,19 @@ describeDb('the balance a tenant is asked to pay', () => {
 
     // Not one row saying "Invoice INV-A — $139.64", which is the bare total the
     // screen already had, and not July, which is settled.
+    //
+    // B-260 (D-122): a STORED line prints its own `label` — what the billing
+    // engine wrote onto the invoice, which the statement and every staff screen
+    // also show — while the late fee's wording is GENERATED here, so it carries
+    // `lateFee` and a null label and the page says it in the reader's language.
+    // Translating a recorded invoice line would make this screen disagree with
+    // the record it is itemising.
     expect(breakdown.lines.map((line) => line.label)).toEqual([
       'Rent, August',
       'TX tax (8.25%)',
-      'Late fee, assessed August 11, 2026',
+      null,
     ])
+    expect(breakdown.lines.map((line) => line.lateFee)).toEqual([false, false, true])
     expect(breakdown.lines.map((line) => line.amountCents)).toEqual([12_900, 1_064, 2_000])
   })
 
@@ -203,8 +213,16 @@ describeDb('the balance a tenant is asked to pay', () => {
     const fee = breakdown.lines.find((line) => line.disputable)
 
     // Never "Late fee (step 1) — 10+ days past due": a step number is a rule
-    // engine's word, and the tenant wants the date it was charged.
-    expect(fee?.label).toBe('Late fee, assessed August 11, 2026')
+    // engine's word, and the tenant wants the date it was charged. B-260 moved
+    // the wording into the dictionaries; what this file asserts is that the
+    // line is FLAGGED as the generated one and carries the date the page
+    // interpolates, rather than the sentence itself.
+    expect(fee?.lateFee).toBe(true)
+    expect(fee?.label).toBeNull()
+    expect(fee?.on).toBe('August 11, 2026')
+    expect(translate(en, 'paypg.lateFeeAssessed', { on: fee!.on })).toBe(
+      'Late fee, assessed August 11, 2026',
+    )
     // The rent and tax lines are not something to argue with, so they carry no
     // phone number.
     expect(breakdown.lines.filter((line) => line.disputable)).toHaveLength(1)

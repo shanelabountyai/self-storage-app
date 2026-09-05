@@ -174,6 +174,22 @@ export const MONTH_NAMES = [
   'December',
 ] as const
 
-export function statementLabel(year: number, month: number): string {
-  return `${MONTH_NAMES[month - 1]} ${year}`
+/// "August 2026", or "agosto de 2026" in Spanish (B-260, D-122).
+///
+/// `Intl.DateTimeFormat` rather than `MONTH_NAMES`, which stays for the two
+/// ADMIN callers that want the English name and nothing else. This is stdlib
+/// doing a job a hand-written array cannot: Spanish puts "de" between the
+/// month and the year, so a `${month} ${year}` template is wrong in Spanish
+/// however the month is spelled.
+///
+/// `timeZone: 'UTC'` is not decoration. The date is built at UTC midnight, and
+/// without it a machine in any US timezone formats 1 October as September —
+/// the B-228 defect, which is exactly what `/portal/methods` was still doing
+/// when this row found it.
+export function statementLabel(year: number, month: number, locale = 'en-US'): string {
+  return new Intl.DateTimeFormat(locale, {
+    timeZone: 'UTC',
+    month: 'long',
+    year: 'numeric',
+  }).format(new Date(Date.UTC(year, month - 1, 1)))
 }

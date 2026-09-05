@@ -9,8 +9,12 @@ import { formatRate } from '@/lib/format'
 import { mintInviteAction } from './actions'
 import { referralsForTenant, REFERRAL_STATE_LABELS } from '@/lib/referrals/portal'
 import { ScrollRegion } from '@/components/ui/scroll-region'
+import { dictionaryFor, translate, type MessageKey } from '@/lib/i18n'
+import { getLocale } from '@/lib/i18n/server'
 
-export const metadata: Metadata = { title: 'Refer a friend' }
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: translate(dictionaryFor(await getLocale()), 'refer.title') }
+}
 
 // PRD 10 §5.1 (B-100). The tenant's own view of the program.
 //
@@ -20,8 +24,8 @@ export const metadata: Metadata = { title: 'Refer a friend' }
 // unit, balance or move-in date). What is here is the half §5.1 specifies: the
 // outstanding invites, each with its code and share control, and the terms.
 
-function formatDate(date: Date): string {
-  return new Intl.DateTimeFormat('en-US', { day: 'numeric', month: 'long', year: 'numeric' }).format(date)
+function formatDate(date: Date, locale: string): string {
+  return new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'long', year: 'numeric' }).format(date)
 }
 
 export default async function ReferPage() {
@@ -62,16 +66,22 @@ export default async function ReferPage() {
         select: { id: true, code: true, expiresAt: true },
       })
     : []
+  const locale = await getLocale()
+  const dict = dictionaryFor(locale)
+  const t = (key: MessageKey, vars?: Record<string, string | number>) =>
+    translate(dict, key, vars)
 
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-lg font-semibold">Refer a friend</h1>
+        <h1 className="text-lg font-semibold">{t('refer.title')}</h1>
         {facility?.referralEnabled ? (
           <p className="text-muted-foreground mt-1 max-w-prose text-sm text-pretty">
-            When a friend rents at {facility.name} on your invite and their first payment clears,
-            they get {formatRate(facility.refereeRewardCents)} off their first invoice and you get{' '}
-            {formatRate(facility.referralRewardCents)} off your next one.
+            {t('refer.offer', {
+              facility: facility.name,
+              friendReward: formatRate(facility.refereeRewardCents),
+              yourReward: formatRate(facility.referralRewardCents),
+            })}
           </p>
         ) : (
           // §5.1 AC: "a tenant with no active lease sees why they cannot refer,
@@ -79,8 +89,8 @@ export default async function ReferPage() {
           // program switched off — say which it is.
           <p className="text-muted-foreground mt-1 max-w-prose text-sm text-pretty">
             {facility
-              ? `The referral program is not running at ${facility.name} at the moment.`
-              : 'Referrals are for current tenants, and there is no active lease on your account right now.'}
+              ? t('refer.notRunning', { facility: facility.name })
+              : t('refer.noLease')}
           </p>
         )}
       </div>
@@ -89,12 +99,12 @@ export default async function ReferPage() {
         <>
           <section aria-labelledby="invites-heading" className="flex flex-col gap-3">
             <h2 id="invites-heading" className="font-medium">
-              Your invites
+              {t('refer.yourInvites')}
             </h2>
 
             {invites.length === 0 ? (
               <p className="text-muted-foreground text-sm">
-                You have no unused invites. Make one and share it with a friend.
+                {t('refer.noInvites')}
               </p>
             ) : (
               <ul className="flex flex-col gap-3">
@@ -110,12 +120,12 @@ export default async function ReferPage() {
                       <p className="font-mono text-lg tracking-widest">{invite.code}</p>
                       <p className="text-muted-foreground mt-1 text-sm break-all">{link}</p>
                       <p className="text-muted-foreground mt-1 text-xs">
-                        Good until {formatDate(invite.expiresAt)}. One friend each.
+                        {t('refer.goodUntil', { date: formatDate(invite.expiresAt, locale) })}
                       </p>
                       <div className="mt-2">
                         <ShareInvite
                           code={invite.code}
-                          message={`Storage at ${facility.name} — use my invite and we both get a credit: ${link}`}
+                          message={t('refer.shareMessage', { facility: facility.name, link })}
                         />
                       </div>
                     </li>
@@ -124,24 +134,24 @@ export default async function ReferPage() {
               </ul>
             )}
 
-            <AdminForm action={mintInviteAction} label="Make a new invite" className="flex flex-col gap-2">
+            <AdminForm action={mintInviteAction} label={t('refer.makeInvite')} className="flex flex-col gap-2">
               <button
                 type="submit"
                 className="bg-primary text-primary-foreground inline-flex min-h-11 items-center justify-center self-start rounded-md px-4 text-sm font-medium"
               >
-                Make a new invite
+                {t('refer.makeInvite')}
               </button>
             </AdminForm>
           </section>
 
           <section aria-labelledby="referrals-heading" className="flex flex-col gap-3">
             <h2 id="referrals-heading" className="font-medium">
-              Your referrals
+              {t('refer.yourReferrals')}
             </h2>
 
             {referrals.length === 0 ? (
               <p className="text-muted-foreground text-sm">
-                Nothing yet. When a friend uses one of your invites, it will show up here.
+                {t('refer.noReferrals')}
               </p>
             ) : (
               // A real <table> with <th scope>, which the row states as an
@@ -149,22 +159,21 @@ export default async function ReferPage() {
               // <div> grid gives a screen-reader user no way to associate a
               // cell with its column, and this table's whole content is
               // "which friend, what state, when".
-              <ScrollRegion aria-label="Your referrals">
+              <ScrollRegion aria-label={t('refer.regionLabel')}>
                 <table className="w-full border-collapse text-sm">
                   <caption className="sr-only">
-                    Every friend you have referred, what state their referral is in, and when the
-                    credit lands
+                    {t('refer.caption')}
                   </caption>
                   <thead>
                     <tr className="border-input border-b text-left">
                       <th scope="col" className="py-2 pr-4">
-                        Friend
+                        {t('refer.colFriend')}
                       </th>
                       <th scope="col" className="py-2 pr-4">
-                        State
+                        {t('refer.colState')}
                       </th>
                       <th scope="col" className="py-2 pr-4">
-                        Credit
+                        {t('refer.colCredit')}
                       </th>
                     </tr>
                   </thead>
@@ -176,7 +185,9 @@ export default async function ReferPage() {
                               unit, balance and move-in date are things the
                               friend never agreed to share with whoever
                               referred them. */}
-                          {referral.friend ?? <span className="text-muted-foreground">Not used yet</span>}
+                          {referral.friend ?? (
+                            <span className="text-muted-foreground">{t('refer.notUsedYet')}</span>
+                          )}
                         </th>
                         <td className="py-2 pr-4">
                           {/* In WORDS, never a coloured pill alone (1.4.1).
@@ -184,7 +195,7 @@ export default async function ReferPage() {
                               codebase says something, and a state a
                               colour-blind tenant cannot read is a state they
                               have to phone about. */}
-                          {REFERRAL_STATE_LABELS[referral.state]}
+                          {t(REFERRAL_STATE_LABELS[referral.state])}
                           {referral.refusedReason && (
                             <span className="text-muted-foreground mt-1 block text-xs text-pretty">
                               {referral.refusedReason}
@@ -197,8 +208,10 @@ export default async function ReferPage() {
                               {formatRate(referral.rewardCents)}
                               <span className="text-muted-foreground block text-xs">
                                 {referral.creditDate
-                                  ? `on your ${formatDate(referral.creditDate)} invoice`
-                                  : 'on your next invoice'}
+                                  ? t('refer.onInvoiceDated', {
+                                      date: formatDate(referral.creditDate, locale),
+                                    })
+                                  : t('refer.onNextInvoice')}
                               </span>
                             </>
                           ) : (
@@ -215,7 +228,7 @@ export default async function ReferPage() {
 
           <section aria-labelledby="terms-heading" className="flex flex-col gap-2">
             <h2 id="terms-heading" className="font-medium">
-              The terms
+              {t('refer.terms')}
             </h2>
             {/* §5.1's AC asks for "the plain-language terms" on this page, and
                 §3's three consequences are the ones a tenant is most likely to
@@ -223,34 +236,23 @@ export default async function ReferPage() {
                 discovered. The clawback and minimum-stay wording is on the
                 attorney list (§9 Q1). */}
             <ul className="text-muted-foreground list-disc space-y-1 pl-5 text-sm">
-              <li>Each invite works once, for one friend.</li>
+              <li>{t('refer.term1')}</li>
+              <li>{t('refer.term2')}</li>
               <li>
-                Your friend has to be new to us — someone who has rented here before does not
-                qualify.
+                {t('refer.term3Before')} <strong>{t('refer.term3And')}</strong>{' '}
+                {t('refer.term3After')}
               </li>
-              <li>
-                The credit is earned when they move in <strong>and</strong> their first payment
-                clears, not when they reserve.
-              </li>
-              <li>
-                Yours comes off your next invoice, which may be up to a month away. Theirs comes off
-                their first.
-              </li>
-              <li>
-                Neither credit is cash and neither is refundable. If you move out with an unused
-                credit, it does not carry over.
-              </li>
-              <li>An unused invite expires after {facility.referralInviteExpiryDays} days.</li>
-              <li>
-                You can hold {facility.referralOpenInviteCap} unused invites at a time.
-              </li>
+              <li>{t('refer.term4')}</li>
+              <li>{t('refer.term5')}</li>
+              <li>{t('refer.term6', { days: facility.referralInviteExpiryDays })}</li>
+              <li>{t('refer.term7', { cap: facility.referralOpenInviteCap })}</li>
             </ul>
           </section>
         </>
       )}
 
       <Link href="/portal" className="text-sm underline underline-offset-4">
-        Back to my account
+        {t('paypg.backToAccount')}
       </Link>
     </div>
   )

@@ -3,7 +3,7 @@ import { requireTenantActor } from "@/lib/rbac/session";
 import {
   lienMoveOutRefusal,
   MAX_MOVE_OUT_DAYS_AHEAD,
-  PORTAL_MOVE_OUT_PROBLEM_COPY,
+  PORTAL_MOVE_OUT_PROBLEM_KEYS,
   previewTenantMoveOut,
   tenantMoveOutLeases,
 } from "@/lib/portal/move-out";
@@ -11,8 +11,12 @@ import { formatRate } from "@/lib/format";
 import { AdminForm, Field } from "@/components/admin/form";
 import { CallLink, phoneFor } from "@/components/marketing/call-link";
 import { cancelMoveOutAction, requestMoveOutAction } from "./actions";
+import { dictionaryFor, plural, translate, type MessageKey } from '@/lib/i18n'
+import { getLocale } from '@/lib/i18n/server'
 
-export const metadata = { title: "Request a move-out" };
+export async function generateMetadata() {
+  return { title: translate(dictionaryFor(await getLocale()), "mo.title") };
+}
 
 // PRD 01 US-707. Pick a unit → pick a date → see what it settles to →
 // confirm. Nothing here finalizes anything — that is still entirely B-040's,
@@ -38,8 +42,8 @@ function maxMoveOutDate(): Date {
   );
 }
 
-function formatDate(date: Date): string {
-  return new Intl.DateTimeFormat("en-US", {
+function formatDate(date: Date, locale: string): string {
+  return new Intl.DateTimeFormat(locale, {
     month: "long",
     day: "numeric",
     year: "numeric",
@@ -54,16 +58,20 @@ export default async function PortalMoveOutPage({
   const { lease: leaseId, date } = await searchParams;
   const actor = await requireTenantActor();
   const leases = await tenantMoveOutLeases(actor.tenantId);
+  const locale = await getLocale();
+  const dict = dictionaryFor(locale);
+  const t = (key: MessageKey, vars?: Record<string, string | number>) =>
+    translate(dict, key, vars);
 
   if (leases.length === 0) {
     return (
       <div className="flex flex-col gap-4">
-        <h1 className="text-xl font-semibold">Request a move-out</h1>
+        <h1 className="text-xl font-semibold">{t('mo.title')}</h1>
         <p className="text-sm text-pretty">
-          We don&apos;t see an active unit on this account.
+          {t('mo.noUnits')}
         </p>
         <Link href="/portal" className="text-sm underline underline-offset-4">
-          Back to my account
+          {t('paypg.backToAccount')}
         </Link>
       </div>
     );
@@ -75,8 +83,8 @@ export default async function PortalMoveOutPage({
   if (!selectedId) {
     return (
       <div className="flex flex-col gap-4">
-        <h1 className="text-xl font-semibold">Request a move-out</h1>
-        <p className="text-sm">Which unit?</p>
+        <h1 className="text-xl font-semibold">{t('mo.title')}</h1>
+        <p className="text-sm">{t('mo.whichUnit')}</p>
         <ul className="flex flex-col gap-2">
           {leases.map((lease) => (
             <li key={lease.leaseId}>
@@ -91,11 +99,17 @@ export default async function PortalMoveOutPage({
                   href={`/portal/move-out?lease=${lease.leaseId}`}
                   className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
                 >
-                  {lease.facilityName} — Unit {lease.unitNumber}
+                  {t('mo.unitOption', {
+                    facility: lease.facilityName,
+                    unit: lease.unitNumber,
+                  })}
                 </Link>
               ) : (
                 <p className="text-muted-foreground text-sm text-pretty">
-                  {lease.facilityName} — {lienMoveOutRefusal(lease.unitNumber)}{" "}
+                  {t('mo.lienListed', {
+                    facility: lease.facilityName,
+                    refusal: lienMoveOutRefusal(lease.unitNumber, dict),
+                  })}{" "}
                   <CallLink
                     phone={phoneFor(lease.facilityPhone || null)}
                     className="underline underline-offset-4"
@@ -113,15 +127,15 @@ export default async function PortalMoveOutPage({
   if (!lease) {
     return (
       <div className="flex flex-col gap-4">
-        <h1 className="text-xl font-semibold">Request a move-out</h1>
+        <h1 className="text-xl font-semibold">{t('mo.title')}</h1>
         <p className="text-sm text-pretty">
-          We couldn&apos;t find that unit on your account.
+          {t('mo.notFound')}
         </p>
         <Link
           href="/portal/move-out"
           className="text-sm underline underline-offset-4"
         >
-          Choose a unit
+          {t('mo.chooseAUnit')}
         </Link>
       </div>
     );
@@ -137,12 +151,12 @@ export default async function PortalMoveOutPage({
   if (!lease.schedulable) {
     return (
       <div className="flex flex-col gap-4">
-        <h1 className="text-xl font-semibold">Request a move-out</h1>
+        <h1 className="text-xl font-semibold">{t('mo.title')}</h1>
         <p
           role="alert"
           className="border-input rounded-lg border p-4 text-sm text-pretty"
         >
-          {lienMoveOutRefusal(lease.unitNumber)}{" "}
+          {lienMoveOutRefusal(lease.unitNumber, dict)}{" "}
           <CallLink
             phone={phoneFor(lease.facilityPhone || null)}
             className="underline underline-offset-4"
@@ -150,7 +164,7 @@ export default async function PortalMoveOutPage({
           .
         </p>
         <Link href="/portal" className="text-sm underline underline-offset-4">
-          Back to my account
+          {t('paypg.backToAccount')}
         </Link>
       </div>
     );
@@ -161,25 +175,26 @@ export default async function PortalMoveOutPage({
   if (lease.pendingMoveOutDate) {
     return (
       <div className="flex flex-col gap-6">
-        <h1 className="text-xl font-semibold">Move-out scheduled</h1>
+        <h1 className="text-xl font-semibold">{t('mo.scheduledTitle')}</h1>
         <p className="text-sm text-pretty">
-          Unit {lease.unitNumber} at {lease.facilityName} is scheduled to move
-          out on <strong>{formatDate(lease.pendingMoveOutDate)}</strong>. Your
-          gate code keeps working and your account stays active until then. Our
-          team will verify the unit and finish closing your account after that
-          date.
+          {t('mo.scheduledBodyBefore', {
+            unit: lease.unitNumber,
+            facility: lease.facilityName,
+          })}{" "}
+          <strong>{formatDate(lease.pendingMoveOutDate, locale)}</strong>.{" "}
+          {t('mo.scheduledBodyAfter')}
         </p>
-        <AdminForm action={cancelMoveOutAction} label="Cancel move-out">
+        <AdminForm action={cancelMoveOutAction} label={t('mo.cancelFormLabel')}>
           <input type="hidden" name="leaseId" value={lease.leaseId} />
           <button
             type="submit"
             className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
           >
-            Cancel this move-out
+            {t('mo.cancelThis')}
           </button>
         </AdminForm>
         <Link href="/portal" className="text-sm underline underline-offset-4">
-          Back to my account
+          {t('paypg.backToAccount')}
         </Link>
       </div>
     );
@@ -208,18 +223,22 @@ export default async function PortalMoveOutPage({
           href="/portal/move-out"
           className="text-sm underline underline-offset-4"
         >
-          ← Choose a different unit
+          {t('mo.chooseDifferent')}
         </Link>
         <h1 className="mt-1 text-xl font-semibold">
-          Request a move-out — Unit {lease.unitNumber}, {lease.facilityName}
+          {t('mo.headingForUnit', {
+            unit: lease.unitNumber,
+            facility: lease.facilityName,
+          })}
         </h1>
       </div>
 
       {lease.moveOutNoticeDays > 0 && (
         <p className="text-muted-foreground text-sm text-pretty">
-          This unit needs at least {lease.moveOutNoticeDays} day
-          {lease.moveOutNoticeDays === 1 ? "" : "s"} notice, so the earliest
-          date you can pick is {formatDate(lease.minMoveOutDate)}.
+          {plural(dict, lease.moveOutNoticeDays, 'mo.noticeOne', 'mo.noticeOther', {
+            days: lease.moveOutNoticeDays,
+            date: formatDate(lease.minMoveOutDate, locale),
+          })}
         </p>
       )}
 
@@ -241,7 +260,7 @@ export default async function PortalMoveOutPage({
           still exactly one date control on the page. */}
       <AdminForm
         action={requestMoveOutAction}
-        label="Request a move-out"
+        label={t('mo.formLabel')}
         className="flex flex-col gap-6"
       >
         <input type="hidden" name="leaseId" value={lease.leaseId} />
@@ -255,7 +274,7 @@ export default async function PortalMoveOutPage({
         <div className="flex flex-wrap items-end gap-2">
           <Field
             name="date"
-            label="Move-out date"
+            label={t('mo.date')}
             type="date"
             min={isoDate(lease.minMoveOutDate)}
             max={isoDate(maxMoveOutDate())}
@@ -267,7 +286,7 @@ export default async function PortalMoveOutPage({
             formAction="/portal/move-out"
             className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
           >
-            Update
+            {t('mo.update')}
           </button>
         </div>
 
@@ -276,23 +295,25 @@ export default async function PortalMoveOutPage({
           role="alert"
           className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-pretty text-red-900"
         >
-          {PORTAL_MOVE_OUT_PROBLEM_COPY[previewProblem]}
+          {t(PORTAL_MOVE_OUT_PROBLEM_KEYS[previewProblem], {
+            days: MAX_MOVE_OUT_DAYS_AHEAD,
+          })}
         </p>
       )}
 
       {preview && (
         <dl className="border-input flex flex-col gap-2 rounded-lg border p-4 text-sm">
           <div className="flex justify-between gap-4">
-            <dt>Current balance</dt>
+            <dt>{t('mo.currentBalance')}</dt>
             <dd className="tabular-nums">
               {preview.balanceCents < 0
-                ? `${formatRate(-preview.balanceCents)} in credit`
+                ? t('dash.inCredit', { amount: formatRate(-preview.balanceCents) })
                 : formatRate(preview.balanceCents)}
             </dd>
           </div>
           {preview.settlement.prorationCreditCents > 0 && (
             <div className="flex justify-between gap-4">
-              <dt>Credit for unused days</dt>
+              <dt>{t('mo.creditUnusedDays')}</dt>
               <dd className="tabular-nums">
                 −{formatRate(preview.settlement.prorationCreditCents)}
               </dd>
@@ -301,7 +322,7 @@ export default async function PortalMoveOutPage({
           {preview.settlement.recaptureCents > 0 && (
             <div className="flex justify-between gap-4">
               <dt>
-                Promotional discount recovered
+                {t('mo.promoRecovered')}
                 {/* B-145. The reason, on the screen the tenant agrees on — not
                     on the invoice afterwards. A charge whose first appearance
                     is a final statement is a chargeback. */}
@@ -317,10 +338,10 @@ export default async function PortalMoveOutPage({
           <div className="flex justify-between gap-4 border-t pt-2 font-medium">
             <dt>
               {preview.settlement.refundDueCents > 0
-                ? "Refund you should expect"
+                ? t('mo.refundExpected')
                 : preview.settlement.amountDueCents > 0
-                  ? "You will still owe"
-                  : "Settled in full"}
+                  ? t('mo.willStillOwe')
+                  : t('mo.settledInFull')}
             </dt>
             <dd className="tabular-nums">
               {formatRate(
@@ -341,15 +362,13 @@ export default async function PortalMoveOutPage({
         {preview && (
           <>
             <p className="text-muted-foreground text-sm text-pretty">
-              Your gate code and account stay active until{" "}
-              {formatDate(requestedDate)}. Our team will verify the unit is
-              empty before your account is finally closed.
+              {t('mo.activeUntil', { date: formatDate(requestedDate, locale) })}
             </p>
             <button
               type="submit"
               className="bg-primary text-primary-foreground inline-flex min-h-11 items-center justify-center self-start rounded-md px-4 text-sm font-medium"
             >
-              Request a move-out on {formatDate(requestedDate)}
+              {t('mo.requestOn', { date: formatDate(requestedDate, locale) })}
             </button>
           </>
         )}

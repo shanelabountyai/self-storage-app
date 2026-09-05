@@ -1,6 +1,7 @@
 'use client'
 
 import { useFormStatus } from 'react-dom'
+import { useT } from '@/components/i18n/locale-provider'
 
 // PRD 03 US-8 AC4's accessibility criteria (B-086 part 2). The submit control
 // for a phone unlock, and the only reason it is a component of its own.
@@ -26,6 +27,7 @@ import { useFormStatus } from 'react-dom'
 // gate at night actually needs.
 
 export function UnlockButton({ label }: { label: string }) {
+  const t = useT()
   const { pending } = useFormStatus()
 
   return (
@@ -35,7 +37,7 @@ export function UnlockButton({ label }: { label: string }) {
       disabled={pending}
       className="bg-primary text-primary-foreground inline-flex min-h-11 items-center justify-center rounded-md px-4 text-sm font-medium disabled:opacity-70"
     >
-      {pending ? 'Opening the gate…' : label}
+      {pending ? t('unlock.opening') : label}
     </button>
   )
 }

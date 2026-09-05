@@ -3,8 +3,12 @@ import Link from 'next/link'
 import { requireTenantActor } from '@/lib/rbac/session'
 import { paymentPlansForTenant } from '@/lib/portal/payment-plan'
 import { formatCalendarDate, formatRate } from '@/lib/format'
+import { dictionaryFor, translate, type MessageKey } from '@/lib/i18n'
+import { getLocale } from '@/lib/i18n/server'
 
-export const metadata: Metadata = { title: 'Payment plan' }
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: translate(dictionaryFor(await getLocale()), 'plan.title') }
+}
 
 // PRD 01 §9 (B-090 part 3). "Delinquency self-cure UX beyond banner (payment
 // plans)". Read-only — see the comment in lib/portal/payment-plan.ts for why.
@@ -24,23 +28,32 @@ function formatAgreedOn(date: Date): string {
 // to know what they now owe and what to do, not only that it ended. All of it
 // is words: nothing on this page is carried by colour (WCAG 1.4.1 A), and the
 // language is the tenant's, not the ledger's (D-15).
-const STATUS_COPY: Record<string, string> = {
-  active: 'Active — keep to the dates below and collections stay paused.',
-  completed: 'Completed — this plan is paid off. Thank you for keeping to it.',
-  broken:
-    'Ended because a payment was missed. The whole balance on this unit is due now, and late fees and gate access have gone back to normal.',
-  cancelled:
-    'Cancelled, so it is no longer running. The balance on this unit is due under your normal terms.',
+const STATUS_KEYS: Record<string, MessageKey> = {
+  active: 'plan.status.active',
+  completed: 'plan.status.completed',
+  broken: 'plan.status.broken',
+  cancelled: 'plan.status.cancelled',
+}
+
+/// The one-word installment states. Only the three the schedule can render;
+/// `missed` and `late` are handled in the cell, which needs a date with them.
+const INSTALLMENT_STATUS_KEYS: Record<string, MessageKey> = {
+  paid: 'plan.status.paid',
+  due: 'plan.status.due',
+  upcoming: 'plan.status.upcoming',
 }
 
 export default async function PortalPaymentPlanPage() {
   const actor = await requireTenantActor()
   const plans = await paymentPlansForTenant(actor.tenantId)
+  const dict = dictionaryFor(await getLocale())
+  const t = (key: MessageKey, vars?: Record<string, string | number>) =>
+    translate(dict, key, vars)
 
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-xl font-semibold">Payment plan</h1>
+        <h1 className="text-xl font-semibold">{t('plan.title')}</h1>
         {/* D-96 (B-188). "Paying keeps you on track" was true of the code and
             not of the plan: only money that goes to the overdue balance the
             plan was set up over moves these installments, so a tenant paying
@@ -48,15 +61,12 @@ export default async function PortalPaymentPlanPage() {
             were current. The rule a tenant is held to has to be on the page
             they read before they pay (D-15 — their words, not ours). */}
         <p className="text-muted-foreground mt-1 max-w-prose text-sm text-pretty">
-          What was agreed and what&apos;s left. Your plan covers the amount that was already overdue
-          when it was set up — your regular rent is still due on its own date each month, on top of
-          the payments below. This page updates itself as your payments come in. Plans you have
-          finished with stay here so you can see what you paid.
+          {t('plan.intro')}
         </p>
       </div>
 
       {plans.length === 0 ? (
-        <p className="text-muted-foreground text-sm">You&apos;re not on a payment plan right now.</p>
+        <p className="text-muted-foreground text-sm">{t('plan.none')}</p>
       ) : (
         plans.map((plan) => {
           // The installment to pay next: the first one not yet covered, which
@@ -68,16 +78,25 @@ export default async function PortalPaymentPlanPage() {
             <section key={plan.id} className="border-input flex flex-col gap-3 rounded-lg border p-4">
               <div>
                 <h2 className="font-medium">
-                  {plan.facilityName} — Unit {plan.unitNumber} · agreed {formatAgreedOn(plan.createdAt)}
+                  {t('plan.heading', {
+                    facility: plan.facilityName,
+                    unit: plan.unitNumber,
+                    agreed: formatAgreedOn(plan.createdAt),
+                  })}
                 </h2>
-                <p className="text-sm text-pretty">{STATUS_COPY[plan.status] ?? plan.status}</p>
+                <p className="text-sm text-pretty">
+                  {STATUS_KEYS[plan.status] ? t(STATUS_KEYS[plan.status]) : plan.status}
+                </p>
                 {/* D-98 (B-190), tenant side. A replacement plan is agreed over
                     the arrears that were LEFT, so its own progress restarts at
                     zero — without this line the money the previous plan
                     collected is invisible and a chain of three reads as three
                     failures. */}
                 <p className="text-muted-foreground text-sm">
-                  {formatRate(plan.collectedCents)} paid of {formatRate(plan.totalCents)}.
+                  {t('plan.paidOf', {
+                    paid: formatRate(plan.collectedCents),
+                    total: formatRate(plan.totalCents),
+                  })}
                 </p>
               </div>
 
@@ -92,33 +111,34 @@ export default async function PortalPaymentPlanPage() {
                   they kept to the plan. */}
               {plan.status === 'active' && (
                 <p className="max-w-prose text-sm text-pretty">
-                  {plan.autoCollectEffective
-                    ? "We'll charge your card on file for each payment on the date it's due — you don't need to do anything."
-                    : "You'll need to make each payment yourself by the date it's due. We won't charge your card automatically for these."}
+                  {plan.autoCollectEffective ? t('plan.autoCollect') : t('plan.selfPay')}
                 </p>
               )}
 
               <table className="w-full text-sm">
                 <caption className="sr-only">
-                  Installment schedule for unit {plan.unitNumber}, agreed {formatAgreedOn(plan.createdAt)}
+                  {t('plan.caption', {
+                    unit: plan.unitNumber,
+                    agreed: formatAgreedOn(plan.createdAt),
+                  })}
                 </caption>
                 <thead>
                   <tr className="border-b text-left">
                     <th scope="col" className="py-1 font-medium">
-                      Due
+                      {t('plan.colDue')}
                     </th>
                     <th scope="col" className="py-1 text-right font-medium">
-                      Amount
+                      {t('plan.colAmount')}
                     </th>
                     {/* B-192. What a tenant reads a schedule for is "how much is
                         left after this one", and the subtraction was left to
                         them. Same column as the staff schedule, so the two
                         never disagree over the phone. */}
                     <th scope="col" className="py-1 text-right font-medium">
-                      Left after
+                      {t('plan.colLeftAfter')}
                     </th>
                     <th scope="col" className="py-1 font-medium">
-                      Status
+                      {t('plan.colStatus')}
                     </th>
                   </tr>
                 </thead>
@@ -143,11 +163,15 @@ export default async function PortalPaymentPlanPage() {
                           false. */}
                       <td className="py-1 capitalize">
                         {installment.status === 'missed' ? (
-                          <span className="font-medium text-red-800">Missed</span>
+                          <span className="font-medium text-red-800">{t('plan.missed')}</span>
                         ) : installment.status === 'late' ? (
                           <span className="font-medium normal-case">
-                            Late — pay by {formatCalendarDate(installment.graceEndsOn)}
+                            {t('plan.lateBy', {
+                              date: formatCalendarDate(installment.graceEndsOn),
+                            })}
                           </span>
+                        ) : INSTALLMENT_STATUS_KEYS[installment.status] ? (
+                          t(INSTALLMENT_STATUS_KEYS[installment.status])
                         ) : (
                           installment.status
                         )}
@@ -169,13 +193,16 @@ export default async function PortalPaymentPlanPage() {
                     href={`/portal/pay?lease=${plan.leaseId}&amount=${due.amountCents / 100}`}
                     className="bg-primary text-primary-foreground inline-flex min-h-11 w-fit items-center justify-center rounded-md px-4 text-sm font-medium"
                   >
-                    Pay {formatRate(due.amountCents)} due {formatCalendarDate(due.dueDate)}
+                    {t('plan.payDue', {
+                      amount: formatRate(due.amountCents),
+                      date: formatCalendarDate(due.dueDate),
+                    })}
                   </Link>
                   <Link
                     href={`/portal/pay?lease=${plan.leaseId}`}
                     className="inline-flex min-h-11 items-center text-sm underline underline-offset-4"
                   >
-                    Pay my whole balance on this unit instead
+                    {t('plan.payWholeInstead')}
                   </Link>
                 </div>
               )}
@@ -184,7 +211,7 @@ export default async function PortalPaymentPlanPage() {
                   href={`/portal/pay?lease=${plan.leaseId}`}
                   className="inline-flex min-h-11 w-fit items-center text-sm underline underline-offset-4"
                 >
-                  Pay my balance on this unit
+                  {t('plan.payBalance')}
                 </Link>
               )}
             </section>

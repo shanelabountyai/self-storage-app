@@ -62,6 +62,27 @@ describe('i18n dictionaries', () => {
     expect(invented).toEqual([])
   })
 
+  it('spells English apostrophes the way the JSX did', () => {
+    // This is the third time this bug class has been caught by hand and the
+    // first time it is caught by a test. The pages these strings came out of
+    // wrote `&apos;`, which renders a STRAIGHT apostrophe — so lifting the copy
+    // into a dictionary with a typographic one (’) silently changed the English
+    // on 56 portal strings, and the only thing that noticed was an e2e
+    // assertion on "You're on a payment plan".
+    //
+    // It is a real change, not a nit: a curly apostrophe breaks every by-text
+    // locator and every operator's ⌘F. B-090f had to restore it once
+    // character-for-character across the checkout, and B-260 reintroduced it
+    // across the portal.
+    //
+    // Spanish is deliberately NOT checked — nothing in this repo pins its
+    // punctuation, and « » and ’ are correct there.
+    const curly = Object.entries(en)
+      .filter(([, value]) => value.includes('\u2019'))
+      .map(([key]) => key)
+    expect(curly).toEqual([])
+  })
+
   it('leaves no empty translation', () => {
     // An empty string type-checks and renders a blank label.
     const blank = Object.keys(en).filter((key) => !es[key as keyof typeof en].trim())

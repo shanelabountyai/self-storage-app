@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { restoreShortfallCents } from '@storage/core/access'
 import { formatCents } from '@/lib/format'
+import { useT } from '@/components/i18n/locale-provider'
 
 // PRD 01 US-703 / D-16 (B-232). "Pay a different amount", with the one
 // consequence it never mentioned.
@@ -35,6 +36,7 @@ export function PayAmountForm({
   restoreAtOrBelowCents: number
   accessSuspended: boolean
 }) {
+  const t = useT()
   const [typed, setTyped] = useState((amountCents / 100).toFixed(2))
 
   const shortfallCents = restoreShortfallCents({ facilityBalanceCents, restoreAtOrBelowCents })
@@ -47,8 +49,11 @@ export function PayAmountForm({
   const note = !accessSuspended
     ? ''
     : payingCents >= shortfallCents
-      ? `${formatCents(payingCents)} reopens your gate, usually within a couple of minutes.`
-      : `${formatCents(payingCents)} will not reopen your gate. ${formatCents(shortfallCents)} will.`
+      ? t('amtform.reopens', { amount: formatCents(payingCents) })
+      : t('amtform.willNotReopen', {
+          amount: formatCents(payingCents),
+          needed: formatCents(shortfallCents),
+        })
 
   // B-248's delay, for B-248's reason: typing "437.50" mutates `note` six
   // times, and a polite region does not coalesce those — NVDA queues each text
@@ -63,7 +68,7 @@ export function PayAmountForm({
     <form method="GET" className="mt-3 flex flex-col gap-3">
       <input type="hidden" name={subject.field} value={subject.id} />
       <label className="flex flex-col gap-1 text-sm">
-        Amount in dollars
+        {t('amtform.label')}
         <input
           name="amount"
           type="text"
@@ -85,7 +90,7 @@ export function PayAmountForm({
         type="submit"
         className="border-input hover:bg-accent inline-flex min-h-11 items-center justify-center rounded-md border px-4 text-sm font-medium"
       >
-        Update amount
+        {t('amtform.update')}
       </button>
     </form>
   )

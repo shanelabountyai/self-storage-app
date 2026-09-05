@@ -9,6 +9,8 @@ import {
   saveAddressAction,
   saveContactDetailsAction,
 } from './actions'
+import { dictionaryFor, translate, type MessageKey } from '@/lib/i18n'
+import { getLocale } from '@/lib/i18n/server'
 
 export const metadata: Metadata = { title: 'Contact details' }
 
@@ -40,37 +42,41 @@ export default async function ContactPage() {
     currentAddress(actor.tenantId),
     addressHistory(actor.tenantId),
   ])
+  const locale = await getLocale()
+  const dict = dictionaryFor(locale)
+  const t = (key: MessageKey, vars?: Record<string, string | number>) =>
+    translate(dict, key, vars)
 
   return (
     <div className="flex flex-col gap-8">
-      <h1 className="text-xl font-semibold">Contact details</h1>
+      <h1 className="text-xl font-semibold">{t('cont.title')}</h1>
 
       <section aria-labelledby="details-heading" className="flex flex-col gap-3">
         <h2 id="details-heading" className="font-medium">
-          Phone and alternate contact
+          {t('cont.phoneSection')}
         </h2>
         <AdminForm
           action={saveContactDetailsAction}
-          label="Phone and alternate contact"
+          label={t('cont.phoneSection')}
           className="flex flex-col gap-3"
         >
-          <Field name="phone" label="Phone" type="tel" defaultValue={tenant.phone ?? ''} className={FIELD_CLASS} />
+          <Field name="phone" label={t('cont.phone')} type="tel" defaultValue={tenant.phone ?? ''} className={FIELD_CLASS} />
           <Field
             name="altContactName"
-            label="Alternate contact name"
+            label={t('cont.altName')}
             defaultValue={tenant.altContactName ?? ''}
             className={FIELD_CLASS}
           />
           <Field
             name="altContactPhone"
-            label="Alternate contact phone"
+            label={t('cont.altPhone')}
             type="tel"
             defaultValue={tenant.altContactPhone ?? ''}
             className={FIELD_CLASS}
           />
           <Field
             name="altContactEmail"
-            label="Alternate contact email"
+            label={t('cont.altEmail')}
             type="email"
             defaultValue={tenant.altContactEmail ?? ''}
             className={FIELD_CLASS}
@@ -79,37 +85,36 @@ export default async function ContactPage() {
             type="submit"
             className="bg-primary text-primary-foreground mt-1 inline-flex min-h-11 items-center justify-center self-start rounded-md px-4 text-sm font-medium"
           >
-            Save details
+            {t('cont.saveDetails')}
           </button>
         </AdminForm>
       </section>
 
       <section aria-labelledby="address-heading" className="flex flex-col gap-3">
         <h2 id="address-heading" className="font-medium">
-          Mailing address
+          {t('cont.addressSection')}
         </h2>
         <p className="text-muted-foreground text-sm text-pretty">
-          This is where we post anything that has to reach you on paper, so it&apos;s worth keeping
-          current.
+          {t('cont.addressIntro')}
         </p>
-        <AdminForm action={saveAddressAction} label="Mailing address" className="flex flex-col gap-3">
+        <AdminForm action={saveAddressAction} label={t('cont.addressSection')} className="flex flex-col gap-3">
           <Field
             name="addressLine1"
-            label="Street address"
+            label={t('cont.address1')}
             defaultValue={address?.addressLine1 ?? ''}
             required
             className={FIELD_CLASS}
           />
           <Field
             name="addressLine2"
-            label="Apartment or unit (optional)"
+            label={t('cont.address2')}
             defaultValue={address?.addressLine2 ?? ''}
             className={FIELD_CLASS}
           />
-          <Field name="city" label="City" defaultValue={address?.city ?? ''} required className={FIELD_CLASS} />
+          <Field name="city" label={t('cont.city')} defaultValue={address?.city ?? ''} required className={FIELD_CLASS} />
           <Field
             name="state"
-            label="State"
+            label={t('cont.state')}
             defaultValue={address?.state ?? ''}
             maxLength={2}
             required
@@ -117,7 +122,7 @@ export default async function ContactPage() {
           />
           <Field
             name="postalCode"
-            label="ZIP code"
+            label={t('cont.postalCode')}
             inputMode="numeric"
             defaultValue={address?.postalCode ?? ''}
             required
@@ -127,19 +132,19 @@ export default async function ContactPage() {
             type="submit"
             className="bg-primary text-primary-foreground mt-1 inline-flex min-h-11 items-center justify-center self-start rounded-md px-4 text-sm font-medium"
           >
-            Save address
+            {t('cont.saveAddress')}
           </button>
         </AdminForm>
 
         {history.length > 1 && (
           <details className="border-input rounded-lg border p-4">
-            <summary className="cursor-pointer text-sm font-medium">Previous addresses</summary>
+            <summary className="cursor-pointer text-sm font-medium">{t('cont.previousAddresses')}</summary>
             <ul className="mt-3 flex flex-col gap-2 text-sm">
               {history.slice(1).map((row) => (
                 <li key={row.id} className="text-muted-foreground">
                   {row.addressLine1}
                   {row.addressLine2 ? `, ${row.addressLine2}` : ''}, {row.city} {row.state}{' '}
-                  {row.postalCode} — until {formatWhen(row.createdAt)}
+                  {row.postalCode} — {t('cont.until', { date: formatWhen(row.createdAt) })}
                 </li>
               ))}
             </ul>
@@ -149,19 +154,18 @@ export default async function ContactPage() {
 
       <section aria-labelledby="email-heading" className="flex flex-col gap-3">
         <h2 id="email-heading" className="font-medium">
-          Email address
+          {t('cont.emailSection')}
         </h2>
         <p className="text-sm">
-          Your email is <strong>{tenant.email}</strong>. It&apos;s also how you sign in.
+          {t('cont.emailIsBefore')} <strong>{tenant.email}</strong>. {t('cont.emailIsAfter')}
         </p>
         <p className="text-muted-foreground text-sm text-pretty">
-          To change it, we send a link to the new address to make sure it reaches you — and let your
-          current address know, in case it wasn&apos;t you asking.
+          {t('cont.emailChangeIntro')}
         </p>
-        <AdminForm action={requestEmailChangeAction} label="Change email address" className="flex flex-col gap-3">
+        <AdminForm action={requestEmailChangeAction} label={t('cont.changeEmailFormLabel')} className="flex flex-col gap-3">
           <Field
             name="email"
-            label="New email address"
+            label={t('cont.newEmail')}
             type="email"
             inputMode="email"
             required
@@ -171,13 +175,13 @@ export default async function ContactPage() {
             type="submit"
             className="border-input hover:bg-accent inline-flex min-h-11 items-center justify-center self-start rounded-md border px-4 text-sm font-medium"
           >
-            Send confirmation link
+            {t('cont.sendConfirmation')}
           </button>
         </AdminForm>
       </section>
 
       <Link href="/portal" className="text-sm underline underline-offset-4">
-        Back to my account
+        {t('paypg.backToAccount')}
       </Link>
     </div>
   )

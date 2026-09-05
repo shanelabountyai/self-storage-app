@@ -6,6 +6,7 @@ import {
   type NotificationChannelKey,
 } from '@storage/core/comms'
 import { applySmsStop } from '@/lib/comms/sms-consent'
+import type { MessageKey } from '@/lib/i18n'
 
 // PRD 05 CN-13 (B-074). The tenant preference center's own read/write side —
 // thin, since the storage and default rules live in
@@ -13,12 +14,24 @@ import { applySmsStop } from '@/lib/comms/sms-consent'
 
 export const NOTIFICATION_CATEGORIES: readonly {
   key: NotificationCategoryKey
-  label: string
-  description: string
+  /// B-260 (D-122): keys, not words. The label is also the accessible name of
+  /// two checkboxes per row, so a mismatch between the visible category and the
+  /// spoken one is a 2.5.3 failure — one entry per concept keeps them the same
+  /// string in either language.
+  labelKey: MessageKey
+  descriptionKey: MessageKey
 }[] = [
-  { key: 'payment_reminders', label: 'Payment reminders', description: 'Rent due soon, due today, a card that needs updating.' },
-  { key: 'receipts', label: 'Receipts', description: 'A copy of what was charged, each time.' },
-  { key: 'operational_notices', label: 'Operational notices', description: 'Gate access, unit locks, insurance proof.' },
+  {
+    key: 'payment_reminders',
+    labelKey: 'notif.cat.payment_reminders',
+    descriptionKey: 'notif.cat.payment_reminders.desc',
+  },
+  { key: 'receipts', labelKey: 'notif.cat.receipts', descriptionKey: 'notif.cat.receipts.desc' },
+  {
+    key: 'operational_notices',
+    labelKey: 'notif.cat.operational_notices',
+    descriptionKey: 'notif.cat.operational_notices.desc',
+  },
 ]
 
 export type PreferenceGrid = Record<NotificationCategoryKey, Record<NotificationChannelKey, boolean>>

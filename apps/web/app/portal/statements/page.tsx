@@ -4,8 +4,12 @@ import { requireTenantActor } from '@/lib/rbac/session'
 import { statementsForTenant } from '@/lib/billing/statements'
 import { statementPeriodSegment } from '@/lib/billing/statement-period'
 import { formatCents } from '@/lib/format'
+import { dictionaryFor, translate, type MessageKey } from '@/lib/i18n'
+import { getLocale } from '@/lib/i18n/server'
 
-export const metadata: Metadata = { title: 'Statements' }
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: translate(dictionaryFor(await getLocale()), 'stmt.title') }
+}
 
 // PRD 01 US-705 (B-102). "Monthly statements."
 //
@@ -16,7 +20,11 @@ export const metadata: Metadata = { title: 'Statements' }
 
 export default async function StatementsPage() {
   const actor = await requireTenantActor()
-  const statements = await statementsForTenant(actor.tenantId)
+  const locale = await getLocale()
+  const dict = dictionaryFor(locale)
+  const t = (key: MessageKey, vars?: Record<string, string | number>) =>
+    translate(dict, key, vars)
+  const statements = await statementsForTenant(actor.tenantId, new Date(), locale)
 
   // Grouped by lease so a tenant with three units gets three lists rather than
   // one interleaved column where every month appears three times.
@@ -67,14 +75,11 @@ export default async function StatementsPage() {
   return (
     <div className="flex flex-col gap-8">
       <header className="flex flex-col gap-2">
-        <h1 className="text-xl font-semibold">Statements</h1>
-        <p className="text-muted-foreground max-w-prose text-sm text-pretty">
-          A month-by-month record for each unit: what you owed at the start, everything charged and
-          paid, and what was left at the end.
-        </p>
+        <h1 className="text-xl font-semibold">{t('stmt.title')}</h1>
+        <p className="text-muted-foreground max-w-prose text-sm text-pretty">{t('stmt.intro')}</p>
         <p className="text-sm">
           <Link href="/portal/documents" className="underline underline-offset-4">
-            Individual receipts and your agreement
+            {t('stmt.receiptsLink')}
           </Link>
         </p>
       </header>
@@ -87,7 +92,7 @@ export default async function StatementsPage() {
         >
           <h2 id={`account-${account.id}`} className="font-medium">
             {account.name}
-            <span className="text-muted-foreground font-normal"> · all units</span>
+            <span className="text-muted-foreground font-normal"> {t('stmt.allUnits')}</span>
           </h2>
 
           <ul className="flex flex-col gap-2">
@@ -102,10 +107,12 @@ export default async function StatementsPage() {
                     className={`tabular-nums ${month.closingBalanceCents > 0 ? 'font-medium text-red-800' : 'text-muted-foreground'}`}
                   >
                     {month.closingBalanceCents > 0
-                      ? `${formatCents(month.closingBalanceCents)} owed at month end`
+                      ? t('stmt.owedAtEnd', { amount: formatCents(month.closingBalanceCents) })
                       : month.closingBalanceCents < 0
-                        ? `${formatCents(-month.closingBalanceCents)} in credit at month end`
-                        : 'Settled'}
+                        ? t('stmt.creditAtEnd', {
+                            amount: formatCents(-month.closingBalanceCents),
+                          })
+                        : t('stmt.settled')}
                   </span>
                 </Link>
               </li>
@@ -116,8 +123,7 @@ export default async function StatementsPage() {
 
       {statements.length === 0 && (
         <p className="text-muted-foreground text-sm text-pretty">
-          You don&apos;t have any statements yet. Your first one appears at the end of your first
-          month.
+          {t('stmt.none')}
         </p>
       )}
 
@@ -128,7 +134,7 @@ export default async function StatementsPage() {
           className="flex flex-col gap-3"
         >
           <h2 id={`lease-${group[0].leaseId}`} className="font-medium">
-            Unit {group[0].unitNumber}
+            {t('dash.unitNumber', { unit: group[0].unitNumber })}
             <span className="text-muted-foreground font-normal"> · {group[0].facilityName}</span>
           </h2>
 
@@ -151,10 +157,12 @@ export default async function StatementsPage() {
                     className={`tabular-nums ${statement.closingBalanceCents > 0 ? 'font-medium text-red-800' : 'text-muted-foreground'}`}
                   >
                     {statement.closingBalanceCents > 0
-                      ? `${formatCents(statement.closingBalanceCents)} owed at month end`
+                      ? t('stmt.owedAtEnd', { amount: formatCents(statement.closingBalanceCents) })
                       : statement.closingBalanceCents < 0
-                        ? `${formatCents(-statement.closingBalanceCents)} in credit at month end`
-                        : 'Settled'}
+                        ? t('stmt.creditAtEnd', {
+                            amount: formatCents(-statement.closingBalanceCents),
+                          })
+                        : t('stmt.settled')}
                   </span>
                 </Link>
               </li>

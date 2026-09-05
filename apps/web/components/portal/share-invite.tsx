@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useT } from '@/components/i18n/locale-provider'
 
 // PRD 10 §5.2 (B-100) — "the central decision", in the PRD's own words.
 //
@@ -32,6 +33,7 @@ import { useState } from 'react'
 // page regardless of whether any of this JavaScript runs at all.
 
 export function ShareInvite({ code, message }: { code: string; message: string }) {
+  const t = useT()
   const [copied, setCopied] = useState(false)
   const [failed, setFailed] = useState(false)
 
@@ -68,14 +70,14 @@ export function ShareInvite({ code, message }: { code: string; message: string }
         onClick={share}
         className="border-input hover:bg-accent inline-flex min-h-11 items-center justify-center rounded-md border px-4 text-sm font-medium"
       >
-        Share invite {code}
+        {t('invite.share', { code })}
       </button>
       {/* Pre-mounted and empty rather than inserted with its own text — the
           B-111 lesson: a live region that appears WITH its content announces
           nothing. */}
       <p role="status" className="text-muted-foreground mt-1 text-xs empty:mt-0">
-        {copied ? 'Copied — paste it into a message to your friend.' : ''}
-        {failed ? 'Copy the code above and send it however you like.' : ''}
+        {copied ? t('invite.copied') : ''}
+        {failed ? t('invite.copyFailed') : ''}
       </p>
     </>
   )

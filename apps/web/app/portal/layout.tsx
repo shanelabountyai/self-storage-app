@@ -9,6 +9,10 @@ import { PortalNav } from '@/components/portal/portal-nav'
 import { ForbiddenError } from '@/lib/rbac/authorize'
 import { currentImpersonation, hasStaleImpersonationCookie } from '@/lib/impersonation/context'
 import { ImpersonationBanner } from '@/components/impersonation/banner'
+import { LocaleProvider } from '@/components/i18n/locale-provider'
+import { LanguageToggle } from '@/components/site/language-toggle'
+import { dictionaryFor, translate } from '@/lib/i18n'
+import { getLocale } from '@/lib/i18n/server'
 
 // PRD 01 §4.7 US-701. The portal shell: every route under here requires a
 // signed-in tenant. proxy.ts already redirects a signed-out visit before this
@@ -23,6 +27,14 @@ export default async function PortalLayout({ children }: { children: React.React
   // here, and `requireTenantActor()` succeeds for them because
   // `currentActor()` has already swapped in the subject.
   const impersonation = await currentImpersonation()
+  // B-260 (D-122). B-090f translated the move-in path and sent the renter here
+  // with "Ir a mi cuenta" — into an English account. The portal is outside the
+  // `(public)` route group, so it inherits neither the provider nor the
+  // toggle; both are mounted here for the same reasons they are mounted there.
+  const locale = await getLocale()
+  const dict = dictionaryFor(locale)
+  const t = (key: Parameters<typeof translate>[1], vars?: Record<string, string | number>) =>
+    translate(dict, key, vars)
 
   let tenantId: string
   try {
@@ -46,7 +58,8 @@ export default async function PortalLayout({ children }: { children: React.React
   // down to four links because nine wrapped to four lines at 360px, and a
   // fifth belongs there only for the tenants it is about.
   const showPaymentPlan = await hasAnyPaymentPlan(tenantId)
-  const userName = impersonation?.subjectName ?? session?.user?.name ?? 'your account'
+  const userName =
+    impersonation?.subjectName ?? session?.user?.name ?? t('portal.yourAccountFallback')
 
   // B-239. Paying was reachable only from the lease card on Overview, so the
   // one thing collections depends on had no permanent route while Move out —
@@ -64,17 +77,18 @@ export default async function PortalLayout({ children }: { children: React.React
       ? null
       : {
           href: owing.length === 1 ? `/portal/pay?lease=${owing[0].leaseId}` : '/portal',
-          label: `Pay ${formatRate(owedCents)}`,
+          label: t('portal.pay', { amount: formatRate(owedCents) }),
         }
 
   return (
-    <div className="flex min-h-screen flex-col">
+    <LocaleProvider locale={locale} dict={dict}>
+      <div className="flex min-h-screen flex-col">
       <ImpersonationBanner />
       <a
         href="#main"
         className="bg-background focus:ring-ring sr-only rounded-md px-4 py-2 text-sm font-medium focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:ring-2"
       >
-        Skip to main content
+        {t('chrome.skipToMain')}
       </a>
 
       <header className="border-b">
@@ -85,6 +99,13 @@ export default async function PortalLayout({ children }: { children: React.React
               What stays here is the DATA: which links to show, and what the
               Pay action points at. */}
           <PortalNav pay={pay} showPaymentPlan={showPaymentPlan} />
+
+          {/* B-260. Last in the header, as on the public site — a preference
+              rather than a destination. It sits INSIDE the portal shell and not
+              only on the public one because a tenant who set Spanish while
+              renting has no other way to change it back once they are signed
+              in, and the checkout hands them straight here. */}
+          <LanguageToggle locale={locale} />
           {/* FR-13's courtesy half. Hiding is not the control — the write
               block in proxy.ts refuses the POST either way — but "Sign out"
               during a support session would sign the STAFF member out of their
@@ -99,7 +120,7 @@ export default async function PortalLayout({ children }: { children: React.React
               }}
             >
               <button type="submit" className="text-sm underline underline-offset-2">
-                Sign out
+                {t('portal.signOut')}
               </button>
             </form>
           )}
@@ -136,6 +157,7 @@ export default async function PortalLayout({ children }: { children: React.React
           </Link>
         </div>
       )}
-    </div>
+      </div>
+    </LocaleProvider>
   )
 }
