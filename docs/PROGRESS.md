@@ -8777,11 +8777,11 @@ pointed at `alex.active5`, and **B-256** gave that exact lease an unpaid month s
 the business-account card would have a money state to render — so the builder
 was correctly offered and the assertion had been failing since B-256 without
 being about B-256 at all. Fixed here, after reproducing it on `d5903cc` first.
-**`/admin/access has no WCAG 2.1 AA violations` fails on `th-has-data-cells`
-and is NOT fixed**: it reproduces identically on `d5903cc` with a freshly seeded
-database, so it is neither this branch's nor local state. It is a staff screen
-and outside this row; it needs a hand-check and a `HAND_CHECKED_INCOMPLETE`
-entry, or a real fix, and it owns no row yet.
+**`/admin/access has no WCAG 2.1 AA violations` was also failing**, on
+`th-has-data-cells`, and reproduces identically on `d5903cc` with a freshly
+seeded database — neither this branch's nor local state. Attributing it turned
+out to matter: it was not a tool limitation but a real missing table cell, fixed
+in `23feb38` with its own entry below.
 
 **What it left behind.**
 - **The duplicate-content corpus is English only.** Comparing a Spanish

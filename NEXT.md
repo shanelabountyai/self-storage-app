@@ -36,13 +36,16 @@ PRD 04's "Multilingual SEO — English-only in MVP" is reversed (**D-123**).
    both URLs** until somebody writes the Spanish box. That is the operator's
    words staying the operator's words (D-122), not a gap to close in code.
 
-## A pre-existing failure that is nobody's row
+## A pre-existing failure, since fixed (`23feb38`)
 
-**`/admin/access has no WCAG 2.1 AA violations` fails** on `th-has-data-cells`
-("Table data cells are missing or empty"). It reproduces on `d5903cc` with a
-freshly seeded database, so it predates B-262 and is not local state. The
-repo's own policy is to hand-check an axe-undecidable and add a route-scoped
-`HAND_CHECKED_INCOMPLETE` entry — or fix the table. Either way it needs a row.
+`/admin/access has no WCAG 2.1 AA violations` was failing on
+`th-has-data-cells` before B-262 and had nothing to do with it. It was **not** a
+tool limitation: the gate log declared seven column headers and rendered six
+cells, so everything from Unit rightward sat under the wrong heading and Flags
+was empty on every row. `assertTableShape` now checks table shape directly on
+every admin route the a11y loop visits, because axe only sees this bug when a
+header points at nothing — a missing MIDDLE cell passes axe and mislabels every
+column after it. Nothing outstanding.
 
 ## Local setup notes for whoever picks this up
 
