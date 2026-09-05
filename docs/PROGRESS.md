@@ -8822,3 +8822,47 @@ Verified against a **production build** rather than the suite alone, per the
 sitemap emits `xhtml:link` alternates, `/guides` and `/es/guides` name each
 other, and the `FAQPage` JSON-LD on a Spanish facility URL carries Spanish
 questions.
+
+## /admin/access — the Unit column had a header and no cell (2026-09-05)
+
+**Commit:** `23feb38`
+
+Not a backlog row. Found because B-262's e2e sweep went red on
+`/admin/access has no WCAG 2.1 AA violations` and the failure had to be
+attributed before that branch could be reviewed — it reproduces on `d5903cc`
+with a freshly seeded database, so it predates the branch entirely.
+
+**What was wrong.** The gate log declared seven column headers — When,
+Facility, Who, Unit, How, Result, Flags — and rendered six `<td>` per row. The
+`Unit` cell was never written, though `AccessEventRow.unitNumber` has carried
+the value since B-084. Everything from Unit rightward therefore rendered one
+column to the left: the result under "How", the flags under "Result", and
+"Flags" empty on every row. That is the screen a manager reads after a theft
+claim, and B-086 part 2's whole point is that "Keypad" and "Phone" are
+different facts there — printed under the wrong heading.
+
+**What it decided.** The tempting reading was an axe limitation. `th-has-data-cells`
+returns *incomplete* rather than a violation, the house pattern puts a `colSpan`
+empty-state row inside the table (~10 admin screens do it), and the repo has a
+`HAND_CHECKED_INCOMPLETE` mechanism for exactly that. Dumping the rendered
+markup instead of reasoning about it showed 24 cells across 4 rows under 7
+headers. **A waiver would have recorded a hand-check that never happened, on a
+real defect.**
+
+`assertTableShape` (`e2e/a11y-helpers.ts`) now runs on every admin route the
+a11y loop already visits, so no new route list. It counts SLOTS
+(`colspan × rowspan`) rather than elements, which is what lets an empty-state
+`colSpan={7}` row and the delinquency report's `rowspan` facility column both
+pass. It exists because axe can only see the one shape of this bug where a
+header refers to nothing: a table missing a MIDDLE cell still has every header
+pointing at some cell, so axe passes it while every column after the gap is
+mislabelled.
+
+**What it left behind.** Nothing. Swept 25 admin routes; `/admin/access` was the
+only genuine mismatch, and the four the sweep first reported on
+`/admin/reports/delinquency` were its own false positives before `rowspan` was
+accounted for.
+
+**Test verification.** Typecheck clean; lint clean (6 pre-existing warnings);
+unit suite 4,183 passed, 8 skipped; `e2e/admin.spec.ts` 282 passed, including
+the scan that had been failing.
