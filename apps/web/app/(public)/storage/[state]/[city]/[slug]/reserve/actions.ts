@@ -6,6 +6,8 @@ import { publicFacilityBySlug } from '@/lib/facility/public-facility'
 import { publicInventoryForFacility } from '@/lib/inventory/public-inventory'
 import { fieldError, type FieldErrors, type FormState } from '@/lib/admin/form-state'
 
+import { getLocale } from '@/lib/i18n/server'
+import { localePath } from '@/lib/i18n/routing'
 // B-018 / US-401. Same return-don't-throw contract as the admin actions
 // (PRD 02 FR-19): a rejected reservation is a message beside the field, never
 // an error boundary.
@@ -81,5 +83,7 @@ export async function reserveAction(_prev: FormState, formData: FormData): Promi
     }
   }
 
-  redirect(`/reservations?token=${encodeURIComponent(result.token)}&new=1`)
+  redirect(
+    localePath(await getLocale(), `/reservations?token=${encodeURIComponent(result.token)}&new=1`),
+  )
 }

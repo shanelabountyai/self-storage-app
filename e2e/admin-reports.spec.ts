@@ -553,9 +553,21 @@ test.describe('city page copy', () => {
     // "Generated" as a word, not a colour or an icon (WCAG 1.4.1) — and the
     // generated text itself, so "clear the box to go back" is something an
     // operator can see rather than a claim a hint makes.
-    await expect(austin).toContainText('Generated')
+    //
+    // B-262: one box and one status PER LANGUAGE, because `/storage/tx/austin`
+    // and `/es/storage/tx/austin` are two pages with two columns behind them.
+    // The status is named per language for the same reason — "Generated" alone
+    // would be a claim about a city that can be written in one language and
+    // generated in the other.
+    await expect(austin).toContainText('English: Generated')
+    await expect(austin).toContainText('Español: Generated')
     await expect(austin).toContainText('We have')
-    await expect(austin.getByRole('textbox', { name: 'Intro copy' })).toHaveValue('')
+    // The generated SPANISH intro, not a translation of the English one and not
+    // the English one repeated: each language falls back to its own.
+    await expect(austin).toContainText('Tenemos')
+
+    await expect(austin.getByRole('textbox', { name: /Intro copy — English/ })).toHaveValue('')
+    await expect(austin.getByRole('textbox', { name: /Intro copy — Español/ })).toHaveValue('')
   })
 
   test('links to the live page it edits', async ({ page }) => {

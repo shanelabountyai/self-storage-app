@@ -533,8 +533,22 @@ test.describe('payment plans on the tenant profile', () => {
   // B-212. The builder used to render for every non-ended lease with no active
   // plan, so a current tenant got twelve fields over "$0.00 is past due" that
   // refused every submit.
+  //
+  // **The fixture moved out from under this test and B-262 found it red.** It
+  // pointed at `alex.active5`, and B-256 gave that exact lease an unpaid month
+  // — the primary facility's second active lease is what gives the business
+  // account card a money state to render. So the builder was correctly offered,
+  // this assertion was correctly failing, and it had been failing since B-256
+  // without being about B-256 at all. Nothing in that item's diff named this
+  // spec, which is how a seed change reaches a test that reads the seed by
+  // email.
+  //
+  // The tenant below is an active lease on a NON-primary facility, which is the
+  // property this test actually needs: `seedUnpaidRent` is called for the
+  // primary facility's `i === 1` lease only. Keep it that way if the seed moves
+  // again.
   test('is not offered on a lease with nothing past due', async ({ page }) => {
-    await page.goto('/admin/tenants?q=alex.active5@demo.example.com')
+    await page.goto('/admin/tenants?q=alex.active14@demo.example.com')
     await page.getByRole('link', { name: 'Alex Active' }).first().click()
 
     await expect(page.getByRole('region', { name: 'Actions' })).toBeVisible()

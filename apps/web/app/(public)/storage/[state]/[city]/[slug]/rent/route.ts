@@ -6,6 +6,8 @@ import { offerFor } from '@/lib/promotions/service'
 import { cookies } from 'next/headers'
 import { REFERRAL_COOKIE } from '@storage/core/marketing'
 
+import { getLocale } from '@/lib/i18n/server'
+import { localePath } from '@/lib/i18n/routing'
 // B-020. "Rent now" — starts a checkout session and redirects into the stepper.
 //
 // A route handler rather than a page: starting a checkout takes a unit off the
@@ -20,12 +22,20 @@ export async function POST(
   const form = await request.formData()
   const unitTypeId = String(form.get('unitTypeId') ?? '')
 
+  // B-262. Every redirect below has to land in the language the renter was
+  // reading. This POST arrives at `/es/storage/.../rent` and the proxy stamps
+  // the locale on it like any other request, so the answer is available here —
+  // what was missing was using it. A Spanish renter pressing "Rentar ahora"
+  // landed on the ENGLISH checkout, which is the exact failure this row exists
+  // to end, at the exact moment it costs most.
+  const locale = await getLocale()
+
   const facility = await publicFacilityBySlug(slug)
-  if (!facility) redirect('/storage/search')
+  if (!facility) redirect(localePath(locale, '/storage/search'))
 
   const inventory = await publicInventoryForFacility(slug)
   const unitType = inventory?.unitTypes.find((type) => type.unitTypeId === unitTypeId)
-  if (!unitType) redirect(`${facilityPath(facility)}?unavailable=1`)
+  if (!unitType) redirect(localePath(locale, `${facilityPath(facility)}?unavailable=1`))
 
   // The promotion the facility page just advertised, re-evaluated here from the
   // server's own view rather than accepted from the form. Without this the card
@@ -76,7 +86,7 @@ export async function POST(
 
   // Someone took the last one while they were reading. Honest, and back to the
   // list rather than into a checkout that cannot complete.
-  if (!started.ok) redirect(`${facilityPath(facility)}?soldout=1`)
+  if (!started.ok) redirect(localePath(locale, `${facilityPath(facility)}?soldout=1`))
 
-  redirect(`/checkout?token=${encodeURIComponent(started.token)}`)
+  redirect(localePath(locale, `/checkout?token=${encodeURIComponent(started.token)}`))
 }

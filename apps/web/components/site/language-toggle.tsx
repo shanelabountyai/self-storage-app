@@ -1,4 +1,3 @@
-import Link from 'next/link'
 import {
   dictionaryFor,
   LOCALE_NAMES,
@@ -17,6 +16,18 @@ import { hasSpanishTwin, localePath } from '@/lib/i18n/routing'
 // one: the address bar now says which language you are reading, and the link a
 // Spanish speaker copies stays Spanish for whoever opens it. It still works
 // with JavaScript off, for the same reason the checkout steps are forms.
+//
+// **A plain `<a>`, deliberately, and NOT `next/link`.** The root layout is what
+// carries `<html lang>`, and Next does not re-render it on a client-side
+// navigation — it is shared across the transition by design. So with `<Link>`
+// the toggle swapped every word on the page into Spanish and left the document
+// announced as `lang="en"`: SC 3.1.1 Language of Page, failed by the one
+// control on the site whose entire job is to change the language. It renders
+// correctly on a full load, so it is invisible to anything that navigates by
+// URL — the e2e caught it only because it CLICKS.
+//
+// The cost is a document navigation on a control somebody presses roughly once
+// per visit, which is the right side of that trade.
 //
 // One link per language rather than a `<select>` that needs a submit button
 // beside it, because there are two languages and there will not be three soon;
@@ -50,7 +61,7 @@ export function LanguageToggle({ locale, path }: { locale: Locale; path: string 
       {LOCALES.map((candidate) => {
         const current = candidate === locale
         return (
-          <Link
+          <a
             key={candidate}
             href={localePath(candidate, twinTarget)}
             hrefLang={candidate}
@@ -68,7 +79,7 @@ export function LanguageToggle({ locale, path }: { locale: Locale; path: string 
             }`}
           >
             {LOCALE_NAMES[candidate]}
-          </Link>
+          </a>
         )
       })}
     </div>

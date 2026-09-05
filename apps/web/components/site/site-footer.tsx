@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { LEGAL_PAGES, SITE } from '@/lib/site-config'
-import { dictionaryFor, translate, type Locale, type MessageKey } from '@/lib/i18n'
+import { dictionaryFor, translate, DEFAULT_LOCALE, type Locale, type MessageKey } from '@/lib/i18n'
 import { hasSpanishTwin, localePath } from '@/lib/i18n/routing'
 
 // B-090 part 6. The legal-page labels live in `site-config.ts` in English
@@ -30,15 +30,35 @@ export function SiteFooter({ locale }: { locale: Locale }) {
           <ul className="flex flex-wrap gap-x-2 gap-y-1">
             {LEGAL_PAGES.map((page) => (
               <li key={page.href}>
-                <Link
-                  // B-262: a legal page has no Spanish twin, so its link stays
-                  // unprefixed in both languages rather than pointing at a URL
-                  // the proxy would redirect straight back.
-                  href={hasSpanishTwin(page.href) ? localePath(locale, page.href) : page.href}
-                  className="hover:bg-accent inline-flex min-h-11 items-center rounded-md px-2 text-sm underline underline-offset-4"
-                >
-                  {t(NAV_KEYS[page.href])}
-                </Link>
+                {/* B-262. A legal page has no Spanish twin, so its link stays
+                    unprefixed in both languages rather than pointing at a URL
+                    the proxy would redirect straight back.
+
+                    That makes it a CROSS-LOCALE link when the reader is on
+                    `/es/…`, and a cross-locale link cannot be a `<Link>`: Next
+                    keeps the root layout across a client-side navigation, so
+                    `/terms` would render its English prose inside a document
+                    still announced as `lang="es"` — SC 3.1.1, and the same bug
+                    the language toggle has. A plain anchor forces the document
+                    load that re-reads the language. */}
+                {hasSpanishTwin(page.href) ? (
+                  <Link
+                    href={localePath(locale, page.href)}
+                    className="hover:bg-accent inline-flex min-h-11 items-center rounded-md px-2 text-sm underline underline-offset-4"
+                  >
+                    {t(NAV_KEYS[page.href])}
+                  </Link>
+                ) : (
+                  <a
+                    href={page.href}
+                    // The target is English whatever this page is in, and a
+                    // screen reader is owed that (SC 3.1.2 Language of Parts).
+                    hrefLang={DEFAULT_LOCALE}
+                    className="hover:bg-accent inline-flex min-h-11 items-center rounded-md px-2 text-sm underline underline-offset-4"
+                  >
+                    {t(NAV_KEYS[page.href])}
+                  </a>
+                )}
               </li>
             ))}
           </ul>

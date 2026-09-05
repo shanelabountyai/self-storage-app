@@ -349,7 +349,11 @@ function bestOutcome(outcomes: readonly CodeOutcome[]): CodeOutcome | null {
   return [...outcomes].sort((a, b) => rank[a.kind] - rank[b.kind])[0] ?? null
 }
 
-function UnitTypeCard({
+// B-262: async so it can read the locale for its "Rent now" action. The card is
+// several components below `FacilityPage`, which has it — threading a prop
+// through `UnitList` for one form attribute would be a wider change than
+// reading the request again, and `getLocale()` is a header lookup.
+async function UnitTypeCard({
   unitType,
   phone,
   pricing,
@@ -371,6 +375,7 @@ function UnitTypeCard({
   code: string | null
   dict: Dictionary
 }) {
+  const locale = await getLocale()
   const t = (key: MessageKey, vars?: Record<string, string | number>) =>
     translate(dict, key, vars)
   const available = unitType.availableCount
@@ -468,7 +473,14 @@ function UnitTypeCard({
             {/* POST, not a link: starting a checkout takes a unit off the
                 market, so it must not fire on a prefetch or a back-button
                 visit (B-020). */}
-            <form method="POST" action={`${facilityPath(facility)}/rent`}>
+            {/* B-262. The ACTION carries the locale, not just the links. The
+                route handler reads `getLocale()` to decide where to send the
+                renter next, and it reads it from the URL this posts to — so an
+                unprefixed action put a Spanish renter into the English
+                checkout at the moment the money moves. It renders correctly
+                and redirects wrongly, which is why only a clicking test found
+                it. */}
+            <form method="POST" action={localePath(locale, `${facilityPath(facility)}/rent`)}>
               <input type="hidden" name="unitTypeId" value={unitType.unitTypeId} />
               {code && <input type="hidden" name="promo" value={code} />}
               <button
@@ -1156,7 +1168,10 @@ export default async function FacilityPage({
               <span className="text-muted-foreground font-normal">{t('card.perMonth')}</span>
             </p>
             <div className="flex gap-2">
-              <form method="POST" action={`${facilityPath(facility)}/rent`}>
+              <form
+                method="POST"
+                action={localePath(locale, `${facilityPath(facility)}/rent`)}
+              >
                 <input type="hidden" name="unitTypeId" value={cheapestAvailable.unitTypeId} />
                 {/* B-122. The sticky bar starts the same checkout as a card, so
                     it has to carry the same code — a renter who applied one and
