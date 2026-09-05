@@ -66,6 +66,17 @@ export function instructionFor(
         code: context.code,
         reason: 'This tenant has moved out and should no longer get through the gate.',
       }
+    case 'revoke_credential':
+      return {
+        action: `Remove ONE credential for ${who}${unit} from the keypad — leave their other codes alone.`,
+        // Never the secret. This command only ever carries a `mobile_key`
+        // today (B-086 part 2) and that value is a 256-bit token nobody can
+        // key in; printing it on a task sheet would leak a working credential
+        // onto a clipboard for no possible use.
+        code: null,
+        reason:
+          'One of this tenant\u2019s credentials has been withdrawn — a lost phone, typically. Their own gate code is unchanged and must keep working.',
+      }
     case 'set_time_window':
       return {
         action: `Set the access schedule for ${who}${unit} to match the facility's published gate hours.`,

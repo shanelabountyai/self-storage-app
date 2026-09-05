@@ -38,8 +38,13 @@ export async function provisionAccessForLease(leaseId: string): Promise<AccessPr
   // suspended and who is now renting another unit must have the grant
   // reactivated whether or not a credential already exists, which is what the
   // per-lease version did too. Only the minting changes.
+  //
+  // B-086 part 2: scoped to `pin`. A tenant who enrolled phone unlock holds a
+  // second active credential on this grant, and without the filter their next
+  // move-in would read as already provisioned and mint no gate code at all —
+  // a renter handed a phone button and no digits for the keypad.
   const existing = await prisma.accessCredential.findFirst({
-    where: { grantId: grant.grantId, state: 'active' },
+    where: { grantId: grant.grantId, state: 'active', type: 'pin' },
     select: { id: true, grantId: true },
   })
   if (existing) return { ok: true, grantId: existing.grantId, alreadyProvisioned: true }
@@ -92,9 +97,15 @@ export async function codeForLease(leaseId: string): Promise<string | null> {
   })
   if (!lease) return null
 
+  // B-086 part 2: `type: 'pin'` is load-bearing, not defensive. A `mobile_key`
+  // is a newer active credential on the same grant, so `createdAt desc` would
+  // hand the portal a 43-character token and render it as the tenant's gate
+  // code — unusable at the keypad, and a working credential splashed across a
+  // screen for no reason.
   const credential = await prisma.accessCredential.findFirst({
     where: {
       state: 'active',
+      type: 'pin',
       grant: { facilityId: lease.facilityId, tenantId: lease.tenantId },
     },
     orderBy: { createdAt: 'desc' },

@@ -43,6 +43,50 @@ test.describe('signed in as the demo tenant', () => {
     })
   }
 
+  // PRD 03 US-8 AC1/AC4 (B-086 part 2, D-121). Phone unlock, end to end.
+  //
+  // Repeatable against the same un-reseeded database by construction rather
+  // than by a self-skip (B-120's rule): enrolling is idempotent — a tenant who
+  // taps twice gets the one key back — and the assertion is on a REFUSAL, so
+  // no run of this spec opens a gate or leaves anything for the next one to
+  // find. The demo tenant is past due with a suspended grant, which is exactly
+  // the branch worth pinning: the phone must be refused for the same reason
+  // the keypad is, from the same grant state, rather than routing around it.
+  // a11y-state: /portal/access | phone unlock refused
+  test('the phone unlock refuses a suspended tenant, in text, from a pre-existing region', async ({
+    page,
+  }) => {
+    await page.goto('/portal/access')
+    await expect(page.getByRole('main')).toBeVisible()
+
+    const enrol = page.getByRole('button', { name: 'Turn on phone unlock' })
+    if ((await enrol.count()) > 0) {
+      await enrol.first().click()
+      await expect(page.getByRole('button', { name: 'Open the gate' }).first()).toBeVisible()
+    }
+
+    const unlockForm = page.getByRole('form', { name: /^Open the gate at / }).first()
+    // 4.1.3 AA: the region has to be in the accessibility tree BEFORE the press
+    // that writes to it, which is the whole reason this control reuses
+    // `AdminForm`'s own status paragraph rather than inserting a toast.
+    await expectPreexisting(unlockForm.getByRole('status'))
+
+    await unlockForm.getByRole('button', { name: 'Open the gate' }).click()
+
+    // 1.4.1 A: the outcome is words, and they name what to do about it — the
+    // failure state here is somebody standing outside a gate. A refusal lands
+    // in `AdminForm`'s `role="alert"` box rather than the status paragraph
+    // above it, which also takes focus — right for a control whose whole
+    // subject is why the thing you pressed did not happen.
+    await expect(unlockForm.getByRole('alert')).toHaveText(/switched off/i)
+    await expect(unlockForm.getByRole('alert')).toBeFocused()
+
+    // The refusal is a STATE, not a route, and B-184 owns the general gap —
+    // but this one is scanned rather than promised, because the whole point of
+    // the control is what it does when the gate does NOT open.
+    await assertNoAxeViolations(page)
+  })
+
   // a11y-state: /portal/access | add-someone disclosure open
   //
   // B-086 part 1. Everything behind a closed <details> is invisible to axe

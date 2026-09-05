@@ -224,6 +224,20 @@ enum AccessGrantState {
 
 enum AccessCredentialType {
   pin
+  /// B-086 part 2. A secret the tenant's phone presents on their behalf
+  /// instead of a person typing digits — held, pushed, suspended, revoked and
+  /// reconciled by exactly the same machinery as a `pin`, because a second
+  /// path to a working gate credential is a second place for the cap, the
+  /// audit entry and the suspension state to be wrong (US-9's rule, applied
+  /// again).
+  ///
+  /// It is NOT a PIN and must never be rendered as one: the value is a long
+  /// opaque token, unreadable and untypeable at a keypad, and every query that
+  /// means "the code this tenant types" filters `type: pin` for that reason.
+  ///
+  /// **The transport is our server, not Bluetooth** (D-121). The spike US-8
+  /// AC4 asked for found Web Bluetooth unavailable on iOS entirely; the phone
+  /// asks us to open the gate, and we tell the controller.
   mobile_key
 }
 
@@ -2422,6 +2436,12 @@ enum GateCommandType {
   suspend_access
   resume_access
   set_credential
+  /// B-086 part 2. Withdraw ONE credential from the controller without
+  /// touching the grant it hangs off. Every other revoke here is grant-scoped,
+  /// which was enough while a holder had exactly one code — a mobile key is a
+  /// second credential on the tenant's own grant, and "I lost my phone" must
+  /// not cancel the PIN they still type at the keypad.
+  revoke_credential
   /// PRD 03 US-4 AC1/AC2: where the adapter reports `timeWindows: true`,
   /// enforcement is hardware-side, so the schedule has to reach the controller
   /// rather than being checked here. Editing a facility's gate hours

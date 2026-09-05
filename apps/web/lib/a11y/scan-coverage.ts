@@ -535,6 +535,19 @@ export const SCANNED_STATES: readonly ScannedState[] = [
     layoutException:
       "One short form inside the portal container the portal route loop already measures at all three widths.",
   },
+  // B-086 part 2. The phone unlock refused. The enrolled state and the refusal
+  // arrive together — the spec turns the key on if it is off, then presses
+  // Open the gate against a suspended demo tenant — so one scan covers both
+  // the control and the branch that matters: what the page looks like when the
+  // gate does not open is the state a tenant is standing outside in.
+  {
+    route: '/portal/access',
+    state: 'phone unlock refused',
+    spec: 'e2e/portal.spec.ts',
+    layout: 'excepted',
+    layoutException:
+      "A button and a sentence inside the portal container the portal route loop already measures at all three widths.",
+  },
   // B-184 (T3). A refused task completion, added alongside the invalid-submit
   // scan this row required.
   {

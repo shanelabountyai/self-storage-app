@@ -87,7 +87,11 @@ export async function authorizedAccessForTenant(tenantId: string): Promise<Lease
               select: {
                 state: true,
                 credentials: {
-                  where: { state: 'active' },
+                  // B-086 part 2. An authorized person cannot enrol phone
+                  // unlock today, so this filter changes nothing yet — it is
+                  // here because the query means "the code they key in", and
+                  // the day that changes this line should not be the bug.
+                  where: { state: 'active', type: 'pin' },
                   orderBy: { createdAt: 'desc' },
                   take: 1,
                   select: { valueRef: true },

@@ -200,6 +200,13 @@ export default async function TenantProfilePage({
         {event.unitNumber && (
           <span className="text-muted-foreground"> · {event.unitNumber}</span>
         )}
+        {/* B-086 part 2. Named only for a phone unlock: the keypad is the
+            default everywhere else and repeating it on every row would bury
+            the one entry method that means the holder need not have been
+            standing at the gate. */}
+        {event.entryMethod === "mobile_key" && (
+          <span className="text-muted-foreground"> · Phone unlock</span>
+        )}
       </span>
       <span className="text-muted-foreground">
         {event.flags.length > 0 && <span>{event.flags.join(", ")} · </span>}

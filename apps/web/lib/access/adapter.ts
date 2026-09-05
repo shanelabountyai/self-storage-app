@@ -1,6 +1,13 @@
 import { prisma } from '@storage/db'
 import type { GateCommandType } from '@storage/db'
-import { opensGate, windowFingerprint, type GrantState } from '@storage/core/access'
+import {
+  isAlwaysOpen,
+  opensGate,
+  scheduleForGrant,
+  windowFingerprint,
+  type GrantState,
+} from '@storage/core/access'
+import { parseWeeklySchedule } from '@storage/core/facility-settings'
 import { hashCode } from './secret'
 
 // PRD 03 §4.1 / FR-3. The port every gate controller sits behind.
@@ -82,9 +89,44 @@ async function applyToSimulatedController(command: GateCommandInput): Promise<Ad
       }
       const credential = await prisma.accessCredential.findUnique({
         where: { id: command.credentialId },
-        select: { grant: { select: { state: true } } },
+        select: {
+          grant: {
+            select: {
+              state: true,
+              extendedHours: true,
+              authorizedPerson: { select: { accessHours: true } },
+            },
+          },
+        },
       })
       if (!credential) return { ok: false, retryable: false, message: 'Unknown credential' }
+
+      // B-086 part 2. The window rides along, exactly as the PTI driver has
+      // always sent `timeZoneId` on its own upsert.
+      //
+      // `set_time_window` cannot be relied on to arrive afterwards: its
+      // idempotency key is a digest of the schedule itself, so pushing an
+      // unchanged schedule to a grant that already has one is deduped away by
+      // the outbox — correctly. That was harmless while a grant held one
+      // credential and got its window at provisioning. A SECOND credential on
+      // an existing grant (a mobile key) landed here with `windowSchedule`
+      // null, which this controller reads as no restriction — the facility's
+      // paid `extendedHours` add-on, handed out by enrolling a phone (D-100).
+      const facility = await prisma.facility.findUnique({
+        where: { id: command.facilityId },
+        select: { gateHours: true },
+      })
+      const schedule = scheduleForGrant(
+        parseWeeklySchedule(facility?.gateHours ?? null),
+        credential.grant.authorizedPerson?.accessHours,
+      )
+      const window = {
+        // Same collapse `propagateGateHours` applies: an always-open schedule
+        // is stored as null so the two paths cannot write different values for
+        // the same facts and show up as reconciliation drift.
+        windowSchedule: (schedule && !isAlwaysOpen(schedule) ? schedule : null) as never,
+        windowExempt: credential.grant.extendedHours,
+      }
 
       await prisma.simulatedGateCode.upsert({
         where: { credentialId: command.credentialId },
@@ -93,8 +135,29 @@ async function applyToSimulatedController(command: GateCommandInput): Promise<Ad
           credentialId: command.credentialId,
           code,
           active: opensGate(credential.grant.state as GrantState),
+          ...window,
         },
+        // An UPDATE leaves the window alone: a rotation of an existing code
+        // must not quietly re-derive a schedule the controller may have been
+        // told something newer about by `set_time_window`.
         update: { code, active: opensGate(credential.grant.state as GrantState) },
+      })
+      return { ok: true }
+    }
+
+    case 'revoke_credential': {
+      // Deactivated rather than deleted, matching what `revoke_access` does to
+      // a grant's rows. Reconciliation includes revoked credentials with
+      // `shouldOpen: false` on purpose — a revoked code the controller still
+      // honours is the most valuable finding that job has — and a deleted row
+      // would report as `missing_at_controller` noise instead of as the clean
+      // agreement it actually is.
+      if (!command.credentialId) {
+        return { ok: false, retryable: false, message: 'revoke_credential requires a credentialId' }
+      }
+      await prisma.simulatedGateCode.updateMany({
+        where: { credentialId: command.credentialId },
+        data: { active: false },
       })
       return { ok: true }
     }

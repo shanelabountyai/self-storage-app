@@ -123,7 +123,25 @@ export async function evaluateKeypadEntry(
     return { result, reason, delivered: false, vendorEventId }
   }
 
-  await deliver(payload)
+  try {
+    await deliver(payload)
+  } catch {
+    // B-086 part 2. An undelivered event is exactly the state above, and the
+    // row is already in the backlog for `replayVendorEventBacklog` to retry —
+    // so a delivery that fails for a reason nobody injected is reported the
+    // same way rather than thrown.
+    //
+    // It used to throw, and the caller that made that matter is new: a
+    // configuration gap (no `HARDWARE_WEBHOOK_SECRET`, which
+    // `hardwareWebhookSecret()` refuses to invent under `NODE_ENV=production`)
+    // turned into a 500 on the TENANT'S unlock button, on the screen whose
+    // whole subject is somebody standing at a gate. The gate's decision and
+    // reporting it home are different facts, and this function's own comment
+    // three lines up already said so — the throw was the one path that did not
+    // honour it.
+    return { result, reason, delivered: false, vendorEventId }
+  }
+
   await prisma.simulatedVendorEvent.update({
     where: { vendorEventId },
     data: { delivered: true },

@@ -1,6 +1,7 @@
 import {
   DAYS_OF_WEEK,
   type DayOfWeek,
+  parseWeeklySchedule,
   type WeeklySchedule,
 } from '../facility-settings/weekly-schedule.ts'
 
@@ -199,4 +200,32 @@ export function narrowSchedule(
       return [day, open < close ? { closed: false, open, close } : { closed: true }]
     }),
   ) as WeeklySchedule
+}
+
+/// PRD 03 US-8 AC1 (B-086). The one place that decides which window a grant
+/// gets pushed, so provisioning, a settings save, a per-grant push and the
+/// adapter's own `set_credential` cannot disagree.
+///
+/// A tenant's grant gets the facility's hours. An authorized person's gets
+/// theirs narrowed against the facility's — see `narrowSchedule` for why
+/// narrowing rather than replacing.
+///
+/// A person's `accessHours` that fails to parse is treated as unset rather
+/// than throwing, matching `parseWeeklySchedule`'s own contract. The cost of
+/// the other choice is a settings save that 500s for every tenant at a site
+/// because one row holds malformed JSON.
+///
+/// Lived in `apps/web/lib/access/time-windows.ts` until B-086 part 2, and moved
+/// here so the simulated adapter can reach it: a credential added to a grant
+/// whose window had already been pushed used to land on the controller with no
+/// window at all, because the propagation command's idempotency key is the
+/// schedule's own digest and the outbox correctly deduped it away. That is
+/// unrestricted access handed to a second credential — which is `extendedHours`,
+/// the add-on the facility sells (D-100) — so `set_credential` now carries the
+/// window the way the PTI driver always has.
+export function scheduleForGrant(
+  facilitySchedule: WeeklySchedule | null,
+  personAccessHours: unknown,
+): WeeklySchedule | null {
+  return narrowSchedule(facilitySchedule, parseWeeklySchedule(personAccessHours ?? null))
 }

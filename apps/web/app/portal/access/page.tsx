@@ -4,7 +4,16 @@ import { requireTenantActor } from '@/lib/rbac/session'
 import { authorizedAccessForTenant } from '@/lib/portal/authorized-access'
 import { currentImpersonation } from '@/lib/impersonation/context'
 import { SHARED_ACCESS_PRESETS } from '@storage/core/access'
-import { addPersonAction, revokePersonAction } from './actions'
+import { mobileKeysForTenant, type MobileKey } from '@/lib/access/mobile-key'
+import { UnlockButton } from '@/components/portal/unlock-button'
+import { AnnounceRegion } from '@/components/admin/announce'
+import {
+  addPersonAction,
+  enrollMobileKeyAction,
+  revokeMobileKeyAction,
+  revokePersonAction,
+  unlockGateAction,
+} from './actions'
 
 export const metadata: Metadata = { title: 'Who can get in' }
 
@@ -18,9 +27,10 @@ export const metadata: Metadata = { title: 'Who can get in' }
 
 export default async function AccessPage() {
   const actor = await requireTenantActor()
-  const [loaded, impersonation] = await Promise.all([
+  const [loaded, impersonation, mobileKeys] = await Promise.all([
     authorizedAccessForTenant(actor.tenantId),
     currentImpersonation(),
+    mobileKeysForTenant(actor.tenantId),
   ])
 
   // PRD 09 FR-12 (B-091 part 2). Same rule as the tenant's own code on
@@ -36,11 +46,23 @@ export default async function AccessPage() {
       <header className="flex flex-col gap-2">
         <h1 className="text-xl font-semibold">Who can get in</h1>
         <p className="text-muted-foreground max-w-prose text-sm text-pretty">
-          Anyone you add gets their <strong>own</strong> gate code, not a copy of yours. The gate log
-          records who actually came in, and you can withdraw one person&apos;s code at any time
-          without changing your own.
+          Open the gate from your phone, and give the people you trust their <strong>own</strong>{' '}
+          gate code rather than a copy of yours. The gate log records who actually came in, and you
+          can withdraw any one of them at any time without changing your own code.
         </p>
       </header>
+
+      <PhoneUnlockSection keys={mobileKeys} impersonated={Boolean(impersonation)} />
+
+      {/* Wrapped and named, and the unit headings drop to h3 with it. Before
+          this row the units were the page's only h2s; adding the phone-unlock
+          section above them would otherwise have left two unrelated things
+          reading as peers, with each unit a sibling of "Open the gate from your
+          phone" rather than a child of the list it belongs to. */}
+      <section aria-labelledby="authorized-people" className="flex flex-col gap-8">
+      <h2 id="authorized-people" className="text-lg font-semibold">
+        Who else can get in
+      </h2>
 
       {units.length === 0 && (
         <p className="text-muted-foreground text-sm">You don&apos;t have any units right now.</p>
@@ -52,10 +74,10 @@ export default async function AccessPage() {
           aria-labelledby={`unit-${unit.leaseId}`}
           className="border-input flex flex-col gap-4 rounded-lg border p-4"
         >
-          <h2 id={`unit-${unit.leaseId}`} className="font-medium">
+          <h3 id={`unit-${unit.leaseId}`} className="font-medium">
             Unit {unit.unitNumber}
             <span className="text-muted-foreground font-normal"> · {unit.facilityName}</span>
-          </h2>
+          </h3>
 
           {unit.tenantSuspended && (
             // Said before the form rather than after the submit. Anyone added
@@ -203,7 +225,126 @@ export default async function AccessPage() {
           )}
         </section>
       ))}
+      </section>
     </div>
+  )
+}
+
+
+// PRD 03 US-8 AC1/AC4, OQ-2 (B-086 part 2, D-121). Phone unlock, per gate.
+//
+// Keyed on the FACILITY, not the unit, and placed above the per-unit list for
+// that reason: a mobile key is one credential on the tenant's grant, and a
+// tenant with three units at one site has one gate, one code and one phone
+// button. The three "unlock" buttons a per-lease rendering would have drawn are
+// the same mistake D-54 found in the three PINs a three-unit checkout used to
+// mint.
+function PhoneUnlockSection({ keys, impersonated }: { keys: MobileKey[]; impersonated: boolean }) {
+  if (keys.length === 0) return null
+
+  return (
+    <section aria-labelledby="phone-unlock" className="flex flex-col gap-4">
+      <h2 id="phone-unlock" className="text-lg font-semibold">
+        Open the gate from your phone
+      </h2>
+      {/* B-170's case exactly, and it took an e2e failure to see it: turning
+          phone unlock on or off revalidates the page, so the form that reports
+          the outcome is unmounted in the same commit that writes the message.
+          Announced from here instead, above the cards, where the revalidation
+          cannot take the region away. The UNLOCK form keeps its own in-form
+          region — it survives its own success, and the outcome belongs beside
+          the button somebody just pressed. */}
+      <AnnounceRegion>
+      {/* Said once, at the top, and said plainly. A tenant who believes the
+          phone REPLACES the keypad is a tenant standing outside a gate with no
+          signal and no code — which is the failure this whole control has to be
+          honest about (D-121). */}
+      <p className="text-muted-foreground max-w-prose text-sm text-pretty">
+        Your gate code still works at the keypad and always will. Phone unlock needs a signal, so
+        keep the code where you can find it.
+      </p>
+
+      {impersonated && (
+        <p role="alert" className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-pretty text-amber-900">
+          The gate cannot be opened during a support session. The tenant can do it from this page
+          themselves.
+        </p>
+      )}
+
+      {keys.map((key) => (
+        <div key={key.facilityId} className="border-input flex flex-col gap-3 rounded-lg border p-4">
+          <h3 className="font-medium">{key.facilityName}</h3>
+
+          {key.unavailableReason ? (
+            <p className="text-muted-foreground text-sm text-pretty">{key.unavailableReason}</p>
+          ) : key.credentialId ? (
+            <>
+              {key.suspended && (
+                <p role="alert" className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-pretty text-red-900">
+                  Your access here is switched off while the balance is unpaid, so the gate will not
+                  open — from your phone or at the keypad.
+                </p>
+              )}
+              {/* Keyed, and this is not decoration. The enrol branch and this
+                  one are conditional siblings in the same slot, so React
+                  reconciles the first `AdminForm` of one into the first of the
+                  other and carries its `useActionState` across — which put
+                  "Phone unlock is on for this gate" into the UNLOCK form's
+                  status region as if the gate had just been opened. */}
+              <AdminForm
+                key="unlock"
+                action={unlockGateAction}
+                label={`Open the gate at ${key.facilityName}`}
+              >
+                <input type="hidden" name="facilityId" value={key.facilityId} />
+                <UnlockButton label="Open the gate" />
+              </AdminForm>
+              <AdminForm
+                key="revoke"
+                action={revokeMobileKeyAction}
+                label={`Turn off phone unlock at ${key.facilityName}`}
+                announceOutside
+              >
+                <input type="hidden" name="facilityId" value={key.facilityId} />
+                <button type="submit" className="self-start text-sm underline underline-offset-4">
+                  Turn off phone unlock — I lost this phone
+                </button>
+              </AdminForm>
+            </>
+          ) : (
+            <>
+              <p className="text-muted-foreground text-sm text-pretty">
+                Not switched on. Turning it on gives this account its own key, separate from your
+                gate code — losing your phone means switching this off, not changing your code.
+              </p>
+              <AdminForm
+                key="enroll"
+                action={enrollMobileKeyAction}
+                label={`Turn on phone unlock at ${key.facilityName}`}
+                announceOutside
+              >
+                <input type="hidden" name="facilityId" value={key.facilityId} />
+                <button
+                  type="submit"
+                  className="bg-primary text-primary-foreground inline-flex min-h-11 items-center justify-center self-start rounded-md px-4 text-sm font-medium"
+                >
+                  Turn on phone unlock
+                </button>
+              </AdminForm>
+            </>
+          )}
+
+          <p className="text-muted-foreground text-sm">
+            Trouble at the gate? Call{' '}
+            <a href={`tel:${key.facilityPhone.replace(/[^0-9+]/g, '')}`} className="underline underline-offset-4">
+              {key.facilityPhone}
+            </a>
+            .
+          </p>
+        </div>
+      ))}
+      </AnnounceRegion>
+    </section>
   )
 }
 

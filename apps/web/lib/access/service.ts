@@ -1,5 +1,5 @@
-import { randomInt } from 'node:crypto'
-import { type GateCommandType, type Prisma, prisma } from '@storage/db'
+import { randomBytes, randomInt } from 'node:crypto'
+import { type AccessCredentialType, type GateCommandType, type Prisma, prisma } from '@storage/db'
 import { canTransition, type GrantCause, type GrantState } from '@storage/core/access'
 import { emitEvent } from '@storage/core/events'
 import { recordAudit } from '@storage/core/audit'
@@ -36,6 +36,19 @@ export function generateCode(): string {
     if ('0123456789'.includes(code) || '9876543210'.includes(code)) continue
     return code
   }
+}
+
+/// B-086 part 2. The secret a `mobile_key` credential holds.
+///
+/// 256 bits of `randomBytes`, base64url, and deliberately nothing like a PIN.
+/// The six-digit keyspace exists because a human has to type it at a keypad in
+/// the rain; nobody types this one, so the only reason to keep it short would
+/// be to make it guessable. It also means a mobile key can never collide with
+/// a PIN in `generateUniqueCode`'s facility-wide uniqueness scope, and can
+/// never be presented at a physical keypad by someone who has read it over a
+/// shoulder.
+export function generateMobileKeySecret(): string {
+  return randomBytes(32).toString('base64url')
 }
 
 export type EnsureGrantResult = {
@@ -192,20 +205,32 @@ export async function generateUniqueCode(
 
 export type IssuedCredential = { credentialId: string; code: string }
 
-/// Issues a gate code for a grant and queues it for the controller.
+/// Issues a gate credential for a grant and queues it for the controller.
 ///
-/// Returns the plaintext code exactly once, to its caller, for immediate
+/// Returns the plaintext secret exactly once, to its caller, for immediate
 /// delivery (a confirmation screen, a counter receipt). The credential row
 /// itself stores it encrypted (`lib/access/secret.ts`) rather than as a bare
 /// reference, so a later, separately audited `revealCode()` can still recover
 /// it (SR-2) — never plaintext, never logged.
+///
+/// B-086 part 2: `type` picks the keyspace and nothing else. A `mobile_key`
+/// travels the identical path — same uniqueness scope, same `set_credential`
+/// command, same suspension and reconciliation — because the alternative was a
+/// second way to reach a working gate, and US-9 already settled what that
+/// costs. Only the secret differs, and it differs because a person never types
+/// this one.
 export async function issueCredential(
   grantId: string,
   leaseId: string | null,
   client: Prisma.TransactionClient | typeof prisma = prisma,
+  type: AccessCredentialType = 'pin',
 ): Promise<IssuedCredential> {
   const grant = await client.accessGrant.findUniqueOrThrow({ where: { id: grantId } })
-  const { code, codeHash } = await generateUniqueCode(grant.facilityId, client)
+  const { code, codeHash } = await generateUniqueCode(
+    grant.facilityId,
+    client,
+    type === 'mobile_key' ? generateMobileKeySecret : generateCode,
+  )
   const key = accessCodeEncryptionKey()
 
   const credential = await client.accessCredential.create({
@@ -213,7 +238,7 @@ export async function issueCredential(
       facilityId: grant.facilityId,
       grantId,
       leaseId,
-      type: 'pin',
+      type,
       valueRef: key ? encryptCode(code, key) : unrevealableRef(),
       codeHash,
       state: 'active',
@@ -236,6 +261,51 @@ export async function issueCredential(
   )
 
   return { credentialId: credential.id, code }
+}
+
+/// B-086 part 2. Withdraws ONE credential, leaving its grant alone.
+///
+/// Every other revocation in this file is grant-scoped, and that was right for
+/// as long as a holder had exactly one credential: revoking a person's access
+/// and revoking their code were the same act. A mobile key breaks that — it is
+/// a second credential on the tenant's OWN grant, and "I lost my phone" has to
+/// stop the phone without stopping the PIN they still type at the gate.
+///
+/// The row is marked revoked AND a command is queued, in that order and both
+/// unconditionally, because our row is not what opens the gate. A keypad
+/// decides from what it was last told; a credential we merely hide from our
+/// own reads still works (the same reasoning `expiresAt` revocation follows in
+/// B-086 part 1). If the controller is offline the command retries and
+/// eventually dead-letters to a person — which is the honest outcome, and the
+/// reason `syncStatus` is reset to `pending` rather than left reading
+/// `synced` at a code the controller has not yet dropped.
+export async function revokeCredential(
+  credentialId: string,
+  cause: GrantCause,
+  client: Prisma.TransactionClient | typeof prisma = prisma,
+): Promise<{ ok: boolean }> {
+  const credential = await client.accessCredential.findUnique({ where: { id: credentialId } })
+  if (!credential || credential.state === 'revoked') return { ok: false }
+
+  await client.accessCredential.update({
+    where: { id: credentialId },
+    data: { state: 'revoked', syncStatus: 'pending' },
+  })
+
+  await enqueueCommand(
+    {
+      facilityId: credential.facilityId,
+      grantId: credential.grantId,
+      credentialId,
+      type: 'revoke_credential',
+      // A credential can only be revoked once, so the id alone is the key.
+      idempotencyKey: `credential:${credentialId}:revoke`,
+      payload: { cause },
+    },
+    client,
+  )
+
+  return { ok: true }
 }
 
 export type RevealedCode = { available: true; code: string } | { available: false; reason: string }

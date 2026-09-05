@@ -22,6 +22,17 @@ const REASON_LABELS: Record<string, string> = {
   suspended: 'Account suspended',
 }
 
+/// B-086 part 2. How the credential was presented.
+///
+/// `unknown` is not a third method — it is the unknown-code row, where there is
+/// no credential to have a type. Named rather than left blank because "we
+/// cannot say who or how" is the fact FR-4 retains those rows to record.
+const ENTRY_METHOD_LABELS: Record<string, string> = {
+  pin: 'Keypad',
+  mobile_key: 'Phone',
+  unknown: '—',
+}
+
 function formatWhen(at: Date, timezone: string): string {
   return new Intl.DateTimeFormat('en-US', {
     dateStyle: 'medium',
@@ -160,6 +171,9 @@ export default async function AccessEventsPage({
                 Unit
               </th>
               <th scope="col" className="py-2 pr-4">
+                How
+              </th>
+              <th scope="col" className="py-2 pr-4">
                 Result
               </th>
               <th scope="col" className="py-2 pr-4">
@@ -184,7 +198,11 @@ export default async function AccessEventsPage({
                     <span className="text-muted-foreground">Unknown</span>
                   )}
                 </td>
-                <td className="py-2 pr-4">{row.unitNumber ?? '—'}</td>
+                {/* B-086 part 2. "Keypad" and "Phone" are different facts
+                    after a theft claim: a phone unlock can be sent from
+                    anywhere, so the log stops implying the holder was standing
+                    at the gate. */}
+                <td className="py-2 pr-4">{ENTRY_METHOD_LABELS[row.entryMethod ?? 'unknown']}</td>
                 {/* The result is a word, never a colour alone (WCAG 1.4.1). */}
                 <td className="py-2 pr-4">
                   {row.result === 'granted' ? 'Opened' : 'Denied'}
@@ -210,7 +228,7 @@ export default async function AccessEventsPage({
             ))}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={6} className="text-muted-foreground py-3">
+                <td colSpan={7} className="text-muted-foreground py-3">
                   Nothing at the gate in this range.
                 </td>
               </tr>

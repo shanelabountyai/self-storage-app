@@ -84,6 +84,23 @@ jobs:
             #
             # Set in BOTH jobs so the two blocks stay identical and cannot drift.
             echo 'NEXT_PUBLIC_SITE_URL=http://localhost:3000'
+            # B-086 part 2. The same throwaway key vitest.config.ts injects.
+            # Without it every secret stored at rest takes its degraded branch:
+            # gate codes become `unrevealable:`, the demo portal shows "your
+            # gate code isn't ready yet" for every tenant, and phone unlock
+            # reports itself unavailable at every site — all correct for an
+            # unconfigured environment, and all a silent hole in what the e2e
+            # suite can assert. Test-only, published deliberately, and scoped to
+            # a throwaway container, the same posture as the demo passwords.
+            #
+            # Set in BOTH jobs, like the line above, so the two cannot drift.
+            echo 'ACCESS_CODE_ENCRYPTION_KEY=00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff'
+            # B-086 part 2, and for the same reason one line up. The e2e lane
+            # serves a PRODUCTION build, and `hardwareWebhookSecret()` refuses
+            # to invent a per-process dev secret under NODE_ENV=production — so
+            # without this nothing can sign a simulated gate event and the
+            # signed webhook path FR-8 asks to be exercised is not.
+            echo 'HARDWARE_WEBHOOK_SECRET=ci-only-hardware-webhook-secret-not-a-real-key'
           } > .env.local
 
       - run: npm run db:generate
@@ -164,6 +181,23 @@ jobs:
             #
             # Set in BOTH jobs so the two blocks stay identical and cannot drift.
             echo 'NEXT_PUBLIC_SITE_URL=http://localhost:3000'
+            # B-086 part 2. The same throwaway key vitest.config.ts injects.
+            # Without it every secret stored at rest takes its degraded branch:
+            # gate codes become `unrevealable:`, the demo portal shows "your
+            # gate code isn't ready yet" for every tenant, and phone unlock
+            # reports itself unavailable at every site — all correct for an
+            # unconfigured environment, and all a silent hole in what the e2e
+            # suite can assert. Test-only, published deliberately, and scoped to
+            # a throwaway container, the same posture as the demo passwords.
+            #
+            # Set in BOTH jobs, like the line above, so the two cannot drift.
+            echo 'ACCESS_CODE_ENCRYPTION_KEY=00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff'
+            # B-086 part 2, and for the same reason one line up. The e2e lane
+            # serves a PRODUCTION build, and `hardwareWebhookSecret()` refuses
+            # to invent a per-process dev secret under NODE_ENV=production — so
+            # without this nothing can sign a simulated gate event and the
+            # signed webhook path FR-8 asks to be exercised is not.
+            echo 'HARDWARE_WEBHOOK_SECRET=ci-only-hardware-webhook-secret-not-a-real-key'
           } > .env.local
 
       - run: npm run db:generate

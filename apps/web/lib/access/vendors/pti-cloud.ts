@@ -141,6 +141,19 @@ async function send(command: GateCommandInput): Promise<AdapterResult> {
       return { ok: true }
     }
 
+    case 'revoke_credential': {
+      if (!command.credentialId) {
+        return { ok: false, retryable: false, message: 'revoke_credential requires a credentialId' }
+      }
+      // See note 3: the vendor has no "revoked", so this deletes — the same
+      // call `revoke_access` makes, aimed at one keypad user instead of all of
+      // a grant's. A 404 is the outcome we wanted rather than a failure, for
+      // the reason the enable/disable branch above spells out.
+      const response = await deleteKeypadUser({ siteId, externalRef: command.credentialId })
+      if (response.status === 404) return { ok: true }
+      return resultFrom(response)
+    }
+
     case 'set_time_window': {
       if (!command.grantId) {
         return { ok: false, retryable: false, message: 'set_time_window requires a grantId' }

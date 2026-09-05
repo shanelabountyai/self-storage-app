@@ -10,6 +10,13 @@ import {
   revokeAuthorizedPerson,
 } from '@/lib/access/authorized-persons'
 import { isSharedAccessPreset, SHARED_ACCESS_PRESETS } from '@storage/core/access'
+import {
+  enrollMobileKey,
+  NoGrantError,
+  revokeMobileKey,
+  unlockWithMobileKey,
+} from '@/lib/access/mobile-key'
+import { currentImpersonation } from '@/lib/impersonation/context'
 import { fieldError, success, type FormState } from '@/lib/admin/form-state'
 
 // PRD 03 US-9 AC4 (B-105). Tenant self-service for the authorized-access list.
@@ -96,4 +103,83 @@ export async function revokePersonAction(_prev: FormState, formData: FormData): 
 
   revalidatePath('/portal/access')
   return success(`${name}'s code has stopped working. Your own code is unchanged.`)
+}
+
+// PRD 03 US-8 AC1/AC4 (B-086 part 2). Phone unlock.
+
+/// PRD 09 FR-12. A support session may not open a gate.
+///
+/// The portal already withholds the gate CODE during impersonation, and an
+/// unlock button is the same permission with the physical step removed — a
+/// staff member who cannot be told the code must not be handed the door. The
+/// three actions below are refused rather than hidden, because a hidden
+/// control is still a reachable server action.
+async function refuseDuringImpersonation(): Promise<FormState | null> {
+  if (!(await currentImpersonation())) return null
+  return refusal(
+    'The gate cannot be opened from a support session. The tenant can do it here themselves.',
+  )
+}
+
+/// A refusal with no field to hang it on — the B-233 shape. Every field on
+/// these three forms is a hidden `facilityId`, so a `fieldError` would point
+/// `aria-describedby` at a control nobody can focus or correct, and the
+/// summary would read "There is a problem with one field" above a sentence
+/// about a gate. The message carries the whole meaning; `AdminForm` renders it
+/// in the `role="alert"` box and moves focus there.
+function refusal(message: string): FormState {
+  return { status: 'error', message, fieldErrors: {} }
+}
+
+export async function unlockGateAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const actor = await requireTenantActor()
+  const blocked = await refuseDuringImpersonation()
+  if (blocked) return blocked
+
+  const facilityId = String(formData.get('facilityId') ?? '')
+  const outcome = await unlockWithMobileKey(actor.tenantId, facilityId)
+
+  // A refusal is a `fieldError` rather than a thrown error on purpose: "the
+  // gate is closed right now" is an answer, not a fault, and the tenant needs
+  // to READ it — `AdminForm` renders an error into the same pre-existing live
+  // region it renders a success into, and focuses it.
+  return outcome.opened ? success(outcome.message) : refusal(outcome.message)
+}
+
+export async function enrollMobileKeyAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const actor = await requireTenantActor()
+  const blocked = await refuseDuringImpersonation()
+  if (blocked) return blocked
+
+  const facilityId = String(formData.get('facilityId') ?? '')
+  try {
+    const result = await enrollMobileKey(actor, facilityId)
+    if (!result.ok) return refusal(result.reason)
+  } catch (error) {
+    if (error instanceof NoGrantError) return refusal(error.message)
+    throw error
+  }
+
+  revalidatePath('/portal/access')
+  return success(
+    'Phone unlock is on for this gate. Your gate code still works at the keypad — you have not lost it, and you will want it if your phone has no signal.',
+  )
+}
+
+export async function revokeMobileKeyAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const actor = await requireTenantActor()
+  const blocked = await refuseDuringImpersonation()
+  if (blocked) return blocked
+
+  const facilityId = String(formData.get('facilityId') ?? '')
+  try {
+    const result = await revokeMobileKey(actor, facilityId)
+    if (!result.ok) return refusal('Phone unlock is already switched off for this gate.')
+  } catch (error) {
+    if (error instanceof NoGrantError) return refusal(error.message)
+    throw error
+  }
+
+  revalidatePath('/portal/access')
+  return success('This phone can no longer open the gate. Your gate code is unchanged and still works at the keypad.')
 }

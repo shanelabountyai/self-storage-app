@@ -11,6 +11,45 @@ export const metadata = metadataFor(
 /// credibility rests on the record, not the intention — an undated one is a
 /// claim about a codebase that has since moved. Update this when the claims are
 /// re-verified, not when the page is edited.
+// Re-verified 2026-09-04, at B-086 part 2 (phone unlock, D-121). Customer-
+// facing and a new control, on a route this page already lists and already
+// scans: `/portal/access` gains a section that turns a mobile key on, opens the
+// gate, and turns it off again.
+//
+// **What was checked and what it cost.** The four criteria US-8 AC4 wrote for
+// this control were built rather than retrofitted, because the default build of
+// an unlock button fails all four: the in-flight state is `aria-busy` on a real
+// `<button type="submit">` (4.1.2, 2.1.1) with the label changing in TEXT, so
+// nothing about the state is colour (1.4.1); the outcome is announced from
+// `AdminForm`'s pre-existing `role="status"` on success and its `role="alert"`
+// box on a refusal, never a toast (4.1.3); and a refused unlock names the
+// facility's phone number in words, because the failure state of this control
+// is somebody standing outside a gate. `aria-pressed` was deliberately NOT
+// used, though the AC offers it: this is a momentary action, and a button
+// reported as "pressed" tells a screen-reader user the gate is being held open.
+//
+// **One real defect found by writing the e2e, not by review.** The enrol form
+// and the unlock form are conditional siblings in one slot, so React
+// reconciled the first into the other and carried its `useActionState` across:
+// "Phone unlock is on for this gate" appeared in the UNLOCK form's status
+// region as though the gate had just opened. Keys fixed the identity, and the
+// two forms that remove themselves on success now announce through
+// `AnnounceRegion` (B-170's case) rather than into a region the revalidation
+// unmounts in the same commit.
+//
+// **The new STATE is scanned, not promised.** `/portal/access | phone unlock
+// refused` is in `SCANNED_STATES` and `e2e/portal.spec.ts` runs axe on it, so
+// the branch that matters — what the page looks like when the gate does not
+// open — is audited rather than assumed. B-184 still owns route-versus-state in
+// general.
+//
+// No public route added, so the generated coverage claim and the route-keyed
+// exception list are untouched. **The "where we fall short" list needed no
+// change and was re-read to be sure** — none of its three entries is about the
+// portal, and this row adds no known gap to it. The screen-reader and keyboard
+// sentence above it stays exactly as it is: no manual pass was carried out
+// here, and this control does not rest on one. `LAST_REVIEWED` is not bumped —
+// this is one flow verified, not the page, and B-254 owns the date itself.
 const LAST_REVIEWED = '19 August 2026'
 
 // PRD 01 §6.8 requires a public accessibility statement. Unlike the legal pages

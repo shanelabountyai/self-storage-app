@@ -24,6 +24,15 @@ export type AccessEventRow = {
   tenantId: string | null
   tenantName: string | null
   unitNumber: string | null
+  /// B-086 part 2. How they presented themselves: `pin` is somebody physically
+  /// at the keypad, `mobile_key` is a phone unlock.
+  ///
+  /// A real distinction rather than a label, and it is why it is carried on the
+  /// row: a phone unlock can be sent from anywhere, so "they were at the gate"
+  /// stops following from "the gate opened for them". After a theft claim that
+  /// is the first thing a manager needs to be able to tell apart, and the event
+  /// log is where they look. Null for an unknown code, alongside the tenant.
+  entryMethod: 'pin' | 'mobile_key' | null
 }
 
 export type EventLogFilters = {
@@ -87,6 +96,7 @@ export async function accessEventLog(
       facility: { select: { name: true } },
       credential: {
         select: {
+          type: true,
           lease: { select: { unit: { select: { number: true } } } },
           grant: {
             select: {
@@ -112,6 +122,7 @@ export async function accessEventLog(
       ? `${row.credential.grant.tenant.firstName} ${row.credential.grant.tenant.lastName}`
       : null,
     unitNumber: row.credential?.lease?.unit?.number ?? null,
+    entryMethod: row.credential?.type ?? null,
   }))
 }
 

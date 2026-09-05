@@ -1,7 +1,12 @@
 import { prisma } from '@storage/db'
-import { isAlwaysOpen, narrowSchedule } from '@storage/core/access'
-import { parseWeeklySchedule, type WeeklySchedule } from '@storage/core/facility-settings'
+import { isAlwaysOpen, scheduleForGrant } from '@storage/core/access'
+import { parseWeeklySchedule } from '@storage/core/facility-settings'
 import { enqueueCommand } from '@/lib/access/service'
+
+// `scheduleForGrant` moved to @storage/core/access in B-086 part 2 (the
+// simulated adapter needs it and cannot import this module without a cycle).
+// Re-exported so its existing callers and tests keep one import path.
+export { scheduleForGrant } from '@storage/core/access'
 
 // PRD 03 US-4 AC1 (B-064): "changes propagate to all active grants via
 // `setTimeWindow`."
@@ -62,25 +67,6 @@ export async function propagateGateHours(facilityId: string): Promise<{ enqueued
   }
 
   return { enqueued }
-}
-
-/// PRD 03 US-8 AC1 (B-086). The one place that decides which window a grant
-/// gets pushed, so provisioning, a settings save and a per-grant push cannot
-/// disagree.
-///
-/// A tenant's grant gets the facility's hours. An authorized person's gets
-/// theirs narrowed against the facility's — see `narrowSchedule` for why
-/// narrowing rather than replacing.
-///
-/// A person's `accessHours` that fails to parse is treated as unset rather
-/// than throwing, matching `parseWeeklySchedule`'s own contract. The cost of
-/// the other choice is a settings save that 500s for every tenant at a site
-/// because one row holds malformed JSON.
-export function scheduleForGrant(
-  facilitySchedule: WeeklySchedule | null,
-  personAccessHours: unknown,
-): WeeklySchedule | null {
-  return narrowSchedule(facilitySchedule, parseWeeklySchedule(personAccessHours ?? null))
 }
 
 /// A short stable digest of what is being pushed. Not a security boundary —
