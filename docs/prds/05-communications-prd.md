@@ -183,6 +183,8 @@ CN-1, CN-2, CN-6 and CN-10a ship as eight org-default rules and templates in `pa
 
 **CN-21 [P2]** As Priya, I can send a one-off manual message (template-based, not freeform in MVP of this feature) to a tenant or a filtered set (e.g., all tenants in Building B: "power outage today"), respecting consent and quiet hours, logged like any automated send.
 
+> ***Built 2026-09-04 as B-090d (D-117).*** `/admin/comms/broadcast`, under a new `comms:broadcast` permission. **"Respecting consent and quiet hours" resolved to: whichever rules the chosen classification carries, and the sender chooses** — `broadcast.notice` (operational) and `broadcast.announcement` (marketing) are two seeded templates, and the classification decides whether an unsubscribe blocks the send, whether FR-MSG-5's window holds it back, whether the daily marketing cap counts it, and whether an unsubscribe link is appended (D-117). "A tenant" is expressed as a unit-number filter, since staff know the unit. **Email only** — an SMS broadcast is a per-message cost and a per-classification consent lane (D-51) this story does not ask for — and the send is inline, capped at 2,000 recipients per announcement.
+
 ---
 
 ## 4. Functional Requirements
@@ -365,7 +367,7 @@ Aligned to the master PRD roadmap (comms email lands with MVP billing; SMS lands
 - Delivery dashboard + alerting hardening (CN-19, FR-19)
 
 ### Phase 3 — Depth
-- Operational notices bundle (CN-10); manual/broadcast sends (CN-21)
+- Operational notices bundle (CN-10); manual/broadcast sends (CN-21 — ***built 2026-09-04, B-090d / D-117***)
 - Promise-to-pay dunning pause; tenant-level timezone; reminder-timing experiments
 - Two-way SMS inbox (evaluate); PWA push channel (per master PRD option)
   - ***Both answered 2026-08-20 by D-78, neither built.*** **PWA push: no** — PRD 00 gates it on "if metrics justify" and nothing in this product counts portal engagement, so the condition cannot be evaluated. **Two-way inbox: no**, on the evaluation that at 2–10 facilities inbound volume does not warrant a second queue beside `Task`. The evaluation did find a real defect: `sms-webhook/route.ts` handles STOP/HELP/START/YES and **silently drops every other inbound message**, so a tenant who replies is answered by nothing. That is **B-135** — route an unrecognised inbound SMS to the existing `Task` queue. If its task volume proves an inbox is warranted, that is the number to reopen D-78 with.

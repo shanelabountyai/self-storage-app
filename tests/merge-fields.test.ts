@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
   availableFieldsFor,
+  BROADCAST_EVENT,
   checkPublishable,
   EVENT_MERGE_FIELDS,
+  isBroadcastTemplateKey,
   fieldsUsedIn,
   sampleContextFor,
   STANDARD_MERGE_FIELDS,
@@ -49,11 +51,18 @@ describe('every seeded template is publishable by its own gate', () => {
   it.each(COMMS_TEMPLATES.map((template) => [template.key, template] as const))(
     '%s',
     (_key, template) => {
+      // A template with no rule can never be sent — EXCEPT a broadcast, which
+      // has no rule by design because nothing emits one, a person sends it
+      // (CN-21, B-090 part 4). The assertion stays, narrowed rather than
+      // dropped: a new eventless template that is not a broadcast is still the
+      // mistake this was written to catch.
       const rule = COMMS_RULES.find((r) => r.templateKey === template.key)
-      expect(rule, `${template.key} has no rule, so it can never be sent`).toBeTruthy()
+      if (!isBroadcastTemplateKey(template.key)) {
+        expect(rule, `${template.key} has no rule, so it can never be sent`).toBeTruthy()
+      }
 
       const check = checkPublishable({
-        event: rule!.event,
+        event: rule?.event ?? BROADCAST_EVENT,
         subject: template.subject,
         bodyText: template.bodyText,
         requiredMergeFields: template.requiredMergeFields,

@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { AdminForm, Field } from '@/components/admin/form'
 import { Button } from '@/components/ui/button'
+import { BROADCAST_EVENT } from '@storage/core/comms'
 import { getSwitcherData } from '@/lib/admin/context'
 import { resolveSelectedFacility } from '@/lib/admin/facility-selection-logic'
 import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
@@ -93,7 +94,11 @@ export default async function TemplatesPage({
             <p className="text-muted-foreground text-xs">
               Version {active.version}
               {active.isOverride ? ' · this facility’s own copy' : ' · the shared default'}
-              {active.event ? ` · sent on ${active.event}` : ' · not wired to an event yet'}
+              {active.event === BROADCAST_EVENT
+                ? ' · sent by hand from Announcements'
+                : active.event
+                  ? ` · sent on ${active.event}`
+                  : ' · not wired to an event yet'}
             </p>
 
             <Field name="subject" label="Subject" defaultValue={active.subject ?? ''} />

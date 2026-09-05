@@ -1580,6 +1580,27 @@ const LAST_REVIEWED = '19 August 2026'
 // `LAST_REVIEWED` is not bumped, for the reason the entries above give and per
 // D-115 — only a recorded manual screen-reader pass moves it (B-254).
 
+// Re-verified 2026-09-04, at B-090 part 4 (announcements — a staff-sent
+// broadcast to a site's tenants). No prose change and none needed in either
+// direction, and the reason is worth stating rather than implied: the SCREEN
+// is staff-facing, so it is covered by the second shortfall bullet's admission
+// rather than by any claim here — and it is a form, not one of the four
+// unpaginated lists that bullet names, so the bullet's scope is unchanged.
+//
+// What a customer receives is an EMAIL, and this page has never made a claim
+// about email. It does not start now, but the email is not unassessed: a
+// broadcast renders through the same `renderEmail` every other template uses,
+// so it inherits FR-9a's text/HTML pair from one body, the subject as the
+// single `<h1>`, `lang` on the wrapper and escaping on every merged value —
+// which is what stops a facility called "Bob & Sons" emitting broken markup.
+// Nothing about that is new work this row did, and nothing about it is a
+// promise this page can make on behalf of every mail client.
+//
+// The "Where we fall short" list was re-read against this build and all three
+// entries are still true and unchanged in scope. `LAST_REVIEWED` is not
+// bumped, per D-115 — only a recorded manual screen-reader pass moves it
+// (B-254).
+
 export default function AccessibilityPage() {
   return (
     <ProsePage

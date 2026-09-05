@@ -374,6 +374,16 @@ export const AUDIT_ACTIONS = [
     label: "Message template published",
     requiresReason: false,
   },
+  /// CN-21 (B-090 part 4). A manual broadcast. Audited even though every
+  /// individual send is already a `Message` row, because the act being
+  /// recorded is a DECISION — who chose to mail this many people, with which
+  /// audience filter and which wording — and reconstructing that from a few
+  /// hundred message rows after the complaint arrives is not the same thing.
+  {
+    action: "comms.broadcast_sent",
+    label: "Announcement sent",
+    requiresReason: false,
+  },
   /// B-061. Separate from `template.published` because the stakes differ: this
   /// one changes the wording of a legal notice that precedes a sale, and "who
   /// last edited the lien notice, and when" is a question a wrongful-sale claim

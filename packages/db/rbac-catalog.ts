@@ -51,6 +51,11 @@ export const PERMISSIONS = [
   { key: 'access:events', name: 'View gate activity', category: 'access', description: 'Who came through the gate, when, and which attempts were denied.' },
 
   // Administration
+  // PRD 05 CN-21 (B-090 part 4). Its own permission rather than reusing
+  // `facility:settings`: editing opening hours and mailing every tenant on the
+  // site in one press are not the same authority, and the second is the only
+  // act in the product whose blast radius is "everyone at once".
+  { key: 'comms:broadcast', name: 'Send announcements', category: 'admin', description: 'Send a one-off message to every tenant at a facility, or to a building or units within it.' },
   { key: 'facility:settings', name: 'Edit facility settings', category: 'admin', description: 'Hours, fees, taxes, and facility configuration.' },
   { key: 'users:manage', name: 'Manage users and roles', category: 'admin', description: 'Create staff users and assign roles.' },
   // B-079 / PRD 02 US-4. Editing the org-level default is a portfolio-wide act,
@@ -206,6 +211,7 @@ export const ROLES: readonly RoleSeed[] = [
       'access:manage_grants',
       'access:view_codes',
       'access:events',
+      'comms:broadcast',
       'reports:operational',
       'reports:financial',
     ],
@@ -244,6 +250,7 @@ export const ROLES: readonly RoleSeed[] = [
       'access:view_codes',
       'access:events',
       'facility:settings',
+      'comms:broadcast',
       'org:defaults',
       'marketing:city_copy',
       'accounting:close',

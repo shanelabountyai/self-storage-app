@@ -148,6 +148,7 @@ export const PORTAL_SCAN_ROUTES = [
 /// session and redirect to `/login` without one.
 export const ADMIN_SCAN_ROUTES = [
   '/admin',
+  '/admin/comms/broadcast',
   '/admin/units',
   '/admin/units/types',
   '/admin/units/ready',

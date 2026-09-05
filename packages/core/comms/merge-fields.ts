@@ -37,6 +37,21 @@ export const STANDARD_MERGE_FIELDS: readonly MergeFieldSpec[] = [
   { field: 'links.portal', description: 'Link to the tenant’s account', sample: 'https://example.com/login' },
 ]
 
+/// PRD 05 CN-21 (B-090 part 4). A manual broadcast has no event — nothing in
+/// the system emits one, a person presses a button — so it gets a pseudo-event
+/// rather than a second field-schema mechanism beside this one. Everything the
+/// CN-16 editor already does (preview, publish gate, versioning, per-facility
+/// override) then works on a broadcast template with no change to the editor.
+export const BROADCAST_EVENT = 'broadcast'
+
+/// The prefix IS the wiring: a broadcast template has no notification rule to
+/// read an event from, so the key is what says which schema applies.
+export const BROADCAST_KEY_PREFIX = 'broadcast.'
+
+export function isBroadcastTemplateKey(key: string): boolean {
+  return key.startsWith(BROADCAST_KEY_PREFIX)
+}
+
 /// Available only on templates whose event supplies them. Keyed by event name,
 /// mirroring `CONTEXT_EXTENDERS` in the comms service — if a field is added
 /// there it belongs here too, and the test below is what enforces that.
@@ -56,6 +71,20 @@ export const EVENT_MERGE_FIELDS: Record<string, readonly MergeFieldSpec[]> = {
   'lease.moved_out': [
     { field: 'unit.number', description: 'Unit number', sample: 'A-12' },
     { field: 'billing.settlement_line', description: 'How the account settled', sample: 'Your account is settled in full — nothing further is owed.' },
+  ],
+  // CN-21. The two fields the sender types on the announcements screen. They
+  // are merge fields rather than a free-composed body so the greeting, the
+  // sign-off and the facility's own identity stay the template's — editable
+  // once, under CN-16, instead of retyped correctly by every staffer in a
+  // hurry. `broadcast.subject` sits in the subject line for the same reason:
+  // an operator who wants every announcement prefixed edits it there.
+  [BROADCAST_EVENT]: [
+    { field: 'broadcast.subject', description: 'The subject line you type when sending', sample: 'Gate motor replacement on Thursday' },
+    {
+      field: 'broadcast.message',
+      description: 'What you type when sending',
+      sample: 'The gate motor is being replaced on Thursday 11 September. The gate will stay open from 8am until about noon and the office will be staffed throughout.',
+    },
   ],
   'lease.move_out_requested': [
     { field: 'unit.number', description: 'Unit number', sample: 'A-12' },

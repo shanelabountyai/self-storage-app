@@ -2,7 +2,9 @@ import { prisma } from '@storage/db'
 import { recordAudit } from '@storage/core/audit'
 import {
   availableFieldsFor,
+  BROADCAST_EVENT,
   checkPublishable,
+  isBroadcastTemplateKey,
   sampleContextFor,
   type MergeFieldSpec,
 } from '@storage/core/comms'
@@ -29,6 +31,12 @@ import type { Actor } from '@/lib/rbac/actor'
 /// because guessing here is how a template gets published referencing a field
 /// its event never supplies.
 export function eventForTemplateKey(key: string): string | null {
+  // CN-21 (B-090 part 4). A broadcast template has no rule — nothing emits a
+  // broadcast, a person sends one — so its schema comes from the pseudo-event
+  // instead. Resolved here rather than special-cased in each of the four
+  // callers below, which is what makes the whole CN-16 editor work on these
+  // templates unchanged.
+  if (isBroadcastTemplateKey(key)) return BROADCAST_EVENT
   return COMMS_RULES.find((rule: CommsRuleSeed) => rule.templateKey === key)?.event ?? null
 }
 

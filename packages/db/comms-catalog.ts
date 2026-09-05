@@ -1235,6 +1235,67 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
       'facility.phone',
     ],
   },
+
+  // ── PRD 05 CN-21 (B-090 part 4). Manual broadcasts. ──────────────────────
+  //
+  // These two are the only templates in the catalog with no rule pointing at
+  // them: nothing emits a broadcast, a person sends one. `BROADCAST_EVENT`
+  // supplies their field schema instead (see merge-fields.ts), so the CN-16
+  // editor treats them like any other template — preview, publish gate,
+  // versioning, per-facility override — and an operator can reword the frame
+  // without a deploy.
+  //
+  // TWO of them, not one, and the difference is the whole point: the
+  // classification is what decides whether the send honours an unsubscribe,
+  // waits out FR-MSG-5 quiet hours and carries a one-click unsubscribe link.
+  // A product that offered only the operational one would have every
+  // "50% off your second month" go out as an operational notice, which is
+  // both the CAN-SPAM problem and the reason tenants stop reading the outage
+  // notices that matter.
+  //
+  // No postal address in either body: for the marketing one `sendDirectEmail`
+  // appends it centrally (an edited template must not be able to drop a
+  // CAN-SPAM requirement), and the operational one signs off with the
+  // facility's name and address as the sender's identity rather than as a
+  // legal footer.
+  {
+    key: 'broadcast.notice',
+    classification: 'operational',
+    subject: '{{facility.name}}: {{broadcast.subject}}',
+    bodyText: [
+      'Hi {{tenant.first_name}},',
+      '',
+      '{{broadcast.message}}',
+      '',
+      '{{facility.name}}',
+      '{{facility.address}}',
+    ].join('\n'),
+    requiredMergeFields: [
+      'tenant.first_name',
+      'facility.name',
+      'facility.address',
+      'broadcast.subject',
+      'broadcast.message',
+    ],
+  },
+  {
+    key: 'broadcast.announcement',
+    classification: 'marketing',
+    subject: '{{broadcast.subject}}',
+    bodyText: [
+      'Hi {{tenant.first_name}},',
+      '',
+      '{{broadcast.message}}',
+      '',
+      'Your account: {{links.portal}}',
+    ].join('\n'),
+    requiredMergeFields: [
+      'tenant.first_name',
+      'broadcast.subject',
+      'broadcast.message',
+      'links.portal',
+    ],
+  },
 ]
 
 export const COMMS_RULES: readonly CommsRuleSeed[] = [

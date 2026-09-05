@@ -234,6 +234,45 @@ test.describe('signed in as the demo owner', () => {
   // is unit-tested directly in tests/form-state.test.ts.
 })
 
+// PRD 05 CN-21 (B-090 part 4). The announcements screen's confirm gate.
+//
+// This test does NOT press the send button, for the same reason the
+// create-facility pair below does not press theirs, only more so: the commit
+// here emails every current tenant at a demo facility, which is the unscoped
+// mutation B-120 forbids in its purest form — it would write a `Message` row
+// per demo tenant on every run and put marketing sends against the daily cap
+// that the comms suites read. The confirm step is reachable without sending
+// anything (the action only counts the audience until `confirmed=yes`), and it
+// is the control worth pinning: an announcement cannot be recalled, so the
+// number in the echo is the last thing between a staffer and everyone.
+//
+// What the send actually DOES is covered in tests/broadcast-db.test.ts, where
+// the fixture is disposable and the provider is faked.
+test.describe('announcements, given an owner', () => {
+  test.beforeEach(async ({ page }) => {
+    await signInAsDemoOwner(page)
+  })
+
+  test('counts the audience and echoes it back before anything is emailed', async ({ page }) => {
+    await page.goto('/admin/comms/broadcast')
+
+    const form = page.getByRole('form', { name: 'Send an announcement' })
+    const status = form.getByRole('status')
+    await expectPreexisting(status)
+
+    await form.getByLabel('Subject').fill('e2e-check — gate closed Thursday')
+    await form.getByLabel('Message').fill('This message is never sent; the confirm step is where this test stops.')
+    await form.getByRole('button', { name: 'Review and send' }).click()
+
+    await expect(status).toHaveText(/cannot be recalled/)
+    // The count is the point of the step, so it is asserted as a real number
+    // rather than as the presence of a button.
+    await expect(form.getByRole('button', { name: /^Yes, send to \d+ tenants?$/ })).toBeVisible()
+
+    await assertNoAxeViolations(page)
+  })
+})
+
 // B-237. The create-facility flow.
 //
 // NEITHER test presses the commit button, and that is deliberate rather than

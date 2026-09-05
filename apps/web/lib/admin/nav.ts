@@ -45,6 +45,10 @@ export const NAV_ITEMS: readonly NavItem[] = [
   // No Task entity yet (B-060) — gated the same as Tenants for now.
   { key: 'tasks', label: 'Tasks', href: '/admin/tasks', group: 'today', anyOf: ['tenants:view'] },
   { key: 'leads', label: 'Inquiries', href: '/admin/leads', group: 'today', anyOf: ['tenants:view'] },
+  // PRD 05 CN-21 (B-090 part 4). In `today` rather than under Settings: the
+  // message this exists for is "the gate is closed this morning", and a
+  // destination filed under configuration is one nobody reaches in a hurry.
+  { key: 'broadcast', label: 'Announcements', href: '/admin/comms/broadcast', group: 'today', anyOf: ['comms:broadcast'] },
   { key: 'units', label: 'Units', href: '/admin/units', group: 'property', anyOf: ['units:edit'] },
   { key: 'walkthrough', label: 'Walkthrough', href: '/admin/walkthrough', group: 'property', anyOf: ['units:edit'] },
   { key: 'maintenance', label: 'Maintenance', href: '/admin/maintenance', group: 'property', anyOf: ['units:edit'] },

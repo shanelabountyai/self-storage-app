@@ -2475,6 +2475,10 @@ export type DirectEmailInput = {
   text: string
   facilityId?: string | null
   recipientTenantId?: string | null
+  /// CN-13 preference category (B-090 part 4). Omit for a send the tenant
+  /// cannot switch off — which is every direct send that existed before
+  /// broadcasts, and is why this is optional rather than required.
+  category?: NotificationCategory | null
 }
 
 export type DirectSendResult = { sent: boolean; suppressed?: SuppressionReason }
@@ -2507,12 +2511,83 @@ export async function sendDirectEmail(input: DirectEmailInput): Promise<DirectSe
     bodySnapshot: input.text,
   }
 
+  // CN-13. The tenant turned this category off in the preference center.
+  // Before B-090 part 4 no direct send passed a category, so this is inert for
+  // every caller that predates broadcasts — but it lives here rather than in
+  // the broadcast module for the same reason the marketing obligations below
+  // do: a caller must not be able to forget it.
+  if (!(await notificationAllowed(input.recipientTenantId ?? null, input.category ?? null, CHANNEL))) {
+    await prisma.message.create({
+      data: { ...common, toAddress: address, status: 'cancelled', error: 'skipped: notification_preference_off' },
+    })
+    return { sent: false }
+  }
+
   const suppression = await suppressionFor(address, input.classification, CHANNEL)
   if (suppression) {
     await prisma.message.create({
       data: { ...common, toAddress: address, status: 'suppressed', suppressionReason: suppression },
     })
     return { sent: false, suppressed: suppression }
+  }
+
+  // FR-MSG-5 and US-13 AC2, for a direct send.
+  //
+  // `deliverForRule` has enforced these centrally since B-050 and a direct
+  // send bypassed all of it, which was harmless only for as long as nothing
+  // sent marketing this way. B-090 part 4's broadcast is the first that does,
+  // and composing the unsubscribe link in the CALLER would make the next
+  // marketing direct-send a coin toss. Gated on `marketing` so every caller
+  // that predates this item sends exactly the bytes it sent before.
+  let marketingFooter: { name: string; address: string } | null = null
+  if (input.classification === 'marketing') {
+    const facility = input.facilityId
+      ? await prisma.facility.findUnique({
+          where: { id: input.facilityId },
+          select: FACILITY_SELECT,
+        })
+      : null
+    if (isMarketingQuietHours(new Date(), facility?.timezone ?? 'America/Chicago')) {
+      await prisma.message.create({
+        data: { ...common, toAddress: address, status: 'cancelled', error: 'skipped: marketing_quiet_hours' },
+      })
+      return { sent: false }
+    }
+    // "Max 1 marketing email/day/contact ACROSS SEQUENCES", keyed on the
+    // address and on a rolling 24h window — the same rule and the same
+    // reasoning as the rule-driven path, so a broadcast and a drip step cannot
+    // between them send two in a day by each counting only its own.
+    const rollingDayAgo = new Date(Date.now() - 24 * 3_600_000)
+    const sentToday = await prisma.message.findFirst({
+      where: {
+        toAddress: address,
+        classification: 'marketing',
+        status: { in: ['sent', 'delivered'] },
+        sentAt: { gte: rollingDayAgo },
+      },
+      select: { id: true },
+    })
+    if (sentToday) {
+      await prisma.message.create({
+        data: { ...common, toAddress: address, status: 'cancelled', error: 'skipped: marketing_daily_cap' },
+      })
+      return { sent: false }
+    }
+    marketingFooter = facility
+      ? { name: facility.name, address: formatFacilityAddress(facility) }
+      : null
+  }
+
+  let text = input.text
+  let html = input.html
+  if (input.classification === 'marketing') {
+    text = withPostalFooter(text, marketingFooter)
+    if (marketingFooter) {
+      html = `${html}<hr><p>${marketingFooter.name}<br>${marketingFooter.address}</p>`
+    }
+    const link = unsubscribeUrl(mintUnsubscribeToken(address), baseUrl())
+    text = `${text}\n\nUnsubscribe: ${link}`
+    html = `${html}<p><a href="${link}">Unsubscribe</a></p>`
   }
 
   const destination = effectiveRecipient(address)
@@ -2523,8 +2598,8 @@ export async function sendDirectEmail(input: DirectEmailInput): Promise<DirectSe
     to: destination,
     from: fromAddress(input.fromName),
     subject: input.subject,
-    html: input.html,
-    text: input.text,
+    html,
+    text,
     idempotencyKey: input.idempotencyKey,
   })
 
