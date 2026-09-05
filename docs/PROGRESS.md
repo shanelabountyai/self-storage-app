@@ -8657,7 +8657,7 @@ The last unbuilt part of B-090, and the only backlog row left that is not blocke
 
 ## B-260 part 1 — The portal in Spanish (2026-09-05)
 
-**Commit:** `PENDING`
+**Commit:** `dbda712`
 
 B-090f translated the move-in path and then handed the renter a button reading "Ir a mi cuenta" that landed on an English account. This is the other side of that button: all seventeen portal routes, the nav, the shell, and the components the portal shares with checkout.
 
