@@ -8454,7 +8454,7 @@ PRD 05 CN-21 has been a firm P2 commitment since the PRDs were written and no ro
 
 ## B-090e — Business accounts: the payer above the lease (2026-09-04)
 
-**Commit:** _(recorded in the follow-up commit)_
+**Commit:** `1449a39`
 
 B-090 part 5. The commercial customer with eleven units got eleven leases, eleven invoices, eleven Pay buttons in the portal and eleven separate allocations at the counter. B-090's own audit called this "the only one needing a schema change — a payer ABOVE lease". It needed one table and one nullable column.
 
