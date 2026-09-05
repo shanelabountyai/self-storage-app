@@ -8682,7 +8682,7 @@ B-090f translated the move-in path and then handed the renter a button reading "
 
 ## B-262 — Spanish gets its own URLs (2026-09-05)
 
-**Commits:** `e0ae521` (routing), `c64b030` (static pages), `02b2d78` (guides), `a00738c` (generated SEO prose + city copy), `1424b37` (e2e)
+**Commits:** `e0ae521` (routing), `c64b030` (static pages), `02b2d78` (guides), `a00738c` (generated SEO prose + city copy), `1424b37` (e2e), `bb52528` (decision, PRDs, record)
 
 The last of the Spanish work, and the owner reversed its premise before it
 started. Asked whether the SEO surfaces should stay English (D-122's answer),
