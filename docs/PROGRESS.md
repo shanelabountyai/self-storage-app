@@ -8494,7 +8494,7 @@ B-090 part 5. The commercial customer with eleven units got eleven leases, eleve
 
 ## B-257 — One payment settled several leases; the ledger credited one (2026-09-04)
 
-**Commit:** _(recorded in the follow-up commit)_
+**Commit:** `a8588e7`
 
 Found while starting B-256, and **verified by reproduction before any code was changed**: a tenant with two $100 units pays $200 at the counter. Both invoices come out `paid`. The ledger reads **−$10,000 on unit A and +$10,000 on unit B**. The portal then asks that tenant for $100 they handed over at the desk, and each unit's statement is wrong in opposite directions.
 
