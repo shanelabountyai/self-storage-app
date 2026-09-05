@@ -333,6 +333,90 @@ export async function recomputeInvoices(
   }
 }
 
+/// Writes the ledger side of a payment, SPLIT ACROSS THE LEASES IT SETTLED.
+///
+/// B-257. One payment settles as many leases as the facility's allocation order
+/// reaches — `claimsFor` has spread money across every lease a tenant holds at a
+/// facility since B-048, and across a billing account's leases since B-090e —
+/// but both money-in paths wrote a SINGLE ledger entry for the whole amount
+/// against one named lease. The invoices came out right and the per-lease
+/// balances did not: a tenant with two $100 units who paid $200 at the counter
+/// ended with both invoices `paid`, unit A reading a $100 credit and unit B
+/// still reading $100 owed. The portal then asks them for money they have
+/// already handed over, and the statement for each unit is wrong in opposite
+/// directions.
+///
+/// Mirrored off the allocation rather than re-deriving the arithmetic, which is
+/// the device `postMoveInPaymentToLedger` (B-255) already uses for a multi-unit
+/// basket, and for the same reason: the allocation is what decided where the
+/// money went, so anything else is a second opinion that can disagree with it.
+///
+/// **The unallocated remainder goes to the anchor lease**, which is the lease
+/// the payer named — the unit whose Pay button they pressed, or the one the
+/// counter had open. That is money over and above what any invoice claimed, and
+/// it must still land somewhere on a lease ledger or a prepayment would vanish
+/// from the balance a tenant is shown. Credit on account stays derived at
+/// tenant × facility (B-225); this is only the per-lease view of it, and it
+/// keeps the behaviour a single-lease prepayment has always had.
+///
+/// Idempotent on the same `paymentId` + `type: 'payment'` guard the single-entry
+/// version used, so a Stripe redelivery is a no-op.
+export async function postPaymentLedger(
+  tx: Prisma.TransactionClient,
+  payment: { id: string; facilityId: string; amountCents: number },
+  applied: AppliedPayment,
+  anchorLeaseId: string | null,
+  description: string,
+): Promise<void> {
+  const existing = await tx.ledgerEntry.findFirst({
+    where: { paymentId: payment.id, type: 'payment' },
+    select: { id: true },
+  })
+  if (existing) return
+
+  const byLease = new Map<string, number>()
+  if (applied.lines.length > 0) {
+    const invoices = await tx.invoice.findMany({
+      where: { id: { in: [...new Set(applied.lines.map((line) => line.invoiceId))] } },
+      select: { id: true, leaseId: true },
+    })
+    const leaseOf = new Map(invoices.map((invoice) => [invoice.id, invoice.leaseId]))
+    for (const line of applied.lines) {
+      const leaseId = leaseOf.get(line.invoiceId)
+      if (!leaseId) continue
+      byLease.set(leaseId, (byLease.get(leaseId) ?? 0) + line.amountCents)
+    }
+  }
+
+  // Whatever no invoice claimed — a prepayment, or an overpayment the allocator
+  // deliberately refused to invent a home for. Computed from the payment total
+  // rather than read from `unappliedCents` so that the entries always sum to the
+  // amount actually taken, even if a line failed to resolve its lease above.
+  const allocated = [...byLease.values()].reduce((sum, cents) => sum + cents, 0)
+  const remainder = payment.amountCents - allocated
+  if (remainder > 0 && anchorLeaseId) {
+    byLease.set(anchorLeaseId, (byLease.get(anchorLeaseId) ?? 0) + remainder)
+  }
+
+  // Nothing to post is a real state — a merchandise sale, or a payment by
+  // somebody holding no lease at this facility — and inventing an entry would
+  // attach the money to a lease it never touched.
+  for (const [leaseId, amountCents] of byLease) {
+    if (amountCents === 0) continue
+    await tx.ledgerEntry.create({
+      data: {
+        facilityId: payment.facilityId,
+        leaseId,
+        type: 'payment',
+        // Signed: a payment reduces what is owed (see the enum's own comment).
+        amountCents: -amountCents,
+        description,
+        paymentId: payment.id,
+      },
+    })
+  }
+}
+
 /// Leases with money in flight — a bank debit accepted but not yet settled.
 ///
 /// B-103. Only ACH reaches `processing`, and while it is there the tenant has

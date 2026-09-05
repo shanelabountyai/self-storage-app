@@ -160,7 +160,7 @@ export async function returnPayment(
       receiptNumber: true,
       ledgerEntries: {
         where: { type: "payment" },
-        select: { id: true, leaseId: true, occurredAt: true },
+        select: { id: true, leaseId: true, amountCents: true, occurredAt: true },
       },
       allocations: { select: { id: true, invoiceId: true } },
     },
@@ -176,11 +176,15 @@ export async function returnPayment(
   if (payment.status !== "succeeded")
     return { ok: false, reason: "not_settled" };
 
-  const posted = payment.ledgerEntries[0];
+  // B-257. EVERY posted entry, not `[0]`. A payment settles as many leases as
+  // the allocation reached, so since that item it posts one entry per lease —
+  // and reversing only the first would leave the other units credited with
+  // money the bank has taken back.
+  const posted = payment.ledgerEntries;
   // A `succeeded` payment with no ledger entry is a merchandise sale or a
   // payment against no lease. There is nothing to reverse on a lease ledger,
   // and inventing an entry would attach the money to a lease it never touched.
-  if (!posted) return { ok: false, reason: "nothing_posted" };
+  if (posted.length === 0) return { ok: false, reason: "nothing_posted" };
 
   // A payment that was returned and later REINSTATED (B-147's won dispute) is
   // `succeeded` again, so the status check above lets a second return through —
@@ -188,8 +192,8 @@ export async function returnPayment(
   // posted entry throws inside the transaction. From a webhook that is a 500
   // Stripe retries for days. Refuse it here instead, with the reason that is
   // true: this entry has already been reversed once and that pair still stands.
-  const alreadyReversed = await prisma.ledgerEntry.findUnique({
-    where: { reversalOfId: posted.id },
+  const alreadyReversed = await prisma.ledgerEntry.findFirst({
+    where: { reversalOfId: { in: posted.map((entry) => entry.id) } },
     select: { id: true },
   });
   if (alreadyReversed) return { ok: false, reason: "already_returned" };
@@ -203,24 +207,34 @@ export async function returnPayment(
     // that date against a receipt the tenant is holding — and the correction is
     // a new entry pointing back at it through the column that has been waiting
     // since B-002.
-    const reversal = await tx.ledgerEntry.create({
-      data: {
-        facilityId: payment.facilityId,
-        leaseId: posted.leaseId,
-        // `adjustment`, not `refund`: a refund is money we handed back, and
-        // nothing left the building. The sign is positive because the tenant
-        // owes it again.
-        type: "adjustment",
-        amountCents: payment.amountCents,
-        description: `Returned ${payment.method.replace("_", " ")} payment${
-          payment.receiptNumber !== null
-            ? `, receipt #${payment.receiptNumber}`
-            : ""
-        } — ${input.reasonCode}`,
-        paymentId: payment.id,
-        reversalOfId: posted.id,
-      },
-    });
+    // One counter-entry per posted entry, each for the amount that entry
+    // credited, so every lease the payment touched is put back exactly where it
+    // was. The entries sum to the payment, which is what keeps the tenant's
+    // total right whichever units the money had reached.
+    const reversals = [];
+    for (const entry of posted) {
+      reversals.push(
+        await tx.ledgerEntry.create({
+          data: {
+            facilityId: payment.facilityId,
+            leaseId: entry.leaseId,
+            // `adjustment`, not `refund`: a refund is money we handed back, and
+            // nothing left the building. The sign is positive because the tenant
+            // owes it again.
+            type: "adjustment",
+            amountCents: -entry.amountCents,
+            description: `Returned ${payment.method.replace("_", " ")} payment${
+              payment.receiptNumber !== null
+                ? `, receipt #${payment.receiptNumber}`
+                : ""
+            } — ${input.reasonCode}`,
+            paymentId: payment.id,
+            reversalOfId: entry.id,
+          },
+        }),
+      );
+    }
+    const reversal = reversals[0];
 
     // The money settled nothing. Deleting the allocations and recomputing is
     // what re-opens the invoices — and `daysPastDue` anchors to the OLDEST
@@ -250,7 +264,11 @@ export async function returnPayment(
           amountCents: payment.amountCents,
           method: payment.method,
           receiptNumber: payment.receiptNumber,
+          // B-257. Plural, because a payment that settled two leases is
+          // reversed on both; `reversalEntryId` stays for the one the result
+          // type has always named.
           reversalEntryId: reversal.id,
+          reversalEntryIds: reversals.map((row) => row.id),
           reopenedInvoiceIds: invoiceIds,
           feeInvoiceNumber: fee?.number ?? null,
           feeCents: fee?.amountCents ?? 0,
@@ -297,11 +315,16 @@ export async function returnPayment(
     priority: "high",
   });
 
-  await resumeLadderAfterReversal(
-    payment.facilityId,
-    posted.leaseId,
-    posted.occurredAt,
-  );
+  // B-257. Once per lease the returned money had settled. Resuming on one of
+  // them left the ladder halted on every other unit the payment had reached —
+  // a lease that looks paid to the dunning run and is not.
+  for (const entry of posted) {
+    await resumeLadderAfterReversal(
+      payment.facilityId,
+      entry.leaseId,
+      entry.occurredAt,
+    );
+  }
 
   return {
     ok: true,
@@ -404,7 +427,7 @@ export async function reinstatePayment(
       receiptNumber: true,
       ledgerEntries: {
         where: { type: "payment" },
-        select: { id: true, leaseId: true },
+        select: { id: true, leaseId: true, amountCents: true },
       },
     },
   });
@@ -417,37 +440,47 @@ export async function reinstatePayment(
   // stops here rather than posting a second counter-entry.
   if (payment.status !== "returned") return { ok: false, reason: "not_returned" };
 
-  const posted = payment.ledgerEntries[0];
-  const reversal = posted
-    ? await prisma.ledgerEntry.findUnique({
-        where: { reversalOfId: posted.id },
-        select: { id: true, leaseId: true },
-      })
-    : null;
+  // B-257. Every posted entry has its own reversal, because a payment settling
+  // two leases posts two entries and the return reverses both. Reinstating only
+  // the first would put one unit back and leave the other owing money the bank
+  // has since confirmed we keep.
+  const reversals = await prisma.ledgerEntry.findMany({
+    where: {
+      reversalOfId: { in: payment.ledgerEntries.map((entry) => entry.id) },
+    },
+    select: { id: true, leaseId: true, amountCents: true },
+  });
   // `returned` with nothing reversed should not exist, but a status set by hand
   // in a database client would produce it, and inventing a credit off the back
   // of that is worse than refusing.
-  if (!reversal) return { ok: false, reason: "nothing_reversed" };
+  if (reversals.length === 0) return { ok: false, reason: "nothing_reversed" };
 
   const result = await prisma.$transaction(async (tx) => {
-    const entry = await tx.ledgerEntry.create({
-      data: {
-        facilityId: payment.facilityId,
-        leaseId: reversal.leaseId,
-        // Negative: the tenant stops owing it again. `adjustment` rather than
-        // `payment`, so `ledgerEntries[0]` above keeps meaning the ONE original
-        // posting and a later return still reverses the right row.
-        type: "adjustment",
-        amountCents: -payment.amountCents,
-        description: `Reinstated ${payment.method.replace("_", " ")} payment${
-          payment.receiptNumber !== null
-            ? `, receipt #${payment.receiptNumber}`
-            : ""
-        } — ${input.reasonCode}`,
-        paymentId: payment.id,
-        reversalOfId: reversal.id,
-      },
-    });
+    const entries = [];
+    for (const reversal of reversals) {
+      entries.push(
+        await tx.ledgerEntry.create({
+          data: {
+            facilityId: payment.facilityId,
+            leaseId: reversal.leaseId,
+            // Negative: the tenant stops owing it again. `adjustment` rather
+            // than `payment`, so the `type: 'payment'` selects above keep
+            // meaning the ORIGINAL postings and a later return still reverses
+            // the right rows.
+            type: "adjustment",
+            amountCents: -reversal.amountCents,
+            description: `Reinstated ${payment.method.replace("_", " ")} payment${
+              payment.receiptNumber !== null
+                ? `, receipt #${payment.receiptNumber}`
+                : ""
+            } — ${input.reasonCode}`,
+            paymentId: payment.id,
+            reversalOfId: reversal.id,
+          },
+        }),
+      );
+    }
+    const entry = entries[0];
 
     // Order matters, exactly as it does in `reconcile.ts`: allocation sums only
     // SETTLING statuses, and this update is what makes this payment count.
@@ -476,7 +509,11 @@ export async function reinstatePayment(
           amountCents: payment.amountCents,
           method: payment.method,
           receiptNumber: payment.receiptNumber,
-          reversedEntryId: reversal.id,
+          // B-257. Plural, because a payment that settled two leases was
+          // reversed on both — an audit naming one of them would understate
+          // what this action actually put back.
+          reversedEntryIds: reversals.map((row) => row.id),
+          entryIds: entries.map((row) => row.id),
           entryId: entry.id,
           reallocatedInvoiceIds: [
             ...new Set(applied.lines.map((line) => line.invoiceId)),
@@ -521,9 +558,15 @@ async function assessNsfFee(
   payment: { facilityId: string; id: string },
   reasonCode: string,
 ): Promise<{ number: string; amountCents: number; invoiceId: string } | null> {
+  // B-257. ONE fee for one returned payment, however many leases the money had
+  // reached — a bank reversing a single debit is a single NSF event, and
+  // raising one per unit would charge a two-unit tenant twice for it. Ordered
+  // so the unit it lands on is the same on a re-run rather than whichever row
+  // the database happened to return first.
   const posted = await tx.ledgerEntry.findFirst({
     where: { paymentId: payment.id, type: "payment" },
     select: { leaseId: true },
+    orderBy: { id: "asc" },
   });
   if (!posted) return null;
 

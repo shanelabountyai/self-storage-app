@@ -3,7 +3,7 @@ import { type Prisma, prisma } from '@storage/db'
 import { emitEvent } from '@storage/core/events'
 import { provisionMoveIn, requestDownstream } from '@/lib/checkout/provision'
 import { cancelOpenTask, createTask } from '@/lib/admin/tasks'
-import { applyPayment } from '@/lib/billing/allocation'
+import { applyPayment, postPaymentLedger, type AppliedPayment } from '@/lib/billing/allocation'
 import { reinstatePayment, returnPayment } from '@/lib/billing/reversals'
 import { systemActor } from '@/lib/rbac/actor'
 import { restoreAccessIfSettled } from '@/lib/access/delinquency-gate'
@@ -101,11 +101,18 @@ function referencePlanId(intent: Stripe.PaymentIntent): string | null {
 /// on the strength of a round trip through a third party. A mismatch posts
 /// nothing rather than guessing — an unposted payment is visible in the
 /// reconciliation report, a misposted one is not.
-async function postPaymentToLedger(
+/// The lease a payment ANCHORS to — the one the payer named, which is where any
+/// money no invoice claimed lands.
+///
+/// B-257. This used to write the ledger entry itself, for the whole amount,
+/// against this one lease. It no longer does: `postPaymentLedger` splits the
+/// entry across every lease the allocation actually settled, and this function
+/// answers only the narrower question it was always really answering.
+async function anchorLeaseFor(
   tx: Prisma.TransactionClient,
   payment: { id: string; facilityId: string; tenantId: string; amountCents: number },
   explicitLeaseId?: string | null,
-): Promise<void> {
+): Promise<string | null> {
   const lease = explicitLeaseId
     ? await tx.lease.findFirst({
         where: { id: explicitLeaseId, tenantId: payment.tenantId, facilityId: payment.facilityId },
@@ -125,26 +132,7 @@ async function postPaymentToLedger(
         select: { id: true },
         orderBy: { startDate: 'desc' },
       })
-  if (!lease) return
-
-  // Already posted? Stripe redelivering the same event must not double-credit.
-  const existing = await tx.ledgerEntry.findFirst({
-    where: { paymentId: payment.id, type: 'payment' },
-    select: { id: true },
-  })
-  if (existing) return
-
-  await tx.ledgerEntry.create({
-    data: {
-      facilityId: payment.facilityId,
-      leaseId: lease.id,
-      type: 'payment',
-      // Signed: a payment reduces what is owed (see the enum's own comment).
-      amountCents: -payment.amountCents,
-      description: 'Card payment',
-      paymentId: payment.id,
-    },
-  })
+  return lease?.id ?? null
 }
 
 /// The payment half of a move-in's opening ledger (B-255).
@@ -220,7 +208,7 @@ async function settlePayment(
   payment: { id: string; facilityId: string; tenantId: string; amountCents: number },
   explicitInvoiceId: string | null,
   explicitPlanId: string | null = null,
-): Promise<void> {
+): Promise<AppliedPayment> {
   // The named invoice is checked against this payment's own tenant and
   // facility before it is trusted: it arrives through Stripe metadata, and
   // money must not settle an invoice on the strength of a round trip through a
@@ -262,6 +250,8 @@ async function settlePayment(
     })
     if (invoice?.status === 'paid') await cancelOpenTask('failed_payment', line.invoiceId, tx)
   }
+
+  return applied
 }
 
 /// Applies one Stripe event to our records. Assumes the caller has already
@@ -292,15 +282,32 @@ export async function applyStripeEvent(event: Stripe.Event): Promise<void> {
           where: { id: payment.id },
           data: { status: 'succeeded', receivedAt: new Date(intent.created * 1000) },
         })
-        // B-255. A checkout payment is posted AFTER provisioning instead —
-        // the lease it belongs to does not exist yet, so posting here can only
-        // find nothing and return.
-        if (!referenceSessionId(intent)) {
-          await postPaymentToLedger(tx, payment, referenceLeaseId(intent))
-        }
         // Order matters: the allocation sums only SUCCEEDED payments, and the
         // status update above is what makes this one count.
-        await settlePayment(tx, payment, referenceInvoiceId(intent), referencePlanId(intent))
+        const applied = await settlePayment(
+          tx,
+          payment,
+          referenceInvoiceId(intent),
+          referencePlanId(intent),
+        )
+        // B-257. AFTER the allocation, not before it, because the entries are
+        // split by what the allocation settled — one per lease this payment
+        // actually reached. Previously this ran first and wrote one entry for
+        // the whole amount, which is why a payment spanning two leases left one
+        // of them still reading as owed.
+        //
+        // B-255. A checkout payment is posted AFTER provisioning instead — the
+        // lease it belongs to does not exist yet, so posting here can only find
+        // nothing and return.
+        if (!referenceSessionId(intent)) {
+          await postPaymentLedger(
+            tx,
+            payment,
+            applied,
+            await anchorLeaseFor(tx, payment, referenceLeaseId(intent)),
+            'Card payment',
+          )
+        }
         settled.push({
           id: payment.id,
           tenantId: payment.tenantId,

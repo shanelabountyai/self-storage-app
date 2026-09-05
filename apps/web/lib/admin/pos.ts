@@ -16,7 +16,7 @@ import {
 import { toAuditActor } from "@/lib/rbac/audit-actor";
 import type { Actor } from "@/lib/rbac/actor";
 import { restoreAccessIfSettled } from "@/lib/access/delinquency-gate";
-import { applyPayment, type AppliedPayment } from "@/lib/billing/allocation";
+import { applyPayment, postPaymentLedger, type AppliedPayment } from "@/lib/billing/allocation";
 import { openSessionFor } from "@/lib/admin/drawer";
 import {
   createChargeIntent,
@@ -241,18 +241,6 @@ export async function recordCounterPayment(
       },
     });
 
-    await tx.ledgerEntry.create({
-      data: {
-        facilityId: input.facilityId,
-        leaseId: lease.id,
-        type: "payment",
-        // Signed: a payment reduces what is owed.
-        amountCents: -settled.amountCents,
-        description: `${input.method.replace("_", " ")} payment, receipt #${receiptNumber}`,
-        paymentId: payment.id,
-      },
-    });
-
     // US-22 (B-048). Counter payments were posting to the ledger and nothing
     // else, so every invoice stayed open however much cash came across the
     // desk — the balance moved and the invoices did not, which is exactly the
@@ -261,13 +249,26 @@ export async function recordCounterPayment(
     //
     // `status: 'succeeded'` is already set on a counter payment (money is in
     // hand), so the recompute counts it immediately.
-    allocation.push(
-      await applyPayment(tx, {
-        id: payment.id,
-        tenantId: input.tenantId,
-        facilityId: input.facilityId,
-        amountCents: settled.amountCents,
-      }),
+    const applied = await applyPayment(tx, {
+      id: payment.id,
+      tenantId: input.tenantId,
+      facilityId: input.facilityId,
+      amountCents: settled.amountCents,
+    });
+    allocation.push(applied);
+
+    // B-257. AFTER the allocation, not before, and split by it: this payment
+    // may settle more than one lease — a second unit at the same site, or a
+    // whole business account (B-090e) — and one entry for the whole amount
+    // against `lease.id` left every other unit still reading as owed. The
+    // remainder no invoice claimed anchors to the lease the counter had open,
+    // which is the unit the person at the desk named.
+    await postPaymentLedger(
+      tx,
+      { id: payment.id, facilityId: input.facilityId, amountCents: settled.amountCents },
+      applied,
+      lease.id,
+      `${input.method.replace("_", " ")} payment, receipt #${receiptNumber}`,
     );
 
     await recordAudit(
