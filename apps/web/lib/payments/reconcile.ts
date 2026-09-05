@@ -147,6 +147,64 @@ async function postPaymentToLedger(
   })
 }
 
+/// The payment half of a move-in's opening ledger (B-255).
+///
+/// `openingLedger`'s docstring promises both entries — "what was owed today,
+/// and the payment that cleared it" — and wrote only the charge. The payment
+/// side could not be written there: `postPaymentToLedger` runs inside the
+/// payment transaction, `provisionMoveIn` runs after it commits, so at the
+/// moment that function looked for a lease to post against there was none and
+/// it correctly returned. Nothing wrote the entry afterwards, so every card
+/// move-in's ledger read as owing the whole move-in total, forever.
+///
+/// Mirrored off the charge rows rather than re-deriving the arithmetic, so a
+/// two-unit basket credits each lease exactly what B-106 charged it. Any
+/// difference between what was charged and what was actually paid lands on the
+/// last lease, which keeps the tenant's total exact whichever way it drifted.
+///
+/// Idempotent on the same `paymentId` + `type` guard `postPaymentToLedger`
+/// uses, so a Stripe redelivery is a no-op.
+export async function postMoveInPaymentToLedger(
+  payment: { id: string; facilityId: string; amountCents: number },
+  leaseIds: string[],
+): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    const existing = await tx.ledgerEntry.findFirst({
+      where: { paymentId: payment.id, type: 'payment' },
+      select: { id: true },
+    })
+    if (existing) return
+
+    const charges = await tx.ledgerEntry.findMany({
+      where: { leaseId: { in: leaseIds }, type: 'charge', description: 'Move-in charges' },
+      select: { leaseId: true, amountCents: true },
+      orderBy: { createdAt: 'asc' },
+    })
+    // No opening charge means provisioning did not get that far. Posting a
+    // credit against nothing would read as the facility owing the tenant.
+    if (charges.length === 0) return
+
+    let remaining = payment.amountCents
+    for (const [index, charge] of charges.entries()) {
+      const amountCents =
+        index === charges.length - 1 ? remaining : Math.min(remaining, charge.amountCents)
+      remaining -= amountCents
+      if (amountCents <= 0) continue
+      await tx.ledgerEntry.create({
+        data: {
+          facilityId: payment.facilityId,
+          leaseId: charge.leaseId,
+          type: 'payment',
+          // Signed: a payment reduces what is owed.
+          amountCents: -amountCents,
+          description: 'Move-in payment',
+          paymentId: payment.id,
+        },
+      })
+    }
+  })
+}
+
 
 /// Applies a succeeded payment across what the tenant owes (US-22, B-048).
 ///
@@ -216,7 +274,8 @@ export async function applyStripeEvent(event: Stripe.Event): Promise<void> {
       // A one-element box rather than a `let`: TypeScript narrows a variable
       // only ever assigned inside a callback to `never` at the point it is
       // read, and the cast that silences that would also silence a real error.
-      const settled: { tenantId: string; facilityId: string }[] = []
+      const settled: { id: string; tenantId: string; facilityId: string; amountCents: number }[] =
+        []
 
       await prisma.$transaction(async (tx) => {
         const payment = await tx.payment.findUnique({
@@ -233,11 +292,21 @@ export async function applyStripeEvent(event: Stripe.Event): Promise<void> {
           where: { id: payment.id },
           data: { status: 'succeeded', receivedAt: new Date(intent.created * 1000) },
         })
-        await postPaymentToLedger(tx, payment, referenceLeaseId(intent))
+        // B-255. A checkout payment is posted AFTER provisioning instead —
+        // the lease it belongs to does not exist yet, so posting here can only
+        // find nothing and return.
+        if (!referenceSessionId(intent)) {
+          await postPaymentToLedger(tx, payment, referenceLeaseId(intent))
+        }
         // Order matters: the allocation sums only SUCCEEDED payments, and the
         // status update above is what makes this one count.
         await settlePayment(tx, payment, referenceInvoiceId(intent), referencePlanId(intent))
-        settled.push({ tenantId: payment.tenantId, facilityId: payment.facilityId })
+        settled.push({
+          id: payment.id,
+          tenantId: payment.tenantId,
+          facilityId: payment.facilityId,
+          amountCents: payment.amountCents,
+        })
         // FR-4.4: finalisation is webhook-driven. The reference carries which
         // checkout this was, so a renter who closed the tab still gets moved in.
         checkoutSessionId = referenceSessionId(intent)
@@ -273,6 +342,11 @@ export async function applyStripeEvent(event: Stripe.Event): Promise<void> {
       // paid; if this throws, the webhook retries and the money stays received.
       if (checkoutSessionId) {
         const result = await provisionMoveIn(checkoutSessionId)
+        // B-255. Now that the leases exist, the payment has something to post
+        // against. Before this, the opening ledger was half written and the
+        // tenant's balance stayed at the full move-in total.
+        const paid = settled[0]
+        if (result.ok && paid) await postMoveInPaymentToLedger(paid, result.leaseIds)
         // B-106. Every lease of the basket, not just the first: an access
         // credential is per lease, and a renter who paid for two units and can
         // open one is locked out of something they are paying for.

@@ -7,6 +7,8 @@ import { sessionById } from '../apps/web/lib/checkout/session'
 import { startCheckout, advance } from '../apps/web/lib/checkout/session'
 import { createReservation } from '../apps/web/lib/reservations/reserve'
 import { publicInventoryForFacility } from '../apps/web/lib/inventory/public-inventory'
+import { applyStripeEvent } from '../apps/web/lib/payments/reconcile'
+import type Stripe from 'stripe'
 
 // B-026 / PRD 01 FR-4.5, FR-4.6.
 
@@ -64,6 +66,7 @@ describeDb('move-in provisioning', () => {
 
   beforeEach(async () => {
     await prisma.ledgerEntry.deleteMany({ where: { facilityId } })
+    await prisma.payment.deleteMany({ where: { facilityId } })
     await prisma.leaseRateChange.deleteMany({ where: { lease: { facilityId } } })
     await prisma.document.deleteMany({ where: { facilityId } })
     await prisma.lease.deleteMany({ where: { facilityId } })
@@ -78,6 +81,11 @@ describeDb('move-in provisioning', () => {
     await prisma.ledgerEntry.deleteMany({ where: { facilityId } })
     await prisma.leaseRateChange.deleteMany({ where: { lease: { facilityId } } })
     await prisma.domainEvent.deleteMany({ where: { facilityId } })
+    await prisma.payment.deleteMany({ where: { facilityId } })
+    // B-255's test drives the whole webhook path, so access provisioning ran
+    // too — and both tables restrict the tenant they point at.
+    await prisma.accessGrant.deleteMany({ where: { facilityId } })
+    await prisma.accessCredential.deleteMany({ where: { facilityId } })
     await prisma.document.deleteMany({ where: { facilityId } })
     // Before the leases and the facility: both referral tables restrict their
     // facility, and Referral restricts its invite (B-100).
@@ -402,6 +410,81 @@ describeDb('move-in provisioning', () => {
     // A charge increases what is owed, so it is positive.
     expect(entries[0].type).toBe('charge')
     expect(entries[0].amountCents).toBeGreaterThan(0)
+  })
+
+  it('posts the move-in payment to the ledger, so a paid move-in nets to zero (B-255)', async () => {
+    // The bug this covers: `postPaymentToLedger` runs inside the payment
+    // transaction and `provisionMoveIn` runs after it commits, so the payment
+    // half of the opening ledger had nothing to post against and was never
+    // written. Every card move-in read as owing its whole first month, forever.
+    //
+    // Driven through `applyStripeEvent` rather than `provisionMoveIn`, because
+    // the defect is in that ordering and calling provisioning directly cannot
+    // see it. Two units, so the split is covered too: each lease must net to
+    // zero on its own, not just the tenant's total.
+    const started = await paidSession()
+    const secondUnit = await prisma.unit.create({
+      data: { facilityId, unitTypeId, number: `PZ-${suffix}` },
+    })
+    await prisma.checkoutSessionUnit.create({
+      data: {
+        checkoutSessionId: started.sessionId,
+        unitTypeId,
+        unitId: secondUnit.id,
+        quotedRateCents: 9_900,
+      },
+    })
+
+    const due = await amountDueToday((await sessionById(started.sessionId))!)
+    const intentId = `pi_prov_${suffix}`
+    const payment = await prisma.payment.create({
+      data: {
+        facilityId,
+        tenantId,
+        amountCents: due.totalDueTodayCents,
+        method: 'card',
+        status: 'pending',
+        stripePaymentIntentId: intentId,
+      },
+    })
+
+    const event = {
+      id: `evt_prov_${suffix}`,
+      type: 'payment_intent.succeeded',
+      data: {
+        object: {
+          id: intentId,
+          created: Math.floor(Date.now() / 1000),
+          metadata: { reference: `checkout:${started.sessionId}` },
+        },
+      },
+    } as unknown as Stripe.Event
+
+    await applyStripeEvent(event)
+
+    const leases = await prisma.lease.findMany({
+      where: { unitId: { in: [started.unitId, secondUnit.id] } },
+      select: { id: true },
+    })
+    expect(leases).toHaveLength(2)
+
+    const entries = await prisma.ledgerEntry.findMany({
+      where: { leaseId: { in: leases.map((lease) => lease.id) } },
+    })
+    expect(entries.filter((entry) => entry.type === 'payment')).toHaveLength(2)
+    expect(entries.reduce((sum, entry) => sum + entry.amountCents, 0)).toBe(0)
+    for (const lease of leases) {
+      const balance = entries
+        .filter((entry) => entry.leaseId === lease.id)
+        .reduce((sum, entry) => sum + entry.amountCents, 0)
+      expect(balance).toBe(0)
+    }
+
+    // Stripe delivers at-least-once: a redelivery must not credit them twice.
+    await applyStripeEvent(event)
+    expect(
+      await prisma.ledgerEntry.count({ where: { paymentId: payment.id, type: 'payment' } }),
+    ).toBe(2)
   })
 
   it('is idempotent — a redelivered webhook does not create a second lease', async () => {

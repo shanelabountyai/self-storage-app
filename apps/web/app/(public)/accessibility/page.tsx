@@ -1567,6 +1567,18 @@ const LAST_REVIEWED = '19 August 2026'
 // judgement about announcement order that no automated check can make — axe
 // sees a named link either way — so it is recorded here rather than left to a
 // green scan.
+//
+// Re-verified 2026-09-04, at B-255 (a web move-in's payment reaches the
+// ledger). No prose change and none needed in either direction. The row adds no
+// route, no control and no copy — it is an ordering fix inside the Stripe
+// webhook handler and a repair script — so the generated coverage claim is
+// unaffected. What a tenant SEES does change, and in the direction that helps:
+// the portal balance after a card move-in stops reading as the whole first
+// month still owing. A number that was wrong is not an accessibility exception
+// and does not belong in "Where we fall short"; that list was re-read against
+// this build and all three entries are still true and unchanged in scope.
+// `LAST_REVIEWED` is not bumped, for the reason the entries above give and per
+// D-115 — only a recorded manual screen-reader pass moves it (B-254).
 
 export default function AccessibilityPage() {
   return (
