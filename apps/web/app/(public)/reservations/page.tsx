@@ -1,4 +1,4 @@
-import Link from 'next/link'
+import { LocaleLink } from '@/components/site/locale-link'
 import { formatRate } from '@/lib/format'
 import { SITE } from '@/lib/site-config'
 import { reservationByToken } from '@/lib/reservations/reserve'
@@ -63,9 +63,9 @@ export default async function ReservationPage({
           <span className="text-muted-foreground">
             and we will tell you what is available, or{' '}
           </span>
-          <Link href="/storage/search" className="underline underline-offset-4">
+          <LocaleLink href="/storage/search" className="underline underline-offset-4">
             search again
-          </Link>
+          </LocaleLink>
           .
         </p>
       </div>

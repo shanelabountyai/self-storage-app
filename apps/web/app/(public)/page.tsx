@@ -1,4 +1,4 @@
-import Link from 'next/link'
+import { LocaleLink } from '@/components/site/locale-link'
 import { FacilitySearchForm } from '@/components/site/facility-search-form'
 import { SITE } from '@/lib/site-config'
 import {
@@ -7,6 +7,7 @@ import {
   type MessageKey,
 } from '@/lib/i18n'
 import { getLocale } from '@/lib/i18n/server'
+import { localeAlternates } from '@/lib/marketing/alternates'
 
 // Homepage (PRD 01 §6.1). One primary CTA — the search — and nothing competing
 // with it. The form submits by GET so the query lands in a shareable URL
@@ -18,6 +19,21 @@ import { getLocale } from '@/lib/i18n/server'
 /// all, because the root layout reads the language cookie — see
 /// `lib/i18n/index.ts` for why that trade was taken and what reverses it.
 export const revalidate = 3600
+
+// B-262. The homepage had no `metadata` of its own at all — it inherited title
+// and description from the root layout and declared no canonical, which was
+// harmless while there was one URL per page. There are two now, and the
+// homepage is the one a crawler reaches first: without this, `/` and `/es`
+// arrive as two unrelated pages making the same claim.
+export async function generateMetadata() {
+  const locale = await getLocale()
+  const dict = dictionaryFor(locale)
+  return {
+    title: translate(dict, 'home.h1'),
+    description: translate(dict, 'site.tagline'),
+    alternates: localeAlternates(locale, '/'),
+  }
+}
 
 /// The three steps, as message keys. The copy is in the dictionaries; what
 /// stays here is the order and the fact that there are three of them.
@@ -80,9 +96,9 @@ export default async function HomePage() {
                 size, and the page that answers that question is the one that
                 lists them with what fits in each. Sending a size question to a
                 general FAQ makes the reader do the routing. */}
-            <Link href="/storage/size-guide" className="underline underline-offset-4">
+            <LocaleLink href="/storage/size-guide" className="underline underline-offset-4">
               {t('home.helpSizeGuideLink')}
-            </Link>
+            </LocaleLink>
             .
           </p>
         </div>

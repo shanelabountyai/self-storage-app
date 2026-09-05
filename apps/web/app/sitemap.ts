@@ -6,6 +6,8 @@ import { citySizePath, citySlugPath, facilityPagePath } from '@/lib/marketing/pa
 import { citiesWithFacilities } from '@/lib/facility/city-facilities'
 import { citySizePages } from '@/lib/facility/city-size-pages'
 import { GUIDES, guidePath } from '@/lib/guides/catalog'
+import { LOCALES } from '@/lib/i18n'
+import { isIndexableTwin, localePath } from '@/lib/i18n/routing'
 
 // PRD 04 FR-SEO-5 / US-3 AC1 (B-066). The sitemap, generated from the records.
 //
@@ -19,6 +21,13 @@ import { GUIDES, guidePath } from '@/lib/guides/catalog'
 // `lastmod` is the facility's own `updatedAt`, not the build time. A sitemap
 // that stamps every URL with "now" on every deploy is telling crawlers that
 // every page changed, every deploy — which trains them to ignore the field.
+//
+// B-262 (D-123). Every translated page is now TWO URLs, and they are listed as
+// ONE entry carrying `xhtml:link` alternates rather than two entries — which is
+// what tells a crawler they are the same page in two languages rather than two
+// pages competing for one query. `entry()` below is the only thing that builds
+// a row, so a URL cannot reach the sitemap without its alternates being
+// considered.
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -42,9 +51,36 @@ const STATIC_ROUTES: { path: string; priority: number; changeFrequency: Metadata
   { path: '/privacy', priority: 0.2, changeFrequency: 'yearly' },
 ]
 
-export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const origin = siteOrigin()
 
+/// One sitemap row for a path, with its `hreflang` set when it has one.
+///
+/// The row's own `url` is the ENGLISH URL. Google treats every URL in an
+/// alternates cluster as equivalent, so which one carries the row is a
+/// presentation choice — and English is the `x-default`, so it is the one to
+/// name if a consumer reads only the `<loc>`.
+///
+/// The self-referencing `en` alternate is deliberate and not redundant: an
+/// hreflang set is only believed when every URL in it names every other,
+/// itself included.
+function entry(
+  path: string,
+  fields: Omit<MetadataRoute.Sitemap[number], 'url'>,
+): MetadataRoute.Sitemap[number] {
+  const origin = siteOrigin()
+  const row: MetadataRoute.Sitemap[number] = {
+    url: absoluteUrl(origin, path),
+    ...fields,
+  }
+  if (!isIndexableTwin(path)) return row
+
+  const languages: Record<string, string> = {}
+  for (const locale of LOCALES) {
+    languages[locale] = absoluteUrl(origin, localePath(locale, path))
+  }
+  return { ...row, alternates: { languages } }
+}
+
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const facilities = await prisma.facility.findMany({
     // Only what a renter can actually rent. A facility that is not taking
     // customers has a page that either 404s or wastes a crawl, and inviting a
@@ -56,13 +92,14 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   const now = new Date()
 
-  const facilityEntries: MetadataRoute.Sitemap = facilities.map((facility) => ({
-    url: absoluteUrl(origin, facilityPagePath(facility)),
-    lastModified: facility.updatedAt,
-    changeFrequency: 'daily',
-    // Facility pages are the point of the site. Everything else routes to them.
-    priority: 0.9,
-  }))
+  const facilityEntries: MetadataRoute.Sitemap = facilities.map((facility) =>
+    entry(facilityPagePath(facility), {
+      lastModified: facility.updatedAt,
+      changeFrequency: 'daily',
+      // Facility pages are the point of the site. Everything else routes to them.
+      priority: 0.9,
+    }),
+  )
 
   // One entry per city that actually has a facility — US-4 AC1: "indexable only
   // when ≥1 facility exists in the city", which is the same rule the page
@@ -72,33 +109,36 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // Listed from B-082 part 2, which built the page. Until then this block
   // computed the list and threw it away, because the page was a 404 — and the
   // comment deferred it to "B-071", which shipped reviews instead.
-  const cityEntries: MetadataRoute.Sitemap = (await citiesWithFacilities()).map((city) => ({
-    url: absoluteUrl(origin, citySlugPath(city.state, city.city)),
-    lastModified: city.lastModified,
-    // Below a facility page and above the static set: a city page is a route
-    // to a facility, not the thing being rented.
-    priority: 0.7,
-    changeFrequency: 'daily',
-  }))
+  const cityEntries: MetadataRoute.Sitemap = (await citiesWithFacilities()).map((city) =>
+    entry(citySlugPath(city.state, city.city), {
+      lastModified: city.lastModified,
+      // Below a facility page and above the static set: a city page is a route
+      // to a facility, not the thing being rented.
+      priority: 0.7,
+      changeFrequency: 'daily',
+    }),
+  )
 
-  const staticEntries: MetadataRoute.Sitemap = STATIC_ROUTES.map((route) => ({
-    url: absoluteUrl(origin, route.path),
-    lastModified: now,
-    changeFrequency: route.changeFrequency,
-    priority: route.priority,
-  }))
+  const staticEntries: MetadataRoute.Sitemap = STATIC_ROUTES.map((route) =>
+    entry(route.path, {
+      lastModified: now,
+      changeFrequency: route.changeFrequency,
+      priority: route.priority,
+    }),
+  )
 
   // B-082 part 3. One entry per guide, from the catalog the routes read — so a
   // guide cannot exist without being listed, and cannot be listed without
   // existing. `lastModified` is the guide's own `updated` date, typed by
   // whoever changed the words: stamping `now` here would tell a crawler that
   // every guide changed on every deploy, which is how the field gets ignored.
-  const guideEntries: MetadataRoute.Sitemap = GUIDES.map((guide) => ({
-    url: absoluteUrl(origin, guidePath(guide)),
-    lastModified: new Date(`${guide.updated}T00:00:00Z`),
-    changeFrequency: 'monthly',
-    priority: 0.5,
-  }))
+  const guideEntries: MetadataRoute.Sitemap = GUIDES.map((guide) =>
+    entry(guidePath(guide), {
+      lastModified: new Date(`${guide.updated}T00:00:00Z`),
+      changeFrequency: 'monthly',
+      priority: 0.5,
+    }),
+  )
 
   // B-089's per-city/size pages, and ONLY the ones that cleared D-77's
   // duplicate gate. A sitemap entry for a `noindex` page asks a crawler to
@@ -106,14 +146,15 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // what passed is what makes the gate mean anything.
   const sizeEntries: MetadataRoute.Sitemap = (await citySizePages())
     .filter((page) => page.indexable)
-    .map((page) => ({
-      url: absoluteUrl(origin, citySizePath(page.state, page.city, page.dimension)),
-      lastModified: page.lastModified,
-      changeFrequency: 'daily',
-      // Below a city page: a size page is a route INTO a facility for one
-      // specific need, and the city page is the broader entry point.
-      priority: 0.6,
-    }))
+    .map((page) =>
+      entry(citySizePath(page.state, page.city, page.dimension), {
+        lastModified: page.lastModified,
+        changeFrequency: 'daily',
+        // Below a city page: a size page is a route INTO a facility for one
+        // specific need, and the city page is the broader entry point.
+        priority: 0.6,
+      }),
+    )
 
   return [...staticEntries, ...guideEntries, ...cityEntries, ...sizeEntries, ...facilityEntries]
   // ponytail: one flat sitemap. FR-SEO-5 wants segmentation above 1,000 URLs;

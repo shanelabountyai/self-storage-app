@@ -1,4 +1,4 @@
-import Link from 'next/link'
+import { LocaleLink } from '@/components/site/locale-link'
 import { notFound } from 'next/navigation'
 import { SITE } from '@/lib/site-config'
 import {
@@ -9,6 +9,9 @@ import {
   renderJsonLd,
 } from '@storage/core/marketing'
 import { siteOrigin } from '@/lib/marketing/origin'
+import { getLocale } from '@/lib/i18n/server'
+import { OPEN_GRAPH_LOCALE, localePath } from '@/lib/i18n/routing'
+import { localeAlternates, localeUrl } from '@/lib/marketing/alternates'
 import {
   GUIDES,
   guideBySlug,
@@ -65,13 +68,14 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const guide = guideBySlug(slug)
   if (!guide) return { title: 'Guide not found' }
 
+  const locale = await getLocale()
   const canonical = guidePath(guide)
-  const url = absoluteUrl(siteOrigin(), canonical)
+  const url = absoluteUrl(siteOrigin(), localePath(locale, canonical))
 
   return {
     title: guide.title,
     description: guide.description,
-    alternates: { canonical },
+    alternates: localeAlternates(locale, canonical),
     openGraph: {
       // `article`, not `website` — this is the one place on the site where that
       // is true, and the type is what a share card uses to decide whether to
@@ -81,7 +85,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
       description: guide.description,
       url,
       siteName: SITE.name,
-      locale: 'en_US',
+      locale: OPEN_GRAPH_LOCALE[locale],
       publishedTime: guide.published,
       modifiedTime: guide.updated,
     },
@@ -97,8 +101,9 @@ export default async function GuidePage({ params }: { params: Promise<{ slug: st
 
   const { default: Body } = await load()
 
+  const locale = await getLocale()
   const canonical = guidePath(guide)
-  const url = absoluteUrl(siteOrigin(), canonical)
+  const url = localeUrl(locale, canonical)
   const filterLabel = guideFilterLabel(guide.filter)
 
   const schema = [
@@ -114,8 +119,8 @@ export default async function GuidePage({ params }: { params: Promise<{ slug: st
     // questions, rather than a one-question FAQPage.
     faqPageJsonLd(guide.faqs),
     breadcrumbJsonLd([
-      { name: SITE.name, url: absoluteUrl(siteOrigin(), '/') },
-      { name: 'Storage guides', url: absoluteUrl(siteOrigin(), '/guides') },
+      { name: SITE.name, url: localeUrl(locale, '/') },
+      { name: 'Storage guides', url: localeUrl(locale, '/guides') },
       { name: guide.title, url },
     ]),
   ].filter((node): node is NonNullable<typeof node> => node !== null)
@@ -131,9 +136,9 @@ export default async function GuidePage({ params }: { params: Promise<{ slug: st
       ))}
 
       <p className="text-muted-foreground text-sm">
-        <Link href="/guides" className="underline underline-offset-4">
+        <LocaleLink href="/guides" className="underline underline-offset-4">
           ← All guides
-        </Link>
+        </LocaleLink>
       </p>
 
       <h1 className="mt-4 text-3xl font-semibold tracking-tight text-balance">{guide.title}</h1>
@@ -169,12 +174,12 @@ export default async function GuidePage({ params }: { params: Promise<{ slug: st
           </p>
         )}
         <p className="mt-4">
-          <Link
+          <LocaleLink
             href={guideCtaHref(guide.filter)}
             className="bg-primary text-primary-foreground inline-flex min-h-11 items-center rounded-md px-4 text-sm font-medium"
           >
             {guide.ctaLabel}
-          </Link>
+          </LocaleLink>
         </p>
       </section>
 
@@ -199,13 +204,13 @@ export default async function GuidePage({ params }: { params: Promise<{ slug: st
 
       <p className="text-muted-foreground mt-10 text-sm text-pretty">
         More in the{' '}
-        <Link href="/guides" className="underline underline-offset-4">
+        <LocaleLink href="/guides" className="underline underline-offset-4">
           storage guides
-        </Link>
+        </LocaleLink>
         , or{' '}
-        <Link href="/storage/search" className="underline underline-offset-4">
+        <LocaleLink href="/storage/search" className="underline underline-offset-4">
           find storage near you
-        </Link>
+        </LocaleLink>
         .
       </p>
     </div>

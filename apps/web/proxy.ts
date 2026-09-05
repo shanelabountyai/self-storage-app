@@ -10,6 +10,14 @@ import {
   touchFrom,
 } from '@storage/core/marketing'
 import { authConfig } from '@/auth.config'
+import { DEFAULT_LOCALE, type Locale } from '@/lib/i18n'
+import {
+  hasSpanishTwin,
+  localePath,
+  LOCALE_HEADER,
+  LOCALE_PATH_HEADER,
+  splitLocalePath,
+} from '@/lib/i18n/routing'
 import { demoGate } from '@/lib/demo-gate'
 import {
   IMPERSONATION_BLOCKED_MESSAGE,
@@ -46,14 +54,17 @@ const { auth } = NextAuth(authConfig)
 /// must not touch a database — the *redirect map* for renamed and retired slugs
 /// needs a lookup and therefore lives on the 404 path instead, where only
 /// requests that were already going to fail pay for it.
-function seoResponse(request: NextRequest): NextResponse {
+function seoResponse(request: NextRequest, locale: Locale, path: string): NextResponse {
   const { pathname, search } = request.nextUrl
+  // Canonicalisation runs on the FULL path, prefix included, so `/ES/FAQ/`
+  // still lands on `/es/faq`. It is pure lower-casing and trailing-slash work,
+  // so the prefix survives it untouched.
   const { target, isCanonical } = canonicalPath(pathname, search)
 
   if (!isCanonical) {
     const url = request.nextUrl.clone()
-    const [path, query = ''] = target.split('?')
-    url.pathname = path
+    const [canonicalPathname, query = ''] = target.split('?')
+    url.pathname = canonicalPathname
     url.search = query
     // 308, not 301: permanent, and unlike 301 it is guaranteed to preserve the
     // method. A POST to a URL with a stray trailing slash — which a hand-typed
@@ -72,7 +83,21 @@ function seoResponse(request: NextRequest): NextResponse {
     return redirect
   }
 
-  const response = NextResponse.next()
+  // B-262. The locale the URL named, and the path underneath it, handed to the
+  // app as request headers — `getLocale()` reads nothing else. A non-default
+  // locale is also REWRITTEN onto its unprefixed path, because `/es/faq` has no
+  // route of its own: there is one route tree and it renders in whichever
+  // language this header names.
+  const requestHeaders = new Headers(request.headers)
+  requestHeaders.set(LOCALE_HEADER, locale)
+  requestHeaders.set(LOCALE_PATH_HEADER, path)
+
+  const response =
+    locale === DEFAULT_LOCALE
+      ? NextResponse.next({ request: { headers: requestHeaders } })
+      : NextResponse.rewrite(new URL(`${path}${search}`, request.nextUrl), {
+          request: { headers: requestHeaders },
+        })
 
   // PRD 04 FR-LEAD-2 (B-068): "First-touch UTMs + landing page persisted 90
   // days; last-touch updated each session."
@@ -89,7 +114,7 @@ function seoResponse(request: NextRequest): NextResponse {
   writeAttributionCookies(request, response)
   ensureSessionCookie(request, response)
 
-  if (isNoindexPath(pathname)) {
+  if (isNoindexPath(path)) {
     // A header rather than a meta tag, because it also covers routes that
     // return something other than HTML: a CSV export or a JSON response has
     // nowhere to put a `<meta>`.
@@ -166,8 +191,17 @@ function writeAttributionCookies(request: NextRequest, response: NextResponse): 
 }
 
 const gated = auth((request) => {
+  // Split again rather than threaded in from `proxy()`. `auth()` wraps our
+  // handler and AWAITS the session before calling it, so a module-scope hand-off
+  // would be read by whichever request happened to be in the isolate when the
+  // await resolved — and the value decides `requiredAudience`, so the failure
+  // mode is a tenant JWT admitted to `/admin` under concurrency rather than
+  // merely a page in the wrong language. `splitLocalePath` is pure and the
+  // pathname has not been rewritten yet, so this is the same answer computed
+  // from the same string by the same function.
+  const { locale, path } = splitLocalePath(request.nextUrl.pathname)
   const audience = request.auth?.user?.audience
-  const requiredAudience = request.nextUrl.pathname.startsWith('/admin') ? 'staff' : 'tenant'
+  const requiredAudience = path.startsWith('/admin') ? 'staff' : 'tenant'
 
   // PRD 09 FR-22/D-13d (B-091 part 2): an impersonated tenant session renders
   // the REAL portal at its real URLs, so a staff-audience JWT has to be allowed
@@ -185,15 +219,38 @@ const gated = auth((request) => {
 
   if (!audienceOk) {
     const url = new URL('/login', request.nextUrl.origin)
-    url.searchParams.set('from', request.nextUrl.pathname)
+    // The PREFIXED path, so signing in from `/es/portal/pay` returns there and
+    // not to the English twin. `/login` itself is not translated, so it keeps
+    // its own unprefixed URL.
+    url.searchParams.set('from', localePath(locale, path))
     return NextResponse.redirect(url)
   }
 
-  return seoResponse(request)
+  return seoResponse(request, locale, path)
 })
 
 export default function proxy(request: NextRequest, event: unknown) {
-  const { pathname } = request.nextUrl
+  // B-262. The locale comes off the front of the path before anything else
+  // looks at it, so every check below — the demo gate, the impersonation block,
+  // the auth gate, the noindex header — reasons about `/portal/pay` whether the
+  // visitor asked for it in English or Spanish. Getting this order wrong is how
+  // `/es/admin` becomes an unauthenticated admin URL.
+  const { locale, path } = splitLocalePath(request.nextUrl.pathname)
+
+  // A `/es` URL for a page that is not translated would serve English prose
+  // from a Spanish URL — a second indexable copy of the English page, which is
+  // exactly what D-77's duplicate gate refuses. So it is not a 404 (the page
+  // exists) and not a rewrite (that would create the duplicate): it is a
+  // permanent redirect to the one URL that content lives at.
+  //
+  // This covers `/es/terms`, `/es/privacy` and `/es/messaging-policy`, which
+  // stay English by decision rather than by omission, and `/es/admin`,
+  // `/es/login` and `/es/api/...`, which were never translatable at all.
+  if (locale !== DEFAULT_LOCALE && !hasSpanishTwin(path)) {
+    const url = request.nextUrl.clone()
+    url.pathname = path
+    return NextResponse.redirect(url, 308)
+  }
 
   // Before anything else, including the auth redirect: a deployment that is not
   // meant to be public should not reveal which paths exist by redirecting
@@ -215,7 +272,7 @@ export default function proxy(request: NextRequest, event: unknown) {
   // fails in the client as an unexplained parse error, whereas the body below
   // is the message FR-11 asks for. It is a backstop, not the normal path — the
   // banner replaces the controls it would otherwise refuse.
-  if (isImpersonationWriteBlocked(request.method, pathname, request.cookies.has(IMPERSONATION_COOKIE))) {
+  if (isImpersonationWriteBlocked(request.method, path, request.cookies.has(IMPERSONATION_COOKIE))) {
     return new NextResponse(IMPERSONATION_BLOCKED_MESSAGE, {
       status: 403,
       headers: { 'content-type': 'text/plain; charset=utf-8' },
@@ -225,11 +282,11 @@ export default function proxy(request: NextRequest, event: unknown) {
   // Signed-in areas go through the auth gate first — being redirected to the
   // login page matters more than URL tidiness, and the gate ends by calling
   // `seoResponse` itself so the noindex header is still stamped.
-  if (pathname.startsWith('/admin') || pathname.startsWith('/portal')) {
+  if (path.startsWith('/admin') || path.startsWith('/portal')) {
     return (gated as unknown as (r: NextRequest, e: unknown) => unknown)(request, event)
   }
 
-  return seoResponse(request)
+  return seoResponse(request, locale, path)
 }
 
 export const config = {

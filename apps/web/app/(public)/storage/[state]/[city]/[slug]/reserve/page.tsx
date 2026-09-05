@@ -1,4 +1,4 @@
-import Link from 'next/link'
+import { LocaleLink } from '@/components/site/locale-link'
 import { notFound, redirect } from 'next/navigation'
 import { AdminForm, Field } from '@/components/admin/form'
 import { formatRate } from '@/lib/format'
@@ -55,9 +55,9 @@ export default async function ReservePage({
   return (
     <div className="mx-auto w-full max-w-xl px-4 py-12">
       <p className="mb-4 text-sm">
-        <Link href={facilityPath(facility)} className="underline underline-offset-4">
+        <LocaleLink href={facilityPath(facility)} className="underline underline-offset-4">
           ← Back to {facility.name}
-        </Link>
+        </LocaleLink>
       </p>
 
       <h1 className="text-3xl font-semibold tracking-tight text-balance">Reserve this unit</h1>

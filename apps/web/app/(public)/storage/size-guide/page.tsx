@@ -1,11 +1,20 @@
-import Link from 'next/link'
+import { LocaleLink } from '@/components/site/locale-link'
 import { SITE } from '@/lib/site-config'
 import { dimensionSpoken, parseDimension, UNIT_SIZES, UNIT_SIZE_ORDER } from '@storage/core/marketing'
+import { getLocale } from '@/lib/i18n/server'
+import { localeAlternates } from '@/lib/marketing/alternates'
 
-export const metadata = {
-  title: 'What size storage unit do I need?',
-  description:
-    'What fits in a 5x5, 10x10 or 10x20 storage unit, in plain terms — with real-world comparisons for every size we rent.',
+// B-262: `generateMetadata` rather than a static `metadata`, so the page can
+// declare its own canonical and name its Spanish twin. The words are still
+// English here — the size table itself is translated in the same item, but the
+// tab title follows it rather than leading.
+export async function generateMetadata() {
+  return {
+    title: 'What size storage unit do I need?',
+    description:
+      'What fits in a 5x5, 10x10 or 10x20 storage unit, in plain terms — with real-world comparisons for every size we rent.',
+    alternates: localeAlternates(await getLocale(), '/storage/size-guide'),
+  }
 }
 
 // PRD 01 US-202. The size guide, as its own crawlable page.
@@ -99,9 +108,9 @@ export default function SizeGuidePage() {
           </span>
         </p>
         <p className="mt-4">
-          <Link href="/storage/search" className="underline underline-offset-4">
+          <LocaleLink href="/storage/search" className="underline underline-offset-4">
             Find storage near you
-          </Link>
+          </LocaleLink>
         </p>
         {/* B-082 part 3. This page is the fifth guide in the hub's launch set
             and it stays at this URL — it has been indexable since B-016 and is
@@ -110,9 +119,9 @@ export default function SizeGuidePage() {
             duplicate content this row's part 6 exists to warn about (D-60). The
             hub links here; here links back. */}
         <p className="mt-4">
-          <Link href="/guides" className="underline underline-offset-4">
+          <LocaleLink href="/guides" className="underline underline-offset-4">
             Read the other storage guides
-          </Link>
+          </LocaleLink>
         </p>
       </section>
     </div>

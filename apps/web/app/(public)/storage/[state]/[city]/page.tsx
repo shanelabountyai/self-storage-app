@@ -1,4 +1,4 @@
-import Link from 'next/link'
+import { LocaleLink } from '@/components/site/locale-link'
 import { notFound, permanentRedirect } from 'next/navigation'
 import { SITE } from '@/lib/site-config'
 import { formatRate } from '@/lib/format'
@@ -16,6 +16,9 @@ import {
   renderJsonLd,
 } from '@storage/core/marketing'
 import { siteOrigin } from '@/lib/marketing/origin'
+import { getLocale } from '@/lib/i18n/server'
+import { OPEN_GRAPH_LOCALE, localePath } from '@/lib/i18n/routing'
+import { localeAlternates, localeUrl } from '@/lib/marketing/alternates'
 import { citySlugPath } from '@/lib/marketing/paths'
 import {
   cityAmenities,
@@ -73,19 +76,20 @@ export async function generateMetadata({
   const { first, facilities, canonical } = resolved
   const title = cityTitle(first.city, first.state)
   const description = cityDescription(first.city, first.state, facilities)
-  const url = absoluteUrl(siteOrigin(), canonical)
+  const locale = await getLocale()
+  const url = absoluteUrl(siteOrigin(), localePath(locale, canonical))
 
   return {
     title,
     description,
-    alternates: { canonical },
+    alternates: localeAlternates(locale, canonical),
     openGraph: {
       type: 'website',
       title,
       description,
       url,
       siteName: SITE.name,
-      locale: 'en_US',
+      locale: OPEN_GRAPH_LOCALE[locale],
     },
     twitter: { card: 'summary_large_image', title, description },
   }
@@ -100,9 +104,9 @@ function FacilityCard({ facility }: { facility: CityFacility }) {
         {/* The name is the link, not the card. A card-wide target swallows the
             address a reader may want to select and gives a screen reader one
             enormous link name — the same rule the search results follow. */}
-        <Link href={facilityPath(facility)} className="underline underline-offset-4">
+        <LocaleLink href={facilityPath(facility)} className="underline underline-offset-4">
           {facility.name}
-        </Link>
+        </LocaleLink>
       </h3>
 
       <address className="text-muted-foreground mt-1 text-sm not-italic">{address}</address>
@@ -163,6 +167,9 @@ export default async function CityPage({
   if (!resolved) notFound()
 
   const { facilities, canonical, first } = resolved
+  // B-262: every URL this page's structured data names is built in the language
+  // being rendered, so a Spanish page's breadcrumb walks Spanish URLs.
+  const locale = await getLocale()
   // One URL per city in the index rather than one per spelling anybody links.
   //
   // This is the SECOND of two layers, not the only one. The edge proxy
@@ -189,7 +196,7 @@ export default async function CityPage({
     await authoredCityIntro(first.state, first.city),
   )
   const amenities = cityAmenities(facilities)
-  const canonicalUrl = absoluteUrl(siteOrigin(), canonical)
+  const canonicalUrl = localeUrl(locale, canonical)
 
   // FR-SEO-4's `ItemList` for a city page — the list IS the page, and its
   // items are the facility links rendered below, built from the same array so
@@ -198,12 +205,12 @@ export default async function CityPage({
     itemListJsonLd(
       facilities.map((facility) => ({
         name: facility.name,
-        url: absoluteUrl(siteOrigin(), facilityPath(facility)),
+        url: localeUrl(locale, facilityPath(facility)),
       })),
       `Self-storage facilities in ${label}`,
     ),
     breadcrumbJsonLd([
-      { name: 'Storage', url: absoluteUrl(siteOrigin(), '/storage/search') },
+      { name: 'Storage', url: localeUrl(locale, '/storage/search') },
       { name: label, url: canonicalUrl },
     ]),
   ].filter((node): node is NonNullable<typeof node> => node !== null)
@@ -286,13 +293,13 @@ export default async function CityPage({
 
       <p className="text-muted-foreground mt-10 text-sm text-pretty">
         Not sure what size you need? Read the{' '}
-        <Link href="/storage/size-guide" className="underline underline-offset-4">
+        <LocaleLink href="/storage/size-guide" className="underline underline-offset-4">
           size guide
-        </Link>
+        </LocaleLink>
         , or{' '}
-        <Link href="/storage/search" className="underline underline-offset-4">
+        <LocaleLink href="/storage/search" className="underline underline-offset-4">
           look at other cities
-        </Link>
+        </LocaleLink>
         .
       </p>
     </div>

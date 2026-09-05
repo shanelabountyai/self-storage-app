@@ -3,6 +3,7 @@ import { Phone } from 'lucide-react'
 import { SITE } from '@/lib/site-config'
 import { LanguageToggle } from '@/components/site/language-toggle'
 import { dictionaryFor, translate, type Locale } from '@/lib/i18n'
+import { localePath } from '@/lib/i18n/routing'
 
 // Persistent header per PRD 01 §6.1: logo, "Find storage" search, phone with
 // click-to-call, and "Pay bill / My account".
@@ -10,15 +11,21 @@ import { dictionaryFor, translate, type Locale } from '@/lib/i18n'
 // Tap targets are ≥44×44px (§6.2) — that is what the `min-h-11` / `py-2.5`
 // sizing is for, not visual padding. Nothing here depends on hover (§6.2), so
 // it works on touch and via keyboard alike.
-export function SiteHeader({ locale }: { locale: Locale }) {
+// B-262: `path` is the current URL with its locale prefix already stripped.
+// Every internal link below is built through `localePath`, so a Spanish visitor
+// clicking "Buscar almacenamiento" stays on `/es/...` — a raw `href="/storage/
+// search"` would silently drop them back into English mid-session, which is the
+// one failure mode a URL-carried locale introduces that a cookie did not have.
+export function SiteHeader({ locale, path }: { locale: Locale; path: string }) {
   const dict = dictionaryFor(locale)
   const t = (key: Parameters<typeof translate>[1]) => translate(dict, key)
+  const href = (to: string) => localePath(locale, to)
 
   return (
     <header className="border-b">
       <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
         <Link
-          href="/"
+          href={href('/')}
           className="mr-auto inline-flex min-h-11 items-center text-base font-semibold tracking-tight"
         >
           {SITE.name}
@@ -36,7 +43,7 @@ export function SiteHeader({ locale }: { locale: Locale }) {
           className="flex flex-wrap items-center gap-x-1 gap-y-1"
         >
           <Link
-            href="/storage/search"
+            href={href('/storage/search')}
             className="hover:bg-accent inline-flex min-h-11 items-center rounded-md px-3 text-sm font-medium"
           >
             {t('chrome.findStorage')}
@@ -51,7 +58,7 @@ export function SiteHeader({ locale }: { locale: Locale }) {
               second row. A `sm:`-only nav link is content that disappears on
               reflow, which is the thing 1.4.10 is about. */}
           <Link
-            href="/guides"
+            href={href('/guides')}
             className="hover:bg-accent inline-flex min-h-11 items-center rounded-md px-3 text-sm font-medium"
           >
             {t('chrome.guides')}
@@ -81,7 +88,7 @@ export function SiteHeader({ locale }: { locale: Locale }) {
               at the end of the nav. In the header on every public page and not
               only the homepage, because the visitor who needs it usually
               arrives on a facility page from search, never on `/`. */}
-          <LanguageToggle locale={locale} />
+          <LanguageToggle locale={locale} path={path} />
         </nav>
       </div>
     </header>

@@ -1,4 +1,4 @@
-import Link from 'next/link'
+import { LocaleLink } from '@/components/site/locale-link'
 import { notFound, permanentRedirect } from 'next/navigation'
 import { MapPin, Phone } from 'lucide-react'
 import { DAYS_OF_WEEK, type WeeklySchedule } from '@storage/core/facility-settings'
@@ -45,6 +45,8 @@ import {
   type MessageKey,
 } from '@/lib/i18n'
 import { getLocale } from '@/lib/i18n/server'
+import { OPEN_GRAPH_LOCALE, localePath } from '@/lib/i18n/routing'
+import { localeAlternates } from '@/lib/marketing/alternates'
 import { costLineLabel, costLineNote } from '@/lib/pricing/cost-line-copy'
 import { offerFor } from '@/lib/promotions/service'
 import { PromoCodeEntry } from '@/components/promo-code-entry'
@@ -96,15 +98,20 @@ export async function generateMetadata({
   // generated template is the floor, not the ceiling.
   const title = facility.seoTitle ?? facilityTitle(facility)
   const description = facility.metaDescription ?? facilityDescription(facility)
+  const locale = await getLocale()
   const canonical = facilityPath(facility)
-  const url = absoluteUrl(siteOrigin(), canonical)
+  // B-262: the OG url is the URL THIS RENDER is at, not the English one. A
+  // Spanish page whose share card points at the English page is a card that
+  // sends every reader of it somewhere else.
+  const url = absoluteUrl(siteOrigin(), localePath(locale, canonical))
 
   return {
     title,
     description,
     // The slug alone resolves the facility, so a wrong state/city still renders.
     // Declaring the canonical keeps that from reading as duplicate content.
-    alternates: { canonical },
+    // B-262: one canonical per language, each naming the other.
+    alternates: localeAlternates(locale, canonical),
     // FR-SEO-3's Open Graph and Twitter tags. Same title and description as the
     // page itself — a share card that says something different from the search
     // result is two claims about one page.
@@ -114,7 +121,7 @@ export async function generateMetadata({
       description,
       url,
       siteName: SITE.name,
-      locale: 'en_US',
+      locale: OPEN_GRAPH_LOCALE[locale],
     },
     twitter: { card: 'summary_large_image', title, description },
   }
@@ -471,12 +478,12 @@ function UnitTypeCard({
                 {t('facility.rentNow')}
               </button>
             </form>
-            <Link
+            <LocaleLink
               href={`${facilityPath(facility)}/reserve?unitType=${unitType.unitTypeId}`}
               className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
             >
               {t('facility.reserveForFree')}
-            </Link>
+            </LocaleLink>
           </div>
           {/* §6.6: the trust line for each action, beside the action. */}
           <p className="text-muted-foreground mt-2 text-xs">
@@ -970,9 +977,9 @@ export default async function FacilityPage({
 
       {backToSearch && (
         <p className="mb-4 text-sm">
-          <Link href={backToSearch} className="underline underline-offset-4">
+          <LocaleLink href={backToSearch} className="underline underline-offset-4">
             {t('facility.backToSearch', { query: query.from ?? '' })}
-          </Link>
+          </LocaleLink>
         </p>
       )}
 
@@ -1153,12 +1160,12 @@ export default async function FacilityPage({
                   {t('facility.rentNow')}
                 </button>
               </form>
-              <Link
+              <LocaleLink
                 href={`${facilityPath(facility)}/reserve?unitType=${cheapestAvailable.unitTypeId}`}
                 className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
               >
                 {t('facility.reserveFree')}
-              </Link>
+              </LocaleLink>
             </div>
           </div>
         </div>
@@ -1361,13 +1368,13 @@ export default async function FacilityPage({
 
       <p className="text-muted-foreground mt-10 text-sm text-pretty">
         {t('search.sizeGuideBefore')}{' '}
-        <Link href="/storage/size-guide" className="underline underline-offset-4">
+        <LocaleLink href="/storage/size-guide" className="underline underline-offset-4">
           {t('search.sizeGuideLink')}
-        </Link>
+        </LocaleLink>
         {t('facility.sizeGuideOr')}{' '}
-        <Link href="/storage/search" className="underline underline-offset-4">
+        <LocaleLink href="/storage/search" className="underline underline-offset-4">
           {t('facility.otherLocations')}
-        </Link>
+        </LocaleLink>
         .
       </p>
     </div>

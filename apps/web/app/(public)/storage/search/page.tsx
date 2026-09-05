@@ -1,4 +1,4 @@
-import Link from 'next/link'
+import { LocaleLink } from '@/components/site/locale-link'
 import { FacilitySearchForm } from '@/components/site/facility-search-form'
 import { SITE } from '@/lib/site-config'
 import { formatRate } from '@/lib/format'
@@ -19,13 +19,15 @@ import {
   type MessageKey,
 } from '@/lib/i18n'
 import { getLocale } from '@/lib/i18n/server'
+import { localeAlternates } from '@/lib/marketing/alternates'
 
 // B-090 part 6: `generateMetadata` rather than a static `metadata`, so the tab
-// title follows the language the page is actually in. The canonical does not
-// move — there is one URL per result view whatever language it renders in,
-// which is the whole point of the cookie strategy (D-122).
+// title follows the language the page is actually in. B-262: the canonical now
+// DOES move — `/es/storage/search` is its own URL and its own canonical, with
+// each language naming the other as an `hreflang` alternate.
 export async function generateMetadata() {
-  const dict = dictionaryFor(await getLocale())
+  const locale = await getLocale()
+  const dict = dictionaryFor(locale)
   return {
   title: translate(dict, 'search.title'),
   // One canonical for every result view. This page takes `?q=`, `?lat=&lng=`
@@ -35,7 +37,7 @@ export async function generateMetadata() {
   // because the filter is carried onward rather than applied here. Without
   // this, the guides' CTAs would have manufactured a duplicate of the search
   // page per size band.
-  alternates: { canonical: '/storage/search' },
+  alternates: localeAlternates(locale, '/storage/search'),
   }
 }
 
@@ -166,10 +168,10 @@ function ResultCard({
                   distance rides inside the accessible name (WCAG 2.4.4) rather
                   than being read twice — the visible copy below is hidden from
                   assistive technology for exactly that reason. */}
-              <Link href={href} className="underline underline-offset-4">
+              <LocaleLink href={href} className="underline underline-offset-4">
                 {facility.name}
                 <span className="sr-only">, {formatMiles(facility.distanceMiles)}</span>
-              </Link>
+              </LocaleLink>
             </h3>
             <p className="text-muted-foreground text-sm" aria-hidden="true">
               {formatMiles(facility.distanceMiles)}
@@ -464,9 +466,9 @@ export default async function SearchPage({
 
       <p className="text-muted-foreground mt-10 text-sm text-pretty">
         {translate(dict, 'search.sizeGuideBefore')}{' '}
-        <Link href="/storage/size-guide" className="underline underline-offset-4">
+        <LocaleLink href="/storage/size-guide" className="underline underline-offset-4">
           {translate(dict, 'search.sizeGuideLink')}
-        </Link>
+        </LocaleLink>
         .
       </p>
     </div>

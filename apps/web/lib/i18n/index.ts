@@ -1,34 +1,24 @@
 import { en } from './en'
 import { es } from './es'
 
-// B-090 part 6 (D-122). Spanish-language support for the move-in path.
+// B-090 part 6 (D-122), rewritten by B-262 (D-123). Spanish-language support.
 //
-// Locale is carried by a cookie and the URLs do not change (owner decision,
-// 2026-09-05). The alternative — an `app/[locale]` segment with `/es/...`
-// URLs and hreflang — buys indexable Spanish pages, and PRD 04 §3 already
-// scopes that out ("Multilingual SEO — English-only in MVP"). So the cheap
-// shape is the one that matches the written commitment: a renter who asks for
-// Spanish gets Spanish, and Googlebot (which carries no cookie) keeps seeing
-// exactly the English pages it indexes today.
+// The locale is carried by the URL — `/faq` is English, `/es/faq` is Spanish —
+// and `lib/i18n/routing.ts` owns that vocabulary. D-122 originally carried it
+// in a cookie with the URLs unchanged, because PRD 04 §3 scoped multilingual
+// SEO out ("English-only in MVP"); the owner reversed that on 2026-09-05 for
+// the reason D-122 could not answer, which is that a cookie leaves a Spanish
+// visitor and Googlebot reading different words from one URL and leaves a
+// Spanish speaker unable to share a Spanish page at all.
 //
-// ponytail: reading the cookie in the root layout opts EVERY route out of
-// full-route caching, so the homepage's `revalidate = 3600` and the city
-// page's `revalidate = 300` no longer cache rendered HTML. The staleness
-// ceilings those numbers exist for (FR-2.1, AC3's ≤15-minute price cache) are
-// unaffected — they live on `cachedPublicInventory`, which still caches the
-// data reads, so this costs a React render per request and not a database
-// round trip. Upgrade path if Core Web Vitals regresses: move the public tree
-// under `app/[locale]` and prerender both locales.
+// ponytail: this file stays PURE. `translate` runs in the browser bundle, so
+// anything that needs a request (`next/headers`) lives in `server.ts` and
+// anything the Edge proxy needs lives in `routing.ts`.
 
 export const LOCALES = ['en', 'es'] as const
 export type Locale = (typeof LOCALES)[number]
 
 export const DEFAULT_LOCALE: Locale = 'en'
-
-/// Same `st_` prefix as the consent cookie, so the app's own cookies are
-/// distinguishable from a vendor's at a glance in devtools.
-export const LOCALE_COOKIE = 'st_locale'
-export const LOCALE_COOKIE_DAYS = 365
 
 /// Display names are written in the language they name, never translated —
 /// "Spanish" is useless to somebody who cannot read the English page.

@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { LEGAL_PAGES, SITE } from '@/lib/site-config'
 import { dictionaryFor, translate, type Locale, type MessageKey } from '@/lib/i18n'
+import { hasSpanishTwin, localePath } from '@/lib/i18n/routing'
 
 // B-090 part 6. The legal-page labels live in `site-config.ts` in English
 // because the sitemap and the a11y sweep read that list too, and neither of
@@ -30,7 +31,10 @@ export function SiteFooter({ locale }: { locale: Locale }) {
             {LEGAL_PAGES.map((page) => (
               <li key={page.href}>
                 <Link
-                  href={page.href}
+                  // B-262: a legal page has no Spanish twin, so its link stays
+                  // unprefixed in both languages rather than pointing at a URL
+                  // the proxy would redirect straight back.
+                  href={hasSpanishTwin(page.href) ? localePath(locale, page.href) : page.href}
                   className="hover:bg-accent inline-flex min-h-11 items-center rounded-md px-2 text-sm underline underline-offset-4"
                 >
                   {t(NAV_KEYS[page.href])}
