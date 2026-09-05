@@ -8793,10 +8793,15 @@ entry, or a real fix, and it owns no row yet.
   set follows the language; a marketer's answers are their own words, the same
   rule D-122 puts on facility copy and amenities. The same is true of the
   authored city copy until somebody writes the Spanish box.
-- **The dictionary is 1,030 keys and 72 KB of JSON shipped into the RSC payload
-  of every public page**, because `LocaleProvider` hands the whole thing to the
-  client components. B-262 grew it from 923; the mechanism predates it. The fix
-  is to pass only the keys client components actually use.
+- **The dictionary ships whole to every public page** — 1,030 keys, 71 KB of
+  JSON but **~20 KB brotli** — because `LocaleProvider` hands all of it to the
+  client components. B-262 grew it from 923 keys; the mechanism predates it.
+  Measured rather than assumed, and the measurement argues against acting:
+  the 105 keys that never reach a client component (this statement, the guides,
+  the FAQ, About, Contact, the size guide) are **4.5 KB brotli of the 20**, so
+  the obvious split buys almost nothing. The bulk is checkout, portal and
+  facility strings the client needs. If it ever matters it will show in Core
+  Web Vitals, and the fix then is per-route key subsets.
 - **Full-route caching is still not recovered.** D-122 gave it up to read a
   cookie in the root layout; reading a header costs exactly the same. The honest
   upgrade path is still `app/[locale]` with `generateStaticParams`, which is a

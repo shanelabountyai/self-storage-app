@@ -22,10 +22,12 @@ PRD 04's "Multilingual SEO — English-only in MVP" is reversed (**D-123**).
    other* — four Spanish city intros can be as near-duplicate as four English
    ones. Needs the corpus built per locale and `/admin/reports/duplicate-content`
    showing both.
-2. **The dictionary is 1,030 keys and 72 KB of JSON on every public page.**
-   `LocaleProvider` hands the whole thing to the client components; most of it
-   is server-only prose (the accessibility statement alone is ~40 keys). The fix
-   is to pass only what client components use.
+2. **The dictionary ships whole to every public page**, and the measurement
+   says leave it. 1,030 keys, 71 KB of JSON but **~20 KB brotli**; the 105 keys
+   that never reach a client component are only **4.5 KB brotli** of that, so
+   splitting the server-only prose out buys almost nothing — the bulk is
+   checkout, portal and facility strings the client genuinely needs. Revisit
+   only if Core Web Vitals says so, and then with per-route key subsets.
 3. **Full-route caching is still given up.** D-122 traded it for a cookie read
    in the root layout; a header read costs the same. The upgrade is
    `app/[locale]` with `generateStaticParams` — a route restructure, not a
