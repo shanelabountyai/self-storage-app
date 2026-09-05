@@ -1,3 +1,5 @@
+import type { Locale } from '@/lib/i18n'
+
 // PRD 01 §6.8 / PRD 02 §5.5 FR-24 (B-139). What the accessibility scans cover,
 // as one list rather than three spec files and a hand-written paragraph.
 //
@@ -292,6 +294,14 @@ export type ScanException = {
   /// Written for a visitor rather than for us: what is not checked, and why it
   /// cannot be. This is the sentence the public page renders verbatim.
   reason: string
+  /// B-262. The same sentence in Spanish, because the accessibility statement
+  /// now has a Spanish URL and a Spanish reader who reaches it is exactly the
+  /// person the gap list is written for. Optional in the TYPE and required by
+  /// `tests/a11y-scan-coverage.test.ts` for every customer-facing row: making
+  /// it required here would force a translation of the ~30 admin rows no
+  /// customer ever sees, and a page that promises to name every gap would then
+  /// be blocked on translating the ones it does not render.
+  reasonEs?: string
 }
 
 /// Every route the automated run does not cover, with the reason it does not.
@@ -304,33 +314,44 @@ export const SCAN_EXCEPTIONS: readonly ScanException[] = [
     audience: 'public',
     reason:
       'the checkout confirmation screen, which only exists after a real payment redirect and cannot be reproduced from outside the card processor\u2019s own frame',
+    reasonEs:
+      'la pantalla de confirmaci\u00f3n de la renta, que solo existe despu\u00e9s de un pago real y no se puede reproducir desde fuera del marco del procesador de la tarjeta',
   },
   {
     route: '/pay/[token]',
     audience: 'public',
     reason:
       'the one-tap payment screen a reminder links to, which needs a live link issued against a real balance',
+    reasonEs:
+      'la pantalla de pago con un solo clic a la que lleva un recordatorio, que necesita un enlace vivo emitido contra un saldo real',
   },
   {
     route: '/pay/[token]/done',
     audience: 'public',
     reason: 'the receipt shown after paying from that link, for the same reason',
+    reasonEs: 'el recibo que se muestra despu\u00e9s de pagar desde ese enlace, por la misma raz\u00f3n',
   },
   {
     route: '/checkout/resume/[token]',
     audience: 'public',
     reason:
       'the live state of a resume link from an abandoned-booking email \u2014 the expired-link state it lands on is checked',
+    reasonEs:
+      'el estado vivo de un enlace para continuar una renta que qued\u00f3 a medias \u2014 el estado de enlace vencido al que llega s\u00ed se revisa',
   },
   {
     route: '/portal/documents/[documentId]',
     audience: 'portal',
     reason: 'a single stored document, which needs a real document on a real account',
+    reasonEs:
+      'un documento guardado en particular, que necesita un documento real en una cuenta real',
   },
   {
     route: '/portal/statements/[leaseId]/[period]',
     audience: 'portal',
     reason: 'a single month\u2019s statement, which needs a real statement on a real account',
+    reasonEs:
+      'el estado de cuenta de un mes en particular, que necesita un estado de cuenta real en una cuenta real',
   },
   {
     route: '/admin/auctions/[caseId]',
@@ -747,32 +768,45 @@ export type StateException = {
   state: string
   audience: ScanAudience
   reason: string
+  /// B-262, same contract as `ScanException.reasonEs` above.
+  reasonEs?: string
 }
 
 /// The states a route can be in that no scan reaches, and why — the same bar
 /// as `SCAN_EXCEPTIONS`: genuinely blocked, not merely unscanned yet.
 export const STATE_EXCEPTIONS: readonly StateException[] = [
-  // B-090 part 6 (D-122). Declared rather than left for the route loops to
-  // quietly not reach. Every public route renders in Spanish and only the
-  // facility page is scanned in it (`SCANNED_STATES` above), so the rest are
-  // named here — the page promises to name every gap, and "the scan runs in
-  // English" is a gap that did not exist a day ago.
+  // B-090 part 6 (D-122), corrected by B-262. Declared rather than left for the
+  // route loops to quietly not reach. Every public route renders in Spanish and
+  // only the facility page is scanned in it (`SCANNED_STATES` above), so the
+  // rest are named here — the page promises to name every gap, and "the scan
+  // runs in English" is one.
+  //
+  // The REASON changed even though the gap did not, and that is the point of
+  // re-reading this file on a routing change. Until B-262 the loops carried no
+  // locale cookie and there was no other way to ask for Spanish; the language
+  // is a URL prefix now, so the honest sentence is that the loops visit the
+  // English addresses — which is a choice, and a cheaper one to reverse than
+  // the sentence it replaces implied.
   {
     route: '/',
     state: 'Spanish',
     audience: 'public',
     reason:
-      'the a11y route loops carry no locale cookie, so every public route is scanned in English only; the facility page is scanned and measured in Spanish (above) and the rest of the public site, this route included, is not yet',
+      'the a11y route loops visit the English addresses, so every public route is scanned in English only; the facility page is scanned and measured in Spanish (above) and the rest of the public site, this route included, is not yet',
+    reasonEs:
+      'las corridas automáticas visitan las direcciones en inglés, así que cada página pública se revisa solo en inglés; la página de una sucursal sí se revisa y se mide en español (arriba) y el resto del sitio público, incluida esta página, todavía no',
   },
-  // B-260. The same gap one level in: the portal route loop signs a tenant in
-  // with no locale cookie, so it scans English. `/portal` itself is scanned in
-  // Spanish (above); the other ten portal routes are not yet.
+  // B-260, reason corrected by B-262 for the same reason as the row above.
+  // `/portal` itself is scanned in Spanish (above); the other ten portal routes
+  // are not yet.
   {
     route: '/portal/methods',
     state: 'Spanish',
     audience: 'portal',
     reason:
-      'the portal a11y route loop carries no locale cookie, so every portal route but /portal is scanned in English only',
+      'the portal a11y route loop visits the English addresses, so every portal route but /portal is scanned in English only',
+    reasonEs:
+      'la corrida automática de la cuenta visita las direcciones en inglés, así que cada página de la cuenta menos la principal se revisa solo en inglés',
   },
   {
     route: '/checkout',
@@ -780,6 +814,8 @@ export const STATE_EXCEPTIONS: readonly StateException[] = [
     audience: 'public',
     reason:
       'reached in Spanish by e2e/i18n.spec.ts as far as step 1, which asserts the language rather than running axe — the later steps need a session the scan loop does not build',
+    reasonEs:
+      'e2e/i18n.spec.ts llega en español hasta el paso 1, que comprueba el idioma en vez de correr la revisión automática — los pasos siguientes necesitan una sesión que la corrida no arma',
   },
   // B-139 named `/portal/pay/done`'s not-found state as scanned; the four
   // outcomes below are what a real payment settles to, and the demo seed
@@ -789,24 +825,29 @@ export const STATE_EXCEPTIONS: readonly StateException[] = [
     state: 'succeeded',
     audience: 'portal',
     reason: 'the receipt for a payment that actually succeeded, which needs a real one on a real account',
+    reasonEs:
+      'el recibo de un pago que de verdad se completó, que necesita uno real en una cuenta real',
   },
   {
     route: '/portal/pay/done',
     state: 'failed',
     audience: 'portal',
     reason: 'the receipt for a payment that was actually declined, for the same reason',
+    reasonEs: 'el recibo de un pago que de verdad fue rechazado, por la misma razón',
   },
   {
     route: '/portal/pay/done',
     state: 'processing',
     audience: 'portal',
     reason: 'the receipt for a payment still mid-flight, for the same reason',
+    reasonEs: 'el recibo de un pago que todavía va en camino, por la misma razón',
   },
   {
     route: '/portal/pay/done',
     state: 'pending',
     audience: 'portal',
     reason: 'the receipt for a payment awaiting settlement, for the same reason',
+    reasonEs: 'el recibo de un pago que espera liquidación, por la misma razón',
   },
   // B-194. `recordNoticeGiven`'s two refusals now land on the field instead of
   // being discarded — but neither is reachable from a browser. `future_date`
@@ -830,6 +871,8 @@ export const STATE_EXCEPTIONS: readonly StateException[] = [
     state: 'returned payment row',
     audience: 'portal',
     reason: 'the row a bounced payment renders, which needs one and the demo seed creates none',
+    reasonEs:
+      'el renglón que dibuja un pago devuelto, que necesita uno y los datos de demostración no crean ninguno',
   },
   // B-137. Considered and deliberately not built: the demo seed's one
   // pending_auction lease belongs to a tenant with no portal credential, and
@@ -840,6 +883,8 @@ export const STATE_EXCEPTIONS: readonly StateException[] = [
     audience: 'portal',
     reason:
       'the refusal shown to a tenant in the lien pipeline, which needs a lease in that state paired with a portal credential — the one demo lease that qualifies has none',
+    reasonEs:
+      'el aviso de rechazo que ve un inquilino que está en proceso de gravamen, que necesita un contrato en ese estado junto con una credencial de la cuenta en línea — el único contrato de demostración que califica no tiene ninguna',
   },
   // B-90 part 3 / B-193. The route loop scans the "you're not on a plan" empty
   // state; B-196's seed reaches the ACTIVE schedule, the "Left after" column and
@@ -858,6 +903,8 @@ export const STATE_EXCEPTIONS: readonly StateException[] = [
     audience: 'portal',
     reason:
       'the schedule of a plan the tenant has finished with, in any of its three ended states, which needs a plan that actually reached one — the demo plan is live and stays that way',
+    reasonEs:
+      'el calendario de un plan que el inquilino ya terminó, en cualquiera de sus tres estados finales, que necesita un plan que de verdad haya llegado a uno — el plan de demostración está activo y así se queda',
   },
   // B-210. The same fixture problem one row down: every installment in the
   // demo plan is in the FUTURE by design (a past one would be broken by the
@@ -872,6 +919,8 @@ export const STATE_EXCEPTIONS: readonly StateException[] = [
     audience: 'portal',
     reason:
       'the schedule rows for an installment past its date — inside its grace, and past it — which need an installment that has actually gone by, and one moves on its own the moment the nightly jobs run',
+    reasonEs:
+      'los renglones del calendario de una mensualidad que ya pasó su fecha — dentro de su periodo de gracia y después de él — que necesitan una mensualidad que de verdad haya pasado, y una se mueve sola en cuanto corren los procesos de la noche',
   },
   // B-215. `/admin/auctions` is in ADMIN_SCAN_ROUTES, and against demo data it
   // renders "no sale here is ready to advertise" — the lot sheet's populated
@@ -903,8 +952,25 @@ export const STATE_EXCEPTIONS: readonly StateException[] = [
     audience: 'portal',
     reason:
       'the three warning states of the plan card — a payment late inside its grace, a payment missed past it, and the plan ended because one was — which all need a plan that has actually let an installment date go by, and that state moves on its own the moment the nightly jobs run',
+    reasonEs:
+      'los tres estados de advertencia de la tarjeta del plan — un pago atrasado dentro de su gracia, un pago perdido después de ella, y el plan terminado porque hubo uno — que necesitan un plan que de verdad haya dejado pasar una fecha, y ese estado se mueve solo en cuanto corren los procesos de la noche',
   },
 ] as const
+
+/// The reason to render, in the language being read.
+///
+/// B-262. The fallback to English is deliberate and it is not a shrug: a row
+/// whose Spanish is missing renders the English sentence, which is worse than a
+/// translation and far better than a blank bullet on the page that promises to
+/// name every gap. `tests/a11y-scan-coverage.test.ts` is what stops the
+/// fallback from ever being reached — it fails on a customer-facing row with no
+/// `reasonEs`, so this branch exists for the admin rows the page never renders.
+export function localisedReason(
+  row: { reason: string; reasonEs?: string },
+  locale: Locale,
+): string {
+  return locale === 'es' ? (row.reasonEs ?? row.reason) : row.reason
+}
 
 /// The state exceptions a visitor is owed, same rule as `customerFacingExceptions`.
 export function customerFacingStateExceptions(): readonly StateException[] {

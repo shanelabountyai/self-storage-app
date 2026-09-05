@@ -23,9 +23,21 @@ const read = (path: string) => readFileSync(fileURLToPath(new URL(path, import.m
 const page = read('../apps/web/app/(public)/accessibility/page.tsx')
 const workflow = read('../.github/workflows/ci.yml')
 
+// B-262 moved every sentence on that page into the dictionaries so it could be
+// read in Spanish, which quietly broke this file: the claim below stopped being
+// IN the page, so `page.includes(...)` went false and the assertion started
+// passing vacuously — the exact "guard a comment can satisfy" failure the note
+// above was written about, one level up. The claim is checked where it now
+// lives, in BOTH languages, because a Spanish statement is a public claim about
+// this codebase on the same footing as the English one.
+const dictionaries = {
+  en: read('../apps/web/lib/i18n/en.ts'),
+  es: read('../apps/web/lib/i18n/es.ts'),
+}
+
 describe('the public accessibility statement', () => {
   it('only claims PR-time scanning while CI actually triggers on ready-for-review', () => {
-    const claimsPullRequests = page.includes('pull request that is open for review')
+    const claimsPullRequests = dictionaries.en.includes('pull request that is open for review')
 
     // The `types:` LINE, not any mention of the string. The first draft of this
     // test used `workflow.includes('ready_for_review')` and passed happily with
@@ -46,13 +58,32 @@ describe('the public accessibility statement', () => {
     ).toBe(claimsPullRequests)
   })
 
+  it('makes the same scanning claim in Spanish as in English', () => {
+    // Not a translation check — the dictionary key test covers that. This is
+    // about the two pages making the SAME claim: if the English sentence is
+    // ever softened because the trigger went away, a Spanish sentence left
+    // behind still tells a Spanish reader the scans run on every PR. The
+    // Spanish wording for it is "cada propuesta de cambio que está abierta
+    // para revisión".
+    expect(dictionaries.en.includes('pull request that is open for review')).toBe(
+      dictionaries.es.includes('propuesta de cambio que está abierta para revisión'),
+    )
+  })
+
   it('dates its known-shortfalls list with the same constant the list is introduced by', () => {
-    // `LAST_REVIEWED` appears twice in the rendered page — introducing "these
-    // are the problems we know about, as of X" and again as "Last reviewed: X".
-    // A future edit that hard-codes either one would let the two drift, and the
+    // The date appears twice in the rendered page — introducing "these are the
+    // problems we know about, as of X" and again as "Last reviewed: X". A
+    // future edit that hard-codes either one would let the two drift, and the
     // page would date its shortfalls differently from its review. B-254 owns
     // what MOVES the constant; this only holds the two uses to one value.
-    expect(page.match(/\{LAST_REVIEWED\}/g)?.length ?? 0).toBeGreaterThanOrEqual(2)
-    expect(page).toMatch(/const LAST_REVIEWED = '[^']+'/)
+    //
+    // B-262 put a formatter between the constant and the page — the date is
+    // rendered "19 de agosto de 2026" in Spanish — so what is counted is the
+    // formatted value rather than the constant. The constant is still checked
+    // for its shape, and it is an ISO date now precisely so it can be
+    // formatted per language rather than being an English string in a Spanish
+    // sentence.
+    expect(page.match(/\{ date: reviewed \}/g)?.length ?? 0).toBeGreaterThanOrEqual(2)
+    expect(page).toMatch(/const LAST_REVIEWED = '\d{4}-\d{2}-\d{2}'/)
   })
 })
