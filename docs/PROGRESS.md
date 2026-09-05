@@ -8567,7 +8567,7 @@ B-090 part 5's portal side, split out because that part is L. B-090e built the p
 
 ## B-258 — Authorized users on a business account: the people allowed to see it (2026-09-04)
 
-**Commit:** `PENDING`
+**Commit:** `9d572e5`
 
 B-090 part 5's last piece, split out of B-256 rather than deferred silently: it is a table, a migration, a control and an authorization boundary. Until this, an account had exactly one person who could see it, so giving the office manager sight of it meant making them the payer — a money change to solve a visibility problem, which moves who the consolidated Pay button belongs to and who a receipt names.
 
