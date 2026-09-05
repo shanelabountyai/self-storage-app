@@ -11,7 +11,7 @@ It complements rather than duplicates:
 - `git log` — the change-by-change record
 - `README.md` — how the built thing works today
 
-**Status:** 255 of 266 backlog items complete. Latest entry: Chore.
+**Status:** 255 of 266 backlog items complete. Latest entry: Chore (`e33c60f`).
 **Entries:** 283 across 20 part files.
 
 ## Reading one entry
@@ -331,4 +331,4 @@ Append the entry as a `### ` heading at the end of the **highest-numbered** file
 | B-086 part 2 — Phone unlock, and the answer to OQ-2 (2026-09-04) | — | [20-from-b-258](progress/20-from-b-258.md#b-086-part-2-phone-unlock-and-the-answer-to-oq-2-2026-09-04) |
 | B-090f — Spanish on the move-in path (B-090 part 6) (2026-09-05) | — | [20-from-b-258](progress/20-from-b-258.md#b-090f-spanish-on-the-move-in-path-b-090-part-6-2026-09-05) |
 | B-260 part 1 — The portal in Spanish (2026-09-05) | — | [20-from-b-258](progress/20-from-b-258.md#b-260-part-1-the-portal-in-spanish-2026-09-05) |
-| Chore — the build record was too large to read, so no session read it | — | [20-from-b-258](progress/20-from-b-258.md#chore-the-build-record-was-too-large-to-read-so-no-session-read-it) |
+| Chore — the build record was too large to read, so no session read it | `e33c60f` `2d63bfe` | [20-from-b-258](progress/20-from-b-258.md#chore-the-build-record-was-too-large-to-read-so-no-session-read-it) |
