@@ -16,6 +16,7 @@ import {
   DEMO_TENANT_EMAIL,
   DEMO_TENANT_PASSWORD,
   DEMO_POS_TENANT_EMAIL,
+  DEMO_CURRENT_TENANT_EMAIL,
   DEMO_BUSINESS_PAYER_EMAIL,
   DEMO_BUSINESS_MEMBER_EMAIL,
   DEMO_BUSINESS_ACCOUNT_NAME,
@@ -58,7 +59,7 @@ export const DEMO_PREFIX = 'demo-'
 /// `npm run db:reset-link -- --email dana@demo.example.com --tenant` mints a
 /// password-reset link for a demo tenant without sending mail anywhere.
 const NO_LOGINS = process.argv.includes('--no-logins')
-export { DEMO_EMAIL_DOMAIN, DEMO_STAFF_EMAIL, DEMO_STAFF_PASSWORD, DEMO_TENANT_EMAIL, DEMO_TENANT_PASSWORD, DEMO_POS_TENANT_EMAIL, DEMO_PLAN_TENANT_EMAIL, DEMO_BUSINESS_PAYER_EMAIL, DEMO_BUSINESS_MEMBER_EMAIL, DEMO_BUSINESS_ACCOUNT_NAME }
+export { DEMO_EMAIL_DOMAIN, DEMO_STAFF_EMAIL, DEMO_STAFF_PASSWORD, DEMO_TENANT_EMAIL, DEMO_TENANT_PASSWORD, DEMO_POS_TENANT_EMAIL, DEMO_CURRENT_TENANT_EMAIL, DEMO_PLAN_TENANT_EMAIL, DEMO_BUSINESS_PAYER_EMAIL, DEMO_BUSINESS_MEMBER_EMAIL, DEMO_BUSINESS_ACCOUNT_NAME }
 
 /// A signed-in staff account for the e2e suite.
 ///
@@ -769,26 +770,36 @@ async function seedLifecycleStates(
   note('pending')
 
   // --- active ×3 ----------------------------------------------------------
-  // At the primary facility the first of these carries a stable email, so
-  // tests that record real payments have a tenant whose balance nothing else
-  // asserts on (see DEMO_POS_TENANT_EMAIL).
+  // At the primary facility TWO of these carry a stable email, because a spec
+  // that needs one of them by name cannot reach it through `makeTenant`'s
+  // counter-derived address — see the note on DEMO_CURRENT_TENANT_EMAIL for
+  // what that cost. The first is the tenant money is taken against
+  // (DEMO_POS_TENANT_EMAIL); the third is the one that owes nothing
+  // (DEMO_CURRENT_TENANT_EMAIL), the second having the unpaid month.
+  const STABLE_ACTIVE_EMAIL: Record<number, string | undefined> = {
+    0: DEMO_POS_TENANT_EMAIL,
+    2: DEMO_CURRENT_TENANT_EMAIL,
+  }
   for (let i = 0; i < 3; i++) {
-    const tenant =
-      isPrimaryFacility && i === 0
-        ? await prisma.tenant.create({
-            data: {
-              email: DEMO_POS_TENANT_EMAIL,
-              firstName: 'Alex',
-              lastName: 'Active',
-              phone: `512-555-${String(1000 + index).slice(-4)}`,
-              addressLine1: `${100 + index} Demo Street`,
-              city: 'Austin',
-              state: 'TX',
-              postalCode: '78701',
-            },
-          })
-        : await makeTenant('Alex', 'Active', index)
-    if (isPrimaryFacility && i === 0) await recordSeedAddress(tenant.id, index)
+    const stableEmail = isPrimaryFacility ? STABLE_ACTIVE_EMAIL[i] : undefined
+    const tenant = stableEmail
+      ? await prisma.tenant.create({
+          data: {
+            email: stableEmail,
+            firstName: 'Alex',
+            lastName: 'Active',
+            phone: `512-555-${String(1000 + index).slice(-4)}`,
+            addressLine1: `${100 + index} Demo Street`,
+            city: 'Austin',
+            state: 'TX',
+            postalCode: '78701',
+          },
+        })
+      : await makeTenant('Alex', 'Active', index)
+    // `makeTenant` records one itself; the raw-create path above does not, so
+    // every stable-email tenant needs it here or it silently loses the address
+    // history the counter-derived ones have.
+    if (stableEmail) await recordSeedAddress(tenant.id, index)
     index++
     const slot = next()
     const lease = await makeLease(facility.id, slot.unit.id, tenant.id, 'active', slot.rate, 90 + i * 30)
