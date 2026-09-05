@@ -6936,7 +6936,7 @@ The fix went past the index. The test now maps **all six** screen columns to the
 
 ## B-205 — The lot sheet carries what a lien advertisement has to carry
 
-`18f4b34`, `88cbe59`, `db9432e`
+`c08f71f`, `9474c57` (a `--rebase` merge rewrote the commits; they were `18f4b34`, `88cbe59` and `db9432e` on the branch. Three were recorded and two are on `main` — the third is most likely the empty placeholder the draft PR was opened on, which the rebase drops, as B-203's entry notes, but the branch is gone and that is not verifiable now.)
 
 **What it built.** Four defects on one document — `/admin/auctions/lots.csv`, the only file this product generates *for publication*.
 
