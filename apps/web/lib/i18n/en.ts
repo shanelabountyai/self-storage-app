@@ -1264,7 +1264,7 @@ export const en = {
     ", and they are not ours to fix. A facility page embeds OpenStreetMap, whose zoom controls are named “+” and “−” and whose marker has no text alternative. Search results can show a second map from a different provider, where we control the price markers but not the tiles or the vendor's own controls beneath them; we have not yet assessed that one against a live map, so nothing here rests on it. Both stay collapsed behind a button, and neither is ever the only way to get the information.",
   'a11y.short.spanishLabel': 'The Spanish site is scanned in fewer places than the English one.',
   'a11y.short.spanishBody':
-    'Every public page and every account page now has a Spanish address of its own, and our automated run follows the English ones. The pages it does check in Spanish are named in the list above, and so is every page it does not. The Spanish text is the same markup as the English, so a problem found on one is a problem on both — what is not yet measured is how the longer Spanish wording reflows on a small screen, page by page.',
+    'Every public page and every account page now has a Spanish address of its own, and our automated run follows the English ones. Two pages are checked in Spanish today — a facility page and your account overview — and the gap is named in the list above, as a group rather than one page at a time. The Spanish text is the same markup as the English, so a problem found on one is a problem on both; what is not yet measured is how the longer Spanish wording reflows on a small screen, page by page.',
   'a11y.short.lastReviewed': 'Last reviewed: {date}.',
   'a11y.tellHeading': 'Tell us when we get it wrong',
   'a11y.tell.before': 'If something here blocks you, email',

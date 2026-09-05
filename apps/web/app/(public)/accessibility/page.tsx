@@ -1851,6 +1851,14 @@ function reviewDate(locale: Locale): string {
 // one, because a softened English sentence with a Spanish one left behind still
 // tells a Spanish reader the scans run on every PR.
 //
+// **The re-read caught an overstatement in the new entry itself.** Its first
+// draft said the pages checked in Spanish "are named in the list above" — they
+// are not: the generated lists on this page render GAPS, not coverage, so that
+// sentence pointed a reader at a list that would never contain what it
+// promised. It names the two scanned pages outright now (a facility page and
+// the account overview) and describes the gap as what it is, a group rather
+// than a per-page enumeration.
+//
 // The other three "Where we fall short" entries were re-read against this build
 // and are unchanged in scope. `LAST_REVIEWED` is NOT bumped, per D-115: no
 // manual screen-reader pass was performed here, and nothing on this page rests

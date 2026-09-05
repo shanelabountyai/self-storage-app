@@ -1312,7 +1312,7 @@ export const es: Dictionary = {
   'a11y.short.spanishLabel':
     'El sitio en español se revisa en menos lugares que el sitio en inglés.',
   'a11y.short.spanishBody':
-    'Cada página pública y cada página de la cuenta ya tiene su propia dirección en español, y nuestra corrida automática sigue las direcciones en inglés. Las páginas que sí revisa en español vienen en la lista de arriba, y también viene cada página que no revisa. El texto en español usa el mismo código que el inglés, así que un problema encontrado en uno es un problema en los dos — lo que todavía no medimos es cómo se reacomoda en pantalla chica el texto en español, que es más largo, página por página.',
+    'Cada página pública y cada página de la cuenta ya tiene su propia dirección en español, y nuestra corrida automática sigue las direcciones en inglés. Hoy se revisan en español dos páginas — la de una sucursal y el resumen de su cuenta — y el hueco viene nombrado en la lista de arriba, como grupo y no página por página. El texto en español usa el mismo código que el inglés, así que un problema encontrado en uno es un problema en los dos; lo que todavía no medimos es cómo se reacomoda en pantalla chica el texto en español, que es más largo, página por página.',
   'a11y.short.lastReviewed': 'Última revisión: {date}.',
   'a11y.tellHeading': 'Avísenos cuando algo falle',
   'a11y.tell.before':

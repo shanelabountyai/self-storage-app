@@ -8679,3 +8679,141 @@ B-090f translated the move-in path and then handed the renter a button reading "
 **What it left behind.** **B-262** — the static and legal pages, the guides, and the city/size landing pages. Three different problems: the static pages are ordinary prose (bar `/terms` and `/privacy`, which stay English with the lease under D-122); the guides need an `hreflang` owner decision before translating them means anything, since D-122 keeps the crawler on English; and the authored city copy is a `marketing:city_copy` column that needs a second column and a second editor field. **B-259** (consent disclosures) and **B-261** (email and SMS still English, including the dunning ladder) are unchanged and still blocked on their own terms.
 
 **Test verification.** Typecheck clean including `tsconfig.tests.json`; lint clean (6 warnings, all pre-existing `_prev`/`_formData`, unchanged in count from B-090f); `prisma migrate diff --exit-code` reports no drift (no migration). Unit suite **4,149 passed, 8 skipped, 254 files** — reconciled, and one more test than B-090f left because of the apostrophe guard. e2e on `desktop-chrome`: `i18n.spec.ts` 21 passed (11 portal routes asserted for `lang="es"` and a Spanish `<h1>`, plus an axe scan of the Spanish dashboard), `portal.spec.ts` + `i18n.spec.ts` 93 passed, and `a11y.spec.ts` + `a11y-own-spec-routes.spec.ts` + `portal-billing-account` + `portal-transfer` + `portal-move-out` + `smoke.spec.ts` 232 passed.
+
+## B-262 — Spanish gets its own URLs (2026-09-05)
+
+**Commits:** `e0ae521` (routing), `c64b030` (static pages), `02b2d78` (guides), `a00738c` (generated SEO prose + city copy), `1424b37` (e2e)
+
+The last of the Spanish work, and the owner reversed its premise before it
+started. Asked whether the SEO surfaces should stay English (D-122's answer),
+be translated behind the cookie anyway, or move to `/es/` URLs with `hreflang`,
+the owner chose the third — so this became a routing change as well as a
+translation, and PRD 04 §2's "Multilingual SEO — English-only in MVP" is
+reversed. The decision is **D-123**, and it supersedes D-122's URL half while
+leaving its interface/content line and every carve-out standing.
+
+**What it built.** `/faq` and `/es/faq` are two real pages. The locale is a
+path prefix, stripped in `proxy.ts` before anything else reads the path and
+handed to the app as a request header; `getLocale()` reads nothing else and the
+`st_locale` cookie is gone. Every public page declares its own canonical and a
+reciprocal `hreflang` set including `x-default`; the sitemap emits one entry per
+URL carrying `xhtml:link` alternates; `robots.txt` disallows the noindex
+prefixes once per locale, because `/es/portal` is a real URL. Translated in
+full: the static pages (`/faq`, `/about`, `/contact`, `/accessibility`), the
+four MDX guides, the size guide, the generated city intros, the per-city/size
+intros and the generated facility FAQs. `City` gains `introEs` with its editor
+field in the same item.
+
+**What it decided.** A `/es` URL for a page with no Spanish twin **308s to the
+English one** rather than rendering it — serving English prose from a Spanish
+address is a second indexable copy of the same page, which is what D-77's gate
+refuses. That covers `/terms`, `/privacy` and `/messaging-policy`, English by
+the owner's decision this session; `/messaging-policy` in particular is the URL
+an A2P 10DLC review reads and the target of the portal's consent control, so
+translating it while consent is still recorded against an English disclosure
+version would create exactly the mismatch **B-259** is open to fix.
+`City.introEs` is a **second authored column**, not a translation of the first,
+and each language falls back to its own generated intro rather than to the other
+language's authored copy — English prose under a Spanish heading is the worst of
+the three outcomes and the one that looks deliberate. **D-77's duplicate gate
+now has to pass in every language** for a size page to be indexed: an hreflang
+cluster whose members disagree about `noindex` is discarded, and translation
+flattens distinctions, so a page whose English intros differ enough can be thin
+content in Spanish.
+
+**Five real bugs, and three of them were only findable by clicking.**
+
+1. **The language toggle changed every word on the page and left
+   `<html lang="en">`.** The root layout carries `lang` and Next does not
+   re-render it across a client-side navigation — it is shared by design. SC
+   3.1.1, failed by the one control whose entire job is to change the language,
+   and invisible to anything that navigates by URL because a full load renders
+   it correctly. The toggle and the footer's legal links (cross-locale by
+   construction, since `/terms` stays English) are plain anchors now.
+2. **"Rentar ahora" put a Spanish renter into the English checkout.** The rent
+   form posted to an unprefixed action, so the route handler's own `getLocale()`
+   answered English and every redirect it makes landed in English — at the
+   moment the money moves.
+3. **The auth gate's split path was racy.** It first reached `gated` through a
+   module-scope variable, and `auth()` awaits the session before calling back —
+   so under concurrency another request's value decides `requiredAudience`. The
+   failure mode is a tenant JWT admitted to `/admin`, not merely a page in the
+   wrong language. It re-splits the pathname instead, purely.
+4. **`PortalNav` lost `aria-current` on every Spanish route** and dropped the
+   tenant into English on the next click: it reads `usePathname()`, which still
+   returns `/es/portal` after the proxy's rewrite.
+5. **`e2e/a11y-own-spec-routes.spec.ts` would have measured the wrong page** —
+   its Spanish key set a cookie that now does nothing, so the scan would have
+   run against the English page under a Spanish key, which is precisely the
+   overstatement `scan-coverage.ts` exists to stop.
+
+**Two guards earned their keep and one had been silently disarmed.**
+`tests/i18n.test.ts`'s curly-apostrophe rule failed immediately on `vendor’s`
+where the JSX had `&apos;`. The new "Spanish descriptions fit a search result"
+test caught the failure its own comment predicted — Spanish runs ~20% longer and
+the 10x10 guide's translated description came out at 204 characters against a
+200-character cap. And **`tests/accessibility-statement.test.ts` was disarmed by
+this change**: it asserted the page source contains "pull request that is open
+for review", the sentence moved into `en.ts`, so the check went false and the
+assertion began passing vacuously — the same "a guard a comment can satisfy is
+not a guard" failure its own note was written about. It reads the dictionary
+now, in both languages.
+
+**The accessibility statement gained a shortfall by being translated.** Its two
+GENERATED gap lists are translated too, via a `reasonEs` beside every
+customer-facing `reason`, enforced in both directions (missing, and copied from
+the English to satisfy the check). Three of its sentences had gone false and
+none was about accessibility — they said the scan loops "carry no locale
+cookie", and there is no locale cookie. A fourth "where we fall short" entry is
+added and is genuinely new: until this item there was one address per page, so
+which language was scanned was a property of a cookie the run did not set.
+`LAST_REVIEWED` is an ISO date formatted per language now — it was the literal
+"19 August 2026", which rendered "al 19 August 2026" mid-Spanish-sentence — and
+is **not bumped**, per D-115: no manual screen-reader pass was performed.
+
+**Two pre-existing failures found, one fixed and one named.**
+`admin-tenants.spec.ts`'s "is not offered on a lease with nothing past due"
+pointed at `alex.active5`, and **B-256** gave that exact lease an unpaid month so
+the business-account card would have a money state to render — so the builder
+was correctly offered and the assertion had been failing since B-256 without
+being about B-256 at all. Fixed here, after reproducing it on `d5903cc` first.
+**`/admin/access has no WCAG 2.1 AA violations` fails on `th-has-data-cells`
+and is NOT fixed**: it reproduces identically on `d5903cc` with a freshly seeded
+database, so it is neither this branch's nor local state. It is a staff screen
+and outside this row; it needs a hand-check and a `HAND_CHECKED_INCOMPLETE`
+entry, or a real fix, and it owns no row yet.
+
+**What it left behind.**
+- **The duplicate-content corpus is English only.** Comparing a Spanish
+  description against an English one measures the language gap rather than
+  duplication, and every other input to that corpus is English. The Spanish URLs
+  are indexable now and deserve the same gate against *each other*; that needs
+  the corpus built per locale and the report showing both.
+- **A facility's OWN typed FAQ answers are English on both URLs.** The generated
+  set follows the language; a marketer's answers are their own words, the same
+  rule D-122 puts on facility copy and amenities. The same is true of the
+  authored city copy until somebody writes the Spanish box.
+- **The dictionary is 1,030 keys and 72 KB of JSON shipped into the RSC payload
+  of every public page**, because `LocaleProvider` hands the whole thing to the
+  client components. B-262 grew it from 923; the mechanism predates it. The fix
+  is to pass only the keys client components actually use.
+- **Full-route caching is still not recovered.** D-122 gave it up to read a
+  cookie in the root layout; reading a header costs exactly the same. The honest
+  upgrade path is still `app/[locale]` with `generateStaticParams`, which is a
+  route restructure rather than a translation.
+- **B-259** (Spanish consent version constants and a legal read) and **B-261**
+  (email and SMS in Spanish, needing `Tenant.preferredLocale`) are unchanged and
+  still blocked on their own terms.
+
+**Test verification.** Typecheck clean including `tsconfig.tests.json`; lint
+clean (6 warnings, all pre-existing `_prev`/`_formData`, unchanged in count from
+B-260); `prisma migrate diff --exit-code` reports no drift after the
+`introEs` migration. Unit suite **4,183 passed, 8 skipped**; `city-copy-db`
+run twice in a row to confirm it is repeatable. Full e2e sweep **1,467 passed,
+9 skipped** with the one pre-existing `/admin/access` failure named above.
+Verified against a **production build** rather than the suite alone, per the
+"a green build and a 200 on the homepage do not mean production works" rule:
+`/es/faq` 200s, `/es/terms` 308s to `/terms`, `/ES/FAQ` canonicalises, the
+sitemap emits `xhtml:link` alternates, `/guides` and `/es/guides` name each
+other, and the `FAQPage` JSON-LD on a Spanish facility URL carries Spanish
+questions.
