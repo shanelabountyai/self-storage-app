@@ -4,6 +4,7 @@ import { emitEvent } from '@storage/core/events'
 import { provisionMoveIn, requestDownstream } from '@/lib/checkout/provision'
 import { cancelOpenTask, createTask } from '@/lib/admin/tasks'
 import { applyPayment, postPaymentLedger, type AppliedPayment } from '@/lib/billing/allocation'
+import { payableLeaseFilter } from '@/lib/billing/accounts'
 import { reinstatePayment, returnPayment } from '@/lib/billing/reversals'
 import { systemActor } from '@/lib/rbac/actor'
 import { restoreAccessIfSettled } from '@/lib/access/delinquency-gate'
@@ -115,7 +116,20 @@ async function anchorLeaseFor(
 ): Promise<string | null> {
   const lease = explicitLeaseId
     ? await tx.lease.findFirst({
-        where: { id: explicitLeaseId, tenantId: payment.tenantId, facilityId: payment.facilityId },
+        // B-256. `payableLeaseFilter`, not a bare `tenantId`. This is the check
+        // that a named lease is one this payer may post against, and it is the
+        // same question `claimsFor` asks about the money itself — so it has to
+        // be the same answer. Scoped to the tenant alone, a business account's
+        // payer naming one of their account's units got NO anchor, and any
+        // remainder no invoice claimed then landed on no lease ledger at all:
+        // the payment existed, the per-unit balances did not move for it, and
+        // the account total the portal shows would have been stale. Unreachable
+        // until this item gave the payer a Pay button, which is why it is fixed
+        // here rather than left for the first person to hit it.
+        where: {
+          id: explicitLeaseId,
+          ...payableLeaseFilter(payment.tenantId, payment.facilityId),
+        },
         select: { id: true },
       })
     : // No stated lease: the only remaining option is the tenant's occupying

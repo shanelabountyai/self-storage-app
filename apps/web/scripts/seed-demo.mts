@@ -797,10 +797,39 @@ async function seedLifecycleStates(
     // and so a reader can see what "one payer, somebody else's unit" looks
     // like without building one first.
     //
-    // Attaching THIS lease is deliberate and is safe for the reason the note
-    // beside DEMO_BUSINESS_PAYER_EMAIL gives: allocation widens for the payer,
-    // and Alex is not the payer, so every POS test that takes money against
-    // this lease behaves exactly as it did before.
+    // B-256 moved which units are on it, and the move is the point. B-090e
+    // attached i === 0, which is DEMO_POS_TENANT_EMAIL's lease — the one that
+    // exists precisely so the POS specs can take real money against it. That
+    // was safe while an account was a staff screen: allocation widens for the
+    // PAYER, and Alex is not the payer, so those specs behaved as before.
+    //
+    // It stopped being safe the moment the account grew a portal card with a
+    // total and a Pay button on it. The POS specs pay that unit ~$25 a sweep
+    // and never reverse it, so the account's total walks steadily downwards:
+    // measured at $86.00 owed after one sweep and **$39.00 in CREDIT after
+    // two**, at which point the card correctly renders no Pay button and every
+    // spec that reaches the consolidated pay screen fails — which is B-120's
+    // repeatability rule catching a fixture choice, not a bug.
+    //
+    // So the account now holds the two anonymous active units (i === 1 and
+    // i === 2) and not the POS one. It still demonstrates exactly what B-090e
+    // wanted — a payer settling units that are somebody else's, more than one
+    // of them — and its total is now stable across any number of sweeps,
+    // because nothing in the suite takes money against either lease. One
+    // unpaid month on the first of them is what gives the card, the pay screen
+    // and the consolidated statement a money state to render and to scan.
+    if (isPrimaryFacility && (i === 1 || i === 2)) {
+      const account = await prisma.billingAccount.findFirstOrThrow({
+        where: { facilityId: facility.id, name: DEMO_BUSINESS_ACCOUNT_NAME },
+        select: { id: true },
+      })
+      await prisma.lease.update({
+        where: { id: lease.id },
+        data: { billingAccountId: account.id },
+      })
+      if (i === 1) invoiceNumber = await seedUnpaidRent(facility, lease, 1, invoiceNumber)
+    }
+
     if (isPrimaryFacility && i === 0) {
       const payer = await prisma.tenant.create({
         data: {
@@ -814,17 +843,23 @@ async function seedLifecycleStates(
           postalCode: '78701',
         },
       })
-      const account = await prisma.billingAccount.create({
+      // The account is created here because the PAYER is, and its units are
+      // attached on the next two iterations — see the note above for why the
+      // POS lease this block used to attach is deliberately not on it any more.
+      await prisma.billingAccount.create({
         data: {
           facilityId: facility.id,
           name: DEMO_BUSINESS_ACCOUNT_NAME,
           payerTenantId: payer.id,
         },
       })
-      await prisma.lease.update({
-        where: { id: lease.id },
-        data: { billingAccountId: account.id },
-      })
+      // B-256. A known password on the PAYER, for the same reason B-034 put one
+      // on Dana: the account card, the consolidated pay screen and the account
+      // statement are portal surfaces, and a portal surface with no session
+      // cannot be accessibility-scanned at all. Casey holds no lease, so
+      // signing in as them lands on a portal whose only content IS the account
+      // card — which is the shape the row is about.
+      if (!NO_LOGINS) await setPassword(payer.id, 'tenant', DEMO_TENANT_PASSWORD)
     }
   }
 

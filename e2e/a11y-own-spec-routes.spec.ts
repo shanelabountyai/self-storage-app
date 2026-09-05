@@ -1,6 +1,12 @@
 import { expect, test, type Page } from '@playwright/test'
 import { SCANNED_BY_OWN_SPEC, SCANNED_STATES } from '../apps/web/lib/a11y/scan-coverage'
-import { signInAsDemoOwner, signInAsDemoTenant, signInAsPlanTenant } from './sign-in'
+import { DEMO_BUSINESS_ACCOUNT_NAME } from '../apps/web/scripts/demo-credentials'
+import {
+  signInAsBusinessPayer,
+  signInAsDemoOwner,
+  signInAsDemoTenant,
+  signInAsPlanTenant,
+} from './sign-in'
 import { expectNoHorizontalOverflow, TEXT_SPACING } from './a11y-helpers'
 
 // B-201 / PRD 02 §5.5 FR-24 (WCAG 2.1 AA, 1.4.10 Reflow, 1.4.4 Resize text,
@@ -28,11 +34,14 @@ import { expectNoHorizontalOverflow, TEXT_SPACING } from './a11y-helpers'
 // in those files because it is the thing being shared; the axe scans stay
 // where they are, beside the behaviour they were written next to.
 
-type Audience = 'admin' | 'tenant' | 'plan-tenant'
+type Audience = 'admin' | 'tenant' | 'plan-tenant' | 'business-payer'
 
 async function signIn(page: Page, audience: Audience): Promise<void> {
   if (audience === 'admin') await signInAsDemoOwner(page)
   else if (audience === 'plan-tenant') await signInAsPlanTenant(page)
+  // B-256. Casey Contractor holds no lease, so this is the only session in
+  // which the account card and the consolidated pay screen render at all.
+  else if (audience === 'business-payer') await signInAsBusinessPayer(page)
   else await signInAsDemoTenant(page)
 }
 
@@ -55,6 +64,37 @@ const REACH: Record<string, { audience: Audience; go: (page: Page) => Promise<vo
       await page.getByRole('link', { name: /pay \$.* now/i }).first().click()
       await page.waitForURL(/\/portal\/pay\?lease=/)
       await expect(page.getByRole('heading', { name: 'Pay your balance' })).toBeVisible()
+    },
+  },
+  // B-090e, added by B-256 — the row that put `/admin/billing/accounts/[id]`
+  // in `SCANNED_BY_OWN_SPEC` gave it no entry here, so this test has failed
+  // since that item merged and the page has been measured at no width by
+  // anything. It is a table of units, tenant names and money on a screen
+  // counter staff open on a phone (B-217), which is the shape B-199 spent an
+  // item on.
+  '/admin/billing/accounts/[id]': {
+    audience: 'admin',
+    async go(page) {
+      await page.goto('/admin/billing/accounts')
+      await page.getByRole('link', { name: DEMO_BUSINESS_ACCOUNT_NAME }).click()
+      await page.waitForURL(/\/admin\/billing\/accounts\/[^/?]+$/)
+      // The units table, not the heading above it.
+      await expect(page.getByRole('rowheader', { name: 'Total' })).toBeVisible()
+    },
+  },
+  // B-256. A five-column table of money on the page a payer prints for their
+  // bookkeeper. Reached the way they reach it: the statements list, then the
+  // month under the account's own heading — no id can be written down here.
+  '/portal/statements/account/[accountId]/[period]': {
+    audience: 'business-payer',
+    async go(page) {
+      await page.goto('/portal/statements')
+      await page
+        .getByRole('region', { name: /all units/ })
+        .getByRole('link')
+        .first()
+        .click()
+      await expect(page.getByRole('rowheader', { name: 'All units' })).toBeVisible()
     },
   },
   '/admin/tenants/[tenantId]': { audience: 'admin', go: (page) => openDanasProfile(page) },
@@ -175,6 +215,31 @@ for (const { route, spec } of SCANNED_BY_OWN_SPEC) {
 // belongs here is a state reachable by signing in as the right actor and going
 // to the page.
 const STATE_REACH: Record<string, { audience: Audience; go: (page: Page) => Promise<void> }> = {
+  // B-256. A business account's card is a three-column table of units, tenant
+  // names and money, on the page a payer reads on a phone — the shape B-199
+  // spent an item on. The portal route loop measures `/portal` as Dana, who
+  // has no account and therefore no table, so this is measured here or nowhere.
+  '/portal | business account card': {
+    audience: 'business-payer',
+    async go(page) {
+      await page.goto('/portal')
+      // The TABLE, not the heading above it: measuring the page before the
+      // units render is the failure this key exists to catch.
+      await expect(page.getByRole('columnheader', { name: 'Rented by' })).toBeVisible()
+    },
+  },
+  // And the same table again under the bill, where it sits beside the Payment
+  // Element in a narrower container.
+  '/portal/pay | business account': {
+    audience: 'business-payer',
+    async go(page) {
+      await page.goto('/portal')
+      // Inside `main`: the portal nav carries its own "Pay $X" link (B-239),
+      // which points at the one owing LEASE rather than at the account.
+      await page.getByRole('main').getByRole('link', { name: /^Pay \$/ }).click()
+      await expect(page.getByRole('row', { name: /Paying today/ })).toBeVisible()
+    },
+  },
   '/portal/payment-plan | active plan schedule': {
     audience: 'plan-tenant',
     async go(page) {

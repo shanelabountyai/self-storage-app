@@ -1600,6 +1600,37 @@ const LAST_REVIEWED = '19 August 2026'
 // entries are still true and unchanged in scope. `LAST_REVIEWED` is not
 // bumped, per D-115 — only a recorded manual screen-reader pass moves it
 // (B-254).
+//
+// Re-verified 2026-09-04, at B-256 (a business account's payer gets one card,
+// one Pay button and one consolidated statement instead of eleven of each).
+// This one IS customer-facing — three portal surfaces change and one route is
+// new — and it renders this page byte-identically, which is the outcome to
+// check rather than to assume: no `SCAN_EXCEPTIONS` row was added, so the
+// generated coverage claim below is untouched.
+//
+// It is untouched because the new work went INTO the scan contract rather than
+// around it. `/portal/statements/account/[accountId]/[period]` joined
+// `SCANNED_BY_OWN_SPEC` with a `REACH` entry (a bare `goto` cannot invent an
+// account id or a month), and the two states the route loops could never
+// reach — the account card on `/portal` and the consolidated bill on
+// `/portal/pay`, both of which the loops render as Dana, who pays for no
+// account and therefore has neither — joined `SCANNED_STATES` as `reached`,
+// with `STATE_REACH` keys so they are measured at 320px, 200% zoom and forced
+// text spacing rather than only scanned. Each is a three- or five-column table
+// of units, tenant names and money on a page a payer reads on a phone, which
+// is the shape B-199 spent an item on.
+//
+// Found while doing that, and fixed here: `/admin/billing/accounts/[id]` was
+// put in `SCANNED_BY_OWN_SPEC` by B-090e with no `REACH` entry, so that
+// route's layout test has FAILED since that item merged and the page had been
+// measured at no width by anything. Staff-only, so this page makes no claim
+// about it either way — but a coverage list with a false entry in it is the
+// thing this page's history is mostly about.
+//
+// The "Where we fall short" list was re-read against this build and all three
+// entries are still true and unchanged in scope: the no-JavaScript hold
+// countdown, the staff screens, and the embedded maps. None of them is
+// touched by an account card. `LAST_REVIEWED` is not bumped, per D-115.
 
 export default function AccessibilityPage() {
   return (

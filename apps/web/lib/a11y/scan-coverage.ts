@@ -268,6 +268,15 @@ export const SCANNED_BY_OWN_SPEC = [
   // it by a click from the list is the only way to scan the page rather than
   // an empty state.
   { route: '/admin/billing/accounts/[id]', spec: 'e2e/admin-billing-accounts.spec.ts' },
+  // B-256. Needs a real account id AND a real month, neither of which a bare
+  // `goto` can produce — and the substance of the page is the row per unit,
+  // which only exists once an account has some. Reached the way the payer
+  // reaches it: sign in, open the statements list, click a month under the
+  // account heading.
+  {
+    route: '/portal/statements/account/[accountId]/[period]',
+    spec: 'e2e/portal-billing-account.spec.ts',
+  },
 ] as const
 
 /// Who the page is for. The public statement lists the first two and not
@@ -397,6 +406,23 @@ export type ScannedState = {
 }
 
 export const SCANNED_STATES: readonly ScannedState[] = [
+  // B-256. The portal route loop scans `/portal` and `/portal/pay` as Dana,
+  // who holds units of her own and pays for no account — so a business
+  // account's card, its units table and the consolidated bill on the pay
+  // screen were markup no scan had ever seen. Both are reached by signing in
+  // as the demo payer, which is what makes them measurable below too.
+  {
+    route: '/portal',
+    state: 'business account card',
+    spec: 'e2e/portal-billing-account.spec.ts',
+    layout: 'reached',
+  },
+  {
+    route: '/portal/pay',
+    state: 'business account',
+    spec: 'e2e/portal-billing-account.spec.ts',
+    layout: 'reached',
+  },
   // B-090 part 1's waitlist form, opened. The route loop scans the closed
   // disclosure; nothing inside it is in the accessibility tree until a click.
   {

@@ -2,6 +2,11 @@ import { prisma } from '@storage/db'
 import { OCCUPYING_LEASE_STATUSES } from '@storage/core/inventory'
 import { createChargeIntent, createCustomerSession } from '@/lib/payments/intents'
 import { paymentsEnabled } from '@/lib/payments/stripe'
+import {
+  payableLeaseWhere,
+  portalAccountsForPayer,
+  type AccountLease,
+} from '@/lib/billing/accounts'
 
 // PRD 01 §4.7 US-703 / §4.6. A tenant paying their own balance from the
 // portal. The amount is decided here, server-side, from the ledger — never
@@ -99,7 +104,22 @@ export type PayableLease = {
   restoreAtOrBelowCents: number
   /// B-232. Whether the gate is actually shut right now. The consequence
   /// sentence is only true, and only wanted, when it is.
+  ///
+  /// Always the VIEWER's own grant, never the lease holder's — a payer settling
+  /// an employee's unit has no grant at that facility and no gate copy to read,
+  /// which is the honest silence. What the employee's gate is doing belongs on
+  /// the employee's own dashboard.
   accessSuspended: boolean
+  /// B-256. Set when this payment is for a whole BUSINESS ACCOUNT rather than
+  /// for one unit: `balanceCents` is then the account's total, `leaseId` is an
+  /// ANCHOR rather than the thing being paid, and the screen bills the units
+  /// instead of the ledger.
+  ///
+  /// One shape rather than two, deliberately. Everything downstream of here —
+  /// `validatePaymentAmount`, `startPortalPayment`, the Payment Element, the
+  /// receipt — is the code that decides how much money moves, and a second copy
+  /// of it for accounts is a second place for the amount to be wrong.
+  account: { id: string; name: string; units: AccountLease[] } | null
 }
 
 /// B-225. How far past the balance a tenant may pay from the portal.
@@ -121,7 +141,17 @@ export function prepayCeilingFor(lease: { monthlyRateCents: number }): number {
 /// from the session (`requireTenantActor`), never from the request.
 export async function payableLease(tenantId: string, leaseId: string): Promise<PayableLease | null> {
   const lease = await prisma.lease.findFirst({
-    where: { id: leaseId, tenantId, status: { in: [...OCCUPYING_LEASE_STATUSES] } },
+    // B-256. `payableLeaseWhere` rather than a bare `tenantId`, so the front
+    // door matches the money path behind it. `claimsFor` has settled a business
+    // account's units out of the payer's money since B-090e, and this function
+    // still refused the payer at the URL — the portal could allocate a payment
+    // it would not let anybody start. A UNION, so a tenant's own units are
+    // reachable exactly as before.
+    where: {
+      id: leaseId,
+      ...payableLeaseWhere(tenantId),
+      status: { in: [...OCCUPYING_LEASE_STATUSES] },
+    },
     select: {
       id: true,
       facilityId: true,
@@ -142,7 +172,11 @@ export async function payableLease(tenantId: string, leaseId: string): Promise<P
   // B-232. Every occupying lease this tenant holds AT THIS FACILITY, in one
   // grouped read — this lease's balance and the facility-wide one the gate rule
   // reads come out of the same rows, so they cannot be two numbers that drift.
-  const [balances, grant] = await Promise.all([
+  const [balances, thisLease, grant] = await Promise.all([
+    // Deliberately still the viewer's OWN leases, not the widened set: this
+    // sum feeds `restoreShortfallCents`, and the gate rule (`tenantStates`)
+    // judges a tenant on what THEY owe. Adding the units they merely pay for
+    // would state a shortfall the gate does not agree with.
     prisma.ledgerEntry.groupBy({
       by: ['leaseId'],
       where: {
@@ -154,6 +188,9 @@ export async function payableLease(tenantId: string, leaseId: string): Promise<P
       },
       _sum: { amountCents: true },
     }),
+    // Which is why this lease's own balance is read separately — for a payer it
+    // is not in the sum above at all.
+    prisma.ledgerEntry.aggregate({ where: { leaseId: lease.id }, _sum: { amountCents: true } }),
     prisma.accessGrant.findUnique({
       where: { facilityId_tenantId: { facilityId: lease.facilityId, tenantId } },
       select: { state: true },
@@ -168,12 +205,78 @@ export async function payableLease(tenantId: string, leaseId: string): Promise<P
     facilityName: lease.facility.name,
     facilityPhone: lease.facility.phone,
     unitNumber: lease.unit.number,
-    balanceCents: byLease.get(lease.id) ?? 0,
+    balanceCents: thisLease._sum.amountCents ?? 0,
     monthlyRateCents: lease.monthlyRateCents,
     facilityTimezone: lease.facility.timezone,
     facilityBalanceCents: [...byLease.values()].reduce((sum, cents) => sum + cents, 0),
     restoreAtOrBelowCents: lease.facility.accessRestoreAtOrBelowCents,
     accessSuspended: grant?.state === 'suspended',
+    account: null,
+  }
+}
+
+/// B-256. The whole of a business account, as one thing to pay.
+///
+/// Authorization and lookup in one call, the same way `payableLease` does it:
+/// `portalAccountsForPayer` selects on `payerTenantId`, so an account id in a
+/// URL that belongs to somebody else comes back as null rather than as a
+/// balance. The tenant id comes from the session, never from the request.
+///
+/// The returned `leaseId` is an ANCHOR, not the unit being paid. A payment is
+/// allocated across every claimable lease in the facility's own order however
+/// it is anchored (`claimsFor` via `payableLeaseFilter`), so which unit the
+/// button names changes nothing about where the money lands; the anchor exists
+/// only so a remainder has somewhere to sit (`postPaymentLedger`). It is the
+/// first unit in the list's own sort order, so a reload produces the same
+/// idempotency key rather than a second intent.
+export async function payableAccount(
+  tenantId: string,
+  accountId: string,
+): Promise<PayableLease | null> {
+  const account = (await portalAccountsForPayer(tenantId)).find((row) => row.id === accountId)
+  if (!account) return null
+  const anchor = account.units[0]
+  if (!anchor) return null
+
+  // The same two facts `payableLease` reads, on the same basis: the VIEWER's
+  // own leases and the VIEWER's own grant. A payer who holds nothing at this
+  // facility gets zero and no grant, which is correct — their gate is not what
+  // paying this reopens.
+  const [balances, grant, facility] = await Promise.all([
+    prisma.ledgerEntry.groupBy({
+      by: ['leaseId'],
+      where: {
+        lease: {
+          tenantId,
+          facilityId: account.facilityId,
+          status: { in: [...OCCUPYING_LEASE_STATUSES] },
+        },
+      },
+      _sum: { amountCents: true },
+    }),
+    prisma.accessGrant.findUnique({
+      where: { facilityId_tenantId: { facilityId: account.facilityId, tenantId } },
+      select: { state: true },
+    }),
+    prisma.facility.findUniqueOrThrow({
+      where: { id: account.facilityId },
+      select: { accessRestoreAtOrBelowCents: true },
+    }),
+  ])
+
+  return {
+    leaseId: anchor.leaseId,
+    facilityId: account.facilityId,
+    facilityName: account.facilityName,
+    facilityPhone: account.facilityPhone,
+    unitNumber: anchor.unitNumber,
+    balanceCents: account.balanceCents,
+    monthlyRateCents: account.monthlyRateCents,
+    facilityTimezone: account.facilityTimezone,
+    facilityBalanceCents: balances.reduce((sum, row) => sum + (row._sum.amountCents ?? 0), 0),
+    restoreAtOrBelowCents: facility.accessRestoreAtOrBelowCents,
+    accessSuspended: grant?.state === 'suspended',
+    account: { id: account.id, name: account.name, units: account.units },
   }
 }
 
@@ -211,8 +314,17 @@ export async function startPortalPayment(
       tenantId,
       leaseId: lease.leaseId,
       amountCents,
-      reference: `portal:${lease.leaseId}:${amountCents}:${lease.balanceCents}`,
-      description: `Storage payment — unit ${lease.unitNumber}`,
+      // B-256. An account payment is keyed on the ACCOUNT, not on the anchor
+      // lease: two accounts can share a facility and an amount, and the anchor
+      // is an implementation detail that could change if a unit is detached.
+      // The balance is in the key for the reason it always was — a genuine
+      // second payment of the same amount comes after the first one moved it.
+      reference: lease.account
+        ? `portal-account:${lease.account.id}:${amountCents}:${lease.balanceCents}`
+        : `portal:${lease.leaseId}:${amountCents}:${lease.balanceCents}`,
+      description: lease.account
+        ? `Storage payment — ${lease.account.name}`
+        : `Storage payment — unit ${lease.unitNumber}`,
       // The tenant asked to pay a bill, not to store a card. Autopay
       // enrolment and method management are B-036's, with their own
       // disclosure; silently retaining a card here would be neither.

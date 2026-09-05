@@ -19,13 +19,17 @@ import { formatCents } from '@/lib/format'
 // exactly as before.
 
 export function PayAmountForm({
-  leaseId,
+  subject,
   amountCents,
   facilityBalanceCents,
   restoreAtOrBelowCents,
   accessSuspended,
 }: {
-  leaseId: string
+  /// B-256. What is being paid, as the query parameter the page reads back:
+  /// one lease, or a whole business account. It was a bare `leaseId`, which
+  /// re-submitted an account payment as a payment for its anchor unit — a
+  /// different and much smaller bill than the one on the screen.
+  subject: { field: 'lease' | 'account'; id: string }
   amountCents: number
   facilityBalanceCents: number
   restoreAtOrBelowCents: number
@@ -57,7 +61,7 @@ export function PayAmountForm({
 
   return (
     <form method="GET" className="mt-3 flex flex-col gap-3">
-      <input type="hidden" name="lease" value={leaseId} />
+      <input type="hidden" name={subject.field} value={subject.id} />
       <label className="flex flex-col gap-1 text-sm">
         Amount in dollars
         <input

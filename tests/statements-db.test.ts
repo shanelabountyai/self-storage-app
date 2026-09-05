@@ -5,7 +5,7 @@ import {
   leaseStatement,
   staffStatementsForLease,
   statementsForTenant,
-  tenantOwnsLease,
+  tenantMayViewLease,
 } from '../apps/web/lib/billing/statements'
 import { reconciles } from '../packages/core/billing'
 import { ForbiddenError } from '../apps/web/lib/rbac/authorize'
@@ -253,8 +253,8 @@ describeDb('monthly statements (US-705)', () => {
     it('refuses a lease that belongs to another tenant', async () => {
       // The portal takes the lease id from the URL, and a statement is a full
       // month of somebody's financial history.
-      expect(await tenantOwnsLease(tenantId, otherLeaseId)).toBe(false)
-      expect(await tenantOwnsLease(tenantId, leaseId)).toBe(true)
+      expect(await tenantMayViewLease(tenantId, otherLeaseId)).toBe(false)
+      expect(await tenantMayViewLease(tenantId, leaseId)).toBe(true)
     })
 
     it('lets staff at the facility list the months', async () => {

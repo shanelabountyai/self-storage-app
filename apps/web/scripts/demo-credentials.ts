@@ -33,10 +33,19 @@ export const DEMO_POS_TENANT_EMAIL = `pos-tenant@${DEMO_EMAIL_DOMAIN}`
 //
 // A tenant of their own with no lease, which is the ordinary shape: the person
 // at the company who settles the bill is rarely the person whose goods are in
-// the unit. The account pays for DEMO_POS_TENANT_EMAIL's unit, chosen because
-// it is the one active lease with a stable address AND because attaching it
-// changes nothing about the POS tests that already take money against it —
-// allocation widens for the PAYER, and Alex is not the payer.
+// the unit.
+//
+// The account pays for the two anonymous active units at the primary facility,
+// and deliberately NOT for DEMO_POS_TENANT_EMAIL's. B-090e attached that one —
+// safe while an account was only a staff screen — and B-256 moved it off,
+// because the POS specs take real money against that lease every sweep and
+// never reverse it, so an account holding it walks into credit and the payer's
+// portal card loses the Pay button the specs are there to scan. See the note
+// beside the attach in seed-demo.mts.
+//
+// B-256 also gives this account a PASSWORD (DEMO_TENANT_PASSWORD): the payer's
+// portal is a customer-facing surface, and a customer-facing surface with no
+// session cannot be accessibility-scanned.
 export const DEMO_BUSINESS_PAYER_EMAIL = `business@${DEMO_EMAIL_DOMAIN}`
 export const DEMO_BUSINESS_ACCOUNT_NAME = 'Acme Contracting'
 

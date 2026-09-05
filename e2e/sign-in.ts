@@ -4,6 +4,7 @@ import type { Page } from '@playwright/test'
 import { SESSION_COOKIE } from '../apps/web/auth.config'
 import { base32Decode, TOTP_STEP_SECONDS, totpCode } from '../packages/core/auth/totp'
 import {
+  DEMO_BUSINESS_PAYER_EMAIL,
   DEMO_PLAN_TENANT_EMAIL,
   DEMO_STAFF_EMAIL,
   DEMO_STAFF_PASSWORD,
@@ -148,6 +149,20 @@ export async function signInAsPlanTenant(page: Page): Promise<void> {
   await signInWithPassword(
     page,
     { email: DEMO_PLAN_TENANT_EMAIL, password: DEMO_TENANT_PASSWORD, audience: 'tenant' },
+    '/portal',
+  )
+}
+
+/// B-256. The payer on the demo business account, who holds no lease of their
+/// own — so their portal is the account card and nothing else.
+///
+/// A live sign-in rather than a stored jar, for the reason `signInAsPlanTenant`
+/// gives: a tenant password carries no second factor, and a third
+/// `storageState` would buy nothing for the three screens this account reaches.
+export async function signInAsBusinessPayer(page: Page): Promise<void> {
+  await signInWithPassword(
+    page,
+    { email: DEMO_BUSINESS_PAYER_EMAIL, password: DEMO_TENANT_PASSWORD, audience: 'tenant' },
     '/portal',
   )
 }

@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { requireTenantActor } from '@/lib/rbac/session'
 import {
   MIN_PAYMENT_CENTS,
+  payableAccount,
   payableLease,
   startPortalPayment,
   validatePaymentAmount,
@@ -55,19 +56,29 @@ function CallInstead({ phone }: { phone: string }) {
 export default async function PortalPayPage({
   searchParams,
 }: {
-  searchParams: Promise<{ lease?: string; amount?: string }>
+  searchParams: Promise<{ lease?: string; account?: string; amount?: string }>
 }) {
-  const { lease: leaseId, amount } = await searchParams
+  const { lease: leaseId, account: accountId, amount } = await searchParams
   const actor = await requireTenantActor()
 
-  const lease = leaseId ? await payableLease(actor.tenantId, leaseId) : null
+  // B-256. One unit, or a whole business account. `account` wins if both are
+  // present — a link carries one or the other, and picking the larger subject
+  // can only ever offer to settle MORE than was asked for, never less than the
+  // tenant thought they were paying.
+  const lease = accountId
+    ? await payableAccount(actor.tenantId, accountId)
+    : leaseId
+      ? await payableLease(actor.tenantId, leaseId)
+      : null
   if (!lease) {
     // Same message whether the lease does not exist or belongs to someone
     // else — there is nothing to tell apart from the outside.
     return (
       <div className="flex flex-col gap-4">
         <h1 className="text-xl font-semibold">Pay your balance</h1>
-        <p className="text-sm text-pretty">We couldn&apos;t find that unit on your account.</p>
+        <p className="text-sm text-pretty">
+          We couldn&apos;t find that {accountId ? 'account' : 'unit'} on your account.
+        </p>
         <Link href="/portal" className="text-sm underline underline-offset-4">
           Back to my account
         </Link>
@@ -76,13 +87,14 @@ export default async function PortalPayPage({
   }
 
   const phone = lease.facilityPhone ?? SITE.phone.display
+  const subject = lease.account ? lease.account.name : `unit ${lease.unitNumber}`
 
   if (lease.balanceCents <= 0) {
     return (
       <div className="flex flex-col gap-4">
         <h1 className="text-xl font-semibold">Pay your balance</h1>
         <p className="text-sm text-pretty">
-          You&apos;re all paid up on unit {lease.unitNumber} — there&apos;s nothing to pay right now.
+          You&apos;re all paid up on {subject} — there&apos;s nothing to pay right now.
         </p>
         <Link href="/portal" className="text-sm underline underline-offset-4">
           Back to my account
@@ -99,22 +111,38 @@ export default async function PortalPayPage({
   // comment promising prepayment "comes back with B-044" — B-044 shipped
   // without it, and the refusal became the reason the product would not take
   // money a tenant was trying to give it.
+  //
+  // B-256. No prepayment ceiling on an ACCOUNT payment, which means overpayment
+  // is refused there exactly as it was everywhere before B-225. Credit on
+  // account is derived at tenant x facility (B-225) and a business account's
+  // payer typically holds no lease at that facility at all — so money paid past
+  // the account's balance would bank credit against the payer, where none of
+  // the three jobs that spend credit would ever reach it, and the units it was
+  // meant for would still read as owing. Paying ahead on an account needs an
+  // owner decision about whose credit it is; until then the screen refuses it
+  // and says to call, which is what `above_balance` already says.
   const checked = validatePaymentAmount(
     requested,
     lease.balanceCents,
-    prepayCeilingFor(lease),
+    lease.account ? 0 : prepayCeilingFor(lease),
   )
   const amountCents = checked.ok ? checked.amountCents : lease.balanceCents
   const [setup, breakdown] = await Promise.all([
     startPortalPayment(actor.tenantId, lease, amountCents),
-    balanceBreakdownFor(lease.leaseId, lease.facilityTimezone),
+    // An account's bill is its units, not one lease's ledger — itemising the
+    // anchor lease would print one unit's charges under a total covering
+    // eleven.
+    lease.account
+      ? Promise.resolve({ lines: [], totalCents: 0 })
+      : balanceBreakdownFor(lease.leaseId, lease.facilityTimezone),
   ])
 
   // B-232. The itemisation comes off the same ledger read as the total, so this
   // holds by construction. It is checked anyway, and the lines are dropped
   // rather than shown if it fails: a bill that does not add up, on the screen
   // that then asks for the money, is worse than the bare total this replaced.
-  const itemised = reconciles(breakdown, lease.balanceCents) ? breakdown.lines : []
+  const itemised =
+    !lease.account && reconciles(breakdown, lease.balanceCents) ? breakdown.lines : []
   const shortfallCents = restoreShortfallCents({
     facilityBalanceCents: lease.facilityBalanceCents,
     restoreAtOrBelowCents: lease.restoreAtOrBelowCents,
@@ -126,7 +154,7 @@ export default async function PortalPayPage({
       <div>
         <h1 className="text-xl font-semibold">Pay your balance</h1>
         <p className="text-muted-foreground mt-1 text-sm">
-          {lease.facilityName} — Unit {lease.unitNumber}
+          {lease.facilityName} — {lease.account ? lease.account.name : `Unit ${lease.unitNumber}`}
         </p>
       </div>
 
@@ -142,21 +170,43 @@ export default async function PortalPayPage({
       <div className="border-input overflow-x-auto rounded-lg border">
         <table className="w-full text-sm">
           <caption className="px-4 pt-4 text-left font-medium">
-            What you owe on unit {lease.unitNumber}
+            {lease.account
+              ? `What ${lease.account.name} owes`
+              : `What you owe on unit ${lease.unitNumber}`}
           </caption>
           <thead>
             <tr className="text-left">
               <th scope="col" className="px-4 py-2 font-medium">
-                What
+                {lease.account ? 'Unit' : 'What'}
               </th>
               <th scope="col" className="px-4 py-2 font-medium">
-                When
+                {lease.account ? 'Rented by' : 'When'}
               </th>
               <th scope="col" className="px-4 py-2 text-right font-medium">
                 Amount
               </th>
             </tr>
           </thead>
+          {/* B-256. An account's bill is its UNITS. The per-unit balances are
+              the same ledger sums the account card added up, so the rows and
+              the total below cannot disagree — the itemisation of a single
+              lease is a different question and is asked, per unit, on that
+              unit's own statement. */}
+          {lease.account && (
+            <tbody>
+              {lease.account.units.map((unit) => (
+                <tr key={unit.leaseId} className="border-t">
+                  <th scope="row" className="px-4 py-2 text-left font-normal">
+                    {unit.unitNumber}
+                  </th>
+                  <td className="text-muted-foreground px-4 py-2">{unit.tenantName}</td>
+                  <td className="px-4 py-2 text-right tabular-nums">
+                    {formatCents(unit.balanceCents)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          )}
           {itemised.length > 0 && (
             <tbody>
               {itemised.map((line, index) => (
@@ -244,7 +294,11 @@ export default async function PortalPayPage({
       <details className="border-input rounded-lg border p-4" open={Boolean(amount) && !checked.ok}>
         <summary className="cursor-pointer text-sm font-medium">Pay a different amount</summary>
         <PayAmountForm
-          leaseId={lease.leaseId}
+          subject={
+            lease.account
+              ? { field: 'account', id: lease.account.id }
+              : { field: 'lease', id: lease.leaseId }
+          }
           amountCents={amountCents}
           facilityBalanceCents={lease.facilityBalanceCents}
           restoreAtOrBelowCents={lease.restoreAtOrBelowCents}

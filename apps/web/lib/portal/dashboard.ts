@@ -3,6 +3,7 @@ import { monthlyRecurring, type RecurringCharge } from '@storage/core/pricing'
 import { OCCUPYING_LEASE_STATUSES, TRANSFER_HOLD_SOURCE } from '@storage/core/inventory'
 import { codeForLease } from '@/lib/access/provision'
 import { paymentPlanForLease } from '@/lib/admin/payment-plans'
+import { payableLeaseWhere } from '@/lib/billing/accounts'
 import { SITE } from '@/lib/site-config'
 
 // PRD 01 §4.7 US-702 / §6.5. "What do I owe, when is it due, what's my gate
@@ -79,6 +80,18 @@ export type PortalLeaseSummary = {
   /// comment makes the same point).
   pendingMoveOutDate: Date | null
   pendingTransfer: { toUnitNumber: string; transferDate: Date; expiresAt: Date } | null
+  /// B-256. The business account this unit is billed to, when it is on one.
+  ///
+  /// Two different cards come out of it, because two different people read it.
+  /// The unit's own TENANT keeps their Pay button whatever their employer
+  /// usually does (B-090e: "the tenant handing over cash at the counter for
+  /// their own unit must not be refused") and is simply told who else is
+  /// billed, so they do not pay a bill twice by accident. The PAYER, looking at
+  /// a unit they hold and also pay for through their own account, gets no
+  /// second Pay button here at all — the account card below owns that money,
+  /// and two buttons for one balance is how a screen shows the same debt twice
+  /// under two different totals.
+  billedTo: { accountName: string; youArePayer: boolean } | null
   /// B-090 part 3 / PRD 01 §9's "self-cure UX beyond banner", corrected by
   /// B-191.
   ///
@@ -128,6 +141,13 @@ export async function portalDashboardForTenant(
 ): Promise<PortalLeaseSummary[]> {
   const [tenant, leases] = await Promise.all([
     prisma.tenant.findUniqueOrThrow({ where: { id: tenantId }, select: { stripeDefaultPaymentMethodId: true } }),
+    // B-256. Still `{ tenantId }` alone, and that is load-bearing rather than
+    // an oversight. This function decrypts a GATE CODE, reads an access grant
+    // and reads a transfer hold, all of which belong to the lease's own tenant;
+    // widening it to what the viewer merely PAYS for would hand a payer a
+    // credential for somebody else's unit, which PRD 03 SR-2 makes a separately
+    // audited permission even for staff. A business account's units are their
+    // own read model (`portalAccountsForPayer`), and it carries money only.
     prisma.lease.findMany({
       where: { tenantId, status: { in: [...OCCUPYING_LEASE_STATUSES] } },
       orderBy: { startDate: 'asc' },
@@ -139,6 +159,7 @@ export async function portalDashboardForTenant(
         monthlyRateCents: true,
         protectionCents: true,
         moveOutDate: true,
+        billingAccount: { select: { name: true, payerTenantId: true } },
         facility: {
           select: {
             name: true,
@@ -224,6 +245,12 @@ export async function portalDashboardForTenant(
         gateCode,
         settlingCents: settling._sum.amountCents ?? 0,
         pendingMoveOutDate: lease.moveOutDate,
+        billedTo: lease.billingAccount
+          ? {
+              accountName: lease.billingAccount.name,
+              youArePayer: lease.billingAccount.payerTenantId === tenantId,
+            }
+          : null,
         pendingTransfer:
           transferHold?.unit && transferHold.moveInDate
             ? {
@@ -279,7 +306,12 @@ export async function owingLeases(
   tenantId: string,
 ): Promise<{ leaseId: string; balanceCents: number }[]> {
   const leases = await prisma.lease.findMany({
-    where: { tenantId, status: { in: [...OCCUPYING_LEASE_STATUSES] } },
+    // B-256. Everything this tenant may pay, which since B-090e includes the
+    // units on any business account they are the payer of. Scoped to their own
+    // leases, the nav offered a payer "Pay $200" for their personal 5x5 while
+    // eleven company units went unmentioned, and offered a payer who holds no
+    // lease of their own no Pay link at all.
+    where: { ...payableLeaseWhere(tenantId), status: { in: [...OCCUPYING_LEASE_STATUSES] } },
     select: { id: true },
   })
   if (leases.length === 0) return []

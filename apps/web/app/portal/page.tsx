@@ -4,9 +4,11 @@ import { listParts, recurringParts } from '@storage/core/pricing'
 import Link from 'next/link'
 import { requireTenantActor } from '@/lib/rbac/session'
 import { portalDashboardForTenant, type PortalLeaseSummary } from '@/lib/portal/dashboard'
-import { formatCalendarDate, formatRate } from '@/lib/format'
+import { portalAccountsForPayer, type PortalAccount } from '@/lib/billing/accounts'
+import { formatCalendarDate, formatCents, formatRate } from '@/lib/format'
 import { GateCodePanel } from '@/components/portal/gate-code-panel'
 import { currentImpersonation } from '@/lib/impersonation/context'
+import { SITE } from '@/lib/site-config'
 
 export const metadata: Metadata = { title: 'My account' }
 
@@ -56,7 +58,12 @@ function PayNowButton({ lease }: { lease: PortalLeaseSummary }) {
 }
 
 function LeaseCard({ lease, impersonated }: { lease: PortalLeaseSummary; impersonated: boolean }) {
-  const owesMoney = lease.balanceCents > 0
+  // B-256. The viewer is this unit's tenant (the dashboard reads their own
+  // leases) — so `youArePayer` means they hold the unit AND pay for it through
+  // their own business account, and the account card below already carries this
+  // balance inside one total with one button. Two buttons for one debt is the
+  // shape that gets it paid twice.
+  const owesMoney = lease.balanceCents > 0 && !lease.billedTo?.youArePayer
   // B-227. Was `monthlyRateCents + protectionCents`, computed here — which left
   // the tax on rent out and understated the charge a tenant is about to see.
   // One shared reckoning now, the same one `/portal/methods` and the checkout
@@ -102,6 +109,31 @@ function LeaseCard({ lease, impersonated }: { lease: PortalLeaseSummary; imperso
           · {formatRate(lease.monthlyRateCents)}/mo
         </p>
       </div>
+
+      {/* B-256. Who else is billed for this unit. Said on the card rather than
+          left to be discovered, because the alternative is a tenant paying a
+          bill their employer has already paid — and the money then sits as
+          credit rather than bouncing, so nothing tells either of them.
+
+          It never REPLACES this tenant's own way of paying (B-090e: the person
+          handing over cash at the counter for their own unit must not be
+          refused because their employer usually pays), which is why the
+          sentence is a fact and not an instruction. */}
+      {lease.billedTo && (
+        <div className="border-input rounded-md border p-3 text-sm text-pretty">
+          {lease.billedTo.youArePayer ? (
+            <p>
+              This unit is billed to <strong>{lease.billedTo.accountName}</strong>. Its balance is
+              part of the account total below, where you can pay for every unit at once.
+            </p>
+          ) : (
+            <p>
+              This unit is billed to <strong>{lease.billedTo.accountName}</strong>. You can still
+              pay it yourself &mdash; check with them first so it isn&apos;t paid twice.
+            </p>
+          )}
+        </div>
+      )}
 
       {owesMoney && lease.accessSuspended && (
         <div className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-pretty text-red-900">
@@ -388,10 +420,148 @@ function LeaseCard({ lease, impersonated }: { lease: PortalLeaseSummary; imperso
   )
 }
 
+// B-256 / PRD 01 §12. What a business account's PAYER came here for: one
+// total and one button, instead of the eleven cards and eleven buttons the
+// portal drew before this — because it rendered per lease and B-090e, which
+// built the account, changed no portal file.
+//
+// The card states two things that are true and easy to assume wrongly, and
+// both of them are about where money goes:
+//
+//   * A payment here is spread across the whole account in the facility's
+//     allocation order, oldest first. It is NOT applied to a unit of the
+//     payer's choosing, and has not been since B-048 for anyone holding two
+//     units — B-090e widened the pool to the account and named this wording as
+//     the thing this row owes.
+//   * Autopay is untouched by the account (D-119). `chargeAutopay` charges
+//     `lease.tenant.stripeDefaultPaymentMethodId`, so eleven units still
+//     autopay from eleven employees' own cards; attaching a unit to an account
+//     does not move the mandate, and a payer who assumed otherwise would find
+//     out on a card that was never charged.
+//
+// **What the card deliberately does NOT carry is the gate code.** Paying for a
+// unit is not authority to open it: a code is a physical access credential for
+// somebody else's goods, and PRD 03 SR-2 makes revealing one a separately
+// audited permission even for staff. It holds by construction rather than by a
+// condition here — `GateCodePanel` renders only inside `LeaseCard`, and
+// `portalDashboardForTenant` still reads `{ tenantId }` alone, so a lease the
+// viewer merely pays for never reaches that component. Widening that query is
+// what would break it.
+function AccountCard({ account }: { account: PortalAccount }) {
+  const headingId = `account-${account.id}-heading`
+  const owesMoney = account.balanceCents > 0
+  // The same fallback `portalDashboardForTenant` gives a lease card: a facility
+  // with no number of its own falls back to the site's, rather than the call
+  // line silently disappearing (B-164's rule).
+  const phone = account.facilityPhone ?? SITE.phone.display
+  const telHref = `tel:${phone.replace(/[^0-9+]/g, '')}`
+
+  return (
+    <section
+      aria-labelledby={headingId}
+      className="border-input flex flex-col gap-4 rounded-lg border p-4"
+    >
+      <div>
+        <h2 id={headingId} className="font-medium">
+          {account.name}
+        </h2>
+        <p className="text-muted-foreground text-sm">
+          {account.facilityName} · {account.units.length}{' '}
+          {account.units.length === 1 ? 'unit' : 'units'} ·{' '}
+          {formatRate(account.monthlyRateCents)}/mo
+        </p>
+      </div>
+
+      {owesMoney ? (
+        <div className="border-input rounded-md border p-3 text-sm text-pretty">
+          <p>
+            This account owes <strong>{formatRate(account.balanceCents)}</strong> across{' '}
+            {account.units.length === 1 ? 'its unit' : 'its units'}.
+          </p>
+          <Link
+            href={`/portal/pay?account=${account.id}`}
+            className="bg-primary text-primary-foreground mt-2 inline-flex min-h-11 items-center justify-center rounded-md px-4 text-sm font-medium"
+          >
+            Pay {formatRate(account.balanceCents)} now
+          </Link>
+          <p className="mt-2">
+            One payment covers the whole account. It goes to the oldest amounts owed first, across
+            every unit below, rather than to one unit in particular.
+          </p>
+          <p className="mt-2">
+            Or call{' '}
+            <a href={telHref} className="underline underline-offset-4">
+              {phone}
+            </a>{' '}
+            to pay by phone.
+          </p>
+        </div>
+      ) : (
+        <p className="text-sm text-pretty">
+          Nothing is owed on this account right now.
+        </p>
+      )}
+
+      {/* A real table, not a visual list: "Unit 12 — Dana Foreman" and "$200.00"
+          have to stay associated when the row is read one cell at a time
+          (1.3.1 A). `formatCents` rather than `formatRate` for the same reason
+          the pay screen uses it — a column where one figure reads "$129" and
+          the next "$20.00" is harder to check. */}
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <caption className="sr-only">Units billed to {account.name}</caption>
+          <thead>
+            <tr className="text-left">
+              <th scope="col" className="py-2 font-medium">
+                Unit
+              </th>
+              <th scope="col" className="py-2 font-medium">
+                Rented by
+              </th>
+              <th scope="col" className="py-2 text-right font-medium">
+                Balance
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {account.units.map((unit) => (
+              <tr key={unit.leaseId} className="border-input border-t">
+                <th scope="row" className="py-2 text-left font-normal">
+                  {unit.unitNumber}
+                </th>
+                <td className="text-muted-foreground py-2">{unit.tenantName}</td>
+                <td className="py-2 text-right tabular-nums">
+                  {unit.balanceCents < 0
+                    ? `${formatCents(-unit.balanceCents)} in credit`
+                    : formatCents(unit.balanceCents)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* D-119. Stated because the opposite is the natural assumption, and
+          because the consequence of assuming it is a bill nobody paid. */}
+      <p className="text-muted-foreground text-sm text-pretty">
+        Autopay is set up per unit and charges the card that unit&apos;s own renter has on file.
+        Paying through this account does not change that.
+      </p>
+
+      <p className="text-sm">
+        <Link href="/portal/statements" className="underline underline-offset-4">
+          Statements for this account
+        </Link>
+      </p>
+    </section>
+  )
+}
+
 export default async function PortalHomePage() {
   const actor = await requireTenantActor()
-  const [leases, impersonation] = await Promise.all([
+  const [leases, accounts, impersonation] = await Promise.all([
     portalDashboardForTenant(actor.tenantId),
+    portalAccountsForPayer(actor.tenantId),
     currentImpersonation(),
   ])
   const impersonated = Boolean(impersonation)
@@ -400,14 +570,26 @@ export default async function PortalHomePage() {
     <div className="flex flex-col gap-6">
       <h1 className="text-xl font-semibold">My account</h1>
 
-      {leases.length === 0 ? (
+      {/* B-256. The units this tenant HOLDS come first, then the accounts they
+          PAY FOR. That order because the first group is where their own gate
+          code, plan and move-out live, and a payer who holds nothing simply
+          starts at their account card. A payer whose own unit sits on their own
+          account appears in both, which is deliberate — the lease card has the
+          gate code, the account card has the money, and `billedTo` keeps the
+          balance from being offered twice. */}
+      {leases.length === 0 && accounts.length === 0 ? (
         <p className="text-muted-foreground text-sm text-pretty">
           We don&apos;t see an active unit on this account yet.
         </p>
       ) : (
-        leases.map((lease) => (
-          <LeaseCard key={lease.leaseId} lease={lease} impersonated={impersonated} />
-        ))
+        <>
+          {leases.map((lease) => (
+            <LeaseCard key={lease.leaseId} lease={lease} impersonated={impersonated} />
+          ))}
+          {accounts.map((account) => (
+            <AccountCard key={account.id} account={account} />
+          ))}
+        </>
       )}
     </div>
   )

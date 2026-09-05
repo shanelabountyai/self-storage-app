@@ -30,10 +30,20 @@ export function payableLeaseFilter(
   tenantId: string,
   facilityId: string,
 ): Prisma.LeaseWhereInput {
-  return {
-    facilityId,
-    OR: [{ tenantId }, { billingAccount: { payerTenantId: tenantId } }],
-  }
+  return { facilityId, ...payableLeaseWhere(tenantId) }
+}
+
+/// The same union, with no facility on it.
+///
+/// B-256. The portal asks the question across every site a tenant touches —
+/// "what may I pay", "which statements are mine" — where the money path always
+/// asks it about one facility, because a `Payment` carries a facility and an
+/// allocation order is per-facility. Extracted rather than copied so there is
+/// still exactly ONE definition of what an account lets a tenant reach; a
+/// second one that drifted would be a payer seeing units they cannot pay for,
+/// or paying for units they cannot see.
+export function payableLeaseWhere(tenantId: string): Prisma.LeaseWhereInput {
+  return { OR: [{ tenantId }, { billingAccount: { payerTenantId: tenantId } }] }
 }
 
 export type AccountLease = {
@@ -362,4 +372,98 @@ export async function detachLease(
   })
 
   return { unitNumber: lease.unit.number }
+}
+
+/// B-256. What the PAYER sees in the portal: one card per account they pay for.
+///
+/// A separate read model from `accountsFor`, which is a staff screen scoped by
+/// facility and gated on `billing_accounts:manage`. This one is scoped by who
+/// is signed in, spans every facility, and is reached by a tenant — so it takes
+/// a `tenantId` rather than an `Actor` and there is no permission to check: the
+/// only thing that makes these leases visible is being the account's payer,
+/// which is the same fact that makes their money settle them
+/// (`payableLeaseWhere`).
+///
+/// Occupying leases only by default — this feeds a Pay button, and a unit
+/// somebody moved out of is not something to bill for.
+///
+/// `includeEndedLeases` is for the consolidated STATEMENT, which is the other
+/// question and needs the other answer. A lease keeps its `billingAccountId`
+/// when it ends (the relation is `Restrict` both ways, and nothing detaches on
+/// move-out), and a month's account statement that silently dropped the unit
+/// the company moved out of in April would be a bookkeeping document that
+/// disagrees with the list it was reached from — which lists every month every
+/// lease on the account has, ended ones included, deliberately
+/// (`statementsForTenant`).
+export type PortalAccount = {
+  id: string
+  name: string
+  facilityId: string
+  facilityName: string
+  facilityPhone: string | null
+  /// A ledger entry is an instant; the day it happened on is a facility-local
+  /// day. Carried so the account's statement months line up with the per-unit
+  /// ones (`monthBounds`).
+  facilityTimezone: string
+  units: AccountLease[]
+  monthlyRateCents: number
+  balanceCents: number
+}
+
+export async function portalAccountsForPayer(
+  tenantId: string,
+  { includeEndedLeases = false }: { includeEndedLeases?: boolean } = {},
+): Promise<PortalAccount[]> {
+  const accounts = await prisma.billingAccount.findMany({
+    where: { payerTenantId: tenantId },
+    select: {
+      id: true,
+      name: true,
+      facilityId: true,
+      facility: { select: { name: true, phone: true, timezone: true } },
+      leases: {
+        where: includeEndedLeases ? {} : { status: { in: [...OCCUPYING_LEASE_STATUSES] } },
+        select: {
+          id: true,
+          monthlyRateCents: true,
+          unit: { select: { number: true } },
+          tenant: { select: { firstName: true, lastName: true } },
+        },
+      },
+    },
+    orderBy: { name: 'asc' },
+  })
+
+  const balances = await balancesFor(
+    accounts.flatMap((account) => account.leases.map((lease) => lease.id)),
+  )
+
+  return accounts
+    // An account with no units left is not a card worth drawing — it has no
+    // total, nothing to pay and nothing to list. The account itself survives,
+    // because the staff screen is where an empty one is dealt with.
+    .filter((account) => account.leases.length > 0)
+    .map((account) => {
+      const units: AccountLease[] = account.leases
+        .map((lease) => ({
+          leaseId: lease.id,
+          unitNumber: lease.unit.number,
+          tenantName: `${lease.tenant.firstName} ${lease.tenant.lastName}`,
+          monthlyRateCents: lease.monthlyRateCents,
+          balanceCents: balances.get(lease.id) ?? 0,
+        }))
+        .sort((a, b) => a.unitNumber.localeCompare(b.unitNumber, undefined, { numeric: true }))
+
+      return {
+        id: account.id,
+        name: account.name,
+        facilityId: account.facilityId,
+        facilityName: account.facility.name,
+        facilityPhone: account.facility.phone,
+        facilityTimezone: account.facility.timezone,
+        units,
+        monthlyRateCents: units.reduce((sum, unit) => sum + unit.monthlyRateCents, 0),
+        balanceCents: units.reduce((sum, unit) => sum + unit.balanceCents, 0),
+      }
+    })
 }

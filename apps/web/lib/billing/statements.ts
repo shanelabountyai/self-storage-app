@@ -1,5 +1,6 @@
 import { prisma } from '@storage/db'
 import { assertFacilityAccess, can, ForbiddenError } from '@/lib/rbac/authorize'
+import { payableLeaseWhere } from './accounts'
 import type { Actor } from '@/lib/rbac/actor'
 import {
   buildStatement,
@@ -42,6 +43,10 @@ export type StatementSummary = {
   /// balance appeared in opened five statements to find one, and a tenant
   /// asking "what is this charge" got no help from this screen at all.
   closingBalanceCents: number
+  /// B-256. The business account this unit is billed to, when it is on one.
+  /// The list groups by it, so a payer with eleven units gets one account
+  /// heading rather than eleven unit headings they have to add up themselves.
+  account: { id: string; name: string } | null
 }
 
 /// Every month every one of this tenant's leases has a statement for, newest
@@ -56,12 +61,22 @@ export async function statementsForTenant(
   now: Date = new Date(),
 ): Promise<StatementSummary[]> {
   const leases = await prisma.lease.findMany({
-    where: { tenantId },
+    // B-256. Widened to what this tenant may PAY, not only what they hold: a
+    // business account's payer needs the statements for the units they settle,
+    // which is most of why persona P5 asked for this screen — the small-business
+    // tenant "needs receipts/statements for bookkeeping", and the bookkeeping is
+    // for the company's eleven units, not for the payer's own zero.
+    //
+    // Still no status filter, for the reason above: an ENDED lease keeps its
+    // statements, and a unit somebody moved out of is still on the account that
+    // paid for it.
+    where: payableLeaseWhere(tenantId),
     select: {
       id: true,
       startDate: true,
       moveOutDate: true,
       unit: { select: { number: true } },
+      billingAccount: { select: { id: true, name: true, payerTenantId: true } },
       facility: { select: { name: true, timezone: true } },
     },
     orderBy: { startDate: 'desc' },
@@ -107,6 +122,14 @@ export async function statementsForTenant(
       closingByMonth.set(`${year}-${month}`, running)
     }
 
+    // Only when the viewer is the PAYER. A tenant whose own unit is on somebody
+    // else's account still sees it as their unit, under its own heading — the
+    // account is not theirs to be grouped under.
+    const account =
+      lease.billingAccount && lease.billingAccount.payerTenantId === tenantId
+        ? { id: lease.billingAccount.id, name: lease.billingAccount.name }
+        : null
+
     return months.map(({ year, month }) => ({
       leaseId: lease.id,
       unitNumber: lease.unit.number,
@@ -115,6 +138,7 @@ export async function statementsForTenant(
       month,
       label: statementLabel(year, month),
       closingBalanceCents: closingByMonth.get(`${year}-${month}`) ?? 0,
+      account,
     }))
   })
 }
@@ -201,15 +225,25 @@ export async function leaseStatement(input: {
   }
 }
 
-/// True when this tenant owns this lease. The statements screens take a lease
-/// id from the URL, and a statement is a full financial history — an unscoped
-/// read would hand one tenant another's.
-export async function tenantOwnsLease(tenantId: string, leaseId: string): Promise<boolean> {
-  const lease = await prisma.lease.findUnique({
-    where: { id: leaseId },
-    select: { tenantId: true },
+/// True when this tenant may see this lease's statements. The statements screens
+/// take a lease id from the URL, and a statement is a full financial history —
+/// an unscoped read would hand one tenant another's.
+///
+/// B-256. Was `tenantOwnsLease`, and ownership is no longer the whole of who may
+/// look: a business account's payer settles these invoices out of their own
+/// money and gets the bookkeeping record for them. `payableLeaseWhere` is the
+/// same union that decides which leases their payment can settle, so what a
+/// payer can SEE and what they can PAY cannot drift apart.
+///
+/// It is deliberately not symmetric — a unit's own tenant never gains sight of
+/// the rest of the account through this. Being billed for something does not
+/// make the other units' history yours.
+export async function tenantMayViewLease(tenantId: string, leaseId: string): Promise<boolean> {
+  const lease = await prisma.lease.findFirst({
+    where: { id: leaseId, ...payableLeaseWhere(tenantId) },
+    select: { id: true },
   })
-  return lease?.tenantId === tenantId
+  return lease !== null
 }
 
 /// The statements a staff member may see for one lease.

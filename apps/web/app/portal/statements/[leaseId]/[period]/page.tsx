@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { requireTenantActor } from '@/lib/rbac/session'
-import { leaseStatement, tenantOwnsLease } from '@/lib/billing/statements'
+import { leaseStatement, tenantMayViewLease } from '@/lib/billing/statements'
 import { StatementView } from '@/components/statement-view'
 import { parseStatementPeriod } from '@/lib/billing/statement-period'
 import { SITE } from '@/lib/site-config'
@@ -25,7 +25,7 @@ export default async function StatementPage({
   // Checked before anything is read. A statement is a full month of somebody's
   // financial history and the lease id is in the URL — an unscoped read here
   // would hand one tenant another's.
-  if (!(await tenantOwnsLease(actor.tenantId, leaseId))) notFound()
+  if (!(await tenantMayViewLease(actor.tenantId, leaseId))) notFound()
 
   const statement = await leaseStatement({ leaseId, year: parsed.year, month: parsed.month })
 
