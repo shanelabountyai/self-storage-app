@@ -1321,4 +1321,23 @@ export const es: Dictionary = {
   'a11y.tell.after':
     '. Díganos la página y qué pasó, y lo arreglamos y le contestamos. Una barrera de accesibilidad es un error, y así la tratamos.',
 
+
+  // --- Páginas de guías (B-262) ------------------------------------------
+  'guide.allGuides': '← Todas las guías',
+  'guide.lastUpdated': 'Última actualización',
+  'guide.carryFilterBefore': 'Llevamos el filtro',
+  'guide.carryFilterAfter': 'hasta la sucursal que usted elija.',
+  'guide.questionsHeading': 'Preguntas que nos hacen',
+  'guide.moreBefore': 'Hay más en las',
+  'guide.moreLink': 'guías de bodegas',
+  'guide.moreMiddle': ', o',
+  'guide.moreSearchLink': 'busque bodegas cerca de usted',
+  'guide.hubTitle': 'Guías de bodegas',
+  'guide.hubDescription':
+    'Respuestas claras a lo que la gente pregunta antes de rentar una bodega: qué tamaño necesita, qué cabe, cómo empacar y si vale la pena el clima controlado.',
+  'guide.hubIntro':
+    'Cinco guías sobre las decisiones que la gente toma antes de rentar: qué tamaño, qué cabe, cómo empacar y si conviene pagar por clima controlado.',
+  'guide.hubReadMore': 'Leer',
+  'guide.notFound': 'No encontramos esa guía',
+
 }

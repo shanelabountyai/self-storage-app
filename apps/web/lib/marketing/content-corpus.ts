@@ -9,7 +9,8 @@ import {
 import { cityIntro } from '@/lib/marketing/city-copy'
 import { citySizeIntro, dimensionLabel } from '@storage/core/marketing'
 import { sizesInCity } from '@/lib/facility/city-size-pages'
-import { GUIDES, guidePath } from '@/lib/guides/catalog'
+import { GUIDES, guideCopy, guidePath } from '@/lib/guides/catalog'
+import { DEFAULT_LOCALE } from '@/lib/i18n'
 
 // PRD 04 §7 Phase 2 (B-082 part 6). Everything the site publishes as prose,
 // gathered so it can be compared against itself.
@@ -129,14 +130,28 @@ export async function contentCorpus(): Promise<ContentItem[]> {
     }
   }
 
+  // B-262. English only, and that is a stated limit rather than an oversight:
+  // the corpus compares prose for near-duplicates, and comparing a Spanish
+  // description against an English one measures the language gap, not the
+  // duplication. Every other input here is English too — the facility copy is
+  // operator-typed and the city intros are generated in English — so a mixed
+  // corpus would report noise.
+  //
+  // The Spanish URLs are indexable now, so they deserve the same gate against
+  // EACH OTHER: four Spanish guide descriptions can be as near-duplicate as
+  // four English ones. That needs the corpus built per locale and the report
+  // showing both, and it is the same change the city and size intros will want
+  // when they are translated — so it belongs with them rather than half-done
+  // here. Named in `docs/PROGRESS.md` as what this item left behind.
   for (const guide of GUIDES) {
+    const copy = guideCopy(guide, DEFAULT_LOCALE)
     items.push({
       key: `guide:${guide.slug}`,
       url: guidePath(guide),
-      label: guide.title,
+      label: copy.title,
       kind: KIND.guide,
       origin: 'authored',
-      text: guide.description,
+      text: copy.description,
     })
   }
 

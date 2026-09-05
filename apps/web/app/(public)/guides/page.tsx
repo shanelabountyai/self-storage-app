@@ -6,6 +6,7 @@ import { getLocale } from '@/lib/i18n/server'
 import { OPEN_GRAPH_LOCALE, localePath } from '@/lib/i18n/routing'
 import { localeAlternates, localeUrl } from '@/lib/marketing/alternates'
 import { hubEntries } from '@/lib/guides/catalog'
+import { dictionaryFor, translate, type MessageKey } from '@/lib/i18n'
 
 // PRD 04 §3.2 US-4 AC2 (B-082 part 3). The content hub's front page.
 //
@@ -15,12 +16,11 @@ import { hubEntries } from '@/lib/guides/catalog'
 // copying its text to make the set look uniform would manufacture the
 // duplicate content this row's own part 6 exists to warn about (D-60).
 
-const TITLE = 'Storage guides'
-const DESCRIPTION =
-  'Plain answers to the questions people ask before renting a storage unit: what size you need, what fits, what to pack, and whether climate control is worth it.'
-
 export async function generateMetadata() {
   const locale = await getLocale()
+  const dict = dictionaryFor(locale)
+  const TITLE = translate(dict, 'guide.hubTitle')
+  const DESCRIPTION = translate(dict, 'guide.hubDescription')
   // A function rather than a constant so the absolute OG url comes from
   // `siteOrigin()` — the one place that decides this site's origin — instead of
   // a second reading of the environment that could disagree with the sitemap.
@@ -42,7 +42,10 @@ export async function generateMetadata() {
 
 export default async function GuidesHubPage() {
   const locale = await getLocale()
-  const entries = hubEntries()
+  const dict = dictionaryFor(locale)
+  const t = (key: MessageKey) => translate(dict, key)
+  const TITLE = t('guide.hubTitle')
+  const entries = hubEntries(locale)
 
   const schema = [
     itemListJsonLd(
@@ -66,7 +69,7 @@ export default async function GuidesHubPage() {
       ))}
 
       <h1 className="text-3xl font-semibold tracking-tight text-balance">{TITLE}</h1>
-      <p className="text-muted-foreground mt-3 text-lg text-pretty">{DESCRIPTION}</p>
+      <p className="text-muted-foreground mt-3 text-lg text-pretty">{t('guide.hubIntro')}</p>
 
       <ul className="mt-8 flex flex-col gap-4">
         {entries.map((entry) => (
@@ -85,9 +88,9 @@ export default async function GuidesHubPage() {
       </ul>
 
       <p className="text-muted-foreground mt-10 text-sm text-pretty">
-        Ready to look at units?{' '}
+        {t('guide.moreBefore')}{' '}
         <LocaleLink href="/storage/search" className="underline underline-offset-4">
-          Find storage near you
+          {t('guide.moreSearchLink')}
         </LocaleLink>
         .
       </p>

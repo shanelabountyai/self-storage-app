@@ -1272,4 +1272,27 @@ export const en = {
   'a11y.tell.after':
     '. Tell us the page and what happened, and we will fix it and reply. An accessibility barrier is a bug, and we treat it as one.',
 
+
+  // --- Guide pages (B-262, PRD 04 US-4) ---------------------------------
+  // The frame around a guide's MDX prose. The prose itself is a file per
+  // language under `content/guides`, because a 50-line article is not a
+  // dictionary entry — what lives here is the chrome a reader meets on every
+  // one of them.
+  'guide.allGuides': '← All guides',
+  'guide.lastUpdated': 'Last updated',
+  'guide.carryFilterBefore': 'We will carry the',
+  'guide.carryFilterAfter': 'filter through to the facility you pick.',
+  'guide.questionsHeading': 'Questions people ask',
+  'guide.moreBefore': 'More in the',
+  'guide.moreLink': 'storage guides',
+  'guide.moreMiddle': ', or',
+  'guide.moreSearchLink': 'find storage near you',
+  'guide.hubTitle': 'Storage guides',
+  'guide.hubDescription':
+    'Plain answers to the questions people ask before renting a storage unit: what size you need, what fits, what to pack, and whether climate control is worth it.',
+  'guide.hubIntro':
+    'Five guides to the decisions people make before they rent: what size, what fits, what to pack, and whether to pay for climate control.',
+  'guide.hubReadMore': 'Read',
+  'guide.notFound': 'Guide not found',
+
 } as const
