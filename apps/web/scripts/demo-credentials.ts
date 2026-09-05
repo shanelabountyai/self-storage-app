@@ -94,6 +94,37 @@ export const DEMO_PROMO_CODE = 'E2ESAVE'
 // this account can do that Dana's cannot.
 export const DEMO_PLAN_TENANT_EMAIL = `pia@${DEMO_EMAIL_DOMAIN}`
 
+// A tenant whose lease is CURRENT — nothing past due, ever.
+//
+// Its own stable address for the reason DEMO_POS_TENANT_EMAIL has one: a spec
+// that needs a particular fixture cannot name it through `makeTenant`, whose
+// address is `${first}.${last}${index}@…` off a running counter shared by every
+// preceding fixture. Insert or reorder anything earlier in the seed and every
+// address below it shifts. `admin-tenants.spec.ts` pinned `alex.active5@` that
+// way, and the address did not stop RESOLVING — it started resolving to the
+// wrong tenant, which is the worse failure because it reads as a product bug.
+// Verified against a fresh seed: `alex.active5@` is now the second active lease
+// at the primary facility, the one `seedUnpaidRent` gives a $161 unpaid month so
+// the business account has a total to render. The spec asserting "nothing past
+// due" was therefore pointed at the one active tenant that owes money, the
+// payment-plan disclosure correctly rendered, and B-212's assertion that it must
+// not correctly failed. The guard was right, the test was right, and the fixture
+// had wandered underneath both.
+//
+// This is the third active lease at the primary facility, which is the one of
+// the three that owes nothing: the first is DEMO_POS_TENANT_EMAIL, whose
+// balance the POS specs move every sweep, and the second carries the unpaid
+// month that gives the business account a total to render. Nothing seeds an
+// invoice against this one, and `makeLease` creates none, so `arrearsCents` is
+// 0 by construction rather than by nobody having disturbed it yet.
+//
+// It is on the demo business account (B-256 put the second and third there).
+// That does not affect what this fixture is for — a lease with no invoices has
+// no arrears whether or not somebody else settles its bill — but a spec that
+// needs a current tenant on NO account needs a fourth lease, and a fourth lease
+// moves the occupancy and revenue numbers the smoke suite asserts on.
+export const DEMO_CURRENT_TENANT_EMAIL = `current-tenant@${DEMO_EMAIL_DOMAIN}`
+
 // B-258. An authorized MEMBER of the demo business account: somebody who sees
 // the account and cannot pay it.
 //

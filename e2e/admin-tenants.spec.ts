@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 import { signInAsDemoOwner } from './sign-in'
 import { assertNoAxeViolations } from './a11y-helpers'
+import { DEMO_CURRENT_TENANT_EMAIL } from '../apps/web/scripts/demo-credentials'
 
 // B-181. The occasional write forms live behind native <details> now — the
 // support-session form was the third thing on the page and the leases were the
@@ -534,7 +535,7 @@ test.describe('payment plans on the tenant profile', () => {
   // plan, so a current tenant got twelve fields over "$0.00 is past due" that
   // refused every submit.
   test('is not offered on a lease with nothing past due', async ({ page }) => {
-    await page.goto('/admin/tenants?q=alex.active5@demo.example.com')
+    await page.goto(`/admin/tenants?q=${DEMO_CURRENT_TENANT_EMAIL}`)
     await page.getByRole('link', { name: 'Alex Active' }).first().click()
 
     await expect(page.getByRole('region', { name: 'Actions' })).toBeVisible()
