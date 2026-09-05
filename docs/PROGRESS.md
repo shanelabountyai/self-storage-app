@@ -8605,7 +8605,7 @@ B-090 part 5's last piece, split out of B-256 rather than deferred silently: it 
 
 ## B-086 part 2 — Phone unlock, and the answer to OQ-2 (2026-09-04)
 
-**Commit:** `PENDING`
+**Commit:** `68a1cc8`
 
 The half of US-8 that was still a question. `AccessCredentialType.mobile_key` had sat in the enum since B-002 with no reader, no writer and no UI, and the unlock it implied was blocked on an open question the PRD had carried since it was written: **OQ-2, native app vs. PWA for Bluetooth unlock.** The row asked for a spike; the spike changed the shape of the feature rather than confirming it.
 
