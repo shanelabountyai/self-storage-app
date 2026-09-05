@@ -29,6 +29,14 @@ export const PERMISSIONS = [
   /// Separate from `payments:take`: selling a lock is counter work, but
   /// setting its price and its cost is not.
   { key: 'merchandise:manage', name: 'Manage merchandise', category: 'billing', description: 'Add products, set prices and adjust stock.' },
+  /// PRD 01 §9 Phase 3 (B-090 part 5). Deciding who pays for a unit.
+  ///
+  /// Its own key rather than leaning on `tenants:edit`, which is contact
+  /// details and notes. Attaching a lease to an account makes somebody else’s
+  /// payment settle it and lets that somebody see the balance in the portal —
+  /// a money authority and a disclosure at once, and neither is what “update
+  /// contact info” grants.
+  { key: 'billing_accounts:manage', name: 'Manage billing accounts', category: 'billing', description: 'Create a business account and choose which leases it pays for.' },
 
   // Inventory & pricing
   { key: 'units:edit', name: 'Edit unit inventory', category: 'inventory', description: 'Create, edit, and change unit statuses.' },
@@ -205,6 +213,7 @@ export const ROLES: readonly RoleSeed[] = [
       'fees:waive',
       'credits:manual',
       'refunds:request',
+      'billing_accounts:manage',
       'units:edit',
       'rates:street:propose',
       'delinquency:execute_step',

@@ -16,6 +16,8 @@ import {
   DEMO_TENANT_EMAIL,
   DEMO_TENANT_PASSWORD,
   DEMO_POS_TENANT_EMAIL,
+  DEMO_BUSINESS_PAYER_EMAIL,
+  DEMO_BUSINESS_ACCOUNT_NAME,
   DEMO_PLAN_TENANT_EMAIL,
   DEMO_PROMO_CODE,
 } from './demo-credentials.ts'
@@ -55,7 +57,7 @@ export const DEMO_PREFIX = 'demo-'
 /// `npm run db:reset-link -- --email dana@demo.example.com --tenant` mints a
 /// password-reset link for a demo tenant without sending mail anywhere.
 const NO_LOGINS = process.argv.includes('--no-logins')
-export { DEMO_EMAIL_DOMAIN, DEMO_STAFF_EMAIL, DEMO_STAFF_PASSWORD, DEMO_TENANT_EMAIL, DEMO_TENANT_PASSWORD, DEMO_POS_TENANT_EMAIL, DEMO_PLAN_TENANT_EMAIL }
+export { DEMO_EMAIL_DOMAIN, DEMO_STAFF_EMAIL, DEMO_STAFF_PASSWORD, DEMO_TENANT_EMAIL, DEMO_TENANT_PASSWORD, DEMO_POS_TENANT_EMAIL, DEMO_PLAN_TENANT_EMAIL, DEMO_BUSINESS_PAYER_EMAIL, DEMO_BUSINESS_ACCOUNT_NAME }
 
 /// A signed-in staff account for the e2e suite.
 ///
@@ -175,6 +177,13 @@ async function teardown() {
   // e2e suite against a demo lease has the same effect and the same fix.
   await prisma.paymentPlan.deleteMany({ where: { lease: { facilityId: { in: facilityIds } } } })
   await prisma.leaseHold.deleteMany({ where: { lease: { facilityId: { in: facilityIds } } } })
+  // B-090 part 5. `Lease.billingAccount` is onDelete: Restrict in BOTH
+  // directions — the lease cannot be deleted while it names an account, and the
+  // account cannot be deleted while a lease names it — so the pointer is
+  // cleared first and the accounts go with the leases. Same failure shape as
+  // B-132's auction case: without this the NEXT re-seed dies on a foreign key.
+  await prisma.lease.updateMany({ where, data: { billingAccountId: null } })
+  await prisma.billingAccount.deleteMany({ where })
   await prisma.lease.deleteMany({ where })
   await prisma.unit.deleteMany({ where })
   await prisma.unitTypeRate.deleteMany({ where })
@@ -781,8 +790,42 @@ async function seedLifecycleStates(
     if (isPrimaryFacility && i === 0) await recordSeedAddress(tenant.id, index)
     index++
     const slot = next()
-    await makeLease(facility.id, slot.unit.id, tenant.id, 'active', slot.rate, 90 + i * 30)
+    const lease = await makeLease(facility.id, slot.unit.id, tenant.id, 'active', slot.rate, 90 + i * 30)
     note('active')
+
+    // B-090 part 5. One business account, so the screen has something on it
+    // and so a reader can see what "one payer, somebody else's unit" looks
+    // like without building one first.
+    //
+    // Attaching THIS lease is deliberate and is safe for the reason the note
+    // beside DEMO_BUSINESS_PAYER_EMAIL gives: allocation widens for the payer,
+    // and Alex is not the payer, so every POS test that takes money against
+    // this lease behaves exactly as it did before.
+    if (isPrimaryFacility && i === 0) {
+      const payer = await prisma.tenant.create({
+        data: {
+          email: DEMO_BUSINESS_PAYER_EMAIL,
+          firstName: 'Casey',
+          lastName: 'Contractor',
+          phone: '512-555-0199',
+          addressLine1: '900 Demo Street',
+          city: 'Austin',
+          state: 'TX',
+          postalCode: '78701',
+        },
+      })
+      const account = await prisma.billingAccount.create({
+        data: {
+          facilityId: facility.id,
+          name: DEMO_BUSINESS_ACCOUNT_NAME,
+          payerTenantId: payer.id,
+        },
+      })
+      await prisma.lease.update({
+        where: { id: lease.id },
+        data: { billingAccountId: account.id },
+      })
+    }
   }
 
   // --- delinquent ---------------------------------------------------------

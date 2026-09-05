@@ -840,6 +840,7 @@ model Facility {
   units                  Unit[]
   leases                 Lease[]
   invoices               Invoice[]
+  billingAccounts        BillingAccount[]
   payments               Payment[]
   ledgerEntries          LedgerEntry[]
   accessGrants           AccessGrant[]
@@ -1194,6 +1195,10 @@ model Tenant {
   messages                Message[]
   notificationPreferences NotificationPreference[]
   merchandiseSales        MerchandiseSale[]
+  /// B-090 part 5. Accounts this tenant is the payer for. A tenant can be the
+  /// payer on several — one per facility their company rents at — and can hold
+  /// leases of their own that are on none of them.
+  billingAccountsPaid     BillingAccount[]         @relation("BillingAccountPayer")
 
   @@index([lastName, firstName])
   @@map("tenant")
@@ -1366,6 +1371,14 @@ model Lease {
   protectionCents        Int              @default(0)
   /// Set when the tenant waives protection, with the attestation text shown.
   protectionWaivedAt     DateTime?        @db.Timestamptz(6)
+  /// PRD 01 §9 Phase 3 (B-090 part 5). The payer, when it is not the tenant.
+  ///
+  /// Additive and nullable, and `tenantId` is untouched: the person whose goods
+  /// are in the unit and the person who pays for it are different facts, and
+  /// only the first one is who a lien notice is served on. Null — the shipped
+  /// state for every existing lease — means the tenant pays for their own unit,
+  /// which is the behaviour that was there before this column.
+  billingAccountId       String?
   signedDocumentUrl      String?
   signedDocumentHash     String?
   signedAt               DateTime?        @db.Timestamptz(6)
@@ -1377,6 +1390,13 @@ model Lease {
   facility               Facility                 @relation(fields: [facilityId], references: [id], onDelete: Restrict)
   tenant                 Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   unit                   Unit                     @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  /// The facility is part of the key on purpose. A composite foreign key onto
+  /// `BillingAccount(id, facilityId)` is what makes "a lease can only be on an
+  /// account at its own facility" a database fact rather than a check in one
+  /// service — and that invariant is a money one: a payment carries exactly one
+  /// `facilityId`, so a lease attached across sites would settle out of the
+  /// wrong facility's drawer, deposit slip and accounting period.
+  billingAccount         BillingAccount?          @relation(fields: [billingAccountId, facilityId], references: [id, facilityId], onDelete: Restrict)
   protectionChanges      ProtectionChange[]
   invoices               Invoice[]
   ledgerEntries          LedgerEntry[]
@@ -1406,10 +1426,62 @@ model Lease {
   /// fails on it by design.
   @@index([facilityId, startDate, acquisitionChannel])
   @@index([transferredFromLeaseId])
+  @@index([billingAccountId])
   @@map("lease")
 }
 
 // -------------------------------------------------------------- billing ----
+
+/// PRD 01 §9 Phase 3 / PRD 01 §12 (B-090 part 5). A payer ABOVE the lease.
+///
+/// The commercial customer with eleven units gets eleven leases, eleven
+/// invoices and — before this — eleven Pay buttons in the portal and eleven
+/// separate allocations at the counter. This is the row that makes them one
+/// bill to settle.
+///
+/// **`Invoice` is deliberately unchanged, and that is the whole design.**
+/// Consolidation is a PRESENTATION and PAYMENT concern here, never a ledger
+/// one. An invoice stays per-lease because everything downstream of it is
+/// per-unit and legally has to be: a Texas lien attaches to the goods in one
+/// unit, a notice names one unit, late fees anchor on one lease's rent
+/// invoices, and invoice numbers are gapless per facility. Folding eleven units
+/// into one invoice row would put all of that behind a join that does not
+/// exist. What the account changes is who may settle those invoices with one
+/// payment, and what a screen adds up before it shows a total.
+///
+/// **Scoped to one facility, and that is a real ceiling.** `Payment.facilityId`
+/// is not nullable, and deposit slips, drawer sessions, accounting periods and
+/// the allocation order are all per-facility — so one payment spanning two
+/// sites would post to one of them and quietly misstate both. A customer
+/// renting at three sites gets three accounts.
+/// ponytail: per-facility accounts; a payer group above them if a real
+/// portfolio ever needs one bill across sites.
+model BillingAccount {
+  id            String   @id @default(cuid())
+  facilityId    String
+  /// What the operator calls the payer — "Acme Contracting", not the payer
+  /// tenant's own name, which is usually a person at the company.
+  name          String
+  /// The Tenant who pays. A Tenant rather than a new identity because the
+  /// payer has to be someone the POS can take a payment from, the portal can
+  /// sign in, and `Payment.tenantId` can point at — all of which already work
+  /// for a Tenant and none of which would for a new table.
+  payerTenantId String
+  createdAt     DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime @updatedAt @db.Timestamptz(6)
+
+  facility Facility @relation(fields: [facilityId], references: [id], onDelete: Restrict)
+  payer    Tenant   @relation("BillingAccountPayer", fields: [payerTenantId], references: [id], onDelete: Restrict)
+  leases   Lease[]
+
+  @@unique([facilityId, name])
+  /// Not redundant with the primary key: it is the target of `Lease`'s
+  /// composite foreign key, which is what pins a lease and its account to the
+  /// same facility.
+  @@unique([id, facilityId])
+  @@index([payerTenantId])
+  @@map("billing_account")
+}
 
 model Invoice {
   id              String        @id @default(cuid())

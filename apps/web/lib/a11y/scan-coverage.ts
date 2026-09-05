@@ -160,6 +160,7 @@ export const ADMIN_SCAN_ROUTES = [
   '/admin/tenants/former',
   '/admin/leads',
   '/admin/billing',
+  '/admin/billing/accounts',
   '/admin/delinquency',
   '/admin/overlocks',
   '/admin/walkthrough',
@@ -261,6 +262,12 @@ export const SCANNED_BY_OWN_SPEC = [
   // file exists to stop. Reached the way the counter reaches it: a click from
   // a tenant's profile.
   { route: '/admin/pos/card', spec: 'e2e/admin-pos.spec.ts' },
+  // B-090 part 5. Needs a real account id. A bare `goto` cannot produce one,
+  // and the substance of the page — the units table, its totals and the two
+  // controls beside them — only exists once an account has units, so reaching
+  // it by a click from the list is the only way to scan the page rather than
+  // an empty state.
+  { route: '/admin/billing/accounts/[id]', spec: 'e2e/admin-billing-accounts.spec.ts' },
 ] as const
 
 /// Who the page is for. The public statement lists the first two and not

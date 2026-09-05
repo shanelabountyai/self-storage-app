@@ -9,6 +9,7 @@ import {
   type AllocationLine,
   type AllocationTarget,
 } from '@storage/core/billing'
+import { payableLeaseFilter } from './accounts'
 
 // PRD 02 US-22 (B-048). Applying a payment across what a lease owes.
 //
@@ -60,7 +61,11 @@ export async function claimsFor(
     where: {
       facilityId,
       status: { in: ['open', 'partially_paid'] },
-      lease: { tenantId },
+      // B-090 part 5. `payableLeaseFilter` is `{ tenantId }` widened by the
+      // billing account this tenant pays for, so a business account's one
+      // payment settles all eleven units and nothing else in the money path had
+      // to learn about accounts.
+      lease: payableLeaseFilter(tenantId, facilityId),
     },
     select: {
       id: true,
@@ -124,7 +129,11 @@ async function coveredByPlan(
   client: Prisma.TransactionClient | typeof prisma = prisma,
 ): Promise<Map<string, Set<string>>> {
   const plans = await client.paymentPlan.findMany({
-    where: { status: 'active', lease: { facilityId, tenantId } },
+    // Widened with `claimsFor` and for the same reason: a plan on an account's
+    // lease must defer the payer's money exactly as it defers the tenant's, or
+    // the consolidated payment walks straight over the arrears the plan froze
+    // and B-203's defect comes back through the business-account door.
+    where: { status: 'active', lease: payableLeaseFilter(tenantId, facilityId) },
     select: { leaseId: true, invoiceIds: true },
   })
   const byLease = new Map<string, Set<string>>()

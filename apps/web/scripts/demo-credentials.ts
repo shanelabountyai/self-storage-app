@@ -29,6 +29,17 @@ export const DEMO_TENANT_PASSWORD = 'demo-tenant-password'
 // balance nothing else depends on.
 export const DEMO_POS_TENANT_EMAIL = `pos-tenant@${DEMO_EMAIL_DOMAIN}`
 
+// B-090 part 5. The payer on the demo business account.
+//
+// A tenant of their own with no lease, which is the ordinary shape: the person
+// at the company who settles the bill is rarely the person whose goods are in
+// the unit. The account pays for DEMO_POS_TENANT_EMAIL's unit, chosen because
+// it is the one active lease with a stable address AND because attaching it
+// changes nothing about the POS tests that already take money against it —
+// allocation widens for the PAYER, and Alex is not the payer.
+export const DEMO_BUSINESS_PAYER_EMAIL = `business@${DEMO_EMAIL_DOMAIN}`
+export const DEMO_BUSINESS_ACCOUNT_NAME = 'Acme Contracting'
+
 // B-079. Staff MFA is mandatory, so the demo owner has to hold a real second
 // factor or the e2e suite reaches the enrolment screen and nothing else.
 //

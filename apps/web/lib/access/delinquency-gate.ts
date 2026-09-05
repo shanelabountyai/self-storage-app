@@ -182,36 +182,70 @@ export async function evaluateAccessSuspensions(
 /// Safe to call on every payment: a grant that is not suspended produces no
 /// transition, and `transitionGrant` treats a same-state move as a quiet no-op
 /// rather than a second command to the hardware.
+///
+/// **`tenantId` is the PAYER, and since B-090 part 5 the payer is not always
+/// the person whose gate code is off.** A business account's payment settles
+/// every lease on the account, and those leases belong to other tenants — so
+/// restoring only the payer would leave the contractor's site foreman locked
+/// out until 4am on a balance his employer cleared at the counter, which is the
+/// phone call this function exists to prevent. Every tenant the payer's money
+/// could have moved is evaluated, and each is judged on its own grant and its
+/// own balance exactly as before.
 export async function restoreAccessIfSettled(
   tenantId: string,
   facilityId: string,
   asOf: Date = new Date(),
 ): Promise<boolean> {
-  const grant = await prisma.accessGrant.findFirst({
-    where: { facilityId, tenantId },
-    select: { id: true, state: true },
+  const tenantIds = await tenantsPaidForBy(tenantId, facilityId)
+  const grants = await prisma.accessGrant.findMany({
+    where: { facilityId, tenantId: { in: tenantIds }, state: 'suspended' },
+    select: { id: true, tenantId: true, state: true },
   })
-  if (!grant || grant.state !== 'suspended') return false
+  if (grants.length === 0) return false
 
   const facility = await prisma.facility.findUniqueOrThrow({
     where: { id: facilityId },
     select: { accessSuspendDaysPastDue: true, accessRestoreAtOrBelowCents: true },
   })
-  const state = (await tenantStates(facilityId, asOf)).find((row) => row.tenantId === tenantId)
-  if (!state) return false
+  const states = await tenantStates(facilityId, asOf)
 
-  const decision = gateDecision({
-    state: grant.state,
-    daysPastDue: state.daysPastDue,
-    balanceCents: state.balanceCents,
-    suspendAtDays: facility.accessSuspendDaysPastDue,
-    restoreAtOrBelowCents: facility.accessRestoreAtOrBelowCents,
-    onHold: state.onHold,
+  let restored = false
+  for (const grant of grants) {
+    const state = states.find((row) => row.tenantId === grant.tenantId)
+    if (!state) continue
+
+    const decision = gateDecision({
+      state: grant.state,
+      daysPastDue: state.daysPastDue,
+      balanceCents: state.balanceCents,
+      suspendAtDays: facility.accessSuspendDaysPastDue,
+      restoreAtOrBelowCents: facility.accessRestoreAtOrBelowCents,
+      onHold: state.onHold,
+    })
+    if (decision.action !== 'restore') continue
+
+    // `state.tenantId` rather than `grant.tenantId`: the grant's column is
+    // nullable, and a row that matched a state has already proved it is not
+    // null by matching on that very field.
+    await applyRestore(facilityId, grant.id, state.tenantId, state.leaseIds, asOf)
+    restored = true
+  }
+  return restored
+}
+
+/// The payer, plus every tenant holding a lease the payer's billing accounts
+/// pay for. Almost always just the payer — one query, and it returns the
+/// single-element array on the ordinary path.
+async function tenantsPaidForBy(tenantId: string, facilityId: string): Promise<string[]> {
+  const leases = await prisma.lease.findMany({
+    where: {
+      facilityId,
+      status: { in: [...OCCUPYING_LEASE_STATUSES] },
+      billingAccount: { payerTenantId: tenantId },
+    },
+    select: { tenantId: true },
   })
-  if (decision.action !== 'restore') return false
-
-  await applyRestore(facilityId, grant.id, tenantId, state.leaseIds, asOf)
-  return true
+  return [...new Set([tenantId, ...leases.map((lease) => lease.tenantId)])]
 }
 
 async function applySuspend(

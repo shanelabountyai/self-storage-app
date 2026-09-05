@@ -61,6 +61,10 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { key: 'tenants', label: 'Tenants', href: '/admin/tenants', group: 'money', anyOf: ['tenants:view'] },
   { key: 'billing', label: 'Billing', href: '/admin/billing', group: 'money', anyOf: ['payments:take', 'reports:financial'] },
   { key: 'pos', label: 'POS / Drawer', href: '/admin/pos', group: 'money', anyOf: ['payments:take'] },
+  // PRD 01 §9 Phase 3 (B-090 part 5). Under Money & tenants beside Billing:
+  // an account is a payer, and the question it answers ("who settles unit 12")
+  // is a billing one rather than a setting.
+  { key: 'billing-accounts', label: 'Business Accounts', href: '/admin/billing/accounts', group: 'money', anyOf: ['billing_accounts:manage', 'reports:financial'] },
   { key: 'delinquency', label: 'Delinquency', href: '/admin/delinquency', group: 'money', anyOf: ['delinquency:execute_step'] },
   // B-076 / PRD 02 US-11. The rate-increase review screen. Gated on the
   // permission that schedules them; the regional-rank check that governs
