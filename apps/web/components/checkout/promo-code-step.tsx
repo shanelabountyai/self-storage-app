@@ -1,5 +1,6 @@
 import { AdminForm, Field } from '@/components/admin/form'
 import type { FormState } from '@/lib/admin/form-state'
+import { translate, type Dictionary, type MessageKey } from '@/lib/i18n'
 
 // PRD 04 §3.6 US-11 AC3 (B-122). The code box inside the checkout.
 //
@@ -23,6 +24,7 @@ export function PromoCodeStep({
   token,
   action,
   appliedTerms,
+  dict,
 }: {
   token: string
   /// The same signature `AdminForm` takes. Typed properly rather than `any`:
@@ -34,7 +36,10 @@ export function PromoCodeStep({
   /// see what a code would be competing with — FR-PROMO-4 allows only one, and
   /// "why did nothing change" is the support call this prevents.
   appliedTerms?: string | null
+  dict: Dictionary
 }) {
+  const t = (key: MessageKey, vars?: Record<string, string | number>) =>
+    translate(dict, key, vars)
   return (
     <details className="border-input mt-4 rounded-lg border p-3">
       {/* Collapsed by default, and a <details> rather than a JS disclosure so
@@ -42,33 +47,32 @@ export function PromoCodeStep({
           renters have no code, and an open field asking for one reads as a
           discount everybody else is getting — which is its own reason to
           abandon a checkout. */}
-      <summary className="cursor-pointer text-sm font-medium">Have a promo code?</summary>
+      <summary className="cursor-pointer text-sm font-medium">{t('promo.haveACode')}</summary>
 
       {appliedTerms && (
         <p className="text-muted-foreground mt-2 text-sm">
-          Currently applied: {appliedTerms}. Only one promotion applies at a time — if the code you
-          enter is worth less, we will keep this one.
+          {t('promo.currentlyApplied', { terms: appliedTerms })}
         </p>
       )}
 
       {/* The FORM's name, which must not repeat the field's. Both were "Promo
           code", so a screen reader announced "Promo code, form — Promo code,
           edit text" and neither said what the form was for. */}
-      <AdminForm action={action} label="Add a promo code" className="mt-2 flex flex-col gap-2">
+      <AdminForm action={action} label={t('promo.formLabel')} className="mt-2 flex flex-col gap-2">
         <input type="hidden" name="token" value={token} />
         <Field
           name="promo"
-          label="Promo code"
+          label={t('promo.field')}
           autoCapitalize="characters"
           autoComplete="off"
-          placeholder="e.g. SUMMER25"
+          placeholder={t('promo.placeholder')}
           className="flex flex-col gap-1 text-sm"
         />
         <button
           type="submit"
           className="border-input hover:bg-accent inline-flex min-h-11 items-center justify-center self-start rounded-md border px-4 text-sm font-medium"
         >
-          Apply code
+          {t('promo.apply')}
         </button>
       </AdminForm>
     </details>

@@ -1,5 +1,11 @@
 import { prisma } from '@storage/db'
 import { UseMyLocation } from './use-my-location'
+import {
+  dictionaryFor,
+  translate,
+  type MessageKey,
+} from '@/lib/i18n'
+import { getLocale } from '@/lib/i18n/server'
 
 // US-101's search input, shared by the homepage and the results page so the two
 // cannot drift in behaviour or accessibility.
@@ -25,12 +31,16 @@ async function suggestions(): Promise<string[]> {
 
 export async function FacilitySearchForm({
   defaultValue,
-  label = 'Where do you need storage?',
+  labelKey = 'search.labelWhere',
   autoFocus = false,
   carry = '',
 }: {
   defaultValue?: string
-  label?: string
+  /// B-090 part 6. A message key rather than the text: the two callers that
+  /// override this ("Zip code or city", above the results and on a city page)
+  /// are server components that would otherwise each have to resolve the
+  /// locale just to pass a string down to a component already resolving it.
+  labelKey?: MessageKey
   autoFocus?: boolean
   /// B-082 part 3. A query string of filters to preserve across this submit,
   /// as hidden inputs.
@@ -44,6 +54,8 @@ export async function FacilitySearchForm({
 }) {
   const options = await suggestions()
   const carried = [...new URLSearchParams(carry).entries()]
+  const dict = dictionaryFor(await getLocale())
+  const t = (key: MessageKey) => translate(dict, key)
 
   return (
     <div className="max-w-xl">
@@ -55,7 +67,7 @@ export async function FacilitySearchForm({
         ))}
         <div className="flex-1">
           <label htmlFor="q" className="block text-sm font-medium">
-            {label}
+            {t(labelKey)}
           </label>
           <input
             id="q"
@@ -77,7 +89,7 @@ export async function FacilitySearchForm({
             // A mixed field takes the full keyboard; §6.2's numeric-keyboard
             // rule is for genuinely numeric fields.
             autoComplete="postal-code"
-            placeholder="Zip code or city"
+            placeholder={t('search.placeholder')}
             aria-describedby="q-hint"
             className="border-input bg-background mt-1 h-12 w-full rounded-md border px-3 text-base"
           />
@@ -87,7 +99,7 @@ export async function FacilitySearchForm({
             ))}
           </datalist>
           <p id="q-hint" className="text-muted-foreground mt-1 text-sm">
-            For example: 78704, or Austin, TX
+            {t('search.hint')}
           </p>
         </div>
         {/* Full-width on mobile, in the thumb zone (§6.1). */}
@@ -95,7 +107,7 @@ export async function FacilitySearchForm({
           type="submit"
           className="bg-primary text-primary-foreground hover:bg-primary/90 mt-1 h-12 rounded-md px-6 text-base font-medium sm:mt-7"
         >
-          Find storage
+          {t('search.submit')}
         </button>
       </form>
 

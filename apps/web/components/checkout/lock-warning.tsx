@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { AdminForm } from '@/components/admin/form'
 import { extendLockAction } from '@/app/(public)/checkout/actions'
+import { useT } from '@/components/i18n/locale-provider'
 
 // 2.2.1 Timing Adjustable. The T-5-minute warning on the 30-minute unit lock.
 //
@@ -39,6 +40,7 @@ export function LockWarning({
   /// keeps the no-JavaScript render and the hydrated one identical.
   initialRemaining: number
 }) {
+  const t = useT()
   const [remaining, setRemaining] = useState(initialRemaining)
   const due = remaining <= warningMinutes
 
@@ -55,9 +57,7 @@ export function LockWarning({
   // that restates itself every minute is a screen reader interrupting a renter
   // mid-lease, over and over — which is why the minutes live in the ordinary
   // paragraph below and this sentence does not name them.
-  const announcement = due
-    ? 'The hold on your unit runs out soon. Nothing has been charged, and you can keep it for longer.'
-    : ''
+  const announcement = due ? t('lock.announcement') : ''
 
   return (
     <>
@@ -70,23 +70,25 @@ export function LockWarning({
       {due && (
         <section aria-labelledby="lock" className="border-input mt-6 rounded-lg border p-4">
           <h2 id="lock" className="text-base font-medium">
-            Still there?
+            {t('lock.stillThere')}
           </h2>
           {/* Not a live region: the sr-only paragraph above says this once, and
               this one changes every minute. */}
           <p className="mt-1 text-sm text-pretty">
             {remaining > 0
-              ? `We are holding your unit for another ${remaining} ${remaining === 1 ? 'minute' : 'minutes'}.`
-              : 'The hold on your unit runs out in less than a minute.'}{' '}
-            Nothing has been charged, and you can keep it for longer.
+              ? t(remaining === 1 ? 'lock.holdingOne' : 'lock.holdingOther', {
+                  count: remaining,
+                })
+              : t('lock.underAMinute')}{' '}
+            {t('lock.reassurance')}
           </p>
-          <AdminForm action={extendLockAction} label="Keep holding my unit" className="mt-3">
+          <AdminForm action={extendLockAction} label={t('lock.keepFormLabel')} className="mt-3">
             <input type="hidden" name="token" value={token} />
             <button
               type="submit"
               className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
             >
-              Keep it for another 30 minutes
+              {t('lock.keepAnother30')}
             </button>
           </AdminForm>
         </section>

@@ -1,16 +1,20 @@
 import { AdminForm } from '@/components/admin/form'
 import { goBackAction } from '@/app/(public)/checkout/actions'
 import { STEPS, type Step } from '@/lib/checkout/session'
+import { translate, type Dictionary, type MessageKey } from '@/lib/i18n'
 
 // PRD 01 §6.4 and §6.8.1. The progress indicator.
 
-const STEP_LABELS: Record<Step, string> = {
-  details: 'Your details',
-  unit_assign: 'Your unit',
-  insurance: 'Protection',
-  lease: 'Lease',
-  payment: 'Payment',
-  provisioned: 'Done',
+// B-090 part 6: keys, not words. `stepAnnouncement` and the indicator both
+// resolve them from the same dictionary, so the spoken announcement and the
+// visible step name still cannot drift — which is the reason this map exists.
+const STEP_LABELS: Record<Step, MessageKey> = {
+  details: 'step.details',
+  unit_assign: 'step.unit_assign',
+  insurance: 'step.insurance',
+  lease: 'step.lease',
+  payment: 'step.payment',
+  provisioned: 'step.provisioned',
 }
 
 /// What a renter is told when a step changes: where they now are, in the same
@@ -18,15 +22,29 @@ const STEP_LABELS: Record<Step, string> = {
 /// the indicator cannot drift apart, and so `CheckoutAnnouncer` — a client
 /// component — never has to import `lib/checkout/session` and drag Prisma and
 /// `node:crypto` into the browser bundle for the sake of a label.
-export function stepAnnouncement(step: Step): string {
-  return `${STEP_LABELS[step]} — step ${STEPS.indexOf(step) + 1} of ${STEPS.length}`
+export function stepAnnouncement(step: Step, dict: Dictionary): string {
+  return translate(dict, 'step.announcement', {
+    label: translate(dict, STEP_LABELS[step]),
+    index: STEPS.indexOf(step) + 1,
+    total: STEPS.length,
+  })
 }
 
-export function labelForStep(step: Step): string {
-  return STEP_LABELS[step]
+export function labelForStep(step: Step, dict: Dictionary): string {
+  return translate(dict, STEP_LABELS[step])
 }
 
-export function Stepper({ current, token }: { current: Step; token?: string }) {
+export function Stepper({
+  current,
+  token,
+  dict,
+}: {
+  current: Step
+  token?: string
+  dict: Dictionary
+}) {
+  const t = (key: MessageKey, vars?: Record<string, string | number>) =>
+    translate(dict, key, vars)
   const currentIndex = STEPS.indexOf(current)
   // Nothing is navigable once the move-in is done: there is no step behind
   // `provisioned` that means anything, and the session is closed anyway.
@@ -56,10 +74,9 @@ export function Stepper({ current, token }: { current: Step; token?: string }) {
                 value={step}
                 className="min-h-11 underline underline-offset-4"
               >
-                {STEP_LABELS[step]}
+                {t(STEP_LABELS[step])}
                 <span className="sr-only">
-                  {' '}
-                  — step {index + 1} of {STEPS.length}, completed. Go back to this step.
+                  {t('step.completedGoBack', { index: index + 1, total: STEPS.length })}
                 </span>
               </button>
             ) : (
@@ -67,11 +84,14 @@ export function Stepper({ current, token }: { current: Step; token?: string }) {
                 aria-current={isCurrent ? 'step' : undefined}
                 className={isCurrent ? 'font-medium' : 'text-muted-foreground'}
               >
-                {STEP_LABELS[step]}
+                {t(STEP_LABELS[step])}
                 <span className="sr-only">
-                  {' '}
-                  — step {index + 1} of {STEPS.length}
-                  {done ? ', completed' : isCurrent ? ', current step' : ', not started'}
+                  {t('step.ofTotal', { index: index + 1, total: STEPS.length })}
+                  {done
+                    ? t('step.completed')
+                    : isCurrent
+                      ? t('step.current')
+                      : t('step.notStarted')}
                 </span>
               </span>
             )}
@@ -82,11 +102,11 @@ export function Stepper({ current, token }: { current: Step; token?: string }) {
   )
 
   return (
-    <nav aria-label="Checkout progress">
+    <nav aria-label={t('step.progressNav')}>
       {navigable ? (
         // One form around the whole list, with each button carrying its own
         // `to`. Six forms would be six landmarks in a row for no gain.
-        <AdminForm action={goBackAction} label="Go back to a completed step">
+        <AdminForm action={goBackAction} label={t('step.goBackForm')}>
           <input type="hidden" name="token" value={token} />
           {list}
         </AdminForm>

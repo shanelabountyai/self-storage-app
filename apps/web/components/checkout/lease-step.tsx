@@ -1,6 +1,7 @@
 import { AdminForm, Field } from '@/components/admin/form'
 import { advanceAction, signLeaseAction } from '@/app/(public)/checkout/actions'
 import { ELECTRONIC_RECORDS_CONSENT } from '@/lib/lease/template'
+import { translate, type Dictionary, type MessageKey } from '@/lib/i18n'
 
 // PRD 01 US-501 step 4 / FR-4.2.
 //
@@ -23,6 +24,7 @@ export function LeaseStep({
   altContactName,
   altContactPhone,
   activeDutyMilitary,
+  dict,
 }: {
   token: string
   /// D-53 (B-106 part 5). One agreement per unit, in basket order. A single
@@ -41,20 +43,22 @@ export function LeaseStep({
   /// as `already_signed`, so the renter is told their own lease cannot be
   /// signed and has no way forward at all.
   signedOn?: string
+  dict: Dictionary
 }) {
+  const t = (key: MessageKey, vars?: Record<string, string | number>) =>
+    translate(dict, key, vars)
   return (
     <div className="mt-4">
       {leases.length > 1 && (
-        <p className="text-pretty">
-          You are renting {leases.length} units, so there is one agreement for each. They are the
-          same terms — signing once at the bottom signs all {leases.length}.
-        </p>
+        <p className="text-pretty">{t('lease.multiIntro', { count: leases.length })}</p>
       )}
 
       {leases.map((lease, index) => (
         <div key={lease.unitName} className={index === 0 && leases.length === 1 ? '' : 'mt-6'}>
           {leases.length > 1 && (
-            <h2 className="text-xl font-medium">Agreement for {lease.unitName}</h2>
+            <h2 className="text-xl font-medium">
+              {t('lease.agreementFor', { unit: lease.unitName })}
+            </h2>
           )}
 
           {/* Both blocks are server-rendered from templates we control and
@@ -71,7 +75,9 @@ export function LeaseStep({
               render their own heading id, so the wrapper carries the suffix. */}
           <section
             aria-label={
-              leases.length > 1 ? `What this means in plain English — ${lease.unitName}` : undefined
+              leases.length > 1
+                ? t('lease.plainEnglishFor', { unit: lease.unitName })
+                : undefined
             }
             aria-labelledby={leases.length > 1 ? undefined : 'lease-summary'}
             className="border-input mt-3 rounded-lg border p-4"
@@ -80,7 +86,9 @@ export function LeaseStep({
 
           <section aria-labelledby={`lease-full-${index}`} className="mt-6">
             <h3 id={`lease-full-${index}`} className="text-lg font-medium">
-              {leases.length > 1 ? `The full agreement for ${lease.unitName}` : 'The full agreement'}
+              {leases.length > 1
+                ? t('lease.fullAgreementFor', { unit: lease.unitName })
+                : t('lease.fullAgreement')}
             </h3>
             <div
               className="prose-sm mt-3 max-w-none"
@@ -91,29 +99,35 @@ export function LeaseStep({
       ))}
 
       {signedOn ? (
-        <AdminForm action={advanceAction} label="Continue from your signed lease" className="mt-8">
+        <AdminForm action={advanceAction} label={t('lease.continueFormLabel')} className="mt-8">
           <input type="hidden" name="token" value={token} />
           <input type="hidden" name="from" value="lease" />
 
-          <h2 className="text-xl font-medium">Signed</h2>
+          <h2 className="text-xl font-medium">{t('lease.signedHeading')}</h2>
           <p className="mt-2 text-pretty">
-            You signed{' '}
-            {leases.length === 1 ? 'this agreement' : `all ${leases.length} agreements`} on{' '}
-            <strong>{signedOn}</strong> as {legalName}. Signing again is not needed and would not
-            change {leases.length === 1 ? 'it' : 'them'} — a signed lease is fixed, which is the
-            point of signing one.
+            {leases.length === 1
+              ? t('lease.signedOneBody', { date: signedOn, name: legalName })
+              : t('lease.signedManyBody', {
+                  count: leases.length,
+                  date: signedOn,
+                  name: legalName,
+                })}
           </p>
           <button
             type="submit"
             className="bg-primary text-primary-foreground mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-md px-4 text-base font-medium sm:w-auto"
           >
-            Continue to payment
+            {t('lease.continueToPayment')}
           </button>
         </AdminForm>
       ) : (
       <AdminForm
         action={signLeaseAction}
-        label={leases.length === 1 ? 'Sign the lease' : `Sign all ${leases.length} agreements`}
+        label={
+          leases.length === 1
+            ? t('lease.signOne')
+            : t('lease.signMany', { count: leases.length })
+        }
         className="mt-8"
       >
         <input type="hidden" name="token" value={token} />
@@ -126,21 +140,18 @@ export function LeaseStep({
             unexplained question about someone's military service on a storage
             form is the kind of thing people decline to answer. */}
         <fieldset className="text-sm">
-          <legend className="font-medium">If we cannot reach you (optional)</legend>
-          <p className="text-muted-foreground mt-1 text-pretty">
-            Someone we can contact if a notice about your unit does not reach you. This does not
-            give them access to your unit, and we will not contact them for anything else.
-          </p>
+          <legend className="font-medium">{t('lease.altContactLegend')}</legend>
+          <p className="text-muted-foreground mt-1 text-pretty">{t('lease.altContactBody')}</p>
           <div className="mt-2 grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field
               name="altContactName"
-              label="Name"
+              label={t('lease.altContactName')}
               autoComplete="off"
               defaultValue={altContactName ?? ''}
             />
             <Field
               name="altContactPhone"
-              label="Phone"
+              label={t('lease.altContactPhone')}
               type="tel"
               inputMode="tel"
               autoComplete="off"
@@ -155,11 +166,11 @@ export function LeaseStep({
           value="yes"
           defaultChecked={activeDutyMilitary ?? false}
           className="mt-4 text-sm"
-          label="I am on active duty in the US armed forces"
-          hint="Self-declared. Active-duty servicemembers have protections under the Servicemembers Civil Relief Act — we cannot sell stored goods or restrict access without a court order. Telling us means we apply them."
+          label={t('lease.activeDuty')}
+          hint={t('lease.activeDutyHint')}
         />
 
-        <h2 className="mt-6 text-xl font-medium">Sign</h2>
+        <h2 className="mt-6 text-xl font-medium">{t('lease.signHeading')}</h2>
 
         {/* Consent to transact electronically is its own affirmative act under
             E-SIGN — not something the signature implies — so it is a separate
@@ -177,11 +188,11 @@ export function LeaseStep({
         <div className="mt-4 max-w-sm">
           <Field
             name="typedName"
-            label="Type your full name to sign"
+            label={t('lease.typeName')}
             autoComplete="off"
             // 3.3.2 Labels or Instructions: say what typing the name means
             // before they do it, not after it is rejected.
-            hint={`Type it exactly as it appears on the lease: ${legalName}. Typing your name here is your signature.`}
+            hint={t('lease.typeNameHint', { name: legalName })}
           />
         </div>
 
@@ -189,12 +200,12 @@ export function LeaseStep({
           type="submit"
           className="bg-primary text-primary-foreground mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-md px-4 text-base font-medium sm:w-auto"
         >
-          {leases.length === 1 ? 'Sign and continue' : `Sign all ${leases.length} and continue`}
+          {leases.length === 1
+            ? t('lease.submitOne')
+            : t('lease.submitMany', { count: leases.length })}
         </button>
         <p className="text-muted-foreground mt-2 text-sm text-pretty">
-          You will get {leases.length === 1 ? 'a copy' : 'copies'} by email, and you can download
-          {leases.length === 1 ? ' it ' : ' them '}any time. Nothing is charged until
-          the next step.
+          {leases.length === 1 ? t('lease.copiesOne') : t('lease.copiesMany')}
         </p>
       </AdminForm>
       )}

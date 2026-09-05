@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Elements, PaymentElement, useElements, useStripe } from '@stripe/react-stripe-js'
 import { loadStripe } from '@stripe/stripe-js'
+import { useLocale, useT } from '@/components/i18n/locale-provider'
 
 // PRD 01 US-501 step 5 / §4.6. The Stripe Payment Element.
 //
@@ -32,6 +33,7 @@ const appearance = {
 } as const
 
 function PaymentForm({ returnUrl }: { returnUrl: string }) {
+  const t = useT()
   const stripe = useStripe()
   const elements = useElements()
   const [error, setError] = useState<string | null>(null)
@@ -68,7 +70,9 @@ function PaymentForm({ returnUrl }: { returnUrl: string }) {
     if (result.error) {
       // B-103: no longer necessarily a card. Stripe's own message is used
       // when there is one; the fallback stopped naming the method.
-      setError(result.error.message ?? 'That payment was declined. Try another payment method.')
+      // Stripe's own decline message is already localised by the Element's
+      // `locale`; ours is the fallback for a failure it did not describe.
+      setError(result.error.message ?? t('pay.declined'))
       inFlight.current = false
       setSubmitting(false)
       return
@@ -97,7 +101,7 @@ function PaymentForm({ returnUrl }: { returnUrl: string }) {
           re-read. Confirming a card can take several seconds, and silence for
           several seconds after paying reads as "it didn't work". */}
       <p role="status" className="text-muted-foreground mt-2 text-sm empty:mt-0">
-        {submitting ? 'Taking payment. This can take a few seconds.' : ''}
+        {submitting ? t('pay.takingPaymentStatus') : ''}
       </p>
 
       <PaymentElement options={{ layout: 'tabs' }} />
@@ -127,7 +131,7 @@ function PaymentForm({ returnUrl }: { returnUrl: string }) {
         aria-busy={!stripe || submitting}
         className="bg-primary text-primary-foreground mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-md px-4 text-base font-medium sm:w-auto"
       >
-        {submitting ? 'Taking payment…' : 'Pay and complete move-in'}
+        {submitting ? t('pay.takingPayment') : t('pay.payAndComplete')}
       </button>
     </form>
   )
@@ -140,9 +144,15 @@ export function StripePayment({
   clientSecret: string
   returnUrl: string
 }) {
+  // B-090 part 6. Stripe's Element renders its own field labels and decline
+  // messages inside a cross-origin iframe we cannot reach, so the ONLY way it
+  // speaks Spanish is this option. Without it a Spanish checkout ends at a
+  // card form labelled in English — the last screen before the charge, and the
+  // one place a renter is least willing to guess.
+  const locale = useLocale()
   if (!stripePromise) return null
   return (
-    <Elements stripe={stripePromise} options={{ clientSecret, appearance }}>
+    <Elements stripe={stripePromise} options={{ clientSecret, appearance, locale }}>
       <PaymentForm returnUrl={returnUrl} />
     </Elements>
   )

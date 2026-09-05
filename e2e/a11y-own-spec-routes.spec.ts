@@ -35,9 +35,19 @@ import { expectNoHorizontalOverflow, TEXT_SPACING } from './a11y-helpers'
 // in those files because it is the thing being shared; the axe scans stay
 // where they are, beside the behaviour they were written next to.
 
-type Audience = 'admin' | 'tenant' | 'plan-tenant' | 'business-payer' | 'business-member'
+type Audience =
+  | 'admin'
+  | 'tenant'
+  | 'plan-tenant'
+  | 'business-payer'
+  | 'business-member'
+  /// B-090 part 6. Every other audience is a person signed in; a Spanish
+  /// visitor is nobody, holding a cookie. Without this the only way to measure
+  /// a translated page here was to sign somebody in who did not need to be.
+  | 'public'
 
 async function signIn(page: Page, audience: Audience): Promise<void> {
+  if (audience === 'public') return
   if (audience === 'admin') await signInAsDemoOwner(page)
   else if (audience === 'plan-tenant') await signInAsPlanTenant(page)
   // B-256. Casey Contractor holds no lease, so this is the only session in
@@ -219,6 +229,27 @@ for (const { route, spec } of SCANNED_BY_OWN_SPEC) {
 // belongs here is a state reachable by signing in as the right actor and going
 // to the page.
 const STATE_REACH: Record<string, { audience: Audience; go: (page: Page) => Promise<void> }> = {
+  // B-090 part 6. The facility page in Spanish, measured rather than assumed.
+  //
+  // Axe alone would not be enough here and the reason is specific: Spanish runs
+  // roughly 20% longer than the English it replaces, and this route's unit
+  // cards, filter row and sticky Rent/Reserve bar are the tightest layout on
+  // the public site at 320px. The English state of the same route is measured
+  // by the public reflow loop; that measurement says nothing about the strings
+  // that actually ship to a Spanish reader.
+  '/storage/[state]/[city]/[slug] | Spanish': {
+    audience: 'public',
+    async go(page) {
+      await page.context().addCookies([
+        { name: 'st_locale', value: 'es', url: 'http://localhost:3000' },
+      ])
+      await page.goto('/storage/tx/austin/demo-austin-south')
+      // The unit cards, not the heading above them: measuring before the
+      // inventory renders would measure a page with none of the content this
+      // key exists for.
+      await expect(page.getByRole('heading', { name: 'Unidades disponibles' })).toBeVisible()
+    },
+  },
   // B-256. A business account's card is a three-column table of units, tenant
   // names and money, on the page a payer reads on a phone — the shape B-199
   // spent an item on. The portal route loop measures `/portal` as Dana, who

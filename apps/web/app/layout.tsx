@@ -1,5 +1,7 @@
 import type { Metadata } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
+import { getLocale } from '@/lib/i18n/server'
+
 import './globals.css'
 
 const geistSans = Geist({
@@ -44,14 +46,25 @@ export const metadata: Metadata = {
     : undefined,
 }
 
-export default function RootLayout({
+// B-090 part 6 (D-122). `lang` is the document's language, and WCAG 2.1
+// SC 3.1.1 Language of Page (A) is about this attribute specifically — a
+// Spanish page announced as `lang="en"` is read aloud with English phonemes,
+// which is worse than untranslated. It can only be set here, because only
+// this layout renders `<html>`.
+//
+// Reading the cookie makes every route dynamic; the trade-off, and why the
+// staleness ceilings it looks like it breaks are unaffected, is written out in
+// `lib/i18n/index.ts`.
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode
 }>) {
+  const locale = await getLocale()
+
   return (
     <html
-      lang="en"
+      lang={locale}
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col">{children}</body>

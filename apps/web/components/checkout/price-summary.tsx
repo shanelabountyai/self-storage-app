@@ -1,6 +1,8 @@
 import { Fragment } from 'react'
 import { calculateMoveInCost, type TaxRate } from '@storage/core/pricing'
 import { formatRate } from '@/lib/format'
+import { translate, type Dictionary, type MessageKey } from '@/lib/i18n'
+import { costLineLabel } from '@/lib/pricing/cost-line-copy'
 
 // PRD 01 §6.4 / US-301, and B-020's row: the price summary is the stepper's
 // chrome, not the payment step's.
@@ -46,6 +48,7 @@ export type PriceSummaryProps = {
   /// §6.4: a total that moves without an explicit cause is a defect, so the
   /// cause is stated rather than left to be inferred from a changed number.
   changeNote?: string
+  dict: Dictionary
 }
 
 export function PriceSummary({
@@ -57,7 +60,10 @@ export function PriceSummary({
   promoDiscountCents,
   promoTerms,
   changeNote,
+  dict,
 }: PriceSummaryProps) {
+  const t = (key: MessageKey, vars?: Record<string, string | number>) =>
+    translate(dict, key, vars)
   // The same arithmetic `amountDueToday` does, and deliberately the same shape:
   // the admin fee and the tax are charged ONCE for the checkout (the fee opens
   // an account; the tax follows the summed rent it is levied on), while the
@@ -92,21 +98,28 @@ export function PriceSummary({
       className="border-input bg-background sticky bottom-0 z-10 rounded-lg border p-4"
     >
       <h2 id="summary-heading" className="sr-only">
-        What you are paying
+        {t('summary.heading')}
       </h2>
 
       <details className="group">
         <summary className="flex cursor-pointer flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
           <span className="font-medium">
-            Due today <span className="tabular-nums">{formatRate(dueToday)}</span>
+            {t('summary.dueToday')} <span className="tabular-nums">{formatRate(dueToday)}</span>
           </span>
           <span className="text-muted-foreground text-sm">
-            then <span className="tabular-nums">{formatRate(monthly)}</span>/mo
+            {t('summary.then')} <span className="tabular-nums">{formatRate(monthly)}</span>
+            {t('card.perMonth')}
           </span>
         </summary>
 
         <p className="text-muted-foreground mt-3 text-sm">
-          {units.length === 1 ? units[0].label : `${units.length} units`} at {facilityName}
+          {t('summary.unitsAt', {
+            units:
+              units.length === 1
+                ? units[0].label
+                : t('summary.nUnits', { count: units.length }),
+            facility: facilityName,
+          })}
         </p>
 
         <dl className="mt-3 flex flex-col gap-2 text-sm">
@@ -118,13 +131,13 @@ export function PriceSummary({
             // to keep every group a direct child.
             <Fragment key={line.key}>
               <div className="flex justify-between gap-4">
-                <dt>{line.label}</dt>
+                <dt>{costLineLabel(dict, line, promoTerms)}</dt>
                 <dd className="tabular-nums">
                   {line.key === 'protection' ? (
                     protectionPremiumCents === undefined ? (
-                      'chosen at checkout'
+                      t('summary.chosenAtCheckout')
                     ) : premium === 0 ? (
-                      'your own cover'
+                      t('summary.ownCover')
                     ) : (
                       <>
                         {formatRate(premium)}
@@ -135,7 +148,10 @@ export function PriceSummary({
                             is not a legal child of a <dl>. */}
                         {units.length > 1 && (
                           <span className="text-muted-foreground block text-xs">
-                            {formatRate(premiumPerUnit)} × {units.length} units
+                            {t('summary.perUnitTimes', {
+                              each: formatRate(premiumPerUnit),
+                              count: units.length,
+                            })}
                           </span>
                         )}
                       </>
@@ -163,7 +179,7 @@ export function PriceSummary({
             </Fragment>
           ))}
           <div className="flex justify-between gap-4 border-t pt-2 font-medium">
-            <dt>Total due today</dt>
+            <dt>{t('summary.totalDueToday')}</dt>
             <dd className="tabular-nums">{formatRate(dueToday)}</dd>
           </div>
         </dl>

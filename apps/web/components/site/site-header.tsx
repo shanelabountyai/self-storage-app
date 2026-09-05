@@ -1,6 +1,8 @@
 import Link from 'next/link'
 import { Phone } from 'lucide-react'
 import { SITE } from '@/lib/site-config'
+import { LanguageToggle } from '@/components/site/language-toggle'
+import { dictionaryFor, translate, type Locale } from '@/lib/i18n'
 
 // Persistent header per PRD 01 §6.1: logo, "Find storage" search, phone with
 // click-to-call, and "Pay bill / My account".
@@ -8,7 +10,10 @@ import { SITE } from '@/lib/site-config'
 // Tap targets are ≥44×44px (§6.2) — that is what the `min-h-11` / `py-2.5`
 // sizing is for, not visual padding. Nothing here depends on hover (§6.2), so
 // it works on touch and via keyboard alike.
-export function SiteHeader() {
+export function SiteHeader({ locale }: { locale: Locale }) {
+  const dict = dictionaryFor(locale)
+  const t = (key: Parameters<typeof translate>[1]) => translate(dict, key)
+
   return (
     <header className="border-b">
       <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
@@ -19,12 +24,22 @@ export function SiteHeader() {
           {SITE.name}
         </Link>
 
-        <nav aria-label="Main" className="flex items-center gap-1">
+        {/* B-090 part 6: `flex-wrap` on the NAV, not only on the header around
+            it. The header has wrapped since B-082 and the comment below says
+            so — but the nav is a single flex ITEM of that header, and its own
+            children could not wrap. Four controls fitted 320px; the language
+            toggle's two did not, and every one of the 26 reflow specs failed
+            with a horizontally scrolling page (SC 1.4.10). Wrapping here is
+            what the header's own rule always intended. */}
+        <nav
+          aria-label={t('chrome.mainNav')}
+          className="flex flex-wrap items-center gap-x-1 gap-y-1"
+        >
           <Link
             href="/storage/search"
             className="hover:bg-accent inline-flex min-h-11 items-center rounded-md px-3 text-sm font-medium"
           >
-            Find storage
+            {t('chrome.findStorage')}
           </Link>
 
           {/* B-082 part 3. The content hub, one click from every page. In the
@@ -39,7 +54,7 @@ export function SiteHeader() {
             href="/guides"
             className="hover:bg-accent inline-flex min-h-11 items-center rounded-md px-3 text-sm font-medium"
           >
-            Guides
+            {t('chrome.guides')}
           </Link>
 
           {/* tel: on every phone number (§6.2). The icon is decorative — the
@@ -49,7 +64,7 @@ export function SiteHeader() {
             className="hover:bg-accent inline-flex min-h-11 items-center gap-2 rounded-md px-3 text-sm font-medium"
           >
             <Phone className="size-4" aria-hidden="true" />
-            <span className="sr-only">Call us at </span>
+            <span className="sr-only">{t('chrome.callUsAt')}</span>
             {SITE.phone.display}
           </a>
 
@@ -57,9 +72,16 @@ export function SiteHeader() {
             href="/login"
             className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex min-h-11 items-center rounded-md px-4 text-sm font-medium"
           >
-            Pay bill
-            <span className="sr-only"> or sign in to my account</span>
+            {t('chrome.payBill')}
+            <span className="sr-only">{t('chrome.payBillSr')}</span>
           </Link>
+
+          {/* B-090 part 6. Last in the header rather than first: it is a
+              preference, not a destination, and a renter looking for it looks
+              at the end of the nav. In the header on every public page and not
+              only the homepage, because the visitor who needs it usually
+              arrives on a facility page from search, never on `/`. */}
+          <LanguageToggle locale={locale} />
         </nav>
       </div>
     </header>

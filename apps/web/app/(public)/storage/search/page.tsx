@@ -11,9 +11,23 @@ import {
 } from '@/lib/geo/facility-search'
 import { ResultsMap, type MapFacility } from '@/components/site/results-map'
 import { FEATURE_FILTERS, parseFilters, SIZE_BANDS } from '@/lib/inventory/unit-filters'
+import {
+  dictionaryFor,
+  plural,
+  translate,
+  type Dictionary,
+  type MessageKey,
+} from '@/lib/i18n'
+import { getLocale } from '@/lib/i18n/server'
 
-export const metadata = {
-  title: 'Find storage',
+// B-090 part 6: `generateMetadata` rather than a static `metadata`, so the tab
+// title follows the language the page is actually in. The canonical does not
+// move — there is one URL per result view whatever language it renders in,
+// which is the whole point of the cookie strategy (D-122).
+export async function generateMetadata() {
+  const dict = dictionaryFor(await getLocale())
+  return {
+  title: translate(dict, 'search.title'),
   // One canonical for every result view. This page takes `?q=`, `?lat=&lng=`
   // and now `?size=`/`?features=` (B-082 part 3), each of which is a distinct
   // URL a crawler can reach and none of which is a distinct page worth
@@ -22,6 +36,7 @@ export const metadata = {
   // this, the guides' CTAs would have manufactured a duplicate of the search
   // page per size band.
   alternates: { canonical: '/storage/search' },
+  }
 }
 
 /// PRD 04 US-4 AC3 (B-082 part 3): a guide's CTA lands here carrying the size
@@ -54,11 +69,14 @@ function carriedFilters(query: { size?: string; features?: string | string[] }):
 /// opinion about what a valid filter is: an unrecognised value produces no
 /// label here and is carried onward regardless, where the facility page ignores
 /// it exactly as it would have.
-function carriedFilterLabels(query: { size?: string; features?: string | string[] }): string[] {
+function carriedFilterLabels(
+  query: { size?: string; features?: string | string[] },
+  dict: Dictionary,
+): string[] {
   const { size, features } = parseFilters(query)
   return [
-    ...(size ? [SIZE_BANDS[size].label] : []),
-    ...features.map((feature) => FEATURE_FILTERS[feature].label),
+    ...(size ? [translate(dict, SIZE_BANDS[size].labelKey)] : []),
+    ...features.map((feature) => translate(dict, FEATURE_FILTERS[feature].labelKey)),
   ]
 }
 
@@ -99,7 +117,17 @@ function facilityHref(facility: FacilityResult, query: string, filters: string):
   return search ? `${facilityPath(facility)}?${search}` : facilityPath(facility)
 }
 
-function ResultCard({ facility, href }: { facility: FacilityResult; href: string }) {
+function ResultCard({
+  facility,
+  href,
+  dict,
+}: {
+  facility: FacilityResult
+  href: string
+  dict: Dictionary
+}) {
+  const t = (key: MessageKey, vars?: Record<string, string | number>) =>
+    translate(dict, key, vars)
   const from = facility.from
   return (
     <li className="rounded-lg border p-4">
@@ -168,9 +196,9 @@ function ResultCard({ facility, href }: { facility: FacilityResult; href: string
               // render $0. Saying so plainly beats an empty space the reader has to
               // interpret (§6.7).
               <>
-                No units available right now —{' '}
+                {t('card.noUnits')}{' '}
                 <a href={`tel:${SITE.phone.href}`} className="underline underline-offset-4">
-                  call {SITE.phone.display}
+                  {t('card.call', { phone: SITE.phone.display })}
                 </a>
               </>
             ) : (
@@ -182,12 +210,18 @@ function ResultCard({ facility, href }: { facility: FacilityResult; href: string
               // the pattern B-016 shipped and this is the fourth surface to need.
               <>
                 <span aria-hidden="true">
-                  {from.widthFt}×{from.lengthFt} from {formatRate(from.webRateCents)}
-                  <span className="text-muted-foreground font-normal">/mo</span>
+                  {from.widthFt}×{from.lengthFt} {t('card.from')}{' '}
+                  {formatRate(from.webRateCents)}
+                  <span className="text-muted-foreground font-normal">
+                    {t('card.perMonth')}
+                  </span>
                 </span>
                 <span className="sr-only">
-                  {from.widthFt} foot by {from.lengthFt} foot from{' '}
-                  {formatRate(from.webRateCents)} per month
+                  {t('card.priceSr', {
+                    width: from.widthFt,
+                    length: from.lengthFt,
+                    price: formatRate(from.webRateCents),
+                  })}
                 </span>
               </>
             )}
@@ -200,8 +234,13 @@ function ResultCard({ facility, href }: { facility: FacilityResult; href: string
           {from !== null && (
             <p className="text-muted-foreground mt-1 text-sm">
               {from.availableUnits <= 3
-                ? `Only ${from.availableUnits} unit${from.availableUnits === 1 ? '' : 's'} left`
-                : `${from.availableSizes} size${from.availableSizes === 1 ? '' : 's'} available`}
+                ? plural(dict, from.availableUnits, 'card.onlyLeftOne', 'card.onlyLeftOther')
+                : plural(
+                    dict,
+                    from.availableSizes,
+                    'card.sizesAvailableOne',
+                    'card.sizesAvailableOther',
+                  )}
             </p>
           )}
         </div>
@@ -212,40 +251,53 @@ function ResultCard({ facility, href }: { facility: FacilityResult; href: string
 
 /// §6.7: an error state names the problem, the consequence, and the next
 /// action, in that order — and a full-page error always offers a human.
-function Dead({ heading, children }: { heading: string; children: React.ReactNode }) {
+function Dead({
+  heading,
+  dict,
+  children,
+}: {
+  heading: string
+  dict: Dictionary
+  children: React.ReactNode
+}) {
   return (
     <div className="mt-8">
       <h2 className="text-xl font-medium">{heading}</h2>
       <div className="text-muted-foreground mt-2 flex flex-col gap-2 text-pretty">{children}</div>
       <p className="mt-4">
         <a href={`tel:${SITE.phone.href}`} className="font-medium underline underline-offset-4">
-          Call {SITE.phone.display}
+          {translate(dict, 'dead.call', { phone: SITE.phone.display })}
         </a>{' '}
-        <span className="text-muted-foreground">and we will find you a unit.</span>
+        <span className="text-muted-foreground">{translate(dict, 'dead.callSuffix')}</span>
       </p>
     </div>
   )
 }
 
-function Results({ outcome, filters }: { outcome: SearchOutcome; filters: string }) {
+function Results({
+  outcome,
+  filters,
+  dict,
+}: {
+  outcome: SearchOutcome
+  filters: string
+  dict: Dictionary
+}) {
+  const t = (key: MessageKey, vars?: Record<string, string | number>) =>
+    translate(dict, key, vars)
   // "Your location" results have no text query to hand on; the back link is
   // simply absent there rather than pointing at an empty search.
   const query = outcome.status === 'ok' || outcome.status === 'none_nearby' ? outcome.query : ''
   if (outcome.status === 'empty') {
     return (
-      <p className="text-muted-foreground mt-8 text-pretty">
-        Enter a zip code or city above to see facilities near you.
-      </p>
+      <p className="text-muted-foreground mt-8 text-pretty">{t('search.empty')}</p>
     )
   }
 
   if (outcome.status === 'not_found') {
     return (
-      <Dead heading={`We couldn't find "${outcome.query}"`}>
-        <p>
-          That doesn&apos;t look like a US zip code or city we recognise, so we can&apos;t work out
-          what is nearby. Try a 5-digit zip code, or a city and state like &ldquo;Austin, TX&rdquo;.
-        </p>
+      <Dead dict={dict} heading={t('search.notFoundHeading', { query: outcome.query })}>
+        <p>{t('search.notFoundBody')}</p>
       </Dead>
     )
   }
@@ -253,8 +305,8 @@ function Results({ outcome, filters }: { outcome: SearchOutcome; filters: string
   if (outcome.status === 'none_nearby') {
     if (outcome.results.length === 0) {
       return (
-        <Dead heading="We have no facilities listed yet">
-          <p>There is nothing to show you here, which is our gap and not your search.</p>
+        <Dead dict={dict} heading={t('search.noneListedHeading')}>
+          <p>{t('search.noneListedBody')}</p>
         </Dead>
       )
     }
@@ -264,28 +316,27 @@ function Results({ outcome, filters }: { outcome: SearchOutcome; filters: string
         {/* US-101: the zero-results state suggests the nearest facilities
             beyond the radius, with distances — never a dead end. */}
         <h2 className="text-xl font-medium">
-          Nothing within {SEARCH_RADIUS_MILES} miles of {outcome.label}
+          {t('search.noneNearbyHeading', {
+            miles: SEARCH_RADIUS_MILES,
+            label: outcome.label,
+          })}
         </h2>
-        <p className="text-muted-foreground mt-2 text-pretty">
-          These are the closest facilities we have. They are further than most people want to drive,
-          so check the distance before you reserve.
-        </p>
+        <p className="text-muted-foreground mt-2 text-pretty">{t('search.noneNearbyBody')}</p>
         <ul className="mt-6 flex flex-col gap-4">
           {outcome.results.map((facility) => (
             <ResultCard
               key={facility.id}
               facility={facility}
               href={facilityHref(facility, query, filters)}
+              dict={dict}
             />
           ))}
         </ul>
         <p className="mt-6">
           <a href={`tel:${SITE.phone.href}`} className="underline underline-offset-4">
-            Call {SITE.phone.display}
+            {t('dead.call', { phone: SITE.phone.display })}
           </a>{' '}
-          <span className="text-muted-foreground">
-            if you need something closer — we may have space coming up.
-          </span>
+          <span className="text-muted-foreground">{t('search.callCloser')}</span>
         </p>
       </div>
     )
@@ -293,10 +344,11 @@ function Results({ outcome, filters }: { outcome: SearchOutcome; filters: string
 
   return (
     <div className="mt-8">
-      <h2 className="sr-only">Search results</h2>
+      <h2 className="sr-only">{t('search.resultsHeading')}</h2>
       <p className="text-muted-foreground text-sm">
-        {outcome.results.length} {outcome.results.length === 1 ? 'facility' : 'facilities'} within{' '}
-        {SEARCH_RADIUS_MILES} miles, nearest first
+        {plural(dict, outcome.results.length, 'search.countOne', 'search.countOther', {
+          miles: SEARCH_RADIUS_MILES,
+        })}
       </p>
       <ul className="mt-4 flex flex-col gap-4">
         {outcome.results.map((facility) => (
@@ -304,6 +356,7 @@ function Results({ outcome, filters }: { outcome: SearchOutcome; filters: string
               key={facility.id}
               facility={facility}
               href={facilityHref(facility, query, filters)}
+              dict={dict}
             />
         ))}
       </ul>
@@ -326,8 +379,9 @@ export default async function SearchPage({
   }>
 }) {
   const { q, lat, lng, size, features } = await searchParams
+  const dict = dictionaryFor(await getLocale())
   const filters = carriedFilters({ size, features })
-  const filterLabels = carriedFilterLabels({ size, features })
+  const filterLabels = carriedFilterLabels({ size, features }, dict)
 
   // Coordinates come from "Use my location". Parsed defensively because they
   // arrive in a URL anyone can edit; anything out of range falls back to the
@@ -359,7 +413,9 @@ export default async function SearchPage({
           // "Full" rather than a price for a facility with nothing rentable —
           // the same refusal to print $0 the card makes one line above.
           priceLabel:
-            facility.fromWebRateCents === null ? 'Full' : formatRate(facility.fromWebRateCents),
+            facility.fromWebRateCents === null
+              ? translate(dict, 'map.full')
+              : formatRate(facility.fromWebRateCents),
           latitude: facility.latitude,
           longitude: facility.longitude,
         }))
@@ -367,15 +423,15 @@ export default async function SearchPage({
 
   const heading =
     outcome.status === 'ok' || outcome.status === 'none_nearby'
-      ? `Storage near ${outcome.label}`
-      : 'Find storage'
+      ? translate(dict, 'search.headingNear', { label: outcome.label })
+      : translate(dict, 'search.title')
 
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-12">
       <h1 className="text-3xl font-semibold tracking-tight text-balance">{heading}</h1>
 
       <div className="mt-6">
-        <FacilitySearchForm defaultValue={q} label="Zip code or city" carry={filters} />
+        <FacilitySearchForm defaultValue={q} labelKey="search.labelZipOrCity" carry={filters} />
       </div>
 
       {/* B-082 part 3. A guide's CTA arrives here holding a filter, and this is
@@ -385,13 +441,15 @@ export default async function SearchPage({
           searching from the header instead. */}
       {filterLabels.length > 0 && (
         <p className="text-muted-foreground mt-4 text-sm text-pretty">
-          Carrying your{' '}
-          <strong className="text-foreground font-medium">{filterLabels.join(' and ')}</strong>{' '}
-          filter through — choose a location and we will apply it there.
+          {translate(dict, 'search.carryingBefore')}{' '}
+          <strong className="text-foreground font-medium">
+            {filterLabels.join(` ${translate(dict, 'common.and')} `)}
+          </strong>{' '}
+          {translate(dict, 'search.carryingAfter')}
         </p>
       )}
 
-      <Results outcome={outcome} filters={filters} />
+      <Results outcome={outcome} filters={filters} dict={dict} />
 
       {/* After the list, never instead of it, and never before it — the text
           equivalent has to precede the map the same way the facility page puts
@@ -405,9 +463,9 @@ export default async function SearchPage({
       )}
 
       <p className="text-muted-foreground mt-10 text-sm text-pretty">
-        Not sure what size you need? Read the{' '}
+        {translate(dict, 'search.sizeGuideBefore')}{' '}
         <Link href="/storage/size-guide" className="underline underline-offset-4">
-          size guide
+          {translate(dict, 'search.sizeGuideLink')}
         </Link>
         .
       </p>

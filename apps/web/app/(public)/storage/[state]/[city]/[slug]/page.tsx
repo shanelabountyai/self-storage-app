@@ -37,6 +37,15 @@ import { joinWaitlistAction } from './waitlist-actions'
 import { WaitlistForm } from '@/components/marketing/waitlist-form'
 import { CallLink, phoneFor, type Phone as PhoneNumber } from '@/components/marketing/call-link'
 import { citySlugPath } from '@/lib/marketing/paths'
+import {
+  dictionaryFor,
+  plural,
+  translate,
+  type Dictionary,
+  type MessageKey,
+} from '@/lib/i18n'
+import { getLocale } from '@/lib/i18n/server'
+import { costLineLabel, costLineNote } from '@/lib/pricing/cost-line-copy'
 import { offerFor } from '@/lib/promotions/service'
 import { PromoCodeEntry } from '@/components/promo-code-entry'
 import type { CodeOutcome } from '@storage/core/promotions'
@@ -73,7 +82,10 @@ export async function generateMetadata({
 }) {
   const { slug } = await params
   const facility = await publicFacilityBySlug(slug)
-  if (!facility) return { title: 'Facility not found' }
+  if (!facility) {
+    const dict = dictionaryFor(await getLocale())
+    return { title: translate(dict, 'facility.notFound') }
+  }
 
   // FR-SEO-3's template, verbatim: `{Facility Name} | Storage Units in {City},
   // {State}`. B-067 makes both fields overridable per facility (US-2 AC1);
@@ -112,19 +124,21 @@ function HoursTable({
   caption,
   schedule,
   phone,
+  dict,
 }: {
   caption: string
   schedule: WeeklySchedule | null
   phone: PhoneNumber
+  dict: Dictionary
 }) {
   if (!schedule) {
     return (
       <div>
         <h3 className="font-medium">{caption}</h3>
         <p className="text-muted-foreground mt-1 text-sm text-pretty">
-          Not published yet —{' '}
-          <CallLink phone={phone} className="underline underline-offset-4" /> to check before you
-          drive out.
+          {translate(dict, 'facility.hoursUnpublished')}{' '}
+          <CallLink phone={phone} className="underline underline-offset-4" />{' '}
+          {translate(dict, 'facility.hoursUnpublishedAfter')}
         </p>
       </div>
     )
@@ -154,7 +168,7 @@ function HoursTable({
                 </th>
                 <td className="py-1.5 text-right tabular-nums">
                   {hours.closed ? (
-                    'Closed'
+                    translate(dict, 'facility.closed')
                   ) : (
                     <>
                       <time>{formatTimeOfDay(hours.open)}</time>
@@ -164,7 +178,7 @@ function HoursTable({
                           guess which is opening. The word is spoken; the dash
                           is seen. */}
                       <span aria-hidden="true"> – </span>
-                      <span className="sr-only"> to </span>
+                      <span className="sr-only">{translate(dict, 'facility.to')}</span>
                       <time>{formatTimeOfDay(hours.close)}</time>
                     </>
                   )}
@@ -181,12 +195,12 @@ function HoursTable({
 /// US-202's real-world comparison, inline on the card. Keyed by square footage
 /// rather than by name so an operator naming a type "Big Locker" still gets the
 /// right hint. The full guide is /storage/size-guide.
-function sizeHint(sqFt: number): string {
-  if (sqFt <= 25) return 'Holds about a large closet — boxes, a bike, seasonal things.'
-  if (sqFt <= 50) return 'Holds about a studio flat — a mattress set, boxes, small furniture.'
-  if (sqFt <= 100) return 'Holds about a one-bedroom apartment, including a sofa.'
-  if (sqFt <= 200) return 'Holds about a two- or three-bedroom house.'
-  return 'Holds a three-bedroom house, or a car with room to spare.'
+function sizeHint(sqFt: number): MessageKey {
+  if (sqFt <= 25) return 'facility.sizeHint.closet'
+  if (sqFt <= 50) return 'facility.sizeHint.studio'
+  if (sqFt <= 100) return 'facility.sizeHint.oneBed'
+  if (sqFt <= 200) return 'facility.sizeHint.twoBed'
+  return 'facility.sizeHint.house'
 }
 
 /// US-301's "What you'd pay today", closed by default. A native <details>: no
@@ -196,10 +210,12 @@ function CostBreakdown({
   unitType,
   pricing,
   promo,
+  dict,
 }: {
   unitType: PublicUnitType
   pricing: PublicPricingContext
   promo: { terms: string; firstPeriodCents: number; fromCode: boolean } | null
+  dict: Dictionary
 }) {
   // The one shared calculation (US-301). B-020's checkout stepper calls the
   // same function with the same inputs; a disagreement between the two is a
@@ -236,7 +252,7 @@ function CostBreakdown({
   return (
     <details className="mt-3">
       <summary className="border-input inline-flex min-h-11 cursor-pointer items-center rounded-md border px-3 text-sm font-medium">
-        What you&apos;d pay today
+        {translate(dict, 'facility.whatYoudPay')}
       </summary>
 
       {/* Grid rather than nested flex rows, and that is a correctness fix
@@ -252,37 +268,43 @@ function CostBreakdown({
       <dl className="mt-3 flex flex-col gap-2 text-sm">
         {cost.lines.map((line) => (
           <div key={line.key} className="grid grid-cols-[1fr_auto] gap-x-4">
-            <dt>{line.label}</dt>
+            <dt>{costLineLabel(dict, line, promo?.terms)}</dt>
             <dd className="tabular-nums">
-              {line.key === 'protection' ? 'chosen at checkout' : formatRate(line.amountCents)}
+              {line.key === 'protection'
+                ? translate(dict, 'facility.chosenAtCheckout')
+                : formatRate(line.amountCents)}
             </dd>
             {line.note && (
               <dd className="text-muted-foreground col-span-2 mt-0.5 text-xs text-pretty">
-                {line.note}
+                {costLineNote(dict, line)}
               </dd>
             )}
           </div>
         ))}
 
         <div className="flex justify-between gap-4 border-t pt-2 font-medium">
-          <dt>Total due today</dt>
+          <dt>{translate(dict, 'facility.totalDueToday')}</dt>
           <dd className="tabular-nums">{formatRate(cost.totalDueTodayCents)}</dd>
         </div>
         <div className="flex justify-between gap-4">
-          <dt>Then each month</dt>
-          <dd className="tabular-nums">{formatRate(cost.ongoingMonthlyCents)}/mo</dd>
+          <dt>{translate(dict, 'facility.thenEachMonth')}</dt>
+          <dd className="tabular-nums">
+            {formatRate(cost.ongoingMonthlyCents)}
+            {translate(dict, 'card.perMonth')}
+          </dd>
         </div>
       </dl>
     </details>
   )
 }
 
-function features(unitType: PublicUnitType): string[] {
+function features(unitType: PublicUnitType, dict: Dictionary): string[] {
   const list: string[] = []
-  if (unitType.climateControlled) list.push('Climate controlled')
-  if (unitType.driveUp) list.push('Drive-up — pull your car right to the door')
-  if (unitType.powerAvailable) list.push('Power outlet')
-  if (unitType.floor > 1) list.push(`Floor ${unitType.floor}`)
+  if (unitType.climateControlled) list.push(translate(dict, 'facility.feature.climate'))
+  if (unitType.driveUp) list.push(translate(dict, 'facility.feature.driveUp'))
+  if (unitType.powerAvailable) list.push(translate(dict, 'facility.feature.power'))
+  if (unitType.floor > 1)
+    list.push(translate(dict, 'facility.feature.floor', { floor: unitType.floor }))
   return list
 }
 
@@ -327,6 +349,7 @@ function UnitTypeCard({
   facility,
   promo,
   code,
+  dict,
 }: {
   unitType: PublicUnitType
   phone: PhoneNumber
@@ -339,7 +362,10 @@ function UnitTypeCard({
   /// or none — the browse estimate and the money path disagreeing again, which
   /// is exactly the defect B-070's own comment describes.
   code: string | null
+  dict: Dictionary
 }) {
+  const t = (key: MessageKey, vars?: Record<string, string | number>) =>
+    translate(dict, key, vars)
   const available = unitType.availableCount
   const saving = Math.max(0, unitType.streetRateCents - unitType.webRateCents)
   return (
@@ -355,13 +381,15 @@ function UnitTypeCard({
             {unitType.widthFt}×{unitType.lengthFt}
           </span>
           <span className="sr-only">
-            {unitType.widthFt} foot by {unitType.lengthFt} foot
+            {t('facility.footBy', { width: unitType.widthFt, length: unitType.lengthFt })}
           </span>
           <span className="text-muted-foreground font-normal"> · {unitType.name}</span>
         </h3>
         <p className="font-medium">
           {formatRate(unitType.webRateCents)}
-          <span className="text-muted-foreground font-normal">/mo online</span>
+          <span className="text-muted-foreground font-normal">
+            {t('facility.perMonthOnline')}
+          </span>
         </p>
       </div>
 
@@ -378,13 +406,13 @@ function UnitTypeCard({
                 before this item and is a lie about a code-gated one — the
                 renter typed the thing it says there is nothing to type. */}
             {promo.fromCode
-              ? 'Applied to your first invoice. Your code carries through to checkout.'
+              ? t('facility.promoFromCode')
               : /* B-226. This sentence was FALSE until this row: the total below
                    was computed without the discount. It is kept, rather than
                    softened, because the fix made it true — and a claim that a
                    figure includes something is exactly the kind a reader
                    should be able to check by opening the expander. */
-                'Applied to your first invoice. Nothing to enter — it is already in the total below.'}
+                t('facility.promoAutomatic')}
           </span>
         </p>
       )}
@@ -396,22 +424,22 @@ function UnitTypeCard({
           signal only, and 1.4.1 forbids carrying meaning that way alone. */}
       {saving > 0 && (
         <p className="text-muted-foreground mt-1 text-sm">
-          <s>{formatRate(unitType.streetRateCents)}/mo in store</s>{' '}
+          <s>{t('facility.inStoreStruck', { price: formatRate(unitType.streetRateCents) })}</s>{' '}
           <span className="text-foreground">
-            — {formatRate(saving)} off for renting online
+            {t('facility.savingOnline', { amount: formatRate(saving) })}
           </span>
         </p>
       )}
 
       <p className="text-muted-foreground mt-1 text-sm">
-        {unitType.sqFt} sq ft
-        {unitType.heightFt !== null ? ` · ${unitType.heightFt} ft ceiling` : ''}
+        {t('facility.sqFt', { sqFt: unitType.sqFt })}
+        {unitType.heightFt !== null ? t('facility.ceiling', { height: unitType.heightFt }) : ''}
       </p>
-      <p className="mt-1 text-sm text-pretty">{sizeHint(unitType.sqFt)}</p>
+      <p className="mt-1 text-sm text-pretty">{t(sizeHint(unitType.sqFt))}</p>
 
-      {features(unitType).length > 0 && (
+      {features(unitType, dict).length > 0 && (
         <ul className="mt-3 flex flex-wrap gap-2">
-          {features(unitType).map((feature) => (
+          {features(unitType, dict).map((feature) => (
             <li key={feature} className="bg-muted rounded-full px-3 py-1 text-xs">
               {feature}
             </li>
@@ -422,7 +450,7 @@ function UnitTypeCard({
       {unitType.description && <p className="mt-3 text-sm text-pretty">{unitType.description}</p>}
 
       {available > 0 && (
-        <CostBreakdown unitType={unitType} pricing={pricing} promo={promo} />
+        <CostBreakdown unitType={unitType} pricing={pricing} promo={promo} dict={dict} />
       )}
 
       {available > 0 && (
@@ -440,19 +468,19 @@ function UnitTypeCard({
                 type="submit"
                 className="bg-primary text-primary-foreground inline-flex min-h-11 items-center rounded-md px-4 text-sm font-medium"
               >
-                Rent now
+                {t('facility.rentNow')}
               </button>
             </form>
             <Link
               href={`${facilityPath(facility)}/reserve?unitType=${unitType.unitTypeId}`}
               className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
             >
-              Reserve for free
+              {t('facility.reserveForFree')}
             </Link>
           </div>
           {/* §6.6: the trust line for each action, beside the action. */}
           <p className="text-muted-foreground mt-2 text-xs">
-            Month-to-month, no long-term commitment · Reserving is free and needs no card
+            {t('facility.trustLine')}
           </p>
         </div>
       )}
@@ -462,9 +490,9 @@ function UnitTypeCard({
       <p className="mt-3 text-sm">
         {available === 0 ? (
           <>
-            <span className="text-muted-foreground">All rented right now — </span>
+            <span className="text-muted-foreground">{t('facility.allRented')}</span>
             <CallLink phone={phone} className="underline underline-offset-4" />
-            <span className="text-muted-foreground"> about this size; units open up most weeks.</span>
+            <span className="text-muted-foreground">{t('facility.allRentedAfter')}</span>
           </>
         ) : (
           <>
@@ -476,10 +504,10 @@ function UnitTypeCard({
                 here would be a button that does nothing. */}
             {available <= 3 ? (
               <span className="font-medium">
-                Only {available} left
+                {plural(dict, available, 'facility.onlyLeftOne', 'facility.onlyLeftOther')}
               </span>
             ) : (
-              <>{available} available</>
+              <>{plural(dict, available, 'facility.availableOne', 'facility.availableOther')}</>
             )}
           </>
         )}
@@ -494,7 +522,10 @@ function UnitTypeCard({
         <WaitlistForm
           facilityId={facility.id}
           unitTypeId={unitType.unitTypeId}
-          sizeLabel={`${unitType.widthFt} foot by ${unitType.lengthFt} foot`}
+          sizeLabel={t('facility.footBy', {
+            width: unitType.widthFt,
+            length: unitType.lengthFt,
+          })}
           action={joinWaitlistAction}
         />
       )}
@@ -502,31 +533,41 @@ function UnitTypeCard({
   )
 }
 
-function FilterForm({ filters, resultCount }: { filters: UnitFilters; resultCount: number }) {
+function FilterForm({
+  filters,
+  resultCount,
+  dict,
+}: {
+  filters: UnitFilters
+  resultCount: number
+  dict: Dictionary
+}) {
+  const t = (key: MessageKey, vars?: Record<string, string | number>) =>
+    translate(dict, key, vars)
   return (
     <form method="GET" className="border-input rounded-lg border p-4">
-      <h3 className="text-base font-medium">Narrow these down</h3>
+      <h3 className="text-base font-medium">{t('facility.narrowThese')}</h3>
 
       <div className="mt-3 flex flex-col gap-4 sm:flex-row sm:flex-wrap">
         <div className="flex flex-col gap-1 text-sm">
-          <label htmlFor="size">Size</label>
+          <label htmlFor="size">{t('facility.size')}</label>
           <select
             id="size"
             name="size"
             defaultValue={filters.size ?? ''}
             className="border-input bg-background h-11 rounded-md border px-2"
           >
-            <option value="">Any size</option>
+            <option value="">{t('facility.anySize')}</option>
             {Object.entries(SIZE_BANDS).map(([key, band]) => (
               <option key={key} value={key}>
-                {band.label}
+                {t(band.labelKey)}
               </option>
             ))}
           </select>
         </div>
 
         <div className="flex flex-col gap-1 text-sm">
-          <label htmlFor="sort">Sort by</label>
+          <label htmlFor="sort">{t('facility.sortBy')}</label>
           <select
             id="sort"
             name="sort"
@@ -535,14 +576,14 @@ function FilterForm({ filters, resultCount }: { filters: UnitFilters; resultCoun
           >
             {Object.entries(SORTS).map(([key, sort]) => (
               <option key={key} value={key}>
-                {sort.label}
+                {t(sort.labelKey)}
               </option>
             ))}
           </select>
         </div>
 
         <fieldset className="flex flex-col gap-1 text-sm">
-          <legend className="mb-1">Features</legend>
+          <legend className="mb-1">{t('facility.features')}</legend>
           <div className="flex flex-wrap gap-x-4 gap-y-2">
             {Object.entries(FEATURE_FILTERS).map(([key, feature]) => (
               <label key={key} className="inline-flex min-h-11 items-center gap-2">
@@ -552,7 +593,7 @@ function FilterForm({ filters, resultCount }: { filters: UnitFilters; resultCoun
                   value={key}
                   defaultChecked={filters.features.includes(key as never)}
                 />
-                {feature.label}
+                {t(feature.labelKey)}
               </label>
             ))}
           </div>
@@ -569,11 +610,11 @@ function FilterForm({ filters, resultCount }: { filters: UnitFilters; resultCoun
           type="submit"
           className="bg-primary text-primary-foreground inline-flex min-h-11 items-center rounded-md px-4 text-sm font-medium"
         >
-          Apply
+          {t('facility.apply')}
         </button>
         {hasActiveFilters(filters) && (
           <a href="?" className="text-sm underline underline-offset-4">
-            Clear filters
+            {t('facility.clearFilters')}
           </a>
         )}
       </div>
@@ -582,7 +623,7 @@ function FilterForm({ filters, resultCount }: { filters: UnitFilters; resultCoun
           re-rendered. The region is in the DOM on every load, so the count
           changing is a mutation rather than an insertion. */}
       <p role="status" className="text-muted-foreground mt-3 text-sm">
-        {resultCount === 1 ? '1 size matches' : `${resultCount} sizes match`}
+        {plural(dict, resultCount, 'facility.matchesOne', 'facility.matchesOther')}
       </p>
     </form>
   )
@@ -596,6 +637,7 @@ function UnitList({
   facility,
   promos,
   code,
+  dict,
 }: {
   unitTypes: PublicUnitType[] | null
   phone: PhoneNumber
@@ -607,16 +649,19 @@ function UnitList({
   /// targeting), so one badge for the whole page would be wrong the moment a
   /// promo applies to 10x10s only.
   promos: Map<string, { terms: string; firstPeriodCents: number; fromCode: boolean }>
+  dict: Dictionary
 }) {
+  const t = (key: MessageKey, vars?: Record<string, string | number>) =>
+    translate(dict, key, vars)
   if (unitTypes === null) {
     // US-103: an inventory read that fails shows a call-to-confirm notice, never
     // an error page. The rest of the page — address, hours, directions — is
     // still worth the renter's trip.
     return (
       <p className="rounded-lg border p-4 text-pretty">
-        We can&apos;t show live availability right now.{' '}
-        <CallLink phone={phone} className="font-medium underline underline-offset-4" /> to confirm
-        what is open and we will hold it for you.
+        {t('facility.noLiveAvailability')}{' '}
+        <CallLink phone={phone} className="font-medium underline underline-offset-4" />{' '}
+        {t('facility.noLiveAvailabilityAfter')}
       </p>
     )
   }
@@ -627,17 +672,17 @@ function UnitList({
     // action).
     return filtered ? (
       <p className="rounded-lg border p-4 text-pretty">
-        Nothing here matches those filters.{' '}
+        {t('facility.noFilterMatch')}{' '}
         <a href="?" className="font-medium underline underline-offset-4">
-          Clear them
+          {t('facility.clearThem')}
         </a>{' '}
-        to see every size at this location.
+        {t('facility.clearThemAfter')}
       </p>
     ) : (
       <p className="rounded-lg border p-4 text-pretty">
-        We haven&apos;t published sizes for this location yet.{' '}
-        <CallLink phone={phone} className="font-medium underline underline-offset-4" /> and we will
-        tell you what is here.
+        {t('facility.noSizesPublished')}{' '}
+        <CallLink phone={phone} className="font-medium underline underline-offset-4" />{' '}
+        {t('facility.noSizesPublishedAfter')}
       </p>
     )
   }
@@ -655,8 +700,13 @@ function UnitList({
         {/* Filters and sort are B-017; the honest default until then is smallest
             first, which is also cheapest first. */}
         {available.length === 0
-          ? 'Everything here is rented right now.'
-          : `${available.length} ${available.length === 1 ? 'size' : 'sizes'} available, smallest first`}
+          ? t('facility.everythingRented')
+          : plural(
+              dict,
+              available.length,
+              'facility.availableSmallestOne',
+              'facility.availableSmallestOther',
+            )}
       </p>
 
       {available.length > 0 && (
@@ -670,6 +720,7 @@ function UnitList({
               facility={facility}
               promo={promos.get(unitType.unitTypeId) ?? null}
               code={code}
+              dict={dict}
             />
           ))}
         </ul>
@@ -677,7 +728,7 @@ function UnitList({
 
       {full.length > 0 && (
         <>
-          <h3 className="mt-8 text-base font-medium">Also here, currently full</h3>
+          <h3 className="mt-8 text-base font-medium">{t('facility.alsoHereFull')}</h3>
           <ul className="mt-4 flex flex-col gap-4">
             {full.map((unitType) => (
               <UnitTypeCard
@@ -688,6 +739,7 @@ function UnitList({
               facility={facility}
               promo={promos.get(unitType.unitTypeId) ?? null}
               code={code}
+              dict={dict}
             />
             ))}
           </ul>
@@ -697,7 +749,17 @@ function UnitList({
   )
 }
 
-function ContactBlock({ facility, phone }: { facility: PublicFacility; phone: PhoneNumber }) {
+function ContactBlock({
+  facility,
+  phone,
+  dict,
+}: {
+  facility: PublicFacility
+  phone: PhoneNumber
+  dict: Dictionary
+}) {
+  const t = (key: MessageKey, vars?: Record<string, string | number>) =>
+    translate(dict, key, vars)
   return (
     <>
       <address className="mt-2 text-base not-italic">{formatAddress(facility)}</address>
@@ -711,16 +773,17 @@ function ContactBlock({ facility, phone }: { facility: PublicFacility; phone: Ph
           className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex min-h-11 items-center gap-2 rounded-md px-4 text-sm font-medium"
         >
           <Phone className="size-4" aria-hidden="true" />
-          Call {phone.isMain ? 'our main line, ' : ''}
-          {phone.display}
+          {phone.isMain
+            ? t('facility.callMainLine', { phone: phone.display })
+            : t('facility.callPhone', { phone: phone.display })}
         </a>
         <a
           href={directionsUrl(facility)}
           className="border-input hover:bg-accent inline-flex min-h-11 items-center gap-2 rounded-md border px-4 text-sm font-medium"
         >
           <MapPin className="size-4" aria-hidden="true" />
-          Get directions
-          <span className="sr-only"> to {facility.name}, opens your map app</span>
+          {t('facility.getDirections')}
+          <span className="sr-only">{t('facility.getDirectionsSr', { name: facility.name })}</span>
         </a>
       </div>
     </>
@@ -748,6 +811,9 @@ export default async function FacilityPage({
   const { state, city, slug } = await params
   const query = await searchParams
   const filters = parseFilters(query)
+  const dict = dictionaryFor(await getLocale())
+  const t = (key: MessageKey, vars?: Record<string, string | number>) =>
+    translate(dict, key, vars)
 
   const facility = await publicFacilityBySlug(slug)
   if (!facility) {
@@ -905,21 +971,20 @@ export default async function FacilityPage({
       {backToSearch && (
         <p className="mb-4 text-sm">
           <Link href={backToSearch} className="underline underline-offset-4">
-            ← Back to storage near {query.from}
+            {t('facility.backToSearch', { query: query.from ?? '' })}
           </Link>
         </p>
       )}
 
       {query.soldout && (
         <p role="status" className="border-input mb-4 rounded-md border p-3 text-sm text-pretty">
-          Someone took the last one of that size just before you. Nothing has been charged — here is
-          what we still have.
+          {t('facility.soldOutNotice')}
         </p>
       )}
 
       {query.unavailable && (
         <p role="status" className="border-input mb-4 rounded-md border p-3 text-sm text-pretty">
-          That size isn&apos;t available here any more. Here is everything we do have.
+          {t('facility.unavailableNotice')}
         </p>
       )}
 
@@ -974,39 +1039,48 @@ export default async function FacilityPage({
         </ul>
       )}
 
-      <ContactBlock facility={facility} phone={phone} />
+      <ContactBlock facility={facility} phone={phone} dict={dict} />
 
       {/* §6.6: the commitment terms belong next to the decision, not buried in
           the lease. */}
       <p className="text-muted-foreground mt-4 text-sm">
-        Month-to-month · no long-term commitment
+        {t('facility.monthToMonth')}
       </p>
 
       <section aria-labelledby="hours" className="mt-10">
         <h2 id="hours" className="text-xl font-medium">
-          Hours
+          {t('facility.hoursHeading')}
         </h2>
         {/* §6.3: office hours and gate access hours must never be conflated.
             They are two separately captioned tables for exactly that reason —
             the gate is usually open long after the office closes, and a renter
             who confuses them shows up to a locked office or an unstaffed site. */}
         <p className="text-muted-foreground mt-1 text-sm text-pretty">
-          The office is where staff are. Gate access is when your code opens the
-          gate — usually longer.
+          {t('facility.hoursIntro')}
         </p>
         <div className="mt-4 grid gap-8 sm:grid-cols-2">
-          <HoursTable caption="Office hours" schedule={facility.officeHours} phone={phone} />
-          <HoursTable caption="Gate access hours" schedule={facility.gateHours} phone={phone} />
+          <HoursTable
+            caption={t('facility.officeHours')}
+            schedule={facility.officeHours}
+            phone={phone}
+            dict={dict}
+          />
+          <HoursTable
+            caption={t('facility.gateHours')}
+            schedule={facility.gateHours}
+            phone={phone}
+            dict={dict}
+          />
         </div>
       </section>
 
       <section aria-labelledby="units" className="mt-10">
         <h2 id="units" className="text-xl font-medium">
-          Available units
+          {t('facility.availableUnits')}
         </h2>
         {unitTypes !== null && unitTypes.length > 0 && (
           <div className="mt-4">
-            <FilterForm filters={filters} resultCount={visible?.length ?? 0} />
+            <FilterForm filters={filters} resultCount={visible?.length ?? 0} dict={dict} />
           </div>
         )}
 
@@ -1034,6 +1108,7 @@ export default async function FacilityPage({
             facility={facility}
             promos={promos}
             code={typedCode}
+            dict={dict}
           />
         </div>
       </section>
@@ -1061,8 +1136,8 @@ export default async function FacilityPage({
         <div className="border-input bg-background sticky bottom-0 z-10 -mx-4 mt-4 border-t p-4 sm:hidden">
           <div className="flex items-center justify-between gap-3">
             <p className="text-sm font-medium">
-              From {formatRate(cheapestAvailable.webRateCents)}
-              <span className="text-muted-foreground font-normal">/mo</span>
+              {t('facility.from', { price: formatRate(cheapestAvailable.webRateCents) })}
+              <span className="text-muted-foreground font-normal">{t('card.perMonth')}</span>
             </p>
             <div className="flex gap-2">
               <form method="POST" action={`${facilityPath(facility)}/rent`}>
@@ -1075,14 +1150,14 @@ export default async function FacilityPage({
                   type="submit"
                   className="bg-primary text-primary-foreground inline-flex min-h-11 items-center rounded-md px-4 text-sm font-medium"
                 >
-                  Rent now
+                  {t('facility.rentNow')}
                 </button>
               </form>
               <Link
                 href={`${facilityPath(facility)}/reserve?unitType=${cheapestAvailable.unitTypeId}`}
                 className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
               >
-                Reserve free
+                {t('facility.reserveFree')}
               </Link>
             </div>
           </div>
@@ -1092,7 +1167,7 @@ export default async function FacilityPage({
       {facility.amenities.length > 0 && (
         <section aria-labelledby="amenities" className="mt-10">
           <h2 id="amenities" className="text-xl font-medium">
-            At this facility
+            {t('facility.atThisFacility')}
           </h2>
           <ul className="mt-4 flex flex-wrap gap-2">
             {facility.amenities.map((amenity) => (
@@ -1107,7 +1182,7 @@ export default async function FacilityPage({
       {embed && (
         <section aria-labelledby="map" className="mt-10">
           <h2 id="map" className="text-xl font-medium">
-            Where we are
+            {t('facility.whereWeAre')}
           </h2>
           {/* The text equivalent comes FIRST. The embed is a third-party
               document we cannot remediate — its zoom controls are named "+" and
@@ -1117,7 +1192,7 @@ export default async function FacilityPage({
               the frame blocked entirely. */}
           <p className="mt-2 text-sm">
             <a href={directionsUrl(facility)} className="underline underline-offset-4">
-              Open directions in your map app
+              {t('facility.openDirections')}
             </a>
           </p>
           {/* Behind a native <details> rather than rendered eagerly, for two
@@ -1132,12 +1207,15 @@ export default async function FacilityPage({
               whole public path works with the bundle disabled (B-015). */}
           <details className="mt-4">
             <summary className="border-input inline-flex min-h-11 cursor-pointer items-center rounded-md border px-4 text-sm font-medium">
-              Show map
+              {t('facility.showMap')}
             </summary>
             {/* `title` gives the frame an accessible name; without one a screen
                 reader announces a nameless frame full of unlabelled tiles. */}
             <iframe
-              title={`Map showing ${facility.name} at ${formatAddress(facility)}`}
+              title={t('facility.mapTitle', {
+                name: facility.name,
+                address: formatAddress(facility),
+              })}
               src={embed}
               loading="lazy"
               className="mt-4 aspect-video w-full rounded-lg border"
@@ -1155,7 +1233,7 @@ export default async function FacilityPage({
       {facility.longDescription && (
         <section aria-labelledby="about" className="mt-10">
           <h2 id="about" className="text-xl font-medium">
-            About this location
+            {t('facility.aboutThisLocation')}
           </h2>
           <div className="mt-2 flex flex-col gap-3">
             {facility.longDescription
@@ -1180,7 +1258,7 @@ export default async function FacilityPage({
       {restPhotos.length > 0 && (
         <section aria-labelledby="photos" className="mt-10">
           <h2 id="photos" className="text-xl font-medium">
-            Photos
+            {t('facility.photos')}
           </h2>
           <ul className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
             {restPhotos.map((photo) => (
@@ -1209,11 +1287,10 @@ export default async function FacilityPage({
           person this catches. */}
       <section aria-labelledby="ask" className="mt-10">
         <h2 id="ask" className="text-xl font-medium">
-          Not ready yet? Ask us
+          {t('facility.askUs')}
         </h2>
         <p className="text-muted-foreground mt-2 max-w-prose text-sm text-pretty">
-          A quote or a call back, no account needed. We will not use this to sign you up for
-          anything.
+          {t('facility.askUsBody')}
         </p>
         <div className="mt-4">
           <LeadForm
@@ -1233,17 +1310,21 @@ export default async function FacilityPage({
       {reviews.length > 0 && reviewAverage && (
         <section aria-labelledby="reviews" className="mt-10">
           <h2 id="reviews" className="text-xl font-medium">
-            What renters say
+            {t('facility.whatRentersSay')}
           </h2>
           <p className="text-muted-foreground mt-1">
-            {reviewAverage.ratingValue.toFixed(1)} out of 5, from {reviewAverage.reviewCount} review
-            {reviewAverage.reviewCount === 1 ? '' : 's'}
+            {plural(dict, reviewAverage.reviewCount, 'facility.ratedOne', 'facility.ratedOther', {
+              rating: reviewAverage.ratingValue.toFixed(1),
+            })}
           </p>
           <ul className="mt-4 flex flex-col gap-4">
             {reviews.map((review) => (
               <li key={review.id} className="border-input rounded-lg border p-4">
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <span aria-label={`${review.rating} out of 5 stars`} className="font-medium">
+                  <span
+                    aria-label={t('facility.starsLabel', { rating: review.rating })}
+                    className="font-medium"
+                  >
                     {'★'.repeat(review.rating)}
                     {'☆'.repeat(5 - review.rating)}
                   </span>
@@ -1266,7 +1347,7 @@ export default async function FacilityPage({
           they are open, which is what the FAQPage schema is describing. */}
       <section aria-labelledby="faq" className="mt-10">
         <h2 id="faq" className="text-xl font-medium">
-          Questions people ask
+          {t('facility.questionsPeopleAsk')}
         </h2>
         <div className="mt-4 flex flex-col gap-2">
           {faqs.map((entry) => (
@@ -1279,13 +1360,13 @@ export default async function FacilityPage({
       </section>
 
       <p className="text-muted-foreground mt-10 text-sm text-pretty">
-        Not sure what size you need? Read the{' '}
+        {t('search.sizeGuideBefore')}{' '}
         <Link href="/storage/size-guide" className="underline underline-offset-4">
-          size guide
+          {t('search.sizeGuideLink')}
         </Link>
-        , or{' '}
+        {t('facility.sizeGuideOr')}{' '}
         <Link href="/storage/search" className="underline underline-offset-4">
-          look at other locations
+          {t('facility.otherLocations')}
         </Link>
         .
       </p>

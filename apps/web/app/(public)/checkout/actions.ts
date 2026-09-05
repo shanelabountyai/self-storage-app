@@ -23,6 +23,15 @@ import {
   validateDetails,
 } from '@/lib/checkout/details'
 import { prisma } from '@storage/db'
+import { formatRate } from '@/lib/format'
+import { labelForStep } from '@/components/checkout/stepper'
+import {
+  dictionaryFor,
+  translate,
+  type Dictionary,
+  type MessageKey,
+} from '@/lib/i18n'
+import { getLocale } from '@/lib/i18n/server'
 import { recordConsent } from '@storage/core/consent'
 import { fieldError, type FormState } from '@/lib/admin/form-state'
 import {
@@ -44,10 +53,25 @@ import { requestMetadata } from '@/lib/http/request-metadata'
 // validation lands with B-021..B-025; this item owns the machine they run on.
 
 /// US-501 step 1. Validates, creates or links the account, and moves on.
+// B-090 part 6. Every message these actions return lands in a live region on
+// the money path, so they are translated like the rest of the checkout.
+//
+// Resolved per call rather than once at module scope: a server action runs
+// inside a request, and a module-level dictionary would be whichever language
+// the first request after a cold start happened to use — served to everybody
+// afterwards.
+type Translator = (key: MessageKey, vars?: Record<string, string | number>) => string
+
+async function messages(): Promise<{ dict: Dictionary; t: Translator }> {
+  const dict = dictionaryFor(await getLocale())
+  return { dict, t: (key, vars) => translate(dict, key, vars) }
+}
+
 export async function submitDetailsAction(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
+  const { t } = await messages()
   const token = String(formData.get('token') ?? '')
   const input = {
     firstName: String(formData.get('firstName') ?? ''),
@@ -85,8 +109,8 @@ export async function submitDetailsAction(
       status: 'error',
       message:
         result.reason === 'lock_lapsed'
-          ? 'The 30 minutes we were holding your unit ran out. Nothing has been charged — see below for what we can do.'
-          : 'We could not save those details. Reload the page and try again.',
+          ? t('act.lockLapsed')
+          : t('act.detailsFailed'),
       fieldErrors: {},
     }
   }
@@ -152,7 +176,7 @@ export async function submitDetailsAction(
   }
 
   revalidatePath('/checkout')
-  return { status: 'success', message: 'Details saved. Next: confirm your unit.' }
+  return { status: 'success', message: t('act.detailsSaved') }
 }
 
 /// US-501 step 3 / US-44. Choose a plan, or waive with a real record.
@@ -160,10 +184,11 @@ export async function submitProtectionAction(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
+  const { t } = await messages()
   const token = String(formData.get('token') ?? '')
   const session = await sessionByToken(token)
   if (!session) {
-    return { status: 'error', message: 'We could not find that checkout.', fieldErrors: {} }
+    return { status: 'error', message: t('act.checkoutNotFound'), fieldErrors: {} }
   }
 
   const plans = await currentPlans(session.facilityId)
@@ -207,16 +232,16 @@ export async function submitProtectionAction(
     // clears it on the next step.
     changeNote:
       premiumCents > 0
-        ? `Protection plan added — ${(premiumCents / 100).toFixed(2)} dollars a month.`
-        : 'Your own cover recorded — no protection charge added.',
+        ? t('act.protectionAddedNote', { amount: formatRate(premiumCents) })
+        : t('act.ownCoverNote'),
   })
   if (!result.ok) {
     return {
       status: 'error',
       message:
         result.reason === 'lock_lapsed'
-          ? 'The 30 minutes we were holding your unit ran out. Nothing has been charged — see below for what we can do.'
-          : 'We could not save that choice. Reload the page and try again.',
+          ? t('act.lockLapsed')
+          : t('act.protectionChoiceFailed'),
       fieldErrors: {},
     }
   }
@@ -228,17 +253,18 @@ export async function submitProtectionAction(
     status: 'success',
     message:
       premiumCents > 0
-        ? `Protection added — your monthly total went up by ${(premiumCents / 100).toFixed(2)} dollars.`
-        : 'Your own cover recorded. No protection charge added.',
+        ? t('act.protectionAdded', { amount: formatRate(premiumCents) })
+        : t('act.ownCoverRecorded'),
   }
 }
 
 /// US-501 step 4 / FR-4.2. Signs the lease that was rendered for this session.
 export async function signLeaseAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const { t } = await messages()
   const token = String(formData.get('token') ?? '')
   const session = await sessionByToken(token)
   if (!session) {
-    return { status: 'error', message: 'We could not find that checkout.', fieldErrors: {} }
+    return { status: 'error', message: t('act.checkoutNotFound'), fieldErrors: {} }
   }
 
   // D-53. Every agreement in the basket, signed by this one action.
@@ -246,7 +272,7 @@ export async function signLeaseAction(_prev: FormState, formData: FormData): Pro
   if (documents.length !== session.units.length) {
     return {
       status: 'error',
-      message: 'We could not find your lease. Reload the page and it will be rebuilt.',
+      message: t('act.leaseNotFound'),
       fieldErrors: {},
     }
   }
@@ -292,7 +318,7 @@ export async function signLeaseAction(_prev: FormState, formData: FormData): Pro
     if (!signed.ok && signed.reason !== 'already_signed') {
       return {
         status: 'error',
-        message: 'We could not record your signature. Reload the page and try again.',
+        message: t('act.signatureFailed'),
         fieldErrors: {},
       }
     }
@@ -302,7 +328,7 @@ export async function signLeaseAction(_prev: FormState, formData: FormData): Pro
   // Every document already carried a signature, and none was written now. That
   // is the genuine "you have already signed" case.
   if (signatures.length === 0) {
-    return { status: 'error', message: 'This lease has already been signed.', fieldErrors: {} }
+    return { status: 'error', message: t('act.alreadySigned'), fieldErrors: {} }
   }
   const signed = signatures[0]
 
@@ -338,24 +364,25 @@ export async function signLeaseAction(_prev: FormState, formData: FormData): Pro
       status: 'error',
       message:
         result.reason === 'lock_lapsed'
-          ? 'The 30 minutes we were holding your unit ran out. Nothing has been charged — see below for what we can do.'
-          : 'We could not continue. Reload the page and try again.',
+          ? t('act.lockLapsed')
+          : t('act.continueFailed'),
       fieldErrors: {},
     }
   }
 
   revalidatePath('/checkout')
-  return { status: 'success', message: 'Lease signed. Next: payment.' }
+  return { status: 'success', message: t('act.leaseSigned') }
 }
 
 /// §6.9 / D-11a. Records the autopay choice on the session; B-026 carries it
 /// onto the lease. Default-on is only defensible because the disclosure sits
 /// beside the control and turning it off is one activation.
 export async function setAutopayAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const { t } = await messages()
   const token = String(formData.get('token') ?? '')
   const session = await sessionByToken(token)
   if (!session) {
-    return { status: 'error', message: 'We could not find that checkout.', fieldErrors: {} }
+    return { status: 'error', message: t('act.checkoutNotFound'), fieldErrors: {} }
   }
 
   const autopay = formData.get('autopay') === 'yes'
@@ -368,8 +395,8 @@ export async function setAutopayAction(_prev: FormState, formData: FormData): Pr
   return {
     status: 'success',
     message: autopay
-      ? 'Automatic payments are on. We will email you before every charge.'
-      : 'Automatic payments are off. We will email you when each payment is due.',
+      ? t('act.autopayOn')
+      : t('act.autopayOff'),
   }
 }
 
@@ -390,22 +417,23 @@ export async function applyPromoCodeAction(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
+  const { t } = await messages()
   const token = String(formData.get('token') ?? '')
   const session = await sessionByToken(token)
   if (!session) {
-    return { status: 'error', message: 'We could not find that checkout.', fieldErrors: {} }
+    return { status: 'error', message: t('act.checkoutNotFound'), fieldErrors: {} }
   }
   if (session.step === 'provisioned' || session.status === 'completed') {
     return {
       status: 'error',
-      message: 'This checkout is finished, so a code can no longer be added to it.',
+      message: t('act.checkoutFinishedNoCode'),
       fieldErrors: {},
     }
   }
 
   const code = String(formData.get('promo') ?? '').trim()
   if (!code) {
-    return { status: 'error', message: 'Enter a code first.', fieldErrors: { promo: 'Enter a code first.' } }
+    return { status: 'error', message: t('act.enterACode'), fieldErrors: { promo: t('act.enterACode') } }
   }
 
   const lookup = await offerFor({
@@ -427,8 +455,8 @@ export async function applyPromoCodeAction(
   if (lookup.codeOutcome?.kind === 'rejected') {
     return {
       status: 'error',
-      message: lookup.problem ?? 'That code did not work.',
-      fieldErrors: { promo: lookup.problem ?? 'That code did not work.' },
+      message: lookup.problem ?? t('act.codeDidNotWork'),
+      fieldErrors: { promo: lookup.problem ?? t('act.codeDidNotWork') },
     }
   }
 
@@ -461,7 +489,7 @@ export async function applyPromoCodeAction(
   })
 
   revalidatePath('/checkout')
-  return { status: 'success', message: lookup.problem ?? 'Code applied.' }
+  return { status: 'success', message: lookup.problem ?? t('act.codeApplied') }
 }
 
 /// US-501 step 2, extended by B-106. Confirm the unit, and pick when.
@@ -473,10 +501,11 @@ export async function confirmUnitAction(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
+  const { t } = await messages()
   const token = String(formData.get('token') ?? '')
   const session = await sessionByToken(token)
   if (!session) {
-    return { status: 'error', message: 'We could not find that checkout.', fieldErrors: {} }
+    return { status: 'error', message: t('act.checkoutNotFound'), fieldErrors: {} }
   }
 
   const facility = await prisma.facility.findUniqueOrThrow({
@@ -515,14 +544,14 @@ export async function confirmUnitAction(
       status: 'error',
       message:
         result.reason === 'lock_lapsed'
-          ? 'The 30 minutes we were holding your unit ran out. Nothing has been charged — see below for what we can do.'
-          : 'We could not continue from this step. Reload the page and try again.',
+          ? t('act.lockLapsed')
+          : t('act.stepContinueFailed'),
       fieldErrors: {},
     }
   }
 
   revalidatePath('/checkout')
-  return { status: 'success', message: 'Unit confirmed. Next: protection.' }
+  return { status: 'success', message: t('act.unitConfirmed') }
 }
 
 // B-106 part 5. Adding and removing units in one checkout.
@@ -537,12 +566,12 @@ export async function confirmUnitAction(
 
 /// Shared refusal wording. The reasons are the same on both paths and each one
 /// says what the renter can do next, never just what failed.
-function basketRefusal(reason: string): FormState {
+function basketRefusal(reason: string, t: Translator): FormState {
   if (reason === 'lock_lapsed') {
     return {
       status: 'error',
       message:
-        'The 30 minutes we were holding your units ran out. Nothing has been charged — see below for what we can do.',
+        t('act.lockLapsedUnits'),
       fieldErrors: {},
     }
   }
@@ -550,7 +579,7 @@ function basketRefusal(reason: string): FormState {
     return {
       status: 'error',
       message:
-        'That size just went. Nothing has changed in your rental — pick another size, or carry on with what you have.',
+        t('act.sizeJustWent'),
       fieldErrors: {},
     }
   }
@@ -558,32 +587,37 @@ function basketRefusal(reason: string): FormState {
     return {
       status: 'error',
       message:
-        'This is the only unit in your rental, so there is nothing to take it out of. To stop renting, just close this page — nothing has been charged.',
+        t('act.lastUnit'),
       fieldErrors: {},
     }
   }
-  return { status: 'error', message: 'We could not change your rental. Reload the page and try again.', fieldErrors: {} }
+  return { status: 'error', message: t('act.basketFailed'), fieldErrors: {} }
 }
 
 export async function addUnitAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const { t } = await messages()
   const token = String(formData.get('token') ?? '')
-  const result = await addUnitToBasket(token, String(formData.get('unitTypeId') ?? ''))
-  if (!result.ok) return basketRefusal(result.reason)
+  const { dict } = await messages()
+  const result = await addUnitToBasket(token, String(formData.get('unitTypeId') ?? ''), dict)
+  if (!result.ok) return basketRefusal(result.reason, t)
 
   revalidatePath('/checkout')
   return { status: 'success', message: result.changeNote }
 }
 
 export async function removeUnitAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const { t } = await messages()
   const token = String(formData.get('token') ?? '')
-  const result = await removeUnitFromBasket(token, String(formData.get('lineId') ?? ''))
-  if (!result.ok) return basketRefusal(result.reason)
+  const { dict } = await messages()
+  const result = await removeUnitFromBasket(token, String(formData.get('lineId') ?? ''), dict)
+  if (!result.ok) return basketRefusal(result.reason, t)
 
   revalidatePath('/checkout')
   return { status: 'success', message: result.changeNote }
 }
 
 export async function advanceAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const { dict, t } = await messages()
   const token = String(formData.get('token') ?? '')
   const from = String(formData.get('from') ?? '') as Step
 
@@ -593,25 +627,29 @@ export async function advanceAction(_prev: FormState, formData: FormData): Promi
       return {
         status: 'error',
         message:
-          'The 30 minutes we were holding your unit ran out. Nothing has been charged — see below for what we can do.',
+          t('act.lockLapsed'),
         fieldErrors: {},
       }
     }
     return {
       status: 'error',
-      message: 'We could not continue from this step. Reload the page and try again.',
+      message: t('act.stepContinueFailed'),
       fieldErrors: {},
     }
   }
 
   revalidatePath('/checkout')
-  return { status: 'success', message: `Moved on to ${result.session.step.replace('_', ' ')}.` }
+  return {
+    status: 'success',
+    message: t('act.movedOnTo', { step: labelForStep(result.session.step, dict).toLowerCase() }),
+  }
 }
 
 /// §6.4's back navigation. One action for both the Back control beside Continue
 /// and the completed steps in the progress indicator, so there is one set of
 /// rules about what may be gone back to rather than two that can disagree.
 export async function goBackAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const { t } = await messages()
   const token = String(formData.get('token') ?? '')
   const to = String(formData.get('to') ?? '') as Step
 
@@ -621,12 +659,12 @@ export async function goBackAction(_prev: FormState, formData: FormData): Promis
       status: 'error',
       message:
         result.reason === 'paid'
-          ? 'Your payment has gone through and your unit is yours, so there is nothing to go back to. Reload the page to see your gate code.'
+          ? t('act.alreadyPaid')
           : result.reason === 'lock_lapsed'
-            ? 'The 30 minutes we were holding your unit ran out. Nothing has been charged — see below for what we can do.'
+            ? t('act.lockLapsed')
             : result.reason === 'not_yet_reached'
-              ? 'You have not got that far yet. Carry on from where you are.'
-              : 'We could not go back to that step. Reload the page and try again.',
+              ? t('act.notThatFarYet')
+              : t('act.goBackFailed'),
       fieldErrors: {},
     }
   }
@@ -644,6 +682,7 @@ export async function goBackAction(_prev: FormState, formData: FormData): Promis
 /// a background timer: a screen-reader user reading a long lease generates no
 /// interaction events, and an idle-based heartbeat would drop exactly them.
 export async function extendLockAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const { t } = await messages()
   const token = String(formData.get('token') ?? '')
   const result = await extendLock(token)
 
@@ -652,19 +691,20 @@ export async function extendLockAction(_prev: FormState, formData: FormData): Pr
       status: 'error',
       message:
         result.reason === 'lock_lapsed'
-          ? 'That hold had already run out. Nothing has been charged.'
-          : 'We could not extend the hold.',
+          ? t('act.holdAlreadyRanOut')
+          : t('act.extendFailed'),
       fieldErrors: {},
     }
   }
 
   revalidatePath('/checkout')
-  return { status: 'success', message: 'Held for another 30 minutes.' }
+  return { status: 'success', message: t('act.heldAnother30') }
 }
 
 /// FR-4.1's unit-lost fallback: put the renter back on another unit of the same
 /// type, keeping everything they have already entered.
 export async function relockAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const { t } = await messages()
   const sessionId = String(formData.get('sessionId') ?? '')
   const result = await relock(sessionId)
 
@@ -677,7 +717,7 @@ export async function relockAction(_prev: FormState, formData: FormData): Promis
     return {
       status: 'error',
       message:
-        'That size has sold out while you were deciding. Nothing has been charged — the phone number, the other sizes here, and the waiting list are below.',
+        t('act.soldOutWhileDeciding'),
       fieldErrors: {},
     }
   }
@@ -685,7 +725,7 @@ export async function relockAction(_prev: FormState, formData: FormData): Promis
   revalidatePath('/checkout')
   return {
     status: 'success',
-    message: 'We found you another unit the same size and kept everything you had entered.',
+    message: t('act.foundAnother'),
   }
 }
 
@@ -701,6 +741,7 @@ export async function relockAtSizeAction(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
+  const { t } = await messages()
   const sessionId = String(formData.get('sessionId') ?? '')
   const unitTypeId = String(formData.get('unitTypeId') ?? '')
   const result = await relockAtSize(sessionId, unitTypeId)
@@ -714,15 +755,15 @@ export async function relockAtSizeAction(
   if (!result.ok) {
     const message =
       result.reason === 'too_late'
-        ? 'You have already reached payment on this checkout, so we cannot move it to another size — the total has been quoted. Call us and we will set the new one up, or start again from the facility page.'
+        ? t('act.pastPaymentNoSizeChange')
         : result.reason === 'sold_out'
-          ? 'That size has just gone as well. Nothing has been charged — the phone number, the sizes still free, and the waiting list are below.'
-          : 'We could not move this checkout to that size. Nothing has been charged.'
+          ? t('act.thatSizeGoneToo')
+          : t('act.sizeMoveFailed')
     return { status: 'error', message, fieldErrors: {} }
   }
 
   return {
     status: 'success',
-    message: `${result.changeNote} We kept everything you had entered, and the price below is the new size's.`,
+    message: t('act.sizeMoved', { note: result.changeNote }),
   }
 }

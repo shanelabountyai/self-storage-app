@@ -1,4 +1,5 @@
 import type { FaqEntry } from '@storage/core/marketing'
+import { en } from '@/lib/i18n/en'
 import {
   FEATURE_FILTERS,
   SIZE_BANDS,
@@ -159,9 +160,15 @@ export function guideCtaHref(filter: GuideFilter): string {
 /// Read from the same catalogues the filters themselves use, so the guide says
 /// "Medium (5×10 to 10×10)" exactly as the facility page's filter control does
 /// — a reader who follows this link should recognise where they landed.
+///
+/// B-090 part 6: resolved against the ENGLISH dictionary deliberately, not the
+/// visitor's locale. The guides are English MDX prose, and a Spanish filter
+/// name in the middle of an English sentence is worse than an English one —
+/// when the guides are translated (B-090 part 6, session 3) this takes a
+/// locale like everything else.
 export function guideFilterLabel(filter: GuideFilter): string | null {
-  if (filter.size) return SIZE_BANDS[filter.size].label
-  if (filter.feature) return FEATURE_FILTERS[filter.feature].label
+  if (filter.size) return en[SIZE_BANDS[filter.size].labelKey]
+  if (filter.feature) return en[FEATURE_FILTERS[filter.feature].labelKey]
   return null
 }
 

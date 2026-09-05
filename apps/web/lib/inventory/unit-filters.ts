@@ -1,4 +1,5 @@
 import type { PublicUnitType } from './public-inventory'
+import type { MessageKey } from '@/lib/i18n'
 
 // PRD 01 US-201. Filtering and sorting the unit list, as pure functions over
 // what the inventory read already returned — no second query, and no client
@@ -7,27 +8,30 @@ import type { PublicUnitType } from './public-inventory'
 
 /// US-201's three size buckets. Boundaries are stated in square feet because
 /// that is what survives an operator naming a type "5x10 Locker" or "Small".
+/// B-090 part 6: the customer-facing wording moved into the dictionaries and
+/// what stays here is the KEY, so a filter cannot render English inside a
+/// Spanish page. The boundaries did not move — only where the words live.
 export const SIZE_BANDS = {
-  small: { label: 'Small (up to 5×5)', max: 25 },
-  medium: { label: 'Medium (5×10 to 10×10)', min: 26, max: 100 },
-  large: { label: 'Large (10×15 and up)', min: 101 },
-} as const
+  small: { labelKey: 'filter.size.small', max: 25 },
+  medium: { labelKey: 'filter.size.medium', min: 26, max: 100 },
+  large: { labelKey: 'filter.size.large', min: 101 },
+} as const satisfies Record<string, { labelKey: MessageKey; min?: number; max?: number }>
 
 export type SizeBand = keyof typeof SIZE_BANDS
 
 export const FEATURE_FILTERS = {
-  climate: { label: 'Climate controlled', matches: (u: PublicUnitType) => u.climateControlled },
-  driveUp: { label: 'Drive-up access', matches: (u: PublicUnitType) => u.driveUp },
-  power: { label: 'Power outlet', matches: (u: PublicUnitType) => u.powerAvailable },
-  groundFloor: { label: 'Ground floor', matches: (u: PublicUnitType) => u.floor <= 1 },
-} as const
+  climate: { labelKey: 'filter.feature.climate', matches: (u: PublicUnitType) => u.climateControlled },
+  driveUp: { labelKey: 'filter.feature.driveUp', matches: (u: PublicUnitType) => u.driveUp },
+  power: { labelKey: 'filter.feature.power', matches: (u: PublicUnitType) => u.powerAvailable },
+  groundFloor: { labelKey: 'filter.feature.groundFloor', matches: (u: PublicUnitType) => u.floor <= 1 },
+} as const satisfies Record<string, { labelKey: MessageKey; matches: (u: PublicUnitType) => boolean }>
 
 export type FeatureKey = keyof typeof FEATURE_FILTERS
 
 /// Price low→high is the default because it is what a comparer is here for.
 export const SORTS = {
-  price: { label: 'Price: low to high', compare: (a: PublicUnitType, b: PublicUnitType) => a.webRateCents - b.webRateCents },
-  size: { label: 'Size: small to large', compare: (a: PublicUnitType, b: PublicUnitType) => a.sqFt - b.sqFt },
+  price: { labelKey: 'sort.price', compare: (a: PublicUnitType, b: PublicUnitType) => a.webRateCents - b.webRateCents },
+  size: { labelKey: 'sort.size', compare: (a: PublicUnitType, b: PublicUnitType) => a.sqFt - b.sqFt },
 } as const
 
 export type SortKey = keyof typeof SORTS

@@ -280,7 +280,7 @@ export default async function CityPage({
           Search by zip code to see distances from where you are.
         </p>
         <div className="mt-4">
-          <FacilitySearchForm defaultValue={label} label="Zip code or city" />
+          <FacilitySearchForm defaultValue={label} labelKey="search.labelZipOrCity" />
         </div>
       </section>
 

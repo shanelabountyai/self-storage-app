@@ -5,6 +5,8 @@ import { currentRateForUnitType } from '@/lib/pricing/unit-type-rates'
 import { offerFor } from '@/lib/promotions/service'
 import { sendDirectEmail } from '@/lib/comms/service'
 import type { MoveSource } from '@storage/core/metrics'
+import { translate, type Dictionary } from '@/lib/i18n'
+import { en } from '@/lib/i18n/en'
 
 // PRD 01 FR-4.1. The server-side checkout state machine.
 //
@@ -356,7 +358,16 @@ export type BasketResult =
 /// a unit renews the single countdown rather than starting a second one. That
 /// is what makes 2.2.1 satisfiable here at all: N independent timers cannot be
 /// warned about or extended in any usable way, which the row says outright.
-export async function addUnitToBasket(token: string, unitTypeId: string): Promise<BasketResult> {
+/// B-090 part 6. `dict` is optional and defaults to English, because this
+/// function is called from tests and scripts that have no request to read a
+/// cookie from — `getLocale()` here would throw outside a request scope. The
+/// server actions pass the renter's own dictionary; everything else gets the
+/// English sentence it got before.
+export async function addUnitToBasket(
+  token: string,
+  unitTypeId: string,
+  dict?: Dictionary,
+): Promise<BasketResult> {
   const current = await prisma.checkoutSession.findUnique({
     where: { tokenHash: hashSessionToken(token) },
     select: { facilityId: true },
@@ -409,7 +420,12 @@ export async function addUnitToBasket(token: string, unitTypeId: string): Promis
     // §6.4, and the row's own criterion: the note names WHICH unit moved the
     // total. "Your total changed" on a screen with three units in it tells the
     // renter a number moved and leaves them to find out which line did it.
-    const changeNote = `Unit ${unit.number} added — ${unitType.widthFt}×${unitType.lengthFt} ${unitType.name}.`
+    const changeNote = translate(dict ?? en, 'act.unitAddedNote', {
+      number: unit.number,
+      width: unitType.widthFt,
+      length: unitType.lengthFt,
+      name: unitType.name,
+    })
 
     const updated = await tx.checkoutSession.update({
       where: { id: session.id },
@@ -434,7 +450,11 @@ export async function addUnitToBasket(token: string, unitTypeId: string): Promis
 /// abandon. The control is withheld rather than offered-and-refused when only
 /// one line is left (B-093's rule), so this is the server half of a decision
 /// the UI has already made.
-export async function removeUnitFromBasket(token: string, lineId: string): Promise<BasketResult> {
+export async function removeUnitFromBasket(
+  token: string,
+  lineId: string,
+  dict?: Dictionary,
+): Promise<BasketResult> {
   return prisma.$transaction(async (tx) => {
     const session = await tx.checkoutSession.findUnique({
       where: { tokenHash: hashSessionToken(token) },
@@ -460,7 +480,9 @@ export async function removeUnitFromBasket(token: string, lineId: string): Promi
     if (line.unitId) await recomputeUnitStatus(line.unitId, tx)
 
     const remaining = session.units.filter((candidate) => candidate.id !== lineId)
-    const changeNote = `Unit ${unit?.number ?? 'removed'} taken out of your rental.`
+    const changeNote = unit
+      ? translate(dict ?? en, 'act.unitRemovedNote', { number: unit.number })
+      : translate(dict ?? en, 'act.unitRemovedNoNumber')
 
     const updated = await tx.checkoutSession.update({
       where: { id: session.id },

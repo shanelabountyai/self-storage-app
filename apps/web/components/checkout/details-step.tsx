@@ -6,6 +6,7 @@ import {
   SMS_CONSENT_DISCLOSURE,
   type DetailsInput,
 } from '@/lib/checkout/details'
+import { translate, type Dictionary, type MessageKey } from '@/lib/i18n'
 
 // PRD 01 US-501 step 1. One screen, and every field carries its autocomplete
 // token (1.3.5 Identify Input Purpose) and a keyboard that matches the data
@@ -42,6 +43,7 @@ export function DetailsStep({
   token,
   prefill,
   manualLocality = false,
+  dict,
 }: {
   token: string
   prefill: Partial<DetailsInput>
@@ -51,44 +53,47 @@ export function DetailsStep({
   /// carries a city and state from then on either way, and the step would be
   /// back over the field cap for anyone who came back to it.
   manualLocality?: boolean
+  dict: Dictionary
 }) {
+  const t = (key: MessageKey, vars?: Record<string, string | number>) =>
+    translate(dict, key, vars)
 
   return (
     <AdminForm
       action={submitDetailsAction}
-      label="Your details"
+      label={t('details.formLabel')}
       className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2"
     >
       <input type="hidden" name="token" value={token} />
 
       <Field
         name="firstName"
-        label="First name"
+        label={t('details.firstName')}
         autoComplete="given-name"
         defaultValue={prefill.firstName ?? ''}
         required
       />
       <Field
         name="lastName"
-        label="Last name"
+        label={t('details.lastName')}
         autoComplete="family-name"
         defaultValue={prefill.lastName ?? ''}
         required
       />
       <Field
         name="email"
-        label="Email"
+        label={t('details.email')}
         type="email"
         inputMode="email"
         autoComplete="email"
         defaultValue={prefill.email ?? ''}
         required
         className="flex flex-col gap-1 text-sm sm:col-span-2"
-        hint="This is your account. We send your lease, receipt and gate code here — no password needed."
+        hint={t('details.emailHint')}
       />
       <Field
         name="phone"
-        label="Mobile number"
+        label={t('details.phone')}
         type="tel"
         inputMode="tel"
         autoComplete="tel"
@@ -99,7 +104,7 @@ export function DetailsStep({
 
       <Field
         name="addressLine1"
-        label="Street address"
+        label={t('details.address1')}
         autoComplete="address-line1"
         defaultValue={prefill.addressLine1 ?? ''}
         required
@@ -107,21 +112,21 @@ export function DetailsStep({
       />
       <Field
         name="addressLine2"
-        label="Flat, suite or unit (optional)"
+        label={t('details.address2')}
         autoComplete="address-line2"
         defaultValue={prefill.addressLine2 ?? ''}
         className="flex flex-col gap-1 text-sm sm:col-span-2"
       />
       <Field
         name="postalCode"
-        label="Zip code"
+        label={t('details.postalCode')}
         // Numeric here is correct — unlike the search field, this one only ever
         // takes digits.
         inputMode="numeric"
         autoComplete="postal-code"
         defaultValue={prefill.postalCode ?? ''}
         required
-        hint="Your city and state come from this."
+        hint={t('details.postalCodeHint')}
       />
 
       {/* Read-only, and real text rather than a disabled input: there is
@@ -129,13 +134,13 @@ export function DetailsStep({
           otherwise. Before the renter has submitted anything there is nothing
           to show, and saying so beats an empty box. */}
       <div className="text-sm">
-        <p className="text-muted-foreground">City and state</p>
+        <p className="text-muted-foreground">{t('details.cityAndState')}</p>
         <p className="mt-1 font-medium">
           {prefill.city && prefill.state ? (
             `${prefill.city}, ${prefill.state}`
           ) : (
             <span className="text-muted-foreground font-normal">
-              From your zip code
+              {t('details.fromYourZip')}
             </span>
           )}
         </p>
@@ -148,22 +153,22 @@ export function DetailsStep({
           with the bundle disabled. */}
       <details open={manualLocality} className="text-sm sm:col-span-2">
         <summary className="inline-flex min-h-11 cursor-pointer items-center underline underline-offset-4">
-          Enter my city and state myself
+          {t('details.enterMyself')}
         </summary>
         <div className="mt-2 grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field
             name="city"
-            label="City"
+            label={t('details.city')}
             autoComplete="address-level2"
             defaultValue={prefill.city ?? ''}
           />
           <Field
             name="state"
-            label="State"
+            label={t('details.state')}
             autoComplete="address-level1"
             maxLength={2}
             defaultValue={prefill.state ?? ''}
-            hint="Two-letter code, for example TX."
+            hint={t('details.stateHint')}
           />
         </div>
       </details>
@@ -173,10 +178,20 @@ export function DetailsStep({
           type="submit"
           className="bg-primary text-primary-foreground inline-flex min-h-11 w-full items-center justify-center rounded-md px-4 text-base font-medium sm:w-auto"
         >
-          Continue
+          {t('checkout.continue')}
         </button>
       </div>
 
+      {/* B-090 part 6 (D-122): the three disclosure strings below are NOT
+          translated, and that is deliberate rather than unfinished. Each is a
+          versioned consent text (`SMS_CONSENT_DISCLOSURE_VERSION` and friends)
+          recorded against the tenant as evidence of what they agreed to, and
+          TCPA wants express written consent to the words actually shown. A
+          translation is a different disclosure and needs its own version
+          constant and a legal read before it can be displayed, not a
+          dictionary entry — B-259 owns that. Showing English here is the
+          honest state; silently recording an English version number against
+          Spanish words would not be. */}
       {/* Below the primary action on purpose (B-112). Neither is required to
           rent, and the marketing one exists for us rather than for the renter —
           it has no business sitting between their phone number and their

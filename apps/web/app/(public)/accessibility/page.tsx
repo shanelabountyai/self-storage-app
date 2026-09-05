@@ -11,7 +11,7 @@ export const metadata = metadataFor(
 /// credibility rests on the record, not the intention — an undated one is a
 /// claim about a codebase that has since moved. Update this when the claims are
 /// re-verified, not when the page is edited.
-// Re-verified 2026-09-04, at B-086 part 2 (phone unlock, D-121). Customer-
+// Re-verified 2026-09-04, at B-086 part 2 (phone unlock, D-122). Customer-
 // facing and a new control, on a route this page already lists and already
 // scans: `/portal/access` gains a section that turns a mobile key on, opens the
 // gate, and turns it off again.
@@ -1696,6 +1696,49 @@ const LAST_REVIEWED = '19 August 2026'
 // entries are still true and unchanged in scope: the no-JavaScript hold
 // countdown, the staff screens, and the embedded maps. A read-only account card
 // touches none of them. `LAST_REVIEWED` is not bumped, per D-115.
+//
+// Re-verified 2026-09-05, at B-090 part 6 (Spanish on the move-in path —
+// D-122). The first item to change what LANGUAGE this page's claims are about,
+// which makes it the first that could make the coverage sentence false without
+// touching a single route.
+//
+// **The claim that needed re-checking is "automated tests on every page".** It
+// was true and stayed true, but it quietly narrowed: the route loops carry no
+// locale cookie, so all of them scan English, and the site now renders a second
+// set of strings that no scan had ever seen. Two entries record that rather
+// than letting the sentence cover a language it does not. `SCANNED_STATES`
+// gains the facility page in Spanish — scanned by axe AND measured for reflow,
+// zoom and text spacing through `STATE_REACH`, which matters because Spanish
+// runs ~20% longer and that route is the tightest public layout at 320px —
+// and `STATE_EXCEPTIONS` names the rest of the public site and the checkout as
+// scanned in English only. Both render on the page.
+//
+// **The reflow claim went false during this item and is true again.** The
+// language toggle adds two controls to the header, whose `<nav>` was `flex`
+// without `flex-wrap` — the header around it wrapped, the nav inside it could
+// not — and 26 of the 320px reflow specs failed on a horizontally scrolling
+// page. Recorded here because "the page reflows to 320px without sideways
+// scrolling" is a bullet in "What is true today", and it was briefly a false
+// one on this branch. The nav now wraps and all 130 layout specs pass.
+//
+// **Two things are NOT claimed and both are deliberate.** WCAG 3.1.1 Language
+// of Page is met — `<html lang>` follows the cookie, asserted in
+// `e2e/i18n.spec.ts` — and 3.1.2 Language of Parts is met on the toggle, whose
+// buttons carry their own `lang` so "Español" is not read with English
+// phonemes. What is NOT met by translation is anything a lawyer wrote: the
+// legal pages, the lease, every notice, and the three consent disclosures on
+// checkout step 1 stay English, because a translated TCPA disclosure recorded
+// against an English version constant would be evidence of a consent nobody
+// gave. The footer says so in Spanish, in the sentence that already admits the
+// legal pages are unreviewed drafts. That is a product gap (B-259), not an
+// accessibility one, so the "Where we fall short" list is unchanged.
+//
+// The "Where we fall short" list was re-read against this build and all three
+// entries are still true and unchanged in scope: the no-JavaScript hold
+// countdown (the Spanish checkout degrades identically), the staff screens, and
+// the embedded maps. `LAST_REVIEWED` is not bumped, per D-115 — no manual
+// screen-reader pass was performed, and an axe run in a second language is
+// exactly the kind of evidence B-254 says cannot move that date.
 
 export default function AccessibilityPage() {
   return (

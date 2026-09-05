@@ -406,6 +406,26 @@ export type ScannedState = {
 }
 
 export const SCANNED_STATES: readonly ScannedState[] = [
+  // B-090 part 6 (D-122). The site now ships a second language, and the route
+  // loops scan it in exactly one: they carry no locale cookie, so every one of
+  // them measures English. That is not a defect — English is what a crawler
+  // and a first-time visitor get — but it does mean the AA claim on this page
+  // covered a set of strings no Spanish reader ever sees.
+  //
+  // One route closes that honestly rather than all of them badly: the facility
+  // page, because it is the densest customer-facing layout at 320px and the
+  // one a renter spends longest on. `layout: 'reached'` — `STATE_REACH` has a
+  // key for it, so it is measured for reflow, zoom and text spacing as well as
+  // scanned, which is the half that matters when the strings get ~20% longer.
+  //
+  // The other Spanish routes are a named gap, not a silent one: they are in
+  // `STATE_EXCEPTIONS` below.
+  {
+    route: '/storage/[state]/[city]/[slug]',
+    state: 'Spanish',
+    spec: 'e2e/i18n.spec.ts',
+    layout: 'reached',
+  },
   // B-256. The portal route loop scans `/portal` and `/portal/pay` as Dana,
   // who holds units of her own and pays for no account — so a business
   // account's card, its units table and the consolidated bill on the pay
@@ -716,6 +736,25 @@ export type StateException = {
 /// The states a route can be in that no scan reaches, and why — the same bar
 /// as `SCAN_EXCEPTIONS`: genuinely blocked, not merely unscanned yet.
 export const STATE_EXCEPTIONS: readonly StateException[] = [
+  // B-090 part 6 (D-122). Declared rather than left for the route loops to
+  // quietly not reach. Every public route renders in Spanish and only the
+  // facility page is scanned in it (`SCANNED_STATES` above), so the rest are
+  // named here — the page promises to name every gap, and "the scan runs in
+  // English" is a gap that did not exist a day ago.
+  {
+    route: '/',
+    state: 'Spanish',
+    audience: 'public',
+    reason:
+      'the a11y route loops carry no locale cookie, so every public route is scanned in English only; the facility page is scanned and measured in Spanish (above) and the rest of the public site, this route included, is not yet',
+  },
+  {
+    route: '/checkout',
+    state: 'Spanish',
+    audience: 'public',
+    reason:
+      'reached in Spanish by e2e/i18n.spec.ts as far as step 1, which asserts the language rather than running axe — the later steps need a session the scan loop does not build',
+  },
   // B-139 named `/portal/pay/done`'s not-found state as scanned; the four
   // outcomes below are what a real payment settles to, and the demo seed
   // creates none to settle.

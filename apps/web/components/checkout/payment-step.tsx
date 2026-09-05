@@ -5,6 +5,8 @@ import { takeCounterMoveInAction } from '@/app/(public)/checkout/counter-actions
 import { formatRate } from '@/lib/format'
 import { SITE } from '@/lib/site-config'
 import type { AmountDue, PaymentSetup } from '@/lib/checkout/payment'
+import { translate, type Dictionary, type MessageKey } from '@/lib/i18n'
+import { costLineLabel } from '@/lib/pricing/cost-line-copy'
 
 // PRD 01 US-501 step 5 / §4.6, §6.9.
 
@@ -18,6 +20,7 @@ export function PaymentStep({
   returnUrl,
   billingDay,
   counterTender = false,
+  dict,
 }: {
   token: string
   due: AmountDue
@@ -34,7 +37,10 @@ export function PaymentStep({
   /// A prop rather than a lookup in here: this is a server component in a
   /// public route, and the page it renders in already resolves the actor.
   counterTender?: boolean
+  dict: Dictionary
 }) {
+  const t = (key: MessageKey, vars?: Record<string, string | number>) =>
+    translate(dict, key, vars)
   return (
     <div className="mt-4">
       {/* 3.3.4 Error Prevention (Financial): everything being charged, itemised
@@ -42,22 +48,25 @@ export function PaymentStep({
           announces with the thing it is for rather than as a loose number. */}
       <section aria-labelledby="due-heading" className="border-input rounded-lg border p-4">
         <h2 id="due-heading" className="font-medium">
-          What you are paying today
+          {t('pay.whatYouArePaying')}
         </h2>
         <dl className="mt-3 flex flex-col gap-2 text-sm">
           {due.lines.map((line) => (
             <div key={line.key} className="flex justify-between gap-4">
-              <dt>{line.label}</dt>
+              <dt>{costLineLabel(dict, line)}</dt>
               <dd className="tabular-nums">{formatRate(line.amountCents)}</dd>
             </div>
           ))}
           <div className="flex justify-between gap-4 border-t pt-2 text-base font-medium">
-            <dt>Total due today</dt>
+            <dt>{t('facility.totalDueToday')}</dt>
             <dd className="tabular-nums">{formatRate(due.totalDueTodayCents)}</dd>
           </div>
           <div className="text-muted-foreground flex justify-between gap-4">
-            <dt>Then each month</dt>
-            <dd className="tabular-nums">{formatRate(due.ongoingMonthlyCents)}/mo</dd>
+            <dt>{t('facility.thenEachMonth')}</dt>
+            <dd className="tabular-nums">
+              {formatRate(due.ongoingMonthlyCents)}
+              {t('card.perMonth')}
+            </dd>
           </div>
         </dl>
       </section>
@@ -68,9 +77,9 @@ export function PaymentStep({
           the renter has to find later. */}
       <section aria-labelledby="autopay-heading" className="mt-6">
         <h2 id="autopay-heading" className="font-medium">
-          Automatic payments
+          {t('pay.autopayHeading')}
         </h2>
-        <AdminForm action={setAutopayAction} label="Automatic payments" className="mt-2">
+        <AdminForm action={setAutopayAction} label={t('pay.autopayHeading')} className="mt-2">
           <input type="hidden" name="token" value={token} />
           <label className="flex items-start gap-2 text-sm">
             <input
@@ -81,7 +90,7 @@ export function PaymentStep({
               aria-describedby="autopay-disclosure"
               className="mt-1"
             />
-            <span>Pay automatically each month</span>
+            <span>{t('pay.autopayCheckbox')}</span>
           </label>
           {/* B-227. This paragraph was STATIC and always said "Autopay is on."
               A renter who unticked the box and pressed Save reloaded onto a
@@ -94,17 +103,15 @@ export function PaymentStep({
           <p id="autopay-disclosure" className="text-muted-foreground mt-2 text-sm text-pretty">
             {autopayOn ? (
               <>
-                Autopay is on. We will charge this card{' '}
-                <strong>{formatRate(due.ongoingMonthlyCents)}</strong> on day {billingDay} of each
-                month, and email you two days before every charge. You can turn it off here now, or
-                any time from your account.
+                {t('pay.autopayOnBefore')}{' '}
+                <strong>{formatRate(due.ongoingMonthlyCents)}</strong>{' '}
+                {t('pay.autopayOnAfter', { day: billingDay })}
               </>
             ) : (
               <>
-                Autopay is off. Nothing is charged automatically —{' '}
-                <strong>{formatRate(due.ongoingMonthlyCents)}</strong> is due on day {billingDay} of
-                each month and you pay it yourself. We will email you when each payment is due. You
-                can turn it back on here, or any time from your account.
+                {t('pay.autopayOffBefore')}{' '}
+                <strong>{formatRate(due.ongoingMonthlyCents)}</strong>{' '}
+                {t('pay.autopayOffAfter', { day: billingDay })}
               </>
             )}
           </p>
@@ -112,7 +119,7 @@ export function PaymentStep({
             type="submit"
             className="border-input hover:bg-accent mt-3 inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
           >
-            Save this choice
+            {t('pay.saveChoice')}
           </button>
           {/* B-227. There are two submit buttons on this step — this one and
               the card payment below — and a renter who unticks the box and goes
@@ -121,8 +128,7 @@ export function PaymentStep({
               because that would need JavaScript and this checkout works
               without it. */}
           <p className="text-muted-foreground mt-2 text-xs text-pretty">
-            Changing the tick does nothing until you press Save this choice. Paying below without
-            saving keeps the setting above as it now reads.
+            {t('pay.saveWarning')}
           </p>
         </AdminForm>
       </section>
@@ -138,6 +144,10 @@ export function PaymentStep({
           Only rendered for staff. The tenant's own browser sees the card form
           and nothing else, and the server action refuses anyone who is not
           staff regardless of what is on screen. */}
+      {/* B-090 part 6 (D-122): the counter-tender block below is STAFF-only —
+          it is rendered for a staffer standing at the POS, and the rest of the
+          admin surface is English. Left untranslated on purpose, the same rule
+          the rest of `/admin` follows; the customer never sees it. */}
       {counterTender && (
         <section aria-labelledby="counter-heading" className="mt-6">
           <h2 id="counter-heading" className="font-medium">
@@ -199,7 +209,7 @@ export function PaymentStep({
 
       <section aria-labelledby="pay-heading" className="mt-6">
         <h2 id="pay-heading" className="font-medium">
-          Card details
+          {t('pay.cardDetails')}
         </h2>
         {payment.available ? (
           <StripePayment clientSecret={payment.clientSecret} returnUrl={returnUrl} />
@@ -207,15 +217,14 @@ export function PaymentStep({
           // The honest failure. A form that cannot submit is worse than a
           // sentence that ends in a rented unit.
           <p className="border-input mt-3 rounded-lg border p-4 text-pretty">
-            We can&apos;t take card payments online just now.{' '}
+            {t('pay.cardsUnavailable')}{' '}
             <a
               href={`tel:${SITE.phone.href}`}
               className="font-medium underline underline-offset-4"
             >
-              Call {SITE.phone.display}
+              {t('facility.callPhone', { phone: SITE.phone.display })}
             </a>{' '}
-            and we will take payment over the phone and finish your move-in. Your unit stays held in
-            the meantime.
+            {t('pay.cardsUnavailableAfter')}
           </p>
         )}
       </section>

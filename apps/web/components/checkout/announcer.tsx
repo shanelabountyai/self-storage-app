@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { useT } from '@/components/i18n/locale-provider'
 
 // PRD 01 §6.8.1 / 4.1.3, 2.4.3. What tells a renter that a step changed.
 //
@@ -38,6 +39,7 @@ export function CheckoutAnnouncer({
   /// sentence below has to be able to tell which recovery happened.
   sizeLabel: string
 }) {
+  const t = useT()
   const [message, setMessage] = useState('')
   const region = useRef<HTMLParagraphElement>(null)
   const previous = useRef<{
@@ -73,15 +75,15 @@ export function CheckoutAnnouncer({
       // problem was copy that did not match what the product could do.
       setMessage(
         prior.sizeLabel !== sizeLabel
-          ? `We moved you to the ${sizeLabel}. Nothing you entered was lost.`
-          : 'We found you another unit the same size. Nothing you entered was lost.',
+          ? t('announce.movedToSize', { size: sizeLabel })
+          : t('announce.foundSameSize'),
       )
     } else if (prior.step !== step) {
       setMessage(stepLabel)
     } else if (prior.lockExpiresAt !== lockExpiresAt) {
       // The hold was extended. The renter never left the step, so nothing moves
       // their focus — they are mid-lease and reading.
-      setMessage('Your unit is held for another 30 minutes.')
+      setMessage(t('announce.heldAnother30'))
       return
     } else {
       return
@@ -90,6 +92,11 @@ export function CheckoutAnnouncer({
     // 2.4.3: focus follows the change it announced, so the next Tab is into the
     // new step rather than back at the top of the document.
     document.getElementById('step')?.focus()
+    // `t` is stable for the life of a render tree — the dictionary only
+    // changes when the language does, which is a full navigation — so it is
+    // deliberately not a dependency: adding it would re-run this effect on
+    // every render and re-announce a step the renter is already on.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, stepLabel, lockExpiresAt, lapsed, sizeLabel])
 
   // Rendered unconditionally and empty, then written into. A live region

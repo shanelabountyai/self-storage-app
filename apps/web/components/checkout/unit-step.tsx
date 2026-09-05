@@ -5,6 +5,7 @@ import {
   removeUnitAction,
 } from '@/app/(public)/checkout/actions'
 import { formatRate } from '@/lib/format'
+import { translate, type Dictionary, type MessageKey } from '@/lib/i18n'
 
 // PRD 01 US-501 step 2. "Move-in date & unit confirmation."
 //
@@ -46,6 +47,7 @@ export function UnitStep({
   startDate,
   earliest,
   latest,
+  dict,
 }: {
   token: string
   lines: readonly BasketLineView[]
@@ -62,15 +64,22 @@ export function UnitStep({
   /// beside it. B-106.
   earliest: string
   latest: string
+  dict: Dictionary
 }) {
+  const t = (key: MessageKey, vars?: Record<string, string | number>) =>
+    translate(dict, key, vars)
   const monthlyCents = lines.reduce((sum, line) => sum + line.quotedRateCents, 0)
 
   return (
     <div className="mt-4">
       <p className="text-muted-foreground text-sm">
         {lines.length === 1
-          ? `Your unit at ${facilityName}.`
-          : `Your ${lines.length} units at ${facilityName} — ${formatRate(monthlyCents)}/mo in total.`}
+          ? t('unit.oneAt', { facility: facilityName })
+          : t('unit.manyAt', {
+              count: lines.length,
+              facility: facilityName,
+              total: `${formatRate(monthlyCents)}${t('card.perMonth')}`,
+            })}
       </p>
 
       <ul className="mt-3 flex flex-col gap-3">
@@ -78,7 +87,9 @@ export function UnitStep({
           // The unit number when we have one, and the size when we do not —
           // a unit is only assigned a number once claimed, and the region still
           // needs a name that tells this line from the one below it.
-          const name = line.unitNumber ? `Unit ${line.unitNumber}` : `${line.unitLabel} (unit ${index + 1})`
+          const name = line.unitNumber
+            ? t('unit.numbered', { number: line.unitNumber })
+            : t('unit.unnumbered', { label: line.unitLabel, index: index + 1 })
           const headingId = `basket-line-${line.id}`
 
           return (
@@ -95,7 +106,10 @@ export function UnitStep({
                   {/* The rate locked when this line was added. US-301: price
                       seen is price charged, so it cannot move under the renter
                       mid-checkout even if the published rate changes. */}
-                  <p className="mt-1 tabular-nums">{formatRate(line.quotedRateCents)}/mo</p>
+                  <p className="mt-1 tabular-nums">
+                    {formatRate(line.quotedRateCents)}
+                    {t('card.perMonth')}
+                  </p>
                 </div>
 
                 {/* Withheld rather than disabled when it is the only unit left.
@@ -106,7 +120,7 @@ export function UnitStep({
                 {lines.length > 1 && (
                   <AdminForm
                     action={removeUnitAction}
-                    label={`Remove ${name}`}
+                    label={t('unit.remove', { name })}
                     className="shrink-0"
                   >
                     <input type="hidden" name="token" value={token} />
@@ -115,7 +129,7 @@ export function UnitStep({
                       type="submit"
                       className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
                     >
-                      Remove {name}
+                      {t('unit.remove', { name })}
                     </button>
                   </AdminForm>
                 )}
@@ -128,7 +142,7 @@ export function UnitStep({
       {addableTypes.length > 0 && (
         <AdminForm
           action={addUnitAction}
-          label="Add another unit"
+          label={t('unit.addFormLabel')}
           className="border-input mt-3 flex flex-wrap items-end gap-3 rounded-lg border border-dashed p-4"
         >
           <input type="hidden" name="token" value={token} />
@@ -138,14 +152,15 @@ export function UnitStep({
             // a select sharing it gives two elements one name, which is the
             // same 4.1.2 defect this step fixes for the Remove controls. Found
             // by the spec below rather than by review.
-            label="Size to add"
+            label={t('unit.sizeToAdd')}
             as="select"
-            hint="Renting more than one? Add it here and pay for them together."
+            hint={t('unit.sizeToAddHint')}
             className="flex flex-1 flex-col gap-1 text-sm"
           >
             {addableTypes.map((type) => (
               <option key={type.unitTypeId} value={type.unitTypeId}>
-                {type.label} — {formatRate(type.webRateCents)}/mo
+                {type.label} — {formatRate(type.webRateCents)}
+                {t('card.perMonth')}
               </option>
             ))}
           </Field>
@@ -153,17 +168,20 @@ export function UnitStep({
             type="submit"
             className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
           >
-            Add to my rental
+            {t('unit.addToRental')}
           </button>
         </AdminForm>
       )}
 
       <p className="text-muted-foreground mt-3 text-sm text-pretty">
-        Month-to-month — no long-term commitment. We are holding{' '}
-        {lines.length === 1 ? 'this unit' : 'these units'} for you while you finish.
+        {lines.length === 1 ? t('unit.holdingOne') : t('unit.holdingMany')}
       </p>
 
-      <AdminForm action={confirmUnitAction} label="Confirm this unit" className="mt-4 flex flex-col gap-3">
+      <AdminForm
+        action={confirmUnitAction}
+        label={t('unit.confirmFormLabel')}
+        className="mt-4 flex flex-col gap-3"
+      >
         <input type="hidden" name="token" value={token} />
         {/* B-106. A real date field, not a fixed "today".
 
@@ -174,15 +192,15 @@ export function UnitStep({
             way: `min`/`max` are a convenience, never the enforcement. */}
         <Field
           name="startDate"
-          label={lines.length === 1 ? 'Move-in date' : 'Move-in date for all your units'}
+          label={lines.length === 1 ? t('unit.moveInDate') : t('unit.moveInDateAll')}
           type="date"
           defaultValue={startDate}
           min={earliest}
           max={latest}
           hint={
             earliest === latest
-              ? 'Move-ins start today at this location.'
-              : `Any day from ${earliest} to ${latest}. Leave it as it is to move in today.`
+              ? t('unit.startsToday')
+              : t('unit.dateRange', { earliest, latest })
           }
           className="flex flex-col gap-1 text-sm"
         />
@@ -190,7 +208,7 @@ export function UnitStep({
           type="submit"
           className="bg-primary text-primary-foreground inline-flex min-h-11 w-full items-center justify-center rounded-md px-4 text-base font-medium sm:w-auto"
         >
-          {lines.length === 1 ? 'This is right — continue' : 'These are right — continue'}
+          {lines.length === 1 ? t('unit.confirmOne') : t('unit.confirmMany')}
         </button>
       </AdminForm>
     </div>

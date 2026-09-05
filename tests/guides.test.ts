@@ -11,6 +11,7 @@ import {
   SIZE_GUIDE_ENTRY,
 } from '../apps/web/lib/guides/catalog'
 import { FEATURE_FILTERS, SIZE_BANDS } from '../apps/web/lib/inventory/unit-filters'
+import { en } from '../apps/web/lib/i18n/en'
 import {
   articleJsonLd,
   DESCRIPTION_HARD_MAX,
@@ -111,8 +112,14 @@ describe('AC3 contextual CTAs', () => {
 
   it('labels the filter with the same words the facility page control uses', () => {
     // A reader who follows the CTA should recognise where they landed.
-    expect(guideFilterLabel({ size: 'medium' })).toBe(SIZE_BANDS.medium.label)
-    expect(guideFilterLabel({ feature: 'climate' })).toBe(FEATURE_FILTERS.climate.label)
+    //
+    // B-090 part 6 moved the words into the dictionaries and left the KEY on
+    // the band, so the assertion resolves the key the same way the control
+    // does. It stays an English lookup on purpose: the guides are English MDX
+    // prose, and `guideFilterLabel` is documented as resolving against `en`
+    // for exactly that reason.
+    expect(guideFilterLabel({ size: 'medium' })).toBe(en[SIZE_BANDS.medium.labelKey])
+    expect(guideFilterLabel({ feature: 'climate' })).toBe(en[FEATURE_FILTERS.climate.labelKey])
   })
 })
 

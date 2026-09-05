@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useT } from '@/components/i18n/locale-provider'
 
 // US-101: browser geolocation is "offered but never required; declining it
 // degrades gracefully to manual entry."
@@ -20,6 +21,7 @@ export function UseMyLocation({
   carry = '',
 }: { carry?: string } = {}) {
   const router = useRouter()
+  const t = useT()
   const [state, setState] = useState<'idle' | 'locating' | 'unavailable' | 'denied'>('idle')
 
   function locate() {
@@ -60,7 +62,7 @@ export function UseMyLocation({
         aria-busy={state === 'locating'}
         className="text-sm underline underline-offset-4 aria-busy:opacity-60"
       >
-        {state === 'locating' ? 'Finding you…' : 'Use my location'}
+        {state === 'locating' ? t('location.finding') : t('location.use')}
       </button>
 
       {/* Rendered unconditionally and empty, then written into. A live region
@@ -73,11 +75,9 @@ export function UseMyLocation({
           ten seconds after activation has failed the user, whatever it does
           next. */}
       <p role="status" className="text-muted-foreground mt-1 text-sm empty:mt-0">
-        {state === 'locating' && 'Finding your location…'}
-        {state === 'unavailable' &&
-          "This browser can't share your location. Enter a zip code or city instead."}
-        {state === 'denied' &&
-          "We couldn't get your location. Enter a zip code or city instead."}
+        {state === 'locating' && t('location.findingStatus')}
+        {state === 'unavailable' && t('location.unavailable')}
+        {state === 'denied' && t('location.denied')}
       </p>
     </div>
   )

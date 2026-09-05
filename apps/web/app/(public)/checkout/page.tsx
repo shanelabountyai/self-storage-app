@@ -51,10 +51,23 @@ import {
 import type { DayOfWeek } from '@storage/core/facility-settings'
 import { advanceAction, applyPromoCodeAction, relockAction, relockAtSizeAction } from './actions'
 import { PromoCodeStep } from '@/components/checkout/promo-code-step'
+import {
+  dictionaryFor,
+  translate,
+  type Dictionary,
+  type MessageKey,
+} from '@/lib/i18n'
+import { getLocale } from '@/lib/i18n/server'
 
-export const metadata = {
-  title: 'Move in online',
-  robots: { index: false, follow: false },
+// B-090 part 6. `robots` is unchanged and is the reason the language never
+// reaches a crawler here at all: checkout is noindex, so there is no SEO
+// consequence to this page rendering in either language.
+export async function generateMetadata() {
+  const dict = dictionaryFor(await getLocale())
+  return {
+    title: translate(dict, 'checkout.title'),
+    robots: { index: false, follow: false },
+  }
 }
 
 // PRD 01 FR-4.1. The stepper shell.
@@ -73,8 +86,8 @@ function minutesLeft(lockExpiresAt: Date): number {
 /// The confirmation page's one line of hours: what matters right now, to
 /// someone about to drive to the unit they just paid for — not the full
 /// weekly table the facility page shows.
-function todaysGateHours(facility: PublicFacility): string {
-  if (!facility.gateHours) return 'Gate hours: call to confirm before you head over.'
+function todaysGateHours(facility: PublicFacility, dict: Dictionary): string {
+  if (!facility.gateHours) return translate(dict, 'checkout.gateHoursUnknown')
   const weekday = new Intl.DateTimeFormat('en-US', {
     weekday: 'long',
     timeZone: facility.timezone,
@@ -82,8 +95,11 @@ function todaysGateHours(facility: PublicFacility): string {
     .format(new Date())
     .toLowerCase() as DayOfWeek
   const today = facility.gateHours[weekday]
-  if (today.closed) return 'The gate is closed today.'
-  return `Gate hours today: ${formatTimeOfDay(today.open)}–${formatTimeOfDay(today.close)}.`
+  if (today.closed) return translate(dict, 'checkout.gateClosedToday')
+  return translate(dict, 'checkout.gateHoursToday', {
+    open: formatTimeOfDay(today.open),
+    close: formatTimeOfDay(today.close),
+  })
 }
 
 export default async function CheckoutPage({
@@ -93,22 +109,23 @@ export default async function CheckoutPage({
 }) {
   const { token } = await searchParams
   const session = token ? await sessionByToken(token) : null
+  const dict = dictionaryFor(await getLocale())
+  const t = (key: MessageKey, vars?: Record<string, string | number>) =>
+    translate(dict, key, vars)
 
   if (!session) {
     return (
       <div className="mx-auto w-full max-w-xl px-4 py-12">
         <h1 className="text-3xl font-semibold tracking-tight text-balance">
-          We couldn&apos;t find that checkout
+          {t('checkout.notFoundHeading')}
         </h1>
-        <p className="mt-4 text-pretty">
-          The link may have expired. Nothing has been charged, and nothing is being held for you.
-        </p>
+        <p className="mt-4 text-pretty">{t('checkout.notFoundBody')}</p>
         <p className="mt-4">
           <Link href="/storage/search" className="underline underline-offset-4">
-            Find a unit
+            {t('checkout.findAUnit')}
           </Link>{' '}
           <span className="text-muted-foreground">
-            or call{' '}
+            {t('checkout.orCall')}{' '}
             <a href={`tel:${SITE.phone.href}`} className="underline underline-offset-4">
               {SITE.phone.display}
             </a>
@@ -262,7 +279,13 @@ export default async function CheckoutPage({
   const numberByUnitId = new Map(basketUnits.map((unit) => [unit.id, unit.number]))
   const labelFor = (typeId: string) => {
     const type = inventory?.unitTypes.find((candidate) => candidate.unitTypeId === typeId)
-    return type ? `${type.widthFt} foot by ${type.lengthFt} foot ${type.name}` : 'Storage unit'
+    return type
+      ? t('checkout.unitLabel', {
+          width: type.widthFt,
+          length: type.lengthFt,
+          name: type.name,
+        })
+      : t('checkout.storageUnit')
   }
   const basketLines = session.units.map((line) => ({
     id: line.id,
@@ -354,15 +377,21 @@ export default async function CheckoutPage({
     const rateDiff = type.webRateCents - session.quotedRateCents
     const money =
       rateDiff === 0
-        ? 'the same price as the unit you had'
-        : `${formatCents(Math.abs(rateDiff))} ${rateDiff > 0 ? 'more' : 'less'} a month than the unit you had`
+        ? t('checkout.samePrice')
+        : t('checkout.priceDiff', {
+            amount: formatCents(Math.abs(rateDiff)),
+            direction: t(rateDiff > 0 ? 'checkout.more' : 'checkout.less'),
+          })
     if (!unitType) return money
     const areaDiff = type.sqFt - unitType.sqFt
     const area =
       areaDiff === 0
-        ? 'the same floor area'
-        : `${Math.abs(areaDiff)} sq ft ${areaDiff > 0 ? 'bigger' : 'smaller'}`
-    return `${area}, ${money}`
+        ? t('checkout.sameArea')
+        : t('checkout.areaDiff', {
+            amount: Math.abs(areaDiff),
+            direction: t(areaDiff > 0 ? 'checkout.bigger' : 'checkout.smaller'),
+          })
+    return t('checkout.trade', { area, money })
   }
 
   const stepIndex = STEPS.indexOf(session.step)
@@ -375,22 +404,30 @@ export default async function CheckoutPage({
 
   return (
     <div className="mx-auto w-full max-w-2xl px-4 py-12">
-      <h1 className="text-3xl font-semibold tracking-tight text-balance">Move in online</h1>
+      <h1 className="text-3xl font-semibold tracking-tight text-balance">
+        {t('checkout.title')}
+      </h1>
 
       {/* Above everything conditional on purpose: it has to outlive the step it
           is reporting on. See the note in announcer.tsx. */}
       <CheckoutAnnouncer
         step={session.step}
-        stepLabel={stepAnnouncement(session.step)}
+        stepLabel={stepAnnouncement(session.step, dict)}
         lockExpiresAt={session.lockExpiresAt.toISOString()}
         lapsed={lockLapsed}
         sizeLabel={
-          unitType ? `${unitType.widthFt} foot by ${unitType.lengthFt} foot ${unitType.name}` : ''
+          unitType
+            ? t('checkout.unitLabel', {
+                width: unitType.widthFt,
+                length: unitType.lengthFt,
+                name: unitType.name,
+              })
+            : ''
         }
       />
 
       <div className="mt-6">
-        <Stepper current={session.step} token={token} />
+        <Stepper current={session.step} token={token} dict={dict} />
       </div>
 
       {/* FR-4.1's unit-lost fallback. The renter keeps every answer they have
@@ -411,26 +448,26 @@ export default async function CheckoutPage({
       {lockLapsed && (
         <section aria-labelledby="lost" className="border-input mt-6 rounded-lg border p-4">
           <h2 id="lost" className="text-xl font-medium">
-            We couldn&apos;t keep that unit
+            {t('checkout.lostHeading')}
           </h2>
           <p className="mt-2 text-pretty">
-            We hold a unit for 30 minutes while you move in, and that time ran out.{' '}
-            <strong>Nothing has been charged.</strong>{' '}
+            {t('checkout.lostIntro')}{' '}
+            <strong>{t('checkout.nothingCharged')}</strong>{' '}
             {sizeStillAvailable
-              ? 'Everything you have entered is still here — we just need to put you on another unit the same size.'
+              ? t('checkout.lostSameSize')
               : canMoveSize
-                ? 'That size has gone while you were deciding. Everything you have entered is still here, and we can move it onto any of the sizes below.'
-                : 'That size has gone while you were deciding. We cannot move this checkout onto another size from here, so the quickest route is a phone call — or pick a size on the facility page and start again.'}
+                ? t('checkout.lostCanMove')
+                : t('checkout.lostCannotMove')}
           </p>
 
           {sizeStillAvailable ? (
-            <AdminForm action={relockAction} label="Find me another unit" className="mt-3">
+            <AdminForm action={relockAction} label={t('checkout.findAnother')} className="mt-3">
               <input type="hidden" name="sessionId" value={session.id} />
               <button
                 type="submit"
                 className="bg-primary text-primary-foreground inline-flex min-h-11 items-center rounded-md px-4 text-sm font-medium"
               >
-                Find me another unit the same size
+                {t('checkout.findAnotherSameSize')}
               </button>
             </AdminForm>
           ) : (
@@ -440,7 +477,7 @@ export default async function CheckoutPage({
                   phone={lostPhone}
                   className="font-medium underline underline-offset-4"
                 />{' '}
-                and we will find you something — or pick one of these.
+                {t('checkout.callAndWeWillFind')}
               </p>
 
               {/* The facility's own ordering, smallest first. No recommender:
@@ -460,8 +497,8 @@ export default async function CheckoutPage({
                 <div>
                   <h3 className="font-medium">
                     {canMoveSize
-                      ? `Move to another size at ${inventory.facility.name}`
-                      : `Other sizes at ${inventory.facility.name}`}
+                      ? t('checkout.moveToAnotherSize', { facility: inventory.facility.name })
+                      : t('checkout.otherSizesAt', { facility: inventory.facility.name })}
                   </h3>
                   <ul className="mt-2 grid gap-2">
                     {alternatives.map((type) => (
@@ -477,17 +514,28 @@ export default async function CheckoutPage({
                             {type.widthFt}&prime; &times; {type.lengthFt}&prime; {type.name}
                           </span>
                           <span className="sr-only">
-                            {type.widthFt} foot by {type.lengthFt} foot {type.name}
+                            {t('checkout.unitLabel', {
+                              width: type.widthFt,
+                              length: type.lengthFt,
+                              name: type.name,
+                            })}
                           </span>
                         </span>
-                        <span className="tabular-nums">{formatCents(type.webRateCents)}/mo</span>
+                        <span className="tabular-nums">
+                          {formatCents(type.webRateCents)}
+                          {t('card.perMonth')}
+                        </span>
                         <span className="text-muted-foreground text-sm text-pretty">
                           {tradeAgainstLost(type)}
                         </span>
                         {canMoveSize && (
                           <AdminForm
                             action={relockAtSizeAction}
-                            label={`Move me to the ${type.widthFt} foot by ${type.lengthFt} foot ${type.name}`}
+                            label={t('checkout.moveMeToSize', {
+                              width: type.widthFt,
+                              length: type.lengthFt,
+                              name: type.name,
+                            })}
                             className="w-full"
                           >
                             <input type="hidden" name="sessionId" value={session.id} />
@@ -502,10 +550,14 @@ export default async function CheckoutPage({
                                 the component created to fix it. */}
                             <button
                               type="submit"
-                              aria-label={`Move me to the ${type.widthFt} foot by ${type.lengthFt} foot ${type.name}`}
+                              aria-label={t('checkout.moveMeToSize', {
+                                width: type.widthFt,
+                                length: type.lengthFt,
+                                name: type.name,
+                              })}
                               className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
                             >
-                              Move me to this size
+                              {t('checkout.moveMeToThisSize')}
                             </button>
                           </AdminForm>
                         )}
@@ -517,7 +569,7 @@ export default async function CheckoutPage({
                       href={facilityPath(inventory.facility)}
                       className="underline underline-offset-4"
                     >
-                      Read about these sizes at {inventory.facility.name}
+                      {t('checkout.readAboutSizes', { facility: inventory.facility.name })}
                     </Link>
                   </p>
                 </div>
@@ -532,13 +584,19 @@ export default async function CheckoutPage({
                       Or wait for a {unitType.widthFt}&prime; &times; {unitType.lengthFt}&prime;
                     </span>
                     <span className="sr-only">
-                      Or wait for a {unitType.widthFt} foot by {unitType.lengthFt} foot
+                      {t('checkout.orWaitFor', {
+                        width: unitType.widthFt,
+                        length: unitType.lengthFt,
+                      })}
                     </span>
                   </h3>
                   <WaitlistForm
                     facilityId={session.facilityId}
                     unitTypeId={unitType.unitTypeId}
-                    sizeLabel={`${unitType.widthFt} foot by ${unitType.lengthFt} foot`}
+                    sizeLabel={t('facility.footBy', {
+                      width: unitType.widthFt,
+                      length: unitType.lengthFt,
+                    })}
                     action={joinWaitlistAction}
                   />
                 </div>
@@ -567,12 +625,12 @@ export default async function CheckoutPage({
           {/* Each step's own form arrives with its item; what this owns is that
               the heading exists, is focusable, and names where the renter is. */}
           <h2 id="step" tabIndex={-1} className="text-xl font-medium">
-            {session.step === 'details' && 'Your details'}
-            {session.step === 'unit_assign' && 'Your unit'}
-            {session.step === 'insurance' && 'Protect what you store'}
-            {session.step === 'lease' && 'Your lease'}
-            {session.step === 'payment' && 'Payment'}
-            {session.step === 'provisioned' && 'You are moved in'}
+            {session.step === 'details' && t('step.details')}
+            {session.step === 'unit_assign' && t('step.unit_assign')}
+            {session.step === 'insurance' && t('checkout.stepProtect')}
+            {session.step === 'lease' && t('checkout.stepLease')}
+            {session.step === 'payment' && t('step.payment')}
+            {session.step === 'provisioned' && t('checkout.stepMovedIn')}
           </h2>
 
           {/* Session data wins over the reservation prefill: if the renter has
@@ -583,6 +641,7 @@ export default async function CheckoutPage({
               token={token!}
               prefill={detailsPrefill}
               manualLocality={manualLocality}
+              dict={dict}
             />
           )}
 
@@ -601,6 +660,7 @@ export default async function CheckoutPage({
               }
               earliest={isoDate(startWindow.earliest)}
               latest={isoDate(startWindow.latest)}
+              dict={dict}
             />
           )}
 
@@ -614,6 +674,7 @@ export default async function CheckoutPage({
                   : (chosenProtection ?? defaultTier(plans))
               }
               required={facilityPolicy?.protectionRequired ?? true}
+              dict={dict}
               waiver={
                 priorWaiver && {
                   // Nullable on the model — a waiver can also be raised by
@@ -648,6 +709,7 @@ export default async function CheckoutPage({
                   : undefined
               }
               activeDutyMilitary={session.data.activeDutyMilitary === true}
+              dict={dict}
             />
           )}
 
@@ -666,23 +728,23 @@ export default async function CheckoutPage({
                 businessDateFor(new Date(), facilityPolicy?.timezone ?? 'UTC'),
               )}
               counterTender={counterTender}
+              dict={dict}
             />
           )}
 
           {session.step === 'provisioned' && (
             <div className="mt-4">
               <p className="text-pretty">
-                Your unit is yours. We have emailed your lease and receipt to{' '}
-                <strong>{session.email}</strong>.
+                {t('checkout.emailedTo')} <strong>{session.email}</strong>.
               </p>
               {/* B-239. The email is the only copy of the lease the renter has,
                   and "it never arrived" is the commonest first support call
                   after a move-in. One sentence, beside the claim it qualifies,
                   rather than a support page to find. */}
               <p className="text-muted-foreground mt-1 text-sm text-pretty">
-                Didn&apos;t arrive? Check your spam folder, or{' '}
-                <CallLink phone={lostPhone} className="underline underline-offset-4" /> and we will
-                send it again.
+                {t('checkout.didntArrive')}{' '}
+                <CallLink phone={lostPhone} className="underline underline-offset-4" />{' '}
+                {t('checkout.didntArriveAfter')}
               </p>
 
               {/* US-501 step 7. `confirmationCode` is null whenever there is
@@ -691,21 +753,21 @@ export default async function CheckoutPage({
                   rather than showing a placeholder that looks like a code. */}
               {confirmationCode ? (
                 <div className="border-input mt-4 rounded-lg border p-4">
-                  <p className="text-muted-foreground text-sm">Your gate code</p>
+                  <p className="text-muted-foreground text-sm">{t('checkout.yourGateCode')}</p>
                   <p className="mt-1 text-4xl font-semibold tracking-widest tabular-nums select-all">
                     {confirmationCode}
                   </p>
                   {reservation?.unit?.number && (
                     <p className="text-muted-foreground mt-2 text-sm">
-                      Unit {reservation.unit.number}
+                      {t('checkout.unitNumber', { number: reservation.unit.number })}
                     </p>
                   )}
                 </div>
               ) : (
                 <p className="border-input mt-4 rounded-lg border p-4 text-pretty">
-                  Your gate code will be texted to you within 15 minutes. If it has not arrived:{' '}
+                  {t('checkout.codeComing')}{' '}
                   <CallLink phone={lostPhone} className="font-medium underline underline-offset-4" />{' '}
-                  and we will read it to you — you can move in either way.
+                  {t('checkout.codeComingAfter')}
                 </p>
               )}
 
@@ -719,12 +781,13 @@ export default async function CheckoutPage({
                   intention. */}
               {nextCharge && (
                 <p className="mt-4 text-pretty">
-                  Your next payment is{' '}
-                  <strong className="tabular-nums">{formatRate(nextCharge.totalCents)}</strong> on{' '}
+                  {t('checkout.nextPaymentBefore')}{' '}
+                  <strong className="tabular-nums">{formatRate(nextCharge.totalCents)}</strong>{' '}
+                  {t('checkout.nextPaymentOn')}{' '}
                   {formatCalendarDate(nextCharge.dueDate, { month: 'long', day: 'numeric' })}.{' '}
                   {nextCharge.autopayEnabled
-                    ? 'Autopay is on — we will email you two days before every charge.'
-                    : 'Autopay is off, so you pay it yourself. We will email you when it is due.'}
+                    ? t('checkout.autopayOn')
+                    : t('checkout.autopayOff')}
                 </p>
               )}
 
@@ -741,7 +804,7 @@ export default async function CheckoutPage({
                   href="/portal"
                   className="bg-primary text-primary-foreground inline-flex min-h-11 items-center rounded-md px-4 text-sm font-medium"
                 >
-                  Go to my account
+                  {t('checkout.goToAccount')}
                 </Link>
               </p>
 
@@ -751,26 +814,26 @@ export default async function CheckoutPage({
                   "or buy one at the office" is true wherever the counter has
                   them. */}
               <p className="text-muted-foreground mt-3 text-sm text-pretty">
-                Bring your own lock, or buy one at the office.
+                {t('checkout.bringALock')}
               </p>
 
               {confirmationFacility && (
                 <div className="mt-4 text-sm text-pretty">
                   <address className="not-italic">{formatAddress(confirmationFacility)}</address>
-                  <p className="mt-1">{todaysGateHours(confirmationFacility)}</p>
+                  <p className="mt-1">{todaysGateHours(confirmationFacility, dict)}</p>
                   <p className="mt-1">
                     <a
                       href={directionsUrl(confirmationFacility)}
                       className="underline underline-offset-4"
                     >
-                      Get directions
+                      {t('checkout.getDirections')}
                     </a>{' '}
                     ·{' '}
                     <Link
                       href={facilityPath(confirmationFacility)}
                       className="underline underline-offset-4"
                     >
-                      Facility hours &amp; details
+                      {t('checkout.facilityHours')}
                     </Link>
                   </p>
                 </div>
@@ -783,14 +846,14 @@ export default async function CheckoutPage({
           {!['details', 'unit_assign', 'insurance', 'lease', 'payment', 'provisioned'].includes(
             session.step,
           ) && (
-            <AdminForm action={advanceAction} label="Continue" className="mt-4">
+            <AdminForm action={advanceAction} label={t('checkout.continue')} className="mt-4">
               <input type="hidden" name="token" value={token} />
               <input type="hidden" name="from" value={session.step} />
               <button
                 type="submit"
                 className="bg-primary text-primary-foreground inline-flex min-h-11 items-center rounded-md px-4 text-sm font-medium"
               >
-                Continue
+                {t('checkout.continue')}
               </button>
             </AdminForm>
           )}
@@ -804,10 +867,12 @@ export default async function CheckoutPage({
             <BackControl
               token={token!}
               to={previousStep}
-              label={`Back to ${labelForStep(previousStep).toLowerCase()}`}
+              label={t('checkout.backTo', {
+                step: labelForStep(previousStep, dict).toLowerCase(),
+              })}
               note={
                 session.step === 'payment'
-                  ? 'Nothing has been charged yet. Your unit stays held while you go back.'
+                  ? t('checkout.backNoteNothingCharged')
                   : undefined
               }
             />
@@ -834,6 +899,7 @@ export default async function CheckoutPage({
             // US-301 names, and the reason the summary takes the lines rather
             // than a pre-summed total.
             units={summaryUnits}
+            dict={dict}
             facilityName={inventory!.facility.name}
             // Per unit, as D-52 has it. The summary multiplies by the basket
             // size itself rather than being handed a product, so the "× N"
@@ -870,6 +936,7 @@ export default async function CheckoutPage({
               token={token!}
               action={applyPromoCodeAction}
               appliedTerms={lockedPromo?.terms ?? null}
+              dict={dict}
             />
           )}
         </div>
