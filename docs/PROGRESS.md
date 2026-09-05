@@ -8417,7 +8417,7 @@ Sixteen equally weighted chips in one `<nav aria-label="Financial reports">`. Si
 
 ## B-090d — broadcast sends (B-090 part 4)
 
-`PENDING`
+`0d4cd9c`
 
 PRD 05 CN-21 has been a firm P2 commitment since the PRDs were written and no row owned it until B-090's 2026-08-20 split. Nothing in the product could tell a hundred tenants the gate is closed on Thursday: every message the system sends is emitted by an event, and "power outage today" — the PRD's own example — is emitted by a person.
 
