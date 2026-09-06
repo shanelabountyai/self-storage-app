@@ -11,7 +11,7 @@ It complements rather than duplicates:
 - `git log` — the change-by-change record
 - `README.md` — how the built thing works today
 
-**Status:** 255 of 266 backlog items complete. Latest entry: Chore.
+**Status:** 255 of 266 backlog items complete. Latest entry: Chore (`3fa83b3`).
 **Entries:** 285 across 20 part files.
 
 ## Reading one entry
@@ -333,4 +333,4 @@ Append the entry as a `### ` heading at the end of the **highest-numbered** file
 | B-260 part 1 — The portal in Spanish (2026-09-05) | — | [20-from-b-258](progress/20-from-b-258.md#b-260-part-1-the-portal-in-spanish-2026-09-05) |
 | Chore — the build record was too large to read, so no session read it | `e33c60f` `2d63bfe` | [20-from-b-258](progress/20-from-b-258.md#chore-the-build-record-was-too-large-to-read-so-no-session-read-it) |
 | Chore — the decision log gets an index, reversing what the split left behind | `7f8f988` | [20-from-b-258](progress/20-from-b-258.md#chore-the-decision-log-gets-an-index-reversing-what-the-split-left-behind) |
-| Chore — an index gives an address; the row is still in a 493 KB file | — | [20-from-b-258](progress/20-from-b-258.md#chore-an-index-gives-an-address-the-row-is-still-in-a-493-kb-file) |
+| Chore — an index gives an address; the row is still in a 493 KB file | `3fa83b3` | [20-from-b-258](progress/20-from-b-258.md#chore-an-index-gives-an-address-the-row-is-still-in-a-493-kb-file) |
