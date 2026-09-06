@@ -8773,7 +8773,7 @@ Two new suites carry the properties that will rot first. `tests/comms-catalog-lo
 
 ## B-263 — The Spanish checkout refuses you in Spanish (2026-09-06)
 
-**Commit:** `TBD`
+**Commit:** `618f531`
 
 B-090f translated every label, heading and status on the money path. What it did not reach is the **field errors**, because they are built inside the validators rather than in the action that holds the dictionary. So a Spanish renter filled in a Spanish form, got it wrong, and was corrected in English — at exactly the moment 3.3.3 wants a suggestion they can act on, one screen from paying.
 
