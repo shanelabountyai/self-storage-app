@@ -1,42 +1,50 @@
 # Next
 
-**B-261 — every email and text still goes out in English.** ([06-backlog.md](docs/prds/06-backlog.md))
+**B-263 — the Spanish checkout answers in English the moment it refuses you.**
+([06-backlog.md](docs/prds/06-backlog.md))
 
-B-259 shipped on 2026-09-06 (**D-125**) and was B-261's last blocker. The
-renter can now browse, rent, pay, run their account and read the policy pages
-in Spanish, and give consent in Spanish against a record that names the Spanish
-words. Then we email them in English.
+B-261 shipped on 2026-09-06 (**D-126, D-127, D-128**). The renter now browses,
+rents, pays, runs their account and is *written to* in Spanish. What is left is
+smaller and sharper.
 
-**The dunning ladder is why this one matters.** It ends in a lien file, so the
-account least able to read our English is the account it matters most on.
+**Three rows are open, all from the same seam. Pick one; B-263 is the
+recommendation** — it is on the money path, it is a type change rather than a
+copy change, and 3.3.3 wants a suggestion the renter can act on at exactly the
+moment this one speaks English.
 
-The row's own shape:
+1. **B-263 (M)** — `validateDetails`, `validateDeclarations` and
+   `validateSignature` return English literals. **The fix is that the
+   validators return message KEYS and the action translates them**, not that
+   the strings move into the dictionary at the call site: `validateDetails` is
+   shared with admin surfaces that are English by design (D-122). `FieldErrors`
+   is `Record<string, string>` today, which is what makes it a type change.
+2. **B-264 (S)** — the lead form on the translated facility page is entirely
+   English. Its marketing-email disclosure needs the B-259 treatment (a version
+   per language in `lib/consent/disclosures.ts`, the rendered locale recorded);
+   the rest is ordinary copy. Do the whole form — translating the disclosure
+   alone means nothing.
+3. **B-265 (M, new)** — the six `sendDirectEmail` callers compose their own
+   body, so `MessageTemplate.locale` reaches none of them. **The checkout
+   resume link is the one that matters**: end of step 1, so it is the *first*
+   email a Spanish renter gets. The open question that made it its own row is
+   what language to use for a reservation or magic-link recipient who has no
+   `Tenant` row at all (D-7 makes both anonymous).
 
-1. **`Tenant.preferredLocale`** — written from the `st_locale` cookie at
-   checkout, read by `deliverForRule`. It is a column that configures
-   behaviour, so **its control ships in the same item** (this repo's rule, and
-   five columns already shipped reachable only from a database client).
-2. **A Spanish variant per seeded template.** The comms catalog is SEEDED
-   state: `npm run db:migrate:test` after a template edit, and **again when you
-   switch branches** — otherwise the suites fail as `expected [] to have a
-   length of 1`, which reads exactly like a broken sender (B-206).
-3. **Notices stay English regardless.** A lien notice is a legal document and
-   D-122 keeps those in one language.
+**Two things B-261 leaves you that are easy to break:**
 
-Two traps already paid for: a template's `requiredMergeFields` must be
-satisfiable in BOTH languages or `renderEmail` throws and the message is
-recorded `failed`; and anything asserting a MARKETING message was sent must pin
-the clock with `vi.useFakeTimers({ toFake: ['Date'] })`, or it passes between
-8am and 9pm Central and fails outside it.
+- **`npm run db:migrate:test` after switching branches**, not only after a
+  migration. The catalog is seeded state and now has **96 rows, not 48** — a
+  branch without the Spanish variants reseeds them away, and the suites fail as
+  `expected [] to have a length of 1`, which reads exactly like a broken sender
+  (B-206).
+- **`tests/comms-catalog-locale.test.ts` is pure and fast** and will fail on a
+  template edit that drops a merge field from one language. Trust it: it checks
+  both directions plus untranslated pastes.
 
-Also newly open, both found while building B-259 and both smaller:
-**B-263** (every field-validation message on the Spanish checkout is still
-English — a type change, the validators must return keys) and **B-264** (the
-lead form on the translated facility page is entirely English, its
-marketing-email disclosure included).
-
-Not open, and deliberately: the guides and the city/size SEO surfaces stay
-English (**D-123**). Reversing that means reversing D-122 and PRD 04 §3.
+**Do not reverse without reversing a decision.** The mailed lien notice stays
+English and the Spanish courtesy email says so (**D-127**). The template
+fallback is English-rather-than-refuse (**D-126**). An unauthenticated checkout
+fills a blank language and never overwrites a stated one (**D-128**).
 
 **Run `npm run db:reset-test` if the unit suite starts timing out** —
 `storage_test` accumulates facilities and the symptom reads exactly like a
