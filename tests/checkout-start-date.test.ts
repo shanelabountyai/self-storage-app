@@ -51,7 +51,6 @@ describe('judgeStartDate', () => {
     if (verdict.ok) throw new Error('unreachable')
     expect(verdict.reason).toBe('too_early')
     expect(isoDate(verdict.suggested)).toBe('2026-08-15')
-    expect(verdict.message).toContain('2026-08-15')
   })
 
   it('refuses a date past the horizon AND names both the limit and the date', () => {
@@ -63,19 +62,20 @@ describe('judgeStartDate', () => {
     if (verdict.ok) throw new Error('unreachable')
     expect(verdict.reason).toBe('too_late')
     expect(isoDate(verdict.suggested)).toBe('2026-10-14')
-    expect(verdict.message).toContain('60 days')
-    expect(verdict.message).toContain('2026-10-14')
+    // B-263: the number the sentence needs, not the sentence. `err.startDateLate`
+    // is the only key that reads `maxDays`, and it is the boundary the renter
+    // would otherwise have to bisect their way to.
+    expect(verdict.maxDays).toBe(60)
   })
 
-  it('refuses something that is not a date, and shows the format', () => {
+  it('refuses something that is not a date, and suggests one that works', () => {
     // The row requires manual text entry to work, so this is reachable by
     // typing rather than only by a broken browser.
     const verdict = judgeStartDate('next tuesday', WINDOW)
     expect(verdict.ok).toBe(false)
     if (verdict.ok) throw new Error('unreachable')
     expect(verdict.reason).toBe('unparseable')
-    expect(verdict.message).toContain('year-month-day')
-    expect(verdict.message).toContain('2026-08-15')
+    expect(isoDate(verdict.suggested)).toBe('2026-08-15')
   })
 
   it('every refusal carries a usable suggestion, never a bare no', () => {
@@ -87,7 +87,6 @@ describe('judgeStartDate', () => {
       // always resolves the error rather than producing the other one.
       expect(verdict.suggested.getTime()).toBeGreaterThanOrEqual(WINDOW.earliest.getTime())
       expect(verdict.suggested.getTime()).toBeLessThanOrEqual(WINDOW.latest.getTime())
-      expect(verdict.message).toContain(isoDate(verdict.suggested))
     }
   })
 })

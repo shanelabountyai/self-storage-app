@@ -436,6 +436,43 @@ export const es: Dictionary = {
   'act.unitRemovedNote': 'Quitamos la unidad {number} de su renta.',
   'act.unitRemovedNoNumber': 'Esa unidad se quitó de su renta.',
 
+  // --- Field errors (B-263, 3.3.3) --------------------------------------
+  // Cada mensaje dice qué hacer, no solo qué salió mal. `err.postalCodeUnknown`
+  // cita `details.enterMyself` palabra por palabra — si esa etiqueta cambia,
+  // este mensaje también.
+  'err.oneField': 'Hay un problema con un campo.',
+  'err.someFields': 'Hay problemas con {count} campos.',
+  'err.firstName': 'Escriba su nombre.',
+  'err.lastName': 'Escriba su apellido.',
+  'err.email': 'Escriba un correo electrónico al que podamos enviarle el contrato y el recibo.',
+  'err.phone': 'Escriba un número de celular con clave de área, por ejemplo 512-555-0100.',
+  'err.addressLine1': 'Escriba su dirección.',
+  'err.postalCode': 'Escriba un código postal de 5 dígitos, por ejemplo 78704.',
+  'err.postalCodeUnknown':
+    'No reconocemos ese código postal. Abra «Escribir mi ciudad y estado yo mismo» abajo y escríbalos.',
+  'err.city': 'Escriba su ciudad.',
+  'err.state': 'El estado debe ser un código de dos letras, por ejemplo TX.',
+  'err.altContactPhone':
+    'Escriba un número con clave de área, por ejemplo 512-555-0100, o déjelo en blanco.',
+  'err.altContactPhoneMissing':
+    'Agregue un número para su contacto alterno, o borre su nombre.',
+  'err.typedNameEmpty': 'Escriba su nombre completo — {name} — para firmar.',
+  'err.typedNameMismatch':
+    'Eso no coincide con el nombre del contrato. Escríbalo así: {name}.',
+  'err.consented': 'Marque la casilla para aceptar firmar electrónicamente.',
+  'err.protectionChoose': 'Elija un plan de protección, o cuéntenos sobre su propio seguro.',
+  'err.protectionPlan': 'Elija uno de los planes de protección de la lista.',
+  'err.carrier': 'Escriba el nombre de su aseguradora, por ejemplo State Farm.',
+  'err.policyNumber': 'Escriba su número de póliza — viene en su carátula de póliza.',
+  'err.expiresAt': 'Escriba la fecha en que vence su póliza, como aaaa-mm-dd.',
+  'err.expiresAtPast': 'Esa póliza ya venció. Escriba una cobertura que siga vigente.',
+  'err.attested': 'Marque la casilla para confirmar que tiene su propio seguro.',
+  'err.startDateFormat': 'Escriba la fecha como año-mes-día, así: {date}.',
+  'err.startDateEarly':
+    'Una mudanza no puede empezar antes de hoy. La fecha más temprana que puede elegir es {date}.',
+  'err.startDateLate':
+    'Podemos programar una mudanza hasta con {days} días de anticipación. La fecha más lejana que puede elegir es {date}.',
+
   // --- Checkout announcer (4.1.3, 2.4.3) --------------------------------
   'announce.movedToSize': 'Lo cambiamos a la {size}. No se perdió nada de lo que escribió.',
   'announce.foundSameSize':

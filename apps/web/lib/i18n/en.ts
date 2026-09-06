@@ -410,6 +410,48 @@ export const en = {
   'act.unitRemovedNote': 'Unit {number} taken out of your rental.',
   'act.unitRemovedNoNumber': 'That unit was taken out of your rental.',
 
+  // --- Field errors (B-263, 3.3.3) --------------------------------------
+  // The messages the validators used to build themselves. They return KEYS
+  // now, because `validateDetails` and friends are pure and have no request —
+  // and because a validator that resolved its own copy would have to know
+  // whether it was serving the Spanish checkout or a staff screen D-122 keeps
+  // English. Every one carries a suggestion, not just an identification.
+  'err.oneField': 'There is a problem with one field.',
+  'err.someFields': 'There are problems with {count} fields.',
+  'err.firstName': 'Enter your first name.',
+  'err.lastName': 'Enter your last name.',
+  'err.email': 'Enter an email address we can send your lease and receipt to.',
+  'err.phone': 'Enter a mobile number with area code, for example 512-555-0100.',
+  'err.addressLine1': 'Enter your street address.',
+  'err.postalCode': 'Enter a 5-digit zip code, for example 78704.',
+  // Not "invalid zip" — the zip may be perfectly real and simply newer than
+  // the dataset, so this names the way out. It quotes `details.enterMyself`
+  // verbatim in every language; `tests/i18n.test.ts` checks that it still
+  // does, because a control named by the wrong words is a refusal with no way
+  // out for exactly the renter who cannot read the other language.
+  'err.postalCodeUnknown':
+    "We don't recognise that zip code. Open “Enter my city and state myself” below and fill them in.",
+  'err.city': 'Enter your city.',
+  'err.state': 'State must be a 2-letter code, for example TX.',
+  'err.altContactPhone':
+    'Enter a number with area code, for example 512-555-0100, or leave it blank.',
+  'err.altContactPhoneMissing': 'Add a number for your alternate contact, or clear their name.',
+  'err.typedNameEmpty': 'Type your full name — {name} — to sign.',
+  'err.typedNameMismatch': 'That does not match the name on the lease. Type it as {name}.',
+  'err.consented': 'Tick the box to agree to sign electronically.',
+  'err.protectionChoose': 'Choose a protection plan, or tell us about your own cover.',
+  'err.protectionPlan': 'Choose one of the protection plans listed.',
+  'err.carrier': 'Enter the name of your insurer, for example State Farm.',
+  'err.policyNumber': 'Enter your policy number — it is on your declaration page.',
+  'err.expiresAt': 'Enter the date your policy runs out, as yyyy-mm-dd.',
+  'err.expiresAtPast': 'That policy has already run out. Enter cover that is still current.',
+  'err.attested': 'Tick the box to confirm you have your own cover.',
+  'err.startDateFormat': 'Enter the date as year-month-day, like {date}.',
+  'err.startDateEarly':
+    'A move-in cannot start before today. The earliest you can pick is {date}.',
+  'err.startDateLate':
+    'We can schedule a move-in up to {days} days ahead. The latest you can pick is {date}.',
+
   // --- Checkout announcer (4.1.3, 2.4.3) --------------------------------
   'announce.movedToSize': 'We moved you to the {size}. Nothing you entered was lost.',
   'announce.foundSameSize': 'We found you another unit the same size. Nothing you entered was lost.',

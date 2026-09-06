@@ -1,3 +1,5 @@
+import type { MessageKey } from '@/lib/i18n'
+
 // The return shape every admin server action uses, per PRD 02 FR-19.
 //
 // Actions RETURN error state; they do not throw it. A thrown error renders
@@ -7,6 +9,22 @@
 // `aria-invalid` anywhere in the app.
 
 export type FieldErrors = Record<string, string>
+
+// B-263. The same map before it has been resolved into words.
+//
+// Every field error on the money path used to be an English literal built
+// inside the validator, so a renter who filled in a Spanish form was corrected
+// in English at exactly the point 3.3.3 wants a suggestion they can act on.
+// The validators return KEYS instead of copy, and the caller — which is the
+// only thing that knows whose request this is — translates them. They cannot
+// resolve their own copy: `validateDetails` is pure and has no request, and
+// the staff surfaces D-122 keeps English share the same `FieldErrors` shape.
+//
+// The import is type-only on purpose. Three client components import
+// `IDLE_FORM_STATE` from this file as a value, and a runtime import of the
+// dictionaries here would pull both languages into their bundles.
+export type FieldMessage = { key: MessageKey; vars?: Record<string, string | number> }
+export type KeyedFieldErrors = Record<string, FieldMessage>
 
 export type FormState =
   | { status: 'idle' }

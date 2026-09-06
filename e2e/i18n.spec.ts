@@ -115,6 +115,57 @@ test('a renter can reach the Spanish checkout from a Spanish facility page', asy
   await expect(page.locator('input[name="disclosureLocale"]')).toHaveValue('es')
 })
 
+test('the Spanish checkout refuses you in Spanish (B-263)', async ({ page, context }) => {
+  await context.addCookies([SPANISH])
+  await page.goto('/storage/tx/austin/demo-austin-south')
+  await page.getByRole('button', { name: 'Rentar ahora' }).first().click()
+  await expect(page).toHaveURL(/\/checkout\?token=/)
+
+  // Every field on step 1 is `required`, so an empty submit is refused by the
+  // browser and never reaches the server — the refusal this item is about only
+  // happens on input the browser accepts and the server does not. `00000` is
+  // syntactically a zip and is not a place, which is the one refusal on this
+  // step that carries a way out rather than a restatement.
+  await page.getByLabel('Nombre', { exact: true }).fill('Ada')
+  await page.getByLabel('Apellido', { exact: true }).fill('Renter')
+  await page.getByLabel('Correo electrónico', { exact: true }).fill('ada.i18n@example.com')
+  await page.getByLabel('Número de celular', { exact: true }).fill('512-555-0100')
+  await page.getByLabel('Dirección', { exact: true }).fill('2400 South Congress Ave')
+  await page.getByLabel('Código postal', { exact: true }).fill('00000')
+
+  // Nothing is written on a refusal — the action returns before it touches a
+  // tenant — so this mutates no shared fixture and needs neither a scope nor a
+  // self-skip (the B-120 rule).
+  await page.getByRole('button', { name: 'Continuar' }).click()
+
+  // Scoped through `main` for the reason the portal specs are: Next's own route
+  // announcer is an empty `role="alert"` outside it. Everything is asserted
+  // INSIDE the box, because `AdminForm` renders each message twice on purpose —
+  // once in the summary list, once beside its field — so an unscoped
+  // `getByText` is a strict-mode violation rather than a meaningful failure.
+  const alert = page.getByRole('main').getByRole('alert')
+
+  // The summary heading above the fields was the last English string on a
+  // refused Spanish step, and it came from `fieldError`, not from a validator —
+  // which is why translating the three functions the row named would have left
+  // it. One error here, so this is the singular.
+  await expect(alert).toContainText('Hay un problema con un campo.')
+
+  // 3.3.3 in the renter's language: the message says what to DO, and it names
+  // the control to open by that language's own name for it. Asserted end to end
+  // rather than in a unit test because what broke was the WIRING — the
+  // validator was reached, the dictionary was loaded, and the sentence in
+  // between was built in English.
+  //
+  // That the quoted control's name matches the one actually rendered is checked
+  // in `tests/i18n.test.ts`, against the dictionary, rather than by locating the
+  // <details> here — its accessible name is not the summary's text in every
+  // engine, and a locator that flakes on that would say nothing about language.
+  await expect(alert).toContainText(
+    'No reconocemos ese código postal. Abra «Escribir mi ciudad y estado yo mismo» abajo y escríbalos.',
+  )
+})
+
 // --- B-260: the portal ------------------------------------------------------
 //
 // B-090f translated the move-in path and then sent the renter to "Ir a mi

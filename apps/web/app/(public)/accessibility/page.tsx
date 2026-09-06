@@ -1865,6 +1865,45 @@ function reviewedOn(locale: Locale): string {
 // bumped, per D-115 — no manual screen-reader pass was performed, and this
 // item performed none.
 
+// Re-verified 2026-09-06, at B-263 (the Spanish checkout's field errors —
+// D-122). Customer-facing, on the money path, and it fixes an accessibility
+// failure rather than only a product one.
+//
+// **What was actually wrong is 3.1.2 Language of Parts, and it was ours.** A
+// Spanish renter was served `<html lang="es">` — asserted by `e2e/i18n.spec.ts`
+// — and then, on a refused step, an English sentence inside it with no `lang`
+// of its own. A screen reader reads that with Spanish phonemes, which is the
+// same defect B-261 fixed in the templated emails, arrived at from the page
+// side. Every field error on steps 1 through 4 is now translated, so it is
+// fixed by saying the right words rather than by marking up the wrong ones.
+//
+// **The bullet this touches is "What is true today" → errors, and it does not
+// change.** It claims the message is tied to its field, that what was typed
+// survives, and that a save is announced — all three are about the mechanism,
+// were true in both languages before this item, and are true now. What the
+// bullet never claimed is the language of the message, which is why nothing on
+// this page had gone false: the gap was real and unstated rather than
+// misstated. It is stated now, in this note.
+//
+// **No new claim about scan coverage, and no new route or control.** The scan
+// loops still carry no locale cookie and `STATE_EXCEPTIONS` still names the
+// checkout as scanned in English only — B-090f recorded that and it is
+// unchanged. This item adds no page, no control and no interaction; it changes
+// which words an existing live region announces.
+//
+// **One thing worth naming because it is the 3.3.3 half.** `err.postalCodeUnknown`
+// tells the renter to open a disclosure BY NAME, so a rename in one language
+// and not the other would point a Spanish reader at a control that is not on
+// their page — a refusal with no way out, for exactly the person who cannot
+// read the other language. `tests/i18n.test.ts` now asserts each locale's
+// message quotes that locale's own `details.enterMyself`.
+//
+// The "Where we fall short" list was re-read against this build and all three
+// entries are still true and unchanged in scope: the no-JavaScript hold
+// countdown, the staff screens, and the embedded maps. `LAST_REVIEWED` is not
+// bumped, per D-115 — no manual screen-reader pass was performed, and this
+// item performed none.
+
 export default async function AccessibilityPage() {
   const locale = await getLocale()
   const dict = dictionaryFor(locale)

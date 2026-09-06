@@ -38,7 +38,7 @@ import {
   SMS_CONSENT,
 } from '@/lib/consent/disclosures'
 import { recordConsent } from '@storage/core/consent'
-import { fieldError, type FormState } from '@/lib/admin/form-state'
+import type { FormState, KeyedFieldErrors } from '@/lib/admin/form-state'
 import {
   currentPlans,
   premiumFor,
@@ -70,6 +70,32 @@ type Translator = (key: MessageKey, vars?: Record<string, string | number>) => s
 async function messages(): Promise<{ dict: Dictionary; t: Translator }> {
   const dict = dictionaryFor(await getLocale())
   return { dict, t: (key, vars) => translate(dict, key, vars) }
+}
+
+/// The three ways a move-in date can be refused, in the renter's language.
+/// The keys live beside every other message; the rule lives in `@storage/core`.
+const START_DATE_MESSAGE: Record<'too_early' | 'too_late' | 'unparseable', MessageKey> = {
+  too_early: 'err.startDateEarly',
+  too_late: 'err.startDateLate',
+  unparseable: 'err.startDateFormat',
+}
+
+/// B-263. `fieldError` for a renter, in the renter's language.
+///
+/// The admin `fieldError` takes finished sentences, which is right for the
+/// staff screens D-122 keeps English. The checkout's validators return keys
+/// instead, so both halves are resolved here: the per-field messages AND the
+/// summary heading above them, which was the last English string left on a
+/// refused Spanish step.
+function keyedFieldError(errors: KeyedFieldErrors, t: Translator): FormState {
+  const entries = Object.entries(errors)
+  return {
+    status: 'error',
+    message: entries.length === 1 ? t('err.oneField') : t('err.someFields', { count: entries.length }),
+    fieldErrors: Object.fromEntries(
+      entries.map(([field, { key, vars }]) => [field, t(key, vars)]),
+    ),
+  }
 }
 
 /// B-259. The language the disclosures were RENDERED in, taken from the form
@@ -116,7 +142,7 @@ export async function submitDetailsAction(
   const marketingSmsChecked = formData.get('marketingSmsConsent') === 'yes'
 
   const errors = validateDetails(input)
-  if (Object.keys(errors).length > 0) return fieldError(errors)
+  if (Object.keys(errors).length > 0) return keyedFieldError(errors, t)
 
   // B-112: city and state come from the zip unless the renter opened the
   // disclosure and typed them. `validateDetails` has already refused the case
@@ -236,7 +262,7 @@ export async function submitProtectionAction(
   ) as ProtectionChoice
 
   const errors = validateChoice(choice, plans)
-  if (Object.keys(errors).length > 0) return fieldError(errors)
+  if (Object.keys(errors).length > 0) return keyedFieldError(errors, t)
 
   if (choice.kind === 'waiver') {
     await recordWaiver({
@@ -332,7 +358,7 @@ export async function signLeaseAction(_prev: FormState, formData: FormData): Pro
       consented: formData.get('consented') === 'yes',
     }),
   }
-  if (Object.keys(errors).length > 0) return fieldError(errors)
+  if (Object.keys(errors).length > 0) return keyedFieldError(errors, t)
 
   const { ipAddress, userAgent } = await requestMetadata()
   // D-53: one signing action, N agreements. Sequential rather than parallel so
@@ -563,8 +589,19 @@ export async function confirmUnitAction(
 
   // 3.3.3: the message names the date to use, and the field keeps what was
   // typed (B-124's `AdminForm` echo), so the correction is one edit rather
-  // than a retype.
-  if (!verdict.ok) return fieldError({ startDate: verdict.message })
+  // than a retype. B-263: `judgeStartDate` is pure and returns the reason and
+  // the numbers, so the sentence is built here, where the language is known.
+  if (!verdict.ok) {
+    return keyedFieldError(
+      {
+        startDate: {
+          key: START_DATE_MESSAGE[verdict.reason],
+          vars: { date: isoDate(verdict.suggested), days: verdict.maxDays },
+        },
+      },
+      t,
+    )
+  }
 
   await prisma.checkoutSession.update({
     where: { id: session.id },

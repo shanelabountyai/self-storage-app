@@ -22,7 +22,19 @@ export type StartDateVerdict =
   /// between them and paying — and 3.3.3 asks for a correction to be
   /// suggested whenever one is known. Here one always is: the window has two
   /// ends and the violated one names its own fix.
-  | { ok: false; reason: 'too_early' | 'too_late' | 'unparseable'; message: string; suggested: Date }
+  ///
+  /// B-263: the reason and the numbers, never the sentence. This package is
+  /// pure and has no dictionary, so a `message` built here could only ever be
+  /// English — and it was, on a Spanish checkout, one screen before payment.
+  /// `suggested` and `maxDays` are everything the sentence needs.
+  | {
+      ok: false
+      reason: 'too_early' | 'too_late' | 'unparseable'
+      suggested: Date
+      /// The window's width in days, which only `too_late` reads — carried on
+      /// every refusal so the caller does not have to recompute it.
+      maxDays: number
+    }
 
 function startOfDayUtc(date: Date): Date {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()))
@@ -48,37 +60,24 @@ export function judgeStartDate(raw: string, window: StartDateWindow): StartDateV
   const trimmed = raw.trim()
   if (!trimmed) return { ok: true, startDate: window.earliest }
 
+  const maxDays = daysBetween(window.earliest, window.latest)
+
   // `<input type="date">` submits `YYYY-MM-DD`, but the row requires manual
   // text entry to work too — so anything the browser accepts as a date has to
   // be judged rather than assumed well-formed.
   const parsed = new Date(`${trimmed}T00:00:00.000Z`)
   if (Number.isNaN(parsed.getTime())) {
-    return {
-      ok: false,
-      reason: 'unparseable',
-      message: `Enter the date as year-month-day, like ${isoDate(window.earliest)}.`,
-      suggested: window.earliest,
-    }
+    return { ok: false, reason: 'unparseable', suggested: window.earliest, maxDays }
   }
 
   const day = startOfDayUtc(parsed)
   if (day.getTime() < window.earliest.getTime()) {
-    return {
-      ok: false,
-      reason: 'too_early',
-      message: `A move-in cannot start before today. The earliest you can pick is ${isoDate(window.earliest)}.`,
-      suggested: window.earliest,
-    }
+    return { ok: false, reason: 'too_early', suggested: window.earliest, maxDays }
   }
   if (day.getTime() > window.latest.getTime()) {
-    return {
-      ok: false,
-      reason: 'too_late',
-      // Names the boundary AND the date, because "too far ahead" without a
-      // number is a refusal the renter has to bisect their way past.
-      message: `We can schedule a move-in up to ${daysBetween(window.earliest, window.latest)} days ahead. The latest you can pick is ${isoDate(window.latest)}.`,
-      suggested: window.latest,
-    }
+    // `maxDays` is named as well as the date, because "too far ahead" without
+    // a number is a refusal the renter has to bisect their way past.
+    return { ok: false, reason: 'too_late', suggested: window.latest, maxDays }
   }
 
   return { ok: true, startDate: day }

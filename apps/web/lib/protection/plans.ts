@@ -1,6 +1,6 @@
 import { prisma } from '@storage/db'
 import { effectiveByGroup } from '@storage/core/facility-settings'
-import type { FieldErrors } from '@/lib/admin/form-state'
+import type { KeyedFieldErrors } from '@/lib/admin/form-state'
 
 // PRD 02 US-44 / PRD 01 US-501 step 3.
 //
@@ -69,45 +69,45 @@ export type ProtectionChoice =
 export function validateChoice(
   input: Partial<ProtectionChoice> & { kind?: string },
   plans: readonly PlanOption[],
-): FieldErrors {
-  const errors: FieldErrors = {}
+): KeyedFieldErrors {
+  const errors: KeyedFieldErrors = {}
 
   if (input.kind !== 'plan' && input.kind !== 'waiver') {
-    errors.protection = 'Choose a protection plan, or tell us about your own cover.'
+    errors.protection = { key: 'err.protectionChoose' }
     return errors
   }
 
   if (input.kind === 'plan') {
     const tier = (input as { tier?: string }).tier
     if (!tier || !plans.some((plan) => plan.tier === tier)) {
-      errors.protection = 'Choose one of the protection plans listed.'
+      errors.protection = { key: 'err.protectionPlan' }
     }
     return errors
   }
 
   const waiver = input as Partial<Extract<ProtectionChoice, { kind: 'waiver' }>>
   if (!waiver.carrier?.trim()) {
-    errors.carrier = 'Enter the name of your insurer, for example State Farm.'
+    errors.carrier = { key: 'err.carrier' }
   }
   if (!waiver.policyNumber?.trim()) {
-    errors.policyNumber = 'Enter your policy number — it is on your declaration page.'
+    errors.policyNumber = { key: 'err.policyNumber' }
   }
 
   const expires = waiver.expiresAt ?? ''
   const expiryDate = new Date(`${expires}T12:00:00`)
   if (!expires || Number.isNaN(expiryDate.getTime())) {
-    errors.expiresAt = 'Enter the date your policy runs out, as yyyy-mm-dd.'
+    errors.expiresAt = { key: 'err.expiresAt' }
   } else if (expiryDate.getTime() < Date.now()) {
     // A policy that has already lapsed is not cover, and accepting it would put
     // a lapsed waiver on the lease from day one.
-    errors.expiresAt = 'That policy has already run out. Enter cover that is still current.'
+    errors.expiresAt = { key: 'err.expiresAtPast' }
   }
 
   if (!waiver.attested) {
     // 3.3.2/3.3.1: an explicit, identified error rather than a disabled button.
     // Never disable Continue — a control that cannot be pressed, with no
     // message, is invisible to someone who cannot see why.
-    errors.attested = 'Tick the box to confirm you have your own cover.'
+    errors.attested = { key: 'err.attested' }
   }
 
   return errors

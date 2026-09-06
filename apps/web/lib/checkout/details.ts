@@ -1,5 +1,5 @@
 import { prisma } from '@storage/db'
-import type { FieldErrors } from '@/lib/admin/form-state'
+import type { KeyedFieldErrors } from '@/lib/admin/form-state'
 import { localityForZip } from '@/lib/geo/geocode'
 import type { Locale } from '@/lib/i18n'
 
@@ -49,23 +49,27 @@ const PHONE_DIGITS = /\d/g
 /// Validation with a *suggestion* per error, not just an identification
 /// (3.3.3). The messages are the ones the renter reads, so they say what to do
 /// rather than what went wrong.
-export function validateDetails(input: Partial<DetailsInput>): FieldErrors {
-  const errors: FieldErrors = {}
+///
+/// B-263: message KEYS, not messages. This runs on the Spanish checkout as
+/// well as the English one, and it is pure — it has no request and no
+/// dictionary, so the caller resolves them.
+export function validateDetails(input: Partial<DetailsInput>): KeyedFieldErrors {
+  const errors: KeyedFieldErrors = {}
 
-  if (!input.firstName?.trim()) errors.firstName = 'Enter your first name.'
-  if (!input.lastName?.trim()) errors.lastName = 'Enter your last name.'
+  if (!input.firstName?.trim()) errors.firstName = { key: 'err.firstName' }
+  if (!input.lastName?.trim()) errors.lastName = { key: 'err.lastName' }
 
   const email = input.email?.trim() ?? ''
   if (!EMAIL.test(email)) {
-    errors.email = 'Enter an email address we can send your lease and receipt to.'
+    errors.email = { key: 'err.email' }
   }
 
   const digits = (input.phone ?? '').match(PHONE_DIGITS)?.length ?? 0
   if (digits < 10) {
-    errors.phone = 'Enter a mobile number with area code, for example 512-555-0100.'
+    errors.phone = { key: 'err.phone' }
   }
 
-  if (!input.addressLine1?.trim()) errors.addressLine1 = 'Enter your street address.'
+  if (!input.addressLine1?.trim()) errors.addressLine1 = { key: 'err.addressLine1' }
 
   // B-112. City and state come from the zip. They are only validated when the
   // renter has opened the disclosure and typed them, which is the escape hatch
@@ -75,18 +79,18 @@ export function validateDetails(input: Partial<DetailsInput>): FieldErrors {
   const typedEither = typedCity !== '' || typedState !== ''
 
   if (!/^\d{5}(-\d{4})?$/.test(input.postalCode?.trim() ?? '')) {
-    errors.postalCode = 'Enter a 5-digit zip code, for example 78704.'
+    errors.postalCode = { key: 'err.postalCode' }
   } else if (!typedEither && !localityForZip(input.postalCode!)) {
     // Not "invalid zip" — the zip may be perfectly real and simply newer than
-    // the dataset. 3.3.3 wants the way out, not just the refusal.
-    errors.postalCode =
-      "We don't recognise that zip code. Open \u201cEnter my city and state myself\u201d below and fill them in."
+    // the dataset. 3.3.3 wants the way out, not just the refusal. The message
+    // quotes the disclosure's own label, in whichever language it was rendered.
+    errors.postalCode = { key: 'err.postalCodeUnknown' }
   }
 
   if (typedEither) {
-    if (!typedCity) errors.city = 'Enter your city.'
+    if (!typedCity) errors.city = { key: 'err.city' }
     if (!/^[A-Za-z]{2}$/.test(typedState)) {
-      errors.state = 'State must be a 2-letter code, for example TX.'
+      errors.state = { key: 'err.state' }
     }
   }
 
@@ -221,14 +225,14 @@ export async function recordLeaseDeclarations(
 
 /// The alternate contact is optional, but a number we cannot dial is worse than
 /// none — it looks like a fallback and is not one.
-export function validateDeclarations(input: LeaseDeclarations): FieldErrors {
-  const errors: FieldErrors = {}
+export function validateDeclarations(input: LeaseDeclarations): KeyedFieldErrors {
+  const errors: KeyedFieldErrors = {}
   const phone = input.altContactPhone?.trim() ?? ''
   if (phone !== '' && (phone.match(PHONE_DIGITS)?.length ?? 0) < 10) {
-    errors.altContactPhone = 'Enter a number with area code, for example 512-555-0100, or leave it blank.'
+    errors.altContactPhone = { key: 'err.altContactPhone' }
   }
   if (input.altContactName?.trim() && phone === '') {
-    errors.altContactPhone = 'Add a number for your alternate contact, or clear their name.'
+    errors.altContactPhone = { key: 'err.altContactPhoneMissing' }
   }
   return errors
 }

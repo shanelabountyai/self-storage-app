@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { prisma } from '../packages/db'
 import { signatureMatchesName } from '../apps/web/lib/lease/template'
 import { signDocument, validateSignature, verifySignature } from '../apps/web/lib/lease/sign'
+import { LOCALES, dictionaryFor, translate } from '../apps/web/lib/i18n'
 import { storeGeneratedDocument } from '../apps/web/lib/documents/store'
 
 // B-024 / PRD 01 US-501 step 4, FR-4.2.
@@ -40,14 +41,25 @@ describe('validateSignature', () => {
     // E-SIGN: consent to transact electronically is its own affirmative act,
     // so it gets its own error and is never folded into the name field.
     const errors = validateSignature({ typedName: 'Ada Renter', legalName: 'Ada Renter', consented: false })
-    expect(errors.consented).toBeDefined()
+    expect(errors.consented).toEqual({ key: 'err.consented' })
     expect(errors.typedName).toBeUndefined()
   })
 
   it('tells the signer exactly what to type', () => {
     // 3.3.2/3.3.3 — the instruction is in the message, not only in a hint.
+    // B-263: the name travels as a variable, so the Spanish lease step names
+    // it too rather than falling back to an English sentence.
     const errors = validateSignature({ typedName: 'AR', legalName: 'Ada Renter', consented: true })
-    expect(errors.typedName).toMatch(/Ada Renter/)
+    expect(errors.typedName).toEqual({
+      key: 'err.typedNameMismatch',
+      vars: { name: 'Ada Renter' },
+    })
+    for (const locale of LOCALES) {
+      const rendered = translate(dictionaryFor(locale), 'err.typedNameMismatch', {
+        name: 'Ada Renter',
+      })
+      expect(rendered, locale).toContain('Ada Renter')
+    }
   })
 
   it('passes a complete signature', () => {
