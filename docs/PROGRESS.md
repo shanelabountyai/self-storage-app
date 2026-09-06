@@ -8682,7 +8682,7 @@ B-090f translated the move-in path and then handed the renter a button reading "
 
 ## B-262 — The Spanish reaches the pages a renter reads (2026-09-06)
 
-**Commit:** `PENDING`
+**Commit:** `f7658aa`
 
 B-090f translated the move-in path and B-260 the portal, so a renter could browse, rent, pay and run their account in Spanish. What was still English was everything they **read** rather than operated. This closes that, and it closes smaller than the row was written: of the three problems the row named, one was built and two were answered.
 
