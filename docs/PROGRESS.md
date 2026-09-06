@@ -11,7 +11,7 @@ It complements rather than duplicates:
 - `git log` — the change-by-change record
 - `README.md` — how the built thing works today
 
-**Status:** 255 of 266 backlog items complete. Latest entry: Chore (`3fa83b3`).
+**Status:** 255 of 267 backlog items complete. Latest entry: Chore (`3fa83b3`).
 **Entries:** 285 across 20 part files.
 
 ## Reading one entry
