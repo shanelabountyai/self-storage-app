@@ -8709,7 +8709,7 @@ B-090f translated the move-in path and B-260 the portal, so a renter could brows
 
 ## B-259 — A Spanish renter's consent record names Spanish words (2026-09-06)
 
-**Commit:** `PENDING`
+**Commit:** `0fd8338`
 
 B-090f translated the move-in path and deliberately stopped at the four consent disclosures, because translating them was the one change that looks like a one-line fix and cannot be undone after the fact. This is the item that unblocked them, and **the owner decision came before any code** — the handoff's instruction was not to start by translating.
 
