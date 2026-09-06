@@ -109,7 +109,12 @@ export default async function CheckoutPage({
 }) {
   const { token } = await searchParams
   const session = token ? await sessionByToken(token) : null
-  const dict = dictionaryFor(await getLocale())
+  // B-259: the steps need the locale itself, not only its dictionary — the
+  // consent disclosures they render are versioned per language rather than
+  // being dictionary entries, and the version recorded has to name the words
+  // that were on screen.
+  const locale = await getLocale()
+  const dict = dictionaryFor(locale)
   const t = (key: MessageKey, vars?: Record<string, string | number>) =>
     translate(dict, key, vars)
 
@@ -642,6 +647,7 @@ export default async function CheckoutPage({
               prefill={detailsPrefill}
               manualLocality={manualLocality}
               dict={dict}
+              locale={locale}
             />
           )}
 
@@ -710,6 +716,7 @@ export default async function CheckoutPage({
               }
               activeDutyMilitary={session.data.activeDutyMilitary === true}
               dict={dict}
+              locale={locale}
             />
           )}
 

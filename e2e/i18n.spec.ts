@@ -94,6 +94,25 @@ test('a renter can reach the Spanish checkout from a Spanish facility page', asy
   await expect(page.locator('html')).toHaveAttribute('lang', 'es')
   await expect(page.getByRole('heading', { level: 1 })).toContainText('Múdese en línea')
   await expect(page.getByLabel('Correo electrónico')).toBeVisible()
+
+  // B-259 (D-125). The three consent boxes were the last English thing on this
+  // screen, and the one that mattered most: a renter cannot give express
+  // written consent to words they cannot read. Asserted here rather than in a
+  // unit test because the failure mode is a page that renders — the strings
+  // are not dictionary entries, so `Dictionary` cannot catch a missing one.
+  await expect(page.getByText('Acepto recibir mensajes de texto sobre mi cuenta')).toBeVisible()
+  await expect(page.getByText('Envíenme correos electrónicos ocasionales')).toBeVisible()
+  await expect(page.getByText('Acepto recibir mensajes de texto promocionales')).toBeVisible()
+
+  // STOP and HELP are the literal strings the classifier matches, so they stay
+  // English inside the Spanish sentence. A translated keyword is an
+  // instruction that does nothing.
+  await expect(page.getByText('Responda STOP para darse de baja').first()).toBeVisible()
+
+  // The locale that was RENDERED, carried to the action — this is what stamps
+  // the consent rows, and reading the cookie again at submit time would get it
+  // wrong for anyone who used the language toggle after the page drew.
+  await expect(page.locator('input[name="disclosureLocale"]')).toHaveValue('es')
 })
 
 // --- B-260: the portal ------------------------------------------------------
@@ -186,6 +205,8 @@ test.describe('the static pages in Spanish', () => {
     ['/about', /Acerca de nosotros/],
     ['/contact', /Contacto/],
     ['/accessibility', /Accesibilidad/],
+    // B-259 (D-124/D-125).
+    ['/messaging-policy', /Política de mensajes de texto/],
   ]
 
   for (const [route, heading] of TRANSLATED) {
@@ -197,14 +218,12 @@ test.describe('the static pages in Spanish', () => {
   }
 
   // D-122: anything a lawyer wrote stays English until somebody with a licence
-  // says otherwise, and `/messaging-policy` is with them — it is the TCPA /
-  // A2P 10DLC disclosure, and the consent a tenant gives is recorded against
-  // an English version constant (B-259 owns that). The Spanish footer already
-  // tells the reader so; this pins it.
+  // says otherwise. `/messaging-policy` LEFT this list at B-259 — it is the
+  // TCPA / A2P 10DLC disclosure, and it could only be translated once the
+  // disclosures it explains had a Spanish version of their own to point at.
   const ENGLISH_ONLY: [string, RegExp][] = [
     ['/terms', /Terms of service/],
     ['/privacy', /Privacy/],
-    ['/messaging-policy', /Text message policy/],
   ]
 
   for (const [route, heading] of ENGLISH_ONLY) {
@@ -213,6 +232,22 @@ test.describe('the static pages in Spanish', () => {
       await expect(page.getByRole('heading', { level: 1 })).toContainText(heading)
     })
   }
+
+  // B-259. The keywords are rendered from `sms-keywords.ts` rather than typed
+  // into the prose, which is what stops a translated page from publishing an
+  // instruction that does nothing — and what stops the published list drifting
+  // from what `classifySmsKeyword` accepts.
+  test('the Spanish messaging policy keeps the keywords in English', async ({ page }) => {
+    await page.goto('/messaging-policy')
+    await expect(page.locator('html')).toHaveAttribute('lang', 'es')
+    await expect(page.getByText('Responda STOP a cualquier mensaje nuestro')).toBeVisible()
+    await expect(page.getByText('STOPALL, UNSUBSCRIBE, CANCEL, END y QUIT')).toBeVisible()
+    await expect(page.getByText('responda START o UNSTOP')).toBeVisible()
+
+    // One constant, formatted per locale — the English page dates itself
+    // "August 2026" and cannot be rendered in a second language as prose.
+    await expect(page.getByText('Última revisión: agosto de 2026')).toBeVisible()
+  })
 
   test('the accessibility statement names its gaps in Spanish too', async ({ page }) => {
     await page.goto('/accessibility')

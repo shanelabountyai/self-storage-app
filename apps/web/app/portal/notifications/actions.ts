@@ -8,7 +8,9 @@ import {
   setMarketingSmsConsent,
   setPreference,
 } from '@/lib/portal/notifications'
-import { MARKETING_SMS_DISCLOSURE_VERSION } from '@/lib/checkout/details'
+import { MARKETING_SMS_CONSENT } from '@/lib/consent/disclosures'
+import { isLocale } from '@/lib/i18n'
+import { getLocale } from '@/lib/i18n/server'
 import { success, type FormState } from '@/lib/admin/form-state'
 
 // PRD 05 CN-13 (B-074). Thin session wrapper, same shape as
@@ -58,7 +60,20 @@ export async function setMarketingSmsAction(
   const actor = await requireTenantActor()
   const granted = formData.get('marketingSms') === 'yes'
 
-  await setMarketingSmsConsent(actor.tenantId, granted, MARKETING_SMS_DISCLOSURE_VERSION)
+  // B-259. The language the disclosure was RENDERED in, from the form rather
+  // than the cookie — a tenant who switches language between reading the page
+  // and pressing the button would otherwise have a version recorded against
+  // words that were never on screen. Untrusted input, so narrowed by
+  // `isLocale` with the cookie as the fallback.
+  const claimed = formData.get('disclosureLocale')
+  const locale = isLocale(claimed) ? claimed : await getLocale()
+
+  await setMarketingSmsConsent(
+    actor.tenantId,
+    granted,
+    MARKETING_SMS_CONSENT[locale].version,
+    locale,
+  )
 
   revalidatePath('/portal/notifications')
   return {

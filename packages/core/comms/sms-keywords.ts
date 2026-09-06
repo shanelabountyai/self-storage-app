@@ -28,6 +28,18 @@ export const SMS_OPT_IN_KEYWORD = 'JOIN'
 /// What we ask them to reply to confirm.
 export const SMS_CONFIRM_KEYWORD = 'YES'
 
+/// B-259. What `/messaging-policy` publishes as the keywords we accept.
+///
+/// Read from the sets above rather than retyped in the page, because the page
+/// is the document a carrier and a regulator read: a hand-copied list that
+/// drifts from `classifySmsKeyword` is a published promise the code does not
+/// keep. It also makes them structurally untranslatable — these are the
+/// literal strings the classifier matches, not words, so a Spanish page has to
+/// print them in English or print an instruction that does nothing.
+export const PUBLISHED_STOP_KEYWORDS: readonly string[] = [...STOP_KEYWORDS]
+export const PUBLISHED_START_KEYWORDS: readonly string[] = [...START_KEYWORDS]
+export const PUBLISHED_HELP_KEYWORDS: readonly string[] = [...HELP_KEYWORDS]
+
 export type SmsKeyword = 'stop' | 'start' | 'opt_in' | 'confirm' | 'help' | null
 
 export function classifySmsKeyword(body: string): SmsKeyword {

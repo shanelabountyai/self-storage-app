@@ -1,37 +1,43 @@
 # Next
 
-**B-259 — Spanish renters tick English consent boxes.** ([06-backlog.md](docs/prds/06-backlog.md))
+**B-261 — every email and text still goes out in English.** ([06-backlog.md](docs/prds/06-backlog.md))
 
-B-262 finished the reading surfaces and handed this row one more page:
-`/messaging-policy` (**D-124**). So B-259 is now three things, and they are one
-item because they share the same blocker:
+B-259 shipped on 2026-09-06 (**D-125**) and was B-261's last blocker. The
+renter can now browse, rent, pay, run their account and read the policy pages
+in Spanish, and give consent in Spanish against a record that names the Spanish
+words. Then we email them in English.
 
-1. **The three consent disclosures on checkout step 1** — TCPA, E-SIGN and the
-   marketing opt-in. Each is recorded as a `Consent` row stamped with an
-   English **disclosure version constant**. Translating the words without
-   versioning the Spanish is evidence of a consent nobody gave (D-122 says so
-   in those terms).
-2. **`/messaging-policy`** — the A2P 10DLC / TCPA disclosure page a carrier and
-   a campaign review read. Its keywords (STOP, HELP, START, UNSTOP) are English
-   by construction in `packages/core/comms/sms-keywords.ts`, so a Spanish page
-   still has to instruct in English.
-3. **The version constants themselves** need a Spanish sibling per disclosure,
-   and the consent record has to carry which language was shown.
+**The dunning ladder is why this one matters.** It ends in a lien file, so the
+account least able to read our English is the account it matters most on.
 
-**It is blocked on a legal read, not on code.** Do not start by translating —
-start by asking what a Spanish consent record has to look like.
+The row's own shape:
 
-If the answer is "not yet", **B-261** is the unblocked one: every email and
-text still goes out in English, including the dunning ladder, to the account
-least able to read it. Needs `Tenant.preferredLocale` (a column, so its
-control ships in the same item) and a Spanish variant per seeded template —
-and remember the comms catalog is SEEDED state, so `npm run db:migrate:test`
-after a template edit and again when you switch branches.
+1. **`Tenant.preferredLocale`** — written from the `st_locale` cookie at
+   checkout, read by `deliverForRule`. It is a column that configures
+   behaviour, so **its control ships in the same item** (this repo's rule, and
+   five columns already shipped reachable only from a database client).
+2. **A Spanish variant per seeded template.** The comms catalog is SEEDED
+   state: `npm run db:migrate:test` after a template edit, and **again when you
+   switch branches** — otherwise the suites fail as `expected [] to have a
+   length of 1`, which reads exactly like a broken sender (B-206).
+3. **Notices stay English regardless.** A lien notice is a legal document and
+   D-122 keeps those in one language.
+
+Two traps already paid for: a template's `requiredMergeFields` must be
+satisfiable in BOTH languages or `renderEmail` throws and the message is
+recorded `failed`; and anything asserting a MARKETING message was sent must pin
+the clock with `vi.useFakeTimers({ toFake: ['Date'] })`, or it passes between
+8am and 9pm Central and fails outside it.
+
+Also newly open, both found while building B-259 and both smaller:
+**B-263** (every field-validation message on the Spanish checkout is still
+English — a type change, the validators must return keys) and **B-264** (the
+lead form on the translated facility page is entirely English, its
+marketing-email disclosure included).
 
 Not open, and deliberately: the guides and the city/size SEO surfaces stay
-English (**D-123**). No row exists for them. Reversing that means reversing
-D-122 and PRD 04 §3 as well.
+English (**D-123**). Reversing that means reversing D-122 and PRD 04 §3.
 
 **Run `npm run db:reset-test` if the unit suite starts timing out** —
-`storage_test` was at 233 facilities on 2026-09-06 and healthy, but it
-accumulates and the symptom reads exactly like a regression.
+`storage_test` accumulates facilities and the symptom reads exactly like a
+regression.

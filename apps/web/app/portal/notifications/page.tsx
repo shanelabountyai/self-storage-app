@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { AdminForm } from '@/components/admin/form'
 import { requireTenantActor } from '@/lib/rbac/session'
 import { currentPreferences, NOTIFICATION_CATEGORIES, smsConsentView } from '@/lib/portal/notifications'
-import { MARKETING_SMS_DISCLOSURE } from '@/lib/checkout/details'
+import { MARKETING_SMS_CONSENT } from '@/lib/consent/disclosures'
 import { revokeSmsAction, setMarketingSmsAction, setPreferencesAction } from './actions'
 import { ScrollRegion } from '@/components/ui/scroll-region'
 import { dictionaryFor, translate, type MessageKey } from '@/lib/i18n'
@@ -213,10 +213,19 @@ export default async function NotificationsPage() {
           {/* The disclosure is shown HERE, at the point of granting, not only
               at checkout — express written consent is consent to the words the
               person was actually shown, and a bare "on" switch is consent to
-              nothing in particular. The version recorded is this text's. */}
+              nothing in particular. The version recorded is this text's.
+
+              B-259 (D-125): B-260 translated this page and left this sentence
+              English, so a Spanish tenant was granting marketing-SMS consent
+              against words they could not read — the same defect as checkout
+              step 1, on the second and last surface that shows a disclosure.
+              The rendered locale rides in the hidden field below for the same
+              reason it does in checkout: the version stamped on the row has to
+              name the wording that was on screen. */}
           <p className="text-muted-foreground max-w-prose text-xs text-pretty">
-            {MARKETING_SMS_DISCLOSURE}
+            {MARKETING_SMS_CONSENT[locale].text}
           </p>
+          <input type="hidden" name="disclosureLocale" value={locale} />
           <input
             type="hidden"
             name="marketingSms"

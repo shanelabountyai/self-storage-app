@@ -115,6 +115,10 @@ export async function setMarketingSmsConsent(
   tenantId: string,
   granted: boolean,
   disclosureVersion: string,
+  /// B-259. The language that version's words were shown in. Required rather
+  /// than optional: the two are only evidence together, and a default here
+  /// would be a silent claim about a screen this function never saw.
+  locale: string,
 ): Promise<void> {
   await recordConsent({
     tenantId,
@@ -122,6 +126,7 @@ export async function setMarketingSmsConsent(
     state: granted ? 'granted' : 'revoked',
     source: 'portal_preferences',
     disclosureVersion,
+    locale,
   })
 }
 

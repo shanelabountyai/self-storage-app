@@ -13,9 +13,6 @@ import {
   type Step,
 } from '@/lib/checkout/session'
 import {
-  MARKETING_EMAIL_CHECKOUT_DISCLOSURE_VERSION,
-  MARKETING_SMS_DISCLOSURE_VERSION,
-  SMS_CONSENT_DISCLOSURE_VERSION,
   localityFor,
   recordLeaseDeclarations,
   upsertTenantForCheckout,
@@ -27,11 +24,19 @@ import { formatRate } from '@/lib/format'
 import { labelForStep } from '@/components/checkout/stepper'
 import {
   dictionaryFor,
+  isLocale,
   translate,
   type Dictionary,
+  type Locale,
   type MessageKey,
 } from '@/lib/i18n'
 import { getLocale } from '@/lib/i18n/server'
+import {
+  ELECTRONIC_RECORDS_CONSENT,
+  MARKETING_EMAIL_CHECKOUT_CONSENT,
+  MARKETING_SMS_CONSENT,
+  SMS_CONSENT,
+} from '@/lib/consent/disclosures'
 import { recordConsent } from '@storage/core/consent'
 import { fieldError, type FormState } from '@/lib/admin/form-state'
 import {
@@ -46,7 +51,7 @@ import { offerFor } from '@/lib/promotions/service'
 import { isoDate, judgeStartDate, startDateWindow } from '@storage/core/checkout'
 import { businessDateFor } from '@storage/core/jobs'
 import { existingLeaseDocuments } from '@/lib/lease/build'
-import { ELECTRONIC_RECORDS_CONSENT_VERSION, signDocument, validateSignature } from '@/lib/lease/sign'
+import { signDocument, validateSignature } from '@/lib/lease/sign'
 import { requestMetadata } from '@/lib/http/request-metadata'
 
 // B-020. The transitions a step's form can trigger. The individual steps'
@@ -67,11 +72,32 @@ async function messages(): Promise<{ dict: Dictionary; t: Translator }> {
   return { dict, t: (key, vars) => translate(dict, key, vars) }
 }
 
+/// B-259. The language the disclosures were RENDERED in, taken from the form
+/// rather than from the cookie.
+///
+/// These are not the same value. The page is a server render and the cookie is
+/// read again at submit time, so a renter who uses the header language toggle
+/// between reading step 1 and pressing Continue would otherwise have an `es`
+/// version recorded against English words on screen — the exact failure the
+/// versioning exists to prevent, arrived at from the other direction.
+///
+/// The field is untrusted input, so it is narrowed by `isLocale` and falls
+/// back to the cookie. Forging it is possible and pointless: the row is our
+/// evidence of what we showed, and a renter who mislabels it only weakens
+/// their own account of the transaction.
+async function shownLocale(formData: FormData): Promise<Locale> {
+  const claimed = formData.get('disclosureLocale')
+  return isLocale(claimed) ? claimed : await getLocale()
+}
+
 export async function submitDetailsAction(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
   const { t } = await messages()
+  // B-259: the language step 1 was RENDERED in, which is what the three
+  // consent rows below have to be stamped with.
+  const locale = await shownLocale(formData)
   const token = String(formData.get('token') ?? '')
   const input = {
     firstName: String(formData.get('firstName') ?? ''),
@@ -127,7 +153,8 @@ export async function submitDetailsAction(
     channel: 'account_sms',
     state: smsConsentChecked ? 'granted' : 'revoked',
     source: 'checkout_step_1',
-    disclosureVersion: SMS_CONSENT_DISCLOSURE_VERSION,
+    disclosureVersion: SMS_CONSENT[locale].version,
+    locale,
     ipAddress: (await requestMetadata()).ipAddress,
   })
 
@@ -140,7 +167,8 @@ export async function submitDetailsAction(
     channel: 'marketing_email',
     state: marketingConsentChecked ? 'granted' : 'revoked',
     source: 'checkout_step_1',
-    disclosureVersion: MARKETING_EMAIL_CHECKOUT_DISCLOSURE_VERSION,
+    disclosureVersion: MARKETING_EMAIL_CHECKOUT_CONSENT[locale].version,
+    locale,
     ipAddress: (await requestMetadata()).ipAddress,
   })
 
@@ -161,7 +189,8 @@ export async function submitDetailsAction(
     channel: 'marketing_sms',
     state: marketingSmsChecked ? 'granted' : 'revoked',
     source: 'checkout_step_1',
-    disclosureVersion: MARKETING_SMS_DISCLOSURE_VERSION,
+    disclosureVersion: MARKETING_SMS_CONSENT[locale].version,
+    locale,
     ipAddress: (await requestMetadata()).ipAddress,
   })
 
@@ -280,6 +309,12 @@ export async function signLeaseAction(_prev: FormState, formData: FormData): Pro
   const data = session.data as Record<string, string | undefined>
   const legalName = `${data.firstName ?? ''} ${data.lastName ?? ''}`.trim()
 
+  // B-259: the language the E-SIGN consent sentence was RENDERED in. The
+  // Spanish one says something the English one does not — that the agreement
+  // itself is in English (D-122) — so which was shown is a material part of
+  // what this renter consented to.
+  const locale = await shownLocale(formData)
+
   // B-112: these moved here from step 1, so they are validated here too — and
   // BEFORE the signature is recorded, or a bad alternate phone would refuse a
   // lease that had already been signed.
@@ -344,7 +379,8 @@ export async function signLeaseAction(_prev: FormState, formData: FormData): Pro
       channel: 'notice_email',
       state: 'granted',
       source: 'checkout_lease_signing',
-      disclosureVersion: ELECTRONIC_RECORDS_CONSENT_VERSION,
+      disclosureVersion: ELECTRONIC_RECORDS_CONSENT[locale].version,
+      locale,
       ipAddress,
     })
   }

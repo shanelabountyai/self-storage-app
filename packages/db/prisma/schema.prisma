@@ -3660,6 +3660,13 @@ model Consent {
   /// Where the opt-in happened, e.g. "checkout_step_1", "portal_preferences".
   source            String
   disclosureVersion String?
+  /// B-259. Which language the disclosure was displayed in. Pairs with
+  /// `disclosureVersion`: the version alone names words, and only the two
+  /// together name words that can be produced for a dispute. Defaults to
+  /// "en" because every row written before this column existed was shown
+  /// English, which is true rather than assumed — the Spanish disclosures
+  /// did not exist.
+  locale            String         @default("en")
   ipAddress         String?
   capturedAt        DateTime       @default(now()) @db.Timestamptz(6)
   createdAt         DateTime       @default(now()) @db.Timestamptz(6)

@@ -1149,9 +1149,11 @@ export const en = {
   'tr.problem.no_rate_for_unit_type': 'That unit has no published rate, so we cannot quote it.',
 
   // --- Static pages: FAQ, About, Contact (B-262) -------------------------
-  // The prose a renter READS rather than operates. `/terms`, `/privacy` and
-  // `/messaging-policy` are deliberately absent: D-122 keeps anything a lawyer
-  // wrote in English, and the Spanish footer disclaimer already says so.
+  // The prose a renter READS rather than operates. `/terms` and `/privacy` are
+  // deliberately absent: D-122 keeps anything a lawyer wrote in English, and
+  // the Spanish footer disclaimer names them. `/messaging-policy` was absent
+  // for the same reason until B-259 gave its disclosures a Spanish version to
+  // explain — its keys are at the bottom of this file.
   //
   // The page TITLES here are the <h1>, not the <title> — `metadataFor` stays an
   // English literal on all three, because metadata is what a crawler reads and
@@ -1271,4 +1273,74 @@ export const en = {
   'a11y.tell.orCall': 'or call',
   'a11y.tell.tail':
     'Tell us the page and what happened, and we will fix it and reply. An accessibility barrier is a bug, and we treat it as one.',
+
+  // --- /messaging-policy (B-259, D-124/D-125) ---------------------------------
+  // The TCPA / A2P 10DLC disclosure page. B-262 moved it here rather than
+  // translating it, because it explains a consent recorded under a version
+  // constant — see `lib/consent/disclosures.ts` for why that ordering matters.
+  //
+  // The KEYWORDS are interpolated, never written into these strings: they come
+  // from `PUBLISHED_STOP_KEYWORDS` and friends, so the published list cannot
+  // drift from what `classifySmsKeyword` actually matches, and a translator
+  // cannot turn a matched string into a word.
+  'msgpol.title': 'Text message policy',
+  'msgpol.reviewed': '{name} · Last reviewed {date}',
+  'msgpol.intro':
+    'This page explains the text messages {name} sends, how you agree to receive them, and how to stop them at any time. It applies to every mobile number we hold.',
+
+  'msgpol.consent.heading': 'How you agree to receive texts',
+  'msgpol.consent.never': 'We never text a number that has not agreed to hear from us.',
+  'msgpol.consent.optInLead': 'Text {join} to {number}, then reply {yes} when we ask.',
+  'msgpol.consent.optInBody':
+    'Texting the keyword does not subscribe you on its own — we reply asking you to confirm, and only your {yes} switches the messages on. Both of our replies tell you how often we text, that message and data rates may apply, and how to stop.',
+  'msgpol.consent.unknownNumber':
+    'If we do not recognise the number you text from, we say so and subscribe nothing — call us and we will add it to your account first.',
+  'msgpol.consent.selfServe':
+    'You can also turn text messages on yourself, in the Notifications section of your online account, or by telling our staff to switch them on for you.',
+  'msgpol.consent.record':
+    'When you do, we record the date and time, where the consent came from, the exact version of the wording you agreed to, and which language that wording was shown in. You can see all of that on your own Notifications page at any time — including the fact that we have never asked you, if we have not.',
+  'msgpol.consent.notConditionLead': 'Consent is not a condition of renting from us.',
+  'msgpol.consent.notConditionBody':
+    'You can rent, pay and manage your unit entirely without text messages; we will email you instead.',
+
+  'msgpol.what.heading': 'What we send',
+  'msgpol.what.accountTerm': 'Account and payment messages',
+  'msgpol.what.accountBody':
+    'your gate code when you move in, a reminder before rent is due, a notice if a payment fails, and a message if your gate access changes.',
+  'msgpol.what.offersTerm': 'Occasional offers',
+  'msgpol.what.offersBody':
+    'only if you have separately agreed to marketing messages. These are a different permission from the account messages above, and you can hold one without the other.',
+  'msgpol.what.frequencyLead': 'Message frequency varies.',
+  'msgpol.what.frequencyBody':
+    'Most months you will receive around one to four messages. A month in which a payment fails, or in which your account falls behind, will include more.',
+
+  'msgpol.stop.heading': 'How to stop them',
+  'msgpol.stop.reply':
+    'Reply {stop} to any message from us. We also accept {others}. You will get one message confirming it, and then nothing further to that number.',
+  'msgpol.stop.stopsAll':
+    'Stopping texts stops all of them, including account and payment messages — not just the offers. We will keep emailing you about your account, because those messages are part of your rental agreement.',
+  'msgpol.stop.offersOnlyLead': 'If it is only the offers you want to stop:',
+  'msgpol.stop.offersOnlyBody':
+    'do not reply {stop} — turn marketing texts off on your Notifications page instead. That leaves your account and payment texts working, and you can switch the offers back on there whenever you like.',
+  'msgpol.stop.restart':
+    'To start again, reply {start}, or turn texts back on from your Notifications page. For help, reply {help} — you will get our phone number and a link back to this page.',
+  'msgpol.stop.portal':
+    'You can also switch them off yourself, without texting anything, in the Notifications section of your online account. That has exactly the same effect as replying {stop}.',
+
+  'msgpol.hours.heading': 'When we send them',
+  'msgpol.hours.body':
+    'We only text between 8am and 9pm in the local time of the facility you rent from, and that applies to every message including account and payment ones. Anything that would fall outside those hours waits, or is emailed instead. Individual facilities may use a narrower window where their state requires it.',
+
+  'msgpol.cost.heading': 'Cost',
+  'msgpol.cost.lead': 'Message and data rates may apply.',
+  'msgpol.cost.body':
+    'We do not charge you for text messages; your mobile carrier may, depending on your plan. Carriers are not liable for delayed or undelivered messages.',
+
+  'msgpol.privacy.heading': 'Your information',
+  'msgpol.privacy.body':
+    'We do not sell your mobile number, and we do not share it with anyone for their own marketing. We share it only with the messaging provider that delivers the texts on our behalf.',
+  'msgpol.privacy.privacyLink': 'Our privacy policy',
+  'msgpol.privacy.privacyTail': 'covers what else we hold and why.',
+  'msgpol.privacy.termsLink': 'Our terms',
+  'msgpol.privacy.termsTail': 'cover your rental agreement.',
 } as const

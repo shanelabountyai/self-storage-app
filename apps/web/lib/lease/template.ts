@@ -116,19 +116,10 @@ export const LEASE_TEMPLATE = `
 <p>We may change the rent or the terms of this agreement by giving you written notice in advance. If you keep the unit after a change takes effect, you have accepted it.</p>
 `.trim();
 
-/// The sentence a renter agrees to when they tick the consent box.
-///
-/// E-SIGN requires consent to transact electronically as its own affirmative
-/// act — not something a signature implies — so this is deliberately separate
-/// from the signature field and unticked by default.
-export const ELECTRONIC_RECORDS_CONSENT =
-  "I agree to sign this agreement electronically and to receive my lease, receipts and notices by email rather than on paper. I can ask for a paper copy at any time.";
-
-/// PRD 02 US-13 / B-032: this same sentence is what the `notice_email` consent
-/// record captures ("consent to receive notices by email is its own consent
-/// type... captured with the disclosure version at lease signing"). Bumped
-/// when the sentence above changes.
-export const ELECTRONIC_RECORDS_CONSENT_VERSION = "v1";
+// B-259 (D-125). The E-SIGN consent sentence and its version moved to
+// `lib/consent/disclosures.ts`, alongside the three checkout ones, so that a
+// language cannot gain a translation without gaining a version to record it
+// under.
 
 /// A typed name is a signature under E-SIGN when it is the signer's own act and
 /// is attributable to them. Comparing it to the name on the lease is the

@@ -30,13 +30,19 @@ export const es: Dictionary = {
   'chrome.payBillSr': ' o entrar a mi cuenta',
   'chrome.questionsCall': '¿Preguntas? Llame al',
   'chrome.orEmail': 'o escriba a',
-  // Deliberately says one thing more than the English (D-122): the legal
-  // pages, the contract and every notice are English-only, and the Spanish
+  // Deliberately says one thing more than the English (D-122): the contract,
+  // the notices and the pages a lawyer wrote are English-only, and the Spanish
   // reader is the only one for whom that is news. Translating a lien notice
   // is a liability, not a feature — so the honest move is to say where the
   // Spanish stops, on the page where they can still read it.
+  //
+  // B-259 NAMES the pages instead of saying "las páginas legales". It used to
+  // say every legal page was English, and `/messaging-policy` is Spanish now —
+  // a sentence whose whole job is to mark the boundary honestly cannot be left
+  // one merge behind the boundary. What is listed is what is actually English:
+  // `/terms`, `/privacy`, the lease and every notice.
   'chrome.disclaimer':
-    '{name} es un proyecto de aprendizaje. Nada en este sitio es una oferta real de almacenamiento, y las páginas legales son borradores sin revisión legal. Las páginas legales, el contrato y los avisos están únicamente en inglés.',
+    '{name} es un proyecto de aprendizaje. Nada en este sitio es una oferta real de almacenamiento, y las páginas legales son borradores sin revisión legal. Los términos, la política de privacidad, el contrato y los avisos están únicamente en inglés.',
 
   // --- Language toggle ---------------------------------------------------
   'lang.label': 'Idioma',
@@ -1193,9 +1199,11 @@ export const es: Dictionary = {
     'Esa unidad no tiene tarifa publicada, así que no podemos cotizarla.',
 
   // --- Páginas informativas: FAQ, Acerca de, Contacto (B-262) ------------
-  // Lo que un inquilino LEE, no lo que opera. `/terms`, `/privacy` y
-  // `/messaging-policy` no están aquí a propósito: D-122 deja en inglés todo lo
-  // que escribió un abogado, y el pie de página en español ya lo dice.
+  // Lo que un inquilino LEE, no lo que opera. `/terms` y `/privacy` no están
+  // aquí a propósito: D-122 deja en inglés todo lo que escribió un abogado, y
+  // el pie de página en español los nombra. `/messaging-policy` tampoco estaba,
+  // por lo mismo, hasta que B-259 le dio una versión en español a los avisos
+  // que esa página explica; sus claves están al final de este archivo.
   'faq.title': 'Preguntas frecuentes',
   'faq.intro':
     'Respuestas breves a lo que más nos preguntan. Si la suya no está, llámenos.',
@@ -1315,4 +1323,81 @@ export const es: Dictionary = {
   'a11y.tell.orCall': 'o llame al',
   'a11y.tell.tail':
     'Díganos en qué página fue y qué pasó, y lo arreglamos y le contestamos. Una barrera de accesibilidad es un error, y la tratamos como tal.',
+
+  // --- /messaging-policy (B-259, D-124/D-125) ---------------------------------
+  // Se traduce ahora que los avisos de consentimiento tienen su propia versión
+  // en español (`lib/consent/disclosures.ts`). `/terms` y `/privacy` siguen
+  // solo en inglés (D-122), y esta página lo dice al enlazarlos.
+  //
+  // Las PALABRAS CLAVE (STOP, HELP, START…) nunca se escriben aquí: se
+  // interpolan desde el código que las reconoce. No son palabras, son las
+  // cadenas exactas que hay que enviar; traducirlas daría una instrucción que
+  // no funciona.
+  'msgpol.title': 'Política de mensajes de texto',
+  'msgpol.reviewed': '{name} · Última revisión: {date}',
+  'msgpol.intro':
+    'Esta página explica los mensajes de texto que envía {name}, cómo acepta usted recibirlos y cómo detenerlos en cualquier momento. Aplica a todos los números de celular que tenemos.',
+
+  'msgpol.consent.heading': 'Cómo acepta usted recibir mensajes de texto',
+  'msgpol.consent.never':
+    'Nunca enviamos mensajes a un número que no haya aceptado recibirlos.',
+  'msgpol.consent.optInLead':
+    'Envíe {join} al {number} y luego responda {yes} cuando se lo pidamos.',
+  'msgpol.consent.optInBody':
+    'Enviar la palabra clave no lo suscribe por sí solo: le contestamos pidiéndole que confirme, y solo su {yes} activa los mensajes. Las dos respuestas nuestras le dicen con qué frecuencia enviamos mensajes, que pueden aplicarse tarifas de mensajes y datos, y cómo detenerlos.',
+  'msgpol.consent.unknownNumber':
+    'Si no reconocemos el número desde el que nos escribe, se lo decimos y no suscribimos nada: llámenos y lo agregamos primero a su cuenta.',
+  'msgpol.consent.selfServe':
+    'También puede activar los mensajes de texto usted mismo, en la sección Notificaciones de su cuenta en línea, o pidiéndole a nuestro personal que se los active.',
+  'msgpol.consent.record':
+    'Cuando lo hace, registramos la fecha y la hora, de dónde vino el consentimiento, la versión exacta del texto que usted aceptó y en qué idioma se le mostró ese texto. Todo eso lo puede ver cuando quiera en su propia página de Notificaciones, incluido el hecho de que nunca se lo hemos pedido, si no se lo hemos pedido.',
+  'msgpol.consent.notConditionLead': 'El consentimiento no es condición para rentar con nosotros.',
+  'msgpol.consent.notConditionBody':
+    'Usted puede rentar, pagar y manejar su unidad completamente sin mensajes de texto; en ese caso le escribimos por correo electrónico.',
+
+  'msgpol.what.heading': 'Qué enviamos',
+  'msgpol.what.accountTerm': 'Mensajes de su cuenta y sus pagos',
+  'msgpol.what.accountBody':
+    'su código de la puerta cuando se muda, un recordatorio antes de que venza la renta, un aviso si un pago falla y un mensaje si cambia su acceso a la puerta.',
+  'msgpol.what.offersTerm': 'Ofertas ocasionales',
+  'msgpol.what.offersBody':
+    'solo si aceptó por separado recibir mensajes promocionales. Es un permiso distinto del de los mensajes de cuenta de arriba, y puede tener uno sin el otro.',
+  'msgpol.what.frequencyLead': 'La frecuencia de los mensajes varía.',
+  'msgpol.what.frequencyBody':
+    'La mayoría de los meses recibirá entre uno y cuatro mensajes. Un mes en el que falle un pago, o en el que su cuenta se atrase, tendrá más.',
+
+  'msgpol.stop.heading': 'Cómo detenerlos',
+  'msgpol.stop.reply':
+    'Responda {stop} a cualquier mensaje nuestro. También aceptamos {others}. Recibirá un mensaje confirmándolo y después nada más a ese número.',
+  'msgpol.stop.stopsAll':
+    'Detener los mensajes de texto los detiene todos, incluidos los de su cuenta y sus pagos, no solo las ofertas. Le seguiremos escribiendo por correo electrónico sobre su cuenta, porque esos mensajes son parte de su contrato de renta.',
+  'msgpol.stop.offersOnlyLead': 'Si lo único que quiere detener son las ofertas:',
+  'msgpol.stop.offersOnlyBody':
+    'no responda {stop}. En vez de eso, apague los mensajes promocionales en su página de Notificaciones. Así siguen funcionando los mensajes de su cuenta y sus pagos, y puede volver a encender las ofertas ahí cuando quiera.',
+  'msgpol.stop.restart':
+    'Para volver a empezar, responda {start}, o vuelva a encender los mensajes desde su página de Notificaciones. Para obtener ayuda, responda {help}: recibirá nuestro número de teléfono y un enlace de regreso a esta página.',
+  'msgpol.stop.portal':
+    'También puede apagarlos usted mismo, sin enviar ningún mensaje, en la sección Notificaciones de su cuenta en línea. Eso tiene exactamente el mismo efecto que responder {stop}.',
+
+  'msgpol.hours.heading': 'Cuándo los enviamos',
+  'msgpol.hours.body':
+    'Solo enviamos mensajes entre las 8 a. m. y las 9 p. m. en la hora local de la sucursal donde usted renta, y eso aplica a todos los mensajes, incluidos los de cuenta y pagos. Lo que caiga fuera de ese horario espera, o se envía por correo electrónico. Algunas sucursales pueden usar un horario más corto donde su estado lo exige.',
+
+  'msgpol.cost.heading': 'Costo',
+  'msgpol.cost.lead': 'Pueden aplicarse tarifas de mensajes y datos.',
+  'msgpol.cost.body':
+    'Nosotros no le cobramos por los mensajes de texto; su compañía de celular puede cobrarle, según su plan. Las compañías no son responsables de mensajes demorados o no entregados.',
+
+  'msgpol.privacy.heading': 'Su información',
+  'msgpol.privacy.body':
+    'No vendemos su número de celular y no lo compartimos con nadie para su propia publicidad. Lo compartimos únicamente con el proveedor de mensajería que entrega los mensajes por nosotros.',
+  // Dicen una cosa más que el inglés, igual que `chrome.disclaimer`: quien lee
+  // en español es el único para quien es noticia que esas dos páginas no están
+  // traducidas, y es el momento de decírselo — justo antes de que las abra.
+  'msgpol.privacy.privacyLink': 'Nuestra política de privacidad',
+  'msgpol.privacy.privacyTail':
+    'explica qué más guardamos y por qué. Está únicamente en inglés.',
+  'msgpol.privacy.termsLink': 'Nuestros términos',
+  'msgpol.privacy.termsTail':
+    'cubren su contrato de renta. Están únicamente en inglés.',
 }

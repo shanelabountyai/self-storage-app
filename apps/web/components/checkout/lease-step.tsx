@@ -1,7 +1,7 @@
 import { AdminForm, Field } from '@/components/admin/form'
 import { advanceAction, signLeaseAction } from '@/app/(public)/checkout/actions'
-import { ELECTRONIC_RECORDS_CONSENT } from '@/lib/lease/template'
-import { translate, type Dictionary, type MessageKey } from '@/lib/i18n'
+import { ELECTRONIC_RECORDS_CONSENT } from '@/lib/consent/disclosures'
+import { translate, type Dictionary, type Locale, type MessageKey } from '@/lib/i18n'
 
 // PRD 01 US-501 step 4 / FR-4.2.
 //
@@ -25,6 +25,7 @@ export function LeaseStep({
   altContactPhone,
   activeDutyMilitary,
   dict,
+  locale,
 }: {
   token: string
   /// D-53 (B-106 part 5). One agreement per unit, in basket order. A single
@@ -44,6 +45,10 @@ export function LeaseStep({
   /// signed and has no way forward at all.
   signedOn?: string
   dict: Dictionary
+  /// B-259. Which language the E-SIGN consent sentence is rendered in. Not
+  /// derivable from `dict` — that carries interface copy, and this sentence is
+  /// a versioned consent text recorded as evidence.
+  locale: Locale
 }) {
   const t = (key: MessageKey, vars?: Record<string, string | number>) =>
     translate(dict, key, vars)
@@ -176,14 +181,23 @@ export function LeaseStep({
             E-SIGN — not something the signature implies — so it is a separate
             control, unticked by default. Through `Field` so that refusing the
             sign marks THIS box invalid, rather than only listing the reason in
-            an error summary a control-by-control navigator never passes. */}
+            an error summary a control-by-control navigator never passes.
+
+            B-259 (D-125): translated, with its own version per language, and
+            the rendered locale carried in the hidden field below so the
+            `notice_email` consent row records which wording was on screen. The
+            Spanish sentence also says the agreement itself is in English —
+            D-122 keeps the lease in one language, and a Spanish reader
+            consenting to receive documents they cannot read needs telling
+            before they tick, not after. */}
         <Field
           as="checkbox"
           name="consented"
           value="yes"
-          label={ELECTRONIC_RECORDS_CONSENT}
+          label={ELECTRONIC_RECORDS_CONSENT[locale].text}
           className="mt-3 text-sm"
         />
+        <input type="hidden" name="disclosureLocale" value={locale} />
 
         <div className="mt-4 max-w-sm">
           <Field
