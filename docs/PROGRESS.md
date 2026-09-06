@@ -8744,7 +8744,7 @@ B-090f translated the move-in path and deliberately stopped at the four consent 
 
 ## B-261 — Every email and text follows the tenant's language (2026-09-06)
 
-**Commit:** `PENDING`
+**Commit:** `0798c8b`
 
 B-090f gave a renter a Spanish browse, checkout and portal; B-259 gave them a consent record naming Spanish words. Then we emailed them in English. This is the item that closes it, and **the dunning ladder is why it mattered**: the ladder ends in a lien file, so the account least able to read our English was the account it mattered most on.
 
