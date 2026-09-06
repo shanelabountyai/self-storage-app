@@ -23,7 +23,7 @@
 | 90k | B-259 | A Spanish renter ticks three consent boxes written in English | M | B-090f |
 | 90m | B-261 | Every email and text still goes out in English, including to a renter who rented in Spanish | L | B-090f, B-259 |
 | 90n | B-262 | The Spanish stops at the signed-in product | L | B-260 |
-| 93 | B-264 | `reportRange`'s rolling window builds its exclusive end in the wrong coordinate system | S | B-092 |
+| 93 | B-266 | `reportRange`'s rolling window builds its exclusive end in the wrong coordinate system | S | B-092 |
 
 > An item stays open until every part of it is done — several above are partly built, and their parts are recorded in [`../PROGRESS.md`](../PROGRESS.md).
 
@@ -297,4 +297,4 @@
 | 90n | B-262 |  | The Spanish stops at the signed-in product | L | Phase 2 |
 | 91 | B-091 | ✅ | Split into two parts, 2026-08-19 | L | Phase 2 |
 | 92 | B-092 | ✅ | Impersonation oversight | M | Phase 2 |
-| 93 | B-264 |  | `reportRange`'s rolling window builds its exclusive end in the wrong coordinate system | S | Phase 2 |
+| 93 | B-266 |  | `reportRange`'s rolling window builds its exclusive end in the wrong coordinate system | S | Phase 2 |
