@@ -1,25 +1,24 @@
 import { ProsePage, Section, metadataFor } from '@/components/site/prose-page'
+import { dictionaryFor, translate, type MessageKey } from '@/lib/i18n'
+import { getLocale } from '@/lib/i18n/server'
 
+// B-262. The metadata stays an English literal: it is what a crawler reads,
+// and D-122 keeps the crawler on English. Only the rendered page follows the
+// locale cookie.
 export const metadata = metadataFor('About', 'What this project is.')
 
-export default function AboutPage() {
+export default async function AboutPage() {
+  const dict = dictionaryFor(await getLocale())
+  const t = (key: MessageKey) => translate(dict, key)
+
   return (
-    <ProsePage title="About" intro="A small self-storage operator, run on software we own.">
-      <Section heading="What we are">
-        <p>
-          We run a handful of self-storage facilities and built the software that runs
-          them, rather than renting it per site per month. That means the prices and
-          availability you see come from the same system the front desk uses — not a
-          nightly export.
-        </p>
+    <ProsePage title={t('about.title')} intro={t('about.intro')}>
+      <Section heading={t('about.what.heading')}>
+        <p>{t('about.what.body')}</p>
       </Section>
 
-      <Section heading="A note on this site">
-        <p>
-          This is a learning project built to production standards. The facilities,
-          tenants, and prices shown are demonstration data, and nothing here is a real
-          offer of storage.
-        </p>
+      <Section heading={t('about.site.heading')}>
+        <p>{t('about.site.body')}</p>
       </Section>
     </ProsePage>
   )

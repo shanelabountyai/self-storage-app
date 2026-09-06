@@ -167,3 +167,64 @@ test.describe('the portal in Spanish', () => {
     await assertNoAxeViolations(page)
   })
 })
+
+// --- B-262: the static pages ------------------------------------------------
+//
+// The prose a renter READS rather than operates. Two claims, and the second is
+// the one worth a test: the pages that were translated are Spanish, and the
+// pages D-122 keeps in English are still English. That second half is a
+// decision, not an omission — a later session translating `/terms` out of
+// tidiness would reverse it silently, and this is where that shows up.
+
+test.describe('the static pages in Spanish', () => {
+  test.beforeEach(async ({ context }) => {
+    await context.addCookies([SPANISH])
+  })
+
+  const TRANSLATED: [string, RegExp][] = [
+    ['/faq', /Preguntas frecuentes/],
+    ['/about', /Acerca de nosotros/],
+    ['/contact', /Contacto/],
+    ['/accessibility', /Accesibilidad/],
+  ]
+
+  for (const [route, heading] of TRANSLATED) {
+    test(`${route} renders in Spanish`, async ({ page }) => {
+      await page.goto(route)
+      await expect(page.locator('html')).toHaveAttribute('lang', 'es')
+      await expect(page.getByRole('heading', { level: 1 })).toContainText(heading)
+    })
+  }
+
+  // D-122: anything a lawyer wrote stays English until somebody with a licence
+  // says otherwise, and `/messaging-policy` is with them — it is the TCPA /
+  // A2P 10DLC disclosure, and the consent a tenant gives is recorded against
+  // an English version constant (B-259 owns that). The Spanish footer already
+  // tells the reader so; this pins it.
+  const ENGLISH_ONLY: [string, RegExp][] = [
+    ['/terms', /Terms of service/],
+    ['/privacy', /Privacy/],
+    ['/messaging-policy', /Text message policy/],
+  ]
+
+  for (const [route, heading] of ENGLISH_ONLY) {
+    test(`${route} is deliberately still English`, async ({ page }) => {
+      await page.goto(route)
+      await expect(page.getByRole('heading', { level: 1 })).toContainText(heading)
+    })
+  }
+
+  test('the accessibility statement names its gaps in Spanish too', async ({ page }) => {
+    await page.goto('/accessibility')
+
+    // The generated half. Both exception lists are rendered from
+    // `scan-coverage.ts`, and rendering half a list of gaps in the reader's
+    // language reads as though the untranslated rows did not matter.
+    await expect(page.getByText('las corridas de revisión automática no llevan la cookie')).toBeVisible()
+    await expect(page.getByText('el recibo de un pago que de verdad se aprobó')).toBeVisible()
+
+    // One constant, formatted per locale — the English page dates itself
+    // "19 August 2026" and this one must not silently slide a day (B-228).
+    await expect(page.getByText('Última revisión: 19 de agosto de 2026.')).toBeVisible()
+  })
+})

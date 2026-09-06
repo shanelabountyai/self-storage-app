@@ -1191,4 +1191,128 @@ export const es: Dictionary = {
   'tr.problem.same_unit': 'Esa es la unidad en la que ya está.',
   'tr.problem.no_rate_for_unit_type':
     'Esa unidad no tiene tarifa publicada, así que no podemos cotizarla.',
+
+  // --- Páginas informativas: FAQ, Acerca de, Contacto (B-262) ------------
+  // Lo que un inquilino LEE, no lo que opera. `/terms`, `/privacy` y
+  // `/messaging-policy` no están aquí a propósito: D-122 deja en inglés todo lo
+  // que escribió un abogado, y el pie de página en español ya lo dice.
+  'faq.title': 'Preguntas frecuentes',
+  'faq.intro':
+    'Respuestas breves a lo que más nos preguntan. Si la suya no está, llámenos.',
+  'faq.reserve.q': '¿Tengo que pagar para reservar una unidad?',
+  'faq.reserve.a':
+    'No. Las reservaciones son gratis, no piden tarjeta y no piden cuenta — solo su nombre, correo, teléfono y la fecha en que quiere entrar. El apartado vence solo si usted no se muda.',
+  'faq.online.q': '¿Puedo rentar todo en línea?',
+  'faq.online.a':
+    'Sí. Usted elige una unidad, firma el contrato electrónicamente, paga el primer monto y recibe su código de la puerta — sin ir a una oficina.',
+  'faq.term.q': '¿Hay un contrato a largo plazo?',
+  'faq.term.a':
+    'No. La renta es mes a mes. Usted avisa según lo que dice su contrato y se muda.',
+  'faq.price.q': '¿Cuál es la diferencia entre el precio en línea y el precio en tienda?',
+  'faq.price.a':
+    'Algunos tamaños cuestan menos si renta en línea que si renta en el mostrador. Los dos precios se muestran antes de que usted se comprometa, así que puede ver cuál le aplica. Reservar no cambia el precio — lo que lo cambia es rentar en línea.',
+  'faq.size.q': '¿Qué tamaño necesito?',
+  'faq.size.intro': 'Una guía aproximada, y con gusto lo vemos con usted por teléfono:',
+  'faq.size.5x5.term': '5 por 5 pies',
+  'faq.size.5x5.body':
+    'un clóset grande. Cajas, adornos de temporada, una bicicleta, algunos muebles pequeños.',
+  'faq.size.10x10.term': '10 por 10 pies',
+  'faq.size.10x10.body':
+    'como medio garaje, o lo que hay en un departamento de una recámara, incluyendo un sofá y un juego de colchón.',
+  'faq.size.10x20.term': '10 por 20 pies',
+  'faq.size.10x20.body':
+    'un garaje sencillo. Una casa de tres recámaras, o un carro y todavía sobra espacio.',
+  'faq.size.tail':
+    'Si está entre dos tamaños, tome el más grande. Pagar un poco más es mejor que descubrir el día de la mudanza que lo último ya no cabe.',
+  'faq.hours.q': '¿Cuándo puedo llegar a mi unidad?',
+  'faq.hours.a':
+    'El horario de oficina y el horario de la puerta son distintos, y los dos están en la página de cada sucursal. El horario de la puerta es cuando usted puede llegar a su unidad; el horario de oficina es cuando hay personal.',
+  'faq.else.q': '¿Algo más?',
+  'faq.else.call': 'Llame al',
+
+  'about.title': 'Acerca de nosotros',
+  'about.intro':
+    'Un operador pequeño de bodegas de autoalmacenamiento, con software propio.',
+  'about.what.heading': 'Quiénes somos',
+  'about.what.body':
+    'Operamos unas cuantas sucursales de autoalmacenamiento y construimos el software que las opera, en vez de rentarlo por sucursal cada mes. Eso quiere decir que los precios y la disponibilidad que usted ve salen del mismo sistema que usa el mostrador — no de una exportación nocturna.',
+  'about.site.heading': 'Una nota sobre este sitio',
+  'about.site.body':
+    'Este es un proyecto de aprendizaje construido con estándares de producción. Las sucursales, los inquilinos y los precios que se muestran son datos de demostración, y nada de esto es una oferta real de almacenamiento.',
+
+  'contact.title': 'Contacto',
+  'contact.intro': 'La forma más rápida de comunicarse con nosotros es por teléfono.',
+  'contact.phone': 'Teléfono',
+  'contact.email': 'Correo electrónico',
+  'contact.facility.heading': 'Una sucursal en particular',
+  'contact.facility.body':
+    'Cada sucursal publica su propio teléfono, su horario de oficina y su horario de la puerta en su página. Esos números llegan directo a la sucursal.',
+
+  // --- Declaración de accesibilidad (/accessibility, B-262) --------------
+  // Cada frase de aquí es una afirmación pública sobre lo que el sistema hace,
+  // ahora en un segundo idioma — así que el español se sostiene con la misma
+  // vara que el inglés.
+  'a11y.title': 'Accesibilidad',
+  'a11y.intro':
+    'Nuestra meta es cumplir con WCAG 2.1 nivel AA en cada página y en cada proceso. Esta página dice hasta dónde hemos llegado de verdad.',
+  'a11y.target.heading': 'Cuál es nuestra meta',
+  'a11y.target.body':
+    'Las Pautas de Accesibilidad para el Contenido Web (WCAG) 2.1, nivel AA. Eso abarca el manejo con teclado, el uso con lector de pantalla, el contraste de color, el cambio de tamaño del texto y el reajuste en pantallas pequeñas.',
+  'a11y.true.heading': 'Qué es cierto hoy',
+  'a11y.true.keyboard':
+    'Todas las páginas de este sitio público funcionan solo con el teclado, y el indicador de foco cumple el contraste de 3:1 que piden las pautas.',
+  'a11y.true.colour':
+    'El color nunca es la única forma en que le decimos algo — un estado que se muestra con color también va escrito con palabras.',
+  'a11y.true.resize':
+    'El texto se puede agrandar al 200% y la página se reajusta a 320px de ancho sin desplazamiento horizontal.',
+  'a11y.true.labels':
+    'Los campos de los formularios tienen etiquetas de verdad, no solo texto de ejemplo.',
+  'a11y.true.errors':
+    'Cuando un formulario rechaza algo que usted escribió, el mensaje va unido al campo mismo, así que un lector de pantalla lo lee junto con ese campo en vez de dejarlo buscándolo — y lo que ya había escrito sigue ahí, así que corrige solo lo que le pedimos en vez de llenar el formulario otra vez. Un guardado exitoso también se anuncia.',
+  'a11y.true.motion':
+    'La animación respeta la preferencia de movimiento reducido de su sistema.',
+  'a11y.true.maps':
+    'Donde mostramos un mapa, la información va primero como texto y el mapa queda plegado detrás de un botón que usted tiene que presionar. En la página de una sucursal ese texto es la dirección y un enlace para llegar; en los resultados de búsqueda es la lista misma de sucursales, con distancias y precios. Nunca necesita el mapa, y si uno no carga se lo decimos en vez de dejar un recuadro vacío.',
+  'a11y.check.heading': 'Cómo lo revisamos',
+  'a11y.check.ci':
+    'Las pruebas automáticas de accesibilidad corren a lo ancho de un teléfono y de una computadora en cada cambio que sube a nuestra rama principal, y en cada solicitud de cambios que está abierta a revisión. No son una traba para publicar: si una falla nos avisa, no detiene la publicación. Una revisión que la herramienta no puede decidir también reprueba la corrida, en cada página de esa corrida, para que «no revisamos eso» nunca se lea calladamente como «eso pasó».',
+  'a11y.check.waivedIntro':
+    'Algunas de esas revisiones sin decidir ya las vimos y resultaron ser un límite de la herramienta y no un problema real. Se dejan de lado de tres maneras distintas, y preferimos nombrar cada una en vez de redondearlas:',
+  'a11y.check.waived.page':
+    'Algunas se dejan de lado solo en la página donde se revisaron — una barra que se encima a la página a propósito para quedar al alcance, un fondo rayado que el revisor no puede atravesar. La misma revisión sigue teniendo que pasar en todo lo demás.',
+  'a11y.check.waived.site':
+    'Algunas se dejan de lado en todo el sitio, pero solo donde la prueba misma vuelve a revisar lo que confundió a la herramienta. Una celda que se salió de vista en una tabla ancha es una de ellas: se deja de lado solo donde usted tiene una barra de desplazamiento que la trae de vuelta, y algo pintado de verdad fuera del borde de la pantalla sigue reprobando.',
+  'a11y.check.waived.thirdParty':
+    'El contenido dentro de un marco que sirve otra empresa — el formulario de la tarjeta, el mapa — no lo revisan estas pruebas. Esa es su página, no la nuestra. Un marco que construimos nosotros se revisa como cualquier otra cosa.',
+  'a11y.check.routesIntro':
+    'Todavía no lo cubren todo. Estas son las páginas que quedan fuera de esa corrida, y la razón de cada una:',
+  'a11y.check.routesTail':
+    'Preferimos nombrar cada hueco en vez de taparlo con una afirmación general. Esta lista se genera del mismo archivo que leen las pruebas, así que una página que deja de revisarse aparece aquí en vez de desaparecer calladamente de las dos.',
+  'a11y.check.statesIntro':
+    'Esa lista nombra páginas. Algunas pantallas además tienen estados — un mensaje de error, un apartado que venció, un tamaño que se agotó mientras usted decidía — que solo aparecen una vez que usted hizo algo en ellas. Estos son los que sabemos que no están cubiertos, y por qué:',
+  'a11y.check.statesTail':
+    'Es probable que existan más estados que todavía no hemos encontrado ni nombrado — a diferencia de la lista de páginas de arriba, esta no puede decir que está completa.',
+  'a11y.check.floor':
+    'La prueba automática es un piso, no un techo — atrapa más o menos una tercera parte de los problemas reales, y no puede juzgar si un lector de pantalla dice algo que tenga sentido.',
+  'a11y.check.noManualPass':
+    'Todavía no se ha hecho ni una revisión completa con lector de pantalla ni una revisión registrada con teclado',
+  'a11y.check.noManualPassTail': 'así que nada de esta página se apoya en una.',
+  'a11y.short.heading': 'En qué nos quedamos cortos hoy',
+  'a11y.short.intro':
+    'Este sitio está en construcción activa. Estos son los problemas que conocemos, al {date}. Si alguno le impide seguir, díganos y le ayudamos a terminar lo que estaba haciendo por teléfono o por correo mientras tanto.',
+  'a11y.short.js.term': 'Rentar en línea sin JavaScript.',
+  'a11y.short.js.body':
+    'Todo el proceso de renta funciona con JavaScript apagado, pero la cuenta regresiva del apartado de 30 minutos no: muestra el tiempo que quedaba cuando se dibujó la página y no va bajando, así que si usted está leyendo el contrato cuando se acaba, el vencimiento puede ser lo primero que sepa. Con JavaScript encendido le avisamos cinco minutos antes y puede extender el apartado con un solo toque.',
+  'a11y.short.staff.term': 'Nuestras pantallas para el personal',
+  'a11y.short.staff.body':
+    'tienen problemas conocidos. Las listas largas de Tareas, Prospectos, Morosidad y Sesiones de soporte no están paginadas. Ningún cliente las usa, pero no vamos a describirlas como terminadas.',
+  'a11y.short.maps.term': 'Los mapas que mostramos no son totalmente accesibles',
+  'a11y.short.maps.body':
+    'y no está en nuestras manos arreglarlos. La página de una sucursal inserta OpenStreetMap, cuyos controles de acercamiento se llaman «+» y «−» y cuyo marcador no tiene texto alternativo. Los resultados de búsqueda pueden mostrar un segundo mapa de otro proveedor, donde nosotros controlamos los marcadores de precio pero no los mosaicos ni los controles propios del proveedor que están debajo; todavía no hemos evaluado ese contra un mapa en vivo, así que nada de aquí se apoya en eso. Los dos quedan plegados detrás de un botón, y ninguno es nunca la única forma de obtener la información.',
+  'a11y.short.reviewed': 'Última revisión: {date}.',
+  'a11y.tell.heading': 'Díganos cuando nos equivoquemos',
+  'a11y.tell.before': 'Si algo aquí le impide seguir, escriba a',
+  'a11y.tell.orCall': 'o llame al',
+  'a11y.tell.tail':
+    'Díganos en qué página fue y qué pasó, y lo arreglamos y le contestamos. Una barrera de accesibilidad es un error, y la tratamos como tal.',
 }

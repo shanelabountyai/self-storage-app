@@ -127,12 +127,26 @@ describe('the accessibility scan contract (B-139)', () => {
     }
   })
 
+
+  // B-262. The statement is bilingual, so a customer-facing row without a
+  // Spanish reason renders the English one to a Spanish reader — half a list
+  // of gaps in the reader's language, which reads as though the untranslated
+  // rows were the ones that did not matter. `reasonEs` is optional on the type
+  // on purpose (the admin rows never reach a customer and need none), so this
+  // is the guard that makes it required where it counts.
+  const bilingual = (rows: readonly { route: string; reason: string; reasonEs?: string }[]) => {
+    const missing = rows.filter((row) => !row.reasonEs?.trim()).map((row) => row.route)
+    expect(missing, 'customer-facing rows with no Spanish reason (B-262)').toEqual([])
+    expect(rows.every((row) => (row.reasonEs ?? '').length > 20)).toBe(true)
+  }
+
   it('tells a visitor about customer-facing gaps only', () => {
     const shown = customerFacingExceptions()
     expect(shown.length).toBeGreaterThan(0)
     expect(shown.every((row) => row.audience !== 'admin')).toBe(true)
     // Every reason has to read as a sentence on a public page, not as a route.
     expect(shown.every((row) => row.reason.length > 20 && !row.reason.includes('['))).toBe(true)
+    bilingual(shown)
   })
 
   // B-184 (T1). The same contract, one level down: a STATE is not a route, so
@@ -272,6 +286,7 @@ describe('the accessibility scan contract (B-139)', () => {
       expect(shown.length).toBeGreaterThan(0)
       expect(shown.every((row) => row.audience !== 'admin')).toBe(true)
       expect(shown.every((row) => row.reason.length > 20)).toBe(true)
+      bilingual(shown)
     })
   })
 })

@@ -9,8 +9,17 @@
 // online price / in-store price / gate hours / office hours have one
 // customer-facing word each, and Spanish gets the same treatment —
 // tamaño / unidad / precio en línea / precio en tienda / horario de la puerta
-// / horario de oficina. Admin words ("unit type", "street rate", "web rate",
-// "lease", "delinquent") do not appear in either dictionary.
+// / horario de oficina.
+//
+// The industry's OWN words — "unit type", "street rate", "web rate",
+// "delinquent" — appear in neither dictionary. **"lease" is the exception, and
+// this comment used to deny it** (corrected by B-262, which found ~15 uses
+// while lifting `/faq` in): D-15 lists it among the admin words, but the
+// signed agreement is a thing a renter is genuinely asked to sign and read,
+// and every customer surface here has always called it that. Spanish says
+// `contrato` for the same reason and with the same consistency. The rule the
+// dictionaries actually keep is one word per concept, which both languages
+// do; the comment was describing a rule nobody had ever followed.
 
 export const en = {
   // --- Site chrome -------------------------------------------------------
@@ -1138,4 +1147,128 @@ export const en = {
     'A transfer moves you within one facility. That unit is at another site.',
   'tr.problem.same_unit': 'That is the unit you are already in.',
   'tr.problem.no_rate_for_unit_type': 'That unit has no published rate, so we cannot quote it.',
+
+  // --- Static pages: FAQ, About, Contact (B-262) -------------------------
+  // The prose a renter READS rather than operates. `/terms`, `/privacy` and
+  // `/messaging-policy` are deliberately absent: D-122 keeps anything a lawyer
+  // wrote in English, and the Spanish footer disclaimer already says so.
+  //
+  // The page TITLES here are the <h1>, not the <title> — `metadataFor` stays an
+  // English literal on all three, because metadata is what a crawler reads and
+  // D-122 keeps the crawler on English.
+  'faq.title': 'Frequently asked questions',
+  'faq.intro': "Short answers to what people ask most. Call us if yours isn't here.",
+  'faq.reserve.q': 'Do I need to pay to reserve a unit?',
+  'faq.reserve.a':
+    "No. Reservations are free, need no card, and need no account — just your name, email, phone, and the date you want to move in. The hold expires on its own if you don't move in.",
+  'faq.online.q': 'Can I rent entirely online?',
+  'faq.online.a':
+    'Yes. You pick a unit, sign the lease electronically, pay the first amount due, and get your gate code — without visiting an office.',
+  'faq.term.q': 'Is there a long-term contract?',
+  'faq.term.a':
+    'No. Rentals are month-to-month. You give notice according to your lease and move out.',
+  'faq.price.q': 'What is the difference between the online and in-store price?',
+  'faq.price.a':
+    'Some sizes cost less when you rent online than when you rent at the counter. Both prices are shown before you commit, so you can see which one applies to you. Reserving does not change the price — renting online is what does.',
+  'faq.size.q': 'What size do I need?',
+  'faq.size.intro': 'A rough guide, and we will happily talk it through on the phone:',
+  'faq.size.5x5.term': '5 by 5 feet',
+  'faq.size.5x5.body':
+    'a large closet. Boxes, seasonal decorations, a bike, a few pieces of small furniture.',
+  'faq.size.10x10.term': '10 by 10 feet',
+  'faq.size.10x10.body':
+    'about half a garage, or the contents of a one-bedroom apartment including a sofa and a mattress set.',
+  'faq.size.10x20.term': '10 by 20 feet',
+  'faq.size.10x20.body': 'a single garage. A three-bedroom house, or a car with room left over.',
+  'faq.size.tail':
+    'If you are between two sizes, take the larger one. Paying a little more beats discovering on moving day that the last of it does not fit.',
+  'faq.hours.q': 'When can I get to my unit?',
+  'faq.hours.a':
+    'Office hours and gate hours are different, and both are listed on every facility page. Gate hours are when you can reach your unit; office hours are when staff are there.',
+  'faq.else.q': 'Something else?',
+  'faq.else.call': 'Call',
+
+  'about.title': 'About',
+  'about.intro': 'A small self-storage operator, run on software we own.',
+  'about.what.heading': 'What we are',
+  'about.what.body':
+    'We run a handful of self-storage facilities and built the software that runs them, rather than renting it per site per month. That means the prices and availability you see come from the same system the front desk uses — not a nightly export.',
+  'about.site.heading': 'A note on this site',
+  'about.site.body':
+    'This is a learning project built to production standards. The facilities, tenants, and prices shown are demonstration data, and nothing here is a real offer of storage.',
+
+  'contact.title': 'Contact',
+  'contact.intro': 'The fastest way to reach us is the phone.',
+  'contact.phone': 'Phone',
+  'contact.email': 'Email',
+  'contact.facility.heading': 'A specific facility',
+  'contact.facility.body':
+    'Each facility lists its own phone number, office hours, and gate hours on its page. Those reach the site directly.',
+
+  // --- Accessibility statement (/accessibility, B-262) -------------------
+  // Every sentence here is a public claim about the build, in a second
+  // language — so the Spanish is held to the same bar as the English and
+  // `tests/accessibility-statement.test.ts` now reads the CI claim out of this
+  // dictionary rather than out of the page source.
+  'a11y.title': 'Accessibility',
+  'a11y.intro':
+    'We aim to meet WCAG 2.1 Level AA across every page and every flow. This page says how far we have actually got.',
+  'a11y.target.heading': 'What we target',
+  'a11y.target.body':
+    'Web Content Accessibility Guidelines (WCAG) 2.1, Level AA. That covers keyboard operation, screen-reader support, colour contrast, text resizing, and reflow on small screens.',
+  'a11y.true.heading': 'What is true today',
+  'a11y.true.keyboard':
+    'Every page on this public site works with a keyboard alone, and the focus indicator meets the 3:1 contrast the guidelines ask for.',
+  'a11y.true.colour':
+    'Colour is never the only way we tell you something — a status shown in colour is also written in words.',
+  'a11y.true.resize':
+    'Text can be resized to 200% and the page reflows to 320px wide without sideways scrolling.',
+  'a11y.true.labels': 'Form fields have real labels, not just placeholder text.',
+  'a11y.true.errors':
+    'When a form rejects something you typed, the message is tied to the field itself, so a screen reader reads it out with that field rather than leaving you to hunt for it — and what you already entered is still there, so you fix the one thing we asked about rather than filling the form in again. A successful save is announced too.',
+  'a11y.true.motion': "Animation respects your system's reduced-motion setting.",
+  'a11y.true.maps':
+    'Where we show a map, the information is given as text first and the map is collapsed behind a button you have to press. On a facility page that text is the address and a directions link; on search results it is the list of facilities itself, with distances and prices. You never need the map, and if one fails to load we say so rather than leaving an empty box.',
+  'a11y.check.heading': 'How we check',
+  'a11y.check.ci':
+    'Automated accessibility tests run at both phone and desktop widths on every push to our main branch, and on every pull request that is open for review. They are not a release gate: a failing run tells us, it does not stop the deploy. A check the tool cannot decide fails the run as well, on every page in it, so “we did not test that” never quietly reads as “that passed”.',
+  'a11y.check.waivedIntro':
+    'A few of those undecided checks are ones we have looked at and found to be a limit of the tool rather than a real problem. They are set aside in three different ways, and we would rather name each than round them off:',
+  'a11y.check.waived.page':
+    'Some are waived only on the page they were checked on — a bar that overlaps the page on purpose so it stays in reach, a striped background the checker cannot see through. The same check still has to pass everywhere else.',
+  'a11y.check.waived.site':
+    'Some are waived anywhere on the site, but only where the test itself re-checks the thing that confused the tool. A cell that has scrolled out of view in a wide table is one: it is set aside only where you have a scrollbar that brings it back, and something genuinely painted off the edge of the screen still fails.',
+  'a11y.check.waived.thirdParty':
+    'Content inside a frame served by another company — the card form, the map — is not checked by these tests. That is their page, not ours. A frame we build ourselves is checked like anything else.',
+  'a11y.check.routesIntro':
+    'They do not yet cover everything. These are the pages outside that run, and the reason each one is:',
+  'a11y.check.routesTail':
+    'We would rather name each gap than let a general claim cover it. This list is generated from the same file the tests read, so a page that stops being checked appears here rather than quietly disappearing from both.',
+  'a11y.check.statesIntro':
+    'That list names pages. Some screens also have states — an error message, a hold that has expired, a size that sold out while you were deciding — that only appear once you have done something on them. These are the ones we know are not covered, and why:',
+  'a11y.check.statesTail':
+    'More states than these probably exist that we have not found and named yet — unlike the page list above, this one cannot claim to be complete.',
+  'a11y.check.floor':
+    'Automated testing is a floor, not a ceiling — it catches roughly a third of real problems, and it cannot judge whether a screen reader says something that makes sense.',
+  'a11y.check.noManualPass':
+    'Neither a full screen-reader pass nor a recorded keyboard pass has been carried out yet',
+  'a11y.check.noManualPassTail': 'so nothing on this page rests on one.',
+  'a11y.short.heading': 'Where we fall short today',
+  'a11y.short.intro':
+    'This site is under active construction. These are the problems we know about, as of {date}. If one of them blocks you, tell us and we will help you finish what you were doing by phone or email in the meantime.',
+  'a11y.short.js.term': 'Renting online without JavaScript.',
+  'a11y.short.js.body':
+    'The whole checkout works with JavaScript turned off, but the countdown on the 30-minute hold does not: it shows the time left when the page was drawn and does not tick down, so if you are reading the lease when it runs out, the expiry can be the first you hear of it. With JavaScript on you are warned five minutes out and can extend the hold in one press.',
+  'a11y.short.staff.term': 'Our staff-facing screens',
+  'a11y.short.staff.body':
+    'have known problems. Long lists on Tasks, Leads, Delinquency and Support sessions are not paginated. No customer uses them, but we are not going to describe them as done.',
+  'a11y.short.maps.term': 'The maps we show are not fully accessible',
+  'a11y.short.maps.body':
+    "and they are not ours to fix. A facility page embeds OpenStreetMap, whose zoom controls are named “+” and “−” and whose marker has no text alternative. Search results can show a second map from a different provider, where we control the price markers but not the tiles or the vendor's own controls beneath them; we have not yet assessed that one against a live map, so nothing here rests on it. Both stay collapsed behind a button, and neither is ever the only way to get the information.",
+  'a11y.short.reviewed': 'Last reviewed: {date}.',
+  'a11y.tell.heading': 'Tell us when we get it wrong',
+  'a11y.tell.before': 'If something here blocks you, email',
+  'a11y.tell.orCall': 'or call',
+  'a11y.tell.tail':
+    'Tell us the page and what happened, and we will fix it and reply. An accessibility barrier is a bug, and we treat it as one.',
 } as const

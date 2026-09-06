@@ -292,6 +292,18 @@ export type ScanException = {
   /// Written for a visitor rather than for us: what is not checked, and why it
   /// cannot be. This is the sentence the public page renders verbatim.
   reason: string
+  /// The same sentence in Spanish, because the accessibility statement itself
+  /// is now bilingual (B-262) and half a list of gaps in the reader's language
+  /// is worse than none — it reads as though the untranslated rows were the
+  /// ones that did not matter.
+  ///
+  /// Optional rather than required, and enforced by
+  /// `tests/a11y-scan-coverage.test.ts` instead of by the type: the admin rows
+  /// are never rendered to a customer (staff screens are English throughout,
+  /// D-122), so requiring one would buy nine Spanish sentences nobody ever
+  /// reads. The test holds the rule that actually matters — every row a
+  /// visitor is shown carries both languages.
+  reasonEs?: string
 }
 
 /// Every route the automated run does not cover, with the reason it does not.
@@ -304,33 +316,45 @@ export const SCAN_EXCEPTIONS: readonly ScanException[] = [
     audience: 'public',
     reason:
       'the checkout confirmation screen, which only exists after a real payment redirect and cannot be reproduced from outside the card processor\u2019s own frame',
+    reasonEs:
+      'la pantalla de confirmación de la renta, que solo existe después de un cobro real y no se puede reproducir fuera del marco del propio procesador de tarjetas',
   },
   {
     route: '/pay/[token]',
     audience: 'public',
     reason:
       'the one-tap payment screen a reminder links to, which needs a live link issued against a real balance',
+    reasonEs:
+      'la pantalla de pago de un toque a la que lleva un recordatorio, que necesita un enlace vivo emitido contra un saldo real',
   },
   {
     route: '/pay/[token]/done',
     audience: 'public',
     reason: 'the receipt shown after paying from that link, for the same reason',
+    reasonEs:
+      'el recibo que se muestra después de pagar desde ese enlace, por la misma razón',
   },
   {
     route: '/checkout/resume/[token]',
     audience: 'public',
     reason:
       'the live state of a resume link from an abandoned-booking email \u2014 the expired-link state it lands on is checked',
+    reasonEs:
+      'el estado vivo de un enlace para retomar una renta abandonada — el estado de enlace vencido al que llega sí se revisa',
   },
   {
     route: '/portal/documents/[documentId]',
     audience: 'portal',
     reason: 'a single stored document, which needs a real document on a real account',
+    reasonEs:
+      'un documento guardado en particular, que necesita un documento real en una cuenta real',
   },
   {
     route: '/portal/statements/[leaseId]/[period]',
     audience: 'portal',
     reason: 'a single month\u2019s statement, which needs a real statement on a real account',
+    reasonEs:
+      'el estado de cuenta de un mes en particular, que necesita un estado de cuenta real en una cuenta real',
   },
   {
     route: '/admin/auctions/[caseId]',
@@ -747,6 +771,18 @@ export type StateException = {
   state: string
   audience: ScanAudience
   reason: string
+  /// The same sentence in Spanish, because the accessibility statement itself
+  /// is now bilingual (B-262) and half a list of gaps in the reader's language
+  /// is worse than none — it reads as though the untranslated rows were the
+  /// ones that did not matter.
+  ///
+  /// Optional rather than required, and enforced by
+  /// `tests/a11y-scan-coverage.test.ts` instead of by the type: the admin rows
+  /// are never rendered to a customer (staff screens are English throughout,
+  /// D-122), so requiring one would buy nine Spanish sentences nobody ever
+  /// reads. The test holds the rule that actually matters — every row a
+  /// visitor is shown carries both languages.
+  reasonEs?: string
 }
 
 /// The states a route can be in that no scan reaches, and why — the same bar
@@ -763,6 +799,8 @@ export const STATE_EXCEPTIONS: readonly StateException[] = [
     audience: 'public',
     reason:
       'the a11y route loops carry no locale cookie, so every public route is scanned in English only; the facility page is scanned and measured in Spanish (above) and the rest of the public site, this route included, is not yet',
+    reasonEs:
+      'las corridas de revisión automática no llevan la cookie de idioma, así que cada página pública se revisa solo en inglés; la página de una sucursal sí se revisa y se mide en español (arriba) y el resto del sitio público, incluida esta página, todavía no',
   },
   // B-260. The same gap one level in: the portal route loop signs a tenant in
   // with no locale cookie, so it scans English. `/portal` itself is scanned in
@@ -773,6 +811,8 @@ export const STATE_EXCEPTIONS: readonly StateException[] = [
     audience: 'portal',
     reason:
       'the portal a11y route loop carries no locale cookie, so every portal route but /portal is scanned in English only',
+    reasonEs:
+      'la corrida de revisión de la cuenta en línea no lleva la cookie de idioma, así que todas sus páginas menos /portal se revisan solo en inglés',
   },
   {
     route: '/checkout',
@@ -780,6 +820,8 @@ export const STATE_EXCEPTIONS: readonly StateException[] = [
     audience: 'public',
     reason:
       'reached in Spanish by e2e/i18n.spec.ts as far as step 1, which asserts the language rather than running axe — the later steps need a session the scan loop does not build',
+    reasonEs:
+      'en español se llega hasta el paso 1, que comprueba el idioma en vez de correr el revisor automático — los pasos siguientes necesitan una sesión que la corrida de revisión no arma',
   },
   // B-139 named `/portal/pay/done`'s not-found state as scanned; the four
   // outcomes below are what a real payment settles to, and the demo seed
@@ -789,24 +831,32 @@ export const STATE_EXCEPTIONS: readonly StateException[] = [
     state: 'succeeded',
     audience: 'portal',
     reason: 'the receipt for a payment that actually succeeded, which needs a real one on a real account',
+    reasonEs:
+      'el recibo de un pago que de verdad se aprobó, que necesita uno real en una cuenta real',
   },
   {
     route: '/portal/pay/done',
     state: 'failed',
     audience: 'portal',
     reason: 'the receipt for a payment that was actually declined, for the same reason',
+    reasonEs:
+      'el recibo de un pago que de verdad se rechazó, por la misma razón',
   },
   {
     route: '/portal/pay/done',
     state: 'processing',
     audience: 'portal',
     reason: 'the receipt for a payment still mid-flight, for the same reason',
+    reasonEs:
+      'el recibo de un pago todavía en curso, por la misma razón',
   },
   {
     route: '/portal/pay/done',
     state: 'pending',
     audience: 'portal',
     reason: 'the receipt for a payment awaiting settlement, for the same reason',
+    reasonEs:
+      'el recibo de un pago en espera de liquidación, por la misma razón',
   },
   // B-194. `recordNoticeGiven`'s two refusals now land on the field instead of
   // being discarded — but neither is reachable from a browser. `future_date`
@@ -830,6 +880,8 @@ export const STATE_EXCEPTIONS: readonly StateException[] = [
     state: 'returned payment row',
     audience: 'portal',
     reason: 'the row a bounced payment renders, which needs one and the demo seed creates none',
+    reasonEs:
+      'la fila que dibuja un pago devuelto, que necesita uno y los datos de demostración no crean ninguno',
   },
   // B-137. Considered and deliberately not built: the demo seed's one
   // pending_auction lease belongs to a tenant with no portal credential, and
@@ -840,6 +892,8 @@ export const STATE_EXCEPTIONS: readonly StateException[] = [
     audience: 'portal',
     reason:
       'the refusal shown to a tenant in the lien pipeline, which needs a lease in that state paired with a portal credential — the one demo lease that qualifies has none',
+    reasonEs:
+      'el rechazo que se le muestra a un inquilino que está en proceso de gravamen, que necesita un contrato en ese estado junto con un acceso a la cuenta en línea — el único contrato de demostración que califica no lo tiene',
   },
   // B-90 part 3 / B-193. The route loop scans the "you're not on a plan" empty
   // state; B-196's seed reaches the ACTIVE schedule, the "Left after" column and
@@ -858,6 +912,8 @@ export const STATE_EXCEPTIONS: readonly StateException[] = [
     audience: 'portal',
     reason:
       'the schedule of a plan the tenant has finished with, in any of its three ended states, which needs a plan that actually reached one — the demo plan is live and stays that way',
+    reasonEs:
+      'el calendario de un plan que el inquilino ya terminó, en cualquiera de sus tres estados finales, que necesita un plan que de verdad haya llegado a uno — el plan de demostración está vivo y así se queda',
   },
   // B-210. The same fixture problem one row down: every installment in the
   // demo plan is in the FUTURE by design (a past one would be broken by the
@@ -872,6 +928,8 @@ export const STATE_EXCEPTIONS: readonly StateException[] = [
     audience: 'portal',
     reason:
       'the schedule rows for an installment past its date — inside its grace, and past it — which need an installment that has actually gone by, and one moves on its own the moment the nightly jobs run',
+    reasonEs:
+      'las filas del calendario de un abono que ya pasó su fecha — dentro de su periodo de gracia y después de él — que necesitan un abono que de verdad haya pasado, y uno de ellos se mueve solo en cuanto corren los trabajos nocturnos',
   },
   // B-215. `/admin/auctions` is in ADMIN_SCAN_ROUTES, and against demo data it
   // renders "no sale here is ready to advertise" — the lot sheet's populated
@@ -903,6 +961,8 @@ export const STATE_EXCEPTIONS: readonly StateException[] = [
     audience: 'portal',
     reason:
       'the three warning states of the plan card — a payment late inside its grace, a payment missed past it, and the plan ended because one was — which all need a plan that has actually let an installment date go by, and that state moves on its own the moment the nightly jobs run',
+    reasonEs:
+      'los tres estados de aviso de la tarjeta del plan — un abono con retraso dentro de su gracia, un abono perdido después de él, y el plan terminado porque uno lo estuvo — que necesitan un plan que de verdad haya dejado pasar la fecha de un abono, y ese estado se mueve solo en cuanto corren los trabajos nocturnos',
   },
 ] as const
 
