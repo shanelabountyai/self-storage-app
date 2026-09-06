@@ -100,6 +100,67 @@ describe('reportRange', () => {
     expect(range.end.getTime() - range.start.getTime()).toBe(30 * 86_400_000)
   })
 
+  // The evening hole. `businessDateFor` returns UTC MIDNIGHT OF THE LOCAL DATE,
+  // so `today + 1 day` is still a UTC midnight — and between local midnight and
+  // UTC midnight it lands BEFORE now. Every support session and gate attempt
+  // between 7pm and midnight US Central was therefore missing from the log it
+  // is recorded on, until the local day rolled over.
+  //
+  // Found by `e2e/impersonation.spec.ts` failing in CI at 02:45 UTC and passing
+  // locally at 22:58 UTC — the same commit, the same database, four hours
+  // apart. That is the clock-dependent shape CLAUDE.md warns about, and it is
+  // why this asserts against a PINNED instant rather than `new Date()`.
+  it('covers an event that has just happened, late in a western local day', () => {
+    // 21:51 on 5 September in America/Chicago; already the 6th in UTC.
+    const evening = new Date('2026-09-06T02:51:04.000Z')
+    const range = reportRange(
+      {},
+      { now: evening, timeZones: ['America/Chicago'], window: 'rolling-30-days' },
+    )
+
+    // The label stays on the LOCAL date — that is the day an operator in Texas
+    // is having, and moving it would be a different bug.
+    expect(range.toValue).toBe('2026-09-05')
+    // But the query bound has to reach the event the operator opened the log
+    // for. `sessionReport` filters `startedAt: { gte: start, lt: end }`.
+    expect(evening.getTime()).toBeLessThan(range.end.getTime())
+  })
+
+  it('clamps for an unparseable end too, not just an absent one', () => {
+    // `?to=yesterday` falls back to the default range. Keying the clamp off
+    // `params.to` being PRESENT rather than off it having parsed would have
+    // left this URL with the hole while the plain one was fixed.
+    const evening = new Date('2026-09-06T02:51:04.000Z')
+    const range = reportRange(
+      { to: 'yesterday' },
+      { now: evening, timeZones: ['America/Chicago'], window: 'rolling-30-days' },
+    )
+    expect(evening.getTime()).toBeLessThan(range.end.getTime())
+  })
+
+  it('leaves an explicitly picked end exactly where the operator put it', () => {
+    // The other direction: a picked range means what it says, even though that
+    // reintroduces the hole for that one URL. Closing THAT needs a local-day to
+    // UTC-instant conversion, which this module deliberately avoids (B-223) —
+    // it is named in NEXT.md rather than smuggled in here.
+    const evening = new Date('2026-09-06T02:51:04.000Z')
+    const range = reportRange(
+      { from: '2026-08-07', to: '2026-09-05' },
+      { now: evening, timeZones: ['America/Chicago'], window: 'rolling-30-days' },
+    )
+    expect(range.end.toISOString()).toBe('2026-09-06T00:00:00.000Z')
+  })
+
+  it('leaves the report window alone — only the live log clamps', () => {
+    // `last-complete-month` must NOT grow to cover now: it ties out against the
+    // accounting close (D-109), and a month that quietly included today would
+    // be the defect that decision exists to prevent.
+    const evening = new Date('2026-09-06T02:51:04.000Z')
+    const range = reportRange({}, { now: evening, timeZones: ['America/Chicago'] })
+    expect(range.toValue).toBe('2026-08-31')
+    expect(range.end.toISOString()).toBe('2026-09-01T00:00:00.000Z')
+  })
+
   it('includes the whole of the last day picked', () => {
     // Getting this backwards silently drops the last day of every month-long
     // range, which nobody notices until a year-end total is short.

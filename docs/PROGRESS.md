@@ -8866,3 +8866,64 @@ accounted for.
 **Test verification.** Typecheck clean; lint clean (6 pre-existing warnings);
 unit suite 4,183 passed, 8 skipped; `e2e/admin.spec.ts` 282 passed, including
 the scan that had been failing.
+
+## The evening hole in the activity logs (2026-09-06)
+
+**Commit:** recorded below.
+
+Not a backlog row. Found because PR #22's `e2e` lane went red on
+`impersonation.spec.ts` at 02:45 UTC, having passed locally at 22:58 UTC on the
+same commit and the same database — four hours apart, same code. It reproduces
+on `d5903cc` against a freshly dropped-and-reseeded schema, so it predates
+B-262 entirely.
+
+**What was wrong.** `reportRange`'s `rolling-30-days` window built its exclusive
+end from `businessDateFor(now, zone)`, which returns **UTC midnight of the
+facility-LOCAL date**, then added a day — and compared that against **UTC
+instants**. Between local midnight and UTC midnight the end lands *before* now,
+so:
+
+> **Every support session and gate attempt started between 7pm and midnight US
+> Central was missing from the log that records it**, until the local day rolled
+> over.
+
+Three surfaces, all on that window: `/admin/impersonation`,
+`/admin/impersonation.csv` and `/admin/access` (Gate activity). The session rows
+themselves were always written correctly — `impersonation_session` held the row
+with its reason and `endedBy` — so this was a display defect on a compliance
+surface (PRD 09 FR-19), not a recording one.
+
+It is exactly what the window's own comment says it exists to prevent:
+
+> *"Exclusive, and for the rolling window that is tomorrow — a log whose default
+> stopped at midnight today would hide the event the operator opened it to look
+> at."*
+
+The intent was right; the arithmetic mixed a local calendar date with UTC
+instants. D-109 moved these two screens onto a rolling window for precisely this
+reason and the bug survived the move.
+
+**What it decided.** The end is CLAMPED to the present instant rather than
+widened to `today + 2 days`, so the window never advertises a day that has not
+started anywhere. Only when the caller picked no `to`, so an explicit range
+still means what the operator typed. `last-complete-month` is untouched: it ties
+out against the accounting close (D-109), and a month that quietly reached today
+would be the defect that decision exists to prevent.
+
+**Why the suite never caught it.** Nothing pinned the clock. The assertion lived
+only in an e2e that passes during Central daytime and fails in the evening —
+the same class CLAUDE.md already records for marketing quiet hours, and the same
+class as B-228's missing `timeZone`. The regression test now pins the instant.
+
+**What it left behind.** The **explicit** date range still converts a picked day
+to UTC midnight, so submitting the picker with the same dates the default
+displays hides the row again. Closing that means converting a local day to a UTC
+instant, which `report-range.ts` deliberately avoids ("without computing a
+single UTC offset", B-223) and which changes date-filter semantics on every
+report screen — a decision rather than a patch. Named in `NEXT.md`; it owns no
+row yet.
+
+**Test verification.** Reproduced at the unit level against a pinned instant
+before the fix, then green. Typecheck clean; lint clean (6 pre-existing
+warnings); unit suite 4,185 passed, 8 skipped; `impersonation.spec.ts` 6 passed
+run at 02:56 UTC — the hour that reproduced the failure.

@@ -47,6 +47,21 @@ every admin route the a11y loop visits, because axe only sees this bug when a
 header points at nothing — a missing MIDDLE cell passes axe and mislabels every
 column after it. Nothing outstanding.
 
+## A defect fixed in passing, with a deeper half still open
+
+The `rolling-30-days` window on `/admin/impersonation`, `/admin/impersonation.csv`
+and `/admin/access` hid any event from the 7pm–midnight US Central window until
+the local day rolled over — a local calendar date compared against UTC instants.
+The default view is fixed and has a clock-pinned regression test.
+
+**Still open, and it needs a decision rather than a patch:** the EXPLICIT date
+picker on those screens still converts a chosen day to UTC midnight, so
+submitting the form with the same dates the default displays hides the row
+again. Closing it means converting a local day to a real UTC instant, which
+`report-range.ts` deliberately avoids ("without computing a single UTC offset",
+B-223) and which changes date-filter semantics on every report screen. Wants a
+D-number and a row.
+
 ## Local setup notes for whoever picks this up
 
 - `npm run db:migrate:e2e` after checking out, and again after a migration —
