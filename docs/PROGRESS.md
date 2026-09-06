@@ -8684,6 +8684,8 @@ B-090f translated the move-in path and then handed the renter a button reading "
 
 ### B-262 part 1 — The pages a renter reads, in Spanish (2026-09-06)
 
+**Commit:** `9373a3f`
+
 B-090f translated the move-in path and B-260 the portal, so a Spanish speaker could browse, rent, pay and run their account — and then hit English the moment they wanted to know what size they needed, how to stop the texts, or whether the site works with a screen reader. This is the first of B-262's three problems: the static pages, which are ordinary prose and need no decision from anybody.
 
 **What it built.** `/faq`, `/about`, `/contact`, `/accessibility` and `/messaging-policy` render in the reader's language, through the same mechanism as everything before them — a cookie, unchanged URLs, `generateMetadata` so the tab title follows the page (D-122). `/terms` and `/privacy` stay English with the lease.
