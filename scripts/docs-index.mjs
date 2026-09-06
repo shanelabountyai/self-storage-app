@@ -1,10 +1,20 @@
 #!/usr/bin/env node
-// Regenerates the two derived index files, and prints a single progress entry.
+// Regenerates the three derived index files, and prints one entry, backlog row
+// or decision on demand.
 //
-//   node scripts/docs-index.mjs index      → docs/PROGRESS.md, 06-backlog-index.md,
-//                                            07-decisions-index.md
-//   node scripts/docs-index.mjs entry B-137 → that entry's full text, and nothing else
-//   node scripts/docs-index.mjs audit     → every recorded SHA still resolves
+//   node scripts/docs-index.mjs index         → docs/PROGRESS.md, 06-backlog-index.md,
+//                                               07-decisions-index.md
+//   node scripts/docs-index.mjs entry B-137    → that entry's full text, and nothing else
+//   node scripts/docs-index.mjs row B-137      → that backlog row, whole and verbatim
+//   node scripts/docs-index.mjs decision D-122 → that decision row, whole and verbatim
+//   node scripts/docs-index.mjs index --check → those three are up to date, writing
+//                                               nothing
+//   node scripts/docs-index.mjs audit         → every recorded SHA still resolves
+//
+// `row` and `decision` are the other half of the two index files: an index can
+// only give an address, and the binding text still lives in a 493 KB and a
+// 212 KB file. They print one row and nothing else, verbatim — no summarising,
+// because in both files the row's own wording is what binds.
 //
 // Deliberately dependency-free and plain .mjs: this has to keep working on a
 // checkout whose node_modules is mid-rebuild, which is exactly when somebody
@@ -14,7 +24,7 @@
 //   docs/progress/*.md   — the narrative entries, appended to by hand
 //   docs/prds/06-backlog.md — the ordered work list, edited by hand
 //   docs/prds/07-decisions.md — the decision log, edited by hand
-// The two index files are GENERATED. Editing them by hand loses the edit on the
+// The three index files are GENERATED. Editing them by hand loses the edit on the
 // next run; edit the source and re-run `npm run docs:index`.
 
 import { readFileSync, writeFileSync, readdirSync } from 'node:fs'
@@ -78,30 +88,59 @@ function slug(heading) {
   return heading.toLowerCase().replace(/`/g, '').replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '-')
 }
 
-/** Parse the backlog's item rows. */
-function readBacklog() {
+/**
+ * Every row of a pipe table in `file` that `isRow` accepts, each carrying the
+ * `| # | ... |` header line that governs it. Both source files repeat that
+ * header per section (the backlog nine times), so it is tracked as the scan
+ * goes rather than hard-coded — `row` and `decision` label their output with
+ * the file's own column names, and a renamed column should follow.
+ */
+function readRows(file, isRow) {
   const rows = []
-  for (const line of readFileSync(BACKLOG, 'utf8').split('\n')) {
-    if (!/^\|\s*[0-9]+[a-z]*\s*\|\s*B-[0-9]/.test(line)) continue
-    const c = line.split('|').map((s) => s.trim())
-    // c[0] is the empty string before the leading pipe
-    const [, pos, idCell, item, prd, size, deps, phase] = c
-    rows.push({ pos, id: idCell.replace(/[✅\s]+$/, '').trim(), done: idCell.includes('✅'), item, prd, size: size ?? '', deps: deps ?? '', phase: phase ?? '' })
+  let header = []
+  for (const line of readFileSync(file, 'utf8').split('\n')) {
+    if (/^\|\s*#\s*\|/.test(line)) { header = cellsOf(line); continue }
+    if (!isRow(line)) continue
+    rows.push({ header, cells: cellsOf(line), line })
   }
   return rows
 }
 
+// The leading and trailing pipes bracket the row rather than separating cells.
+// Neither file escapes an inner `|` (checked: zero occurrences), so a plain
+// split is exact; if one ever appears it would break the table's rendering
+// first, which is the louder failure.
+const cellsOf = (line) => line.replace(/^\s*\|/, '').replace(/\|\s*$/, '').split('|').map((s) => s.trim())
+
+/** Parse the backlog's item rows. */
+function readBacklog() {
+  return readRows(BACKLOG, (l) => /^\|\s*[0-9]+[a-z]*\s*\|\s*B-[0-9]/.test(l)).map((r) => {
+    const [pos, idCell, item, prd, size, deps, phase] = r.cells
+    return { ...r, pos, id: idCell.replace(/[✅\s]+$/, '').trim(), done: idCell.includes('✅'), item, prd, size: size ?? '', deps: deps ?? '', phase: phase ?? '' }
+  })
+}
+
 /** Parse 07-decisions.md's rows: `| D-n | flag | decision | build impact |`. */
 function readDecisions() {
-  const rows = []
-  for (const line of readFileSync(DECISIONS, 'utf8').split('\n')) {
-    if (!/^\|\s*D-[0-9]/.test(line)) continue
-    const c = line.split('|').map((x) => x.trim())
-    // c[0] is the empty string before the leading pipe
-    const [, id, flag] = c
-    rows.push({ id, flag })
+  return readRows(DECISIONS, (l) => /^\|\s*D-[0-9]/.test(l)).map((r) => ({ ...r, id: r.cells[0], flag: r.cells[1] ?? '' }))
+}
+
+/**
+ * One table row, printed whole: a heading naming where it came from, then every
+ * remaining cell under its own column name. `fold` names the columns already in
+ * the heading. Cell text is passed through untouched — this is a retrieval
+ * command, and a summary of a backlog row or a decision is not the thing that
+ * binds.
+ */
+function printRow(heading, source, row, fold) {
+  console.log(`### ${heading}\n`)
+  console.log(`_Verbatim from ${source}, which is the source of truth. ${source.includes('07-') ? 'This text overrides any conflicting PRD.' : 'The index drops the reasoning; this is the row that carries it.'}_\n`)
+  for (let i = 0; i < row.cells.length; i++) {
+    const name = row.header[i] ?? `column ${i + 1}`
+    if (fold.includes(name)) continue
+    console.log(`**${name}**\n`)
+    console.log(`${row.cells[i] || '—'}\n`)
   }
-  return rows
 }
 
 /** The bolded lead, or the first clause — whichever this row actually has. */
@@ -157,7 +196,8 @@ function buildBacklogIndex(rows) {
   const out = []
   out.push('# 06 — Backlog index', '')
   out.push('**This file is generated. Do not edit it by hand** — edit [`06-backlog.md`](06-backlog.md) and run `npm run docs:index`.', '')
-  out.push('`06-backlog.md` is the source of truth and stays that way; it is also ~350 KB of wide table rows, which is more than a session should spend to answer "what is next". This is the same rows with the long description, the PRD reference and the dependency prose dropped.', '')
+  out.push('`06-backlog.md` is the source of truth and stays that way; it is also ~490 KB of wide table rows, which is more than a session should spend to answer "what is next". This is the same rows with the long description, the PRD reference and the dependency prose dropped.', '')
+  out.push('**Then read the row itself before building the item** — `npm run docs:row -- B-262` prints that one row whole and verbatim, about 2 KB against the file\'s 490. The columns dropped here are the ones that say what to build.', '')
   out.push(`**${rows.length} items — ${rows.length - remaining.length} complete, ${remaining.length} open.**`, '')
   out.push('## Open, in build order', '')
   out.push('| # | ID | Item | Size | Depends on |', '|---|---|---|---|---|')
@@ -177,6 +217,7 @@ function buildDecisionsIndex(rows) {
   out.push('**This file is generated. Do not edit it by hand** — edit [`07-decisions.md`](07-decisions.md) and run `npm run docs:index`.', '')
   out.push('`07-decisions.md` amends the PRDs: where a PRD conflicts with a decision, the decision wins. It is also 212 KB, which is more than a session should spend to answer "is there a decision about X".', '')
   out.push('**This index carries each row\'s D-number and its topic column, and NOT the decision or the build-impact columns.** A decision that overrides a PRD has to be read in full before it is relied on: its wording is what binds, and several rows carry later corrections inside their own text — D-7 is the clearest, stating a policy and then recording that the policy was wrong on both halves. Reproducing the verdict here would invite deciding from the summary, which is the one failure this file exists to prevent.', '')
+  out.push('`npm run docs:decision -- D-122` prints one row whole and verbatim, which is the cheap way to do that — a few KB rather than 212.', '')
   out.push('One caveat, because it is visible below rather than hidden: the topic column changed style over time. Early rows name a conflict to resolve ("Kiosk mode (master P2 vs PRD 03 P3)"); later ones state the decision outright ("Attaching a lease to a business account does not move the autopay mandate"). Where the source does that, so does this index — it is quoting, not summarising. Either way the binding text is the row in [`07-decisions.md`](07-decisions.md), not the line here.', '')
   out.push(`**${rows.length} decisions.**`, '')
   out.push('| # | Topic |', '|---|---|')
@@ -192,6 +233,18 @@ if (cmd === 'entry') {
   const hits = readParts().filter((e) => e.key === arg || e.title.startsWith(arg))
   if (!hits.length) { console.error(`no entry matching "${arg}"`); process.exit(1) }
   for (const e of hits) console.log(`### ${e.title}\n${e.body.replace(/\n*-{3,}\n*$/, '')}\n`)
+} else if (cmd === 'row') {
+  if (!arg) { console.error('usage: docs-index.mjs row <B-number or backlog position>'); process.exit(2) }
+  const hits = readBacklog().filter((r) => r.id === arg || r.pos === arg)
+  if (!hits.length) { console.error(`no backlog row matching "${arg}" — see docs/prds/06-backlog-index.md`); process.exit(1) }
+  for (const r of hits) {
+    printRow(`${r.id} — backlog row ${r.pos}${r.done ? ' ✅' : ''}`, 'docs/prds/06-backlog.md', r, ['#', 'ID'])
+  }
+} else if (cmd === 'decision') {
+  if (!arg) { console.error('usage: docs-index.mjs decision <D-number>'); process.exit(2) }
+  const hits = readDecisions().filter((r) => r.id === arg)
+  if (!hits.length) { console.error(`no decision matching "${arg}" — see docs/prds/07-decisions-index.md`); process.exit(1) }
+  for (const r of hits) printRow(`${r.id}`, 'docs/prds/07-decisions.md', r, ['#'])
 } else if (cmd === 'audit') {
   // Regenerating the index does not check that anything it names exists.
   // A `--rebase` or `--squash` merge rewrites the SHAs an entry recorded
@@ -222,12 +275,31 @@ if (cmd === 'entry') {
   const entries = readParts()
   const backlog = readBacklog()
   const decisions = readDecisions()
-  writeFileSync(join(ROOT, 'docs/PROGRESS.md'), buildProgressIndex(entries, backlog))
-  writeFileSync(join(ROOT, 'docs/prds/06-backlog-index.md'), buildBacklogIndex(backlog))
-  writeFileSync(join(ROOT, 'docs/prds/07-decisions-index.md'), buildDecisionsIndex(decisions))
-  console.log(`docs/PROGRESS.md                ${entries.length} entries`)
-  console.log(`docs/prds/06-backlog-index.md   ${backlog.length} rows, ${backlog.filter((r) => !r.done).length} open`)
-  console.log(`docs/prds/07-decisions-index.md ${decisions.length} decisions`)
+  const files = [
+    ['docs/PROGRESS.md', buildProgressIndex(entries, backlog), `${entries.length} entries`],
+    ['docs/prds/06-backlog-index.md', buildBacklogIndex(backlog), `${backlog.length} rows, ${backlog.filter((r) => !r.done).length} open`],
+    ['docs/prds/07-decisions-index.md', buildDecisionsIndex(decisions), `${decisions.length} decisions`],
+  ]
+  // `--check` writes nothing and fails if any generated file is out of date.
+  // Editing a source without regenerating is silent otherwise, and CI cannot
+  // be relied on to catch it: `paths-ignore` skips both lanes for `docs/**`,
+  // so the pull request that changes only the backlog runs nothing at all.
+  if (arg === '--check') {
+    const stale = files.filter(([path, body]) => {
+      let current = null
+      try { current = readFileSync(join(ROOT, path), 'utf8') } catch { /* missing counts as stale */ }
+      return current !== body
+    })
+    for (const [path] of stale) console.log(`STALE  ${path}`)
+    console.log(stale.length === 0
+      ? 'the three generated index files match their sources'
+      : `${stale.length} generated file(s) are out of date — run \`npm run docs:index\``)
+    process.exit(stale.length === 0 ? 0 : 1)
+  }
+  for (const [path, body, summary] of files) {
+    writeFileSync(join(ROOT, path), body)
+    console.log(`${path.padEnd(31)} ${summary}`)
+  }
 } else {
-  console.error(`unknown command "${cmd}" — expected "index", "entry" or "audit"`); process.exit(2)
+  console.error(`unknown command "${cmd}" — expected "index", "entry", "row", "decision" or "audit"`); process.exit(2)
 }

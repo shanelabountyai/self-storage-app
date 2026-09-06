@@ -2,7 +2,9 @@
 
 **This file is generated. Do not edit it by hand** — edit [`06-backlog.md`](06-backlog.md) and run `npm run docs:index`.
 
-`06-backlog.md` is the source of truth and stays that way; it is also ~350 KB of wide table rows, which is more than a session should spend to answer "what is next". This is the same rows with the long description, the PRD reference and the dependency prose dropped.
+`06-backlog.md` is the source of truth and stays that way; it is also ~490 KB of wide table rows, which is more than a session should spend to answer "what is next". This is the same rows with the long description, the PRD reference and the dependency prose dropped.
+
+**Then read the row itself before building the item** — `npm run docs:row -- B-262` prints that one row whole and verbatim, about 2 KB against the file's 490. The columns dropped here are the ones that say what to build.
 
 **266 items — 255 complete, 11 open.**
 

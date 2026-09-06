@@ -6,6 +6,8 @@
 
 **This index carries each row's D-number and its topic column, and NOT the decision or the build-impact columns.** A decision that overrides a PRD has to be read in full before it is relied on: its wording is what binds, and several rows carry later corrections inside their own text — D-7 is the clearest, stating a policy and then recording that the policy was wrong on both halves. Reproducing the verdict here would invite deciding from the summary, which is the one failure this file exists to prevent.
 
+`npm run docs:decision -- D-122` prints one row whole and verbatim, which is the cheap way to do that — a few KB rather than 212.
+
 One caveat, because it is visible below rather than hidden: the topic column changed style over time. Early rows name a conflict to resolve ("Kiosk mode (master P2 vs PRD 03 P3)"); later ones state the decision outright ("Attaching a lease to a business account does not move the autopay mandate"). Where the source does that, so does this index — it is quoting, not summarising. Either way the binding text is the row in [`07-decisions.md`](07-decisions.md), not the line here.
 
 **127 decisions.**
