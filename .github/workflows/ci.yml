@@ -231,12 +231,27 @@ jobs:
       - name: Lighthouse
         run: npx lhci autorun
 
+      # Both trees, because they answer different questions and only one of
+      # them existed before: `playwright-report/` is the browsable HTML report
+      # (written by the `html` reporter added to playwright.config.ts for this),
+      # and `test-results/` is where Playwright puts each failure's
+      # `error-context.md` — the DOM snapshot the assertion actually saw — plus
+      # the `trace.zip` for `npx playwright show-trace`.
+      #
+      # Until 2026-09-06 this named `playwright-report/` alone while the CI
+      # reporter was `github`, which writes no files at all. Every failing run
+      # therefore ended in "No files were found with the provided path" and
+      # discarded the diagnostics with the runner. That is how /admin/access's
+      # axe failure survived three PRs: nothing could see the DOM axe scanned.
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
           name: playwright-report
-          path: playwright-report/
+          path: |
+            playwright-report/
+            test-results/
           retention-days: 7
+          if-no-files-found: warn
 
       # Reported, not enforced: see _overrides_note in package.json.
       - name: Dependency audit (report only)
