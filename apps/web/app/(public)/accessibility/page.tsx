@@ -1,11 +1,16 @@
-import { ProsePage, Section, metadataFor } from '@/components/site/prose-page'
+import { ProsePage, Section } from '@/components/site/prose-page'
 import { SITE } from '@/lib/site-config'
 import { customerFacingExceptions, customerFacingStateExceptions } from '@/lib/a11y/scan-coverage'
+import { dictionaryFor, translate, type Locale, type MessageKey } from '@/lib/i18n'
+import { getLocale } from '@/lib/i18n/server'
 
-export const metadata = metadataFor(
-  'Accessibility',
-  'Our accessibility target, what we test, and how to tell us when we get it wrong.',
-)
+export async function generateMetadata() {
+  const dict = dictionaryFor(await getLocale())
+  return {
+    title: translate(dict, 'a11y.title'),
+    description: translate(dict, 'a11y.metaDescription'),
+  }
+}
 
 /// The date the claims below were last checked against the build. A statement's
 /// credibility rests on the record, not the intention — an undated one is a
@@ -50,7 +55,28 @@ export const metadata = metadataFor(
 // sentence above it stays exactly as it is: no manual pass was carried out
 // here, and this control does not rest on one. `LAST_REVIEWED` is not bumped —
 // this is one flow verified, not the page, and B-254 owns the date itself.
-const LAST_REVIEWED = '19 August 2026'
+const LAST_REVIEWED = { year: 2026, month: 8, day: 19 }
+
+/// The reviewed date, spelled the way the reader's own language spells it.
+///
+/// B-262. It was the string `'19 August 2026'`, which would have rendered
+/// English inside the Spanish page. One date, formatted twice — because two
+/// dictionary entries would be two places for B-254 to move it, and this is
+/// the one value on the page that a build session is forbidden to move at all
+/// (D-115: it moves when a person has actually run the manual screen-reader
+/// pass, and at no other time).
+///
+/// `en-GB` and not `en-US` for the English: this page has always read
+/// "19 August 2026", and `en-US` would have silently reformatted it to
+/// "August 19, 2026" — a changed claim date is exactly what nobody would
+/// notice. `timeZone: 'UTC'` for B-228's reason: built at UTC midnight, and
+/// without it a US machine formats it as the 18th.
+function reviewedOn(locale: Locale): string {
+  return new Intl.DateTimeFormat(locale === 'es' ? 'es' : 'en-GB', {
+    timeZone: 'UTC',
+    dateStyle: 'long',
+  }).format(new Date(Date.UTC(LAST_REVIEWED.year, LAST_REVIEWED.month - 1, LAST_REVIEWED.day)))
+}
 
 // PRD 01 §6.8 requires a public accessibility statement. Unlike the legal pages
 // this describes our own conformance, so every sentence has to be true of the
@@ -1779,169 +1805,147 @@ const LAST_REVIEWED = '19 August 2026'
 // countdown, the staff screens, and the embedded maps. `LAST_REVIEWED` is not
 // bumped, per D-115 — no manual screen-reader pass was performed.
 
-export default function AccessibilityPage() {
+// ── B-262, 2026-09-06 — the statement can be read in Spanish ───────────────
+//
+// The four static pages a renter READS rather than operates — this one, the
+// FAQ, About and Contact — plus the text-message policy, now render in the
+// language the reader chose. `/terms` and `/privacy` stay English with the
+// lease (D-122), and the Spanish footer already says so.
+//
+// **Not one claim on this page was softened in translation.** The Spanish
+// says what the English says, including the sentence admitting that no manual
+// screen-reader pass has ever been run. A statement that promises less in the
+// language it is harder to complain in would be worse than no statement.
+//
+// **The gap lists are keyed now, not sentences.** `SCAN_EXCEPTIONS` and
+// `STATE_EXCEPTIONS` carried English prose that this page printed verbatim;
+// their customer-facing rows carry a `MessageKey` instead, and the types are
+// split by audience so a new public or portal exception CANNOT ship with an
+// English sentence in it, and cannot ship missing from `es.ts` either. Admin
+// rows keep their English string — staff screens are English throughout.
+// A page that promises to name every gap, naming one of them in a language
+// the reader does not read, names nothing.
+//
+// **This page is scanned in Spanish** — `SCANNED_STATES` gains
+// `/accessibility | Spanish`, and it is this page rather than one of the other
+// three because it renders the most machinery: two generated lists, nested
+// emphasis, and the reviewed date through `Intl`. The other four translated
+// pages are declared, not promised: `scan.state.publicSpanish` names them.
+//
+// **`LAST_REVIEWED` is not bumped, and the reason is worth stating plainly**
+// rather than by reflex. Translating a claim is not re-verifying it, and no
+// manual pass was run here either. What the date now does is render through
+// `Intl` in the reader's language from a single value — D-115 governs when
+// that value moves, and nothing here moves it.
+//
+// The "Where we fall short" list was re-read against this build. All three
+// entries are still true, still in scope, and unchanged: the no-JavaScript
+// hold countdown, the staff screens, and the embedded maps. None of them is
+// about language, and this item adds no new gap to the list — the Spanish
+// coverage gap belongs in the generated list above, where it is declared, and
+// not here.
+
+/// The seven things that are true today, as message keys. The copy is in the
+/// dictionaries; what stays here is which claims are made and in what order.
+const TRUE_TODAY = [
+  'a11y.trueKeyboard',
+  'a11y.trueColour',
+  'a11y.trueResize',
+  'a11y.trueLabels',
+  'a11y.trueErrors',
+  'a11y.trueMotion',
+  'a11y.trueMaps',
+] as const satisfies readonly MessageKey[]
+
+const WAIVERS = [
+  'a11y.checkWaiverPage',
+  'a11y.checkWaiverSite',
+  'a11y.checkWaiverFrame',
+] as const satisfies readonly MessageKey[]
+
+const GAPS = [
+  { label: 'a11y.gapNoJsLabel', body: 'a11y.gapNoJsBody', separator: ' ' },
+  { label: 'a11y.gapStaffLabel', body: 'a11y.gapStaffBody', separator: ' ' },
+  // The maps bullet runs the label straight into a comma — "The maps we show
+  // are not fully accessible, and they are not ours to fix" is one sentence
+  // with an emphasised opening, not a label and a body.
+  { label: 'a11y.gapMapsLabel', body: 'a11y.gapMapsBody', separator: '' },
+] as const satisfies readonly { label: MessageKey; body: MessageKey; separator: string }[]
+
+export default async function AccessibilityPage() {
+  const locale = await getLocale()
+  const dict = dictionaryFor(locale)
+  const t = (key: MessageKey, vars?: Record<string, string | number>) =>
+    translate(dict, key, vars)
+  const reviewed = reviewedOn(locale)
+
   return (
-    <ProsePage
-      title="Accessibility"
-      intro="We aim to meet WCAG 2.1 Level AA across every page and every flow. This page says how far we have actually got."
-    >
-      <Section heading="What we target">
-        <p>
-          Web Content Accessibility Guidelines (WCAG) 2.1, Level AA. That covers keyboard
-          operation, screen-reader support, colour contrast, text resizing, and reflow on
-          small screens.
-        </p>
+    <ProsePage title={t('a11y.title')} intro={t('a11y.intro')}>
+      <Section heading={t('a11y.targetHeading')}>
+        <p>{t('a11y.targetBody')}</p>
       </Section>
 
-      <Section heading="What is true today">
+      <Section heading={t('a11y.trueHeading')}>
         <ul className="list-disc space-y-1 pl-5">
-          <li>
-            Every page on this public site works with a keyboard alone, and the focus
-            indicator meets the 3:1 contrast the guidelines ask for.
-          </li>
-          <li>
-            Colour is never the only way we tell you something — a status shown in colour
-            is also written in words.
-          </li>
-          <li>
-            Text can be resized to 200% and the page reflows to 320px wide without
-            sideways scrolling.
-          </li>
-          <li>Form fields have real labels, not just placeholder text.</li>
-          <li>
-            When a form rejects something you typed, the message is tied to the field
-            itself, so a screen reader reads it out with that field rather than leaving you
-            to hunt for it — and what you already entered is still there, so you fix the one
-            thing we asked about rather than filling the form in again. A successful save is
-            announced too.
-          </li>
-          <li>Animation respects your system&apos;s reduced-motion setting.</li>
-          <li>
-            Where we show a map, the information is given as text first and the map is
-            collapsed behind a button you have to press. On a facility page that text is
-            the address and a directions link; on search results it is the list of
-            facilities itself, with distances and prices. You never need the map, and if
-            one fails to load we say so rather than leaving an empty box.
-          </li>
+          {TRUE_TODAY.map((key) => (
+            <li key={key}>{t(key)}</li>
+          ))}
         </ul>
       </Section>
 
-      <Section heading="How we check">
-        <p>
-          Automated accessibility tests run at both phone and desktop widths on every
-          push to our main branch, and on every pull request that is open for review.
-          They are not a release gate: a failing run tells us, it does not stop the
-          deploy. A check the tool cannot decide fails the run as well, on every page in
-          it, so &ldquo;we did not test that&rdquo; never quietly reads as &ldquo;that
-          passed&rdquo;.
-        </p>
-        <p>
-          A few of those undecided checks are ones we have looked at and found to be a
-          limit of the tool rather than a real problem. They are set aside in three
-          different ways, and we would rather name each than round them off:
-        </p>
+      <Section heading={t('a11y.checkHeading')}>
+        <p>{t('a11y.checkAutomated')}</p>
+        <p>{t('a11y.checkWaiverIntro')}</p>
         <ul className="list-disc space-y-1 pl-5">
-          <li>
-            Some are waived only on the page they were checked on &mdash; a bar that
-            overlaps the page on purpose so it stays in reach, a striped background the
-            checker cannot see through. The same check still has to pass everywhere else.
-          </li>
-          <li>
-            Some are waived anywhere on the site, but only where the test itself re-checks
-            the thing that confused the tool. A cell that has scrolled out of view in a
-            wide table is one: it is set aside only where you have a scrollbar that brings
-            it back, and something genuinely painted off the edge of the screen still
-            fails.
-          </li>
-          <li>
-            Content inside a frame served by another company &mdash; the card form, the map
-            &mdash; is not checked by these tests. That is their page, not ours. A frame we
-            build ourselves is checked like anything else.
-          </li>
+          {WAIVERS.map((key) => (
+            <li key={key}>{t(key)}</li>
+          ))}
         </ul>
-        <p>
-          They do not yet cover everything. These are the pages outside that run, and the
-          reason each one is:
-        </p>
+        <p>{t('a11y.checkPagesIntro')}</p>
         <ul className="list-disc space-y-1 pl-5">
           {customerFacingExceptions().map((exception) => (
-            <li key={exception.route}>{exception.reason}</li>
+            <li key={exception.route}>{t(exception.reasonKey)}</li>
           ))}
         </ul>
-        <p>
-          We would rather name each gap than let a general claim cover it. This list is
-          generated from the same file the tests read, so a page that stops being checked
-          appears here rather than quietly disappearing from both.
-        </p>
-        <p>
-          That list names pages. Some screens also have states — an error message, a
-          hold that has expired, a size that sold out while you were deciding — that only
-          appear once you have done something on them. These are the ones we know are not
-          covered, and why:
-        </p>
+        <p>{t('a11y.checkPagesGenerated')}</p>
+        <p>{t('a11y.checkStatesIntro')}</p>
         <ul className="list-disc space-y-1 pl-5">
           {customerFacingStateExceptions().map((exception) => (
-            <li key={`${exception.route}-${exception.state}`}>{exception.reason}</li>
+            <li key={`${exception.route}-${exception.state}`}>{t(exception.reasonKey)}</li>
           ))}
         </ul>
+        <p>{t('a11y.checkStatesIncomplete')}</p>
         <p>
-          More states than these probably exist that we have not found and named yet —
-          unlike the page list above, this one cannot claim to be complete.
-        </p>
-        <p>
-          Automated testing is a floor, not a ceiling — it catches roughly a third of real
-          problems, and it cannot judge whether a screen reader says something that makes
-          sense. <strong>Neither a full screen-reader pass nor a recorded keyboard pass
-          has been carried out yet</strong>, so nothing on this page rests on one.
+          {t('a11y.checkFloorBefore')} <strong>{t('a11y.checkFloorStrong')}</strong>
+          {t('a11y.checkFloorAfter')}
         </p>
       </Section>
 
-      <Section heading="Where we fall short today">
-        <p>
-          This site is under active construction. These are the problems we know about, as
-          of {LAST_REVIEWED}. If one of them blocks you, tell us and we will help you
-          finish what you were doing by phone or email in the meantime.
-        </p>
+      <Section heading={t('a11y.shortHeading')}>
+        <p>{t('a11y.shortIntro', { date: reviewed })}</p>
         <ul className="list-disc space-y-1 pl-5">
-          <li>
-            <strong>Renting online without JavaScript.</strong> The whole checkout works
-            with JavaScript turned off, but the countdown on the 30-minute hold does not:
-            it shows the time left when the page was drawn and does not tick down, so if
-            you are reading the lease when it runs out, the expiry can be the first you
-            hear of it. With JavaScript on you are warned five minutes out and can extend
-            the hold in one press.
-          </li>
-          <li>
-            <strong>Our staff-facing screens</strong> have known problems. Long lists on Tasks,
-            Leads, Delinquency and Support sessions are not paginated. No customer uses them,
-            but we are not going to describe them as done.
-          </li>
-          <li>
-            <strong>The maps we show are not fully accessible</strong>, and they are not
-            ours to fix. A facility page embeds OpenStreetMap, whose zoom controls are
-            named &ldquo;+&rdquo; and &ldquo;&minus;&rdquo; and whose marker has no text
-            alternative. Search results can show a second map from a different provider,
-            where we control the price markers but not the tiles or the vendor&apos;s own
-            controls beneath them; we have not yet assessed that one against a live map,
-            so nothing here rests on it. Both stay collapsed behind a button, and neither
-            is ever the only way to get the information.
-          </li>
+          {GAPS.map((gap) => (
+            <li key={gap.label}>
+              <strong>{t(gap.label)}</strong>
+              {gap.separator}
+              {t(gap.body)}
+            </li>
+          ))}
         </ul>
-        <p className="text-muted-foreground text-sm">Last reviewed: {LAST_REVIEWED}.</p>
+        <p className="text-muted-foreground text-sm">{t('a11y.lastReviewed', { date: reviewed })}</p>
       </Section>
 
-      <Section heading="Tell us when we get it wrong">
+      <Section heading={t('a11y.tellHeading')}>
         <p>
-          If something here blocks you, email{' '}
+          {t('a11y.tellBefore')}{' '}
           <a href={`mailto:${SITE.supportEmail}`} className="underline underline-offset-4">
             {SITE.supportEmail}
           </a>{' '}
-          or call{' '}
+          {t('a11y.tellMiddle')}{' '}
           <a href={`tel:${SITE.phone.href}`} className="underline underline-offset-4">
             {SITE.phone.display}
           </a>
-          . Tell us the page and what happened, and we will fix it and reply. An
-          accessibility barrier is a bug, and we treat it as one.
+          {t('a11y.tellAfter')}
         </p>
       </Section>
     </ProsePage>

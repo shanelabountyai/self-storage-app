@@ -47,12 +47,20 @@ describe('the public accessibility statement', () => {
   })
 
   it('dates its known-shortfalls list with the same constant the list is introduced by', () => {
-    // `LAST_REVIEWED` appears twice in the rendered page — introducing "these
-    // are the problems we know about, as of X" and again as "Last reviewed: X".
-    // A future edit that hard-codes either one would let the two drift, and the
+    // The date appears twice in the rendered page — introducing "these are the
+    // problems we know about, as of X" and again as "Last reviewed: X". A
+    // future edit that hard-codes either one would let the two drift, and the
     // page would date its shortfalls differently from its review. B-254 owns
-    // what MOVES the constant; this only holds the two uses to one value.
-    expect(page.match(/\{LAST_REVIEWED\}/g)?.length ?? 0).toBeGreaterThanOrEqual(2)
-    expect(page).toMatch(/const LAST_REVIEWED = '[^']+'/)
+    // what MOVES the date; this only holds the two uses to one value.
+    //
+    // B-262 changed the shape and not the contract. The constant was the
+    // English string '19 August 2026', which would have rendered English
+    // inside the Spanish page; it is now a date formatted per locale, so the
+    // two uses share one local `reviewed` rather than one string literal. The
+    // hazard is identical and so is the check: two renders, one source.
+    expect(page.match(/\{ date: reviewed \}/g)?.length ?? 0).toBeGreaterThanOrEqual(2)
+    expect(page).toMatch(/const LAST_REVIEWED = \{ year: \d{4}, month: \d{1,2}, day: \d{1,2} \}/)
+    // Exactly one place formats it. Two would be two places to forget.
+    expect(page.match(/reviewedOn\(/g)?.length ?? 0).toBe(2) // the definition and its one call
   })
 })

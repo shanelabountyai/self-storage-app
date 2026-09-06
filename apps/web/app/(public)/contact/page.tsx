@@ -1,12 +1,23 @@
-import { ProsePage, Section, metadataFor } from '@/components/site/prose-page'
+import { ProsePage, Section } from '@/components/site/prose-page'
 import { SITE } from '@/lib/site-config'
+import { dictionaryFor, translate, type MessageKey } from '@/lib/i18n'
+import { getLocale } from '@/lib/i18n/server'
 
-export const metadata = metadataFor('Contact', 'How to reach us.')
+export async function generateMetadata() {
+  const dict = dictionaryFor(await getLocale())
+  return {
+    title: translate(dict, 'contact.title'),
+    description: translate(dict, 'contact.metaDescription'),
+  }
+}
 
-export default function ContactPage() {
+export default async function ContactPage() {
+  const dict = dictionaryFor(await getLocale())
+  const t = (key: MessageKey) => translate(dict, key)
+
   return (
-    <ProsePage title="Contact" intro="The fastest way to reach us is the phone.">
-      <Section heading="Phone">
+    <ProsePage title={t('contact.title')} intro={t('contact.intro')}>
+      <Section heading={t('contact.phoneHeading')}>
         <p>
           <a href={`tel:${SITE.phone.href}`} className="text-lg underline underline-offset-4">
             {SITE.phone.display}
@@ -14,7 +25,7 @@ export default function ContactPage() {
         </p>
       </Section>
 
-      <Section heading="Email">
+      <Section heading={t('contact.emailHeading')}>
         <p>
           <a href={`mailto:${SITE.supportEmail}`} className="underline underline-offset-4">
             {SITE.supportEmail}
@@ -22,11 +33,8 @@ export default function ContactPage() {
         </p>
       </Section>
 
-      <Section heading="A specific facility">
-        <p>
-          Each facility lists its own phone number, office hours, and gate hours on its
-          page. Those reach the site directly.
-        </p>
+      <Section heading={t('contact.facilityHeading')}>
+        <p>{t('contact.facilityBody')}</p>
       </Section>
     </ProsePage>
   )

@@ -1,3 +1,5 @@
+import type { MessageKey } from '@/lib/i18n'
+
 // PRD 01 §6.8 / PRD 02 §5.5 FR-24 (B-139). What the accessibility scans cover,
 // as one list rather than three spec files and a hand-written paragraph.
 //
@@ -285,14 +287,36 @@ export const SCANNED_BY_OWN_SPEC = [
 /// is that somebody reads it to the end.
 export type ScanAudience = 'public' | 'portal' | 'admin'
 
-export type ScanException = {
-  /// The route as Next.js names it, `[param]` segments and all.
-  route: string
-  audience: ScanAudience
-  /// Written for a visitor rather than for us: what is not checked, and why it
-  /// cannot be. This is the sentence the public page renders verbatim.
-  reason: string
-}
+/// A route the automated run does not cover.
+///
+/// B-262 split this by audience rather than adding an optional field, because
+/// the two halves are genuinely different things. An ADMIN row is never
+/// rendered to a visitor, so its reason stays an English sentence here. A
+/// customer-facing row IS rendered — verbatim, on the public accessibility
+/// statement, in whatever language the reader chose — so it carries a message
+/// key instead. The union is what makes that unforgettable: a new public or
+/// portal exception with an English sentence in it does not compile, and a key
+/// missing from `es.ts` does not compile either (`es` is typed as
+/// `Dictionary`). The page promises to name every gap; this is what stops it
+/// naming one of them in a language the reader does not read.
+export type ScanException =
+  | {
+      /// The route as Next.js names it, `[param]` segments and all.
+      route: string
+      audience: 'admin'
+      /// Written for us. Staff screens are English throughout (D-122).
+      reason: string
+    }
+  | {
+      route: string
+      audience: 'public' | 'portal'
+      /// Written for a visitor rather than for us: what is not checked, and
+      /// why it cannot be. The public page renders this verbatim.
+      reasonKey: MessageKey
+    }
+
+/// The half of `ScanException` a visitor can be shown.
+export type CustomerScanException = Extract<ScanException, { audience: 'public' | 'portal' }>
 
 /// Every route the automated run does not cover, with the reason it does not.
 ///
@@ -302,35 +326,32 @@ export const SCAN_EXCEPTIONS: readonly ScanException[] = [
   {
     route: '/checkout#confirmation',
     audience: 'public',
-    reason:
-      'the checkout confirmation screen, which only exists after a real payment redirect and cannot be reproduced from outside the card processor\u2019s own frame',
+    reasonKey: 'scan.route.checkoutConfirmation',
   },
   {
     route: '/pay/[token]',
     audience: 'public',
-    reason:
-      'the one-tap payment screen a reminder links to, which needs a live link issued against a real balance',
+    reasonKey: 'scan.route.payToken',
   },
   {
     route: '/pay/[token]/done',
     audience: 'public',
-    reason: 'the receipt shown after paying from that link, for the same reason',
+    reasonKey: 'scan.route.payTokenDone',
   },
   {
     route: '/checkout/resume/[token]',
     audience: 'public',
-    reason:
-      'the live state of a resume link from an abandoned-booking email \u2014 the expired-link state it lands on is checked',
+    reasonKey: 'scan.route.checkoutResume',
   },
   {
     route: '/portal/documents/[documentId]',
     audience: 'portal',
-    reason: 'a single stored document, which needs a real document on a real account',
+    reasonKey: 'scan.route.portalDocument',
   },
   {
     route: '/portal/statements/[leaseId]/[period]',
     audience: 'portal',
-    reason: 'a single month\u2019s statement, which needs a real statement on a real account',
+    reasonKey: 'scan.route.portalStatement',
   },
   {
     route: '/admin/auctions/[caseId]',
@@ -355,8 +376,12 @@ export const SCAN_EXCEPTIONS: readonly ScanException[] = [
 ] as const
 
 /// The exceptions a visitor is owed, in the order the page prints them.
-export function customerFacingExceptions(): readonly ScanException[] {
-  return SCAN_EXCEPTIONS.filter((row) => row.audience !== 'admin')
+///
+/// A type PREDICATE and not a bare callback: without it the filter returns the
+/// whole union, and the page would have to reach for `reasonKey` on a variant
+/// that has no such field.
+export function customerFacingExceptions(): readonly CustomerScanException[] {
+  return SCAN_EXCEPTIONS.filter((row): row is CustomerScanException => row.audience !== 'admin')
 }
 
 // B-184 (T1) / PRD 02 §5.5 FR-25, FR-24. Everything above is keyed by ROUTE,
@@ -441,6 +466,27 @@ export const SCANNED_STATES: readonly ScannedState[] = [
     layout: 'excepted',
     layoutException:
       'the portal reflow loops measure /portal as the same tenant at every width; Spanish changes string length inside the same single-column cards, and the tightest translated layout — the facility page — is measured above',
+  },
+  // B-262. The accessibility statement itself, in Spanish. Chosen over the
+  // FAQ, About, Contact and the text-message policy — all translated in the
+  // same item — because it renders the most machinery of the five: two lists
+  // generated from `SCAN_EXCEPTIONS`/`STATE_EXCEPTIONS` (whose customer-facing
+  // rows became message keys in this item), nested emphasis inside a
+  // paragraph, and a date formatted through `Intl` per locale. If the Spanish
+  // markup breaks anywhere in this group, it breaks here first.
+  //
+  // `layout: 'excepted'` for the same reason `/portal` is: this is a
+  // single-column prose page inside `ProsePage`, already measured in English
+  // by the public reflow loop, and what Spanish changes is the length of
+  // sentences inside the same measure. The tightest translated layout is
+  // still the facility page, which IS measured above.
+  {
+    route: '/accessibility',
+    state: 'Spanish',
+    spec: 'e2e/i18n.spec.ts',
+    layout: 'excepted',
+    layoutException:
+      'a single-column prose page already measured in English by the public reflow loop; Spanish changes sentence length inside the same measure, and the tightest translated layout — the facility page — is measured above',
   },
   // B-256. The portal route loop scans `/portal` and `/portal/pay` as Dana,
   // who holds units of her own and pays for no account — so a business
@@ -742,12 +788,14 @@ export const SCANNED_STATES: readonly ScannedState[] = [
   },
 ] as const
 
-export type StateException = {
-  route: string
-  state: string
-  audience: ScanAudience
-  reason: string
-}
+/// A state of a route that no scan reaches. Split by audience for exactly the
+/// reasons `ScanException` is, one level down.
+export type StateException =
+  | { route: string; state: string; audience: 'admin'; reason: string }
+  | { route: string; state: string; audience: 'public' | 'portal'; reasonKey: MessageKey }
+
+/// The half of `StateException` a visitor can be shown.
+export type CustomerStateException = Extract<StateException, { audience: 'public' | 'portal' }>
 
 /// The states a route can be in that no scan reaches, and why — the same bar
 /// as `SCAN_EXCEPTIONS`: genuinely blocked, not merely unscanned yet.
@@ -761,8 +809,7 @@ export const STATE_EXCEPTIONS: readonly StateException[] = [
     route: '/',
     state: 'Spanish',
     audience: 'public',
-    reason:
-      'the a11y route loops carry no locale cookie, so every public route is scanned in English only; the facility page is scanned and measured in Spanish (above) and the rest of the public site, this route included, is not yet',
+    reasonKey: 'scan.state.publicSpanish',
   },
   // B-260. The same gap one level in: the portal route loop signs a tenant in
   // with no locale cookie, so it scans English. `/portal` itself is scanned in
@@ -771,15 +818,13 @@ export const STATE_EXCEPTIONS: readonly StateException[] = [
     route: '/portal/methods',
     state: 'Spanish',
     audience: 'portal',
-    reason:
-      'the portal a11y route loop carries no locale cookie, so every portal route but /portal is scanned in English only',
+    reasonKey: 'scan.state.portalSpanish',
   },
   {
     route: '/checkout',
     state: 'Spanish',
     audience: 'public',
-    reason:
-      'reached in Spanish by e2e/i18n.spec.ts as far as step 1, which asserts the language rather than running axe — the later steps need a session the scan loop does not build',
+    reasonKey: 'scan.state.checkoutSpanish',
   },
   // B-139 named `/portal/pay/done`'s not-found state as scanned; the four
   // outcomes below are what a real payment settles to, and the demo seed
@@ -788,25 +833,25 @@ export const STATE_EXCEPTIONS: readonly StateException[] = [
     route: '/portal/pay/done',
     state: 'succeeded',
     audience: 'portal',
-    reason: 'the receipt for a payment that actually succeeded, which needs a real one on a real account',
+    reasonKey: 'scan.state.paySucceeded',
   },
   {
     route: '/portal/pay/done',
     state: 'failed',
     audience: 'portal',
-    reason: 'the receipt for a payment that was actually declined, for the same reason',
+    reasonKey: 'scan.state.payFailed',
   },
   {
     route: '/portal/pay/done',
     state: 'processing',
     audience: 'portal',
-    reason: 'the receipt for a payment still mid-flight, for the same reason',
+    reasonKey: 'scan.state.payProcessing',
   },
   {
     route: '/portal/pay/done',
     state: 'pending',
     audience: 'portal',
-    reason: 'the receipt for a payment awaiting settlement, for the same reason',
+    reasonKey: 'scan.state.payPending',
   },
   // B-194. `recordNoticeGiven`'s two refusals now land on the field instead of
   // being discarded — but neither is reachable from a browser. `future_date`
@@ -829,7 +874,7 @@ export const STATE_EXCEPTIONS: readonly StateException[] = [
     route: '/portal/documents',
     state: 'returned payment row',
     audience: 'portal',
-    reason: 'the row a bounced payment renders, which needs one and the demo seed creates none',
+    reasonKey: 'scan.state.returnedPaymentRow',
   },
   // B-137. Considered and deliberately not built: the demo seed's one
   // pending_auction lease belongs to a tenant with no portal credential, and
@@ -838,8 +883,7 @@ export const STATE_EXCEPTIONS: readonly StateException[] = [
     route: '/portal/transfer',
     state: 'pending_auction refusal',
     audience: 'portal',
-    reason:
-      'the refusal shown to a tenant in the lien pipeline, which needs a lease in that state paired with a portal credential — the one demo lease that qualifies has none',
+    reasonKey: 'scan.state.transferLien',
   },
   // B-90 part 3 / B-193. The route loop scans the "you're not on a plan" empty
   // state; B-196's seed reaches the ACTIVE schedule, the "Left after" column and
@@ -856,8 +900,7 @@ export const STATE_EXCEPTIONS: readonly StateException[] = [
     route: '/portal/payment-plan',
     state: 'a broken, cancelled or completed plan',
     audience: 'portal',
-    reason:
-      'the schedule of a plan the tenant has finished with, in any of its three ended states, which needs a plan that actually reached one — the demo plan is live and stays that way',
+    reasonKey: 'scan.state.planEnded',
   },
   // B-210. The same fixture problem one row down: every installment in the
   // demo plan is in the FUTURE by design (a past one would be broken by the
@@ -870,8 +913,7 @@ export const STATE_EXCEPTIONS: readonly StateException[] = [
     route: '/portal/payment-plan',
     state: 'a late or missed installment row',
     audience: 'portal',
-    reason:
-      'the schedule rows for an installment past its date — inside its grace, and past it — which need an installment that has actually gone by, and one moves on its own the moment the nightly jobs run',
+    reasonKey: 'scan.state.planLateRow',
   },
   // B-215. `/admin/auctions` is in ADMIN_SCAN_ROUTES, and against demo data it
   // renders "no sale here is ready to advertise" — the lot sheet's populated
@@ -901,12 +943,11 @@ export const STATE_EXCEPTIONS: readonly StateException[] = [
     route: '/portal',
     state: 'payment plan card, after a late or missed payment or a break',
     audience: 'portal',
-    reason:
-      'the three warning states of the plan card — a payment late inside its grace, a payment missed past it, and the plan ended because one was — which all need a plan that has actually let an installment date go by, and that state moves on its own the moment the nightly jobs run',
+    reasonKey: 'scan.state.planCard',
   },
 ] as const
 
 /// The state exceptions a visitor is owed, same rule as `customerFacingExceptions`.
-export function customerFacingStateExceptions(): readonly StateException[] {
-  return STATE_EXCEPTIONS.filter((row) => row.audience !== 'admin')
+export function customerFacingStateExceptions(): readonly CustomerStateException[] {
+  return STATE_EXCEPTIONS.filter((row): row is CustomerStateException => row.audience !== 'admin')
 }

@@ -1,13 +1,15 @@
-import type { Metadata } from 'next'
+import { Fragment } from 'react'
 import Link from 'next/link'
-import { SMS_CONFIRM_KEYWORD, SMS_OPT_IN_KEYWORD } from '@storage/core/comms'
+import {
+  SMS_CONFIRM_KEYWORD,
+  SMS_HELP_KEYWORD,
+  SMS_OPT_IN_KEYWORD,
+  SMS_START_KEYWORDS,
+  SMS_STOP_KEYWORDS,
+} from '@storage/core/comms'
 import { SITE } from '@/lib/site-config'
-
-export const metadata: Metadata = {
-  title: 'Text message policy',
-  description:
-    'How we use text messages: what we send, how you agree to receive them, how to stop them, and what they cost.',
-}
+import { dictionaryFor, translate, type MessageKey } from '@/lib/i18n'
+import { getLocale } from '@/lib/i18n/server'
 
 // PRD 05 CN-14 / §6.4. The public disclosure page a carrier and an A2P 10DLC
 // campaign review expect to find, and the page the portal's consent control
@@ -24,161 +26,200 @@ export const metadata: Metadata = {
 //
 // A page that promises something the system does not do is worse than no page:
 // it is the document a regulator reads when somebody complains.
+//
+// B-262 translated it, and made the first of those three claims true. The stop
+// and resume keywords were RETYPED here as literal JSX under that comment, so
+// adding one to `sms-keywords.ts` would have left this page naming five of six
+// while still claiming to come from the code. They are imported now.
+//
+// The keywords themselves are never translated: a carrier matches STOP, not
+// PARE. They are substituted into the sentences as variables and stay English
+// in both dictionaries.
 
-const LAST_REVIEWED = 'August 2026'
+/// Month and year, formatted in the reader's language.
+///
+/// A `'August 2026'` string constant would have rendered English inside the
+/// Spanish page, and a `${month} ${year}` template is wrong in Spanish however
+/// the month is spelled — Spanish puts "de" between them. Same reasoning, and
+/// the same `Intl` call, as `statementLabel` (B-260). Built at UTC midnight
+/// and formatted in UTC so no timezone can walk it back a day into July.
+const LAST_REVIEWED = { year: 2026, month: 8 }
 
-export default function MessagingPolicyPage() {
+function reviewedOn(locale: string): string {
+  return new Intl.DateTimeFormat(locale, {
+    timeZone: 'UTC',
+    month: 'long',
+    year: 'numeric',
+  }).format(new Date(Date.UTC(LAST_REVIEWED.year, LAST_REVIEWED.month - 1, 1)))
+}
+
+/// The keyword list, each word emphasised, joined the way the reader's own
+/// language joins a list. Bold per keyword rather than around the whole run:
+/// this page is scanned for "what do I text", and the conjunction is not one
+/// of the things to text.
+function KeywordList({ words, conjunction }: { words: readonly string[]; conjunction: string }) {
   return (
-    <main className="mx-auto flex max-w-2xl flex-col gap-6 px-6 py-12">
+    <>
+      {words.map((word, i) => (
+        <Fragment key={word}>
+          {i > 0 && (i === words.length - 1 ? ` ${conjunction} ` : ', ')}
+          <strong>{word}</strong>
+        </Fragment>
+      ))}
+    </>
+  )
+}
+
+export async function generateMetadata() {
+  const dict = dictionaryFor(await getLocale())
+  return {
+    title: translate(dict, 'msg.title'),
+    description: translate(dict, 'msg.metaDescription'),
+  }
+}
+
+export default async function MessagingPolicyPage() {
+  const locale = await getLocale()
+  const dict = dictionaryFor(locale)
+  const t = (key: MessageKey, vars?: Record<string, string | number>) =>
+    translate(dict, key, vars)
+
+  // The portal's own nav label, so the section this page sends people to is
+  // named here exactly as it is named there — "Notifications" in English,
+  // "Avisos" in Spanish — and renaming it there renames it here.
+  const section = t('portal.notifications')
+  const stop = SMS_STOP_KEYWORDS[0]
+
+  return (
+    // B-262. A `<div>`, not a `<main>`. This page rendered its own `<main>`
+    // INSIDE the public layout's `<main id="main">` — two main landmarks in
+    // one document, which is one more than a screen-reader user can navigate
+    // to meaningfully, and it is the only page in the public tree that did it.
+    // The axe sweep never saw it: `landmark-no-duplicate-main` is an
+    // axe-core BEST-PRACTICE rule, and `assertNoAxeViolations` runs
+    // `wcag2a/wcag2aa/wcag21a/wcag21aa` only. A Playwright strict-mode
+    // violation on `locator('main')` is what actually found it, while asserting
+    // something else entirely.
+    <div className="mx-auto flex max-w-2xl flex-col gap-6 px-6 py-12">
       <header className="flex flex-col gap-2">
-        <h1 className="text-2xl font-semibold">Text message policy</h1>
+        <h1 className="text-2xl font-semibold">{t('msg.title')}</h1>
         <p className="text-muted-foreground text-sm">
-          {SITE.name} · Last reviewed {LAST_REVIEWED}
+          {t('msg.reviewedLine', { name: SITE.name, date: reviewedOn(locale) })}
         </p>
       </header>
 
-      <p className="text-pretty">
-        This page explains the text messages {SITE.name} sends, how you agree to receive them, and
-        how to stop them at any time. It applies to every mobile number we hold.
-      </p>
+      <p className="text-pretty">{t('msg.intro', { name: SITE.name })}</p>
 
       <section aria-labelledby="consent" className="flex flex-col gap-3">
         <h2 id="consent" className="text-lg font-medium">
-          How you agree to receive texts
+          {t('msg.consentHeading')}
         </h2>
-        <p className="text-pretty">
-          We never text a number that has not agreed to hear from us.
-        </p>
+        <p className="text-pretty">{t('msg.consentNever')}</p>
         <p className="text-pretty">
           <strong>
-            Text {SMS_OPT_IN_KEYWORD} to {SITE.smsNumber.display}, then reply{' '}
-            {SMS_CONFIRM_KEYWORD} when we ask.
+            {t('msg.consentKeyword', {
+              optIn: SMS_OPT_IN_KEYWORD,
+              number: SITE.smsNumber.display,
+              confirm: SMS_CONFIRM_KEYWORD,
+            })}
           </strong>{' '}
-          Texting the keyword does not subscribe you on its own — we reply asking you to confirm,
-          and only your {SMS_CONFIRM_KEYWORD} switches the messages on. Both of our replies tell you
-          how often we text, that message and data rates may apply, and how to stop.
+          {t('msg.consentKeywordBody', { confirm: SMS_CONFIRM_KEYWORD })}
         </p>
+        <p className="text-pretty">{t('msg.consentUnknown')}</p>
         <p className="text-pretty">
-          If we do not recognise the number you text from, we say so and subscribe nothing — call us
-          and we will add it to your account first.
+          {t('msg.consentSelfServeBefore')} <strong>{section}</strong>{' '}
+          {t('msg.consentSelfServeAfter')}
         </p>
+        <p className="text-pretty">{t('msg.consentRecord', { section })}</p>
         <p className="text-pretty">
-          You can also turn text messages on yourself, in the <strong>Notifications</strong> section
-          of your online account, or by telling our staff to switch them on for you.
-        </p>
-        <p className="text-pretty">
-          When you do, we record the date and time, where the consent came from, and the exact
-          version of the wording you agreed to. You can see all of that on your own Notifications
-          page at any time — including the fact that we have never asked you, if we have not.
-        </p>
-        <p className="text-pretty">
-          <strong>Consent is not a condition of renting from us.</strong> You can rent, pay and
-          manage your unit entirely without text messages; we will email you instead.
+          <strong>{t('msg.consentNotCondition')}</strong> {t('msg.consentNotConditionBody')}
         </p>
       </section>
 
       <section aria-labelledby="what" className="flex flex-col gap-3">
         <h2 id="what" className="text-lg font-medium">
-          What we send
+          {t('msg.whatHeading')}
         </h2>
         <ul className="flex list-disc flex-col gap-2 pl-5">
           <li>
-            <strong>Account and payment messages</strong> — your gate code when you move in, a
-            reminder before rent is due, a notice if a payment fails, and a message if your gate
-            access changes.
+            <strong>{t('msg.whatAccountLabel')}</strong> — {t('msg.whatAccountBody')}
           </li>
           <li>
-            <strong>Occasional offers</strong>, only if you have separately agreed to marketing
-            messages. These are a different permission from the account messages above, and you can
-            hold one without the other.
+            <strong>{t('msg.whatOffersLabel')}</strong>, {t('msg.whatOffersBody')}
           </li>
         </ul>
         <p className="text-pretty">
-          <strong>Message frequency varies.</strong> Most months you will receive around one to four
-          messages. A month in which a payment fails, or in which your account falls behind, will
-          include more.
+          <strong>{t('msg.frequencyLead')}</strong> {t('msg.frequencyBody')}
         </p>
       </section>
 
       <section aria-labelledby="stop" className="flex flex-col gap-3">
         <h2 id="stop" className="text-lg font-medium">
-          How to stop them
+          {t('msg.stopHeading')}
         </h2>
         <p className="text-pretty">
-          Reply <strong>STOP</strong> to any message from us. We also accept{' '}
-          <strong>STOPALL</strong>, <strong>UNSUBSCRIBE</strong>, <strong>CANCEL</strong>,{' '}
-          <strong>END</strong> and <strong>QUIT</strong>. You will get one message confirming it,
-          and then nothing further to that number.
+          {t('msg.stopReplyBefore')} <strong>{stop}</strong> {t('msg.stopReplyAfter')}{' '}
+          <KeywordList words={SMS_STOP_KEYWORDS.slice(1)} conjunction={t('common.and')} />.{' '}
+          {t('msg.stopConfirm')}
         </p>
         <p className="text-pretty">
-          Stopping texts stops <em>all</em> of them, including account and payment messages — not
-          just the offers. We will keep emailing you about your account, because those messages are
-          part of your rental agreement.
+          {t('msg.stopAllBefore')} <em>{t('msg.stopAllEm')}</em> {t('msg.stopAllAfter')}
         </p>
         {/* B-123 / D-51. The marketing-only switch now exists, so the page has
             to say so: telling somebody their only option is STOP, when STOP
             also costs them their gate code, pushes them into giving up more
             than they meant to. */}
         <p className="text-pretty">
-          <strong>If it is only the offers you want to stop</strong>, do not reply STOP — turn
-          marketing texts off on your{' '}
-          <strong>Notifications</strong> page instead. That leaves your account and payment texts
-          working, and you can switch the offers back on there whenever you like.
+          <strong>{t('msg.marketingOnlyLead')}</strong>
+          {t('msg.marketingOnlyBefore', { stop })} <strong>{section}</strong>{' '}
+          {t('msg.marketingOnlyAfter')}
         </p>
         <p className="text-pretty">
-          To start again, reply <strong>START</strong> or <strong>UNSTOP</strong>, or turn texts
-          back on from your Notifications page. For help, reply <strong>HELP</strong> — you will get our
-          phone number and a link back to this page.
+          {t('msg.restartBefore')}{' '}
+          <KeywordList words={SMS_START_KEYWORDS} conjunction={t('common.or')} />
+          {t('msg.restartAfter', { section })} <strong>{SMS_HELP_KEYWORD}</strong>{' '}
+          {t('msg.restartHelpAfter')}
         </p>
         <p className="text-pretty">
-          You can also switch them off yourself, without texting anything, in the{' '}
-          <strong>Notifications</strong> section of your online account. That has exactly the same
-          effect as replying STOP.
+          {t('msg.stopSelfServeBefore')} <strong>{section}</strong>{' '}
+          {t('msg.stopSelfServeAfter', { stop })}
         </p>
       </section>
 
       <section aria-labelledby="hours" className="flex flex-col gap-3">
         <h2 id="hours" className="text-lg font-medium">
-          When we send them
+          {t('msg.hoursHeading')}
         </h2>
         <p className="text-pretty">
-          We only text between <strong>8am and 9pm</strong> in the local time of the facility you
-          rent from, and that applies to every message including account and payment ones. Anything
-          that would fall outside those hours waits, or is emailed instead. Individual facilities may
-          use a narrower window where their state requires it.
+          {t('msg.hoursBefore')} <strong>{t('msg.hoursWindow')}</strong> {t('msg.hoursAfter')}
         </p>
       </section>
 
       <section aria-labelledby="cost" className="flex flex-col gap-3">
         <h2 id="cost" className="text-lg font-medium">
-          Cost
+          {t('msg.costHeading')}
         </h2>
         <p className="text-pretty">
-          <strong>Message and data rates may apply.</strong> We do not charge you for text messages;
-          your mobile carrier may, depending on your plan. Carriers are not liable for delayed or
-          undelivered messages.
+          <strong>{t('msg.costLead')}</strong> {t('msg.costBody')}
         </p>
       </section>
 
       <section aria-labelledby="privacy" className="flex flex-col gap-3">
         <h2 id="privacy" className="text-lg font-medium">
-          Your information
+          {t('msg.privacyHeading')}
         </h2>
         <p className="text-pretty">
-          We do not sell your mobile number, and we do not share it with anyone for their own
-          marketing. We share it only with the messaging provider that delivers the texts on our
-          behalf. Our{' '}
+          {t('msg.privacyBefore')}{' '}
           <Link href="/privacy" className="underline underline-offset-4">
-            privacy policy
+            {t('msg.privacyLink')}
           </Link>{' '}
-          covers what else we hold and why, and our{' '}
+          {t('msg.privacyMiddle')}{' '}
           <Link href="/terms" className="underline underline-offset-4">
-            terms
+            {t('msg.termsLink')}
           </Link>{' '}
-          cover your rental agreement.
+          {t('msg.privacyAfter')}
         </p>
       </section>
-
-    </main>
+    </div>
   )
 }

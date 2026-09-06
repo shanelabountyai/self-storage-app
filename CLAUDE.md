@@ -32,6 +32,8 @@ pkill -9 -f "$PWD.*playwright"      # NOT `pkill -f playwright`
 lsof -ti :3000 | xargs -r kill -9
 ```
 
+**Put those two lines in a script, or the first one kills the shell that runs it.** `pkill -f` matches against whole command lines, and a command line that CONTAINS `"$PWD.*playwright"` matches `$PWD.*playwright` — so pasted inline after a `cd`, it matches its own parent shell and SIGKILLs it. The failure is silent and total: no output, no log file, exit 1, and nothing to suggest the pattern was the problem rather than the command it was supposed to protect. Cost B-262 a build run, which is the cheap version — the expensive version is losing the sweep it was meant to clean up for.
+
 A bare `pkill -f playwright` matches **every project on the machine**, not this one. It killed the rental platform's test runs twice on 2026-08-15 while a sweep was running here — a clean SIGKILL partway through, no failures, no summary, which reads exactly like a broken build on the receiving end. The reverse can happen to this repo just as easily.
 
 **The tell that separates a cross-project kill from a memory kill is which process died.** Jetsam takes the LARGEST process, which is the server. A `playwright` pattern takes the RUNNER and leaves the server listening. A dead runner beside a healthy server is positive evidence that something on the machine did it — check `lsof -ti :3000` before reaching for `/Library/Logs/DiagnosticReports/JetsamEvent-*.ips`.

@@ -167,3 +167,86 @@ test.describe('the portal in Spanish', () => {
     await assertNoAxeViolations(page)
   })
 })
+
+// B-262. The static pages a renter READS rather than operates.
+//
+// `/terms` and `/privacy` are deliberately absent: they stay English with the
+// lease (D-122), and the Spanish footer says so in as many words. Asserting
+// they are still English would pin a decision that is somebody else's to
+// reverse, so this asserts what was built and leaves that sentence to the
+// footer.
+test.describe('the static pages in Spanish', () => {
+  test.beforeEach(async ({ context }) => {
+    await context.addCookies([SPANISH])
+  })
+
+  // The heading proves the page's own copy was translated rather than only the
+  // chrome around it — the failure this catches is a page that renders the
+  // Spanish header and footer over English prose, which looks translated at a
+  // glance and is the exact state B-262 was raised to end.
+  const PAGES: [string, RegExp][] = [
+    ['/faq', /Preguntas frecuentes/],
+    ['/about', /Acerca de/],
+    ['/contact', /Contacto/],
+    ['/accessibility', /Accesibilidad/],
+    ['/messaging-policy', /Política de mensajes de texto/],
+  ]
+
+  for (const [route, heading] of PAGES) {
+    test(`${route} renders in Spanish`, async ({ page }) => {
+      await page.goto(route)
+
+      await expect(page.locator('html')).toHaveAttribute('lang', 'es')
+      await expect(page.getByRole('heading', { level: 1 })).toContainText(heading)
+    })
+  }
+
+  test('the text-message policy keeps its carrier keywords in English', async ({ page }) => {
+    await page.goto('/messaging-policy')
+
+    // A carrier matches STOP, not PARE. Translating a keyword would produce a
+    // page that reads correctly and tells a Spanish speaker to send a word
+    // that switches nothing off — which is worse than leaving the page in
+    // English, because it looks like it worked.
+    //
+    // Asserted against the rendered TEXT rather than per element: some
+    // keywords are their own `<strong>` (the stop list) and some are
+    // substituted into the middle of a sentence that is bold as a whole (JOIN
+    // and YES, in "Envíe JOIN al … y luego responda YES"), so an exact-text
+    // locator would pass for one group and fail for the other while both were
+    // correct.
+    const body = await page.locator('#main').innerText()
+    for (const keyword of ['STOP', 'STOPALL', 'UNSUBSCRIBE', 'CANCEL', 'END', 'QUIT', 'START', 'UNSTOP', 'HELP', 'JOIN', 'YES']) {
+      expect(body, `${keyword} must stay English on the Spanish page`).toContain(keyword)
+    }
+  })
+
+  test('the Spanish accessibility statement has no axe violations', async ({ page }) => {
+    await page.goto('/accessibility')
+
+    await expect(page.getByRole('heading', { level: 1 })).toContainText('Accesibilidad')
+    // The densest markup of the five translated pages: two lists generated
+    // from the scan-coverage tables, nested emphasis, and a date through
+    // `Intl`. If Spanish breaks this group's markup, it breaks here.
+    // a11y-state: /accessibility | Spanish
+    await assertNoAxeViolations(page)
+  })
+
+  test('the statement still names its gaps, in Spanish', async ({ page }) => {
+    await page.goto('/accessibility')
+
+    // The load-bearing claim of this page is that it names every gap it knows
+    // about. Translating the generated lists is the one change in B-262 that
+    // could have silently emptied them — a `reasonKey` that resolved to
+    // nothing would render an empty bullet and read as "no gaps".
+    const gaps = page.getByRole('listitem')
+    expect(await gaps.count()).toBeGreaterThan(10)
+    await expect(page.getByText('las pruebas automáticas no llevan la cookie de idioma')).toBeVisible()
+
+    // And the sentence the whole page rests on, which translation must not
+    // soften: no manual screen-reader pass has ever been run.
+    await expect(
+      page.getByText('Todavía no se ha hecho ni una revisión completa con lector de pantalla'),
+    ).toBeVisible()
+  })
+})

@@ -85,6 +85,7 @@ export const en = {
   'sort.price': 'Price: low to high',
   'sort.size': 'Size: small to large',
   'common.and': 'and',
+  'common.or': 'or',
 
   // --- Search results (US-101/US-103) -----------------------------------
   'search.title': 'Find storage',
@@ -1138,4 +1139,257 @@ export const en = {
     'A transfer moves you within one facility. That unit is at another site.',
   'tr.problem.same_unit': 'That is the unit you are already in.',
   'tr.problem.no_rate_for_unit_type': 'That unit has no published rate, so we cannot quote it.',
+  // --- About (B-262) -----------------------------------------------------
+  'about.title': 'About',
+  'about.metaDescription': 'What this project is.',
+  'about.intro': 'A small self-storage operator, run on software we own.',
+  'about.whatWeAre': 'What we are',
+  'about.whatWeAreBody':
+    'We run a handful of self-storage facilities and built the software that runs them, rather than renting it per site per month. That means the prices and availability you see come from the same system the front desk uses — not a nightly export.',
+  'about.aboutSite': 'A note on this site',
+  'about.aboutSiteBody':
+    'This is a learning project built to production standards. The facilities, tenants, and prices shown are demonstration data, and nothing here is a real offer of storage.',
+
+  // --- Contact (B-262) ---------------------------------------------------
+  'contact.title': 'Contact',
+  'contact.metaDescription': 'How to reach us.',
+  'contact.intro': 'The fastest way to reach us is the phone.',
+  'contact.phoneHeading': 'Phone',
+  'contact.emailHeading': 'Email',
+  'contact.facilityHeading': 'A specific facility',
+  'contact.facilityBody':
+    'Each facility lists its own phone number, office hours, and gate hours on its page. Those reach the site directly.',
+
+  // --- FAQ (B-262) -------------------------------------------------------
+  'faq.title': 'Frequently asked questions',
+  'faq.metaDescription': 'How reservations, move-ins, gate access, and billing work.',
+  'faq.intro': "Short answers to what people ask most. Call us if yours isn't here.",
+  'faq.reserveQ': 'Do I need to pay to reserve a unit?',
+  'faq.reserveA':
+    "No. Reservations are free, need no card, and need no account — just your name, email, phone, and the date you want to move in. The hold expires on its own if you don't move in.",
+  'faq.onlineQ': 'Can I rent entirely online?',
+  'faq.onlineA':
+    'Yes. You pick a unit, sign the lease electronically, pay the first amount due, and get your gate code — without visiting an office.',
+  'faq.contractQ': 'Is there a long-term contract?',
+  'faq.contractA':
+    'No. Rentals are month-to-month. You give notice according to your lease and move out.',
+  'faq.priceQ': 'What is the difference between the online and in-store price?',
+  'faq.priceA':
+    'Some sizes cost less when you rent online than when you rent at the counter. Both prices are shown before you commit, so you can see which one applies to you. Reserving does not change the price — renting online is what does.',
+  'faq.sizeQ': 'What size do I need?',
+  'faq.sizeIntro': 'A rough guide, and we will happily talk it through on the phone:',
+  'faq.size5Label': '5 by 5 feet',
+  'faq.size5Body':
+    'a large closet. Boxes, seasonal decorations, a bike, a few pieces of small furniture.',
+  'faq.size10Label': '10 by 10 feet',
+  'faq.size10Body':
+    'about half a garage, or the contents of a one-bedroom apartment including a sofa and a mattress set.',
+  'faq.size20Label': '10 by 20 feet',
+  'faq.size20Body': 'a single garage. A three-bedroom house, or a car with room left over.',
+  'faq.sizeBetween':
+    'If you are between two sizes, take the larger one. Paying a little more beats discovering on moving day that the last of it does not fit.',
+  'faq.accessQ': 'When can I get to my unit?',
+  'faq.accessA':
+    'Office hours and gate hours are different, and both are listed on every facility page. Gate hours are when you can reach your unit; office hours are when staff are there.',
+  'faq.elseQ': 'Something else?',
+  'faq.elseCall': 'Call',
+  // --- Text message policy (PRD 05 CN-14, B-262) -------------------------
+  //
+  // Before/After splits rather than one key per paragraph wherever a carrier
+  // keyword is emphasised mid-sentence: the keywords themselves are literal
+  // and never translated (a carrier matches STOP, not PARE), and losing the
+  // bold on them would cost a reader scanning for "what do I text" the one
+  // thing this page is read for.
+  'msg.title': 'Text message policy',
+  'msg.metaDescription':
+    'How we use text messages: what we send, how you agree to receive them, how to stop them, and what they cost.',
+  'msg.reviewedLine': '{name} · Last reviewed {date}',
+  'msg.intro':
+    'This page explains the text messages {name} sends, how you agree to receive them, and how to stop them at any time. It applies to every mobile number we hold.',
+
+  'msg.consentHeading': 'How you agree to receive texts',
+  'msg.consentNever': 'We never text a number that has not agreed to hear from us.',
+  'msg.consentKeyword': 'Text {optIn} to {number}, then reply {confirm} when we ask.',
+  'msg.consentKeywordBody':
+    'Texting the keyword does not subscribe you on its own — we reply asking you to confirm, and only your {confirm} switches the messages on. Both of our replies tell you how often we text, that message and data rates may apply, and how to stop.',
+  'msg.consentUnknown':
+    'If we do not recognise the number you text from, we say so and subscribe nothing — call us and we will add it to your account first.',
+  // The section is named from `portal.notifications`, the portal's OWN nav
+  // label, so renaming it there renames it here — the page tells a reader
+  // where to click, and "Avisos" is what a Spanish reader will actually see.
+  'msg.consentSelfServeBefore': 'You can also turn text messages on yourself, in the',
+  'msg.consentSelfServeAfter':
+    'section of your online account, or by telling our staff to switch them on for you.',
+  'msg.consentRecord':
+    'When you do, we record the date and time, where the consent came from, and the exact version of the wording you agreed to. You can see all of that on your own {section} page at any time — including the fact that we have never asked you, if we have not.',
+  'msg.consentNotCondition': 'Consent is not a condition of renting from us.',
+  'msg.consentNotConditionBody':
+    'You can rent, pay and manage your unit entirely without text messages; we will email you instead.',
+
+  'msg.whatHeading': 'What we send',
+  'msg.whatAccountLabel': 'Account and payment messages',
+  'msg.whatAccountBody':
+    'your gate code when you move in, a reminder before rent is due, a notice if a payment fails, and a message if your gate access changes.',
+  'msg.whatOffersLabel': 'Occasional offers',
+  'msg.whatOffersBody':
+    'only if you have separately agreed to marketing messages. These are a different permission from the account messages above, and you can hold one without the other.',
+  'msg.frequencyLead': 'Message frequency varies.',
+  'msg.frequencyBody':
+    'Most months you will receive around one to four messages. A month in which a payment fails, or in which your account falls behind, will include more.',
+
+  'msg.stopHeading': 'How to stop them',
+  'msg.stopReplyBefore': 'Reply',
+  'msg.stopReplyAfter': 'to any message from us. We also accept',
+  'msg.stopConfirm':
+    'You will get one message confirming it, and then nothing further to that number.',
+  'msg.stopAllBefore': 'Stopping texts stops',
+  'msg.stopAllEm': 'all',
+  'msg.stopAllAfter':
+    'of them, including account and payment messages — not just the offers. We will keep emailing you about your account, because those messages are part of your rental agreement.',
+  'msg.marketingOnlyLead': 'If it is only the offers you want to stop',
+  'msg.marketingOnlyBefore': ', do not reply {stop} — turn marketing texts off on your',
+  'msg.marketingOnlyAfter':
+    'page instead. That leaves your account and payment texts working, and you can switch the offers back on there whenever you like.',
+  'msg.restartBefore': 'To start again, reply',
+  'msg.restartAfter': ', or turn texts back on from your {section} page. For help, reply',
+  'msg.restartHelpAfter':
+    '— you will get our phone number and a link back to this page.',
+  'msg.stopSelfServeBefore': 'You can also switch them off yourself, without texting anything, in the',
+  'msg.stopSelfServeAfter':
+    'section of your online account. That has exactly the same effect as replying {stop}.',
+
+  'msg.hoursHeading': 'When we send them',
+  'msg.hoursBefore': 'We only text between',
+  'msg.hoursWindow': '8am and 9pm',
+  'msg.hoursAfter':
+    'in the local time of the facility you rent from, and that applies to every message including account and payment ones. Anything that would fall outside those hours waits, or is emailed instead. Individual facilities may use a narrower window where their state requires it.',
+
+  'msg.costHeading': 'Cost',
+  'msg.costLead': 'Message and data rates may apply.',
+  'msg.costBody':
+    'We do not charge you for text messages; your mobile carrier may, depending on your plan. Carriers are not liable for delayed or undelivered messages.',
+
+  'msg.privacyHeading': 'Your information',
+  'msg.privacyBefore':
+    'We do not sell your mobile number, and we do not share it with anyone for their own marketing. We share it only with the messaging provider that delivers the texts on our behalf. Our',
+  'msg.privacyLink': 'privacy policy',
+  'msg.privacyMiddle': 'covers what else we hold and why, and our',
+  'msg.termsLink': 'terms',
+  'msg.privacyAfter': 'cover your rental agreement.',
+
+  // --- Accessibility scan coverage (PRD 01 §6.8, B-262) ------------------
+  //
+  // The sentences the public accessibility statement prints verbatim, one per
+  // gap in the automated run. They lived in `lib/a11y/scan-coverage.ts` as
+  // English strings until B-262; they are keys now because the page they are
+  // rendered on can be read in Spanish, and a statement that names every gap
+  // in a language the reader does not read names none of them.
+  'scan.route.checkoutConfirmation':
+    "the checkout confirmation screen, which only exists after a real payment redirect and cannot be reproduced from outside the card processor's own frame",
+  'scan.route.payToken':
+    'the one-tap payment screen a reminder links to, which needs a live link issued against a real balance',
+  'scan.route.payTokenDone': 'the receipt shown after paying from that link, for the same reason',
+  'scan.route.checkoutResume':
+    'the live state of a resume link from an abandoned-booking email \u2014 the expired-link state it lands on is checked',
+  'scan.route.portalDocument':
+    'a single stored document, which needs a real document on a real account',
+  'scan.route.portalStatement':
+    "a single month's statement, which needs a real statement on a real account",
+  'scan.state.publicSpanish':
+    'the automated run carries no locale cookie, so it scans the public site in English; the facility page and this statement are scanned in Spanish (above), and the rest of the public site, this route included, is not yet',
+  'scan.state.portalSpanish':
+    'the portal a11y route loop carries no locale cookie, so every portal route but /portal is scanned in English only',
+  'scan.state.checkoutSpanish':
+    'reached in Spanish by e2e/i18n.spec.ts as far as step 1, which asserts the language rather than running axe — the later steps need a session the scan loop does not build',
+  'scan.state.paySucceeded':
+    'the receipt for a payment that actually succeeded, which needs a real one on a real account',
+  'scan.state.payFailed':
+    'the receipt for a payment that was actually declined, for the same reason',
+  'scan.state.payProcessing': 'the receipt for a payment still mid-flight, for the same reason',
+  'scan.state.payPending': 'the receipt for a payment awaiting settlement, for the same reason',
+  'scan.state.returnedPaymentRow':
+    'the row a bounced payment renders, which needs one and the demo seed creates none',
+  'scan.state.transferLien':
+    'the refusal shown to a tenant in the lien pipeline, which needs a lease in that state paired with a portal credential — the one demo lease that qualifies has none',
+  'scan.state.planEnded':
+    'the schedule of a plan the tenant has finished with, in any of its three ended states, which needs a plan that actually reached one — the demo plan is live and stays that way',
+  'scan.state.planLateRow':
+    'the schedule rows for an installment past its date — inside its grace, and past it — which need an installment that has actually gone by, and one moves on its own the moment the nightly jobs run',
+  'scan.state.planCard':
+    'the three warning states of the plan card — a payment late inside its grace, a payment missed past it, and the plan ended because one was — which all need a plan that has actually let an installment date go by, and that state moves on its own the moment the nightly jobs run',
+  // --- Accessibility statement (PRD 01 §6.8, B-262) ----------------------
+  //
+  // Every sentence here has to be true of the build that is deployed, in both
+  // languages — translating this page did not soften a single claim, and the
+  // Spanish says exactly what the English says rather than a rounder version
+  // of it. The page's own comment log in `accessibility/page.tsx` is where the
+  // history of each claim lives; this file only holds the words.
+  'a11y.title': 'Accessibility',
+  'a11y.metaDescription':
+    'Our accessibility target, what we test, and how to tell us when we get it wrong.',
+  'a11y.intro':
+    'We aim to meet WCAG 2.1 Level AA across every page and every flow. This page says how far we have actually got.',
+
+  'a11y.targetHeading': 'What we target',
+  'a11y.targetBody':
+    'Web Content Accessibility Guidelines (WCAG) 2.1, Level AA. That covers keyboard operation, screen-reader support, colour contrast, text resizing, and reflow on small screens.',
+
+  'a11y.trueHeading': 'What is true today',
+  'a11y.trueKeyboard':
+    'Every page on this public site works with a keyboard alone, and the focus indicator meets the 3:1 contrast the guidelines ask for.',
+  'a11y.trueColour':
+    'Colour is never the only way we tell you something — a status shown in colour is also written in words.',
+  'a11y.trueResize':
+    'Text can be resized to 200% and the page reflows to 320px wide without sideways scrolling.',
+  'a11y.trueLabels': 'Form fields have real labels, not just placeholder text.',
+  'a11y.trueErrors':
+    'When a form rejects something you typed, the message is tied to the field itself, so a screen reader reads it out with that field rather than leaving you to hunt for it — and what you already entered is still there, so you fix the one thing we asked about rather than filling the form in again. A successful save is announced too.',
+  'a11y.trueMotion': "Animation respects your system's reduced-motion setting.",
+  'a11y.trueMaps':
+    'Where we show a map, the information is given as text first and the map is collapsed behind a button you have to press. On a facility page that text is the address and a directions link; on search results it is the list of facilities itself, with distances and prices. You never need the map, and if one fails to load we say so rather than leaving an empty box.',
+
+  'a11y.checkHeading': 'How we check',
+  'a11y.checkAutomated':
+    'Automated accessibility tests run at both phone and desktop widths on every push to our main branch, and on every pull request that is open for review. They are not a release gate: a failing run tells us, it does not stop the deploy. A check the tool cannot decide fails the run as well, on every page in it, so “we did not test that” never quietly reads as “that passed”.',
+  'a11y.checkWaiverIntro':
+    'A few of those undecided checks are ones we have looked at and found to be a limit of the tool rather than a real problem. They are set aside in three different ways, and we would rather name each than round them off:',
+  'a11y.checkWaiverPage':
+    'Some are waived only on the page they were checked on — a bar that overlaps the page on purpose so it stays in reach, a striped background the checker cannot see through. The same check still has to pass everywhere else.',
+  'a11y.checkWaiverSite':
+    'Some are waived anywhere on the site, but only where the test itself re-checks the thing that confused the tool. A cell that has scrolled out of view in a wide table is one: it is set aside only where you have a scrollbar that brings it back, and something genuinely painted off the edge of the screen still fails.',
+  'a11y.checkWaiverFrame':
+    'Content inside a frame served by another company — the card form, the map — is not checked by these tests. That is their page, not ours. A frame we build ourselves is checked like anything else.',
+  'a11y.checkPagesIntro':
+    'They do not yet cover everything. These are the pages outside that run, and the reason each one is:',
+  'a11y.checkPagesGenerated':
+    'We would rather name each gap than let a general claim cover it. This list is generated from the same file the tests read, so a page that stops being checked appears here rather than quietly disappearing from both.',
+  'a11y.checkStatesIntro':
+    'That list names pages. Some screens also have states — an error message, a hold that has expired, a size that sold out while you were deciding — that only appear once you have done something on them. These are the ones we know are not covered, and why:',
+  'a11y.checkStatesIncomplete':
+    'More states than these probably exist that we have not found and named yet — unlike the page list above, this one cannot claim to be complete.',
+  'a11y.checkFloorBefore':
+    'Automated testing is a floor, not a ceiling — it catches roughly a third of real problems, and it cannot judge whether a screen reader says something that makes sense.',
+  'a11y.checkFloorStrong':
+    'Neither a full screen-reader pass nor a recorded keyboard pass has been carried out yet',
+  'a11y.checkFloorAfter': ', so nothing on this page rests on one.',
+
+  'a11y.shortHeading': 'Where we fall short today',
+  'a11y.shortIntro':
+    'This site is under active construction. These are the problems we know about, as of {date}. If one of them blocks you, tell us and we will help you finish what you were doing by phone or email in the meantime.',
+  'a11y.gapNoJsLabel': 'Renting online without JavaScript.',
+  'a11y.gapNoJsBody':
+    'The whole checkout works with JavaScript turned off, but the countdown on the 30-minute hold does not: it shows the time left when the page was drawn and does not tick down, so if you are reading the lease when it runs out, the expiry can be the first you hear of it. With JavaScript on you are warned five minutes out and can extend the hold in one press.',
+  'a11y.gapStaffLabel': 'Our staff-facing screens',
+  'a11y.gapStaffBody':
+    'have known problems. Long lists on Tasks, Leads, Delinquency and Support sessions are not paginated. No customer uses them, but we are not going to describe them as done.',
+  'a11y.gapMapsLabel': 'The maps we show are not fully accessible',
+  'a11y.gapMapsBody':
+    ", and they are not ours to fix. A facility page embeds OpenStreetMap, whose zoom controls are named “+” and “−” and whose marker has no text alternative. Search results can show a second map from a different provider, where we control the price markers but not the tiles or the vendor's own controls beneath them; we have not yet assessed that one against a live map, so nothing here rests on it. Both stay collapsed behind a button, and neither is ever the only way to get the information.",
+  'a11y.lastReviewed': 'Last reviewed: {date}.',
+
+  'a11y.tellHeading': 'Tell us when we get it wrong',
+  'a11y.tellBefore': 'If something here blocks you, email',
+  'a11y.tellMiddle': 'or call',
+  'a11y.tellAfter':
+    '. Tell us the page and what happened, and we will fix it and reply. An accessibility barrier is a bug, and we treat it as one.',
 } as const

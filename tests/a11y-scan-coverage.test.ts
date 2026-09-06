@@ -12,6 +12,9 @@ import {
   SCANNED_STATES,
   STATE_EXCEPTIONS,
 } from '../apps/web/lib/a11y/scan-coverage'
+import { en } from '../apps/web/lib/i18n/en'
+import { es } from '../apps/web/lib/i18n/es'
+import { translate } from '../apps/web/lib/i18n'
 
 // B-139 / PRD 01 §6.8, PRD 02 §5.5 FR-24. The check that stops the public
 // accessibility statement going stale on a merge.
@@ -130,9 +133,26 @@ describe('the accessibility scan contract (B-139)', () => {
   it('tells a visitor about customer-facing gaps only', () => {
     const shown = customerFacingExceptions()
     expect(shown.length).toBeGreaterThan(0)
-    expect(shown.every((row) => row.audience !== 'admin')).toBe(true)
+    // Not `shown.every(row => row.audience !== 'admin')` any more: B-262's
+    // union makes that provably true, and TypeScript rejects the comparison
+    // outright. The claim worth checking is the one the types cannot make —
+    // that the filter drops the admin rows and keeps every other one.
+    expect(shown.length).toBe(SCAN_EXCEPTIONS.filter((row) => row.audience !== 'admin').length)
     // Every reason has to read as a sentence on a public page, not as a route.
-    expect(shown.every((row) => row.reason.length > 20 && !row.reason.includes('['))).toBe(true)
+    //
+    // B-262: the reason is a message key now, so this resolves it — and it
+    // resolves it in BOTH languages, because the page renders whichever one
+    // the reader chose and a Spanish row that leaked a `[param]` would be just
+    // as wrong. `es` is typed as `Dictionary`, so a missing translation is a
+    // typecheck failure rather than something for this test to catch.
+    for (const dict of [en, es]) {
+      expect(
+        shown.every((row) => {
+          const reason = translate(dict, row.reasonKey)
+          return reason.length > 20 && !reason.includes('[')
+        }),
+      ).toBe(true)
+    }
   })
 
   // B-184 (T1). The same contract, one level down: a STATE is not a route, so
@@ -270,8 +290,10 @@ describe('the accessibility scan contract (B-139)', () => {
     it('tells a visitor about customer-facing state gaps only', () => {
       const shown = customerFacingStateExceptions()
       expect(shown.length).toBeGreaterThan(0)
-      expect(shown.every((row) => row.audience !== 'admin')).toBe(true)
-      expect(shown.every((row) => row.reason.length > 20)).toBe(true)
+      expect(shown.length).toBe(STATE_EXCEPTIONS.filter((row) => row.audience !== 'admin').length)
+      for (const dict of [en, es]) {
+        expect(shown.every((row) => translate(dict, row.reasonKey).length > 20)).toBe(true)
+      }
     })
   })
 })

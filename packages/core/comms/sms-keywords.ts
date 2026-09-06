@@ -3,12 +3,24 @@
 // body, trimmed and case-insensitive — "please stop" is not a STOP, the same
 // way it is not one to a carrier's own filter.
 
-const STOP_KEYWORDS = new Set(['STOP', 'STOPALL', 'UNSUBSCRIBE', 'CANCEL', 'END', 'QUIT'])
+/// Published on `/messaging-policy` in the order a reader meets them: STOP
+/// first, because it is the one every carrier message names, then the rest.
+///
+/// B-262 exported these. The policy page had retyped both lists as literal
+/// JSX, under a comment claiming every word on it comes from the code — so
+/// adding a keyword here would have left the public page quietly naming five
+/// of six, which is the failure that page exists to prevent. The Set is built
+/// FROM the array so there is one list and not two.
+export const SMS_STOP_KEYWORDS = ['STOP', 'STOPALL', 'UNSUBSCRIBE', 'CANCEL', 'END', 'QUIT'] as const
+
+const STOP_KEYWORDS = new Set<string>(SMS_STOP_KEYWORDS)
 
 /// START and UNSTOP are the carrier-standard RESUME keywords, and they take
 /// effect immediately — carriers require that, and a person who already opted
 /// in once and then stopped is not somebody to ask twice.
-const START_KEYWORDS = new Set(['START', 'UNSTOP'])
+export const SMS_START_KEYWORDS = ['START', 'UNSTOP'] as const
+
+const START_KEYWORDS = new Set<string>(SMS_START_KEYWORDS)
 
 /// The keywords that BEGIN an opt-in. Deliberately separate from the resume
 /// set: these start a double opt-in and do not subscribe anybody on their own.
@@ -18,7 +30,9 @@ const OPT_IN_KEYWORDS = new Set(['JOIN', 'SUBSCRIBE'])
 /// nothing, which is what makes the two-step real rather than decorative.
 const CONFIRM_KEYWORDS = new Set(['YES', 'Y'])
 
-const HELP_KEYWORDS = new Set(['HELP'])
+export const SMS_HELP_KEYWORD = 'HELP'
+
+const HELP_KEYWORDS = new Set([SMS_HELP_KEYWORD])
 
 /// The keyword published as the way to opt in, and the one the campaign
 /// collateral shows. One, not five: a policy page listing every synonym is a
