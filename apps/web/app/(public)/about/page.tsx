@@ -1,25 +1,33 @@
-import { ProsePage, Section, metadataFor } from '@/components/site/prose-page'
+import { ProsePage, Section } from '@/components/site/prose-page'
+import { dictionaryFor, translate, type MessageKey } from '@/lib/i18n'
+import { getLocale } from '@/lib/i18n/server'
+import { localeAlternates } from '@/lib/marketing/alternates'
 
-export const metadata = metadataFor('About', 'What this project is.')
+// B-262: `generateMetadata` rather than a static `metadata`, so the tab title
+// follows the language the page is in and the page declares its own canonical
+// alongside its Spanish twin.
+export async function generateMetadata() {
+  const locale = await getLocale()
+  const dict = dictionaryFor(locale)
+  return {
+    title: translate(dict, 'about.title'),
+    description: translate(dict, 'about.meta'),
+    alternates: localeAlternates(locale, '/about'),
+  }
+}
 
-export default function AboutPage() {
+export default async function AboutPage() {
+  const dict = dictionaryFor(await getLocale())
+  const t = (key: MessageKey) => translate(dict, key)
+
   return (
-    <ProsePage title="About" intro="A small self-storage operator, run on software we own.">
-      <Section heading="What we are">
-        <p>
-          We run a handful of self-storage facilities and built the software that runs
-          them, rather than renting it per site per month. That means the prices and
-          availability you see come from the same system the front desk uses — not a
-          nightly export.
-        </p>
+    <ProsePage title={t('about.title')} intro={t('about.intro')}>
+      <Section heading={t('about.whatHeading')}>
+        <p>{t('about.whatBody')}</p>
       </Section>
 
-      <Section heading="A note on this site">
-        <p>
-          This is a learning project built to production standards. The facilities,
-          tenants, and prices shown are demonstration data, and nothing here is a real
-          offer of storage.
-        </p>
+      <Section heading={t('about.siteHeading')}>
+        <p>{t('about.siteBody')}</p>
       </Section>
     </ProsePage>
   )

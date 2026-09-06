@@ -1,4 +1,4 @@
-import Link from 'next/link'
+import { LocaleLink } from '@/components/site/locale-link'
 import { ProsePage } from '@/components/site/prose-page'
 import { cancelWaitlist } from '@/lib/waitlist/service'
 
@@ -50,9 +50,9 @@ export default async function WaitlistCancelPage({
       )}
 
       <p>
-        <Link href="/storage/search" className="underline underline-offset-4">
+        <LocaleLink href="/storage/search" className="underline underline-offset-4">
           Find storage near you
-        </Link>
+        </LocaleLink>
       </p>
     </ProsePage>
   )

@@ -7,6 +7,8 @@ import { cityCopyRows, CITY_INTRO_HARD_MAX } from '@/lib/admin/city-copy'
 import { citySlugPath } from '@/lib/marketing/paths'
 import { cityLabel } from '@/lib/marketing/city-copy'
 import { saveCityCopyAction } from './actions'
+import { LOCALES, LOCALE_NAMES } from '@/lib/i18n'
+import { localePath } from '@/lib/i18n/routing'
 
 export const metadata = { title: 'City page copy' }
 
@@ -23,6 +25,18 @@ export const metadata = { title: 'City page copy' }
 // Every city is listed with what it publishes TODAY, generated or written.
 // Showing the generated text in place rather than an empty box and a hint is
 // what makes "clear it to go back" a claim an operator can check.
+//
+// B-262: one box PER LANGUAGE, because `/storage/tx/austin` and
+// `/es/storage/tx/austin` are two pages and `City.introEs` is the column
+// behind the second. They are independent — writing English does not oblige
+// anybody to write Spanish, and each falls back to its own generated intro on
+// its own, so a half-written city is a complete page in both languages rather
+// than an English paragraph under a Spanish heading.
+//
+// Rendered from `LOCALES` rather than as two hard-coded halves: a third
+// language would otherwise reach the schema and the public page while this
+// screen silently kept editing two of them. Same reason `cityCopyRows` returns
+// a `Record<Locale, …>`.
 
 export const dynamic = 'force-dynamic'
 
@@ -85,60 +99,85 @@ export default async function CityCopyPage() {
                   {city.facilityCount} {city.facilityCount === 1 ? 'location' : 'locations'} ·{' '}
                   {/* Never colour or an icon alone (WCAG 1.4.1) — the word says
                       which state this page is in. */}
-                  <span className="font-medium">
-                    {city.authored ? 'Written' : 'Generated'}
-                  </span>{' '}
-                  ·{' '}
+                  {/* One status per language — "Written" alone would be a
+                      claim about a page that might be written in one language
+                      and generated in the other. */}
+                  {LOCALES.map((locale) => (
+                    <span key={locale}>
+                      <span className="font-medium">
+                        {LOCALE_NAMES[locale]}: {city.copy[locale].authored ? 'Written' : 'Generated'}
+                      </span>{' '}
+                      ·{' '}
+                    </span>
+                  ))}
                   <Link href={path} className="underline underline-offset-2">
                     See the live page
                   </Link>
                 </p>
               </div>
 
-              <div className="bg-muted rounded-md p-3">
-                <h3 className="text-xs font-medium">Showing on the page now</h3>
-                <div className="mt-1 flex flex-col gap-2 text-sm">
-                  {city.rendered.map((paragraph, index) => (
-                    <p key={index} className="text-pretty">
-                      {paragraph}
-                    </p>
-                  ))}
-                </div>
-              </div>
+              {LOCALES.map((locale) => {
+                const copy = city.copy[locale]
+                const languageLabel = `${label} (${LOCALE_NAMES[locale]})`
 
-              <AdminForm
-                action={saveCityCopyAction}
-                label={`Intro copy for ${label}`}
-                className="flex flex-col gap-3"
-              >
-                {/* The city is named by its stored spelling, which is what the
-                    facility records hold — the action re-resolves it against
-                    those records, so a posted city nobody operates in is
-                    refused rather than written. */}
-                <input type="hidden" name="state" value={city.state} />
-                <input type="hidden" name="city" value={city.city} />
+                return (
+                  <div key={locale} className="flex flex-col gap-3">
+                    <div className="bg-muted rounded-md p-3">
+                      <h3 className="text-xs font-medium">
+                        Showing on {localePath(locale, path)} now
+                      </h3>
+                      <div className="mt-1 flex flex-col gap-2 text-sm" lang={locale}>
+                        {copy.rendered.map((paragraph, index) => (
+                          <p key={index} className="text-pretty">
+                            {paragraph}
+                          </p>
+                        ))}
+                      </div>
+                    </div>
 
-                <label className="flex flex-col gap-1 text-sm">
-                  Intro copy
-                  <textarea
-                    name="intro"
-                    rows={8}
-                    defaultValue={city.authored ?? ''}
-                    maxLength={CITY_INTRO_HARD_MAX}
-                    className="border-input bg-background rounded-md border p-2 text-sm"
-                  />
-                  <span className="text-muted-foreground text-xs text-pretty">
-                    A blank line starts a new paragraph. Write what is true of this city rather
-                    than of storage in general — the facility list, the prices and the amenities
-                    are already printed below it, so repeating them is the duplication rather than
-                    the fix. Empty goes back to the generated copy.
-                  </span>
-                </label>
+                    <AdminForm
+                      action={saveCityCopyAction}
+                      label={`Intro copy for ${languageLabel}`}
+                      className="flex flex-col gap-3"
+                    >
+                      {/* The city is named by its stored spelling, which is what
+                          the facility records hold — the action re-resolves it
+                          against those records, so a posted city nobody operates
+                          in is refused rather than written. */}
+                      <input type="hidden" name="state" value={city.state} />
+                      <input type="hidden" name="city" value={city.city} />
+                      <input type="hidden" name="locale" value={locale} />
 
-                <Button type="submit" className="self-start">
-                  Save {label}
-                </Button>
-              </AdminForm>
+                      <label className="flex flex-col gap-1 text-sm">
+                        Intro copy — {LOCALE_NAMES[locale]}
+                        <textarea
+                          name="intro"
+                          rows={8}
+                          // WCAG 3.1.2 Language of Parts: the Spanish box holds
+                          // Spanish, inside an English admin page. Without this
+                          // a screen reader reads it back with English phonemes
+                          // to the person proof-reading it.
+                          lang={locale}
+                          defaultValue={copy.authored ?? ''}
+                          maxLength={CITY_INTRO_HARD_MAX}
+                          className="border-input bg-background rounded-md border p-2 text-sm"
+                        />
+                        <span className="text-muted-foreground text-xs text-pretty">
+                          A blank line starts a new paragraph. Write what is true of this city
+                          rather than of storage in general — the facility list, the prices and
+                          the amenities are already printed below it, so repeating them is the
+                          duplication rather than the fix. Empty goes back to the generated copy
+                          for this language only; the other language is untouched.
+                        </span>
+                      </label>
+
+                      <Button type="submit" className="self-start">
+                        Save {languageLabel}
+                      </Button>
+                    </AdminForm>
+                  </div>
+                )
+              })}
             </section>
           )
         })

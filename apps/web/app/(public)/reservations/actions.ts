@@ -7,6 +7,8 @@ import { offerFor } from '@/lib/promotions/service'
 import { startCheckout } from '@/lib/checkout/session'
 import type { FormState } from '@/lib/admin/form-state'
 
+import { getLocale } from '@/lib/i18n/server'
+import { localePath } from '@/lib/i18n/routing'
 /// B-018. The deliberate second step of cancelling: the email link only ever
 /// renders the reservation, and this is what actually releases the unit
 /// (WCAG 3.3.4 — an irreversible action needs a confirmation step, and a GET
@@ -92,5 +94,5 @@ export async function completeMoveInFromReservationAction(
     }
   }
 
-  redirect(`/checkout?token=${encodeURIComponent(started.token)}`)
+  redirect(localePath(await getLocale(), `/checkout?token=${encodeURIComponent(started.token)}`))
 }

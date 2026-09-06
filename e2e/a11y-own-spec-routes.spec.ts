@@ -240,10 +240,11 @@ const STATE_REACH: Record<string, { audience: Audience; go: (page: Page) => Prom
   '/storage/[state]/[city]/[slug] | Spanish': {
     audience: 'public',
     async go(page) {
-      await page.context().addCookies([
-        { name: 'st_locale', value: 'es', url: 'http://localhost:3000' },
-      ])
-      await page.goto('/storage/tx/austin/demo-austin-south')
+      // B-262: the Spanish page is its own URL. Setting a cookie here would now
+      // do nothing at all — `getLocale()` reads the path — and the measurement
+      // would quietly have been of the English page under a Spanish key, which
+      // is the shape of overstatement `scan-coverage.ts` exists to stop.
+      await page.goto('/es/storage/tx/austin/demo-austin-south')
       // The unit cards, not the heading above them: measuring before the
       // inventory renders would measure a page with none of the content this
       // key exists for.

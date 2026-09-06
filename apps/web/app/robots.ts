@@ -1,5 +1,7 @@
 import type { MetadataRoute } from 'next'
 import { NOINDEX_PREFIXES } from '@storage/core/marketing'
+import { localePath } from '@/lib/i18n/routing'
+import { LOCALES } from '@/lib/i18n'
 import { hasCanonicalDomain, siteOrigin } from '@/lib/marketing/origin'
 
 // PRD 04 FR-SEO-5 / US-3 AC2: "robots.txt allows marketing routes;
@@ -26,7 +28,13 @@ export default function robots(): MetadataRoute.Robots {
       {
         userAgent: '*',
         allow: '/',
-        disallow: NOINDEX_PREFIXES.map((prefix) => `${prefix}/`),
+        // B-262: once per locale. `/es/portal` is a real, reachable URL that
+        // renders the portal in Spanish, so a disallow list naming only
+        // `/portal/` leaves the Spanish half of every noindex route advertised
+        // as crawlable — which is the same mistake as not having the list.
+        disallow: LOCALES.flatMap((locale) =>
+          NOINDEX_PREFIXES.map((prefix) => `${localePath(locale, prefix)}/`),
+        ),
       },
     ],
     sitemap: `${siteOrigin()}/sitemap.xml`,

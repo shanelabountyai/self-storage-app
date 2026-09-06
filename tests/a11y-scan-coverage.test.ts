@@ -273,5 +273,40 @@ describe('the accessibility scan contract (B-139)', () => {
       expect(shown.every((row) => row.audience !== 'admin')).toBe(true)
       expect(shown.every((row) => row.reason.length > 20)).toBe(true)
     })
+
+    // B-262. The statement has a Spanish URL now, so its generated gap lists
+    // are read in Spanish — and a bullet that falls back to English is a gap
+    // named in a language the reader came here because they do not read.
+    //
+    // Enforced here rather than by the type, because making `reasonEs` required
+    // would demand a translation of the ~30 admin rows this page never renders,
+    // and the page that promises to name every gap would then be blocked on
+    // translating the ones nobody sees. The rule is exactly: customer-facing
+    // means translated.
+    it('gives every gap a visitor is shown a Spanish reason too', () => {
+      const untranslated = [
+        ...customerFacingExceptions()
+          .filter((row) => !row.reasonEs)
+          .map((row) => row.route),
+        ...customerFacingStateExceptions()
+          .filter((row) => !row.reasonEs)
+          .map((row) => `${row.route} | ${row.state}`),
+      ]
+      expect(
+        untranslated,
+        'these gaps render on /es/accessibility in English — add a `reasonEs` beside the `reason`',
+      ).toEqual([])
+    })
+
+    it('does not pass off the English reason as a translation', () => {
+      // A `reasonEs` copied from `reason` to satisfy the test above would be
+      // worse than the fallback: it claims a translation that did not happen,
+      // on the page whose entire purpose is not overstating what was done.
+      const copied = [
+        ...customerFacingExceptions(),
+        ...customerFacingStateExceptions(),
+      ].filter((row) => row.reasonEs === row.reason)
+      expect(copied).toEqual([])
+    })
   })
 })

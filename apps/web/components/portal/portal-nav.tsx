@@ -1,8 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
-import { useT } from '@/components/i18n/locale-provider'
+import { useLocaleRoute, useT } from '@/components/i18n/locale-provider'
 import type { MessageKey } from '@/lib/i18n'
 
 // B-239. Lifted out of `app/portal/layout.tsx` so the nav can read
@@ -64,10 +63,23 @@ function NavItem({
   href,
   labelKey,
   pathname,
+  localise,
   t,
-}: NavLink & { pathname: string; t: (key: MessageKey) => string }) {
+}: NavLink & {
+  pathname: string
+  /// B-262. `pathname` is already stripped of its locale prefix, so it compares
+  /// against the route constants above; `localise` puts the prefix back on for
+  /// the link itself. Passing both rather than deriving one from the other
+  /// keeps the comparison and the destination from disagreeing.
+  localise: (to: string) => string
+  t: (key: MessageKey) => string
+}) {
   return (
-    <Link href={href} aria-current={isActive(pathname, href) ? 'page' : undefined} className={LINK_CLASS}>
+    <Link
+      href={localise(href)}
+      aria-current={isActive(pathname, href) ? 'page' : undefined}
+      className={LINK_CLASS}
+    >
       {t(labelKey)}
     </Link>
   )
@@ -85,14 +97,16 @@ export function PortalNav({
   showPaymentPlan: boolean
 }) {
   const t = useT()
-  const pathname = usePathname()
+  // B-262: `path` has the `/es` prefix off, so the route constants below still
+  // compare; `href` puts it back on so a Spanish tenant stays in Spanish.
+  const { path: pathname, href: localise } = useLocaleRoute()
   const manageIsActive = MANAGE.some((link) => isActive(pathname, link.href))
 
   return (
     <nav aria-label={t('portal.nav')} className="flex flex-wrap items-center gap-4 text-sm">
       {pay && (
         <Link
-          href={pay.href}
+          href={localise(pay.href)}
           // Only when it names its own page. With several owing leases the Pay
           // link points at Overview — which is the chooser — and marking BOTH
           // it and Overview `current` would put two current items in one nav.
@@ -102,18 +116,18 @@ export function PortalNav({
           {pay.label}
         </Link>
       )}
-      <NavItem href="/portal" labelKey="portal.overview" pathname={pathname} t={t} />
-      <NavItem href="/portal/methods" labelKey="portal.paymentMethods" pathname={pathname} t={t} />
-      <NavItem href="/portal/statements" labelKey="portal.statements" pathname={pathname} t={t} />
-      <NavItem href="/portal/documents" labelKey="portal.documents" pathname={pathname} t={t} />
+      <NavItem href="/portal" labelKey="portal.overview" pathname={pathname} localise={localise} t={t} />
+      <NavItem href="/portal/methods" labelKey="portal.paymentMethods" pathname={pathname} localise={localise} t={t} />
+      <NavItem href="/portal/statements" labelKey="portal.statements" pathname={pathname} localise={localise} t={t} />
+      <NavItem href="/portal/documents" labelKey="portal.documents" pathname={pathname} localise={localise} t={t} />
       {showPaymentPlan && (
-        <NavItem href="/portal/payment-plan" labelKey="portal.paymentPlan" pathname={pathname} t={t} />
+        <NavItem href="/portal/payment-plan" labelKey="portal.paymentPlan" pathname={pathname} localise={localise} t={t} />
       )}
       <details open={manageIsActive} className="text-sm">
         <summary className={`${LINK_CLASS} cursor-pointer`}>{t('portal.manage')}</summary>
         <div className="flex flex-col gap-2 pt-2">
           {MANAGE.map((link) => (
-            <NavItem key={link.href} {...link} pathname={pathname} t={t} />
+            <NavItem key={link.href} {...link} pathname={pathname} localise={localise} t={t} />
           ))}
         </div>
       </details>

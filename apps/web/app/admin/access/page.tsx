@@ -198,6 +198,21 @@ export default async function AccessEventsPage({
                     <span className="text-muted-foreground">Unknown</span>
                   )}
                 </td>
+                {/* The unit the credential belongs to. Null for an unknown
+                    code, alongside the tenant — somebody was at the gate and we
+                    cannot say whose unit they were opening.
+
+                    This cell was MISSING: the header row has declared a "Unit"
+                    column since B-084 and `AccessEventRow.unitNumber` has always
+                    carried the value, but no `<td>` printed it. Seven headers
+                    over six cells, so everything from Unit rightward rendered
+                    one column to the left — the result under "How", the flags
+                    under "Result" — and "Flags" was empty on every row. On the
+                    screen a manager reads after a theft claim, which is the one
+                    place "Keypad" versus "Phone" is load-bearing. */}
+                <td className="py-2 pr-4">
+                  {row.unitNumber ?? <span className="text-muted-foreground">—</span>}
+                </td>
                 {/* B-086 part 2. "Keypad" and "Phone" are different facts
                     after a theft claim: a phone unlock can be sent from
                     anywhere, so the log stops implying the holder was standing

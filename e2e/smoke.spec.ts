@@ -2,7 +2,9 @@ import { randomUUID } from 'node:crypto'
 import { expect, test, type Locator } from '@playwright/test'
 import { LEGAL_PAGES } from '../apps/web/lib/site-config'
 import { DEMO_PROMO_CODE } from '../apps/web/scripts/demo-credentials'
-import { GUIDES } from '../apps/web/lib/guides/catalog'
+import { GUIDES, guideCopy } from '../apps/web/lib/guides/catalog'
+import { LOCALES } from '../apps/web/lib/i18n'
+import { localePath } from '../apps/web/lib/i18n/routing'
 import { assertNoAxeViolations, expectAnnounced, expectPreexisting } from './a11y-helpers'
 
 test('home page renders its search hero', async ({ page }) => {
@@ -333,27 +335,38 @@ test('the guides hub lists the launch set and the size guide stays where it is',
 })
 
 test('every guide renders with Article markup and reachable prose', async ({ page }) => {
-  for (const guide of GUIDES) {
-    const response = await page.goto(`/guides/${guide.slug}`)
-    expect(response?.status(), `/guides/${guide.slug}`).toBe(200)
+  // B-262: both languages. `/es/guides/{slug}` is a separate URL with its own
+  // prose file and its own `FAQPage`, and a missing Spanish import is a 404 no
+  // other spec would visit.
+  for (const locale of LOCALES) {
+    for (const guide of GUIDES) {
+      const path = localePath(locale, `/guides/${guide.slug}`)
+      const response = await page.goto(path)
+      expect(response?.status(), path).toBe(200)
 
-    // The slug→prose map in the route is written out by hand for the bundler,
-    // so a guide in the catalog with no import lands here as a 404 rather than
-    // as a silently missing page.
-    await expect(page.getByRole('heading', { level: 1 })).toHaveText(guide.title)
-    // Exactly one h1: the MDX component mapping renders no `h1` at all, and a
-    // second one would break the outline of every guide at once.
-    await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1)
-    await expect(page.getByRole('heading', { level: 2 }).first()).toBeVisible()
+      // The slug→prose map in the route is written out by hand for the bundler,
+      // so a guide in the catalog with no import lands here as a 404 rather than
+      // as a silently missing page.
+      const copy = guideCopy(guide, locale)
+      await expect(page.getByRole('heading', { level: 1 })).toHaveText(copy.title)
+      // Exactly one h1: the MDX component mapping renders no `h1` at all, and a
+      // second one would break the outline of every guide at once.
+      await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1)
+      await expect(page.getByRole('heading', { level: 2 }).first()).toBeVisible()
 
-    const types = (
-      await page.locator('script[type="application/ld+json"]').allTextContents()
-    ).map((node) => (JSON.parse(node) as { '@type': string })['@type'])
-    expect(types, `/guides/${guide.slug}`).toContain('Article')
-    expect(types, `/guides/${guide.slug}`).toContain('BreadcrumbList')
-    // AC3's "where appropriate" — present only where the guide has two or more
-    // real questions.
-    expect(types.includes('FAQPage'), `/guides/${guide.slug} FAQPage`).toBe(guide.faqs.length >= 2)
+      // SC 3.1.1: the page has to ANNOUNCE the language its prose is in, not
+      // merely be in it.
+      await expect(page.locator('html')).toHaveAttribute('lang', locale)
+
+      const types = (
+        await page.locator('script[type="application/ld+json"]').allTextContents()
+      ).map((node) => (JSON.parse(node) as { '@type': string })['@type'])
+      expect(types, path).toContain('Article')
+      expect(types, path).toContain('BreadcrumbList')
+      // AC3's "where appropriate" — present only where the guide has two or more
+      // real questions.
+      expect(types.includes('FAQPage'), `${path} FAQPage`).toBe(copy.faqs.length >= 2)
+    }
   }
 })
 

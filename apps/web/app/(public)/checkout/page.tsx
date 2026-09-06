@@ -1,4 +1,4 @@
-import Link from 'next/link'
+import { LocaleLink } from '@/components/site/locale-link'
 import { AdminForm } from '@/components/admin/form'
 import { PriceSummary } from '@/components/checkout/price-summary'
 import { CheckoutAnnouncer } from '@/components/checkout/announcer'
@@ -121,9 +121,9 @@ export default async function CheckoutPage({
         </h1>
         <p className="mt-4 text-pretty">{t('checkout.notFoundBody')}</p>
         <p className="mt-4">
-          <Link href="/storage/search" className="underline underline-offset-4">
+          <LocaleLink href="/storage/search" className="underline underline-offset-4">
             {t('checkout.findAUnit')}
-          </Link>{' '}
+          </LocaleLink>{' '}
           <span className="text-muted-foreground">
             {t('checkout.orCall')}{' '}
             <a href={`tel:${SITE.phone.href}`} className="underline underline-offset-4">
@@ -565,12 +565,12 @@ export default async function CheckoutPage({
                     ))}
                   </ul>
                   <p className="mt-2 text-sm">
-                    <Link
+                    <LocaleLink
                       href={facilityPath(inventory.facility)}
                       className="underline underline-offset-4"
                     >
                       {t('checkout.readAboutSizes', { facility: inventory.facility.name })}
-                    </Link>
+                    </LocaleLink>
                   </p>
                 </div>
               )}
@@ -800,12 +800,12 @@ export default async function CheckoutPage({
                   /portal land on /login, which sends a sign-in link to the
                   address above — no password to invent at the counter. */}
               <p className="mt-4">
-                <Link
+                <LocaleLink
                   href="/portal"
                   className="bg-primary text-primary-foreground inline-flex min-h-11 items-center rounded-md px-4 text-sm font-medium"
                 >
                   {t('checkout.goToAccount')}
-                </Link>
+                </LocaleLink>
               </p>
 
               {/* B-239. The top post-move-in call, and the one thing that stops
@@ -829,12 +829,12 @@ export default async function CheckoutPage({
                       {t('checkout.getDirections')}
                     </a>{' '}
                     ·{' '}
-                    <Link
+                    <LocaleLink
                       href={facilityPath(confirmationFacility)}
                       className="underline underline-offset-4"
                     >
                       {t('checkout.facilityHours')}
-                    </Link>
+                    </LocaleLink>
                   </p>
                 </div>
               )}

@@ -126,8 +126,38 @@ export function reportRange(
   // The user picks the last day they want included; the exclusive end is the
   // next day. Getting this backwards silently drops the last day of every
   // month-long range, which nobody notices until a year-end total is short.
-  const toInclusive = parseDay(params.to) ?? new Date(monthEnd.getTime() - 86_400_000)
-  const end = new Date(toInclusive.getTime() + 86_400_000)
+  // Whether the operator actually PICKED an end, as opposed to passing
+  // something unparseable. The clamp below keys off this rather than off
+  // `params.to` being present: `?to=yesterday` falls back to the default range,
+  // and keying off the raw string would have left that URL with the very hole
+  // this fixes while the plain one was fixed.
+  const pickedTo = parseDay(params.to)
+  const toInclusive = pickedTo ?? new Date(monthEnd.getTime() - 86_400_000)
+  let end = new Date(toInclusive.getTime() + 86_400_000)
+
+  // The rolling log's default end has to cover the PRESENT INSTANT, not just
+  // the facility-local calendar day.
+  //
+  // `today` is UTC midnight OF THE LOCAL DATE, so `today + 1 day` is still a
+  // UTC midnight — and between local midnight and UTC midnight that lands
+  // BEFORE now. Every support session and gate attempt started between 7pm and
+  // midnight US Central was therefore missing from the log that records it,
+  // until the local day rolled over: exactly the failure the `monthEnd` comment
+  // above says this window exists to prevent, reintroduced by the arithmetic
+  // rather than by the intent.
+  //
+  // Found by `e2e/impersonation.spec.ts` failing in CI at 02:45 UTC and passing
+  // locally at 22:58 UTC on the same commit and the same database.
+  //
+  // Clamped rather than widened to `today + 2 days`, so the window never
+  // advertises a day that has not started anywhere; and only when the operator
+  // picked no `to`, so an explicit range still means what they typed.
+  // `last-complete-month` is deliberately untouched — it ties out against the
+  // accounting close (D-109), and a month that quietly reached today would be
+  // the defect that decision exists to prevent.
+  if (!pickedTo && window === 'rolling-30-days' && end.getTime() <= now.getTime()) {
+    end = new Date(now.getTime() + 1)
+  }
 
   if (end <= from) return reportRange({}, options)
 

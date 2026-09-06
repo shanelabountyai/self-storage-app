@@ -6,11 +6,16 @@ import {
   dictionaryFor,
   translate,
 } from '@/lib/i18n'
-import { getLocale } from '@/lib/i18n/server'
+import { getLocale, getLocalePath } from '@/lib/i18n/server'
 
 // Public-site shell (PRD 01 §6.1). A route group rather than a path segment,
 // so these pages keep clean URLs (/faq, not /public/faq) while /admin, /login,
 // and /api stay outside and never inherit this chrome.
+//
+// B-262: the PATH is resolved here too, with its locale prefix already off, and
+// handed to the chrome. The header's links and the language toggle both need it
+// — the toggle to build this page's other-language URL, the links to stay
+// inside the locale the visitor is reading.
 //
 // B-090 part 6: the locale is resolved once here and handed down two ways —
 // as props to the server-rendered chrome, and through `LocaleProvider` for the
@@ -18,7 +23,7 @@ import { getLocale } from '@/lib/i18n/server'
 // request, so the header and the page it wraps cannot end up in different
 // languages.
 export default async function PublicLayout({ children }: { children: React.ReactNode }) {
-  const locale = await getLocale()
+  const [locale, path] = await Promise.all([getLocale(), getLocalePath()])
   const dict = dictionaryFor(locale)
 
   return (
@@ -33,7 +38,7 @@ export default async function PublicLayout({ children }: { children: React.React
         {translate(dict, 'chrome.skipToMain')}
       </a>
 
-      <SiteHeader locale={locale} />
+      <SiteHeader locale={locale} path={path} />
       <main id="main" tabIndex={-1} className="flex-1">
         {children}
       </main>

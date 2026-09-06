@@ -3,6 +3,7 @@ import { expect, test } from '@playwright/test'
 import { signInAsDemoOwner } from './sign-in'
 import {
   assertNoAxeViolations,
+  assertTableShape,
   expectNoHorizontalOverflow,
   expectPreexisting,
   TEXT_SPACING,
@@ -72,6 +73,11 @@ test.describe('signed in as the demo owner', () => {
       await page.goto(route)
       await expect(page.getByRole('main')).toBeVisible()
 
+      // B-262. Cheap, and it caught a real defect axe can only report as
+      // undecidable — see `assertTableShape`. Run before the scan so a
+      // mislabelled table is named as one rather than surfacing as an
+      // `incomplete` somebody has to interpret.
+      await assertTableShape(page, route)
       await assertNoAxeViolations(page)
     })
   }

@@ -1,4 +1,4 @@
-import Link from 'next/link'
+import { LocaleLink } from '@/components/site/locale-link'
 import { notFound, redirect } from 'next/navigation'
 import { AdminForm, Field } from '@/components/admin/form'
 import { formatRate } from '@/lib/format'
@@ -8,6 +8,8 @@ import { publicInventoryForFacility } from '@/lib/inventory/public-inventory'
 import { MAX_MOVE_IN_DAYS_AHEAD } from '@/lib/reservations/reserve'
 import { reserveAction } from './actions'
 
+import { getLocale } from '@/lib/i18n/server'
+import { localePath } from '@/lib/i18n/routing'
 export const metadata = { title: 'Reserve a unit for free' }
 
 // PRD 01 §4.4 US-401. One screen, five fields, no password and no card (D-7).
@@ -50,14 +52,14 @@ export default async function ReservePage({
   // read, so a size withdrawn in the last few minutes still appears there. Send
   // the renter back to the list, which is the thing they want, rather than a
   // 404 that makes it look like the whole facility vanished.
-  if (!unitType) redirect(`${facilityPath(facility)}?unavailable=1`)
+  if (!unitType) redirect(localePath(await getLocale(), `${facilityPath(facility)}?unavailable=1`))
 
   return (
     <div className="mx-auto w-full max-w-xl px-4 py-12">
       <p className="mb-4 text-sm">
-        <Link href={facilityPath(facility)} className="underline underline-offset-4">
+        <LocaleLink href={facilityPath(facility)} className="underline underline-offset-4">
           ← Back to {facility.name}
-        </Link>
+        </LocaleLink>
       </p>
 
       <h1 className="text-3xl font-semibold tracking-tight text-balance">Reserve this unit</h1>

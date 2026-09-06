@@ -1,4 +1,4 @@
-import Link from 'next/link'
+import { LocaleLink } from '@/components/site/locale-link'
 import { notFound, permanentRedirect } from 'next/navigation'
 import { MapPin, Phone } from 'lucide-react'
 import { DAYS_OF_WEEK, type WeeklySchedule } from '@storage/core/facility-settings'
@@ -45,6 +45,8 @@ import {
   type MessageKey,
 } from '@/lib/i18n'
 import { getLocale } from '@/lib/i18n/server'
+import { OPEN_GRAPH_LOCALE, localePath } from '@/lib/i18n/routing'
+import { localeAlternates } from '@/lib/marketing/alternates'
 import { costLineLabel, costLineNote } from '@/lib/pricing/cost-line-copy'
 import { offerFor } from '@/lib/promotions/service'
 import { PromoCodeEntry } from '@/components/promo-code-entry'
@@ -96,15 +98,20 @@ export async function generateMetadata({
   // generated template is the floor, not the ceiling.
   const title = facility.seoTitle ?? facilityTitle(facility)
   const description = facility.metaDescription ?? facilityDescription(facility)
+  const locale = await getLocale()
   const canonical = facilityPath(facility)
-  const url = absoluteUrl(siteOrigin(), canonical)
+  // B-262: the OG url is the URL THIS RENDER is at, not the English one. A
+  // Spanish page whose share card points at the English page is a card that
+  // sends every reader of it somewhere else.
+  const url = absoluteUrl(siteOrigin(), localePath(locale, canonical))
 
   return {
     title,
     description,
     // The slug alone resolves the facility, so a wrong state/city still renders.
     // Declaring the canonical keeps that from reading as duplicate content.
-    alternates: { canonical },
+    // B-262: one canonical per language, each naming the other.
+    alternates: localeAlternates(locale, canonical),
     // FR-SEO-3's Open Graph and Twitter tags. Same title and description as the
     // page itself — a share card that says something different from the search
     // result is two claims about one page.
@@ -114,7 +121,7 @@ export async function generateMetadata({
       description,
       url,
       siteName: SITE.name,
-      locale: 'en_US',
+      locale: OPEN_GRAPH_LOCALE[locale],
     },
     twitter: { card: 'summary_large_image', title, description },
   }
@@ -342,7 +349,11 @@ function bestOutcome(outcomes: readonly CodeOutcome[]): CodeOutcome | null {
   return [...outcomes].sort((a, b) => rank[a.kind] - rank[b.kind])[0] ?? null
 }
 
-function UnitTypeCard({
+// B-262: async so it can read the locale for its "Rent now" action. The card is
+// several components below `FacilityPage`, which has it — threading a prop
+// through `UnitList` for one form attribute would be a wider change than
+// reading the request again, and `getLocale()` is a header lookup.
+async function UnitTypeCard({
   unitType,
   phone,
   pricing,
@@ -364,6 +375,7 @@ function UnitTypeCard({
   code: string | null
   dict: Dictionary
 }) {
+  const locale = await getLocale()
   const t = (key: MessageKey, vars?: Record<string, string | number>) =>
     translate(dict, key, vars)
   const available = unitType.availableCount
@@ -461,7 +473,14 @@ function UnitTypeCard({
             {/* POST, not a link: starting a checkout takes a unit off the
                 market, so it must not fire on a prefetch or a back-button
                 visit (B-020). */}
-            <form method="POST" action={`${facilityPath(facility)}/rent`}>
+            {/* B-262. The ACTION carries the locale, not just the links. The
+                route handler reads `getLocale()` to decide where to send the
+                renter next, and it reads it from the URL this posts to — so an
+                unprefixed action put a Spanish renter into the English
+                checkout at the moment the money moves. It renders correctly
+                and redirects wrongly, which is why only a clicking test found
+                it. */}
+            <form method="POST" action={localePath(locale, `${facilityPath(facility)}/rent`)}>
               <input type="hidden" name="unitTypeId" value={unitType.unitTypeId} />
               {code && <input type="hidden" name="promo" value={code} />}
               <button
@@ -471,12 +490,12 @@ function UnitTypeCard({
                 {t('facility.rentNow')}
               </button>
             </form>
-            <Link
+            <LocaleLink
               href={`${facilityPath(facility)}/reserve?unitType=${unitType.unitTypeId}`}
               className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
             >
               {t('facility.reserveForFree')}
-            </Link>
+            </LocaleLink>
           </div>
           {/* §6.6: the trust line for each action, beside the action. */}
           <p className="text-muted-foreground mt-2 text-xs">
@@ -811,7 +830,10 @@ export default async function FacilityPage({
   const { state, city, slug } = await params
   const query = await searchParams
   const filters = parseFilters(query)
-  const dict = dictionaryFor(await getLocale())
+  // B-262: the locale itself is kept, not just the dictionary — the generated
+  // FAQs and the JSON-LD URLs below are built from it too.
+  const locale = await getLocale()
+  const dict = dictionaryFor(locale)
   const t = (key: MessageKey, vars?: Record<string, string | number>) =>
     translate(dict, key, vars)
 
@@ -926,7 +948,13 @@ export default async function FacilityPage({
   // this page says, and quietly padding it back to five with boilerplate would
   // put words in their mouth. US-1 AC2's "at least 5" is why the generated set
   // is still the fallback when they have written none.
-  const faqs = facility.faqs.length > 0 ? facility.faqs : defaultFacilityFaqs(facility)
+  // B-262: the generated set follows the language. A marketer's OWN answers
+  // (`facility.faqs`) are not translated — they are somebody's own words, the
+  // same rule D-122 puts on facility copy and amenities — so a facility that
+  // has written its own FAQ shows it in English on both URLs. That is a real
+  // gap and it is named in PROGRESS.md rather than papered over by
+  // machine-translating an operator's answer about their own site.
+  const faqs = facility.faqs.length > 0 ? facility.faqs : defaultFacilityFaqs(facility, locale)
   const schema = [
     selfStorageJsonLd({
       facility,
@@ -970,9 +998,9 @@ export default async function FacilityPage({
 
       {backToSearch && (
         <p className="mb-4 text-sm">
-          <Link href={backToSearch} className="underline underline-offset-4">
+          <LocaleLink href={backToSearch} className="underline underline-offset-4">
             {t('facility.backToSearch', { query: query.from ?? '' })}
-          </Link>
+          </LocaleLink>
         </p>
       )}
 
@@ -1140,7 +1168,10 @@ export default async function FacilityPage({
               <span className="text-muted-foreground font-normal">{t('card.perMonth')}</span>
             </p>
             <div className="flex gap-2">
-              <form method="POST" action={`${facilityPath(facility)}/rent`}>
+              <form
+                method="POST"
+                action={localePath(locale, `${facilityPath(facility)}/rent`)}
+              >
                 <input type="hidden" name="unitTypeId" value={cheapestAvailable.unitTypeId} />
                 {/* B-122. The sticky bar starts the same checkout as a card, so
                     it has to carry the same code — a renter who applied one and
@@ -1153,12 +1184,12 @@ export default async function FacilityPage({
                   {t('facility.rentNow')}
                 </button>
               </form>
-              <Link
+              <LocaleLink
                 href={`${facilityPath(facility)}/reserve?unitType=${cheapestAvailable.unitTypeId}`}
                 className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
               >
                 {t('facility.reserveFree')}
-              </Link>
+              </LocaleLink>
             </div>
           </div>
         </div>
@@ -1361,13 +1392,13 @@ export default async function FacilityPage({
 
       <p className="text-muted-foreground mt-10 text-sm text-pretty">
         {t('search.sizeGuideBefore')}{' '}
-        <Link href="/storage/size-guide" className="underline underline-offset-4">
+        <LocaleLink href="/storage/size-guide" className="underline underline-offset-4">
           {t('search.sizeGuideLink')}
-        </Link>
+        </LocaleLink>
         {t('facility.sizeGuideOr')}{' '}
-        <Link href="/storage/search" className="underline underline-offset-4">
+        <LocaleLink href="/storage/search" className="underline underline-offset-4">
           {t('facility.otherLocations')}
-        </Link>
+        </LocaleLink>
         .
       </p>
     </div>

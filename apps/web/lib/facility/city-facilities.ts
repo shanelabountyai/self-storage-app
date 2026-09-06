@@ -4,6 +4,7 @@ import { citySlug } from '@storage/core/marketing'
 import type { AggregateRating } from '@storage/core/reviews'
 import { lowestAvailableWebRateByFacility } from '@/lib/inventory/public-inventory'
 import { visibleRatingsByFacility } from '@/lib/reviews/public'
+import { DEFAULT_LOCALE, type Locale } from '@/lib/i18n'
 
 // PRD 04 §3.2 US-4 AC1 (B-082 part 2). What a city page lists.
 //
@@ -112,6 +113,7 @@ export const facilitiesInCity = cache(async function facilitiesInCity(
 export const authoredCityIntro = cache(async function authoredCityIntro(
   state: string,
   city: string,
+  locale: Locale = DEFAULT_LOCALE,
 ): Promise<string | null> {
   const slug = citySlug(city)
   if (!slug || !state.trim()) return null
@@ -120,9 +122,16 @@ export const authoredCityIntro = cache(async function authoredCityIntro(
     // from a URL segment as well as from a facility record, and those two
     // disagree about casing by construction.
     where: { slug, state: { equals: state, mode: 'insensitive' } },
-    select: { intro: true },
+    select: { intro: true, introEs: true },
   })
-  return row?.intro?.trim() ? row.intro : null
+  // B-262: each language falls back to its OWN generated intro, never to the
+  // other language's authored copy. A city written in English and not yet in
+  // Spanish gets authored English and generated Spanish, which is a complete
+  // page in both — whereas falling back to `intro` would put English prose on
+  // the Spanish page under a Spanish heading, which is the worst of the three
+  // outcomes and the one that looks deliberate.
+  const authored = locale === 'es' ? row?.introEs : row?.intro
+  return authored?.trim() ? authored : null
 })
 
 /// Every city that has at least one active facility, as `{state, city}` pairs.

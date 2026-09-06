@@ -1,11 +1,10 @@
-import Link from 'next/link'
+import { LocaleLink } from '@/components/site/locale-link'
 import { notFound, permanentRedirect } from 'next/navigation'
 import { SITE } from '@/lib/site-config'
 import { formatRate } from '@/lib/format'
 import { facilityPath } from '@/lib/facility/public-facility'
 import { sizesInCity, type SizeFacility } from '@/lib/facility/city-size-pages'
 import {
-  absoluteUrl,
   breadcrumbJsonLd,
   canonicalDimension,
   citySizeDescription,
@@ -19,7 +18,10 @@ import {
   sizeIndexGate,
   UNIT_SIZE_ORDER,
 } from '@storage/core/marketing'
-import { siteOrigin } from '@/lib/marketing/origin'
+import { getLocale } from '@/lib/i18n/server'
+import { dictionaryFor, translate, LOCALES, type Locale } from '@/lib/i18n'
+import { OPEN_GRAPH_LOCALE } from '@/lib/i18n/routing'
+import { localeAlternates, localeUrl } from '@/lib/marketing/alternates'
 import { citySizePath, citySlugPath } from '@/lib/marketing/paths'
 
 // PRD 00 §6 Phase 3 (B-089). The per-city/size landing page.
@@ -45,7 +47,7 @@ export const revalidate = 300
 
 /// One resolution of the URL segments, shared by the metadata and the page so
 /// they cannot disagree about whether this page exists.
-async function resolve(state: string, city: string, dimension: string) {
+async function resolve(state: string, city: string, dimension: string, locale: Locale) {
   const canonical = canonicalDimension(dimension)
   if (!canonical) return null
 
@@ -59,17 +61,43 @@ async function resolve(state: string, city: string, dimension: string) {
   const [first] = size.facilities
   const path = citySizePath(first.state, first.city, canonical)
 
-  // Every sibling's intro, from the same load. This is what the gate scores
-  // against, and building it here rather than per-page is the reason the gate
-  // costs no extra queries.
-  const intros = new Map(
-    [...sizes.values()].map((sibling) => [
-      sibling.dimension,
-      citySizeIntro(sibling.widthFt, sibling.lengthFt, first.city, first.state, sibling.facilities),
-    ]),
-  )
+  // Every sibling's intro, from the same load, in every language. This is what
+  // the gate scores against, and building it here rather than per-page is the
+  // reason the gate costs no extra queries.
+  //
+  // B-262 made it per language, and the gate now has to pass in ALL of them for
+  // the page to be indexed. Two reasons, and the first is the one that decides
+  // it: `/storage/…/size/10x10` and `/es/storage/…/size/10x10` are one hreflang
+  // cluster, and a cluster whose members disagree about `noindex` is a cluster
+  // Google discards — so a per-language verdict would silently cost the English
+  // page its Spanish alternate. The second is that translation FLATTENS
+  // distinctions: two sizes whose English intros differ enough can come out
+  // closer in Spanish, and that page is thin content in Spanish whatever the
+  // English scored.
+  const introsFor = (target: Locale) =>
+    new Map(
+      [...sizes.values()].map((sibling) => [
+        sibling.dimension,
+        citySizeIntro(
+          sibling.widthFt,
+          sibling.lengthFt,
+          first.city,
+          first.state,
+          sibling.facilities,
+          target,
+        ),
+      ]),
+    )
 
-  return { size, sizes, first, canonical, path, intros, gate: sizeIndexGate(canonical, intros) }
+  const intros = introsFor(locale)
+  const gates = LOCALES.map((candidate) =>
+    sizeIndexGate(canonical, candidate === locale ? intros : introsFor(candidate)),
+  )
+  // The first refusal, so the reason a reader or the duplicate report is given
+  // names the language that actually failed rather than the one being rendered.
+  const gate = gates.find((verdict) => !verdict.indexable) ?? gates[0]
+
+  return { size, sizes, first, canonical, path, intros, gate }
 }
 
 export async function generateMetadata({
@@ -78,23 +106,27 @@ export async function generateMetadata({
   params: Promise<{ state: string; city: string; dimension: string }>
 }) {
   const { state, city, dimension } = await params
-  const resolved = await resolve(state, city, dimension)
-  if (!resolved) return { title: 'Size not found' }
+  const locale = await getLocale()
+  const resolved = await resolve(state, city, dimension, locale)
+  if (!resolved) {
+    return { title: translate(dictionaryFor(locale), 'size.notFound') }
+  }
 
   const { size, first, path, gate } = resolved
-  const title = citySizeTitle(size.widthFt, size.lengthFt, first.city, first.state)
+  const title = citySizeTitle(size.widthFt, size.lengthFt, first.city, first.state, locale)
   const description = citySizeDescription(
     size.widthFt,
     size.lengthFt,
     first.city,
     first.state,
     size.facilities,
+    locale,
   )
 
   return {
     title,
     description,
-    alternates: { canonical: path },
+    alternates: localeAlternates(locale, path),
     // D-77's gate. A page too close to its siblings still renders — a visitor
     // who followed a link gets the inventory they came for — but it is not
     // offered to an index, and `follow` keeps the facility links it carries
@@ -104,9 +136,9 @@ export async function generateMetadata({
       type: 'website',
       title,
       description,
-      url: absoluteUrl(siteOrigin(), path),
+      url: localeUrl(locale, path),
       siteName: SITE.name,
-      locale: 'en_US',
+      locale: OPEN_GRAPH_LOCALE[locale],
     },
     twitter: { card: 'summary_large_image', title, description },
   }
@@ -121,9 +153,9 @@ function FacilityCard({ facility, label }: { facility: SizeFacility; label: stri
         {/* The name is the link, not the card — one enormous link name is what
             a screen reader gets otherwise, and a card-wide target swallows the
             address a reader may want to select. Same rule as the city page. */}
-        <Link href={facilityPath(facility)} className="underline underline-offset-4">
+        <LocaleLink href={facilityPath(facility)} className="underline underline-offset-4">
           {facility.name}
-        </Link>
+        </LocaleLink>
       </h3>
 
       <address className="text-muted-foreground mt-1 text-sm not-italic">{address}</address>
@@ -162,7 +194,8 @@ export default async function CitySizePage({
   params: Promise<{ state: string; city: string; dimension: string }>
 }) {
   const { state, city, dimension } = await params
-  const resolved = await resolve(state, city, dimension)
+  const locale = await getLocale()
+  const resolved = await resolve(state, city, dimension, locale)
   if (!resolved) notFound()
 
   const { size, sizes, first, canonical, path, intros } = resolved
@@ -177,8 +210,8 @@ export default async function CitySizePage({
   const label = dimensionLabel(size.widthFt, size.lengthFt)
   const place = `${first.city}, ${first.state.toUpperCase()}`
   const intro = intros.get(canonical) ?? []
-  const facts = sizeFacts(size.widthFt, size.lengthFt)
-  const canonicalUrl = absoluteUrl(siteOrigin(), path)
+  const facts = sizeFacts(size.widthFt, size.lengthFt, locale)
+  const canonicalUrl = localeUrl(locale, path)
 
   // Sibling sizes, in the guide's order — smallest first — with anything the
   // catalogue does not know about appended. This block is the largest reason a
@@ -200,13 +233,13 @@ export default async function CitySizePage({
     itemListJsonLd(
       size.facilities.map((facility) => ({
         name: facility.name,
-        url: absoluteUrl(siteOrigin(), facilityPath(facility)),
+        url: localeUrl(locale, facilityPath(facility)),
       })),
       `${label} storage units in ${place}`,
     ),
     breadcrumbJsonLd([
-      { name: 'Storage', url: absoluteUrl(siteOrigin(), '/storage/search') },
-      { name: place, url: absoluteUrl(siteOrigin(), citySlugPath(first.state, first.city)) },
+      { name: 'Storage', url: localeUrl(locale, '/storage/search') },
+      { name: place, url: localeUrl(locale, citySlugPath(first.state, first.city)) },
       { name: `${label} units`, url: canonicalUrl },
     ]),
   ].filter((node): node is NonNullable<typeof node> => node !== null)
@@ -279,7 +312,7 @@ export default async function CitySizePage({
           <ul className="mt-4 flex flex-wrap gap-2">
             {siblings.map((other) => (
               <li key={other.dimension}>
-                <Link
+                <LocaleLink
                   href={citySizePath(first.state, first.city, other.dimension)}
                   className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm underline underline-offset-4"
                 >
@@ -287,7 +320,7 @@ export default async function CitySizePage({
                   <span className="sr-only">
                     {dimensionSpoken(other.widthFt, other.lengthFt)} units
                   </span>
-                </Link>
+                </LocaleLink>
               </li>
             ))}
           </ul>
@@ -296,16 +329,16 @@ export default async function CitySizePage({
 
       <p className="text-muted-foreground mt-10 text-sm text-pretty">
         Not sure a {label} is right? Read the{' '}
-        <Link href="/storage/size-guide" className="underline underline-offset-4">
+        <LocaleLink href="/storage/size-guide" className="underline underline-offset-4">
           size guide
-        </Link>
+        </LocaleLink>
         , or see{' '}
-        <Link
+        <LocaleLink
           href={citySlugPath(first.state, first.city)}
           className="underline underline-offset-4"
         >
           every location in {first.city}
-        </Link>
+        </LocaleLink>
         .
       </p>
     </div>

@@ -2,6 +2,8 @@ import { redirect } from 'next/navigation'
 import { verifyCheckoutResumeToken } from '@/lib/checkout/resume-token'
 import { reissueCheckoutToken } from '@/lib/checkout/session'
 
+import { getLocale } from '@/lib/i18n/server'
+import { localePath } from '@/lib/i18n/routing'
 export const metadata = { title: 'Resume checkout', robots: { index: false, follow: false } }
 
 // PRD 04 US-9 AC1 (B-073). The abandonment email's landing page. Mints a
@@ -46,5 +48,5 @@ export default async function CheckoutResumePage({
     )
   }
 
-  redirect(`/checkout?token=${encodeURIComponent(sessionToken)}`)
+  redirect(localePath(await getLocale(), `/checkout?token=${encodeURIComponent(sessionToken)}`))
 }
