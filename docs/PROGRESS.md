@@ -8869,7 +8869,7 @@ the scan that had been failing.
 
 ## The evening hole in the activity logs (2026-09-06)
 
-**Commit:** recorded below.
+**Commit:** `46f11b4`
 
 Not a backlog row. Found because PR #22's `e2e` lane went red on
 `impersonation.spec.ts` at 02:45 UTC, having passed locally at 22:58 UTC on the
