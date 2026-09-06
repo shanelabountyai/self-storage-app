@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Regenerates the two derived index files, and prints a single progress entry.
 //
-//   node scripts/docs-index.mjs index      → docs/PROGRESS.md, docs/prds/06-backlog-index.md
+//   node scripts/docs-index.mjs index      → docs/PROGRESS.md, 06-backlog-index.md,
+//                                            07-decisions-index.md
 //   node scripts/docs-index.mjs entry B-137 → that entry's full text, and nothing else
 //   node scripts/docs-index.mjs audit     → every recorded SHA still resolves
 //
@@ -12,6 +13,7 @@
 // SOURCES OF TRUTH, which this script only ever READS:
 //   docs/progress/*.md   — the narrative entries, appended to by hand
 //   docs/prds/06-backlog.md — the ordered work list, edited by hand
+//   docs/prds/07-decisions.md — the decision log, edited by hand
 // The two index files are GENERATED. Editing them by hand loses the edit on the
 // next run; edit the source and re-run `npm run docs:index`.
 
@@ -22,6 +24,7 @@ import { fileURLToPath } from 'node:url'
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const PARTS_DIR = join(ROOT, 'docs/progress')
 const BACKLOG = join(ROOT, 'docs/prds/06-backlog.md')
+const DECISIONS = join(ROOT, 'docs/prds/07-decisions.md')
 
 const SHA = /^[0-9a-f]{7,40}$/
 
@@ -84,6 +87,19 @@ function readBacklog() {
     // c[0] is the empty string before the leading pipe
     const [, pos, idCell, item, prd, size, deps, phase] = c
     rows.push({ pos, id: idCell.replace(/[✅\s]+$/, '').trim(), done: idCell.includes('✅'), item, prd, size: size ?? '', deps: deps ?? '', phase: phase ?? '' })
+  }
+  return rows
+}
+
+/** Parse 07-decisions.md's rows: `| D-n | flag | decision | build impact |`. */
+function readDecisions() {
+  const rows = []
+  for (const line of readFileSync(DECISIONS, 'utf8').split('\n')) {
+    if (!/^\|\s*D-[0-9]/.test(line)) continue
+    const c = line.split('|').map((x) => x.trim())
+    // c[0] is the empty string before the leading pipe
+    const [, id, flag] = c
+    rows.push({ id, flag })
   }
   return rows
 }
@@ -155,6 +171,20 @@ function buildBacklogIndex(rows) {
   return out.join('\n')
 }
 
+function buildDecisionsIndex(rows) {
+  const out = []
+  out.push('# 07 — Decision index', '')
+  out.push('**This file is generated. Do not edit it by hand** — edit [`07-decisions.md`](07-decisions.md) and run `npm run docs:index`.', '')
+  out.push('`07-decisions.md` amends the PRDs: where a PRD conflicts with a decision, the decision wins. It is also 212 KB, which is more than a session should spend to answer "is there a decision about X".', '')
+  out.push('**This index carries each row\'s D-number and its topic column, and NOT the decision or the build-impact columns.** A decision that overrides a PRD has to be read in full before it is relied on: its wording is what binds, and several rows carry later corrections inside their own text — D-7 is the clearest, stating a policy and then recording that the policy was wrong on both halves. Reproducing the verdict here would invite deciding from the summary, which is the one failure this file exists to prevent.', '')
+  out.push('One caveat, because it is visible below rather than hidden: the topic column changed style over time. Early rows name a conflict to resolve ("Kiosk mode (master P2 vs PRD 03 P3)"); later ones state the decision outright ("Attaching a lease to a business account does not move the autopay mandate"). Where the source does that, so does this index — it is quoting, not summarising. Either way the binding text is the row in [`07-decisions.md`](07-decisions.md), not the line here.', '')
+  out.push(`**${rows.length} decisions.**`, '')
+  out.push('| # | Topic |', '|---|---|')
+  for (const r of rows) out.push(`| ${r.id} | ${esc(r.flag)} |`)
+  out.push('')
+  return out.join('\n')
+}
+
 const [cmd, arg] = process.argv.slice(2)
 
 if (cmd === 'entry') {
@@ -191,10 +221,13 @@ if (cmd === 'entry') {
 } else if (cmd === 'index' || cmd === undefined) {
   const entries = readParts()
   const backlog = readBacklog()
+  const decisions = readDecisions()
   writeFileSync(join(ROOT, 'docs/PROGRESS.md'), buildProgressIndex(entries, backlog))
   writeFileSync(join(ROOT, 'docs/prds/06-backlog-index.md'), buildBacklogIndex(backlog))
-  console.log(`docs/PROGRESS.md               ${entries.length} entries`)
-  console.log(`docs/prds/06-backlog-index.md  ${backlog.length} rows, ${backlog.filter((r) => !r.done).length} open`)
+  writeFileSync(join(ROOT, 'docs/prds/07-decisions-index.md'), buildDecisionsIndex(decisions))
+  console.log(`docs/PROGRESS.md                ${entries.length} entries`)
+  console.log(`docs/prds/06-backlog-index.md   ${backlog.length} rows, ${backlog.filter((r) => !r.done).length} open`)
+  console.log(`docs/prds/07-decisions-index.md ${decisions.length} decisions`)
 } else {
   console.error(`unknown command "${cmd}" — expected "index", "entry" or "audit"`); process.exit(2)
 }

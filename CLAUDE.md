@@ -5,7 +5,7 @@ Multi-facility self-storage platform. Learning project, built to professional st
 ## How to work in this repo
 
 - Product source of truth: `docs/prds/`. Build order: `docs/prds/06-backlog.md`, top to bottom, one item (or noted small cluster) per session. To find what is next without reading 88k tokens of wide table, read the generated `docs/prds/06-backlog-index.md` — it leads with the open items. Then read the full row in `06-backlog.md` for the one item you are about to build; that row is still the source of truth.
-- `docs/prds/07-decisions.md` OVERRIDES any conflicting PRD text. Never re-open a settled decision; append new decisions there instead.
+- `docs/prds/07-decisions.md` OVERRIDES any conflicting PRD text. Never re-open a settled decision; append new decisions there instead. To find whether a decision exists on a topic, read the generated `docs/prds/07-decisions-index.md` (18 KB, D-number and topic only) — then read the full row in `07-decisions.md` before relying on it. The index deliberately omits the decision and build-impact columns: several rows correct themselves in their own text, so the row is what binds, not a one-line summary of it.
 - Stack: Next.js (App Router) + TypeScript, Postgres + Prisma, Stripe (ledger-driven PaymentIntents — NOT Stripe Billing, per D-6), Tailwind CSS, deployed on Vercel.
 - Data model: use the canonical entity names in `docs/prds/00-master-prd.md` §7 (Facility, Unit, UnitType, Tenant, Lease, Invoice, Payment, AccessCredential, Lead, and supporting entities).
 - Money is integer cents. All timestamps UTC in the DB, facility-local timezone for display.
