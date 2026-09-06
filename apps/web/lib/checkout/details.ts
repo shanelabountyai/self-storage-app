@@ -1,6 +1,7 @@
 import { prisma } from '@storage/db'
 import type { FieldErrors } from '@/lib/admin/form-state'
 import { localityForZip } from '@/lib/geo/geocode'
+import type { Locale } from '@/lib/i18n'
 
 // PRD 01 US-501 step 1 / FR-5.1. "Your details", and the implicit account.
 
@@ -120,6 +121,11 @@ export function localityFor(
 export async function upsertTenantForCheckout(
   input: DetailsInput,
   locality: { city: string; state: string },
+  /// B-261. The language step 1 was RENDERED in — the same value B-259 stamps
+  /// on the consent rows, from the FORM rather than the cookie, so a renter
+  /// who used the header toggle between the render and the submit is recorded
+  /// against the language they actually read.
+  locale: Locale,
 ): Promise<{
   tenantId: string
   created: boolean
@@ -139,6 +145,7 @@ export async function upsertTenantForCheckout(
         city: locality.city,
         state: locality.state,
         postalCode: input.postalCode.trim(),
+        preferredLocale: locale,
       },
     })
     return { tenantId: tenant.id, created: true }
@@ -153,6 +160,18 @@ export async function upsertTenantForCheckout(
     city: existing.city ?? locality.city,
     state: existing.state ?? locality.state,
     postalCode: existing.postalCode ?? input.postalCode.trim(),
+    // B-261, and additive for exactly the reason the rest of this object is:
+    // this form is unauthenticated, so anyone who knows an email address must
+    // not be able to switch the language every future email and text to that
+    // account goes out in — including the dunning ladder, which is the one
+    // where being unreadable matters most.
+    //
+    // Null is what makes that possible: it means "never told us" rather than
+    // "chose English" (see `Tenant.preferredLocale`), so a returning renter
+    // who has never expressed a preference gets one filled in from the
+    // language they just rented in, and one who HAS keeps theirs. The portal
+    // control is the authenticated way to change it.
+    preferredLocale: existing.preferredLocale ?? locale,
   }
 
   await prisma.tenant.update({ where: { id: existing.id }, data: fillBlanks })

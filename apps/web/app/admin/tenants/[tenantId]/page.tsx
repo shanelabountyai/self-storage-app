@@ -1,4 +1,5 @@
 import { ScrollRegion } from "@/components/ui/scroll-region"
+import { LOCALES, LOCALE_NAMES } from "@/lib/i18n";
 import { ApplyCreditForm } from "@/components/admin/apply-credit-form";
 import Link from "next/link";
 import { getAdminActor } from "@/lib/admin/context";
@@ -943,6 +944,20 @@ export default async function TenantProfilePage({
               <span className="text-muted-foreground">Not recorded</span>
             )}
           </dd>
+          {/* B-261. Read-first alongside the phone number, because it is
+              the fact that decides what a staffer does next: a tenant we write
+              to in Spanish is one to hand to a Spanish-speaking colleague
+              before calling about a past-due balance. */}
+          <dt className="text-muted-foreground">Writes to them in</dt>
+          <dd>
+            {profile.preferredLocale ? (
+              LOCALE_NAMES[profile.preferredLocale]
+            ) : (
+              <span className="text-muted-foreground">
+                Not stated — we write in English
+              </span>
+            )}
+          </dd>
           {(profile.altContactName ||
             profile.altContactPhone ||
             profile.altContactEmail) && (
@@ -999,6 +1014,38 @@ export default async function TenantProfilePage({
               defaultValue={profile.altContactEmail ?? ""}
               className={FIELD_CLASS}
             />
+            {/* B-261. The staff path to `Tenant.preferredLocale` — the
+                counterpart to the tenant's own control in
+                /portal/notifications, and the only one that reaches a walk-in
+                who told the counter they would rather read Spanish. The blank
+                option stores null, which is "never told us" rather than
+                "chose English"; it is how a staffer undoes a wrong entry
+                without asserting a preference the tenant never gave. */}
+            <div className="col-span-2 flex flex-col gap-1">
+              <label
+                htmlFor="preferredLocale"
+                className="text-muted-foreground text-sm"
+              >
+                Language for email and text messages
+              </label>
+              <select
+                id="preferredLocale"
+                name="preferredLocale"
+                defaultValue={profile.preferredLocale ?? ""}
+                className={FIELD_CLASS}
+              >
+                <option value="">Not stated — write in English</option>
+                {LOCALES.map((option) => (
+                  <option key={option} value={option}>
+                    {LOCALE_NAMES[option]}
+                  </option>
+                ))}
+              </select>
+              <p className="text-muted-foreground text-xs text-pretty">
+                Changes every receipt, reminder and past-due notice we send.
+                The lease and any formal notice we mail stay in English.
+              </p>
+            </div>
             <button
               type="submit"
               className="border-input hover:bg-accent col-span-2 inline-flex min-h-11 items-center justify-center self-start rounded-md border px-4 text-sm font-medium"

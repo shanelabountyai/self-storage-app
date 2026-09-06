@@ -66,26 +66,55 @@ async function main() {
   // screen (CN-16) writes later, never something this script touches.
   for (const template of COMMS_TEMPLATES) {
     const channel = template.channel ?? 'email'
-    // Not `upsert`: Prisma's generated compound-unique input does not accept a
-    // literal `null` for a nullable column in the key, even though the schema
-    // itself does (the same reason NotificationRule below uses findFirst).
-    const existing = await prisma.messageTemplate.findFirst({
-      where: { key: template.key, channel, facilityId: null, version: 1 },
-    })
-    const fields = {
-      classification: template.classification,
-      // Schema's own rule: "Email subject; null for SMS."
-      subject: template.subject ?? null,
-      bodyText: template.bodyText,
-      requiredMergeFields: template.requiredMergeFields,
-      active: true,
-    }
-    if (existing) {
-      await prisma.messageTemplate.update({ where: { id: existing.id }, data: fields })
-    } else {
-      await prisma.messageTemplate.create({
-        data: { key: template.key, channel, facilityId: null, version: 1, ...fields },
+    // B-261. One row per language the catalog entry carries. `requiredMergeFields`
+    // is the SAME array on both, which is the guarantee that matters: a Spanish
+    // body that drops a required field renders identically to an English one
+    // that does — `renderEmail` throws and the message is recorded `failed`.
+    const variants = [
+      { locale: 'en', subject: template.subject ?? null, bodyText: template.bodyText },
+      ...(template.es
+        ? [
+            {
+              locale: 'es',
+              // Falls back to the English subject rather than null: null means
+              // "this is an SMS" to the schema, and an email with no subject
+              // line is not the same document.
+              subject: template.es.subject ?? template.subject ?? null,
+              bodyText: template.es.bodyText,
+            },
+          ]
+        : []),
+    ]
+
+    for (const variant of variants) {
+      // Not `upsert`: Prisma's generated compound-unique input does not accept a
+      // literal `null` for a nullable column in the key, even though the schema
+      // itself does (the same reason NotificationRule below uses findFirst).
+      const existing = await prisma.messageTemplate.findFirst({
+        where: { key: template.key, channel, locale: variant.locale, facilityId: null, version: 1 },
       })
+      const fields = {
+        classification: template.classification,
+        // Schema's own rule: "Email subject; null for SMS."
+        subject: variant.subject,
+        bodyText: variant.bodyText,
+        requiredMergeFields: template.requiredMergeFields,
+        active: true,
+      }
+      if (existing) {
+        await prisma.messageTemplate.update({ where: { id: existing.id }, data: fields })
+      } else {
+        await prisma.messageTemplate.create({
+          data: {
+            key: template.key,
+            channel,
+            locale: variant.locale,
+            facilityId: null,
+            version: 1,
+            ...fields,
+          },
+        })
+      }
     }
   }
 

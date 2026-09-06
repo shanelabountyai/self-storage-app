@@ -1176,6 +1176,18 @@ model Tenant {
   altContactName               String?
   altContactPhone              String?
   altContactEmail              String?
+  /// B-261 (D-122). The language this tenant is WRITTEN to in — every email
+  /// and text `deliverForRule` sends. Not the same fact as the `st_locale`
+  /// cookie, which is a browser preference on one device and vanishes with the
+  /// cache; this is the durable one, and the dunning ladder is why it matters
+  /// (it ends in a lien file, so the account least able to read our English is
+  /// the account it matters most on).
+  ///
+  /// Null means never told us, NOT English — the distinction is what lets the
+  /// unauthenticated checkout fill it in additively, the same rule
+  /// `upsertTenantForCheckout` applies to every other field it touches. A send
+  /// resolves null to `en`.
+  preferredLocale              String?
   /// Stripe Customer for this tenant. A reference, never card data (master
   /// PRD §7.4 keeps us in SAQ-A: the browser talks to Stripe directly and we
   /// only ever hold tokens).
@@ -3697,6 +3709,18 @@ model MessageTemplate {
   /// Stable identifier the rules reference, e.g. "move_in_welcome".
   key                 String
   channel             MessageChannel
+  /// B-261. Which language this row IS, from `LOCALES` (`en` | `es`). A second
+  /// row rather than a second body column on one row (the shape B-198 deleted
+  /// `bodyHtml` for): a Spanish rendering is independent content, so it gets
+  /// its own `version` history and its own per-facility override, and a
+  /// Spanish correction cannot silently re-date the English — the same
+  /// reasoning `lib/consent/disclosures.ts` states for its per-locale version
+  /// constants.
+  ///
+  /// A key with no row in the recipient's locale falls back to `en`, so an
+  /// untranslated template still sends. Refusing instead would mean a payment
+  /// reminder withheld over a missing translation.
+  locale              String                @default("en")
   classification      MessageClassification
   /// null = org-level default; set = per-facility override.
   facilityId          String?
@@ -3716,8 +3740,8 @@ model MessageTemplate {
 
   facility Facility? @relation(fields: [facilityId], references: [id], onDelete: Cascade)
 
-  @@unique([key, channel, facilityId, version])
-  @@index([key, channel, facilityId, active])
+  @@unique([key, channel, locale, facilityId, version])
+  @@index([key, channel, locale, facilityId, active])
   @@map("message_template")
 }
 

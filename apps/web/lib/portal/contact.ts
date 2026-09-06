@@ -1,4 +1,5 @@
 import { prisma, type AddressSource, type Prisma } from '@storage/db'
+import type { Locale } from '@/lib/i18n'
 
 // PRD 01 US-706 / PRD 02 US-13. Contact details a tenant can change about
 // themselves, and the address of record that has to survive them changing it.
@@ -135,6 +136,15 @@ export type ContactDetails = {
   altContactName: string | null
   altContactPhone: string | null
   altContactEmail: string | null
+  /// B-261. The language we write to this tenant in. `undefined` leaves it
+  /// alone — the portal form does not carry this field, and a save from there
+  /// must not clear a preference the staff screen set.
+  ///
+  /// `null` is a real value and means "never told us": it is what a staffer
+  /// picks when they have wrongly recorded one and want the account back to
+  /// having no stated preference, rather than asserting English on somebody's
+  /// behalf.
+  preferredLocale?: Locale | null
 }
 
 /// Everything on the contact form that is not the email address and not the
@@ -169,6 +179,9 @@ export async function updateContactDetails(
       altContactName: details.altContactName?.trim() || null,
       altContactPhone: altPhone,
       altContactEmail: altEmail,
+      ...(details.preferredLocale !== undefined
+        ? { preferredLocale: details.preferredLocale }
+        : {}),
     },
   })
   return {}

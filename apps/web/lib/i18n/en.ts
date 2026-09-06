@@ -936,6 +936,22 @@ export const en = {
   'notif.turnOffTexts': 'Turn off text messages',
   'notif.stopNote':
     'This has the same effect as replying STOP to a text from us: every SMS to this number stops, including account and payment texts, immediately.',
+  // ── B-261. The language we WRITE to you in (`Tenant.preferredLocale`). ────
+  //
+  // Deliberately worded as "email and text", not "language", to separate it
+  // from the header toggle: that one is this browser, this device, and it is
+  // gone with the cache. This one follows the account into a payment reminder
+  // and a dunning email six months from now.
+  'notif.languageHeading': 'The language we write to you in',
+  'notif.languageIntro':
+    'We will send your receipts, payment reminders and account notices in this language. The switch at the top of the page changes what you see on this device; this changes what we send you.',
+  'notif.languageLabel': 'Language for email and text messages',
+  'notif.languageSave': 'Save language',
+  'notif.languageNeverSet':
+    'You have not chosen one, so we write to you in English.',
+  'notif.languageSaved': 'Saved. We will write to you in English from now on.',
+  'notif.languageLegalNote':
+    'Your lease and any formal notice we are required to mail you stay in English.',
   'notif.marketingHeading': 'Marketing text messages',
   'notif.marketingIntro':
     'Separate from the account texts above. Turning these off never affects payment reminders or gate codes, and turning them on is not required to rent.',

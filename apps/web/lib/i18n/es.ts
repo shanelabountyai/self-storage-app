@@ -973,6 +973,16 @@ export const es: Dictionary = {
   'notif.turnOffTexts': 'Desactivar los mensajes de texto',
   'notif.stopNote':
     'Esto tiene el mismo efecto que responder STOP a un mensaje nuestro: se detiene de inmediato todo mensaje de texto a este número, incluidos los de la cuenta y los de pagos.',
+  'notif.languageHeading': 'El idioma en el que le escribimos',
+  'notif.languageIntro':
+    'Le enviaremos sus recibos, recordatorios de pago y avisos de la cuenta en este idioma. El selector de la parte superior de la página cambia lo que usted ve en este dispositivo; este cambia lo que le enviamos.',
+  'notif.languageLabel': 'Idioma para correos y mensajes de texto',
+  'notif.languageSave': 'Guardar idioma',
+  'notif.languageNeverSet':
+    'Usted no ha elegido uno, así que le escribimos en inglés.',
+  'notif.languageSaved': 'Guardado. A partir de ahora le escribiremos en español.',
+  'notif.languageLegalNote':
+    'Su contrato y cualquier aviso formal que estemos obligados a enviarle por correo postal se mantienen en inglés.',
   'notif.marketingHeading': 'Mensajes de texto promocionales',
   'notif.marketingIntro':
     'Aparte de los mensajes de la cuenta de arriba. Desactivarlos nunca afecta los recordatorios de pago ni los códigos de la puerta, y activarlos no es requisito para rentar.',

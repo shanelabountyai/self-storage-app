@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { DEFAULT_LOCALE, isLocale, LOCALES, LOCALE_NAMES } from '@/lib/i18n'
 import { AdminForm, Field } from '@/components/admin/form'
 import { Button } from '@/components/ui/button'
 import { BROADCAST_EVENT } from '@storage/core/comms'
@@ -20,9 +21,13 @@ export const metadata = { title: 'Message templates' }
 export default async function TemplatesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ key?: string }>
+  searchParams: Promise<{ key?: string; locale?: string }>
 }) {
-  const { key } = await searchParams
+  const { key, locale: requestedLocale } = await searchParams
+  // B-261. Which language's copy of the catalog is being edited. The editor
+  // itself stays English (D-122 keeps the admin surface English throughout) —
+  // this chooses the language of the DOCUMENT, not of the screen around it.
+  const locale = isLocale(requestedLocale) ? requestedLocale : DEFAULT_LOCALE
   const { actor, facilities, cookieValue, canSeeAll } = await getSwitcherData()
   const selected = resolveSelectedFacility(cookieValue, facilities, canSeeAll)
 
@@ -38,7 +43,7 @@ export default async function TemplatesPage({
   }
 
   const facilityId = selected.facility.id
-  const templates = await templatesFor(actor, facilityId)
+  const templates = await templatesFor(actor, facilityId, locale)
   const active = templates.find((template) => template.key === key) ?? templates[0]
   const fields = active ? fieldsForTemplate(active.key) : []
   const preview = active
@@ -47,6 +52,7 @@ export default async function TemplatesPage({
         subject: active.subject ?? '',
         bodyText: active.bodyText,
         requiredMergeFields: active.requiredMergeFields,
+        locale,
       })
     : null
 
@@ -60,11 +66,33 @@ export default async function TemplatesPage({
         </p>
       </div>
 
+      {/* B-261. Without this the editor could only ever reach the English
+          rows, so the Spanish half of the catalog would be publishable by
+          nobody and overridable per facility by nobody — the exact "a column
+          that configures behaviour shipped with no control" this repo has
+          already paid for five times. */}
+      <nav aria-label="Language" className="flex flex-wrap gap-2">
+        {LOCALES.map((option) => (
+          <Link
+            key={option}
+            href={`/admin/settings/templates?locale=${option}${key ? `&key=${key}` : ''}`}
+            aria-current={option === locale ? 'page' : undefined}
+            className={
+              option === locale
+                ? 'border-foreground bg-accent rounded-md border-2 px-3 py-2 text-sm font-medium'
+                : 'border-input hover:bg-accent rounded-md border-2 px-3 py-2 text-sm'
+            }
+          >
+            {LOCALE_NAMES[option]}
+          </Link>
+        ))}
+      </nav>
+
       <nav aria-label="Templates" className="flex flex-wrap gap-2">
         {templates.map((template) => (
           <Link
             key={template.key}
-            href={`/admin/settings/templates?key=${template.key}`}
+            href={`/admin/settings/templates?key=${template.key}&locale=${locale}`}
             aria-current={template.key === active?.key ? 'page' : undefined}
             className={
               template.key === active?.key
@@ -89,10 +117,11 @@ export default async function TemplatesPage({
           <AdminForm action={saveTemplateAction} label={`Edit ${active.key}`} className="flex flex-col gap-3">
             <input type="hidden" name="facilityId" value={facilityId} />
             <input type="hidden" name="key" value={active.key} />
+            <input type="hidden" name="locale" value={locale} />
             <input type="hidden" name="requiredMergeFields" value={active.requiredMergeFields.join(',')} />
 
             <p className="text-muted-foreground text-xs">
-              Version {active.version}
+              {LOCALE_NAMES[locale]} · version {active.version}
               {active.isOverride ? ' · this facility’s own copy' : ' · the shared default'}
               {active.event === BROADCAST_EVENT
                 ? ' · sent by hand from Announcements'
@@ -169,6 +198,7 @@ export default async function TemplatesPage({
             <AdminForm action={testSendAction} label="Send a test" className="flex flex-col gap-2">
               <input type="hidden" name="facilityId" value={facilityId} />
               <input type="hidden" name="key" value={active.key} />
+              <input type="hidden" name="locale" value={locale} />
               <input type="hidden" name="subject" value={active.subject ?? ''} />
               <input type="hidden" name="bodyText" value={active.bodyText} />
               <input type="hidden" name="requiredMergeFields" value={active.requiredMergeFields.join(',')} />

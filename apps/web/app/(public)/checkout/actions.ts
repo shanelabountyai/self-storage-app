@@ -123,7 +123,7 @@ export async function submitDetailsAction(
   // where neither is available, so this is present.
   const locality = localityFor(input)!
 
-  const { tenantId } = await upsertTenantForCheckout(input, locality)
+  const { tenantId } = await upsertTenantForCheckout(input, locality, locale)
 
   const result = await advance(token, 'details', {
     ...input,

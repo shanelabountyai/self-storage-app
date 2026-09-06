@@ -119,7 +119,7 @@ describeDb('implicit account creation', () => {
   it('creates an account with no password and no verification wall', async () => {
     // FR-5.1: email is the identifier, the account is implicit, and nothing
     // blocks a move-in on verifying it.
-    const result = await upsertTenantForCheckout(VALID, AUSTIN)
+    const result = await upsertTenantForCheckout(VALID, AUSTIN, 'en')
     expect(result.created).toBe(true)
 
     const tenant = await prisma.tenant.findUniqueOrThrow({ where: { id: result.tenantId } })
@@ -133,6 +133,7 @@ describeDb('implicit account creation', () => {
     const again = await upsertTenantForCheckout(
       { ...VALID, email: VALID.email.toUpperCase() },
       AUSTIN,
+      'en',
     )
     expect(again.created).toBe(false)
     expect(await prisma.tenant.count({ where: { email: VALID.email } })).toBe(1)
@@ -167,6 +168,7 @@ describeDb('implicit account creation', () => {
         phone: '555-555-5555',
       },
       { city: 'Nowhere', state: 'CA' },
+      'en',
     )
     // B-112 moved the alternate contact to the lease step; it is additive
     // there for exactly the same reason.
@@ -188,7 +190,7 @@ describeDb('implicit account creation', () => {
     const email = `blanks-${suffix}@example.com`
     await prisma.tenant.create({ data: { email, firstName: 'Sparse', lastName: 'Record' } })
 
-    await upsertTenantForCheckout({ ...VALID, email }, AUSTIN)
+    await upsertTenantForCheckout({ ...VALID, email }, AUSTIN, 'en')
 
     const tenant = await prisma.tenant.findUniqueOrThrow({ where: { email } })
     expect(tenant.addressLine1).toBe(VALID.addressLine1)
@@ -197,7 +199,7 @@ describeDb('implicit account creation', () => {
 
   it('records a self-declared SCRA flag — now from the lease step (B-112)', async () => {
     const email = `scra-${suffix}@example.com`
-    const result = await upsertTenantForCheckout({ ...VALID, email }, AUSTIN)
+    const result = await upsertTenantForCheckout({ ...VALID, email }, AUSTIN, 'en')
     // Step 1 no longer asks, so it is still null at this point.
     expect(
       (await prisma.tenant.findUniqueOrThrow({ where: { id: result.tenantId } }))
@@ -212,9 +214,51 @@ describeDb('implicit account creation', () => {
 
   it('leaves the flag null when never asked', async () => {
     const email = `noscra-${suffix}@example.com`
-    const result = await upsertTenantForCheckout({ ...VALID, email }, AUSTIN)
+    const result = await upsertTenantForCheckout({ ...VALID, email }, AUSTIN, 'en')
     await recordLeaseDeclarations(result.tenantId, {})
     const tenant = await prisma.tenant.findUniqueOrThrow({ where: { id: result.tenantId } })
     expect(tenant.activeDutyMilitary).toBeNull()
+  })
+
+  // ── B-261. The language every future email and text goes out in. ──────────
+
+  it('stores the language the renter checked out in', async () => {
+    const email = `locale-new-${suffix}@example.com`
+    const result = await upsertTenantForCheckout({ ...VALID, email }, AUSTIN, 'es')
+    const tenant = await prisma.tenant.findUniqueOrThrow({ where: { id: result.tenantId } })
+    expect(tenant.preferredLocale).toBe('es')
+  })
+
+  it('never switches an existing tenant’s language from this unauthenticated form', async () => {
+    // The same security property the address rule above has, and it matters
+    // for the same reason: anyone who knows an email address could otherwise
+    // start a checkout and change the language every future message to that
+    // account is written in — including the dunning ladder, where being
+    // unreadable is the whole harm.
+    const email = `locale-existing-${suffix}@example.com`
+    await prisma.tenant.create({
+      data: { email, firstName: 'Real', lastName: 'Tenant', preferredLocale: 'es' },
+    })
+
+    await upsertTenantForCheckout({ ...VALID, email }, AUSTIN, 'en')
+
+    const tenant = await prisma.tenant.findUniqueOrThrow({ where: { email } })
+    expect(tenant.preferredLocale).toBe('es')
+  })
+
+  it('fills in the language for a returning tenant who has never stated one', async () => {
+    // Additive, exactly like the blank address fields beside it — null means
+    // "never told us", so there is nothing to overwrite.
+    const email = `locale-blank-${suffix}@example.com`
+    await prisma.tenant.create({
+      data: { email, firstName: 'Real', lastName: 'Tenant' },
+    })
+    expect(
+      (await prisma.tenant.findUniqueOrThrow({ where: { email } })).preferredLocale,
+    ).toBeNull()
+
+    await upsertTenantForCheckout({ ...VALID, email }, AUSTIN, 'es')
+
+    expect((await prisma.tenant.findUniqueOrThrow({ where: { email } })).preferredLocale).toBe('es')
   })
 })

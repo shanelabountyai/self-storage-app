@@ -263,3 +263,60 @@ test.describe('the static pages in Spanish', () => {
     await expect(page.getByText('Última revisión: 19 de agosto de 2026.')).toBeVisible()
   })
 })
+
+// --- B-261: the language we WRITE to a tenant in ----------------------------
+//
+// The control for `Tenant.preferredLocale`, which is a different fact from the
+// `st_locale` cookie every spec above exercises: the cookie is this browser,
+// this device, and it is gone with the cache; this is what `deliverForRule`
+// reads when it sends a receipt, a payment reminder or a dunning email six
+// months from now.
+//
+// **Shared-state discipline (B-120).** This mutates the demo tenant, so it
+// takes protection (1): the mutation is scoped to a column no other spec
+// asserts a fixed value against — nothing in the suite reads
+// `preferredLocale`, because nothing in the suite sends an email. The spec
+// also puts it back, so a full sweep run twice sees the same starting state
+// both times; the restore is belt-and-braces rather than the protection
+// itself, because a failure between the two halves must not be able to break
+// a neighbouring spec, and here it cannot.
+
+test.describe('the language a tenant is written to in', () => {
+  test('a tenant can choose it, and it is not the same switch as the header toggle', async ({
+    page,
+    context,
+  }) => {
+    await context.addCookies([SPANISH])
+    await signInAsDemoTenant(page)
+    await page.goto('/portal/notifications')
+
+    const select = page.getByLabel('Idioma para correos y mensajes de texto')
+    await expect(select).toBeVisible()
+
+    // The options are named in the language each one NAMES, so "Español" is
+    // legible to exactly the person who needs to find it.
+    await expect(select.locator('option')).toHaveText(['English', 'Español'])
+
+    await select.selectOption('es')
+    await page.getByRole('button', { name: 'Guardar idioma' }).click()
+
+    // Confirmed in the language just chosen — it is the first sentence of the
+    // change taking effect, not a report about it.
+    await expect(page.getByText('A partir de ahora le escribiremos en español')).toBeVisible()
+    await expect(page.locator('html')).toHaveAttribute('lang', 'es')
+
+    // D-122 is stated where the choice is made: the lease and any mailed
+    // notice stay English, and a tenant choosing Spanish must not be left
+    // believing otherwise.
+    await expect(
+      page.getByText('Su contrato y cualquier aviso formal', { exact: false }),
+    ).toBeVisible()
+
+    // Put it back, so the sweep is repeatable — and prove the control works in
+    // both directions while doing it.
+    await page.getByLabel('Idioma para correos y mensajes de texto').selectOption('en')
+    await page.getByRole('button', { name: 'Guardar idioma' }).click()
+    await expect(page.getByText('We will write to you in English from now on')).toBeVisible()
+    await expect(page.locator('html')).toHaveAttribute('lang', 'en')
+  })
+})

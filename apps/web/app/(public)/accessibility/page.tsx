@@ -1829,6 +1829,42 @@ function reviewedOn(locale: Locale): string {
 // countdown, the staff screens, and the embedded maps. `LAST_REVIEWED` is not
 // bumped, per D-115 — no manual screen-reader pass was performed.
 
+// Re-verified 2026-09-06, at B-261 (the language we WRITE to a tenant in —
+// D-122). Customer-facing, and one new control on a route this page already
+// lists and already scans: `/portal/notifications` gains a `<select>` that
+// sets `Tenant.preferredLocale`, the language every email and text goes out
+// in.
+//
+// **What was checked.** The control is a labelled native `<select>` inside the
+// existing `AdminForm`, so it inherits the form's error handling and its
+// announced result; the label is a real `<label for>` rather than a placeholder
+// (1.3.1, 3.3.2), the option names are written in the language each one names
+// (`LOCALE_NAMES`, so "Español" is legible to the person who needs it), and the
+// submit button meets the same 44px target as every control beside it. Nothing
+// here is colour-carried and nothing is new in kind — it is the same
+// `AdminForm` + native-control pattern as the notification grid above it on the
+// same page.
+//
+// **One real accessibility DEFECT was fixed, and it is not on a page.** Every
+// templated email rendered inside `<div lang="en">`, hardcoded — so the Spanish
+// templates this item seeds would have told a screen reader to pronounce
+// Spanish with English phonemes. That is 3.1.2, on a document a tenant reads
+// rather than a page they visit, and it is the one accessibility failure a
+// translation INTRODUCES rather than fixes. `renderEmail` now takes the
+// language and declares it, checked by `tests/comms-locale-db.test.ts` in both
+// directions.
+//
+// **No new claim about scan coverage.** The scan loops carry no locale cookie
+// and `/portal` in Spanish is already in `SCANNED_STATES` from B-260; the
+// language control sits on `/portal/notifications`, which `STATE_EXCEPTIONS`
+// already names as scanned in English only. The gap is where it was.
+//
+// The "Where we fall short" list was re-read against this build and all three
+// entries are still true and unchanged in scope: the no-JavaScript hold
+// countdown, the staff screens, and the embedded maps. `LAST_REVIEWED` is not
+// bumped, per D-115 — no manual screen-reader pass was performed, and this
+// item performed none.
+
 export default async function AccessibilityPage() {
   const locale = await getLocale()
   const dict = dictionaryFor(locale)
