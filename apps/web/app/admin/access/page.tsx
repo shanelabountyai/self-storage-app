@@ -210,6 +210,19 @@ export default async function AccessEventsPage({
                       <span className="text-muted-foreground">Unknown</span>
                     )}
                   </td>
+                  {/* The "Unit" header has promised this cell since B-064 and
+                      no cell rendered it: seven `<th scope="col">` over six
+                      `<td>`, so every column after "Who" was announced under
+                      its left-hand neighbour's header and `unitNumber` — which
+                      `accessEventLog` has always selected — reached nobody. A
+                      denied attempt is read to work out WHICH unit somebody was
+                      standing at, so this is the column the log exists for. Null
+                      is the unknown-code row, where there is no credential and
+                      so no unit, the same fact `ENTRY_METHOD_LABELS.unknown`
+                      states with the same dash. */}
+                  <td className="py-2 pr-4">
+                    {row.unitNumber ?? <span className="text-muted-foreground">—</span>}
+                  </td>
                   {/* B-086 part 2. "Keypad" and "Phone" are different facts
                       after a theft claim: a phone unlock can be sent from
                       anywhere, so the log stops implying the holder was standing
