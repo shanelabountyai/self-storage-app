@@ -8840,7 +8840,7 @@ The facility page has been `<html lang="es">` since B-090f. The quote/callback f
 
 **One thing the first draft of the e2e spec got wrong, and it is worth writing down because B-263's note points the other way.** B-263 warned that `AdminForm` renders every message twice, so assertions must be scoped inside one box. `FormResult` — which these two marketing forms use instead, because neither is built on `AdminForm` — does the opposite: it puts only the SUMMARY in the `role="status"` region, and `Field` puts the message beside its own input (3.3.1). Asserting the field message inside the live region therefore fails, and it fails in a way that reads like an untranslated string. The spec asserts the summary in the region, the field message in the form, and `aria-invalid` on the input — three places, because there are three separate things that could have stayed English.
 
-## B-267 — the reservation form on a Spanish facility page is Spanish (2026-09-07, `SHA_PLACEHOLDER`)
+## B-267 — the reservation form on a Spanish facility page is Spanish (2026-09-07, `5a1cf0c`)
 
 The facility page has been `<html lang="es">` since B-090f and B-264 translated the lead form inside it. The OTHER form on the same page — the one that holds a real unit — took no dictionary at all: `reserve/page.tsx` imported nothing from `@/lib/i18n`, and `reserveAction` built five field refusals plus two non-field messages as English literals. So a Spanish visitor pressed "Reservar gratis" and landed on an English form; when it refused them, it refused them in English.
 
