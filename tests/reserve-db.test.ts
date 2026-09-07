@@ -7,12 +7,13 @@ import {
   expireReservations,
   hashReservationToken,
   holdExpiryFor,
-  holdWindowSentence,
+  holdWindowKey,
   reservationByToken,
   sendExpiringSoonReminders,
   MAX_MOVE_IN_DAYS_AHEAD,
 } from '../apps/web/lib/reservations/reserve'
 import { publicInventoryForFacility } from '../apps/web/lib/inventory/public-inventory'
+import { LOCALES, dictionaryFor, translate } from '../apps/web/lib/i18n'
 import { TRANSFER_HOLD_SOURCE } from '../packages/core/inventory'
 
 // B-018 / PRD 01 US-401, FR-3.
@@ -104,21 +105,44 @@ describe('holdExpiryFor', () => {
   })
 })
 
-describe('holdWindowSentence — B-126', () => {
+describe('holdWindowKey — B-126, B-267', () => {
   // The reserve page's trust line is GENERATED from the setting now, so the
   // wording cannot go stale when an operator changes it. B-118 shipped it as
-  // fixed prose precisely because there was nothing to read.
+  // fixed prose precisely because there was nothing to read. B-267 made it
+  // return the KEY rather than the sentence — the function is pure and has no
+  // request to read a locale from — so these assert the choice, and then that
+  // every choice renders in every language we ship.
+  const say = (locale: 'en' | 'es', graceDays: number) =>
+    translate(dictionaryFor(locale), holdWindowKey(graceDays), { days: graceDays })
+
   it('says the day after, at the default', () => {
-    expect(holdWindowSentence(1)).toContain('day after your move-in date')
+    expect(holdWindowKey(1)).toBe('reserve.holdDayAfter')
+    expect(say('en', 1)).toContain('day after your move-in date')
   })
 
   it('says the move-in day itself at zero, not "0 days"', () => {
-    expect(holdWindowSentence(0)).toContain('end of your move-in date')
-    expect(holdWindowSentence(0)).not.toContain('0 days')
+    expect(holdWindowKey(0)).toBe('reserve.holdThroughMoveIn')
+    expect(say('en', 0)).toContain('end of your move-in date')
+    expect(say('en', 0)).not.toContain('0 days')
+    expect(say('es', 0)).not.toContain('0 días')
   })
 
   it('counts plainly above one', () => {
-    expect(holdWindowSentence(3)).toContain('3 days after your move-in date')
+    expect(holdWindowKey(3)).toBe('reserve.holdDays')
+    expect(say('en', 3)).toContain('3 days after your move-in date')
+  })
+
+  it('renders a real sentence in every locale, with the number in it', () => {
+    // The trap this catches is the one the key shape introduces: only the
+    // `holdDays` case takes `{days}`, so a locale that dropped it renders a
+    // promise with the number missing — and the two `{days}`-free cases must
+    // not start carrying one either.
+    for (const locale of LOCALES) {
+      expect(say(locale, 3), locale).toContain('3')
+      for (const graceDays of [0, 1]) {
+        expect(say(locale, graceDays), `${locale} @ ${graceDays}`).not.toMatch(/\d/)
+      }
+    }
   })
 })
 

@@ -225,6 +225,36 @@ export const en = {
   'facility.otherLocations': 'look at other locations',
   'facility.sizeGuideOr': ', or',
 
+  // --- The reservation form on the facility page (US-401, B-267) ---------
+  //
+  // The whole surface, not a gap inside a translated one: `reserve/page.tsx`
+  // imported nothing from here and the action built every sentence inline. The
+  // field labels are the checkout's — `details.firstName` and its neighbours —
+  // because they are the same five fields asking for the same five things, and
+  // two dictionary entries for one label is how the two forms drift apart.
+  'reserve.title': 'Reserve a unit for free',
+  'reserve.back': 'Back to {facility}',
+  'reserve.heading': 'Reserve this unit',
+  // The three cases `holdWindowKey` picks between. Never assembled from a
+  // count and a plural `s`: 0 and 1 are "the day you picked" and "the day
+  // after" to somebody deciding whether to hand over their phone number.
+  'reserve.holdThroughMoveIn': 'Free to hold through the end of your move-in date',
+  'reserve.holdDayAfter': 'Free to hold through the day after your move-in date',
+  'reserve.holdDays': 'Free to hold for {days} days after your move-in date',
+  'reserve.noCard': 'No credit card needed',
+  'reserve.cancelAnyTime': 'Cancel any time',
+  'reserve.formLabel': 'Reserve a unit',
+  'reserve.emailHint': 'Where we send your confirmation and your cancel link.',
+  'reserve.moveInDate': 'Move-in date',
+  'reserve.moveInHint': 'We can hold a unit up to {days} days ahead.',
+  'reserve.noCommitment':
+    'Reserving costs nothing and does not commit you to renting. We hold the unit and this price until the hold expires.',
+  // The sentence a renter has to understand to not think their reservation
+  // vanished. It is a SUCCESS, so the `err.*` guard in `tests/i18n.test.ts`
+  // does not cover it — `MUST_DIFFER` there names it explicitly instead.
+  'reserve.holdUpdated':
+    'You already had a hold on this size, so we updated it rather than taking a second unit. Your original confirmation email still has the link.',
+
   // --- The lead form on the facility page (US-8, B-264) ------------------
   //
   // Its marketing-consent sentence is deliberately NOT here: that one is a
@@ -472,6 +502,22 @@ export const en = {
     'A move-in cannot start before today. The earliest you can pick is {date}.',
   'err.startDateLate':
     'We can schedule a move-in up to {days} days ahead. The latest you can pick is {date}.',
+
+  // B-267. The reservation form's refusals. `err.firstName` and `err.lastName`
+  // above are shared with the checkout — same field, same sentence — and these
+  // are the four where the reason differs: a reservation sends a confirmation
+  // and a cancel link, not a lease and a receipt.
+  'err.reserveEmail': 'Enter an email address we can send your confirmation to.',
+  'err.reservePhone': 'Enter a mobile number so we can text you the details.',
+  'err.reserveMoveIn': 'Choose the date you want to move in.',
+  'err.reserveMoveInTooFar':
+    'We can hold a unit up to {days} days ahead. Pick a date within that.',
+  // Neither of these hangs on a field: the renter did nothing wrong and the
+  // page has to offer them something else. Under `err.` all the same, so the
+  // "identical in both locales is an untranslated paste" guard covers them.
+  'err.reserveUnlisted': 'That unit is no longer listed.',
+  'err.reserveSoldOut':
+    'Someone took the last one of that size while you were filling this in. Nothing has been charged — pick another size, or call us and we will sort it out.',
 
   // B-264. The lead form's refusals. Their own keys rather than the checkout's
   // above, because the two forms ask for different things for different

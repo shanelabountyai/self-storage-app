@@ -136,6 +136,26 @@ const REACH: Record<string, { audience: Audience; go: (page: Page) => Promise<vo
     audience: 'admin',
     go: (page) => fromProfile(page, 'Take payment', /\/admin\/pos\/card\?lease=/),
   },
+  // B-267. The reservation form, at 320px, at 200% zoom and under forced text
+  // spacing — three checks it had never had, for the same reason it had no axe
+  // scan: the URL needs a real unit-type cuid and the fixed one standing in for
+  // it redirected to the facility page. Public, because a reservation takes no
+  // account (D-7). Read-only: nothing here submits, so no unit is held.
+  '/storage/[state]/[city]/[slug]/reserve': {
+    audience: 'public',
+    async go(page) {
+      await page.goto('/storage/tx/austin/demo-austin-south')
+      await page
+        .getByRole('listitem')
+        .filter({ has: page.getByRole('link', { name: 'Reserve for free' }) })
+        .first()
+        .getByRole('link', { name: 'Reserve for free' })
+        .click()
+      // The form, not the heading above it: measuring before it renders would
+      // measure a page without the content this key exists for.
+      await expect(page.getByLabel('Move-in date')).toBeVisible()
+    },
+  },
 }
 
 // dana@demo.example.com uniquely: two "Dana Delinquent" tenants exist, one per

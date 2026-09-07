@@ -1946,6 +1946,57 @@ function reviewedOn(locale: Locale): string {
 // bumped, per D-115 — no manual screen-reader pass was performed, and this
 // item performed none.
 
+// Re-verified 2026-09-07, at B-267 (the reservation form on a Spanish facility
+// page — D-122). Customer-facing, the last untranslated form on the public
+// site, and the same 3.1.2 Language of Parts failure B-263 fixed on the
+// checkout and B-264 on the lead form beside it.
+//
+// **What was wrong, and it was the whole surface.** `reserve/page.tsx`
+// imported nothing from `@/lib/i18n` and `reserveAction` built five field
+// refusals plus two non-field messages as English literals. A Spanish visitor
+// pressed "Reservar gratis" on a Spanish facility page and landed on an
+// English form; refused, they were told why in English under `<html lang="es">`.
+// The two non-field messages are the ones that mattered — a size selling out
+// mid-form, and "you already had a hold, so we updated it", which is the
+// sentence a renter has to read to not believe their reservation vanished.
+//
+// **A CLAIM ON THIS PAGE WAS FALSE, in the overstating direction, and the
+// re-read is what found it.** `/storage/[state]/[city]/[slug]/reserve` was
+// listed in `PUBLIC_SCAN_ROUTES` as
+// `.../reserve?unitType=INVALID` — a URL that REDIRECTS, because no unit type
+// has that id. So all four public loops (axe, 320px reflow, 200% zoom, forced
+// text spacing) have been scanning the facility page's "that size just went"
+// notice, twice, and the reservation form has never been scanned by anything.
+// The coverage test could not see it: it strips the query string, so the entry
+// satisfied the route pattern. Fixed rather than disclaimed — the entry is
+// renamed to the page it actually visits, and the form is in
+// `SCANNED_BY_OWN_SPEC`, reached by a real click in `smoke.spec.ts` with a
+// `REACH` entry in `a11y-own-spec-routes.spec.ts` for the three layout checks.
+// It cannot go back in the URL list: the route needs a real unit-type cuid,
+// which no fixed string holds across a reseed. This is the `/admin/pos/card`
+// arrangement from B-230, for the same reason.
+//
+// **No bullet below changes.** "Form fields have real labels" and the errors
+// bullet are both about mechanism, and translating a label or a refusal
+// neither strengthens nor weakens either — the same reading B-263 and B-264
+// recorded. The reservation form's `<label for>` / `<input>` shape, its
+// `aria-invalid`, its described-by error and its focused summary are
+// `AdminForm`'s and are untouched.
+//
+// **No new state claim.** The Spanish form is asserted by words rather than by
+// axe, so the new spec carries no `a11y-state:` comment: the scan loops carry
+// no locale cookie, which the `/` | Spanish row in `STATE_EXCEPTIONS` has said
+// since B-262, and the refused Spanish form is the refused English form's
+// markup with different sentences in it.
+//
+// The "Where we fall short" list was re-read against this build and all three
+// entries are still true and unchanged in scope — the no-JavaScript countdown
+// is the CHECKOUT's 30-minute hold and not this form, the staff screens, and
+// the embedded maps. `LAST_REVIEWED` is not bumped, per D-115 — no manual
+// screen-reader pass was performed, and this item performed none. The scan-
+// coverage correction above is a fix to a generated list, not a re-verification
+// of the dated claims.
+
 export default async function AccessibilityPage() {
   const locale = await getLocale()
   const dict = dictionaryFor(locale)

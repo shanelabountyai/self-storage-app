@@ -7,6 +7,7 @@ import { cancelOpenTask } from '@/lib/admin/tasks'
 import { sendDirectEmail } from '@/lib/comms/service'
 import { track } from '@/lib/analytics/track'
 import { trackingContext } from '@/lib/analytics/request'
+import type { MessageKey } from '@/lib/i18n'
 
 // PRD 01 §4.4 US-401 / FR-3. A free, no-card hold on a unit.
 //
@@ -83,7 +84,7 @@ export function holdExpiryFor(
   return new Date(guess + offsetMsAt(new Date(guess), timezone))
 }
 
-/// The same rule in a renter's words, for the reserve page's trust line.
+/// Which of the three hold-window sentences this facility's grace earns.
 ///
 /// Beside `holdExpiryFor` on purpose: these are the two halves of one promise —
 /// what the code does, and what we tell the renter it does — and B-118 is the
@@ -95,10 +96,16 @@ export function holdExpiryFor(
 /// Three cases rather than one template with a plural `s`: 0 and 1 are not
 /// "0 days" and "1 day" to somebody deciding whether to hand over their phone
 /// number — they are "the day you picked" and "the day after".
-export function holdWindowSentence(graceDays: number): string {
-  if (graceDays <= 0) return 'Free to hold through the end of your move-in date'
-  if (graceDays === 1) return 'Free to hold through the day after your move-in date'
-  return `Free to hold for ${graceDays} days after your move-in date`
+///
+/// B-267 returns the KEY rather than the sentence — `judgeStartDate`'s shape
+/// from B-263. This function is pure and has no request to read a locale from,
+/// so the choice of sentence is made here and the sentence itself is built
+/// where the language is known. The two halves of the promise stay together:
+/// which case applies is still decided next to the function that implements it.
+export function holdWindowKey(graceDays: number): MessageKey {
+  if (graceDays <= 0) return 'reserve.holdThroughMoveIn'
+  if (graceDays === 1) return 'reserve.holdDayAfter'
+  return 'reserve.holdDays'
 }
 
 export function newToken(): string {
