@@ -22,15 +22,8 @@ import {
 import { prisma } from '@storage/db'
 import { formatRate } from '@/lib/format'
 import { labelForStep } from '@/components/checkout/stepper'
-import {
-  dictionaryFor,
-  isLocale,
-  translate,
-  type Dictionary,
-  type Locale,
-  type MessageKey,
-} from '@/lib/i18n'
-import { getLocale } from '@/lib/i18n/server'
+import { isLocale, type Locale, type MessageKey } from '@/lib/i18n'
+import { getLocale, messages } from '@/lib/i18n/server'
 import {
   ELECTRONIC_RECORDS_CONSENT,
   MARKETING_EMAIL_CHECKOUT_CONSENT,
@@ -38,7 +31,7 @@ import {
   SMS_CONSENT,
 } from '@/lib/consent/disclosures'
 import { recordConsent } from '@storage/core/consent'
-import type { FormState, KeyedFieldErrors } from '@/lib/admin/form-state'
+import { keyedFieldError, type FormState, type Translator } from '@/lib/admin/form-state'
 import {
   currentPlans,
   premiumFor,
@@ -65,12 +58,6 @@ import { requestMetadata } from '@/lib/http/request-metadata'
 // inside a request, and a module-level dictionary would be whichever language
 // the first request after a cold start happened to use — served to everybody
 // afterwards.
-type Translator = (key: MessageKey, vars?: Record<string, string | number>) => string
-
-async function messages(): Promise<{ dict: Dictionary; t: Translator }> {
-  const dict = dictionaryFor(await getLocale())
-  return { dict, t: (key, vars) => translate(dict, key, vars) }
-}
 
 /// The three ways a move-in date can be refused, in the renter's language.
 /// The keys live beside every other message; the rule lives in `@storage/core`.
@@ -80,23 +67,6 @@ const START_DATE_MESSAGE: Record<'too_early' | 'too_late' | 'unparseable', Messa
   unparseable: 'err.startDateFormat',
 }
 
-/// B-263. `fieldError` for a renter, in the renter's language.
-///
-/// The admin `fieldError` takes finished sentences, which is right for the
-/// staff screens D-122 keeps English. The checkout's validators return keys
-/// instead, so both halves are resolved here: the per-field messages AND the
-/// summary heading above them, which was the last English string left on a
-/// refused Spanish step.
-function keyedFieldError(errors: KeyedFieldErrors, t: Translator): FormState {
-  const entries = Object.entries(errors)
-  return {
-    status: 'error',
-    message: entries.length === 1 ? t('err.oneField') : t('err.someFields', { count: entries.length }),
-    fieldErrors: Object.fromEntries(
-      entries.map(([field, { key, vars }]) => [field, t(key, vars)]),
-    ),
-  }
-}
 
 /// B-259. The language the disclosures were RENDERED in, taken from the form
 /// rather than from the cookie.

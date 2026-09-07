@@ -133,3 +133,30 @@ export const ELECTRONIC_RECORDS_CONSENT: Record<Locale, Disclosure> = {
     version: 'v1-es',
   },
 }
+
+/// PRD 04 US-13 AC1 (B-068, B-264). The LEAD form's marketing opt-in, on the
+/// public facility page.
+///
+/// A different disclosure from `MARKETING_EMAIL_CHECKOUT_CONSENT` above rather
+/// than a second rendering of it, and the difference is who is standing there.
+/// The checkout's box is answered by somebody who has decided to rent, and it
+/// says "this is not required to rent a unit" because it sits beside fields
+/// that are. This one is answered by a stranger who has rented nothing and may
+/// never — there is no rental for consent to be a condition of — so it names
+/// the facility instead, which is the only thing it can promise to be about.
+/// Two audiences, two sentences, two version lines that move independently.
+///
+/// The English is unchanged from what B-068 shipped and keeps `v1`
+/// deliberately: every `marketing_email` / `lead_form` row already written
+/// names that version, and re-pointing it at edited words would rewrite what
+/// those people were shown.
+export const MARKETING_EMAIL_LEAD_CONSENT: Record<Locale, Disclosure> = {
+  en: {
+    text: 'Send me occasional emails about pricing and promotions at this facility. You can unsubscribe any time.',
+    version: 'v1',
+  },
+  es: {
+    text: 'Envíenme correos electrónicos ocasionales sobre precios y promociones de esta sucursal. Puede darse de baja en cualquier momento.',
+    version: 'v1-es',
+  },
+}

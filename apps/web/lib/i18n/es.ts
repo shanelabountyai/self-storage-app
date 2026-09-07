@@ -236,6 +236,22 @@ export const es: Dictionary = {
   'facility.otherLocations': 'vea otras sucursales',
   'facility.sizeGuideOr': ', o',
 
+  // --- The lead form on the facility page (US-8, B-264) ------------------
+  'lead.legend': '¿Qué desea?',
+  'lead.quote': 'Una cotización',
+  'lead.callback': 'Que le llamemos',
+  'lead.name': 'Su nombre',
+  'lead.email': 'Correo electrónico',
+  'lead.phone': 'Teléfono',
+  'lead.phoneHint': 'Obligatorio si desea que le llamemos.',
+  'lead.size': 'Tamaño que le interesa',
+  'lead.sizeUnsure': 'Todavía no sé',
+  'lead.moveInDate': 'Cuándo se mudaría',
+  'lead.note': '¿Algo más?',
+  'lead.send': 'Enviar',
+  'lead.thanks':
+    'Listo: alguien de esta sucursal se pondrá en contacto con usted. Si es urgente, es más rápido llamarnos.',
+
   // --- Move-in cost lines (US-301, shared with checkout) -----------------
   'cost.rent': 'Renta del primer mes',
   'cost.rent.note':
@@ -472,6 +488,15 @@ export const es: Dictionary = {
     'Una mudanza no puede empezar antes de hoy. La fecha más temprana que puede elegir es {date}.',
   'err.startDateLate':
     'Podemos programar una mudanza hasta con {days} días de anticipación. La fecha más lejana que puede elegir es {date}.',
+
+  // B-264. Los rechazos del formulario de contacto.
+  'err.leadName': 'Díganos cómo dirigirnos a usted.',
+  'err.leadContact':
+    'Un correo electrónico o un teléfono: necesitamos alguna forma de responderle.',
+  'err.leadEmail': 'Revise el correo electrónico: parece estar incompleto.',
+  'err.leadPhone': 'Un teléfono con al menos 10 dígitos, para que alguien pueda llamarle.',
+  'err.leadRateLimited':
+    'Son muchas consultas desde un mismo lugar en poco tiempo. Espere unos minutos, o llámenos.',
 
   // --- Checkout announcer (4.1.3, 2.4.3) --------------------------------
   'announce.movedToSize': 'Lo cambiamos a la {size}. No se perdió nada de lo que escribió.',

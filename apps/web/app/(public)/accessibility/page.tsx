@@ -1904,6 +1904,48 @@ function reviewedOn(locale: Locale): string {
 // bumped, per D-115 — no manual screen-reader pass was performed, and this
 // item performed none.
 
+// Re-verified 2026-09-06, at B-264 (the lead form on a Spanish facility page —
+// D-122, D-125). Customer-facing, on a route this page already lists and
+// already scans, and the same 3.1.2 failure B-263 fixed on the checkout, one
+// funnel step earlier.
+//
+// **What was wrong.** The facility page has been `<html lang="es">` since
+// B-090f and the quote/callback form inside it was English end to end — every
+// label, the size options, the refusals, and the marketing-consent sentence. A
+// screen reader announcing that form under a Spanish document reads English
+// words with Spanish phonemes, which is Language of Parts, and it is again
+// fixed by saying the right words rather than by marking up the wrong ones.
+//
+// **Two bullets were re-read and neither changes.** "Form fields have real
+// labels" is about the mechanism and was true in both languages before this
+// item; the `<label for>` / sibling `<input>` shape B-171 gave these fields is
+// untouched, and translating a label does not weaken it. The errors bullet is
+// the one B-263's note already walked: it claims the message is tied to its
+// field, that what was typed survives, and that a save is announced — all
+// three about mechanism, none about language. As with B-263, the gap here was
+// real and unstated rather than misstated.
+//
+// **No new claim about scan coverage, and no new state.** The scan loops carry
+// no locale cookie, and the Spanish facility page is already in
+// `SCANNED_STATES` from B-090f. The new spec asserts words rather than running
+// axe, so it carries no `a11y-state:` comment and adds nothing to either list —
+// the refused Spanish form is the same markup as the refused English one that
+// `smoke.spec.ts` already scans, with different sentences in it.
+//
+// **One thing named because it is where an a11y fix and a legal one meet.**
+// The consent sentence beside the checkbox is NOT a dictionary entry (D-125):
+// it is a versioned disclosure, so `Dictionary`'s typecheck cannot catch a
+// missing translation and only a rendered page can. That is why the e2e spec
+// asserts the Spanish words and the `disclosureLocale` field directly. A
+// disclosure a reader cannot read is not consent, whichever discipline is
+// asked.
+//
+// The "Where we fall short" list was re-read against this build and all three
+// entries are still true and unchanged in scope: the no-JavaScript hold
+// countdown, the staff screens, and the embedded maps. `LAST_REVIEWED` is not
+// bumped, per D-115 — no manual screen-reader pass was performed, and this
+// item performed none.
+
 export default async function AccessibilityPage() {
   const locale = await getLocale()
   const dict = dictionaryFor(locale)

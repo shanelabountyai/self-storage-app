@@ -1295,9 +1295,13 @@ export default async function FacilityPage({
         <div className="mt-4">
           <LeadForm
             facilityId={facility.id}
+            // B-264. Built here rather than in the form: the size label is
+            // the one string in it that interpolates facility data, and "sq
+            // ft" was the last English word left inside a translated option
+            // list.
             unitTypes={(unitTypes ?? []).map((unitType) => ({
               id: unitType.unitTypeId,
-              label: `${unitType.name} — ${unitType.sqFt} sq ft`,
+              label: `${unitType.name} — ${t('facility.sqFt', { sqFt: unitType.sqFt })}`,
             }))}
             action={submitLeadAction}
           />

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   ELECTRONIC_RECORDS_CONSENT,
   MARKETING_EMAIL_CHECKOUT_CONSENT,
+  MARKETING_EMAIL_LEAD_CONSENT,
   MARKETING_SMS_CONSENT,
   SMS_CONSENT,
   type Disclosure,
@@ -23,6 +24,7 @@ import {
 const DISCLOSURES: Record<string, Record<Locale, Disclosure>> = {
   SMS_CONSENT,
   MARKETING_EMAIL_CHECKOUT_CONSENT,
+  MARKETING_EMAIL_LEAD_CONSENT,
   MARKETING_SMS_CONSENT,
   ELECTRONIC_RECORDS_CONSENT,
 }
@@ -49,6 +51,20 @@ describe('consent disclosures', () => {
       expect(new Set(texts).size, `${name} repeats the same text in two languages`).toBe(
         LOCALES.length,
       )
+    }
+  })
+
+  it('keeps the two marketing-email disclosures distinct in every language', () => {
+    // B-264. The failure this guards is a paste: the lead form's sentence
+    // replaced by the checkout's, or vice versa, in a diff that looks like a
+    // tidy-up. They share a channel (`marketing_email`) and differ only in
+    // their words and their audience, so nothing else would notice — and the
+    // version each row carries would then name text that was never on screen.
+    for (const locale of LOCALES) {
+      expect(
+        MARKETING_EMAIL_LEAD_CONSENT[locale].text,
+        `the lead and checkout marketing disclosures are identical in ${locale}`,
+      ).not.toBe(MARKETING_EMAIL_CHECKOUT_CONSENT[locale].text)
     }
   })
 

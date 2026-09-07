@@ -166,6 +166,57 @@ test('the Spanish checkout refuses you in Spanish (B-263)', async ({ page, conte
   )
 })
 
+test('the Spanish lead form asks, refuses and consents in Spanish (B-264)', async ({
+  page,
+  context,
+}) => {
+  await context.addCookies([SPANISH])
+  await page.goto('/storage/tx/austin/demo-austin-south')
+
+  const form = page
+    .getByRole('main')
+    .locator('section:has(h2:text("¿Todavía no se decide?"))')
+
+  // The labels. B-090f translated the page this form sits inside and never
+  // reached the form, so a Spanish visitor read Spanish all the way down and
+  // then met English at the only place they are asked to type.
+  await expect(form.getByLabel('Su nombre')).toBeVisible()
+  await expect(form.getByLabel('Teléfono', { exact: true })).toBeVisible()
+
+  // D-125, and the reason this row was not folded into B-259. The sentence is
+  // a versioned consent text rather than a dictionary entry, so `Dictionary`
+  // cannot catch a missing translation — only a rendered page can.
+  await expect(
+    form.getByText('Envíenme correos electrónicos ocasionales sobre precios y promociones de esta sucursal'),
+  ).toBeVisible()
+  // Which language those words were in, carried to the action. This is what
+  // stamps `v1-es` rather than `v1` on the `Consent` row.
+  await expect(form.locator('input[name="disclosureLocale"]')).toHaveValue('es')
+
+  // The refusal. Neither contact field is `required`, so this reaches the
+  // SERVER rather than being stopped by the browser — which is the only way
+  // the translated message is the one under test. Refused before any `Lead`
+  // row is written, so it mutates no shared fixture (B-120) and does not walk
+  // toward US-8 AC4's five-per-ten-minutes limit the way a success would.
+  await form.getByLabel('Su nombre').fill('Ada i18n');
+  await form.getByRole('button', { name: 'Enviar' }).click()
+
+  // Two assertions in two places, because `FormResult` puts only the SUMMARY in
+  // the live region and `Field` puts the message beside its own input (3.3.1) —
+  // unlike `AdminForm`, which renders each one twice. Both halves are needed:
+  // the summary came from `fieldError` and not from `captureLead`, so
+  // translating the refusals alone would have left the sentence announced above
+  // them in English.
+  await expect(form.getByRole('status')).toContainText('Hay un problema con un campo.')
+  await expect(
+    form.getByText('Un correo electrónico o un teléfono: necesitamos alguna forma de responderle.'),
+  ).toBeVisible()
+  await expect(form.getByLabel('Correo electrónico', { exact: true })).toHaveAttribute(
+    'aria-invalid',
+    'true',
+  )
+})
+
 // --- B-260: the portal ------------------------------------------------------
 //
 // B-090f translated the move-in path and then sent the renter to "Ir a mi

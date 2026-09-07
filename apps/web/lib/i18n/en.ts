@@ -225,6 +225,27 @@ export const en = {
   'facility.otherLocations': 'look at other locations',
   'facility.sizeGuideOr': ', or',
 
+  // --- The lead form on the facility page (US-8, B-264) ------------------
+  //
+  // Its marketing-consent sentence is deliberately NOT here: that one is a
+  // versioned disclosure in `lib/consent/disclosures.ts`, because the version
+  // recorded on the `Consent` row is the evidence of what words were on screen
+  // (D-125). A dictionary entry can be edited without anything noticing.
+  'lead.legend': 'What would you like?',
+  'lead.quote': 'A price quote',
+  'lead.callback': 'A call back',
+  'lead.name': 'Your name',
+  'lead.email': 'Email',
+  'lead.phone': 'Phone',
+  'lead.phoneHint': 'Required if you would like a call back.',
+  'lead.size': 'Size you are interested in',
+  'lead.sizeUnsure': 'Not sure yet',
+  'lead.moveInDate': 'When you would move in',
+  'lead.note': 'Anything else?',
+  'lead.send': 'Send',
+  'lead.thanks':
+    'Got it — somebody from this facility will be in touch. If it is urgent, calling is faster.',
+
   // --- Move-in cost lines (US-301, shared with checkout) -----------------
   'cost.rent': 'First month rent',
   'cost.rent.note':
@@ -451,6 +472,17 @@ export const en = {
     'A move-in cannot start before today. The earliest you can pick is {date}.',
   'err.startDateLate':
     'We can schedule a move-in up to {days} days ahead. The latest you can pick is {date}.',
+
+  // B-264. The lead form's refusals. Their own keys rather than the checkout's
+  // above, because the two forms ask for different things for different
+  // reasons: `err.email` on the checkout is where a lease and a receipt are
+  // sent, and this one is one of two ways somebody might be replied to.
+  'err.leadName': 'Tell us what to call you.',
+  'err.leadContact': 'An email address or a phone number — we need one way to reply.',
+  'err.leadEmail': 'Check the email address — it looks incomplete.',
+  'err.leadPhone': 'A phone number with at least 10 digits, so somebody can call you.',
+  'err.leadRateLimited':
+    'That is a lot of enquiries from one place in a short time. Give it a few minutes, or call us.',
 
   // --- Checkout announcer (4.1.3, 2.4.3) --------------------------------
   'announce.movedToSize': 'We moved you to the {size}. Nothing you entered was lost.',

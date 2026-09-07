@@ -68,6 +68,31 @@ export function fieldError(fields: FieldErrors): FormState {
   }
 }
 
+/// B-263, moved here by B-264 when the lead form became its second caller.
+///
+/// `fieldError` below takes finished sentences, which is right for the staff
+/// screens D-122 keeps English. A renter-facing action holds KEYS instead and
+/// resolves both halves here: the per-field messages AND the summary heading
+/// above them, which is the sentence that was left in English when B-263
+/// translated only the validators.
+///
+/// The dictionary arrives as `t` rather than being read here, and that is what
+/// keeps the `MessageKey` import above type-only — three client components
+/// import `IDLE_FORM_STATE` from this file as a value, and a runtime import of
+/// `@/lib/i18n` would put both dictionaries in their browser bundles.
+export type Translator = (key: MessageKey, vars?: Record<string, string | number>) => string
+
+export function keyedFieldError(errors: KeyedFieldErrors, t: Translator): FormState {
+  const entries = Object.entries(errors)
+  return {
+    status: 'error',
+    message: entries.length === 1 ? t('err.oneField') : t('err.someFields', { count: entries.length }),
+    fieldErrors: Object.fromEntries(
+      entries.map(([field, { key, vars }]) => [field, t(key, vars)]),
+    ),
+  }
+}
+
 export function success(message: string, details?: string[]): FormState {
   return { status: 'success', message, ...(details ? { details } : {}) }
 }
