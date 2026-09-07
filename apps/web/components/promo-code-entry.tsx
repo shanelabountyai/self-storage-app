@@ -1,5 +1,6 @@
 import type { CodeOutcome } from '@storage/core/promotions'
-import { describeCodeOutcome } from '@storage/core/promotions'
+import { codeOutcomeMessage } from '@/lib/promotions/message'
+import { translate, type Dictionary, type MessageKey } from '@/lib/i18n'
 
 // PRD 04 §3.6 US-11 AC3, §4.5 FR-PROMO-2/3 (B-122). Where a renter types a
 // promo code.
@@ -34,11 +35,21 @@ export type PromoCodeEntryProps = {
   /// error that clears the thing it is complaining about makes the renter type
   /// it a second time to find out what was wrong with it.
   value?: string
+  /// B-266. This component sits on the facility page, which has been translated
+  /// since B-090f, and it was English throughout — label, placeholder, button
+  /// and every outcome sentence. Passed rather than read from a hook because
+  /// the page is a server render and already resolved one.
+  dict: Dictionary
   children?: React.ReactNode
 }
 
-export function PromoCodeEntry({ action, carry, outcome, value, children }: PromoCodeEntryProps) {
-  const message = outcome ? describeCodeOutcome(outcome) : null
+export function PromoCodeEntry({ action, carry, outcome, value, dict, children }: PromoCodeEntryProps) {
+  const t = (key: MessageKey, vars?: Record<string, string | number>) => translate(dict, key, vars)
+  // B-266. Built here, from the outcome's own discriminant — the sentence used
+  // to come out of `@storage/core/promotions` already written, in English, onto
+  // a page whose every other word had been translated.
+  const outcomeMessage = outcome ? codeOutcomeMessage(outcome) : null
+  const message = outcomeMessage ? t(outcomeMessage.key, outcomeMessage.vars) : null
   // `applied` and `superseded` are not errors: one is the discount working and
   // the other is us keeping a better one. Only `rejected` is wired to
   // `aria-invalid` and the error styling, or a renter who typed a valid code
@@ -52,8 +63,11 @@ export function PromoCodeEntry({ action, carry, outcome, value, children }: Prom
           <input key={`${name}:${one}`} type="hidden" name={name} value={one} />
         )),
       )}
+      {/* The checkout's own `promo.*` keys, not a second set: the same field
+          asking the same thing in the same words, and one entry per label is
+          what stops the two boxes drifting apart in one language only. */}
       <label htmlFor="promo" className="text-sm font-medium">
-        Have a promo code?
+        {t('promo.haveACode')}
       </label>
       <div className="mt-2 flex flex-wrap items-start gap-2">
         <input
@@ -66,7 +80,7 @@ export function PromoCodeEntry({ action, carry, outcome, value, children }: Prom
           aria-invalid={failed || undefined}
           aria-describedby={message ? 'promo-outcome' : undefined}
           className="border-input bg-background min-h-11 min-w-0 flex-1 rounded-md border px-3 text-sm"
-          placeholder="e.g. SUMMER25"
+          placeholder={t('promo.placeholder')}
         />
         {/* "Apply code", not "Apply". The filter form on the same page already
             has an "Apply" button, and two controls with identical accessible
@@ -78,7 +92,7 @@ export function PromoCodeEntry({ action, carry, outcome, value, children }: Prom
           type="submit"
           className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
         >
-          Apply code
+          {t('promo.apply')}
         </button>
       </div>
 

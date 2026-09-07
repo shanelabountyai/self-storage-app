@@ -209,7 +209,7 @@ export default async function CityPage({
     ]),
   ].filter((node): node is NonNullable<typeof node> => node !== null)
 
-  // B-269. This page is the one mixed-language page on the public site: its own
+  // B-272. This page is the one mixed-language page on the public site: its own
   // prose is English (untranslated, not deliberately English) and the search
   // form it embeds is translated. `lang="en"` on the wrapper below is therefore
   // only half true, and the other half is stated where it stops being true —

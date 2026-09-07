@@ -72,7 +72,7 @@ function shasFrom(title, body) {
   // branch"), and that commit no longer exists — indexing it would put a dead
   // SHA in the index and light up `docs:audit` for every entry ever corrected.
   //
-  // B-269. The optional `**Commit:**` label is not cosmetic tolerance. Entries
+  // B-272. The optional `**Commit:**` label is not cosmetic tolerance. Entries
   // wrote a bare `` `sha` `` line for 277 entries and then, from B-258 on,
   // started labelling it — and this function read neither the label nor what
   // followed it, so the THIRTEEN most recent entries recorded a SHA that

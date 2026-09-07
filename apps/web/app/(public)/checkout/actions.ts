@@ -40,6 +40,7 @@ import {
   type ProtectionChoice,
 } from '@/lib/protection/plans'
 import { sessionByToken } from '@/lib/checkout/session'
+import { codeOutcomeMessage } from '@/lib/promotions/message'
 import { offerFor } from '@/lib/promotions/service'
 import { isoDate, judgeStartDate, startDateWindow } from '@storage/core/checkout'
 import { businessDateFor } from '@storage/core/jobs'
@@ -485,11 +486,17 @@ export async function applyPromoCodeAction(
   // A rejected code that cleared an automatic promotion would make typing a
   // wrong code cost the renter money.
   if (lookup.codeOutcome?.kind === 'rejected') {
-    return {
-      status: 'error',
-      message: lookup.problem ?? t('act.codeDidNotWork'),
-      fieldErrors: { promo: lookup.problem ?? t('act.codeDidNotWork') },
-    }
+    // B-266: the sentence is built HERE, from the rule that refused. It came
+    // out of `@storage/core/promotions` as English, which put a Spanish renter
+    // one field away from B-263's defect — same screen, same submit.
+    //
+    // Not `keyedFieldError`: that helper counts the fields to pick its summary
+    // ("There is a problem with one field."), and this refusal has a sentence
+    // worth reading rather than a count. The summary and the field error are
+    // deliberately the same words, which is what `AdminForm` renders twice.
+    const refused = codeOutcomeMessage(lookup.codeOutcome)
+    const refusal = t(refused.key, refused.vars)
+    return { status: 'error', message: refusal, fieldErrors: { promo: refusal } }
   }
 
   await prisma.checkoutSession.update({
@@ -521,7 +528,16 @@ export async function applyPromoCodeAction(
   })
 
   revalidatePath('/checkout')
-  return { status: 'success', message: lookup.problem ?? t('act.codeApplied') }
+  // `applied` and `superseded` both land here and both say their own sentence:
+  // a code kept out by a BETTER offer is not a failure, and telling that renter
+  // "code applied" would be a lie about which promotion they are getting.
+  // `act.codeApplied` survives as the fallback for the branch the types allow
+  // and `outcomeFor` cannot reach — a non-empty code always produces an outcome.
+  const outcome = lookup.codeOutcome ? codeOutcomeMessage(lookup.codeOutcome) : null
+  return {
+    status: 'success',
+    message: outcome ? t(outcome.key, outcome.vars) : t('act.codeApplied'),
+  }
 }
 
 /// US-501 step 2, extended by B-106. Confirm the unit, and pick when.

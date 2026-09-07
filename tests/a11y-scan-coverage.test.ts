@@ -291,7 +291,7 @@ describe('the accessibility scan contract (B-139)', () => {
     })
   })
 
-  // B-269 / SC 3.1.2 Language of Parts. The third contract in this file, and
+  // B-272 / SC 3.1.2 Language of Parts. The third contract in this file, and
   // the only one whose defect axe cannot see at all: no rule reads prose and
   // decides what language it is in, so an English page served inside
   // `<html lang="es">` passes every scan this repo runs while a screen reader
@@ -302,7 +302,7 @@ describe('the accessibility scan contract (B-139)', () => {
   // list. A public page either renders from the dictionary or says here that
   // it does not — and then has to prove it, because a row whose page carries
   // no `lang="en"` is the exact state this closes.
-  describe('the language-of-parts contract (B-269)', () => {
+  describe('the language-of-parts contract (B-272)', () => {
     const PUBLIC_DIR = join(APP_DIR, '(public)')
 
     /// Every `page.tsx` under `(public)`, as a route and a source.

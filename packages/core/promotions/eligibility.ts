@@ -243,33 +243,19 @@ function disqualify(
   return null;
 }
 
-export const REJECTION_MESSAGES: Record<CodeRejection, string> = {
-  unknown_code: "That code is not one of ours. Check it for a typo.",
-  not_for_this_facility: "That code is for a different location.",
-  not_for_this_size: "That code does not apply to this size.",
-  existing_tenant_only: "That code is for new customers only.",
-  window_closed: "That code has expired.",
-  fully_redeemed: "That code has been fully claimed.",
-  not_active: "That code is not currently running.",
-};
-
-/// One sentence for whatever became of the code, for the field error and the
-/// live region alike.
+/// B-266 removed `REJECTION_MESSAGES` and `describeCodeOutcome` from here.
 ///
-/// Every branch says which rule decided it. A generic "that code is not valid"
-/// is a support call — and under WCAG 3.3.3 an error that does not say what to
-/// do about it is a failure, which is why the seven refusals above were written
-/// as seven distinct sentences in B-070 and then read by nothing until now.
-export function describeCodeOutcome(outcome: CodeOutcome): string {
-  switch (outcome.kind) {
-    case "applied":
-      return `Code applied — ${outcome.terms}.`;
-    case "superseded":
-      // Not framed as a failure: the renter is better off than the code would
-      // have made them, and saying "that code did not work" about a offer we
-      // declined on their behalf is both wrong and alarming.
-      return `We kept your better offer — ${outcome.keptTerms}. Only one promotion applies at a time.`;
-    case "rejected":
-      return REJECTION_MESSAGES[outcome.rejection];
-  }
-}
+/// They built seven English refusal sentences plus two English confirmations
+/// inside a pure package, and a Spanish renter typing a code on a Spanish
+/// checkout was answered in English by every one of them — B-263's defect, one
+/// field over, and `describeCodeOutcome` is why B-263 stopped short of it: the
+/// sentence is read by three surfaces, not one, and the admin screens are
+/// English on purpose (D-122). A package that resolved its own copy would have
+/// to know which caller it is serving.
+///
+/// Nothing had to be added to `CodeOutcome` to make that work — it already
+/// carries its own discriminant, the rejection rule, and the terms — so this is
+/// `judgeStartDate`'s shape (B-263) arrived at by deletion: the reason and the
+/// numbers cross the boundary, and each surface builds the sentence where the
+/// language is known. `apps/web/lib/promotions/message.ts` is where the two
+/// renter-facing ones do it.

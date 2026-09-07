@@ -4,7 +4,6 @@ import {
   discountForPeriod,
   discountSchedule,
   evaluatePromotions,
-  describeCodeOutcome,
   withMinStay,
   type PromotionCandidate,
 } from "../packages/core/promotions";
@@ -266,9 +265,6 @@ describe("evaluatePromotions — FR-PROMO-3", () => {
       kind: "rejected",
       rejection: "not_for_this_facility",
     });
-    expect(describeCodeOutcome(result.codeOutcome!)).toContain(
-      "different location",
-    );
   });
 
   it("reports an unknown code as unknown", () => {
@@ -301,13 +297,14 @@ describe("evaluatePromotions — FR-PROMO-3", () => {
     });
 
     expect(result.best?.promotion.id).toBe("auto");
-    expect(result.codeOutcome?.kind).toBe("superseded");
-    expect(describeCodeOutcome(result.codeOutcome!)).toContain(
-      "kept your better offer",
-    );
-    // Not framed as a failure — the renter is better off than the code alone
-    // would have made them.
-    expect(describeCodeOutcome(result.codeOutcome!)).not.toContain("not");
+    // B-266: the OUTCOME, not a sentence. `keptTerms` is what the renter is
+    // actually getting, and carrying it is what lets each surface say so in its
+    // own language — the sentence used to be built here, in English, and was
+    // read verbatim by a Spanish checkout.
+    expect(result.codeOutcome).toEqual({
+      kind: "superseded",
+      keptTerms: "100% off the first month",
+    });
   });
 
   it("reports a code that beats the automatic offer as applied", () => {
@@ -325,8 +322,10 @@ describe("evaluatePromotions — FR-PROMO-3", () => {
     });
 
     expect(result.best?.promotion.id).toBe("gated");
-    expect(result.codeOutcome?.kind).toBe("applied");
-    expect(describeCodeOutcome(result.codeOutcome!)).toContain("Code applied");
+    expect(result.codeOutcome).toEqual({
+      kind: "applied",
+      terms: "100% off the first month",
+    });
   });
 
   it("respects targeting, windows and the new-tenant flag", () => {

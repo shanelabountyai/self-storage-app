@@ -12,7 +12,7 @@ export function ProsePage({
 }: {
   title: string
   intro?: string
-  /// B-269. The language of the words below, declared on the words rather than
+  /// B-272. The language of the words below, declared on the words rather than
   /// inferred from the shell around them — WCAG 2.1 SC 3.1.2 Language of Parts
   /// (AA).
   ///

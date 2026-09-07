@@ -11,8 +11,8 @@ It complements rather than duplicates:
 - `git log` — the change-by-change record
 - `README.md` — how the built thing works today
 
-**Status:** 262 of 275 backlog items complete. Latest entry: B-269 (`510e866`).
-**Entries:** 292 across 20 part files.
+**Status:** 263 of 276 backlog items complete. Latest entry: B-272 (`510e866`).
+**Entries:** 293 across 20 part files.
 
 ## Reading one entry
 
@@ -340,4 +340,5 @@ Append the entry as a `### ` heading at the end of the **highest-numbered** file
 | B-263 — The Spanish checkout refuses you in Spanish (2026-09-06) | `618f531` | [20-from-b-258](progress/20-from-b-258.md#b-263-the-spanish-checkout-refuses-you-in-spanish-2026-09-06) |
 | B-264 — The lead form on a Spanish facility page is Spanish (2026-09-06) | `d17f86b` | [20-from-b-258](progress/20-from-b-258.md#b-264-the-lead-form-on-a-spanish-facility-page-is-spanish-2026-09-06) |
 | B-267 — the reservation form on a Spanish facility page is Spanish (2026-09-07) | `5a1cf0c` | [20-from-b-258](progress/20-from-b-258.md#b-267-the-reservation-form-on-a-spanish-facility-page-is-spanish-2026-09-07) |
-| B-269 — English contract prose renders under `<html lang="es">`, and no scan can see it (2026-09-07) | `510e866` | [20-from-b-258](progress/20-from-b-258.md#b-269-english-contract-prose-renders-under-html-langes-and-no-scan-can-see-it-2026-09-07) |
+| B-266 — the promo code answers in the renter’s own language, applied or refused (2026-09-07) | `a0f82e4` | [20-from-b-258](progress/20-from-b-258.md#b-266-the-promo-code-answers-in-the-renters-own-language-applied-or-refused-2026-09-07) |
+| B-272 — English contract prose renders under `<html lang="es">`, and no scan can see it (2026-09-07) | `510e866` | [20-from-b-258](progress/20-from-b-258.md#b-272-english-contract-prose-renders-under-html-langes-and-no-scan-can-see-it-2026-09-07) |

@@ -1,6 +1,5 @@
 import { prisma, type Prisma } from "@storage/db";
 import {
-  describeCodeOutcome,
   evaluatePromotions,
   type CodeOutcome,
   type EligibilityResult,
@@ -90,8 +89,6 @@ export type PromoLookup = {
   /// B-122. What became of a typed code — applied, superseded by a better offer
   /// already applying, or refused and by which rule. Null when none was typed.
   codeOutcome: CodeOutcome | null;
-  /// The same thing as one sentence, for a field error or a live region.
-  problem: string | null;
 };
 
 /// FR-PROMO-3's evaluator, against real rows.
@@ -119,14 +116,13 @@ export async function offerFor(input: {
       promotionId: result.promotion.id,
       terms: result.terms,
     })),
+    // B-266 dropped the `problem` sentence that sat beside this. It was built
+    // by `describeCodeOutcome` and was therefore English on a Spanish checkout,
+    // and it had exactly one reader — every other `offerFor` caller passes no
+    // code, so its `codeOutcome` and its `problem` were both always null.
+    // `codeOutcomeMessage` in `./message.ts` turns this into a key at the two
+    // surfaces a renter reads.
     codeOutcome: evaluation.codeOutcome,
-    // Every outcome gets a sentence, including the two that are not failures —
-    // `problem` keeps its name because every existing caller reads it that way,
-    // but a code that APPLIED now says so too, and the surfaces decide whether
-    // that reads as an error or as confirmation.
-    problem: evaluation.codeOutcome
-      ? describeCodeOutcome(evaluation.codeOutcome)
-      : null,
   };
 }
 

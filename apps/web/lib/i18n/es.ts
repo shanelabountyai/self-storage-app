@@ -377,6 +377,11 @@ export const es: Dictionary = {
   'promo.placeholder': 'por ejemplo SUMMER25',
   'promo.apply': 'Aplicar código',
 
+  // B-266. Ver los comentarios en `en.ts`.
+  'promo.codeApplied': 'Código aplicado: {terms}.',
+  'promo.codeSuperseded':
+    'Mantuvimos su mejor oferta: {terms}. Solo se aplica una promoción a la vez.',
+
   // --- Protection step (US-501 step 3) ----------------------------------
   'protection.formLabel': 'Proteja lo que guarda',
   'protection.required':
@@ -437,7 +442,6 @@ export const es: Dictionary = {
   'act.checkoutFinishedNoCode':
     'Este proceso ya terminó, así que ya no se le puede agregar un código.',
   'act.enterACode': 'Escriba un código primero.',
-  'act.codeDidNotWork': 'Ese código no funcionó.',
   'act.codeApplied': 'Código aplicado.',
   'act.stepContinueFailed':
     'No pudimos continuar desde este paso. Recargue la página e inténtelo de nuevo.',
@@ -517,6 +521,15 @@ export const es: Dictionary = {
   'err.reserveUnlisted': 'Esa unidad ya no está publicada.',
   'err.reserveSoldOut':
     'Alguien tomó la última de ese tamaño mientras usted llenaba este formulario. No se le ha cobrado nada: elija otro tamaño, o llámenos y lo resolvemos.',
+
+  // B-266. Los siete rechazos, uno por regla. Ver los comentarios en `en.ts`.
+  'err.promoUnknown': 'Ese código no es uno de los nuestros. Revise si tiene un error de escritura.',
+  'err.promoWrongFacility': 'Ese código es para otra sucursal.',
+  'err.promoWrongSize': 'Ese código no se aplica a este tamaño.',
+  'err.promoNewTenantOnly': 'Ese código es solo para clientes nuevos.',
+  'err.promoExpired': 'Ese código ya venció.',
+  'err.promoFullyClaimed': 'Ese código ya se agotó.',
+  'err.promoNotRunning': 'Ese código no está vigente en este momento.',
 
   // B-264. Los rechazos del formulario de contacto.
   'err.leadName': 'Díganos cómo dirigirnos a usted.',

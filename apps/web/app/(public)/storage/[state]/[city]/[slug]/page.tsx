@@ -1095,6 +1095,7 @@ export default async function FacilityPage({
               outcome={codeOutcome}
               value={typedCode ?? ''}
               carry={carriedQuery(query)}
+              dict={dict}
             />
           </div>
         )}

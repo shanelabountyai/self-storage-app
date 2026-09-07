@@ -146,7 +146,19 @@ describeDb("promotions", () => {
         code: `SPENT-${suffix}`,
       });
       expect(lookup.offer).toBeNull();
-      expect(lookup.problem).toBeTruthy();
+      // B-266: the RULE that refused, not a sentence. `problem` was an English
+      // string built inside `@storage/core/promotions`, which is why a Spanish
+      // checkout refused in English.
+      expect(lookup.codeOutcome).toEqual({
+        kind: "rejected",
+        rejection: "unknown_code",
+      });
+      // `unknown_code` and not `fully_redeemed`, which is worth pinning rather
+      // than assuming: `candidates` filters a spent CODE out of the row before
+      // the evaluator sees it, so the promotion stays open and the string simply
+      // matches nothing. `fully_redeemed` is the PROMOTION's own cap, one level
+      // up. The old assertion was `expect(lookup.problem).toBeTruthy()`, which
+      // passed either way.
     });
   });
 
@@ -713,10 +725,11 @@ describeDb("promotions", () => {
         code: `worse-${suffix}`,
       });
 
+      // The renter keeps the 100%-off, not the 10% they typed — and B-266 makes
+      // the outcome carry the terms they are keeping, so each surface can say so
+      // in its own language.
       expect(lookup.codeOutcome?.kind).toBe("superseded");
-      // The renter keeps the 100%-off, not the 10% they typed.
       expect(lookup.offer?.firstPeriodCents).toBe(RENT);
-      expect(lookup.problem).toContain("kept your better offer");
     });
 
     it("attaches nothing when no promotion is live", async () => {

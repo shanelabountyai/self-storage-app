@@ -1995,7 +1995,7 @@ function reviewedOn(locale: Locale): string {
 // screen-reader pass was performed, and this item performed none. The scan-
 // coverage correction above is a fix to a generated list, not a re-verification
 // of the dated claims.
-// Re-verified 2026-09-07, at B-269 (English prose under `<html lang="es">` —
+// Re-verified 2026-09-07, at B-272 (English prose under `<html lang="es">` —
 // SC 3.1.2 Language of Parts, AA). Customer-facing, and a defect this page's
 // own scan contract was structurally unable to see. **Merged after B-267
 // above, and the merge changed one of its numbers** — see the last paragraph.
@@ -2034,16 +2034,56 @@ function reviewedOn(locale: Locale): string {
 // under the same cookie-driven shell, and one of them — the message-template
 // editor — renders Spanish template bodies inside it, which is the mirror
 // defect. Staff-facing, already disclaimed by the "our staff-facing screens
-// have known problems" bullet, and owned by **B-270** rather than fixed here.
+// have known problems" bullet, and owned by **B-273** rather than fixed here.
 //
 // **The merge with B-267, because it is the guard doing its job rather than a
-// conflict.** B-269 was built against a `main` where the reservation form was
+// conflict.** B-272 was built against a `main` where the reservation form was
 // still English, and marked it `lang="en"` like the other ten. B-267 then
 // translated that form, which makes the mark a lie in the mirror direction —
 // and `tests/a11y-scan-coverage.test.ts` says so out loud ("lists no page that
 // has since been translated"), which is the direction the walker was written
 // for and the first time it has been paid. The attribute and the row are gone;
 // the page renders from the dictionary and needs neither.
+
+// Re-verified 2026-09-07, at B-266 (the promo code box on a Spanish checkout
+// and a Spanish facility page — D-122). Customer-facing, on the money path,
+// and B-263's 3.1.2 Language of Parts failure one field over: an English
+// sentence inside `<html lang="es">` is read aloud with Spanish phonemes.
+//
+// **What was wrong, and half of it was not a refusal.** `describeCodeOutcome`
+// built nine English sentences inside `@storage/core/promotions` — seven
+// refusals plus "Code applied" and "We kept your better offer" — and both
+// renter-facing surfaces rendered them verbatim. The two that are not refusals
+// are the ones worth naming here: the checkout styles that branch green with a
+// `role="status"` and no `aria-invalid`, so a Spanish renter whose code WORKED
+// was told so in English by a live region announcing in the wrong language.
+// The facility page's box was worse — its label, placeholder and submit button
+// were English too, so it was a whole English control on a translated page.
+//
+// **One gap this row does NOT close, and it is a real 3.1.2 one.**
+// `promo.codeApplied` renders "Código aplicado: {terms}", and `{terms}` is the
+// promotion's own wording — an operator's `termsText` or `describeTerms`'
+// generated sentence — which is English on every surface that shows it: this
+// message, every unit-card badge, and the checkout summary. So a Spanish
+// reader still meets one English fragment inside a Spanish sentence. It is
+// **B-269**, filed rather than half-fixed inside this message, because the
+// badges are the larger share of it and fixing one and not the others would
+// leave the page inconsistent about which English is deliberate.
+//
+// **No bullet below changes, and no new claim.** "Form fields have real
+// labels" and the errors bullet are about mechanism; translating a label or a
+// refusal neither strengthens nor weakens either, the reading B-263, B-264 and
+// B-267 each recorded. No route is added: the facility page and the checkout
+// are both already in the scanned set, and this changes the strings inside
+// controls whose markup is untouched. No new `a11y-state:` either — the scan
+// loops carry no locale cookie, which the `/` | Spanish row in
+// `STATE_EXCEPTIONS` has said since B-262, and the new e2e assertions are on
+// words rather than axe.
+//
+// The "Where we fall short" list was re-read against this build and all three
+// entries are still true and unchanged in scope. `LAST_REVIEWED` is not
+// bumped, per D-115 — no manual screen-reader pass was performed, and this
+// item performed none.
 
 export default async function AccessibilityPage() {
   const locale = await getLocale()

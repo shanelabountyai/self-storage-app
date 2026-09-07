@@ -109,7 +109,7 @@ describe('the generated index files', () => {
   })
 })
 
-// B-269. `docs:audit` is the ONE thing that catches a merge rewriting a SHA
+// B-272. `docs:audit` is the ONE thing that catches a merge rewriting a SHA
 // an entry recorded hours earlier — CLAUDE.md says so, because `docs:index`
 // regenerates the index without verifying that a single SHA it names exists.
 // It reads those SHAs out of the entry with the same helper the index does,

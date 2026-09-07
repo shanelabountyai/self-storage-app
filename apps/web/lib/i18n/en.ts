@@ -376,6 +376,25 @@ export const en = {
   'promo.placeholder': 'e.g. SUMMER25',
   'promo.apply': 'Apply code',
 
+  // B-266. What became of the code the renter typed — the sentence
+  // `describeCodeOutcome` used to build inside `@storage/core/promotions`,
+  // where the language is not known.
+  //
+  // These two are NOT under `err.`, and deliberately: one is the discount
+  // working and the other is us keeping a better offer on the renter's behalf.
+  // Styling either as a failure tells somebody who succeeded that they did
+  // not. They carry an `err.` sentence's weight all the same, so both are named
+  // in `MUST_ALSO_DIFFER` in `tests/i18n.test.ts` — an identical value in both
+  // locales is still an untranslated paste here.
+  //
+  // `{terms}` is the promotion's own wording and is still English on a Spanish
+  // page — an operator's `termsText` or `describeTerms`' generated sentence.
+  // That is the badge text on every unit card too, so it is B-269's row rather
+  // than a thing to half-fix inside this sentence.
+  'promo.codeApplied': 'Code applied \u2014 {terms}.',
+  'promo.codeSuperseded':
+    'We kept your better offer \u2014 {terms}. Only one promotion applies at a time.',
+
   // --- Protection step (US-501 step 3) ----------------------------------
   'protection.formLabel': 'Protect what you store',
   'protection.required':
@@ -431,7 +450,6 @@ export const en = {
   'act.autopayOff': 'Automatic payments are off. We will email you when each payment is due.',
   'act.checkoutFinishedNoCode': 'This checkout is finished, so a code can no longer be added to it.',
   'act.enterACode': 'Enter a code first.',
-  'act.codeDidNotWork': 'That code did not work.',
   'act.codeApplied': 'Code applied.',
   'act.stepContinueFailed': 'We could not continue from this step. Reload the page and try again.',
   'act.unitConfirmed': 'Unit confirmed. Next: protection.',
@@ -518,6 +536,19 @@ export const en = {
   'err.reserveUnlisted': 'That unit is no longer listed.',
   'err.reserveSoldOut':
     'Someone took the last one of that size while you were filling this in. Nothing has been charged — pick another size, or call us and we will sort it out.',
+
+  // B-266. The seven refusals `CodeRejection` distinguishes, one sentence each
+  // rather than a shared "that code is not valid" — 3.3.3 wants a refusal the
+  // renter can act on, and "wrong location" and "wrong size" have different
+  // fixes. The English is character-for-character what `REJECTION_MESSAGES`
+  // shipped in B-070, because `smoke.spec.ts` asserts on these words.
+  'err.promoUnknown': 'That code is not one of ours. Check it for a typo.',
+  'err.promoWrongFacility': 'That code is for a different location.',
+  'err.promoWrongSize': 'That code does not apply to this size.',
+  'err.promoNewTenantOnly': 'That code is for new customers only.',
+  'err.promoExpired': 'That code has expired.',
+  'err.promoFullyClaimed': 'That code has been fully claimed.',
+  'err.promoNotRunning': 'That code is not currently running.',
 
   // B-264. The lead form's refusals. Their own keys rather than the checkout's
   // above, because the two forms ask for different things for different

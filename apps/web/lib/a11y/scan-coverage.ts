@@ -482,7 +482,7 @@ export const SCANNED_STATES: readonly ScannedState[] = [
     layoutException:
       'the portal reflow loops measure /portal as the same tenant at every width; Spanish changes string length inside the same single-column cards, and the tightest translated layout — the facility page — is measured above',
   },
-  // B-269. The two pages D-123 and D-124 keep in ENGLISH, visited as a Spanish
+  // B-272. The two pages D-123 and D-124 keep in ENGLISH, visited as a Spanish
   // reader. Not a translation check — there is nothing to translate — but the
   // one state in which the defect this item fixed could exist at all: the shell
   // is `<html lang="es">` and the prose inside it is English, so the markup
@@ -1016,7 +1016,7 @@ export function customerFacingStateExceptions(): readonly StateException[] {
   return STATE_EXCEPTIONS.filter((row) => row.audience !== 'admin')
 }
 
-// B-269 / WCAG 2.1 SC 3.1.2 Language of Parts (AA). The third contract in this
+// B-272 / WCAG 2.1 SC 3.1.2 Language of Parts (AA). The third contract in this
 // file, and it exists for the same reason as the other two: a defect that no
 // scan can see.
 //
@@ -1057,7 +1057,7 @@ export type EnglishPage = {
 ///
 /// **A row leaves this list when its page is translated, not when somebody
 /// remembers.** `/storage/[state]/[city]/[slug]/reserve` was here for the
-/// length of one merge: B-269 marked it `lang="en"` against a `main` where the
+/// length of one merge: B-272 marked it `lang="en"` against a `main` where the
 /// form was still English, B-267 translated it, and the walker's
 /// "lists no page that has since been translated" check failed on the merge —
 /// which is the direction it was written for. A page-level `lang="en"` on a
