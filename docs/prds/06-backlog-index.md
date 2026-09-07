@@ -6,7 +6,7 @@
 
 **Then read the row itself before building the item** — `npm run docs:row -- B-262` prints that one row whole and verbatim, about 2 KB against the file's 490. The columns dropped here are the ones that say what to build.
 
-**272 items — 260 complete, 12 open.**
+**273 items — 260 complete, 13 open.**
 
 ## Open, in build order
 
@@ -24,6 +24,7 @@
 | 90r | B-266 | The promo code is refused in English on a Spanish checkout | S | B-263 |
 | 90s | B-267 | The reservation form is English end to end on a Spanish facility page | M | B-090f |
 | 93 | B-268 | `reportRange`'s rolling window builds its exclusive end in the wrong coordinate system | S | B-092 |
+| 94 | B-269 | English contract prose renders under `<html lang="es">`, and no scan can see it | S | B-262 |
 
 > An item stays open until every part of it is done — several above are partly built, and their parts are recorded in [`../PROGRESS.md`](../PROGRESS.md).
 
@@ -303,3 +304,4 @@
 | 91 | B-091 | ✅ | Split into two parts, 2026-08-19 | L | Phase 2 |
 | 92 | B-092 | ✅ | Impersonation oversight | M | Phase 2 |
 | 93 | B-268 |  | `reportRange`'s rolling window builds its exclusive end in the wrong coordinate system | S | Phase 2 |
+| 94 | B-269 |  | English contract prose renders under `<html lang="es">`, and no scan can see it | S | Phase 2 |
