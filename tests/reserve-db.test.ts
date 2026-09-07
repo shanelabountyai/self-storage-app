@@ -414,6 +414,30 @@ describeDb('reservation service', () => {
     expect(message.bodySnapshot).toContain(result.token)
   })
 
+  it('B-265: writes the confirmation in the language the hold was placed in', async () => {
+    const email = `confirm-es-${suffix}@example.com`
+    const result = await createReservation({ ...input(email), locale: 'es' })
+    if (!result.ok || !result.token) throw new Error('unreachable')
+
+    const message = await prisma.message.findUniqueOrThrow({
+      where: { idempotencyKey: `reservation-confirmation:${result.reservationId}` },
+    })
+    expect(message.status).toBe('sent')
+    // The subject as well as the body: a Spanish body under an English
+    // subject is the halfway state `lib/comms/prose.ts` exists to make
+    // impossible, and the subject is the half the renter sees first.
+    expect(message.subjectSnapshot).toContain('está apartada')
+    expect(message.bodySnapshot).toContain('No se le ha cobrado nada.')
+    // The link still has to survive translation — it is the only copy of the
+    // raw token that will ever exist.
+    expect(message.bodySnapshot).toContain(result.token)
+    // Money reads the same in both languages on purpose (`formatCents`), so a
+    // renter comparing this against the page sees one figure.
+    expect(message.bodySnapshot).toContain('$129.00')
+    // And nothing English survived inside it.
+    expect(message.bodySnapshot).not.toContain('Nothing has been charged')
+  })
+
   it('B-031: does not resend a confirmation when an existing hold is only updated', async () => {
     const email = `no-resend-${suffix}@example.com`
     const first = await createReservation(input(email))

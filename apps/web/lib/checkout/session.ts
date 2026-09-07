@@ -6,7 +6,8 @@ import { offerFor } from '@/lib/promotions/service'
 import { sendDirectEmail } from '@/lib/comms/service'
 import type { MoveSource } from '@storage/core/metrics'
 import type { OfferTerms } from '@storage/core/promotions'
-import { translate, type Dictionary } from '@/lib/i18n'
+import { proseFor } from '@/lib/comms/prose'
+import { DEFAULT_LOCALE, LOCALE_TAG, translate, type Dictionary, type Locale } from '@/lib/i18n'
 import { en } from '@/lib/i18n/en'
 
 // PRD 01 FR-4.1. The server-side checkout state machine.
@@ -659,7 +660,11 @@ export async function goBack(token: string, to: Step): Promise<GoBackResult> {
 /// The link always resolves to whatever step the session is *currently* on —
 /// `sessionByToken` already resumes at `session.step` (B-020) — so there is no
 /// step to encode here, just the token.
-export async function sendCheckoutResumeLink(sessionId: string, token: string): Promise<void> {
+export async function sendCheckoutResumeLink(
+  sessionId: string,
+  token: string,
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<void> {
   const session = await prisma.checkoutSession.findUnique({
     where: { id: sessionId },
     select: {
@@ -672,7 +677,7 @@ export async function sendCheckoutResumeLink(sessionId: string, token: string): 
 
   const base = (process.env.AUTH_URL ?? 'http://localhost:3000').replace(/\/$/, '')
   const link = `${base}/checkout?token=${encodeURIComponent(token)}`
-  const holdUntil = new Intl.DateTimeFormat('en-US', {
+  const holdUntil = new Intl.DateTimeFormat(LOCALE_TAG[locale], {
     timeZone: session.facility.timezone,
     weekday: 'long',
     month: 'long',
@@ -681,20 +686,18 @@ export async function sendCheckoutResumeLink(sessionId: string, token: string): 
     minute: '2-digit',
   }).format(session.lockExpiresAt)
 
-  const text = [
-    `We're holding this unit for you until ${holdUntil}. After that it goes back on sale.`,
-    '',
-    `Finish moving in where you left off: ${link}`,
-  ].join('\n')
+  const say = proseFor(locale).direct
+  const text = [say.resumeHolding(holdUntil), '', say.resumeFinish(link)].join('\n')
 
   await sendDirectEmail({
     idempotencyKey: `checkout-resume-link:${sessionId}`,
     eventId: sessionId,
     templateKey: 'checkout_resume_link',
     classification: 'transactional',
+    locale,
     to: session.email,
     fromName: session.facility.name,
-    subject: 'Finish moving in online',
+    subject: say.resumeSubject,
     html: `<p>${text.replace(/\n/g, '<br>')}</p>`,
     text,
     facilityId: session.facility.id,

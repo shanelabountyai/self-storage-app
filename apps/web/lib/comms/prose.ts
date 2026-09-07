@@ -41,6 +41,72 @@ import type { Locale } from '@/lib/i18n'
 // whichever language they wrote them, exactly as the admin surface shows them.
 // Translating an operator's own words would put sentences in their mouth.
 
+/// B-265. The nine `sendDirectEmail` sends, minus the three D-122 keeps
+/// English. Split into its own type rather than flattened into `CommsProse`
+/// because these belong to named MESSAGES rather than to a merge field: the
+/// grouping is what makes "is every sentence of the reservation confirmation
+/// translated?" a question the reader can answer by looking.
+///
+/// The subject is here with the body for the same reason `renderEmail` renders
+/// one document: a Spanish body under an English subject is the halfway state
+/// this file exists to make impossible.
+export type DirectProse = {
+  /// Shared by the reservation confirmation and the waitlist mail, which are
+  /// the two that may or may not know a first name.
+  hi: (firstName: string | null) => string
+
+  // ── checkout resume link (PRD 05 CN-22) ───────────────────────────────────
+  resumeSubject: string
+  resumeHolding: (until: string) => string
+  resumeFinish: (link: string) => string
+
+  // ── reservation confirmation (US-401) ─────────────────────────────────────
+  reservationSubject: (facility: string) => string
+  reservationHolding: (size: string, facility: string, rate: string) => string
+  reservationHoldUntil: (until: string) => string
+  reservationFinish: (link: string) => string
+  /// Null when the facility has no published number — the sentence loses the
+  /// clause rather than naming a blank.
+  reservationQuestions: (phone: string | null) => string
+
+  // ── magic link / password reset ───────────────────────────────────────────
+  //
+  // Keyed by `AuthTokenPurpose`'s two link-shaped members. Spelled out rather
+  // than imported from `lib/auth/send-auth-email.ts`: the send path must not
+  // depend on the auth module to know what words to use.
+  authSubject: Record<'magic_link' | 'password_reset', (site: string) => string>
+  authIntro: Record<'magic_link' | 'password_reset', string>
+  authExpiry: (minutes: number) => string
+
+  // ── email change, to the NEW address (US-706) ─────────────────────────────
+  emailChangeConfirmSubject: string
+  emailChangeConfirmIntro: (site: string) => string
+  /// The plaintext part says the same thing in one sentence, because it
+  /// carries the URL inline instead of a link with a label.
+  emailChangeConfirmText: (site: string) => string
+  emailChangeConfirmCta: string
+  emailChangeConfirmIgnore: string
+
+  // ── email change, to the OLD address: the security alert ──────────────────
+  emailChangeNoticeSubject: string
+  /// `newEmail` arrives already marked up for the part being rendered — bold
+  /// in the HTML, plain in the text — which is `MergeValue`'s device: one
+  /// sentence, two renderings, no chance of the two saying different things.
+  emailChangeNotice: (site: string, newEmail: string) => string
+  emailChangeNoticeCall: (phone: string) => string
+
+  // ── waitlist: a unit came free (D-87) ─────────────────────────────────────
+  waitlistSubject: (size: string, facility: string) => string
+  waitlistAvailable: (size: string, facility: string) => string
+  /// D-87 again: no unit is held, and the Spanish says so as plainly as the
+  /// English. Softening it in translation would promise a claim that does not
+  /// exist to the reader least able to check.
+  waitlistRace: string
+  waitlistRent: (url: string) => string
+  waitlistCall: (phone: string) => string
+  waitlistCancel: (url: string) => string
+}
+
 export type CommsProse = {
   // ── lease.moved_in ────────────────────────────────────────────────────────
   gateCodeIssued: (code: string) => string
@@ -122,6 +188,19 @@ export type CommsProse = {
   /// made for the SMS consent disclosure, and the Spanish says so out loud for
   /// the same reason.
   smsOptOut: string
+
+  // ── direct sends (B-265) ──────────────────────────────────────────────────
+  //
+  // `sendDirectEmail`'s callers have no `MessageTemplate` row to translate:
+  // each carries a secret minted in the moment it is sent — a resume token, a
+  // reservation token, a sign-in link — and composes its own subject and body
+  // at the call site. So the sentences live here, beside the ones the rule
+  // path builds, rather than in the seeded catalog.
+  //
+  // Only the RENTER-facing sends are here. The staff alert, the report
+  // subscription and the broadcast stay English under D-122 and say so at
+  // their own call sites.
+  direct: DirectProse
 }
 
 const en: CommsProse = {
@@ -217,6 +296,56 @@ const en: CommsProse = {
     graceDays > 0
       ? `If it is late you have ${graceDays} ${graceDays === 1 ? 'day' : 'days'} to catch it up. After that the plan ends: the full amount you owe becomes due, late fees start again and your gate access can be turned off.`
       : 'If it is missed, the plan ends: the full amount you owe becomes due, late fees start again and your gate access can be turned off.',
+
+  direct: {
+    hi: (firstName) => (firstName ? `Hi ${firstName},` : 'Hi,'),
+
+    resumeSubject: 'Finish moving in online',
+    resumeHolding: (until) =>
+      `We're holding this unit for you until ${until}. After that it goes back on sale.`,
+    resumeFinish: (link) => `Finish moving in where you left off: ${link}`,
+
+    reservationSubject: (facility) => `Your unit at ${facility} is reserved`,
+    reservationHolding: (size, facility, rate) =>
+      `We're holding a ${size} unit for you at ${facility}, at ${rate}/mo. Nothing has been charged.`,
+    reservationHoldUntil: (until) => `We'll hold it until ${until}.`,
+    reservationFinish: (link) => `Complete your move-in online, or cancel the hold, here: ${link}`,
+    reservationQuestions: (phone) =>
+      `Questions? Reply to this email${phone ? ` or call ${phone}` : ''}.`,
+
+    authSubject: {
+      magic_link: (site) => `Sign in to ${site}`,
+      password_reset: (site) => `Reset your ${site} password`,
+    },
+    authIntro: {
+      magic_link: 'Use this link to sign in:',
+      password_reset: 'Use this link to choose a new password:',
+    },
+    authExpiry: (minutes) =>
+      `This link expires in ${minutes} minutes. If you did not request this, you can ignore this email.`,
+
+    emailChangeConfirmSubject: 'Confirm your new email address',
+    emailChangeConfirmIntro: (site) =>
+      `Use the link below to confirm this address for your ${site} account. It works for 24 hours.`,
+    emailChangeConfirmText: (site) =>
+      `Confirm this address for your ${site} account (works for 24 hours):`,
+    emailChangeConfirmCta: 'Confirm this email address',
+    emailChangeConfirmIgnore:
+      'If you didn’t ask for this, you can ignore it — nothing changes until the link is opened.',
+
+    emailChangeNoticeSubject: 'Someone asked to change your email address',
+    emailChangeNotice: (site, newEmail) =>
+      `We were asked to change the email address on your ${site} account to ${newEmail}. Nothing has changed yet — it only takes effect when the link we sent to that address is opened.`,
+    emailChangeNoticeCall: (phone) => `If this wasn’t you, call us on ${phone} straight away.`,
+
+    waitlistSubject: (size, facility) => `A ${size} unit is free at ${facility}`,
+    waitlistAvailable: (size, facility) => `A ${size} unit has come free at ${facility}.`,
+    waitlistRace:
+      `You asked us to tell you — it's on sale to everyone else too, so the first person to complete a rental gets it.`,
+    waitlistRent: (url) => `Rent it online: ${url}`,
+    waitlistCall: (phone) => `Or call us on ${phone}.`,
+    waitlistCancel: (url) => `If you no longer need a unit, take yourself off the list: ${url}`,
+  },
 
   unsubscribe: 'Unsubscribe',
   smsOptOut: 'Reply STOP to opt out, HELP for help.',
@@ -321,6 +450,58 @@ const es: CommsProse = {
     graceDays > 0
       ? `Si se atrasa, tiene ${graceDays} ${graceDays === 1 ? 'día' : 'días'} para ponerse al corriente. Después de eso el plan termina: se vence todo el monto que debe, los cargos por atraso vuelven a aplicarse y se le puede cortar el acceso a la puerta.`
       : 'Si no se hace, el plan termina: se vence todo el monto que debe, los cargos por atraso vuelven a aplicarse y se le puede cortar el acceso a la puerta.',
+
+  direct: {
+    hi: (firstName) => (firstName ? `Hola ${firstName}:` : 'Hola:'),
+
+    resumeSubject: 'Termine su mudanza en línea',
+    resumeHolding: (until) =>
+      `Le estamos apartando esta unidad hasta el ${until}. Después de esa hora vuelve a estar a la venta.`,
+    resumeFinish: (link) => `Continúe donde se quedó: ${link}`,
+
+    reservationSubject: (facility) => `Su unidad en ${facility} está apartada`,
+    reservationHolding: (size, facility, rate) =>
+      `Le estamos apartando una unidad de ${size} en ${facility}, por ${rate} al mes. No se le ha cobrado nada.`,
+    reservationHoldUntil: (until) => `La apartamos hasta el ${until}.`,
+    reservationFinish: (link) =>
+      `Complete su mudanza en línea, o cancele el apartado, aquí: ${link}`,
+    reservationQuestions: (phone) =>
+      `¿Tiene preguntas? Responda a este correo${phone ? ` o llámenos al ${phone}` : ''}.`,
+
+    authSubject: {
+      magic_link: (site) => `Inicie sesión en ${site}`,
+      password_reset: (site) => `Restablezca su contraseña de ${site}`,
+    },
+    authIntro: {
+      magic_link: 'Use este enlace para iniciar sesión:',
+      password_reset: 'Use este enlace para elegir una contraseña nueva:',
+    },
+    authExpiry: (minutes) =>
+      `Este enlace vence en ${minutes} ${minutes === 1 ? 'minuto' : 'minutos'}. Si usted no lo pidió, puede ignorar este correo.`,
+
+    emailChangeConfirmSubject: 'Confirme su nueva dirección de correo',
+    emailChangeConfirmIntro: (site) =>
+      `Use el enlace de abajo para confirmar esta dirección en su cuenta de ${site}. Funciona por 24 horas.`,
+    emailChangeConfirmText: (site) =>
+      `Confirme esta dirección en su cuenta de ${site} (funciona por 24 horas):`,
+    emailChangeConfirmCta: 'Confirmar esta dirección de correo',
+    emailChangeConfirmIgnore:
+      'Si usted no pidió esto, puede ignorarlo: nada cambia hasta que se abra el enlace.',
+
+    emailChangeNoticeSubject: 'Alguien pidió cambiar su dirección de correo',
+    emailChangeNotice: (site, newEmail) =>
+      `Nos pidieron cambiar la dirección de correo de su cuenta de ${site} a ${newEmail}. Todavía no ha cambiado nada: el cambio surte efecto solo cuando se abra el enlace que enviamos a esa dirección.`,
+    emailChangeNoticeCall: (phone) => `Si no fue usted, llámenos al ${phone} de inmediato.`,
+
+    waitlistSubject: (size, facility) => `Hay una unidad de ${size} libre en ${facility}`,
+    waitlistAvailable: (size, facility) => `Se desocupó una unidad de ${size} en ${facility}.`,
+    waitlistRace:
+      'Usted nos pidió avisarle. También está a la venta para todos los demás, así que se la queda la primera persona que complete la renta.',
+    waitlistRent: (url) => `Réntela en línea: ${url}`,
+    waitlistCall: (phone) => `O llámenos al ${phone}.`,
+    waitlistCancel: (url) =>
+      `Si ya no necesita una unidad, quítese de la lista: ${url}`,
+  },
 
   unsubscribe: 'Cancelar la suscripción',
   smsOptOut: 'Responda STOP para darse de baja, o HELP para obtener ayuda; estas dos palabras se escriben en inglés.',

@@ -56,3 +56,29 @@ export async function messages(): Promise<{ dict: Dictionary; t: Translator }> {
   const dict = dictionaryFor(await getLocale())
   return { dict, t: (key, vars) => translate(dict, key, vars) }
 }
+
+/// B-265 (D-130). The language we WRITE to somebody in, for the sends that
+/// compose their own words instead of resolving a template.
+///
+/// One rule, in one place, because the answer differs per recipient and the
+/// wrong answer is a notice somebody cannot read:
+///
+///   1. what the tenant told us (`Tenant.preferredLocale`, or the language
+///      stored on a waitlist entry) — durable, and the only source that
+///      survives a send made from a cron;
+///   2. failing that, the language of the request that caused the send — the
+///      renter mid-checkout has no stored preference and is reading Spanish
+///      right now, which is a better answer than English;
+///   3. failing that, English.
+///
+/// `stated` is passed as the raw column value rather than a `Locale` so this
+/// module needs no database import: the caller reads the row it already had,
+/// and a value written before `LOCALES` gained an entry (or removed from it
+/// since) falls to step 2 instead of becoming an undefined dictionary lookup.
+///
+/// Step 2 collapses into step 3 by itself when there is no request — `getLocale`
+/// already answers English outside one — which is what makes the waitlist
+/// sweep correct without a special case.
+export async function writingLocale(stated: string | null | undefined): Promise<Locale> {
+  return isLocale(stated) ? stated : getLocale()
+}

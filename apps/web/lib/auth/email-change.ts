@@ -1,6 +1,9 @@
 import { randomUUID } from 'node:crypto'
 import { prisma } from '@storage/db'
 import { sendDirectEmail } from '@/lib/comms/service'
+import { proseFor } from '@/lib/comms/prose'
+import { writingLocale } from '@/lib/i18n/server'
+import { escapeHtml } from '@storage/core/comms'
 import { SITE } from '@/lib/site-config'
 import { consumeToken, mintToken } from './tokens'
 
@@ -39,7 +42,7 @@ export async function requestEmailChange(
 
   const tenant = await prisma.tenant.findUniqueOrThrow({
     where: { id: tenantId },
-    select: { id: true, email: true, firstName: true },
+    select: { id: true, email: true, firstName: true, preferredLocale: true },
   })
   if (newEmail === tenant.email.toLowerCase()) return { ok: false, reason: 'unchanged' }
 
@@ -70,16 +73,27 @@ export async function requestEmailChange(
   const link = `${appUrl()}/confirm-email?token=${encodeURIComponent(token)}`
   const name = tenant.firstName
 
+  // B-265 (D-130). Both messages go to the same person, so they resolve one
+  // language between them — a confirmation in Spanish and a security alert in
+  // English about the same request would read as two unrelated events.
+  const locale = await writingLocale(tenant.preferredLocale)
+  const say = proseFor(locale).direct
+  const greeting = say.hi(name)
+  // Both HTML parts below escape every interpolated value. They did not: the
+  // tenant's own first name went into the markup raw, so a name containing a
+  // tag reached the inbox as a tag. Same `escapeHtml` the render path uses.
+
   await sendDirectEmail({
     idempotencyKey: `email-change-confirm:${tenantId}:${randomUUID()}`,
     eventId: `email-change:${tenantId}`,
     templateKey: 'email_change_confirm',
     classification: 'transactional',
+    locale,
     to: newEmail,
     fromName: SITE.name,
-    subject: 'Confirm your new email address',
-    html: `<p>Hi ${name},</p><p>Use the link below to confirm this address for your ${SITE.name} account. It works for 24 hours.</p><p><a href="${link}">Confirm this email address</a></p><p>If you didn't ask for this, you can ignore it — nothing changes until the link is opened.</p>`,
-    text: `Hi ${name},\n\nConfirm this address for your ${SITE.name} account (works for 24 hours):\n${link}\n\nIf you didn't ask for this, ignore it — nothing changes until the link is opened.`,
+    subject: say.emailChangeConfirmSubject,
+    html: `<p>${escapeHtml(greeting)}</p><p>${escapeHtml(say.emailChangeConfirmIntro(SITE.name))}</p><p><a href="${link}">${escapeHtml(say.emailChangeConfirmCta)}</a></p><p>${escapeHtml(say.emailChangeConfirmIgnore)}</p>`,
+    text: `${greeting}\n\n${say.emailChangeConfirmText(SITE.name)}\n${link}\n\n${say.emailChangeConfirmIgnore}`,
   })
 
   // Deliberately linkless. Anyone who can read this mailbox but did not ask
@@ -90,11 +104,16 @@ export async function requestEmailChange(
     eventId: `email-change:${tenantId}`,
     templateKey: 'email_change_notice',
     classification: 'transactional',
+    locale,
     to: tenant.email,
     fromName: SITE.name,
-    subject: 'Someone asked to change your email address',
-    html: `<p>Hi ${name},</p><p>We were asked to change the email address on your ${SITE.name} account to <strong>${newEmail}</strong>. Nothing has changed yet — it only takes effect when the link we sent to that address is opened.</p><p>If this wasn't you, call us on ${SITE.phone.display} straight away.</p>`,
-    text: `Hi ${name},\n\nWe were asked to change the email on your ${SITE.name} account to ${newEmail}. Nothing has changed yet.\n\nIf this wasn't you, call us on ${SITE.phone.display} straight away.`,
+    subject: say.emailChangeNoticeSubject,
+    // The new address arrives bold in the HTML and plain in the text, from one
+    // sentence — the plaintext part used to carry a SHORTER sentence that
+    // dropped "it only takes effect when the link is opened", which is the
+    // half that tells somebody reading this alert that they still have time.
+    html: `<p>${escapeHtml(greeting)}</p><p>${say.emailChangeNotice(escapeHtml(SITE.name), `<strong>${escapeHtml(newEmail)}</strong>`)}</p><p>${escapeHtml(say.emailChangeNoticeCall(SITE.phone.display))}</p>`,
+    text: `${greeting}\n\n${say.emailChangeNotice(SITE.name, newEmail)}\n\n${say.emailChangeNoticeCall(SITE.phone.display)}`,
   })
 
   return { ok: true }

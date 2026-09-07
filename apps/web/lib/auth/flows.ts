@@ -1,11 +1,30 @@
 import type { AuthAudience } from '@storage/db'
 import { recordAudit } from '@storage/core/audit'
 import { findSubjectByEmail, resolveAudience, setPassword } from './accounts'
+import { currentWritingLocale } from '@/lib/portal/notifications'
+import { DEFAULT_LOCALE, type Locale } from '@/lib/i18n'
+import { writingLocale } from '@/lib/i18n/server'
 import { sendAuthEmail } from './send-auth-email'
 import { consumeToken, mintToken } from './tokens'
 
 function baseUrl(): string {
   return process.env.AUTH_URL ?? 'http://localhost:3000'
+}
+
+/// B-265 (D-130). What language a sign-in or reset link is written in.
+///
+/// Staff are English outright (D-122) — this is the one direct send whose
+/// recipient can be either audience, and reading the request's cookie for a
+/// staff account would put Spanish in an admin's inbox because the browser
+/// they last used was set that way.
+///
+/// A tenant gets what they told us, and the request's language when they never
+/// have: somebody who reached `/forgot-password` from a Spanish page is
+/// reading Spanish now, and a reset link is exactly the message where guessing
+/// English costs them the account.
+async function linkLocale(audience: AuthAudience, subjectId: string): Promise<Locale> {
+  if (audience === 'staff') return DEFAULT_LOCALE
+  return writingLocale(await currentWritingLocale(subjectId))
 }
 
 /// Requests a magic link. Always resolves the same way whether or not the
@@ -49,6 +68,7 @@ export async function requestMagicLink(
     purpose: 'magic_link',
     url: `${baseUrl()}/login/magic?token=${token}`,
     expiresAt,
+    locale: await linkLocale(audience, subject.id),
   })
 }
 
@@ -74,6 +94,7 @@ export async function requestPasswordReset(
     purpose: 'password_reset',
     url: `${baseUrl()}/reset-password?token=${token}`,
     expiresAt,
+    locale: await linkLocale(audience, subject.id),
   })
 }
 

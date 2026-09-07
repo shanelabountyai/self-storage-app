@@ -2557,6 +2557,18 @@ export type DirectEmailInput = {
   eventId: string
   templateKey: string
   classification: MessageClassification
+  /// B-265. The language `subject`, `html` and `text` ARE — not a request for
+  /// a translation, since a direct send has no template to resolve. It is
+  /// required rather than defaulted for the same reason the marketing footer
+  /// lives in this function rather than in its callers: a caller that can
+  /// forget it is a caller that will, and the failure is silent (an English
+  /// message wrapped in `lang="es"` is worse than an untagged one, because it
+  /// tells a screen reader to pronounce English with Spanish phonemes).
+  ///
+  /// Three callers pass `en` deliberately — the staff alert, the report
+  /// subscription and the broadcast, all D-122 — and each says so where it
+  /// passes it.
+  locale: Locale
   to: string
   fromName: string
   subject: string
@@ -2675,9 +2687,22 @@ export async function sendDirectEmail(input: DirectEmailInput): Promise<DirectSe
       html = `${html}<hr><p>${marketingFooter.name}<br>${marketingFooter.address}</p>`
     }
     const link = unsubscribeUrl(mintUnsubscribeToken(address), baseUrl())
-    text = `${text}\n\nUnsubscribe: ${link}`
-    html = `${html}<p><a href="${link}">Unsubscribe</a></p>`
+    // B-265. In the message's own language, like `deliverForRule`'s copy of
+    // this line — the word was hardcoded English here while the rule path had
+    // been reading `proseFor(recipient.locale)` since B-261, so a Spanish
+    // message could end in an English link label pointing at the Spanish
+    // `/unsubscribe` page B-260 built.
+    const unsubscribeLabel = proseFor(input.locale).unsubscribe
+    text = `${text}\n\n${unsubscribeLabel}: ${link}`
+    html = `${html}<p><a href="${link}">${unsubscribeLabel}</a></p>`
   }
+
+  // FR-9a / 3.1.2, for the direct path. `renderEmail` has wrapped the rule
+  // path's HTML in a `lang` since B-261 and these nine sends had no language
+  // declaration at all — which was survivable only while every one of them was
+  // English. Wrapped here rather than at each call site so a new direct send
+  // cannot ship without one.
+  html = `<div lang="${input.locale}">${html}</div>`
 
   const destination = effectiveRecipient(address)
   await prisma.message.create({ data: { ...common, toAddress: destination, status: 'queued' } })

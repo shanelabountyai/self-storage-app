@@ -25,6 +25,7 @@ import { periodLabel } from '@/lib/admin/accounting-close'
 import { buildManagementPack } from '@/lib/admin/management-pack'
 import { formatCents } from '@/lib/format'
 import { sendDirectEmail } from '@/lib/comms/service'
+import { DEFAULT_LOCALE } from '@/lib/i18n'
 import { siteOrigin } from '@/lib/marketing/origin'
 import { SITE } from '@/lib/site-config'
 
@@ -329,6 +330,10 @@ export async function sendDueReports(
         // not a message to a tenant, so it carries no consent question — but a
         // hard-bounced address is still suppressed like any other.
         classification: 'operational',
+        // B-265 (D-122). English deliberately: a scheduled report is the admin
+        // surface in an inbox, and `renderReportEmail` builds its own English
+        // document with its own `lang="en"` root.
+        locale: DEFAULT_LOCALE,
         to: recipient,
         fromName: SITE.name,
         subject: built.subject,

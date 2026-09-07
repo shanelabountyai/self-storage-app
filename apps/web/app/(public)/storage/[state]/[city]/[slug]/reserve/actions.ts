@@ -5,7 +5,7 @@ import { createReservation } from '@/lib/reservations/reserve'
 import { publicFacilityBySlug } from '@/lib/facility/public-facility'
 import { publicInventoryForFacility } from '@/lib/inventory/public-inventory'
 import { keyedFieldError, type KeyedFieldErrors, type FormState } from '@/lib/admin/form-state'
-import { messages } from '@/lib/i18n/server'
+import { getLocale, messages } from '@/lib/i18n/server'
 
 // B-018 / US-401. Same return-don't-throw contract as the admin actions
 // (PRD 02 FR-19): a rejected reservation is a message beside the field, never
@@ -64,6 +64,10 @@ export async function reserveAction(_prev: FormState, formData: FormData): Promi
     phone,
     moveInDate,
     quotedRateCents: unitType.webRateCents,
+    // B-265 (D-130). The confirmation email in the language of the page the
+    // hold was placed from. A reservation is anonymous (D-7), so there is no
+    // stored preference to prefer over it.
+    locale: await getLocale(),
   })
 
   if (!result.ok) {

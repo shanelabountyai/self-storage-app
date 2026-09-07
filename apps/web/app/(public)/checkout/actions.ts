@@ -195,7 +195,11 @@ export async function submitDetailsAction(
   // still open. A comms failure must never fail step 1, which has already
   // succeeded and committed.
   try {
-    await sendCheckoutResumeLink(result.session.id, token)
+    // In the language the renter just filled the form in, which is the same
+    // `locale` the consent rows above record — read from the FORM rather than
+    // the cookie (B-259), so a header toggle between render and submit cannot
+    // mail them the language they were not looking at.
+    await sendCheckoutResumeLink(result.session.id, token, locale)
   } catch {
     // sendDirectEmail records its own failure in the Message log; this only
     // guards against something throwing before it gets that far.

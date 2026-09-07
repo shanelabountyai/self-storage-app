@@ -1,5 +1,6 @@
 import { prisma, type Prisma } from '@storage/db'
 import { sendDirectEmail } from './service'
+import { DEFAULT_LOCALE } from '@/lib/i18n'
 
 // PRD 05 FR-19 (B-075). "Alert to owner if..." — the three silent-failure
 // detectors' one shared output. Reuses the direct-send path (B-020's resume
@@ -58,6 +59,10 @@ export async function alertOwner(
     // staff, not a Tenant), and `sendDirectEmail`'s classification exists
     // for the Message log's own record, not a gate here.
     classification: 'operational',
+    // B-265 (D-122). English deliberately: the recipient is the platform owner
+    // and the body is an operational alert, which is the admin surface D-122
+    // keeps in one language.
+    locale: DEFAULT_LOCALE,
     to,
     fromName: 'Storage platform',
     subject,

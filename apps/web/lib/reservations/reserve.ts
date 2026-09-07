@@ -7,7 +7,9 @@ import { cancelOpenTask } from '@/lib/admin/tasks'
 import { sendDirectEmail } from '@/lib/comms/service'
 import { track } from '@/lib/analytics/track'
 import { trackingContext } from '@/lib/analytics/request'
-import type { MessageKey } from '@/lib/i18n'
+import { formatCents } from '@/lib/format'
+import { proseFor } from '@/lib/comms/prose'
+import { DEFAULT_LOCALE, LOCALE_TAG, type Locale, type MessageKey } from '@/lib/i18n'
 
 // PRD 01 §4.4 US-401 / FR-3. A free, no-card hold on a unit.
 //
@@ -135,6 +137,16 @@ export type ReserveInput = {
   /// site is the only caller that does not pass it.
   source?: string
   utm?: { source?: string | null; medium?: string | null; campaign?: string | null }
+  /// B-265 (D-130). The language the confirmation email is written in. A hold
+  /// is D-7's anonymous one — there is no `Tenant` row to have stated a
+  /// preference on — so the public form passes the language of the request
+  /// that placed it and there is nothing to store.
+  ///
+  /// Optional and English by default because the other caller is a staffer
+  /// converting an inquiry (`lib/admin/inquiries.ts`): the recipient there is
+  /// the prospect, not the person at the keyboard, so the admin session's own
+  /// language would be the wrong answer rather than a missing one.
+  locale?: Locale
 }
 
 export type ReserveResult =
@@ -325,7 +337,7 @@ export async function createReservation(input: ReserveInput): Promise<ReserveRes
   // A comms failure here must never undo the hold that already committed.
   if (result.ok && !result.updated && result.token) {
     try {
-      await sendReservationConfirmation(result.reservationId, result.token)
+      await sendReservationConfirmation(result.reservationId, result.token, input.locale ?? DEFAULT_LOCALE)
     } catch {
       // sendDirectEmail already records its own failure in the Message log;
       // this guards only against something throwing before it gets that far.
@@ -341,7 +353,11 @@ export async function createReservation(input: ReserveInput): Promise<ReserveRes
 /// next hourly tick) and directly, not through the rule/template pipeline: the
 /// raw reservation token exists only in this call, never persisted (same rule
 /// as B-029's gate codes), so nothing later could re-derive the link anyway.
-async function sendReservationConfirmation(reservationId: string, token: string): Promise<void> {
+async function sendReservationConfirmation(
+  reservationId: string,
+  token: string,
+  locale: Locale,
+): Promise<void> {
   const reservation = await prisma.reservation.findUnique({
     where: { id: reservationId },
     select: {
@@ -357,7 +373,8 @@ async function sendReservationConfirmation(reservationId: string, token: string)
 
   const base = (process.env.AUTH_URL ?? 'http://localhost:3000').replace(/\/$/, '')
   const link = `${base}/reservations?token=${encodeURIComponent(token)}&new=1`
-  const holdUntil = new Intl.DateTimeFormat('en-US', {
+  const tag = LOCALE_TAG[locale]
+  const holdUntil = new Intl.DateTimeFormat(tag, {
     timeZone: reservation.facility.timezone,
     weekday: 'long',
     month: 'long',
@@ -365,20 +382,24 @@ async function sendReservationConfirmation(reservationId: string, token: string)
     hour: 'numeric',
     minute: '2-digit',
   }).format(reservation.expiresAt)
-  const rate = (reservation.quotedRateCents / 100).toFixed(2)
+  // `formatCents` rather than the hand-rolled `$${(cents / 100).toFixed(2)}`
+  // this built before: same two decimal places, same `$` in both languages
+  // (USD formats identically in `es-US`, which is the point — a renter
+  // comparing this email against the price on the page must see one figure).
+  const rate = formatCents(reservation.quotedRateCents, tag)
   const size = `${reservation.unitType.widthFt}x${reservation.unitType.lengthFt}`
-  const phoneLine = reservation.facility.phone ? ` or call ${reservation.facility.phone}` : ''
 
+  const say = proseFor(locale).direct
   const text = [
-    `Hi ${reservation.firstName},`,
+    say.hi(reservation.firstName),
     '',
-    `We're holding a ${size} unit for you at ${reservation.facility.name}, at $${rate}/mo. Nothing has been charged.`,
+    say.reservationHolding(size, reservation.facility.name, rate),
     '',
-    `We'll hold it until ${holdUntil}.`,
+    say.reservationHoldUntil(holdUntil),
     '',
-    `Complete your move-in online, or cancel the hold, here: ${link}`,
+    say.reservationFinish(link),
     '',
-    `Questions? Reply to this email${phoneLine}.`,
+    say.reservationQuestions(reservation.facility.phone),
   ].join('\n')
 
   await sendDirectEmail({
@@ -386,9 +407,10 @@ async function sendReservationConfirmation(reservationId: string, token: string)
     eventId: reservationId,
     templateKey: 'reservation_confirmation',
     classification: 'transactional',
+    locale,
     to: reservation.email,
     fromName: reservation.facility.name,
-    subject: `Your unit at ${reservation.facility.name} is reserved`,
+    subject: say.reservationSubject(reservation.facility.name),
     html: `<p>${text.replace(/\n/g, '<br>')}</p>`,
     text,
     facilityId: reservation.facility.id,

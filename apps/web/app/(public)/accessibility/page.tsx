@@ -2089,6 +2089,42 @@ function reviewedOn(locale: Locale): string {
 // bumped, per D-115 — no manual screen-reader pass was performed, and this
 // item performed none.
 
+// Re-verified 2026-09-07, at B-265 (the emails composed in code, not from a
+// template — D-122, D-130). Customer-facing, and it closes a real 3.1.2 gap
+// that this page had NOT overstated in either direction.
+//
+// **What was wrong.** B-261 fixed `renderEmail`'s hardcoded `<div lang="en">`,
+// which the note above records. It fixed the TEMPLATED path only. Nine sends
+// go out through `sendDirectEmail`, which composes no document and passed the
+// caller's HTML to the provider untouched — so the reservation confirmation,
+// the checkout resume link, the sign-in and reset links, both halves of the
+// email-change flow, the waitlist availability mail, the platform alert, the
+// scheduled report and every broadcast carried NO language declaration at all.
+// That was survivable only while every one of them was English; the moment
+// four of them became Spanish it is 3.1.2 on a document a renter reads.
+//
+// **Where the fix went is the part worth recording.** Not at the nine call
+// sites — in `sendDirectEmail` itself, which now requires the locale and wraps
+// the HTML in it. A caller that can forget the declaration is a caller that
+// will, and the failure is invisible: a message with no `lang` looks the same
+// in every inbox and only sounds wrong. The three sends that stay English say
+// so where they pass `en`, so "English" is a decision in the code rather than
+// the absence of one.
+//
+// **A second, smaller defect was fixed on the way.** Both email-change
+// messages interpolated the tenant's own first name raw into their HTML part.
+// It is escaped now, through the same `escapeHtml` the render path uses.
+//
+// **No claim below changes, and none needed correcting.** This page has said
+// nothing about email since B-198 settled that it says nothing in either
+// direction, and that sentence held: nothing here was disclaimed that has
+// since shipped, and nothing was claimed that had not. The "Where we fall
+// short" list was re-read against this build — the no-JavaScript hold
+// countdown, the staff screens, the embedded maps — and all three are still
+// true and unchanged in scope. No route and no `a11y-state:` is added: this
+// changes no page. `LAST_REVIEWED` is not bumped, per D-115 — no manual
+// screen-reader pass was performed, and this item performed none.
+
 export default async function AccessibilityPage() {
   const locale = await getLocale()
   const dict = dictionaryFor(locale)
