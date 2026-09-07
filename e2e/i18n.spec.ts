@@ -5,10 +5,17 @@ import { DEMO_PROMO_CODE } from '../apps/web/scripts/demo-credentials'
 
 // B-090 part 6 (D-122). Spanish on the move-in path.
 //
-// Nothing here mutates shared demo state: the locale lives in a cookie on the
-// test's own browser context, so these specs need neither of B-120's two
-// disciplines — a full sweep can run twice against the same database and this
-// file behaves identically both times.
+// Almost nothing here mutates shared demo state: the locale lives in a cookie
+// on the test's own browser context, so most of these specs need none of
+// B-120's three disciplines — a full sweep can run twice against the same
+// database and they behave identically both times.
+//
+// The B-268 spec is the exception and takes discipline (1). It holds a real
+// unit, because the page it exists to test cannot be reached without one, and
+// it releases it in the same test. It is scoped to `demo-e2e`'s `10x10 Test` —
+// 250 units seeded deliberately so holds do not have to be cleaned up to keep
+// the suite honest — which is the same fixture, and the same reserve-then-
+// cancel cycle, the English specs in `smoke.spec.ts` already run.
 //
 // What the unit tests cannot see is exactly what is asserted here: that the
 // cookie survives a navigation, that `<html lang>` follows it (SC 3.1.1), and
@@ -271,6 +278,69 @@ test('the Spanish reservation form asks and refuses in Spanish (B-267)', async (
     'aria-invalid',
     'true',
   )
+})
+
+test('the page a Spanish reservation lands on is Spanish, date included (B-268)', async ({
+  page,
+  context,
+}) => {
+  await context.addCookies([SPANISH])
+
+  // The dead-link page first, and with no token at all — free, mutates nothing,
+  // and it is half of what this route renders. It is also where somebody whose
+  // hold has already expired arrives from an email, so it is the one branch a
+  // renter reaches without ever having seen the confirmation.
+  await page.goto('/reservations?token=definitely-not-a-real-token')
+  await expect(page.locator('html')).toHaveAttribute('lang', 'es')
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('Este enlace ya no sirve')
+  await expect(page.getByRole('main').getByRole('link', { name: /^Llame al/ })).toBeVisible()
+
+  // Now the real thing. B-267 translated the form and stopped at its redirect,
+  // so this is the seam: a Spanish form submitted, and whatever comes back.
+  await page.goto('/storage/tx/houston/demo-e2e')
+  const card = page.getByRole('listitem').filter({ hasText: '10x10 Test' }).first()
+  await card.getByRole('link', { name: 'Reservar gratis' }).click()
+
+  await page.getByLabel('Nombre', { exact: true }).fill('Ada')
+  await page.getByLabel('Apellido', { exact: true }).fill('i18n')
+  await page
+    .getByLabel('Correo electrónico', { exact: true })
+    .fill(`e2e-es-${Date.now()}@demo.example.com`)
+  await page.getByLabel('Número de celular', { exact: true }).fill('512-555-0144')
+  await page.getByRole('button', { name: 'Reservar gratis' }).click()
+
+  await expect(page).toHaveURL(/\/reservations\?token=/)
+  await expect(page.locator('html')).toHaveAttribute('lang', 'es')
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('Su unidad está apartada')
+  await expect(page.getByRole('main')).toContainText('Se la apartamos hasta')
+
+  // The assertion this row exists for. `formatWhen` hardcoded 'en-US', so the
+  // expiry rendered "Saturday, September 12 at 5:00 PM" underneath a Spanish
+  // label — the one fact on the page with a deadline attached, in the language
+  // the reader just said they could not read.
+  //
+  // Matched on the weekday rather than on a literal date, because the date
+  // moves with the run: no English tag can produce any of these seven words,
+  // and `es-US` always produces exactly one of them.
+  await expect(page.getByRole('main')).toContainText(
+    /lunes|martes|miércoles|jueves|viernes|sábado|domingo/,
+  )
+
+  await expect(page.getByRole('button', { name: 'Completar la mudanza en línea' })).toBeVisible()
+
+  // Give the unit back — the same reason the English spec does, and what keeps
+  // this test's mutation its own. Asserting the outcome and releasing the
+  // inventory are the same click.
+  await page.getByRole('button', { name: 'Cancelar esta reserva' }).click()
+
+  // `.first()` for the reason `smoke.spec.ts` records: the cancel form is still
+  // mounted while this resolves, so there are briefly two live regions. The
+  // first is the paragraph that replaced the form, which is the sentence a
+  // renter reads to know their unit is gone.
+  await expect(page.getByRole('main').getByRole('status').first()).toContainText(
+    'volvió a estar disponible',
+  )
+  await expect(page.getByRole('button', { name: 'Cancelar esta reserva' })).toHaveCount(0)
 })
 
 

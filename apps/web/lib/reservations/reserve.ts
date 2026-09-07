@@ -412,9 +412,14 @@ export type ReservationView = {
 }
 
 /// Looks a reservation up by its raw token. Returns null for an unknown token
-/// and for one whose reservation is no longer live — the caller renders the
-/// same "this link is no longer good" page either way, so a guesser learns
-/// nothing from the difference.
+/// only: an unknown token and an EXPIRED one look identical to the caller
+/// because neither resolves to a row it can show, so a guesser learns nothing
+/// from the difference.
+///
+/// It deliberately does NOT filter on status — `/reservations` renders a
+/// cancelled or converted hold on purpose, so the renter can see what happened
+/// to it. (B-268 corrected this comment, which said the opposite and had said
+/// so since B-018. The page it describes has always branched on `status`.)
 export async function reservationByToken(token: string): Promise<ReservationView | null> {
   if (!token) return null
   const reservation = await prisma.reservation.findUnique({

@@ -253,6 +253,37 @@ export const es: Dictionary = {
     'Reservar no cuesta nada y no lo compromete a rentar. Apartamos la unidad y este precio hasta que venza la reserva.',
   'reserve.holdUpdated':
     'Usted ya tenía una reserva de este tamaño, así que la actualizamos en lugar de apartar una segunda unidad. Su correo de confirmación original todavía tiene el enlace.',
+  // --- La reserva en sí (US-401 / FR-3.2, B-268) -------------------------
+  'res.title': 'Su reserva',
+  'res.headingNew': 'Su unidad está apartada',
+  'res.deadHeading': 'Este enlace ya no sirve',
+  'res.deadBody':
+    'Los enlaces de reserva dejan de funcionar cuando el apartado termina o se cancela. No le hemos cobrado nada y no estamos apartando nada para usted.',
+  'res.deadCall': 'Llame al {phone}',
+  'res.deadOffer': 'y le decimos qué hay disponible, o',
+  'res.deadSearch': 'busque de nuevo',
+  'res.endedCancelled':
+    'Esta reserva está cancelada. No estamos apartando nada para usted y no le hemos cobrado nada: la unidad volvió a estar disponible para cualquiera.',
+  'res.endedExpired':
+    'Esta reserva venció. No estamos apartando nada para usted y no le hemos cobrado nada: la unidad volvió a estar disponible para cualquiera.',
+  'res.endedConverted':
+    'Ya completó su mudanza, así que el apartado terminó: esta unidad es suya, ya no está reservada para usted.',
+  'res.facility': 'Sucursal',
+  'res.unit': 'Unidad',
+  'res.rateHeld': 'Precio que le apartamos',
+  'res.holdUntil': 'Se la apartamos hasta',
+  'res.reassureBefore':
+    'No le hemos cobrado nada. Puede completar su mudanza en línea antes de que termine el apartado, o simplemente venir — llame al',
+  'res.reassureAfter': 'si algo cambia.',
+  'res.readyHeading': '¿Listo para mudarse?',
+  'res.readyBody':
+    'Termine en línea en unos minutos: firme el contrato, pague y reciba hoy mismo su código de la puerta.',
+  'res.completeMoveIn': 'Completar la mudanza en línea',
+  'res.cancelHeading': '¿Necesita cancelar?',
+  'res.cancelBody':
+    'Esto libera la unidad de inmediato y otra persona puede tomarla. No se puede deshacer, pero siempre puede reservar de nuevo si todavía está libre.',
+  'res.cancelButton': 'Cancelar esta reserva',
+  'res.cancelled': 'Cancelada. La unidad volvió a estar disponible y no le hemos cobrado nada.',
 
   // --- The lead form on the facility page (US-8, B-264) ------------------
   'lead.legend': '¿Qué desea?',
@@ -521,6 +552,13 @@ export const es: Dictionary = {
   'err.reserveUnlisted': 'Esa unidad ya no está publicada.',
   'err.reserveSoldOut':
     'Alguien tomó la última de ese tamaño mientras usted llenaba este formulario. No se le ha cobrado nada: elija otro tamaño, o llámenos y lo resolvemos.',
+  // B-268. Los rechazos de `/reservations`. Ver los comentarios en `en.ts`.
+  'err.reservationNotHeld':
+    'Esa reserva ya estaba cancelada o ya había terminado, así que no había nada que liberar.',
+  'err.reservationNotFound': 'No encontramos esa reserva. Puede que el enlace haya vencido.',
+  'err.reservationNotLive': 'Esta reserva ya no está activa, así que no hay nada que continuar.',
+  'err.reservationUnitGone':
+    'Esa unidad ya no está disponible. Llámenos y le buscamos otra.',
 
   // B-266. Los siete rechazos, uno por regla. Ver los comentarios en `en.ts`.
   'err.promoUnknown': 'Ese código no es uno de los nuestros. Revise si tiene un error de escritura.',

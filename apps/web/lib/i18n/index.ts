@@ -37,6 +37,22 @@ export const LOCALE_NAMES: Record<Locale, string> = {
   es: 'Español',
 }
 
+/// `en` | `es` widened to the BCP-47 tag `Intl` wants. `es-US` rather than
+/// `es-MX` or `es-ES`: the reader is a Spanish speaker in the United States,
+/// which is what makes the currency `$129.00` (identical to English — the same
+/// figure, so a tenant comparing an email to the portal sees one number) while
+/// the date becomes "14 de septiembre de 2026".
+///
+/// B-268 moved it here from `lib/comms/prose.ts`, where B-261 wrote it. It was
+/// never a comms concept — every surface that formats a date, a number or a
+/// list needs the same widening, and a public page importing the send path's
+/// Spanish prose to get two strings is the wrong dependency. Same values, so
+/// every existing caller renders character-for-character what it did.
+export const LOCALE_TAG: Record<Locale, string> = {
+  en: 'en-US',
+  es: 'es-US',
+}
+
 /// `en` is `as const`, so its keys are the message names and its values are
 /// literal types. `Dictionary` widens the values back to `string` — without
 /// that, `es.ts` would have to repeat the English text to satisfy the type,
