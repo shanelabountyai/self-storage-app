@@ -8865,7 +8865,7 @@ The facility page has been `<html lang="es">` since B-090f and B-264 translated 
 
 **One failure that did not reproduce, recorded rather than explained.** The first e2e run of the changed set failed three specs, all on `demo-e2e`, all with the reserve page having redirected to `?unavailable=1` — which means `publicInventoryForFacility` returned no matching unit type for the id the facility page had just linked to. The same set passed twice afterwards with no change in between, the single English spec passed on stashed `HEAD` and again with the change applied, and the facility had 250 available units of that type throughout. The timings are the tell that something else was going on: 5.3s, 5.3s and a 30s timeout in the failing run against sub-1.5s in both passing ones. **No cause is asserted, because none was established** — what is recorded is that it was not the code under change, and that it presents identically to a broken reservation link if it happens again.
 
-## B-266 — the promo code answers in the renter's own language, applied or refused (2026-09-07, `PENDING`)
+## B-266 — the promo code answers in the renter’s own language, applied or refused (2026-09-07, `a0f82e4`)
 
 The last of B-263's three children. `describeCodeOutcome` in `@storage/core/promotions` turned a `CodeOutcome` into an English sentence, `offerFor` put one on `PromoLookup.problem`, and `applyPromoAction` rendered it as both the summary and the `promo` field error — so a Spanish renter typing a code on a Spanish checkout was answered in English, one field over from the errors B-263 had just translated.
 
