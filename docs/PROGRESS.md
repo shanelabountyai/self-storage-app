@@ -8807,7 +8807,7 @@ The four validator suites now assert **keys** rather than message text, which is
 
 ## B-264 — The lead form on a Spanish facility page is Spanish (2026-09-06)
 
-**Commit:** `PENDING`
+**Commit:** `d17f86b`
 
 The facility page has been `<html lang="es">` since B-090f. The quote/callback form inside it took no dictionary and imported nothing from `@/lib/i18n`, so a Spanish visitor read Spanish all the way down the page and then met an English form asking for their name, their phone and their consent — at the top of the funnel, where most people who never reach the checkout are.
 
