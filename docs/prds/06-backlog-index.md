@@ -6,7 +6,7 @@
 
 **Then read the row itself before building the item** — `npm run docs:row -- B-262` prints that one row whole and verbatim, about 2 KB against the file's 490. The columns dropped here are the ones that say what to build.
 
-**267 items — 255 complete, 12 open.**
+**272 items — 260 complete, 12 open.**
 
 ## Open, in build order
 
@@ -20,9 +20,9 @@
 | 87a | B-133 | Google reviews ingestion + GBP API sync | M | B-087 |
 | 89a | B-134 | Authored copy for a size page, when a real portfolio needs it | S | B-089 |
 | 90 | B-090 | Split into six parts, 2026-08-20 | XL | B-074, B-081 |
-| 90k | B-259 | A Spanish renter ticks three consent boxes written in English | M | B-090f |
-| 90m | B-261 | Every email and text still goes out in English, including to a renter who rented in Spanish | L | B-090f, B-259 |
-| 90n | B-262 | The Spanish stops at the signed-in product | L | B-260 |
+| 90q | B-265 | The emails composed in code, not from a template, are still English | M | B-261 |
+| 90r | B-266 | The promo code is refused in English on a Spanish checkout | S | B-263 |
+| 90s | B-267 | The reservation form is English end to end on a Spanish facility page | M | B-090f |
 | 93 | B-268 | `reportRange`'s rolling window builds its exclusive end in the wrong coordinate system | S | B-092 |
 
 > An item stays open until every part of it is done — several above are partly built, and their parts are recorded in [`../PROGRESS.md`](../PROGRESS.md).
@@ -291,10 +291,15 @@
 | 90h | B-256 | ✅ | The business account's portal half: one card and one Pay button | M/L | Phase 3 |
 | 90i | B-258 | ✅ | Authorized users on a business account: the people allowed to see it | M | Phase 3 |
 | 90j | B-090f | ✅ | Spanish on the move-in path | L | Phase 2 |
-| 90k | B-259 |  | A Spanish renter ticks three consent boxes written in English | M | Phase 2 |
+| 90k | B-259 | ✅ | A Spanish renter ticks three consent boxes written in English | M | Phase 2 |
 | 90l | B-260 | ✅ | The Spanish stops at the move-in path | L | Phase 2 |
-| 90m | B-261 |  | Every email and text still goes out in English, including to a renter who rented in Spanish | L | Phase 2 |
-| 90n | B-262 |  | The Spanish stops at the signed-in product | L | Phase 2 |
+| 90m | B-261 | ✅ | Every email and text still goes out in English, including to a renter who rented in Spanish | L | Phase 2 |
+| 90n | B-262 | ✅ | The Spanish stops at the signed-in product | L | Phase 2 |
+| 90o | B-263 | ✅ | The Spanish checkout answers in English the moment it refuses you | M | Phase 2 |
+| 90p | B-264 | ✅ | The lead form on a Spanish facility page is entirely English | S | Phase 2 |
+| 90q | B-265 |  | The emails composed in code, not from a template, are still English | M | Phase 2 |
+| 90r | B-266 |  | The promo code is refused in English on a Spanish checkout | S | Phase 2 |
+| 90s | B-267 |  | The reservation form is English end to end on a Spanish facility page | M | Phase 2 |
 | 91 | B-091 | ✅ | Split into two parts, 2026-08-19 | L | Phase 2 |
 | 92 | B-092 | ✅ | Impersonation oversight | M | Phase 2 |
 | 93 | B-268 |  | `reportRange`'s rolling window builds its exclusive end in the wrong coordinate system | S | Phase 2 |

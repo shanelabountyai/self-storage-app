@@ -4,12 +4,19 @@ import { revalidatePath } from 'next/cache'
 import { requireStaffActor } from '@/lib/rbac/session'
 import { fieldError, success, type FormState } from '@/lib/admin/form-state'
 import { saveTemplateVersion, testSendTemplate } from '@/lib/admin/templates'
+import { DEFAULT_LOCALE, isLocale, LOCALE_NAMES } from '@/lib/i18n'
 
 // CN-16. The editor's two writes. Every gate lives in lib/admin/templates.ts;
 // these only turn refusals into sentences.
 
 function draftFrom(formData: FormData) {
+  // B-261. Which language's copy of this template is being edited. Hidden on
+  // the form and narrowed here rather than trusted: an unrecognised value
+  // would publish a version under a locale no send path ever asks for, which
+  // looks exactly like a save that silently did nothing.
+  const claimed = formData.get('locale')
   return {
+    locale: isLocale(claimed) ? claimed : DEFAULT_LOCALE,
     key: String(formData.get('key') ?? ''),
     subject: String(formData.get('subject') ?? ''),
     bodyText: String(formData.get('bodyText') ?? ''),
@@ -47,10 +54,14 @@ export async function saveTemplateAction(_prev: FormState, formData: FormData): 
   }
 
   revalidatePath('/admin/settings/templates')
+  // Names the language, because the screen shows one language at a time and a
+  // "published" line that does not say which is how the English copy gets
+  // edited twice while the Spanish stays untouched.
+  const language = LOCALE_NAMES[draftFrom(formData).locale]
   return success(
     scope === 'org'
-      ? `Published as version ${result.version} for every facility.`
-      : `Published as version ${result.version} for this facility only.`,
+      ? `Published the ${language} version ${result.version} for every facility.`
+      : `Published the ${language} version ${result.version} for this facility only.`,
   )
 }
 

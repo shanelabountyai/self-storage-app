@@ -10,12 +10,14 @@ import type {
 import { codeForLease } from '@/lib/access/provision'
 import { mintPayLink, payLinkUrl } from '@/lib/portal/pay-links'
 import { leaseHasEffect } from '@/lib/admin/holds'
-import { REFERRAL_REFUSAL_MESSAGES, type ReferralRefusal } from '@storage/core/referrals'
+import { type ReferralRefusal } from '@storage/core/referrals'
 import { daysPastDue } from '@storage/core/metrics'
 import { restoreShortfallCents } from '@storage/core/access'
 import { OCCUPYING_LEASE_STATUSES } from '@storage/core/inventory'
 import { isAutoCollecting } from '@storage/core/payment-plans'
 import { formatCalendarDate, formatCents } from '@/lib/format'
+import { DEFAULT_LOCALE, isLocale, type Locale } from '@/lib/i18n'
+import { LOCALE_TAG, proseFor } from './prose'
 import { facilityPath } from '@/lib/facility/public-facility'
 import { absoluteUrl } from '@storage/core/marketing'
 import { currentRateForUnitType } from '@/lib/pricing/unit-type-rates'
@@ -91,6 +93,13 @@ type RecipientLead = {
 }
 
 type Recipient = {
+  /// B-261. The language this recipient is written to, resolved once here so
+  /// every context extender, the template lookup and the appended footers all
+  /// read the same answer. `Tenant.preferredLocale` when there is a tenant and
+  /// they have told us; `en` otherwise — a reservation and a lead have no
+  /// stored preference (D-7 makes both anonymous), and B-264 is the row that
+  /// gives the lead form one.
+  locale: Locale
   /// Identifies the recipient for idempotency and `Message.recipientTenantId`.
   /// Usually the tenant id — but a reservation is D-7's anonymous hold (no
   /// account required), so this falls back to the reservation id, which is
@@ -109,6 +118,28 @@ type Recipient = {
   lease: RecipientLease | null
   reservation: RecipientReservation | null
   lead: RecipientLead | null
+}
+
+/// B-261. The tenant fields every recipient resolver reads. One constant
+/// rather than the four verbatim copies this file carried — `preferredLocale`
+/// had to reach all of them, and a select a new resolver forgets is a tenant
+/// silently written to in English.
+const TENANT_SELECT = {
+  id: true,
+  email: true,
+  phone: true,
+  firstName: true,
+  lastName: true,
+  preferredLocale: true,
+  stripeDefaultPaymentMethodId: true,
+} as const
+
+/// Null means the tenant never told us, which resolves to English — see
+/// `Tenant.preferredLocale`. Narrowed rather than cast: the column is a plain
+/// `String?`, so a value written before `LOCALES` gained an entry (or removed
+/// from it since) must not become a dictionary lookup that returns undefined.
+function localeOf(tenant: { preferredLocale: string | null } | null | undefined): Locale {
+  return isLocale(tenant?.preferredLocale) ? tenant.preferredLocale : DEFAULT_LOCALE
 }
 
 const LEASE_SELECT = {
@@ -151,22 +182,14 @@ async function resolveRecipient(event: DomainEvent): Promise<Recipient | null> {
       select: {
         status: true,
         autopayEnabled: true,
-        tenant: {
-          select: {
-            id: true,
-            email: true,
-            phone: true,
-            firstName: true,
-            lastName: true,
-            stripeDefaultPaymentMethodId: true,
-          },
-        },
+        tenant: { select: TENANT_SELECT },
         facility: { select: FACILITY_SELECT },
         unit: { select: { number: true, unitType: { select: { name: true, widthFt: true, lengthFt: true } } } },
       },
     })
     if (!lease) return null
     return {
+      locale: localeOf(lease.tenant),
       recipientKey: lease.tenant.id,
       tenantId: lease.tenant.id,
       email: lease.tenant.email,
@@ -188,13 +211,14 @@ async function resolveRecipient(event: DomainEvent): Promise<Recipient | null> {
   if (event.entityType === 'Tenant') {
     const tenant = await prisma.tenant.findUnique({
       where: { id: event.entityId },
-      select: { id: true, email: true, phone: true, firstName: true, lastName: true },
+      select: { id: true, email: true, phone: true, firstName: true, lastName: true, preferredLocale: true },
     })
     if (!tenant) return null
     const facility = event.facilityId
       ? await prisma.facility.findUnique({ where: { id: event.facilityId }, select: FACILITY_SELECT })
       : null
     return {
+      locale: localeOf(tenant),
       recipientKey: tenant.id,
       tenantId: tenant.id,
       email: tenant.email,
@@ -219,16 +243,7 @@ async function resolveRecipient(event: DomainEvent): Promise<Recipient | null> {
         lease: {
           select: {
             ...LEASE_SELECT,
-            tenant: {
-              select: {
-                id: true,
-                email: true,
-                phone: true,
-                firstName: true,
-                lastName: true,
-                stripeDefaultPaymentMethodId: true,
-              },
-            },
+            tenant: { select: TENANT_SELECT },
           },
         },
       },
@@ -242,16 +257,7 @@ async function resolveRecipient(event: DomainEvent): Promise<Recipient | null> {
       where: { id: event.entityId },
       select: {
         facility: { select: FACILITY_SELECT },
-        tenant: {
-          select: {
-            id: true,
-            email: true,
-            phone: true,
-            firstName: true,
-            lastName: true,
-            stripeDefaultPaymentMethodId: true,
-          },
-        },
+        tenant: { select: TENANT_SELECT },
         // The lease this money was for, through the invoice it settled. A
         // payment that named no invoice (a move-in, a counter payment) falls
         // back to the tenant's occupying lease at this facility below.
@@ -273,6 +279,7 @@ async function resolveRecipient(event: DomainEvent): Promise<Recipient | null> {
       }))
 
     return {
+      locale: localeOf(payment.tenant),
       recipientKey: payment.tenant.id,
       tenantId: payment.tenant.id,
       email: payment.tenant.email,
@@ -310,16 +317,7 @@ async function resolveRecipient(event: DomainEvent): Promise<Recipient | null> {
       orderBy: { startDate: 'desc' },
       select: {
         ...LEASE_SELECT,
-        tenant: {
-          select: {
-            id: true,
-            email: true,
-            phone: true,
-            firstName: true,
-            lastName: true,
-            stripeDefaultPaymentMethodId: true,
-          },
-        },
+        tenant: { select: TENANT_SELECT },
       },
     })
     if (!lease) return null
@@ -337,12 +335,16 @@ async function resolveRecipient(event: DomainEvent): Promise<Recipient | null> {
         firstName: true,
         lastName: true,
         expiresAt: true,
+        tenant: { select: { preferredLocale: true } },
         facility: { select: FACILITY_SELECT },
         unitType: { select: { widthFt: true, lengthFt: true } },
       },
     })
     if (!reservation) return null
     return {
+      // A hold needs no account (D-7), so there is usually no tenant row to
+      // carry a preference. When the holder IS a known tenant, theirs applies.
+      locale: reservation.tenant ? localeOf(reservation.tenant) : DEFAULT_LOCALE,
       recipientKey: reservation.id,
       tenantId: reservation.tenantId,
       email: reservation.email,
@@ -377,6 +379,9 @@ async function resolveRecipient(event: DomainEvent): Promise<Recipient | null> {
     })
     if (!lead) return null
     return {
+      // B-264 owns giving the lead form a language to record; until then a
+      // stranger who has not rented is written to in English.
+      locale: DEFAULT_LOCALE,
       recipientKey: lead.id,
       tenantId: null,
       email: lead.email,
@@ -412,12 +417,14 @@ function recipientFromLease(
       phone: string | null
       firstName: string
       lastName: string
+      preferredLocale: string | null
       stripeDefaultPaymentMethodId: string | null
     }
   },
   facility: RecipientFacility,
 ): Recipient {
   return {
+    locale: localeOf(lease.tenant),
     recipientKey: lease.tenant.id,
     tenantId: lease.tenant.id,
     email: lease.tenant.email,
@@ -444,8 +451,8 @@ function formatFacilityAddress(f: RecipientFacility): string {
 /// An absolute local date/time, never a countdown (PRD 01 §2.2.1 — a ticking
 /// clock in an email or on a page a renter may return to hours later reads as
 /// pressure, and drifts from reality the instant the render is stale anyway).
-function formatAbsoluteLocal(date: Date, timezone: string): string {
-  return new Intl.DateTimeFormat('en-US', {
+function formatAbsoluteLocal(date: Date, timezone: string, locale: Locale): string {
+  return new Intl.DateTimeFormat(LOCALE_TAG[locale], {
     timeZone: timezone,
     weekday: 'long',
     month: 'long',
@@ -464,7 +471,11 @@ function baseUrl(): string {
 async function reservationExpiresAtContext(_event: DomainEvent, recipient: Recipient): Promise<MergeContext> {
   if (!recipient.reservation || !recipient.facility) return {} as MergeContext
   return {
-    'reservation.expires_at': formatAbsoluteLocal(recipient.reservation.expiresAt, recipient.facility.timezone),
+    'reservation.expires_at': formatAbsoluteLocal(
+      recipient.reservation.expiresAt,
+      recipient.facility.timezone,
+      recipient.locale,
+    ),
   }
 }
 
@@ -516,17 +527,20 @@ function mergeContextFor(recipient: Recipient): MergeContext {
 /// cannot disagree about a date or an amount.
 function scheduleValue(
   installments: readonly { dueDate: Date; amountCents: number }[],
+  locale: Locale,
 ): MergeValue {
+  const say = proseFor(locale)
+  const tag = LOCALE_TAG[locale]
   const rows = installments.map((installment, index) => [
     `${index + 1}`,
-    formatCalendarDate(installment.dueDate),
-    formatCents(installment.amountCents),
+    formatCalendarDate(installment.dueDate, undefined, tag),
+    formatCents(installment.amountCents, tag),
   ])
   return {
     text: rows.map(([number, date, amount]) => `${number}. ${date} — ${amount}`).join('\n'),
     html: tableHtml({
-      caption: 'Your payment plan',
-      columns: ['Payment', 'Date', 'Amount'],
+      caption: say.planScheduleCaption,
+      columns: [...say.planScheduleColumns],
       rows,
     }),
   }
@@ -563,13 +577,16 @@ const invoiceContext: ContextExtender = async (event, recipient) => {
   const timezone = recipient.facility?.timezone ?? 'America/Chicago'
   return {
     'invoice.number': invoice.number,
-    'invoice.due_date': new Intl.DateTimeFormat('en-US', {
+    'invoice.due_date': new Intl.DateTimeFormat(LOCALE_TAG[recipient.locale], {
       timeZone: timezone,
       weekday: 'long',
       month: 'long',
       day: 'numeric',
     }).format(invoice.dueDate),
-    'invoice.amount': formatCents(invoice.totalCents - invoice.amountPaidCents),
+    'invoice.amount': formatCents(
+      invoice.totalCents - invoice.amountPaidCents,
+      LOCALE_TAG[recipient.locale],
+    ),
     'links.pay_now': await payNowLink(recipient, event),
   }
 }
@@ -586,15 +603,16 @@ const invoiceContext: ContextExtender = async (event, recipient) => {
 async function referralRewardContext(
   event: DomainEvent,
   side: 'referrer' | 'referee',
+  locale: Locale,
 ): Promise<MergeContext> {
   const payload = event.payload as Record<string, unknown>
   const cents = typeof payload.rewardCents === 'number' ? payload.rewardCents : 0
-  const amount = formatCents(cents)
-  const line =
-    side === 'referee'
-      ? `${amount} comes off your first invoice.`
-      : `${amount} comes off your next invoice.`
-  return { 'referral.reward_line': line }
+  const amount = formatCents(cents, LOCALE_TAG[locale])
+  const say = proseFor(locale)
+  return {
+    'referral.reward_line':
+      side === 'referee' ? say.referralRewardReferee(amount) : say.referralRewardReferrer(amount),
+  }
 }
 
 /// D-55. Every unit the renter moved into, as a readable list.
@@ -608,7 +626,7 @@ async function referralRewardContext(
 /// the same reason), while `CheckoutSessionUnit` records exactly which units
 /// were bought together. Going lease → line → session → lines is therefore the
 /// only link that actually exists, rather than one inferred from timestamps.
-async function movedInUnitList(leaseId: string): Promise<string> {
+async function movedInUnitList(leaseId: string, locale: Locale): Promise<string> {
   const lease = await prisma.lease.findUnique({
     where: { id: leaseId },
     select: { unitId: true, unit: { select: { number: true } } },
@@ -636,8 +654,11 @@ async function movedInUnitList(leaseId: string): Promise<string> {
     .map((row) => row.unit?.number)
     .filter((number): number is string => Boolean(number))
   if (numbers.length === 0) return own
-  if (numbers.length === 1) return numbers[0]
-  return `${numbers.slice(0, -1).join(', ')} and ${numbers[numbers.length - 1]}`
+  // B-261. `Intl.ListFormat` replaces the hand-joined "A, B and C" this built:
+  // Spanish drops the serial comma and uses "e" before an i- sound, which is
+  // the kind of rule a join cannot know. Same tool B-259 used on
+  // `/messaging-policy` for the same reason.
+  return new Intl.ListFormat(LOCALE_TAG[locale], { style: 'long', type: 'conjunction' }).format(numbers)
 }
 
 const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
@@ -646,15 +667,13 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
   // returns null whenever there is nothing to reveal (no key configured, or
   // issuance genuinely hasn't landed yet), which is exactly the same fallback
   // the confirmation page shows.
-  'lease.moved_in': async (event) => {
+  'lease.moved_in': async (event, recipient) => {
+    const say = proseFor(recipient.locale)
     const code = await codeForLease(event.entityId)
-    const charge = await firstChargeLine(event.entityId)
     return {
-      'access.gate_code_line': code
-        ? `Your gate code is ${code}.`
-        : 'Your gate code will be texted to you within 15 minutes.',
-      'billing.first_charge_line': charge,
-      'unit.number_list': await movedInUnitList(event.entityId),
+      'access.gate_code_line': code ? say.gateCodeIssued(code) : say.gateCodePending,
+      'billing.first_charge_line': await firstChargeLine(event.entityId, recipient.locale),
+      'unit.number_list': await movedInUnitList(event.entityId, recipient.locale),
     }
   },
 
@@ -667,20 +686,21 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
   // current setting — changing the program next quarter must not rewrite what
   // somebody was already promised, and a template reading today's setting
   // would do exactly that.
-  'referral.qualified': async (event) => referralRewardContext(event, 'referrer'),
-  'referral.reward_granted': async (event) => referralRewardContext(event, 'referee'),
+  'referral.qualified': async (event, recipient) => referralRewardContext(event, 'referrer', recipient.locale),
+  'referral.reward_granted': async (event, recipient) => referralRewardContext(event, 'referee', recipient.locale),
 
-  'referral.refused': async (event) => {
+  'referral.refused': async (event, recipient) => {
     const payload = event.payload as Record<string, unknown>
     const refusal = typeof payload.refusal === 'string' ? payload.refusal : null
     // The same closed vocabulary the staff record and the portal read, so all
     // three say the same thing about the same refusal. An unrecognised key
     // falls back to a sentence that still says what to do, never to
     // "not eligible" — the row forbids that in as many words.
+    const say = proseFor(recipient.locale)
     const message =
-      refusal && refusal in REFERRAL_REFUSAL_MESSAGES
-        ? REFERRAL_REFUSAL_MESSAGES[refusal as ReferralRefusal]
-        : 'We could not confirm this referral. Call us and we will look at it with you.'
+      refusal && refusal in say.referralRefusals
+        ? say.referralRefusals[refusal as ReferralRefusal]
+        : say.referralRefusalUnknown
     return { 'referral.refusal_reason': message }
   },
 
@@ -693,17 +713,19 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
   // which the move-out transaction wrote — not re-derived from the ledger
   // here, because by send time a later adjustment could make this sentence
   // disagree with the figure the tenant was shown at the counter.
-  'lease.moved_out': async (event) => {
+  'lease.moved_out': async (event, recipient) => {
     const payload = (event.payload ?? {}) as { amountDueCents?: number; refundDueCents?: number }
     const due = payload.amountDueCents ?? 0
     const refund = payload.refundDueCents ?? 0
+    const say = proseFor(recipient.locale)
+    const tag = LOCALE_TAG[recipient.locale]
     return {
       'billing.settlement_line':
         refund > 0
-          ? `We owe you ${formatCents(refund)} back — we'll be in touch about getting it to you.`
+          ? say.settlementRefund(formatCents(refund, tag))
           : due > 0
-            ? `There is ${formatCents(due)} still outstanding on the account.`
-            : 'Your account is settled in full — nothing further is owed.',
+            ? say.settlementOutstanding(formatCents(due, tag))
+            : say.settlementSettled,
     }
   },
 
@@ -716,8 +738,8 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
     const date = payload.moveOutDate ? new Date(`${payload.moveOutDate}T00:00:00.000Z`) : null
     return {
       'lease.move_out_date': date
-        ? new Intl.DateTimeFormat('en-US', { timeZone: timezone, month: 'long', day: 'numeric', year: 'numeric' }).format(date)
-        : 'the date you requested',
+        ? new Intl.DateTimeFormat(LOCALE_TAG[recipient.locale], { timeZone: timezone, month: 'long', day: 'numeric', year: 'numeric' }).format(date)
+        : proseFor(recipient.locale).theDateYouRequested,
     }
   },
 
@@ -730,10 +752,10 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
     const timezone = recipient.facility?.timezone ?? 'America/Chicago'
     const date = payload.transferDate ? new Date(`${payload.transferDate}T00:00:00.000Z`) : null
     return {
-      'transfer.to_unit_number': payload.toUnitNumber ?? 'the unit you chose',
+      'transfer.to_unit_number': payload.toUnitNumber ?? proseFor(recipient.locale).theUnitYouChose,
       'transfer.date': date
-        ? new Intl.DateTimeFormat('en-US', { timeZone: timezone, month: 'long', day: 'numeric', year: 'numeric' }).format(date)
-        : 'the date you requested',
+        ? new Intl.DateTimeFormat(LOCALE_TAG[recipient.locale], { timeZone: timezone, month: 'long', day: 'numeric', year: 'numeric' }).format(date)
+        : proseFor(recipient.locale).theDateYouRequested,
     }
   },
 
@@ -758,8 +780,14 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
       : []
     return {
       'access.days_past_due': String(daysPastDue(invoices, new Date())),
-      'balance.total': formatCents(await leaseBalanceCents(recipient.lease?.id ?? null)),
-      'access.restore_amount': formatCents(await restoreAmountCents(recipient)),
+      'balance.total': formatCents(
+        await leaseBalanceCents(recipient.lease?.id ?? null),
+        LOCALE_TAG[recipient.locale],
+      ),
+      'access.restore_amount': formatCents(
+        await restoreAmountCents(recipient),
+        LOCALE_TAG[recipient.locale],
+      ),
       'links.pay_now': await payNowLink(recipient, event),
     }
   },
@@ -777,7 +805,10 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
       : []
     return {
       'access.days_past_due': String(daysPastDue(invoices, new Date())),
-      'balance.total': formatCents(await leaseBalanceCents(recipient.lease?.id ?? null)),
+      'balance.total': formatCents(
+        await leaseBalanceCents(recipient.lease?.id ?? null),
+        LOCALE_TAG[recipient.locale],
+      ),
       'links.pay_now': await payNowLink(recipient, event),
     }
   },
@@ -793,9 +824,13 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
     // day off what the actual notice document printed.
     const deadline = payload.deadlineDate ? new Date(`${payload.deadlineDate}T00:00:00.000Z`) : null
     return {
-      'notice.balance': formatCents(payload.claimTotalCents ?? 0),
+      'notice.balance': formatCents(payload.claimTotalCents ?? 0, LOCALE_TAG[recipient.locale]),
+      // The notice document itself is English regardless (D-122 keeps legal
+      // documents in one language, and B-261 does not change that) — but this
+      // courtesy email is not the notice, so its date is written the way the
+      // rest of the email is.
       'notice.deadline_date': deadline
-        ? new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', month: 'long', day: 'numeric', year: 'numeric' }).format(deadline)
+        ? new Intl.DateTimeFormat(LOCALE_TAG[recipient.locale], { timeZone: 'UTC', month: 'long', day: 'numeric', year: 'numeric' }).format(deadline)
         : '—',
       'links.pay_now': await payNowLink(recipient, event),
     }
@@ -817,7 +852,9 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
         })
       : { offer: null }
     return {
-      'lead.quoted_price': rate ? `${formatCents(rate.webRateCents)}/mo` : 'Call for current pricing',
+      'lead.quoted_price': rate
+        ? `${formatCents(rate.webRateCents, LOCALE_TAG[recipient.locale])}/mo`
+        : proseFor(recipient.locale).callForPricing,
       // AC1: step 3 fires only when a promo is live, so this is never blank on
       // the send that actually uses it — but computed here, at send time, so a
       // promo that ended between the job's check and the dispatch is not
@@ -857,7 +894,7 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
 
     return {
       'unit.size': `${session.unitType.widthFt}x${session.unitType.lengthFt}`,
-      'checkout.quoted_price': `${formatCents(session.quotedRateCents)}/mo`,
+      'checkout.quoted_price': `${formatCents(session.quotedRateCents, LOCALE_TAG[recipient.locale])}/mo`,
       'checkout.promo_line': offer.offer ? offer.offer.terms : '',
       'links.resume_checkout': checkoutResumeUrl(mintCheckoutResumeToken(session.id), baseUrl()),
     }
@@ -886,7 +923,7 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
   // rate, so a live read would have to reconstruct which unit they came from
   // — the event already carries it, and carrying it is why the payload has
   // those fields.
-  'lease.transferred': async (event) => {
+  'lease.transferred': async (event, recipient) => {
     const payload = (event.payload ?? {}) as {
       fromUnitNumber?: string
       toUnitNumber?: string
@@ -898,15 +935,17 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
     const transferDate = payload.transferDate
       ? new Date(`${payload.transferDate}T00:00:00.000Z`)
       : null
+    const say = proseFor(recipient.locale)
+    const tag = LOCALE_TAG[recipient.locale]
 
     return {
       'transfer.from_unit': payload.fromUnitNumber ?? '',
       'transfer.to_unit': payload.toUnitNumber ?? '',
-      'transfer.new_rate': payload.newRateCents !== undefined ? formatCents(payload.newRateCents) : '',
+      'transfer.new_rate': payload.newRateCents !== undefined ? formatCents(payload.newRateCents, tag) : '',
       // UTC, like every other calendar-date merge field here — the transfer
       // happened on a day, and a timezone would shift it.
       'transfer.date': transferDate
-        ? new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', dateStyle: 'long' }).format(transferDate)
+        ? new Intl.DateTimeFormat(tag, { timeZone: 'UTC', dateStyle: 'long' }).format(transferDate)
         : '',
       // One sentence rather than three merge fields the template would have
       // to assemble: the three cases (charged, credited, nothing) read
@@ -914,15 +953,15 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
       // it does not have.
       'transfer.settlement_line':
         due > 0
-          ? `You were charged ${formatCents(due)} today for the rest of this billing period.`
+          ? say.transferChargedToday(formatCents(due, tag))
           : due < 0
-            ? `${formatCents(-due)} has been credited to your account.`
-            : 'There was nothing extra to pay today.',
+            ? say.transferCreditedToday(formatCents(-due, tag))
+            : say.transferNothingToPay,
       'links.portal': `${baseUrl()}/login`,
     }
   },
 
-  'lease.rate_increase_scheduled': async (event) => {
+  'lease.rate_increase_scheduled': async (event, recipient) => {
     const payload = (event.payload ?? {}) as {
       previousRateCents?: number
       newRateCents?: number
@@ -933,14 +972,14 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
       ? new Date(`${payload.effectiveDate}T00:00:00.000Z`)
       : null
     return {
-      'rate.old': payload.previousRateCents !== undefined ? formatCents(payload.previousRateCents) : '',
-      'rate.new': payload.newRateCents !== undefined ? formatCents(payload.newRateCents) : '',
+      'rate.old': payload.previousRateCents !== undefined ? formatCents(payload.previousRateCents, LOCALE_TAG[recipient.locale]) : '',
+      'rate.new': payload.newRateCents !== undefined ? formatCents(payload.newRateCents, LOCALE_TAG[recipient.locale]) : '',
       // Formatted in UTC, not the facility timezone: the effective date is a
       // calendar day (`@db.Date`), and running it through a timezone would
       // shift it a day off the date the increase actually takes effect on —
       // the same reasoning `notice.generated`'s deadline date already uses.
       'rate.effective_date': effective
-        ? new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', dateStyle: 'long' }).format(effective)
+        ? new Intl.DateTimeFormat(LOCALE_TAG[recipient.locale], { timeZone: 'UTC', dateStyle: 'long' }).format(effective)
         : '',
       'rate.notice_days': payload.noticeDays !== undefined ? String(payload.noticeDays) : '',
       'links.portal': `${baseUrl()}/login`,
@@ -959,33 +998,31 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
     const total = payload.totalSteps ?? 4
     const last = position >= total
 
-    const tone = [
-      'It looks like this month’s payment did not go through — it happens, and it is quick to put right.',
-      'Your balance is still outstanding, and a late fee may now have been added.',
-      'This account is far enough behind that your gate access is at risk.',
-      'This account is seriously overdue and we need to hear from you.',
-    ]
-    const consequence = [
-      'Paying today avoids any late fee.',
-      'Please settle it when you can, or call us and we will work something out.',
-      'If it stays unpaid, your gate code will stop working until the balance is cleared. Your belongings stay where they are.',
-      'If we do not hear from you, we would have to begin the formal collection steps our lease and state law allow. We would much rather arrange something with you.',
-    ]
+    // B-261. The four rungs moved to `lib/comms/prose.ts` so they exist in
+    // both languages. This is the message the whole item is FOR: the ladder
+    // ends in a lien file, and every sentence a tenant actually reads in this
+    // email is one of these — the template body around them is a greeting, a
+    // balance and a link. A Spanish `dunning_step` template with English rungs
+    // inside it would have been worse than the English original.
+    const say = proseFor(recipient.locale)
     // Position beyond the written rungs reuses the last one rather than
     // rendering blank: an operator who adds a fifth step gets the firmest
     // wording, not an empty paragraph.
-    const rung = Math.min(Math.max(position, 1), tone.length) - 1
+    const rung = Math.min(Math.max(position, 1), say.dunningTone.length) - 1
 
     return {
       'dunning.subject_line': last
-        ? 'Your account is seriously overdue'
+        ? say.dunningSubjectLast
         : position === 1
-          ? 'We missed your payment'
-          : 'Your balance is still outstanding',
-      'dunning.tone_line': tone[rung],
-      'dunning.consequence_line': consequence[rung],
+          ? say.dunningSubjectFirst
+          : say.dunningSubjectMiddle,
+      'dunning.tone_line': say.dunningTone[rung],
+      'dunning.consequence_line': say.dunningConsequence[rung],
       'dunning.days_past_due': String(payload.day ?? 0),
-      'balance.total': formatCents(await leaseBalanceCents(recipient.lease?.id ?? null)),
+      'balance.total': formatCents(
+        await leaseBalanceCents(recipient.lease?.id ?? null),
+        LOCALE_TAG[recipient.locale],
+      ),
       'links.pay_now': await payNowLink(recipient, event),
     }
   },
@@ -1003,14 +1040,19 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
     })
     if (!payment) return {} as MergeContext
     const timezone = recipient.facility?.timezone ?? 'America/Chicago'
+    const tag = LOCALE_TAG[recipient.locale]
     return {
-      'payment.amount': formatCents(payment.amountCents),
-      'payment.date': new Intl.DateTimeFormat('en-US', {
+      'payment.amount': formatCents(payment.amountCents, tag),
+      'payment.date': new Intl.DateTimeFormat(tag, {
         timeZone: timezone,
         dateStyle: 'long',
       }).format(payment.receivedAt),
-      'payment.method': payment.method === 'card' ? 'card' : payment.method.replace('_', ' '),
-      'balance.total': formatCents(await leaseBalanceCents(recipient.lease?.id ?? null)),
+      // B-261. A lookup rather than `method.replace('_', ' ')`, which turned
+      // the enum into English by accident of its spelling — `money_order`
+      // reads "money order" and there is no punctuation trick that makes it
+      // read "giro postal".
+      'payment.method': proseFor(recipient.locale).paymentMethods[payment.method],
+      'balance.total': formatCents(await leaseBalanceCents(recipient.lease?.id ?? null), tag),
     }
   },
 
@@ -1021,11 +1063,10 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
   'payment.failed': async (event, recipient) => {
     const payload = (event.payload ?? {}) as { amountCents?: number; code?: string }
     const expired = payload.code === 'expired_card'
+    const say = proseFor(recipient.locale)
     return {
-      'payment.amount': formatCents(payload.amountCents ?? 0),
-      'payment.failure_line': expired
-        ? 'The card we have on file has expired, so we could not take the payment.'
-        : 'Your bank declined the payment. That is usually a temporary block or a limit, not anything wrong with your account here.',
+      'payment.amount': formatCents(payload.amountCents ?? 0, LOCALE_TAG[recipient.locale]),
+      'payment.failure_line': expired ? say.paymentFailedExpiredCard : say.paymentFailedDeclined,
       // Updating a card genuinely needs the portal — it changes what autopay
       // charges from then on, which is more than this link is scoped to grant.
       'links.update_card': `${baseUrl()}/portal/methods`,
@@ -1043,65 +1084,64 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
     }
     const number = payload.reminderNumber ?? 1
     const total = payload.remindersTotal ?? 3
+    const say = proseFor(recipient.locale)
     return {
-      'payment.amount': formatCents(payload.outstandingCents ?? 0),
+      'payment.amount': formatCents(payload.outstandingCents ?? 0, LOCALE_TAG[recipient.locale]),
       'links.pay_now': await payNowLink(recipient, event),
       'links.update_card': `${baseUrl()}/portal/methods`,
-      'payment.retry_line':
-        number >= total
-          ? 'This is the last reminder we will send about this payment. If it stays unpaid, someone from the office will be in touch.'
-          : 'We will try the card again automatically, so if you update it or add funds there is nothing else to do.',
+      'payment.retry_line': number >= total ? say.retryLastReminder : say.retryWillTryAgain,
     }
   },
 
   // CN-10a. The card has not failed yet — this is the whole point, and the
   // wording has to stay out of dunning territory or a three-year on-time tenant
   // reads it as a collections letter.
-  'payment_method.expiring': async (event) => {
+  'payment_method.expiring': async (event, recipient) => {
     const payload = (event.payload ?? {}) as { expMonth?: number; expYear?: number; stage?: number }
     const month = payload.expMonth
     const year = payload.expYear
+    const say = proseFor(recipient.locale)
     return {
-      'card.expires': month && year ? `${String(month).padStart(2, '0')}/${year}` : 'soon',
-      'card.urgency_line':
-        payload.stage === 7
-          ? 'It expires within the week, so this is worth doing today.'
-          : 'There is no rush — any time in the next few weeks is fine.',
+      'card.expires': month && year ? `${String(month).padStart(2, '0')}/${year}` : say.cardExpiresSoon,
+      'card.urgency_line': payload.stage === 7 ? say.cardUrgencyThisWeek : say.cardUrgencyRelaxed,
       'links.update_card': `${baseUrl()}/portal/methods`,
     }
   },
 
   // D-17. Two notices the owner's decision explicitly assigned to this item.
-  'protection.proof_expiring': async (event) => {
+  'protection.proof_expiring': async (event, recipient) => {
     const payload = (event.payload ?? {}) as { expiresOn?: string }
     return {
       'protection.expires_on': payload.expiresOn
-        ? new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', dateStyle: 'long' }).format(
+        ? new Intl.DateTimeFormat(LOCALE_TAG[recipient.locale], { timeZone: 'UTC', dateStyle: 'long' }).format(
             new Date(`${payload.expiresOn}T00:00:00.000Z`),
           )
-        : 'soon',
+        : proseFor(recipient.locale).protectionExpiresSoon,
       'links.portal': `${baseUrl()}/login`,
     }
   },
 
-  'protection.auto_enrolled': async (event) => {
+  'protection.auto_enrolled': async (event, recipient) => {
     const payload = (event.payload ?? {}) as { planName?: string; premiumCents?: number }
     return {
-      'protection.plan_name': payload.planName ?? 'our standard cover',
-      'protection.premium': formatCents(payload.premiumCents ?? 0),
+      // The plan's own name is operator-typed data (D-122) and is quoted as
+      // written; only the fallback for a plan with no name is translated.
+      'protection.plan_name': payload.planName ?? proseFor(recipient.locale).protectionStandardPlan,
+      'protection.premium': formatCents(payload.premiumCents ?? 0, LOCALE_TAG[recipient.locale]),
     }
   },
 
   // ── PRD 05 CN-24 (B-191). The payment plan's four messages. ────────────────
 
-  'payment_plan.agreed': async (event) => {
+  'payment_plan.agreed': async (event, recipient) => {
     const plan = await planForEvent(event)
     if (!plan) return {} as MergeContext
+    const locale = recipient.locale
     return {
-      'plan.total': formatCents(plan.totalCents),
-      'plan.schedule': scheduleValue(plan.installments),
-      'plan.collection_line': collectionLine(plan, 'each payment'),
-      'plan.grace_line': graceLine(plan.lease.facility.planGraceDays, 'agreed'),
+      'plan.total': formatCents(plan.totalCents, LOCALE_TAG[locale]),
+      'plan.schedule': scheduleValue(plan.installments, locale),
+      'plan.collection_line': collectionLine(plan, 'each', locale),
+      'plan.grace_line': graceLine(plan.lease.facility.planGraceDays, 'agreed', locale),
       'links.plan': `${baseUrl()}/portal/payment-plan`,
     }
   },
@@ -1111,15 +1151,17 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
     const payload = (event.payload ?? {}) as { installmentId?: string }
     const installment = plan?.installments.find((one) => one.id === payload.installmentId)
     if (!plan || !installment) return {} as MergeContext
+    const locale = recipient.locale
+    const tag = LOCALE_TAG[locale]
     return {
-      'plan.installment_amount': formatCents(installment.amountCents),
-      'plan.installment_due_date': formatCalendarDate(installment.dueDate, {
-        weekday: 'long',
-        month: 'long',
-        day: 'numeric',
-      }),
-      'plan.collection_line': collectionLine(plan, 'this payment'),
-      'plan.grace_line': graceLine(plan.lease.facility.planGraceDays, 'due_soon'),
+      'plan.installment_amount': formatCents(installment.amountCents, tag),
+      'plan.installment_due_date': formatCalendarDate(
+        installment.dueDate,
+        { weekday: 'long', month: 'long', day: 'numeric' },
+        tag,
+      ),
+      'plan.collection_line': collectionLine(plan, 'this', locale),
+      'plan.grace_line': graceLine(plan.lease.facility.planGraceDays, 'due_soon', locale),
       'links.pay_now': await payNowLink(recipient, event),
     }
   },
@@ -1139,14 +1181,15 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
     const payload = (event.payload ?? {}) as { installmentId?: string }
     const missed = plan?.installments.find((one) => one.id === payload.installmentId)
     if (!missed) return {} as MergeContext
+    const tag = LOCALE_TAG[recipient.locale]
     return {
-      'plan.balance': formatCents(await leaseBalanceCents(recipient.lease?.id ?? null)),
-      'plan.missed_amount': formatCents(missed.amountCents),
-      'plan.missed_due_date': formatCalendarDate(missed.dueDate, {
-        weekday: 'long',
-        month: 'long',
-        day: 'numeric',
-      }),
+      'plan.balance': formatCents(await leaseBalanceCents(recipient.lease?.id ?? null), tag),
+      'plan.missed_amount': formatCents(missed.amountCents, tag),
+      'plan.missed_due_date': formatCalendarDate(
+        missed.dueDate,
+        { weekday: 'long', month: 'long', day: 'numeric' },
+        tag,
+      ),
       'links.pay_now': await payNowLink(recipient, event),
       'links.plan': `${baseUrl()}/portal/payment-plan`,
     }
@@ -1164,24 +1207,27 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
         })
       : null
     if (!invoice) return {} as MergeContext
+    const tag = LOCALE_TAG[recipient.locale]
     return {
-      'plan.balance': formatCents(await leaseBalanceCents(recipient.lease?.id ?? null)),
+      'plan.balance': formatCents(await leaseBalanceCents(recipient.lease?.id ?? null), tag),
       // What is still outstanding on it, not what it was raised for: a tenant
       // who part-paid must be quoted the part they did not.
-      'invoice.amount': formatCents(invoice.totalCents - invoice.amountPaidCents),
-      'invoice.due_date': formatCalendarDate(invoice.dueDate, {
-        weekday: 'long',
-        month: 'long',
-        day: 'numeric',
-      }),
+      'invoice.amount': formatCents(invoice.totalCents - invoice.amountPaidCents, tag),
+      'invoice.due_date': formatCalendarDate(
+        invoice.dueDate,
+        { weekday: 'long', month: 'long', day: 'numeric' },
+        tag,
+      ),
       'links.pay_now': await payNowLink(recipient, event),
       'links.plan': `${baseUrl()}/portal/payment-plan`,
     }
   },
 
-  'payment_plan.completed': async (event) => {
+  'payment_plan.completed': async (event, recipient) => {
     const plan = await planForEvent(event)
-    return plan ? { 'plan.total': formatCents(plan.totalCents) } : ({} as MergeContext)
+    return plan
+      ? { 'plan.total': formatCents(plan.totalCents, LOCALE_TAG[recipient.locale]) }
+      : ({} as MergeContext)
   },
 
   // B-206. The reason is read from the plan row rather than carried on the
@@ -1192,8 +1238,14 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
     const plan = await planForEvent(event)
     if (!plan?.cancelReason) return {} as MergeContext
     return {
+      // Operator-typed (D-122), so quoted as written — in whatever language
+      // the staffer typed it, exactly as the staff screen and the audit log
+      // show it. Translating it would put words in their mouth.
       'plan.cancel_reason': plan.cancelReason,
-      'plan.balance': formatCents(await leaseBalanceCents(recipient.lease?.id ?? null)),
+      'plan.balance': formatCents(
+        await leaseBalanceCents(recipient.lease?.id ?? null),
+        LOCALE_TAG[recipient.locale],
+      ),
       'links.pay_now': await payNowLink(recipient, event),
     }
   },
@@ -1237,16 +1289,20 @@ function collectionLine(
     autoCollect: boolean
     lease: { autopayEnabled: boolean; tenant: { stripeDefaultPaymentMethodId: string | null } }
   },
-  subject: 'each payment' | 'this payment',
+  subject: 'each' | 'this',
+  locale: Locale,
 ): string {
   const automatic = isAutoCollecting({
     autoCollect: plan.autoCollect,
     autopayEnabled: plan.lease.autopayEnabled,
     hasSavedCard: Boolean(plan.lease.tenant.stripeDefaultPaymentMethodId),
   })
-  return automatic
-    ? `We will take ${subject} from your card on file on the date shown — you do not need to do anything.`
-    : `${subject === 'each payment' ? 'These payments are' : 'This payment is'} not taken automatically. Pay online, over the phone, or at the office on or before the date shown.`
+  // B-261: the subject is now 'each' | 'this' rather than the English noun
+  // phrase it used to interpolate. Spanish inflects the whole clause around
+  // it ("Estos pagos no se cobran" / "Este pago no se cobra"), so the choice
+  // has to reach the sentence rather than a fragment of it.
+  const say = proseFor(locale)
+  return automatic ? say.planCollectionAutomatic(subject) : say.planCollectionManual(subject)
 }
 
 /// B-210. D-98's grace window, in the tenant's words and read fresh at send
@@ -1261,16 +1317,9 @@ function collectionLine(
 ///
 /// Zero grace is a real configuration and gets the original sentence back:
 /// there is no catching up to describe.
-function graceLine(graceDays: number, message: 'agreed' | 'due_soon'): string {
-  const days = `${graceDays} ${graceDays === 1 ? 'day' : 'days'}`
-  if (message === 'agreed') {
-    return graceDays > 0
-      ? `If a payment is late you have ${days} to catch it up. If it is still unpaid after that, or new rent goes unpaid, the plan ends, all three start again, and the full amount becomes due.`
-      : 'If a payment is missed, or new rent goes unpaid, the plan ends, all three start again, and the full amount becomes due.'
-  }
-  return graceDays > 0
-    ? `If it is late you have ${days} to catch it up. After that the plan ends: the full amount you owe becomes due, late fees start again and your gate access can be turned off.`
-    : 'If it is missed, the plan ends: the full amount you owe becomes due, late fees start again and your gate access can be turned off.'
+function graceLine(graceDays: number, message: 'agreed' | 'due_soon', locale: Locale): string {
+  const say = proseFor(locale)
+  return message === 'agreed' ? say.planGraceAgreed(graceDays) : say.planGraceDueSoon(graceDays)
 }
 
 /// What the lease owes right now, from the ledger — PRD 01 §7.3 makes the
@@ -1339,7 +1388,7 @@ async function leaseBalanceCents(leaseId: string | null): Promise<number> {
 /// invoices yet (billing is B-044) — this is the one thing that does exist at
 /// move-in (B-026's opening ledger), read fresh rather than carried in the
 /// event payload (FR-18).
-async function firstChargeLine(leaseId: string): Promise<string> {
+async function firstChargeLine(leaseId: string, locale: Locale): Promise<string> {
   const lease = await prisma.lease.findUnique({
     where: { id: leaseId },
     select: { monthlyRateCents: true, billingDay: true },
@@ -1350,9 +1399,15 @@ async function firstChargeLine(leaseId: string): Promise<string> {
     select: { amountCents: true },
   })
   if (!lease || !charge) return ''
-  const today = (charge.amountCents / 100).toFixed(2)
-  const monthly = (lease.monthlyRateCents / 100).toFixed(2)
-  return `You were charged $${today} today. After that, rent is $${monthly}/mo, billed on day ${lease.billingDay} of each month.`
+  // B-261: through `formatCents` rather than a hand-built `$${n.toFixed(2)}`,
+  // so the figure in this sentence is written the same way as every other
+  // figure in the same email.
+  const tag = LOCALE_TAG[locale]
+  return proseFor(locale).firstCharge(
+    formatCents(charge.amountCents, tag),
+    formatCents(lease.monthlyRateCents, tag),
+    lease.billingDay,
+  )
 }
 
 type ResolvedRule = {
@@ -1399,20 +1454,42 @@ async function applicableRules(event: DomainEvent): Promise<ResolvedRule[]> {
   }))
 }
 
-/// The effective template for a key: facility override beats org default, and
-/// the highest active version wins (versioned per FR-21).
-async function effectiveTemplate(templateKey: string, channel: MessageChannel, facilityId: string | null) {
+/// The effective template for a key: the recipient's language beats English,
+/// a facility override beats the org default, and the highest active version
+/// wins (versioned per FR-21).
+///
+/// B-261 added the first of those three, and it falls back rather than
+/// refusing: a key with no row in the recipient's locale renders its English
+/// one. Refusing would mean a payment reminder withheld over a missing
+/// translation, and the ladder that follows an unpaid invoice does not pause
+/// while somebody writes one.
+///
+/// The fallback is per LANGUAGE, not per facility — a facility that overrides
+/// only the English copy keeps the org-default Spanish rather than falling all
+/// the way back to its own English. Both resolutions happen inside the chosen
+/// language, in that order.
+async function effectiveTemplate(
+  templateKey: string,
+  channel: MessageChannel,
+  facilityId: string | null,
+  locale: Locale,
+) {
   const rows = await prisma.messageTemplate.findMany({
     where: {
       key: templateKey,
       channel,
       active: true,
+      locale: locale === DEFAULT_LOCALE ? DEFAULT_LOCALE : { in: [locale, DEFAULT_LOCALE] },
       OR: [{ facilityId: facilityId ?? undefined }, { facilityId: null }],
     },
   })
   if (rows.length === 0) return null
-  const scoped = rows.filter((r) => r.facilityId === facilityId)
-  const pool = scoped.length > 0 ? scoped : rows.filter((r) => r.facilityId === null)
+  const inLocale = rows.filter((r) => r.locale === locale)
+  const byLocale = inLocale.length > 0 ? inLocale : rows.filter((r) => r.locale === DEFAULT_LOCALE)
+  if (byLocale.length === 0) return null
+  const scoped = byLocale.filter((r) => r.facilityId === facilityId)
+  const pool = scoped.length > 0 ? scoped : byLocale.filter((r) => r.facilityId === null)
+  if (pool.length === 0) return null
   return pool.reduce((best, r) => (r.version > best.version ? r : best))
 }
 
@@ -1752,7 +1829,7 @@ async function sendEmailFallback(
     return 'suppressed'
   }
 
-  const template = await effectiveTemplate(rule.templateKey, 'email', recipient.facility?.id ?? null)
+  const template = await effectiveTemplate(rule.templateKey, 'email', recipient.facility?.id ?? null, recipient.locale)
   if (!template) {
     await writeMessage(idempotencyKey, {
       ...base, templateVersion: 0, toAddress: address, subject: null, body: '',
@@ -1763,7 +1840,7 @@ async function sendEmailFallback(
 
   let rendered
   try {
-    rendered = renderEmail(template, context)
+    rendered = renderEmail(template, context, recipient.locale)
   } catch (error) {
     if (error instanceof RenderError) {
       await writeMessage(idempotencyKey, {
@@ -1963,7 +2040,7 @@ async function deliverSmsForRule(
     }
   }
 
-  const template = await effectiveTemplate(rule.templateKey, 'sms', recipient.facility?.id ?? null)
+  const template = await effectiveTemplate(rule.templateKey, 'sms', recipient.facility?.id ?? null, recipient.locale)
   if (!template) {
     if (fallbackEligible) return sendEmailFallback(idempotencyKey, rule, recipient, context, base)
     await writeMessage(idempotencyKey, {
@@ -1978,7 +2055,7 @@ async function deliverSmsForRule(
     // FR-11: every SMS carries the opt-out/help line. Appended here, not
     // authored per template, for the same reason the postal footer is
     // appended centrally — a template author cannot forget it.
-    bodyText = `${renderString(template.bodyText, context, template.requiredMergeFields)} Reply STOP to opt out, HELP for help.`
+    bodyText = `${renderString(template.bodyText, context, template.requiredMergeFields)} ${proseFor(recipient.locale).smsOptOut}`
   } catch (error) {
     if (error instanceof RenderError) {
       await writeMessage(idempotencyKey, {
@@ -2168,7 +2245,7 @@ async function deliverForRule(
     }
   }
 
-  const template = await effectiveTemplate(rule.templateKey, CHANNEL, recipient.facility?.id ?? null)
+  const template = await effectiveTemplate(rule.templateKey, CHANNEL, recipient.facility?.id ?? null, recipient.locale)
   if (!template) {
     await writeMessage(idempotencyKey, {
       ...base,
@@ -2184,7 +2261,7 @@ async function deliverForRule(
 
   let rendered
   try {
-    rendered = renderEmail(template, context)
+    rendered = renderEmail(template, context, recipient.locale)
   } catch (error) {
     // FR-9: a missing merge field blocks the send loudly. Recorded as failed
     // (the evidence a future delivery dashboard surfaces) rather than thrown,
@@ -2235,9 +2312,12 @@ async function deliverForRule(
   // in the system links to `/unsubscribe`.
   const isMarketing = rule.classification === 'marketing'
   const unsubscribeLink = isMarketing ? unsubscribeUrl(mintUnsubscribeToken(address), baseUrl()) : null
-  const text = unsubscribeLink ? `${withFooter}\n\nUnsubscribe: ${unsubscribeLink}` : withFooter
+  // B-261. The word, in the recipient's language — the LINK is unchanged, and
+  // the page it lands on is `/unsubscribe`, which B-260 translated.
+  const unsubscribeLabel = proseFor(recipient.locale).unsubscribe
+  const text = unsubscribeLink ? `${withFooter}\n\n${unsubscribeLabel}: ${unsubscribeLink}` : withFooter
   const html = unsubscribeLink
-    ? `${htmlWithFooter}<p><a href="${unsubscribeLink}">Unsubscribe</a></p>`
+    ? `${htmlWithFooter}<p><a href="${unsubscribeLink}">${unsubscribeLabel}</a></p>`
     : htmlWithFooter
 
   const provider = selectProvider()

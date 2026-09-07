@@ -11,8 +11,8 @@ It complements rather than duplicates:
 - `git log` — the change-by-change record
 - `README.md` — how the built thing works today
 
-**Status:** 255 of 267 backlog items complete. Latest entry: Chore (`3fa83b3`).
-**Entries:** 285 across 20 part files.
+**Status:** 260 of 272 backlog items complete. Latest entry: B-264.
+**Entries:** 290 across 20 part files.
 
 ## Reading one entry
 
@@ -334,3 +334,8 @@ Append the entry as a `### ` heading at the end of the **highest-numbered** file
 | Chore — the build record was too large to read, so no session read it | `e33c60f` `2d63bfe` | [20-from-b-258](progress/20-from-b-258.md#chore-the-build-record-was-too-large-to-read-so-no-session-read-it) |
 | Chore — the decision log gets an index, reversing what the split left behind | `7f8f988` | [20-from-b-258](progress/20-from-b-258.md#chore-the-decision-log-gets-an-index-reversing-what-the-split-left-behind) |
 | Chore — an index gives an address; the row is still in a 493 KB file | `3fa83b3` | [20-from-b-258](progress/20-from-b-258.md#chore-an-index-gives-an-address-the-row-is-still-in-a-493-kb-file) |
+| B-262 — The Spanish reaches the pages a renter reads (2026-09-06) | — | [20-from-b-258](progress/20-from-b-258.md#b-262-the-spanish-reaches-the-pages-a-renter-reads-2026-09-06) |
+| B-259 — A Spanish renter's consent record names Spanish words (2026-09-06) | — | [20-from-b-258](progress/20-from-b-258.md#b-259-a-spanish-renters-consent-record-names-spanish-words-2026-09-06) |
+| B-261 — Every email and text follows the tenant's language (2026-09-06) | — | [20-from-b-258](progress/20-from-b-258.md#b-261-every-email-and-text-follows-the-tenants-language-2026-09-06) |
+| B-263 — The Spanish checkout refuses you in Spanish (2026-09-06) | — | [20-from-b-258](progress/20-from-b-258.md#b-263-the-spanish-checkout-refuses-you-in-spanish-2026-09-06) |
+| B-264 — The lead form on a Spanish facility page is Spanish (2026-09-06) | — | [20-from-b-258](progress/20-from-b-258.md#b-264-the-lead-form-on-a-spanish-facility-page-is-spanish-2026-09-06) |

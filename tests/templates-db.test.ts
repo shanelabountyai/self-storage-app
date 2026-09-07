@@ -111,6 +111,7 @@ describeDb('template editor', () => {
       bodyText: 'Hi {{tenant.middle_name}}',
       requiredMergeFields: [],
       scope: 'facility',
+      locale: 'en',
     })
     expect(result).toMatchObject({ ok: false, problem: 'unknown_fields' })
     if (result.ok) throw new Error('unreachable')
@@ -126,6 +127,7 @@ describeDb('template editor', () => {
         bodyText: '   ',
         requiredMergeFields: [],
         scope: 'facility',
+        locale: 'en',
       }),
     ).toMatchObject({ ok: false, problem: 'empty' })
   })
@@ -141,6 +143,7 @@ describeDb('template editor', () => {
       bodyText: 'Hi {{tenant.first_name}} — our own wording.',
       requiredMergeFields: ['tenant.first_name', 'unit.number'],
       scope: 'facility',
+      locale: 'en',
     })
     expect(result).toMatchObject({ ok: true, version: 1 })
 
@@ -163,6 +166,7 @@ describeDb('template editor', () => {
       bodyText: 'Hi {{tenant.first_name}} v1',
       requiredMergeFields: ['tenant.first_name'],
       scope: 'facility',
+      locale: 'en',
     })
     const second = await saveTemplateVersion(actor(), facilityId, {
       key: KEY,
@@ -170,6 +174,7 @@ describeDb('template editor', () => {
       bodyText: 'Hi {{tenant.first_name}} v2',
       requiredMergeFields: ['tenant.first_name'],
       scope: 'facility',
+      locale: 'en',
     })
     expect(second).toMatchObject({ ok: true, version: 2 })
 
@@ -192,6 +197,7 @@ describeDb('template editor', () => {
       bodyText: 'Hi {{tenant.first_name}}',
       requiredMergeFields: ['tenant.first_name'],
       scope: 'facility',
+      locale: 'en',
     })
     if (!result.ok) throw new Error('unreachable')
 
@@ -202,6 +208,7 @@ describeDb('template editor', () => {
     expect((audit.after as { version: number; scope: string })).toMatchObject({
       version: result.version,
       scope: 'facility',
+      locale: 'en',
     })
   })
 

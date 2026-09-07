@@ -1,6 +1,8 @@
 import { ProsePage, Section, metadataFor } from '@/components/site/prose-page'
 import { SITE } from '@/lib/site-config'
 import { customerFacingExceptions, customerFacingStateExceptions } from '@/lib/a11y/scan-coverage'
+import { dictionaryFor, translate, type Locale, type MessageKey } from '@/lib/i18n'
+import { getLocale } from '@/lib/i18n/server'
 
 export const metadata = metadataFor(
   'Accessibility',
@@ -11,6 +13,41 @@ export const metadata = metadataFor(
 /// credibility rests on the record, not the intention — an undated one is a
 /// claim about a codebase that has since moved. Update this when the claims are
 /// re-verified, not when the page is edited.
+// B-262 (D-122). **The statement now makes every one of its claims in a
+// second language**, which is the only kind of edit to this page that adds
+// claims without changing a single English one. Every sentence moved into
+// `en.ts`/`es.ts` word for word — the English rendering is unchanged, and
+// `npm run typecheck` refuses a key that exists in one dictionary and not the
+// other, so the Spanish cannot silently fall behind the English the way a
+// duplicated page would.
+//
+// **The two generated lists are translated too, and that was the decision.**
+// The route and state exception lists are the page's promise to name every
+// gap; rendering half of them in English to a Spanish reader would read as
+// though the untranslated rows were the ones that did not matter. Each
+// customer-facing row in `scan-coverage.ts` carries a `reasonEs` beside its
+// `reason`, checked by `tests/a11y-scan-coverage.test.ts` — the admin rows
+// deliberately carry none, because staff screens are English throughout.
+//
+// **No new claim, and one existing gap now covers more.** `/` | Spanish in
+// `STATE_EXCEPTIONS` already said the scan loops carry no locale cookie and
+// that the rest of the public site is scanned in English only; these three
+// pages are part of "the rest", so the gap is named where it always was
+// rather than growing a row per page. `LAST_REVIEWED` is not bumped — this is
+// a translation, not a re-verification, and B-254 owns the date itself. It
+// did change SHAPE, from '19 August 2026' to an ISO date formatted by `Intl`
+// per locale: one constant still, rendered "19 August 2026" and "19 de agosto
+// de 2026", with `timeZone: 'UTC'` so the date cannot slide a day west of
+// Greenwich (B-228's class, and B-260 hit it again on /portal/methods).
+//
+// **`/messaging-policy` was in this item's scope and is deliberately still
+// English.** It is the TCPA / A2P 10DLC disclosure a carrier and a regulator
+// read, its keywords (STOP, HELP, START) are English by construction, and the
+// consent a tenant actually gives is recorded against an English version
+// constant — telling somebody in Spanish what they are agreeing to and then
+// recording agreement to a different document is worse than not translating
+// it. B-259 owns that, and it is blocked on a legal read.
+//
 // Re-verified 2026-09-04, at B-086 part 2 (phone unlock, D-122). Customer-
 // facing and a new control, on a route this page already lists and already
 // scans: `/portal/access` gains a section that turns a mobile key on, opens the
@@ -50,7 +87,20 @@ export const metadata = metadataFor(
 // sentence above it stays exactly as it is: no manual pass was carried out
 // here, and this control does not rest on one. `LAST_REVIEWED` is not bumped —
 // this is one flow verified, not the page, and B-254 owns the date itself.
-const LAST_REVIEWED = '19 August 2026'
+/// Stored as an ISO date rather than as English prose, so one constant can be
+/// rendered in either language. `timeZone: 'UTC'` is load-bearing: without it
+/// `new Date('2026-08-19')` is UTC midnight rendered in the server's zone, and
+/// anywhere west of Greenwich the page dates itself the 18th.
+const LAST_REVIEWED = '2026-08-19'
+
+function reviewedOn(locale: Locale): string {
+  return new Intl.DateTimeFormat(locale === 'es' ? 'es' : 'en-GB', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(new Date(`${LAST_REVIEWED}T00:00:00Z`))
+}
 
 // PRD 01 §6.8 requires a public accessibility statement. Unlike the legal pages
 // this describes our own conformance, so every sentence has to be true of the
@@ -1779,169 +1829,212 @@ const LAST_REVIEWED = '19 August 2026'
 // countdown, the staff screens, and the embedded maps. `LAST_REVIEWED` is not
 // bumped, per D-115 — no manual screen-reader pass was performed.
 
-export default function AccessibilityPage() {
+// Re-verified 2026-09-06, at B-261 (the language we WRITE to a tenant in —
+// D-122). Customer-facing, and one new control on a route this page already
+// lists and already scans: `/portal/notifications` gains a `<select>` that
+// sets `Tenant.preferredLocale`, the language every email and text goes out
+// in.
+//
+// **What was checked.** The control is a labelled native `<select>` inside the
+// existing `AdminForm`, so it inherits the form's error handling and its
+// announced result; the label is a real `<label for>` rather than a placeholder
+// (1.3.1, 3.3.2), the option names are written in the language each one names
+// (`LOCALE_NAMES`, so "Español" is legible to the person who needs it), and the
+// submit button meets the same 44px target as every control beside it. Nothing
+// here is colour-carried and nothing is new in kind — it is the same
+// `AdminForm` + native-control pattern as the notification grid above it on the
+// same page.
+//
+// **One real accessibility DEFECT was fixed, and it is not on a page.** Every
+// templated email rendered inside `<div lang="en">`, hardcoded — so the Spanish
+// templates this item seeds would have told a screen reader to pronounce
+// Spanish with English phonemes. That is 3.1.2, on a document a tenant reads
+// rather than a page they visit, and it is the one accessibility failure a
+// translation INTRODUCES rather than fixes. `renderEmail` now takes the
+// language and declares it, checked by `tests/comms-locale-db.test.ts` in both
+// directions.
+//
+// **No new claim about scan coverage.** The scan loops carry no locale cookie
+// and `/portal` in Spanish is already in `SCANNED_STATES` from B-260; the
+// language control sits on `/portal/notifications`, which `STATE_EXCEPTIONS`
+// already names as scanned in English only. The gap is where it was.
+//
+// The "Where we fall short" list was re-read against this build and all three
+// entries are still true and unchanged in scope: the no-JavaScript hold
+// countdown, the staff screens, and the embedded maps. `LAST_REVIEWED` is not
+// bumped, per D-115 — no manual screen-reader pass was performed, and this
+// item performed none.
+
+// Re-verified 2026-09-06, at B-263 (the Spanish checkout's field errors —
+// D-122). Customer-facing, on the money path, and it fixes an accessibility
+// failure rather than only a product one.
+//
+// **What was actually wrong is 3.1.2 Language of Parts, and it was ours.** A
+// Spanish renter was served `<html lang="es">` — asserted by `e2e/i18n.spec.ts`
+// — and then, on a refused step, an English sentence inside it with no `lang`
+// of its own. A screen reader reads that with Spanish phonemes, which is the
+// same defect B-261 fixed in the templated emails, arrived at from the page
+// side. Every field error on steps 1 through 4 is now translated, so it is
+// fixed by saying the right words rather than by marking up the wrong ones.
+//
+// **The bullet this touches is "What is true today" → errors, and it does not
+// change.** It claims the message is tied to its field, that what was typed
+// survives, and that a save is announced — all three are about the mechanism,
+// were true in both languages before this item, and are true now. What the
+// bullet never claimed is the language of the message, which is why nothing on
+// this page had gone false: the gap was real and unstated rather than
+// misstated. It is stated now, in this note.
+//
+// **No new claim about scan coverage, and no new route or control.** The scan
+// loops still carry no locale cookie and `STATE_EXCEPTIONS` still names the
+// checkout as scanned in English only — B-090f recorded that and it is
+// unchanged. This item adds no page, no control and no interaction; it changes
+// which words an existing live region announces.
+//
+// **One thing worth naming because it is the 3.3.3 half.** `err.postalCodeUnknown`
+// tells the renter to open a disclosure BY NAME, so a rename in one language
+// and not the other would point a Spanish reader at a control that is not on
+// their page — a refusal with no way out, for exactly the person who cannot
+// read the other language. `tests/i18n.test.ts` now asserts each locale's
+// message quotes that locale's own `details.enterMyself`.
+//
+// The "Where we fall short" list was re-read against this build and all three
+// entries are still true and unchanged in scope: the no-JavaScript hold
+// countdown, the staff screens, and the embedded maps. `LAST_REVIEWED` is not
+// bumped, per D-115 — no manual screen-reader pass was performed, and this
+// item performed none.
+
+// Re-verified 2026-09-06, at B-264 (the lead form on a Spanish facility page —
+// D-122, D-125). Customer-facing, on a route this page already lists and
+// already scans, and the same 3.1.2 failure B-263 fixed on the checkout, one
+// funnel step earlier.
+//
+// **What was wrong.** The facility page has been `<html lang="es">` since
+// B-090f and the quote/callback form inside it was English end to end — every
+// label, the size options, the refusals, and the marketing-consent sentence. A
+// screen reader announcing that form under a Spanish document reads English
+// words with Spanish phonemes, which is Language of Parts, and it is again
+// fixed by saying the right words rather than by marking up the wrong ones.
+//
+// **Two bullets were re-read and neither changes.** "Form fields have real
+// labels" is about the mechanism and was true in both languages before this
+// item; the `<label for>` / sibling `<input>` shape B-171 gave these fields is
+// untouched, and translating a label does not weaken it. The errors bullet is
+// the one B-263's note already walked: it claims the message is tied to its
+// field, that what was typed survives, and that a save is announced — all
+// three about mechanism, none about language. As with B-263, the gap here was
+// real and unstated rather than misstated.
+//
+// **No new claim about scan coverage, and no new state.** The scan loops carry
+// no locale cookie, and the Spanish facility page is already in
+// `SCANNED_STATES` from B-090f. The new spec asserts words rather than running
+// axe, so it carries no `a11y-state:` comment and adds nothing to either list —
+// the refused Spanish form is the same markup as the refused English one that
+// `smoke.spec.ts` already scans, with different sentences in it.
+//
+// **One thing named because it is where an a11y fix and a legal one meet.**
+// The consent sentence beside the checkbox is NOT a dictionary entry (D-125):
+// it is a versioned disclosure, so `Dictionary`'s typecheck cannot catch a
+// missing translation and only a rendered page can. That is why the e2e spec
+// asserts the Spanish words and the `disclosureLocale` field directly. A
+// disclosure a reader cannot read is not consent, whichever discipline is
+// asked.
+//
+// The "Where we fall short" list was re-read against this build and all three
+// entries are still true and unchanged in scope: the no-JavaScript hold
+// countdown, the staff screens, and the embedded maps. `LAST_REVIEWED` is not
+// bumped, per D-115 — no manual screen-reader pass was performed, and this
+// item performed none.
+
+export default async function AccessibilityPage() {
+  const locale = await getLocale()
+  const dict = dictionaryFor(locale)
+  const t = (key: MessageKey, vars?: Record<string, string | number>) =>
+    translate(dict, key, vars)
+  const reviewed = reviewedOn(locale)
+
+  /// A row's Spanish is optional on the type and required by test, so this is
+  /// where the two meet: fall back to the English rather than render nothing.
+  /// A missing translation should read as an untranslated gap, not as a gap
+  /// that stopped existing.
+  const reasonIn = (row: { reason: string; reasonEs?: string }) =>
+    locale === 'es' ? (row.reasonEs ?? row.reason) : row.reason
+
   return (
-    <ProsePage
-      title="Accessibility"
-      intro="We aim to meet WCAG 2.1 Level AA across every page and every flow. This page says how far we have actually got."
-    >
-      <Section heading="What we target">
-        <p>
-          Web Content Accessibility Guidelines (WCAG) 2.1, Level AA. That covers keyboard
-          operation, screen-reader support, colour contrast, text resizing, and reflow on
-          small screens.
-        </p>
+    <ProsePage title={t('a11y.title')} intro={t('a11y.intro')}>
+      <Section heading={t('a11y.target.heading')}>
+        <p>{t('a11y.target.body')}</p>
       </Section>
 
-      <Section heading="What is true today">
+      <Section heading={t('a11y.true.heading')}>
         <ul className="list-disc space-y-1 pl-5">
-          <li>
-            Every page on this public site works with a keyboard alone, and the focus
-            indicator meets the 3:1 contrast the guidelines ask for.
-          </li>
-          <li>
-            Colour is never the only way we tell you something — a status shown in colour
-            is also written in words.
-          </li>
-          <li>
-            Text can be resized to 200% and the page reflows to 320px wide without
-            sideways scrolling.
-          </li>
-          <li>Form fields have real labels, not just placeholder text.</li>
-          <li>
-            When a form rejects something you typed, the message is tied to the field
-            itself, so a screen reader reads it out with that field rather than leaving you
-            to hunt for it — and what you already entered is still there, so you fix the one
-            thing we asked about rather than filling the form in again. A successful save is
-            announced too.
-          </li>
-          <li>Animation respects your system&apos;s reduced-motion setting.</li>
-          <li>
-            Where we show a map, the information is given as text first and the map is
-            collapsed behind a button you have to press. On a facility page that text is
-            the address and a directions link; on search results it is the list of
-            facilities itself, with distances and prices. You never need the map, and if
-            one fails to load we say so rather than leaving an empty box.
-          </li>
+          <li>{t('a11y.true.keyboard')}</li>
+          <li>{t('a11y.true.colour')}</li>
+          <li>{t('a11y.true.resize')}</li>
+          <li>{t('a11y.true.labels')}</li>
+          <li>{t('a11y.true.errors')}</li>
+          <li>{t('a11y.true.motion')}</li>
+          <li>{t('a11y.true.maps')}</li>
         </ul>
       </Section>
 
-      <Section heading="How we check">
-        <p>
-          Automated accessibility tests run at both phone and desktop widths on every
-          push to our main branch, and on every pull request that is open for review.
-          They are not a release gate: a failing run tells us, it does not stop the
-          deploy. A check the tool cannot decide fails the run as well, on every page in
-          it, so &ldquo;we did not test that&rdquo; never quietly reads as &ldquo;that
-          passed&rdquo;.
-        </p>
-        <p>
-          A few of those undecided checks are ones we have looked at and found to be a
-          limit of the tool rather than a real problem. They are set aside in three
-          different ways, and we would rather name each than round them off:
-        </p>
+      <Section heading={t('a11y.check.heading')}>
+        <p>{t('a11y.check.ci')}</p>
+        <p>{t('a11y.check.waivedIntro')}</p>
         <ul className="list-disc space-y-1 pl-5">
-          <li>
-            Some are waived only on the page they were checked on &mdash; a bar that
-            overlaps the page on purpose so it stays in reach, a striped background the
-            checker cannot see through. The same check still has to pass everywhere else.
-          </li>
-          <li>
-            Some are waived anywhere on the site, but only where the test itself re-checks
-            the thing that confused the tool. A cell that has scrolled out of view in a
-            wide table is one: it is set aside only where you have a scrollbar that brings
-            it back, and something genuinely painted off the edge of the screen still
-            fails.
-          </li>
-          <li>
-            Content inside a frame served by another company &mdash; the card form, the map
-            &mdash; is not checked by these tests. That is their page, not ours. A frame we
-            build ourselves is checked like anything else.
-          </li>
+          <li>{t('a11y.check.waived.page')}</li>
+          <li>{t('a11y.check.waived.site')}</li>
+          <li>{t('a11y.check.waived.thirdParty')}</li>
         </ul>
-        <p>
-          They do not yet cover everything. These are the pages outside that run, and the
-          reason each one is:
-        </p>
+        <p>{t('a11y.check.routesIntro')}</p>
         <ul className="list-disc space-y-1 pl-5">
           {customerFacingExceptions().map((exception) => (
-            <li key={exception.route}>{exception.reason}</li>
+            <li key={exception.route}>{reasonIn(exception)}</li>
           ))}
         </ul>
-        <p>
-          We would rather name each gap than let a general claim cover it. This list is
-          generated from the same file the tests read, so a page that stops being checked
-          appears here rather than quietly disappearing from both.
-        </p>
-        <p>
-          That list names pages. Some screens also have states — an error message, a
-          hold that has expired, a size that sold out while you were deciding — that only
-          appear once you have done something on them. These are the ones we know are not
-          covered, and why:
-        </p>
+        <p>{t('a11y.check.routesTail')}</p>
+        <p>{t('a11y.check.statesIntro')}</p>
         <ul className="list-disc space-y-1 pl-5">
           {customerFacingStateExceptions().map((exception) => (
-            <li key={`${exception.route}-${exception.state}`}>{exception.reason}</li>
+            <li key={`${exception.route}-${exception.state}`}>{reasonIn(exception)}</li>
           ))}
         </ul>
+        <p>{t('a11y.check.statesTail')}</p>
         <p>
-          More states than these probably exist that we have not found and named yet —
-          unlike the page list above, this one cannot claim to be complete.
-        </p>
-        <p>
-          Automated testing is a floor, not a ceiling — it catches roughly a third of real
-          problems, and it cannot judge whether a screen reader says something that makes
-          sense. <strong>Neither a full screen-reader pass nor a recorded keyboard pass
-          has been carried out yet</strong>, so nothing on this page rests on one.
+          {t('a11y.check.floor')}{' '}
+          <strong>{t('a11y.check.noManualPass')}</strong>, {t('a11y.check.noManualPassTail')}
         </p>
       </Section>
 
-      <Section heading="Where we fall short today">
-        <p>
-          This site is under active construction. These are the problems we know about, as
-          of {LAST_REVIEWED}. If one of them blocks you, tell us and we will help you
-          finish what you were doing by phone or email in the meantime.
-        </p>
+      <Section heading={t('a11y.short.heading')}>
+        <p>{t('a11y.short.intro', { date: reviewed })}</p>
         <ul className="list-disc space-y-1 pl-5">
           <li>
-            <strong>Renting online without JavaScript.</strong> The whole checkout works
-            with JavaScript turned off, but the countdown on the 30-minute hold does not:
-            it shows the time left when the page was drawn and does not tick down, so if
-            you are reading the lease when it runs out, the expiry can be the first you
-            hear of it. With JavaScript on you are warned five minutes out and can extend
-            the hold in one press.
+            <strong>{t('a11y.short.js.term')}</strong> {t('a11y.short.js.body')}
           </li>
           <li>
-            <strong>Our staff-facing screens</strong> have known problems. Long lists on Tasks,
-            Leads, Delinquency and Support sessions are not paginated. No customer uses them,
-            but we are not going to describe them as done.
+            <strong>{t('a11y.short.staff.term')}</strong> {t('a11y.short.staff.body')}
           </li>
           <li>
-            <strong>The maps we show are not fully accessible</strong>, and they are not
-            ours to fix. A facility page embeds OpenStreetMap, whose zoom controls are
-            named &ldquo;+&rdquo; and &ldquo;&minus;&rdquo; and whose marker has no text
-            alternative. Search results can show a second map from a different provider,
-            where we control the price markers but not the tiles or the vendor&apos;s own
-            controls beneath them; we have not yet assessed that one against a live map,
-            so nothing here rests on it. Both stay collapsed behind a button, and neither
-            is ever the only way to get the information.
+            <strong>{t('a11y.short.maps.term')}</strong>, {t('a11y.short.maps.body')}
           </li>
         </ul>
-        <p className="text-muted-foreground text-sm">Last reviewed: {LAST_REVIEWED}.</p>
+        <p className="text-muted-foreground text-sm">
+          {t('a11y.short.reviewed', { date: reviewed })}
+        </p>
       </Section>
 
-      <Section heading="Tell us when we get it wrong">
+      <Section heading={t('a11y.tell.heading')}>
         <p>
-          If something here blocks you, email{' '}
+          {t('a11y.tell.before')}{' '}
           <a href={`mailto:${SITE.supportEmail}`} className="underline underline-offset-4">
             {SITE.supportEmail}
           </a>{' '}
-          or call{' '}
+          {t('a11y.tell.orCall')}{' '}
           <a href={`tel:${SITE.phone.href}`} className="underline underline-offset-4">
             {SITE.phone.display}
           </a>
-          . Tell us the page and what happened, and we will fix it and reply. An
-          accessibility barrier is a bug, and we treat it as one.
+          . {t('a11y.tell.tail')}
         </p>
       </Section>
     </ProsePage>

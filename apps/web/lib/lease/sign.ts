@@ -1,7 +1,7 @@
 import { prisma } from '@storage/db'
 import { hashContent } from '@/lib/documents/render'
-import type { FieldErrors } from '@/lib/admin/form-state'
-import { ELECTRONIC_RECORDS_CONSENT, ELECTRONIC_RECORDS_CONSENT_VERSION, signatureMatchesName } from './template'
+import type { KeyedFieldErrors } from '@/lib/admin/form-state'
+import { signatureMatchesName } from './template'
 
 // PRD 01 FR-4.2. Capturing a signature, and the evidence that goes with it.
 
@@ -14,26 +14,29 @@ export type SignInput = {
   userAgent?: string | null
 }
 
+/// B-263: returns message KEYS. The legal name travels as a variable rather
+/// than baked into a sentence, which is what lets the Spanish lease step
+/// refuse a mistyped signature in Spanish.
 export function validateSignature(input: {
   typedName?: string
   legalName: string
   consented?: boolean
-}): FieldErrors {
-  const errors: FieldErrors = {}
+}): KeyedFieldErrors {
+  const errors: KeyedFieldErrors = {}
 
   const typed = input.typedName?.trim() ?? ''
   if (typed === '') {
-    errors.typedName = `Type your full name — ${input.legalName} — to sign.`
+    errors.typedName = { key: 'err.typedNameEmpty', vars: { name: input.legalName } }
   } else if (!signatureMatchesName(typed, input.legalName)) {
     // Catches the common real error (initials, "yes") without rejecting a
     // genuine variant like an included or omitted middle name.
-    errors.typedName = `That does not match the name on the lease. Type it as ${input.legalName}.`
+    errors.typedName = { key: 'err.typedNameMismatch', vars: { name: input.legalName } }
   }
 
   if (!input.consented) {
     // Its own affirmative act under E-SIGN, so its own error — never folded
     // into the signature field, and never a disabled button.
-    errors.consented = 'Tick the box to agree to sign electronically.'
+    errors.consented = { key: 'err.consented' }
   }
 
   return errors
@@ -108,4 +111,3 @@ export async function verifySignature(documentId: string): Promise<SignatureVerd
   }
 }
 
-export { ELECTRONIC_RECORDS_CONSENT, ELECTRONIC_RECORDS_CONSENT_VERSION }

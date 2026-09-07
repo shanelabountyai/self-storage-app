@@ -5,6 +5,7 @@ import {
   validateChoice,
   type PlanOption,
 } from '../apps/web/lib/protection/plans'
+import { dictionaryFor, translate } from '../apps/web/lib/i18n'
 
 // B-022 / PRD 02 US-44, PRD 01 US-501 step 3.
 
@@ -66,7 +67,7 @@ describe('validateChoice', () => {
 
   it('refuses cover that has already run out', () => {
     const errors = validateChoice({ ...validWaiver, expiresAt: '2020-01-01' }, PLANS)
-    expect(errors.expiresAt).toMatch(/already run out/)
+    expect(errors.expiresAt).toEqual({ key: 'err.expiresAtPast' })
   })
 
   it('requires the attestation, as an error rather than a disabled button', () => {
@@ -80,11 +81,17 @@ describe('validateChoice', () => {
     expect(validateChoice(validWaiver, PLANS)).toEqual({})
   })
 
-  it('gives every message a suggestion', () => {
+  it('names a key whose message carries a suggestion in every language (B-263)', () => {
     const errors = validateChoice({ kind: 'waiver' }, PLANS)
-    expect(errors.carrier).toMatch(/for example/)
-    expect(errors.policyNumber).toMatch(/declaration page/)
-    expect(errors.expiresAt).toMatch(/yyyy-mm-dd/)
+    expect(errors.carrier).toEqual({ key: 'err.carrier' })
+    expect(errors.policyNumber).toEqual({ key: 'err.policyNumber' })
+    expect(errors.expiresAt).toEqual({ key: 'err.expiresAt' })
+    // The suggestion is the point of the row, and it has to survive the
+    // translation — a Spanish renter refused at the protection step used to be
+    // told what to do in English.
+    expect(translate(dictionaryFor('en'), 'err.carrier')).toMatch(/for example/)
+    expect(translate(dictionaryFor('es'), 'err.carrier')).toMatch(/por ejemplo/)
+    expect(translate(dictionaryFor('es'), 'err.expiresAt')).toMatch(/aaaa-mm-dd/)
   })
 })
 

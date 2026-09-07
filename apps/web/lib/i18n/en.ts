@@ -9,8 +9,17 @@
 // online price / in-store price / gate hours / office hours have one
 // customer-facing word each, and Spanish gets the same treatment —
 // tamaño / unidad / precio en línea / precio en tienda / horario de la puerta
-// / horario de oficina. Admin words ("unit type", "street rate", "web rate",
-// "lease", "delinquent") do not appear in either dictionary.
+// / horario de oficina.
+//
+// The industry's OWN words — "unit type", "street rate", "web rate",
+// "delinquent" — appear in neither dictionary. **"lease" is the exception, and
+// this comment used to deny it** (corrected by B-262, which found ~15 uses
+// while lifting `/faq` in): D-15 lists it among the admin words, but the
+// signed agreement is a thing a renter is genuinely asked to sign and read,
+// and every customer surface here has always called it that. Spanish says
+// `contrato` for the same reason and with the same consistency. The rule the
+// dictionaries actually keep is one word per concept, which both languages
+// do; the comment was describing a rule nobody had ever followed.
 
 export const en = {
   // --- Site chrome -------------------------------------------------------
@@ -216,6 +225,27 @@ export const en = {
   'facility.otherLocations': 'look at other locations',
   'facility.sizeGuideOr': ', or',
 
+  // --- The lead form on the facility page (US-8, B-264) ------------------
+  //
+  // Its marketing-consent sentence is deliberately NOT here: that one is a
+  // versioned disclosure in `lib/consent/disclosures.ts`, because the version
+  // recorded on the `Consent` row is the evidence of what words were on screen
+  // (D-125). A dictionary entry can be edited without anything noticing.
+  'lead.legend': 'What would you like?',
+  'lead.quote': 'A price quote',
+  'lead.callback': 'A call back',
+  'lead.name': 'Your name',
+  'lead.email': 'Email',
+  'lead.phone': 'Phone',
+  'lead.phoneHint': 'Required if you would like a call back.',
+  'lead.size': 'Size you are interested in',
+  'lead.sizeUnsure': 'Not sure yet',
+  'lead.moveInDate': 'When you would move in',
+  'lead.note': 'Anything else?',
+  'lead.send': 'Send',
+  'lead.thanks':
+    'Got it — somebody from this facility will be in touch. If it is urgent, calling is faster.',
+
   // --- Move-in cost lines (US-301, shared with checkout) -----------------
   'cost.rent': 'First month rent',
   'cost.rent.note':
@@ -400,6 +430,59 @@ export const en = {
   'act.unitAddedNote': 'Unit {number} added — {width}×{length} {name}.',
   'act.unitRemovedNote': 'Unit {number} taken out of your rental.',
   'act.unitRemovedNoNumber': 'That unit was taken out of your rental.',
+
+  // --- Field errors (B-263, 3.3.3) --------------------------------------
+  // The messages the validators used to build themselves. They return KEYS
+  // now, because `validateDetails` and friends are pure and have no request —
+  // and because a validator that resolved its own copy would have to know
+  // whether it was serving the Spanish checkout or a staff screen D-122 keeps
+  // English. Every one carries a suggestion, not just an identification.
+  'err.oneField': 'There is a problem with one field.',
+  'err.someFields': 'There are problems with {count} fields.',
+  'err.firstName': 'Enter your first name.',
+  'err.lastName': 'Enter your last name.',
+  'err.email': 'Enter an email address we can send your lease and receipt to.',
+  'err.phone': 'Enter a mobile number with area code, for example 512-555-0100.',
+  'err.addressLine1': 'Enter your street address.',
+  'err.postalCode': 'Enter a 5-digit zip code, for example 78704.',
+  // Not "invalid zip" — the zip may be perfectly real and simply newer than
+  // the dataset, so this names the way out. It quotes `details.enterMyself`
+  // verbatim in every language; `tests/i18n.test.ts` checks that it still
+  // does, because a control named by the wrong words is a refusal with no way
+  // out for exactly the renter who cannot read the other language.
+  'err.postalCodeUnknown':
+    "We don't recognise that zip code. Open “Enter my city and state myself” below and fill them in.",
+  'err.city': 'Enter your city.',
+  'err.state': 'State must be a 2-letter code, for example TX.',
+  'err.altContactPhone':
+    'Enter a number with area code, for example 512-555-0100, or leave it blank.',
+  'err.altContactPhoneMissing': 'Add a number for your alternate contact, or clear their name.',
+  'err.typedNameEmpty': 'Type your full name — {name} — to sign.',
+  'err.typedNameMismatch': 'That does not match the name on the lease. Type it as {name}.',
+  'err.consented': 'Tick the box to agree to sign electronically.',
+  'err.protectionChoose': 'Choose a protection plan, or tell us about your own cover.',
+  'err.protectionPlan': 'Choose one of the protection plans listed.',
+  'err.carrier': 'Enter the name of your insurer, for example State Farm.',
+  'err.policyNumber': 'Enter your policy number — it is on your declaration page.',
+  'err.expiresAt': 'Enter the date your policy runs out, as yyyy-mm-dd.',
+  'err.expiresAtPast': 'That policy has already run out. Enter cover that is still current.',
+  'err.attested': 'Tick the box to confirm you have your own cover.',
+  'err.startDateFormat': 'Enter the date as year-month-day, like {date}.',
+  'err.startDateEarly':
+    'A move-in cannot start before today. The earliest you can pick is {date}.',
+  'err.startDateLate':
+    'We can schedule a move-in up to {days} days ahead. The latest you can pick is {date}.',
+
+  // B-264. The lead form's refusals. Their own keys rather than the checkout's
+  // above, because the two forms ask for different things for different
+  // reasons: `err.email` on the checkout is where a lease and a receipt are
+  // sent, and this one is one of two ways somebody might be replied to.
+  'err.leadName': 'Tell us what to call you.',
+  'err.leadContact': 'An email address or a phone number — we need one way to reply.',
+  'err.leadEmail': 'Check the email address — it looks incomplete.',
+  'err.leadPhone': 'A phone number with at least 10 digits, so somebody can call you.',
+  'err.leadRateLimited':
+    'That is a lot of enquiries from one place in a short time. Give it a few minutes, or call us.',
 
   // --- Checkout announcer (4.1.3, 2.4.3) --------------------------------
   'announce.movedToSize': 'We moved you to the {size}. Nothing you entered was lost.',
@@ -927,6 +1010,22 @@ export const en = {
   'notif.turnOffTexts': 'Turn off text messages',
   'notif.stopNote':
     'This has the same effect as replying STOP to a text from us: every SMS to this number stops, including account and payment texts, immediately.',
+  // ── B-261. The language we WRITE to you in (`Tenant.preferredLocale`). ────
+  //
+  // Deliberately worded as "email and text", not "language", to separate it
+  // from the header toggle: that one is this browser, this device, and it is
+  // gone with the cache. This one follows the account into a payment reminder
+  // and a dunning email six months from now.
+  'notif.languageHeading': 'The language we write to you in',
+  'notif.languageIntro':
+    'We will send your receipts, payment reminders and account notices in this language. The switch at the top of the page changes what you see on this device; this changes what we send you.',
+  'notif.languageLabel': 'Language for email and text messages',
+  'notif.languageSave': 'Save language',
+  'notif.languageNeverSet':
+    'You have not chosen one, so we write to you in English.',
+  'notif.languageSaved': 'Saved. We will write to you in English from now on.',
+  'notif.languageLegalNote':
+    'Your lease and any formal notice we are required to mail you stay in English.',
   'notif.marketingHeading': 'Marketing text messages',
   'notif.marketingIntro':
     'Separate from the account texts above. Turning these off never affects payment reminders or gate codes, and turning them on is not required to rent.',
@@ -1138,4 +1237,200 @@ export const en = {
     'A transfer moves you within one facility. That unit is at another site.',
   'tr.problem.same_unit': 'That is the unit you are already in.',
   'tr.problem.no_rate_for_unit_type': 'That unit has no published rate, so we cannot quote it.',
+
+  // --- Static pages: FAQ, About, Contact (B-262) -------------------------
+  // The prose a renter READS rather than operates. `/terms` and `/privacy` are
+  // deliberately absent: D-122 keeps anything a lawyer wrote in English, and
+  // the Spanish footer disclaimer names them. `/messaging-policy` was absent
+  // for the same reason until B-259 gave its disclosures a Spanish version to
+  // explain — its keys are at the bottom of this file.
+  //
+  // The page TITLES here are the <h1>, not the <title> — `metadataFor` stays an
+  // English literal on all three, because metadata is what a crawler reads and
+  // D-122 keeps the crawler on English.
+  'faq.title': 'Frequently asked questions',
+  'faq.intro': "Short answers to what people ask most. Call us if yours isn't here.",
+  'faq.reserve.q': 'Do I need to pay to reserve a unit?',
+  'faq.reserve.a':
+    "No. Reservations are free, need no card, and need no account — just your name, email, phone, and the date you want to move in. The hold expires on its own if you don't move in.",
+  'faq.online.q': 'Can I rent entirely online?',
+  'faq.online.a':
+    'Yes. You pick a unit, sign the lease electronically, pay the first amount due, and get your gate code — without visiting an office.',
+  'faq.term.q': 'Is there a long-term contract?',
+  'faq.term.a':
+    'No. Rentals are month-to-month. You give notice according to your lease and move out.',
+  'faq.price.q': 'What is the difference between the online and in-store price?',
+  'faq.price.a':
+    'Some sizes cost less when you rent online than when you rent at the counter. Both prices are shown before you commit, so you can see which one applies to you. Reserving does not change the price — renting online is what does.',
+  'faq.size.q': 'What size do I need?',
+  'faq.size.intro': 'A rough guide, and we will happily talk it through on the phone:',
+  'faq.size.5x5.term': '5 by 5 feet',
+  'faq.size.5x5.body':
+    'a large closet. Boxes, seasonal decorations, a bike, a few pieces of small furniture.',
+  'faq.size.10x10.term': '10 by 10 feet',
+  'faq.size.10x10.body':
+    'about half a garage, or the contents of a one-bedroom apartment including a sofa and a mattress set.',
+  'faq.size.10x20.term': '10 by 20 feet',
+  'faq.size.10x20.body': 'a single garage. A three-bedroom house, or a car with room left over.',
+  'faq.size.tail':
+    'If you are between two sizes, take the larger one. Paying a little more beats discovering on moving day that the last of it does not fit.',
+  'faq.hours.q': 'When can I get to my unit?',
+  'faq.hours.a':
+    'Office hours and gate hours are different, and both are listed on every facility page. Gate hours are when you can reach your unit; office hours are when staff are there.',
+  'faq.else.q': 'Something else?',
+  'faq.else.call': 'Call',
+
+  'about.title': 'About',
+  'about.intro': 'A small self-storage operator, run on software we own.',
+  'about.what.heading': 'What we are',
+  'about.what.body':
+    'We run a handful of self-storage facilities and built the software that runs them, rather than renting it per site per month. That means the prices and availability you see come from the same system the front desk uses — not a nightly export.',
+  'about.site.heading': 'A note on this site',
+  'about.site.body':
+    'This is a learning project built to production standards. The facilities, tenants, and prices shown are demonstration data, and nothing here is a real offer of storage.',
+
+  'contact.title': 'Contact',
+  'contact.intro': 'The fastest way to reach us is the phone.',
+  'contact.phone': 'Phone',
+  'contact.email': 'Email',
+  'contact.facility.heading': 'A specific facility',
+  'contact.facility.body':
+    'Each facility lists its own phone number, office hours, and gate hours on its page. Those reach the site directly.',
+
+  // --- Accessibility statement (/accessibility, B-262) -------------------
+  // Every sentence here is a public claim about the build, in a second
+  // language — so the Spanish is held to the same bar as the English and
+  // `tests/accessibility-statement.test.ts` now reads the CI claim out of this
+  // dictionary rather than out of the page source.
+  'a11y.title': 'Accessibility',
+  'a11y.intro':
+    'We aim to meet WCAG 2.1 Level AA across every page and every flow. This page says how far we have actually got.',
+  'a11y.target.heading': 'What we target',
+  'a11y.target.body':
+    'Web Content Accessibility Guidelines (WCAG) 2.1, Level AA. That covers keyboard operation, screen-reader support, colour contrast, text resizing, and reflow on small screens.',
+  'a11y.true.heading': 'What is true today',
+  'a11y.true.keyboard':
+    'Every page on this public site works with a keyboard alone, and the focus indicator meets the 3:1 contrast the guidelines ask for.',
+  'a11y.true.colour':
+    'Colour is never the only way we tell you something — a status shown in colour is also written in words.',
+  'a11y.true.resize':
+    'Text can be resized to 200% and the page reflows to 320px wide without sideways scrolling.',
+  'a11y.true.labels': 'Form fields have real labels, not just placeholder text.',
+  'a11y.true.errors':
+    'When a form rejects something you typed, the message is tied to the field itself, so a screen reader reads it out with that field rather than leaving you to hunt for it — and what you already entered is still there, so you fix the one thing we asked about rather than filling the form in again. A successful save is announced too.',
+  'a11y.true.motion': "Animation respects your system's reduced-motion setting.",
+  'a11y.true.maps':
+    'Where we show a map, the information is given as text first and the map is collapsed behind a button you have to press. On a facility page that text is the address and a directions link; on search results it is the list of facilities itself, with distances and prices. You never need the map, and if one fails to load we say so rather than leaving an empty box.',
+  'a11y.check.heading': 'How we check',
+  'a11y.check.ci':
+    'Automated accessibility tests run at both phone and desktop widths on every push to our main branch, and on every pull request that is open for review. They are not a release gate: a failing run tells us, it does not stop the deploy. A check the tool cannot decide fails the run as well, on every page in it, so “we did not test that” never quietly reads as “that passed”.',
+  'a11y.check.waivedIntro':
+    'A few of those undecided checks are ones we have looked at and found to be a limit of the tool rather than a real problem. They are set aside in three different ways, and we would rather name each than round them off:',
+  'a11y.check.waived.page':
+    'Some are waived only on the page they were checked on — a bar that overlaps the page on purpose so it stays in reach, a striped background the checker cannot see through. The same check still has to pass everywhere else.',
+  'a11y.check.waived.site':
+    'Some are waived anywhere on the site, but only where the test itself re-checks the thing that confused the tool. A cell that has scrolled out of view in a wide table is one: it is set aside only where you have a scrollbar that brings it back, and something genuinely painted off the edge of the screen still fails.',
+  'a11y.check.waived.thirdParty':
+    'Content inside a frame served by another company — the card form, the map — is not checked by these tests. That is their page, not ours. A frame we build ourselves is checked like anything else.',
+  'a11y.check.routesIntro':
+    'They do not yet cover everything. These are the pages outside that run, and the reason each one is:',
+  'a11y.check.routesTail':
+    'We would rather name each gap than let a general claim cover it. This list is generated from the same file the tests read, so a page that stops being checked appears here rather than quietly disappearing from both.',
+  'a11y.check.statesIntro':
+    'That list names pages. Some screens also have states — an error message, a hold that has expired, a size that sold out while you were deciding — that only appear once you have done something on them. These are the ones we know are not covered, and why:',
+  'a11y.check.statesTail':
+    'More states than these probably exist that we have not found and named yet — unlike the page list above, this one cannot claim to be complete.',
+  'a11y.check.floor':
+    'Automated testing is a floor, not a ceiling — it catches roughly a third of real problems, and it cannot judge whether a screen reader says something that makes sense.',
+  'a11y.check.noManualPass':
+    'Neither a full screen-reader pass nor a recorded keyboard pass has been carried out yet',
+  'a11y.check.noManualPassTail': 'so nothing on this page rests on one.',
+  'a11y.short.heading': 'Where we fall short today',
+  'a11y.short.intro':
+    'This site is under active construction. These are the problems we know about, as of {date}. If one of them blocks you, tell us and we will help you finish what you were doing by phone or email in the meantime.',
+  'a11y.short.js.term': 'Renting online without JavaScript.',
+  'a11y.short.js.body':
+    'The whole checkout works with JavaScript turned off, but the countdown on the 30-minute hold does not: it shows the time left when the page was drawn and does not tick down, so if you are reading the lease when it runs out, the expiry can be the first you hear of it. With JavaScript on you are warned five minutes out and can extend the hold in one press.',
+  'a11y.short.staff.term': 'Our staff-facing screens',
+  'a11y.short.staff.body':
+    'have known problems. Long lists on Tasks, Leads, Delinquency and Support sessions are not paginated. No customer uses them, but we are not going to describe them as done.',
+  'a11y.short.maps.term': 'The maps we show are not fully accessible',
+  'a11y.short.maps.body':
+    "and they are not ours to fix. A facility page embeds OpenStreetMap, whose zoom controls are named “+” and “−” and whose marker has no text alternative. Search results can show a second map from a different provider, where we control the price markers but not the tiles or the vendor's own controls beneath them; we have not yet assessed that one against a live map, so nothing here rests on it. Both stay collapsed behind a button, and neither is ever the only way to get the information.",
+  'a11y.short.reviewed': 'Last reviewed: {date}.',
+  'a11y.tell.heading': 'Tell us when we get it wrong',
+  'a11y.tell.before': 'If something here blocks you, email',
+  'a11y.tell.orCall': 'or call',
+  'a11y.tell.tail':
+    'Tell us the page and what happened, and we will fix it and reply. An accessibility barrier is a bug, and we treat it as one.',
+
+  // --- /messaging-policy (B-259, D-124/D-125) ---------------------------------
+  // The TCPA / A2P 10DLC disclosure page. B-262 moved it here rather than
+  // translating it, because it explains a consent recorded under a version
+  // constant — see `lib/consent/disclosures.ts` for why that ordering matters.
+  //
+  // The KEYWORDS are interpolated, never written into these strings: they come
+  // from `PUBLISHED_STOP_KEYWORDS` and friends, so the published list cannot
+  // drift from what `classifySmsKeyword` actually matches, and a translator
+  // cannot turn a matched string into a word.
+  'msgpol.title': 'Text message policy',
+  'msgpol.reviewed': '{name} · Last reviewed {date}',
+  'msgpol.intro':
+    'This page explains the text messages {name} sends, how you agree to receive them, and how to stop them at any time. It applies to every mobile number we hold.',
+
+  'msgpol.consent.heading': 'How you agree to receive texts',
+  'msgpol.consent.never': 'We never text a number that has not agreed to hear from us.',
+  'msgpol.consent.optInLead': 'Text {join} to {number}, then reply {yes} when we ask.',
+  'msgpol.consent.optInBody':
+    'Texting the keyword does not subscribe you on its own — we reply asking you to confirm, and only your {yes} switches the messages on. Both of our replies tell you how often we text, that message and data rates may apply, and how to stop.',
+  'msgpol.consent.unknownNumber':
+    'If we do not recognise the number you text from, we say so and subscribe nothing — call us and we will add it to your account first.',
+  'msgpol.consent.selfServe':
+    'You can also turn text messages on yourself, in the Notifications section of your online account, or by telling our staff to switch them on for you.',
+  'msgpol.consent.record':
+    'When you do, we record the date and time, where the consent came from, the exact version of the wording you agreed to, and which language that wording was shown in. You can see all of that on your own Notifications page at any time — including the fact that we have never asked you, if we have not.',
+  'msgpol.consent.notConditionLead': 'Consent is not a condition of renting from us.',
+  'msgpol.consent.notConditionBody':
+    'You can rent, pay and manage your unit entirely without text messages; we will email you instead.',
+
+  'msgpol.what.heading': 'What we send',
+  'msgpol.what.accountTerm': 'Account and payment messages',
+  'msgpol.what.accountBody':
+    'your gate code when you move in, a reminder before rent is due, a notice if a payment fails, and a message if your gate access changes.',
+  'msgpol.what.offersTerm': 'Occasional offers',
+  'msgpol.what.offersBody':
+    'only if you have separately agreed to marketing messages. These are a different permission from the account messages above, and you can hold one without the other.',
+  'msgpol.what.frequencyLead': 'Message frequency varies.',
+  'msgpol.what.frequencyBody':
+    'Most months you will receive around one to four messages. A month in which a payment fails, or in which your account falls behind, will include more.',
+
+  'msgpol.stop.heading': 'How to stop them',
+  'msgpol.stop.reply':
+    'Reply {stop} to any message from us. We also accept {others}. You will get one message confirming it, and then nothing further to that number.',
+  'msgpol.stop.stopsAll':
+    'Stopping texts stops all of them, including account and payment messages — not just the offers. We will keep emailing you about your account, because those messages are part of your rental agreement.',
+  'msgpol.stop.offersOnlyLead': 'If it is only the offers you want to stop:',
+  'msgpol.stop.offersOnlyBody':
+    'do not reply {stop} — turn marketing texts off on your Notifications page instead. That leaves your account and payment texts working, and you can switch the offers back on there whenever you like.',
+  'msgpol.stop.restart':
+    'To start again, reply {start}, or turn texts back on from your Notifications page. For help, reply {help} — you will get our phone number and a link back to this page.',
+  'msgpol.stop.portal':
+    'You can also switch them off yourself, without texting anything, in the Notifications section of your online account. That has exactly the same effect as replying {stop}.',
+
+  'msgpol.hours.heading': 'When we send them',
+  'msgpol.hours.body':
+    'We only text between 8am and 9pm in the local time of the facility you rent from, and that applies to every message including account and payment ones. Anything that would fall outside those hours waits, or is emailed instead. Individual facilities may use a narrower window where their state requires it.',
+
+  'msgpol.cost.heading': 'Cost',
+  'msgpol.cost.lead': 'Message and data rates may apply.',
+  'msgpol.cost.body':
+    'We do not charge you for text messages; your mobile carrier may, depending on your plan. Carriers are not liable for delayed or undelivered messages.',
+
+  'msgpol.privacy.heading': 'Your information',
+  'msgpol.privacy.body':
+    'We do not sell your mobile number, and we do not share it with anyone for their own marketing. We share it only with the messaging provider that delivers the texts on our behalf.',
+  'msgpol.privacy.privacyLink': 'Our privacy policy',
+  'msgpol.privacy.privacyTail': 'covers what else we hold and why.',
+  'msgpol.privacy.termsLink': 'Our terms',
+  'msgpol.privacy.termsTail': 'cover your rental agreement.',
 } as const

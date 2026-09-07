@@ -12,6 +12,12 @@ export type RecordConsentInput = {
   /// Where the opt-in (or decline) happened, e.g. "checkout_step_1".
   source: string
   disclosureVersion?: string | null
+  /// B-259. The language the disclosure was DISPLAYED in, not the tenant's
+  /// preference — those can differ, and only the first one is evidence.
+  /// Omitted means English, which is what every caller that shows a
+  /// single-language disclosure (the SMS keyword handlers, the lead form) is
+  /// actually doing.
+  locale?: string | null
   ipAddress?: string | null
 }
 
@@ -34,6 +40,9 @@ export async function recordConsent(
       state: input.state,
       source: input.source,
       disclosureVersion: input.disclosureVersion ?? null,
+      // Omitted falls through to the column default ('en') rather than
+      // repeating it here, where it could drift from the schema.
+      ...(input.locale ? { locale: input.locale } : {}),
       ipAddress: input.ipAddress ?? null,
     },
   })

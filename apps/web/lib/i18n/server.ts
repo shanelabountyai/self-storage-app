@@ -1,5 +1,14 @@
 import { cookies } from 'next/headers'
-import { DEFAULT_LOCALE, isLocale, LOCALE_COOKIE, type Locale } from './index'
+import {
+  DEFAULT_LOCALE,
+  dictionaryFor,
+  isLocale,
+  LOCALE_COOKIE,
+  translate,
+  type Dictionary,
+  type Locale,
+} from './index'
+import type { Translator } from '@/lib/admin/form-state'
 
 // B-090 part 6. The one part of the i18n module that needs a request.
 //
@@ -33,4 +42,17 @@ export async function getLocale(): Promise<Locale> {
   } catch {
     return DEFAULT_LOCALE
   }
+}
+
+/// The dictionary for THIS request, plus a `t` bound to it.
+///
+/// Resolved per call rather than once at module scope: a server action runs
+/// inside a request, and a module-level dictionary would be whichever language
+/// the first request after a cold start happened to use — served to everybody
+/// afterwards.
+///
+/// Lived in the checkout action until B-264 gave it a second caller.
+export async function messages(): Promise<{ dict: Dictionary; t: Translator }> {
+  const dict = dictionaryFor(await getLocale())
+  return { dict, t: (key, vars) => translate(dict, key, vars) }
 }

@@ -3,8 +3,12 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { prisma } from '../packages/db'
 import { addUnitToBasket, startCheckout, sessionByToken } from '../apps/web/lib/checkout/session'
 import { buildLeaseDocuments, existingLeaseDocuments } from '../apps/web/lib/lease/build'
-import { SMS_CONSENT_DISCLOSURE_VERSION } from '../apps/web/lib/checkout/details'
-import { ELECTRONIC_RECORDS_CONSENT_VERSION } from '../apps/web/lib/lease/sign'
+import {
+  ELECTRONIC_RECORDS_CONSENT,
+  MARKETING_EMAIL_CHECKOUT_CONSENT,
+  MARKETING_SMS_CONSENT,
+  SMS_CONSENT,
+} from '../apps/web/lib/consent/disclosures'
 import { submitDetailsAction, signLeaseAction } from '../apps/web/app/(public)/checkout/actions'
 
 // B-032 / PRD 05 CN-15, PRD 02 US-13. The consent records step 1 (SMS) and
@@ -101,7 +105,77 @@ describeDb('SMS consent at checkout step 1', () => {
     })
     expect(consent.state).toBe('granted')
     expect(consent.source).toBe('checkout_step_1')
-    expect(consent.disclosureVersion).toBe(SMS_CONSENT_DISCLOSURE_VERSION)
+    expect(consent.disclosureVersion).toBe(SMS_CONSENT.en.version)
+    expect(consent.locale).toBe('en')
+  })
+
+  // B-259 (D-125). The claim the whole item rests on: a renter who ticked a
+  // Spanish box has a row naming the Spanish words, not an English version
+  // number stamped on a consent they never read.
+  //
+  // The locale comes from the FORM, not the cookie, which is why this can be
+  // driven without a request scope — and is also the point: the page is a
+  // server render, the cookie is read again at submit, and a renter who uses
+  // the language toggle in between would otherwise get a version recorded
+  // against words that were never on their screen.
+  it('records the SPANISH version and locale when step 1 was rendered in Spanish', async () => {
+    const started = await start()
+    const email = `consent-es-${randomUUID()}@example.com`
+    await callAction(() =>
+      submitDetailsAction(
+        {} as never,
+        detailsForm({
+          token: started.token,
+          email,
+          smsConsent: 'yes',
+          marketingConsent: 'yes',
+          marketingSmsConsent: 'yes',
+          disclosureLocale: 'es',
+        }),
+      ),
+    )
+
+    const tenant = await prisma.tenant.findUniqueOrThrow({ where: { email } })
+    const rows = await prisma.consent.findMany({ where: { tenantId: tenant.id } })
+
+    expect(rows).toHaveLength(3)
+    for (const row of rows) expect(row.locale).toBe('es')
+
+    const byChannel = Object.fromEntries(rows.map((row) => [row.channel, row.disclosureVersion]))
+    expect(byChannel.account_sms).toBe(SMS_CONSENT.es.version)
+    expect(byChannel.marketing_email).toBe(MARKETING_EMAIL_CHECKOUT_CONSENT.es.version)
+    expect(byChannel.marketing_sms).toBe(MARKETING_SMS_CONSENT.es.version)
+
+    // Not the English ones, said out loud — the failure this item exists to
+    // prevent is a row that looks fine until somebody tries to produce the
+    // words it names.
+    expect(byChannel.account_sms).not.toBe(SMS_CONSENT.en.version)
+  })
+
+  it('falls back rather than trusting a forged disclosure locale', async () => {
+    // The hidden field is untrusted input. `isLocale` narrows it to the two
+    // real locales; anything else falls back to the request's own locale,
+    // which in this harness is the default.
+    const started = await start()
+    const email = `consent-forged-${randomUUID()}@example.com`
+    await callAction(() =>
+      submitDetailsAction(
+        {} as never,
+        detailsForm({
+          token: started.token,
+          email,
+          smsConsent: 'yes',
+          disclosureLocale: 'fr-CA',
+        }),
+      ),
+    )
+
+    const tenant = await prisma.tenant.findUniqueOrThrow({ where: { email } })
+    const consent = await prisma.consent.findFirstOrThrow({
+      where: { tenantId: tenant.id, channel: 'account_sms' },
+    })
+    expect(consent.locale).toBe('en')
+    expect(consent.disclosureVersion).toBe(SMS_CONSENT.en.version)
   })
 
   it('records revoked, not silence, when the box is left unchecked', async () => {
@@ -269,7 +343,29 @@ describeDb('notice-email consent at lease signing', () => {
     })
     expect(consent.state).toBe('granted')
     expect(consent.source).toBe('checkout_lease_signing')
-    expect(consent.disclosureVersion).toBe(ELECTRONIC_RECORDS_CONSENT_VERSION)
+    expect(consent.disclosureVersion).toBe(ELECTRONIC_RECORDS_CONSENT.en.version)
+    expect(consent.locale).toBe('en')
+  })
+
+  // B-259 (D-125). The Spanish E-SIGN sentence says something the English one
+  // does not — that the agreement itself is in English (D-122) — so which was
+  // shown is a material part of what this renter consented to, and its own
+  // version is the only thing that can prove which.
+  it('records the Spanish E-SIGN version when the lease step was rendered in Spanish', async () => {
+    const { token, tenantId } = await sessionAtLeaseStep()
+
+    const form = new FormData()
+    form.set('token', token)
+    form.set('typedName', 'Ada Renter')
+    form.set('consented', 'yes')
+    form.set('disclosureLocale', 'es')
+    await callAction(() => signLeaseAction({} as never, form))
+
+    const consent = await prisma.consent.findFirstOrThrow({
+      where: { tenantId, channel: 'notice_email' },
+    })
+    expect(consent.locale).toBe('es')
+    expect(consent.disclosureVersion).toBe(ELECTRONIC_RECORDS_CONSENT.es.version)
   })
 
   it('never reaches the consent write when the signature itself is refused', async () => {

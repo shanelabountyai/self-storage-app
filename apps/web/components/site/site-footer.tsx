@@ -52,10 +52,12 @@ export function SiteFooter({ locale }: { locale: Locale }) {
           .
         </p>
 
-        {/* The legal pages themselves are still English-only (D-122), and this
-            sentence is where a Spanish reader is told so — it already says the
-            pages are unreviewed drafts, so it is the honest place for it
-            rather than a second banner. */}
+        {/* `/terms`, `/privacy`, the lease and every notice are still
+            English-only (D-122), and this sentence is where a Spanish reader is
+            told so — it already says the pages are unreviewed drafts, so it is
+            the honest place for it rather than a second banner. B-259 made it
+            NAME them: it used to say "las páginas legales", and
+            `/messaging-policy` is Spanish now. */}
         <p className="text-muted-foreground text-xs">
           {t('chrome.disclaimer', { name: SITE.name })}
         </p>

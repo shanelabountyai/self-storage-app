@@ -18,6 +18,24 @@ export type CommsTemplateSeed = {
   subject?: string
   bodyText: string
   requiredMergeFields: string[]
+  /// B-261 (D-122). The Spanish rendering of THIS template, seeded as its own
+  /// `MessageTemplate` row with `locale: 'es'`. Omit it and a Spanish-speaking
+  /// tenant falls back to the English row — `effectiveTemplate` resolves
+  /// language before facility and version, and falls back rather than
+  /// refusing, because a payment reminder withheld over a missing translation
+  /// is worse than one in the wrong language.
+  ///
+  /// It sits INSIDE the English entry rather than in a parallel array for the
+  /// reason `lib/consent/disclosures.ts` states about its own shape: there is
+  /// no way to edit one language's words without seeing that the other exists.
+  ///
+  /// `requiredMergeFields` is deliberately NOT repeated here — one list, both
+  /// languages. That is the trap this repo has already paid for (B-206): a
+  /// field a translation cannot satisfy makes `renderEmail` throw and the
+  /// message is recorded `failed`, which reads exactly like a broken sender.
+  /// Sharing the list makes the two bodies fail typecheck-adjacent review
+  /// together rather than at 2am in a job.
+  es?: { subject?: string; bodyText: string }
 }
 
 export type CommsRuleSeed = {
@@ -51,6 +69,18 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
       '',
       'Nothing has been charged.',
     ].join('\n'),
+    es: {
+      subject: 'Su reserva en {{facility.name}} está por vencer',
+      bodyText: [
+        'Hola {{tenant.first_name}}:',
+        '',
+        'Le estamos reservando su unidad de {{unit.size}} en {{facility.name}} hasta el {{reservation.expires_at}}.',
+        '',
+        'Use el enlace del correo de confirmación que recibió para completar su mudanza en línea, o llame al {{facility.phone}} y nosotros nos encargamos.',
+        '',
+        'No se le ha cobrado nada.',
+      ].join('\n'),
+    },
     requiredMergeFields: ['tenant.first_name', 'facility.name', 'unit.size', 'reservation.expires_at', 'facility.phone'],
   },
   {
@@ -72,6 +102,18 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
       '',
       'Questions? Call {{facility.phone}}.',
     ].join('\n'),
+    es: {
+      subject: 'Su reserva de traslado en {{facility.name}} está por vencer',
+      bodyText: [
+        'Hola {{tenant.first_name}}:',
+        '',
+        'Le estamos reservando la unidad de {{unit.size}} para su traslado en {{facility.name}} hasta el {{reservation.expires_at}}.',
+        '',
+        'Para completar el traslado, llame a la oficina al {{facility.phone}} antes de esa fecha.',
+        '',
+        '¿Preguntas? Llame al {{facility.phone}}.',
+      ].join('\n'),
+    },
     requiredMergeFields: ['tenant.first_name', 'facility.name', 'unit.size', 'reservation.expires_at', 'facility.phone'],
   },
   {
@@ -91,6 +133,22 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
       '',
       'Questions? Call {{facility.phone}}.',
     ].join('\n'),
+    es: {
+      subject: 'Bienvenido a {{facility.name}} — ya está instalado',
+      bodyText: [
+        'Hola {{tenant.first_name}}: ¡ya está instalado!',
+        '',
+        'Su unidad es {{unit.number_list}} en {{facility.name}}, {{facility.address}}.',
+        '',
+        '{{access.gate_code_line}}',
+        '',
+        '{{billing.first_charge_line}}',
+        '',
+        'Cree su cuenta en línea para consultar su contrato, sus pagos y su código de la puerta cuando quiera: {{links.portal}}',
+        '',
+        '¿Preguntas? Llame al {{facility.phone}}.',
+      ].join('\n'),
+    },
     requiredMergeFields: [
       'tenant.first_name',
       'unit.number_list',
@@ -117,6 +175,20 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
       '',
       'Questions about anything above? Call {{facility.phone}}.',
     ].join('\n'),
+    es: {
+      subject: 'Su mudanza de salida de {{facility.name}} está confirmada',
+      bodyText: [
+        'Hola {{tenant.first_name}}:',
+        '',
+        'Ya desocupó la unidad {{unit.number}} en {{facility.name}}.',
+        '',
+        '{{billing.settlement_line}}',
+        '',
+        'Su código de la puerta ya no funciona en esta instalación.',
+        '',
+        '¿Tiene preguntas sobre algo de lo anterior? Llame al {{facility.phone}}.',
+      ].join('\n'),
+    },
     requiredMergeFields: [
       'tenant.first_name',
       'unit.number',
@@ -145,6 +217,20 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
       '',
       'Questions? Call {{facility.phone}}.',
     ].join('\n'),
+    es: {
+      subject: 'Recibimos su solicitud de mudanza de salida de {{facility.name}}',
+      bodyText: [
+        'Hola {{tenant.first_name}}:',
+        '',
+        'Recibimos su solicitud para desocupar la unidad {{unit.number}} en {{facility.name}} el {{lease.move_out_date}}.',
+        '',
+        'Su cuenta sigue activa y su código de la puerta sigue funcionando hasta esa fecha. Nuestro equipo confirmará que la unidad esté vacía y terminará de cerrar su cuenta después de su fecha de salida.',
+        '',
+        '¿Cambió de opinión? Puede cancelar esta solicitud desde su cuenta en cualquier momento antes del {{lease.move_out_date}}.',
+        '',
+        '¿Preguntas? Llame al {{facility.phone}}.',
+      ].join('\n'),
+    },
     requiredMergeFields: [
       'tenant.first_name',
       'unit.number',
@@ -178,6 +264,22 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
       '',
       'Questions? Call {{facility.phone}}.',
     ].join('\n'),
+    es: {
+      subject: 'Le estamos reservando la unidad {{transfer.to_unit_number}} en {{facility.name}}',
+      bodyText: [
+        'Hola {{tenant.first_name}}:',
+        '',
+        'Recibimos su solicitud para trasladarse de la unidad {{unit.number}} a la unidad {{transfer.to_unit_number}} en {{facility.name}}, el {{transfer.date}}.',
+        '',
+        'Le estamos reservando la unidad {{transfer.to_unit_number}}. Todavía no ha cambiado nada: la unidad {{unit.number}} sigue siendo suya, su código de la puerta sigue funcionando y su renta no cambia hasta que se haga el traslado.',
+        '',
+        'Nuestro equipo le llamará para coordinar la fecha y confirmarle el costo del cambio antes de cobrar nada.',
+        '',
+        '¿Cambió de opinión? Puede cancelar esta solicitud desde su cuenta en cualquier momento.',
+        '',
+        '¿Preguntas? Llame al {{facility.phone}}.',
+      ].join('\n'),
+    },
     requiredMergeFields: [
       'tenant.first_name',
       'unit.number',
@@ -209,6 +311,20 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
       '',
       'If that is wrong, or you need to reach your unit urgently, call {{facility.phone}} and we will sort it out.',
     ].join('\n'),
+    es: {
+      subject: 'Su acceso a la puerta en {{facility.name}} está pausado',
+      bodyText: [
+        'Hola {{tenant.first_name}}:',
+        '',
+        'Su código de la puerta para la unidad {{unit.number}} en {{facility.name}} dejó de funcionar porque la cuenta tiene {{access.days_past_due}} días de atraso.',
+        '',
+        'Sus pertenencias están seguras y no se ha vendido ni movido nada.',
+        '',
+        'Si paga {{access.restore_amount}}, su código se reactiva automáticamente, por lo general en un par de minutos: {{links.pay_now}}',
+        '',
+        'Si esto es un error, o necesita entrar a su unidad con urgencia, llame al {{facility.phone}} y lo resolvemos.',
+      ].join('\n'),
+    },
     requiredMergeFields: [
       'tenant.first_name',
       'unit.number',
@@ -234,6 +350,10 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
     channel: 'sms',
     bodyText:
       '{{facility.name}}: gate access for unit {{unit.number}} is paused, {{access.days_past_due}} days past due. Pay {{access.restore_amount}} to restore it: {{links.pay_now}}',
+    es: {
+      bodyText:
+        '{{facility.name}}: el acceso a la puerta de la unidad {{unit.number}} está pausado, {{access.days_past_due}} días de atraso. Pague {{access.restore_amount}} para reactivarlo: {{links.pay_now}}',
+    },
     requiredMergeFields: [
       'unit.number',
       'facility.name',
@@ -253,6 +373,16 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
       '',
       'If it does not let you in within a few minutes, call {{facility.phone}} and we will open the gate for you.',
     ].join('\n'),
+    es: {
+      subject: 'Su acceso a la puerta en {{facility.name}} está activo de nuevo',
+      bodyText: [
+        'Hola {{tenant.first_name}}:',
+        '',
+        'Gracias — su cuenta está al corriente y su código de la puerta para la unidad {{unit.number}} en {{facility.name}} vuelve a funcionar.',
+        '',
+        'Si no le permite entrar en unos minutos, llame al {{facility.phone}} y le abrimos la puerta.',
+      ].join('\n'),
+    },
     requiredMergeFields: ['tenant.first_name', 'unit.number', 'facility.name', 'facility.phone'],
   },
   {
@@ -273,6 +403,20 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
       '',
       'If that is wrong, or you need into your unit urgently, call {{facility.phone}} and we will sort it out.',
     ].join('\n'),
+    es: {
+      subject: 'Se agregó un candado a la unidad {{unit.number}} en {{facility.name}}',
+      bodyText: [
+        'Hola {{tenant.first_name}}:',
+        '',
+        'Como la cuenta de la unidad {{unit.number}} en {{facility.name}} tiene {{access.days_past_due}} días de atraso, agregamos un candado a la unidad además del suyo.',
+        '',
+        'Sus pertenencias están seguras y no se ha vendido ni movido nada.',
+        '',
+        'Si paga {{balance.total}}, esto se resuelve. Una vez pagado, nuestro equipo irá a quitar el candado: {{links.pay_now}}',
+        '',
+        'Si esto es un error, o necesita entrar a su unidad con urgencia, llame al {{facility.phone}} y lo resolvemos.',
+      ].join('\n'),
+    },
     requiredMergeFields: [
       'tenant.first_name',
       'unit.number',
@@ -294,6 +438,16 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
       '',
       'If you have any trouble getting into your unit, call {{facility.phone}}.',
     ].join('\n'),
+    es: {
+      subject: 'Se quitó el candado de la unidad {{unit.number}} en {{facility.name}}',
+      bodyText: [
+        'Hola {{tenant.first_name}}:',
+        '',
+        'Gracias — su cuenta está al corriente y se quitó el candado adicional de la unidad {{unit.number}} en {{facility.name}}.',
+        '',
+        'Si tiene alguna dificultad para entrar a su unidad, llame al {{facility.phone}}.',
+      ].join('\n'),
+    },
     requiredMergeFields: ['tenant.first_name', 'unit.number', 'facility.name', 'facility.phone'],
   },
   {
@@ -318,6 +472,22 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
       '',
       'If you have questions about the notice, or believe the balance is wrong, call {{facility.phone}}.',
     ].join('\n'),
+    es: {
+      subject: 'Se le envió un aviso formal sobre la unidad {{unit.number}} en {{facility.name}}',
+      bodyText: [
+        'Hola {{tenant.first_name}}:',
+        '',
+        'Este es un correo de cortesía. No es el aviso formal.',
+        '',
+        'Se le envió por correo postal un aviso previo de gravamen sobre la unidad {{unit.number}} en {{facility.name}}, como lo exigen su contrato y la ley estatal. Indica un saldo de {{notice.balance}}, con fecha límite del {{notice.deadline_date}}.',
+        '',
+        'El aviso enviado por correo está redactado únicamente en inglés. Si necesita ayuda para entenderlo, llame al {{facility.phone}} y se lo explicamos.',
+        '',
+        'Puede pagar en línea ahora: {{links.pay_now}}',
+        '',
+        'Si tiene preguntas sobre el aviso, o cree que el saldo es incorrecto, llame al {{facility.phone}}.',
+      ].join('\n'),
+    },
     requiredMergeFields: [
       'tenant.first_name',
       'unit.number',
@@ -343,6 +513,22 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
       '',
       'If you have questions about the notice, or believe the balance is wrong, call {{facility.phone}} right away.',
     ].join('\n'),
+    es: {
+      subject: 'Se le envió un aviso formal de gravamen sobre la unidad {{unit.number}} en {{facility.name}}',
+      bodyText: [
+        'Hola {{tenant.first_name}}:',
+        '',
+        'Este es un correo de cortesía. No es el aviso formal.',
+        '',
+        'Se le envió por correo postal un aviso de gravamen sobre la unidad {{unit.number}} en {{facility.name}}, como lo exigen su contrato y la ley estatal. Explica que los bienes guardados en su unidad pueden venderse si no se paga el saldo, e indica un saldo de {{notice.balance}}, con fecha límite del {{notice.deadline_date}}.',
+        '',
+        'El aviso enviado por correo está redactado únicamente en inglés. Si necesita ayuda para entenderlo, llame al {{facility.phone}} y se lo explicamos.',
+        '',
+        'Puede pagar en línea ahora: {{links.pay_now}}',
+        '',
+        'Si tiene preguntas sobre el aviso, o cree que el saldo es incorrecto, llame de inmediato al {{facility.phone}}.',
+      ].join('\n'),
+    },
     requiredMergeFields: [
       'tenant.first_name',
       'unit.number',
@@ -384,6 +570,22 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
       '',
       'If you have already paid, or something is wrong, call {{facility.phone}} — we would rather sort it out than chase you.',
     ].join('\n'),
+    es: {
+      subject: '{{dunning.subject_line}} — unidad {{unit.number}}',
+      bodyText: [
+        'Hola {{tenant.first_name}}:',
+        '',
+        '{{dunning.tone_line}}',
+        '',
+        'El saldo de la unidad {{unit.number}} en {{facility.name}} es de {{balance.total}}, con {{dunning.days_past_due}} días de atraso.',
+        '',
+        'Pague ahora: {{links.pay_now}}',
+        '',
+        '{{dunning.consequence_line}}',
+        '',
+        'Si ya pagó, o si algo no está bien, llame al {{facility.phone}} — preferimos resolverlo con usted que andar detrás de usted.',
+      ].join('\n'),
+    },
     requiredMergeFields: [
       'tenant.first_name',
       'unit.number',
@@ -421,6 +623,20 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
       '',
       'Questions? Call {{facility.phone}}.',
     ].join('\n'),
+    es: {
+      subject: 'La renta de la unidad {{unit.number}} vence el {{invoice.due_date}}',
+      bodyText: [
+        'Hola {{tenant.first_name}}:',
+        '',
+        'El {{invoice.due_date}} vencen {{invoice.amount}} por la unidad {{unit.number}} en {{facility.name}}.',
+        '',
+        'Pague en línea: {{links.pay_now}}',
+        '',
+        '¿Ya pagó, o va a pagar en la oficina? Entonces no hace falta nada: este mensaje se cruzó con su pago.',
+        '',
+        '¿Preguntas? Llame al {{facility.phone}}.',
+      ].join('\n'),
+    },
     requiredMergeFields: [
       'tenant.first_name',
       'invoice.amount',
@@ -437,6 +653,10 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
     channel: 'sms',
     bodyText:
       '{{facility.name}}: {{invoice.amount}} is due {{invoice.due_date}} for unit {{unit.number}}. Pay: {{links.pay_now}}',
+    es: {
+      bodyText:
+        '{{facility.name}}: vencen {{invoice.amount}} el {{invoice.due_date}} por la unidad {{unit.number}}. Pague: {{links.pay_now}}',
+    },
     requiredMergeFields: ['invoice.amount', 'invoice.due_date', 'unit.number', 'facility.name', 'links.pay_now'],
   },
   {
@@ -454,6 +674,20 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
       '',
       'Questions? Call {{facility.phone}}.',
     ].join('\n'),
+    es: {
+      subject: 'La renta de la unidad {{unit.number}} vence hoy',
+      bodyText: [
+        'Hola {{tenant.first_name}}:',
+        '',
+        'Hoy vencen {{invoice.amount}} por la unidad {{unit.number}} en {{facility.name}}.',
+        '',
+        'Pague en línea: {{links.pay_now}}',
+        '',
+        'Si ya pagó hoy, gracias — puede ignorar este mensaje.',
+        '',
+        '¿Preguntas? Llame al {{facility.phone}}.',
+      ].join('\n'),
+    },
     requiredMergeFields: [
       'tenant.first_name',
       'invoice.amount',
@@ -468,6 +702,10 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
     classification: 'transactional',
     channel: 'sms',
     bodyText: '{{facility.name}}: {{invoice.amount}} is due TODAY for unit {{unit.number}}. Pay: {{links.pay_now}}',
+    es: {
+      bodyText:
+        '{{facility.name}}: {{invoice.amount}} vencen HOY por la unidad {{unit.number}}. Pague: {{links.pay_now}}',
+    },
     requiredMergeFields: ['invoice.amount', 'unit.number', 'facility.name', 'links.pay_now'],
   },
   {
@@ -488,6 +726,20 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
       '',
       'Questions? Call {{facility.phone}}.',
     ].join('\n'),
+    es: {
+      subject: 'Recibo: {{payment.amount}} por la unidad {{unit.number}}',
+      bodyText: [
+        'Hola {{tenant.first_name}}:',
+        '',
+        'Recibimos {{payment.amount}} el {{payment.date}} en {{payment.method}}, por la unidad {{unit.number}} en {{facility.name}}.',
+        '',
+        'Saldo de la cuenta después de este pago: {{balance.total}}.',
+        '',
+        'Todo su historial de pagos está en su cuenta: {{links.portal}}',
+        '',
+        '¿Preguntas? Llame al {{facility.phone}}.',
+      ].join('\n'),
+    },
     requiredMergeFields: [
       'tenant.first_name',
       'payment.amount',
@@ -521,6 +773,23 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
       '',
       'Questions? Call {{facility.phone}}.',
     ].join('\n'),
+    es: {
+      subject: 'No pudimos cobrar {{payment.amount}} por la unidad {{unit.number}}',
+      bodyText: [
+        'Hola {{tenant.first_name}}:',
+        '',
+        '{{payment.failure_line}}',
+        '',
+        'El monto pendiente es de {{payment.amount}} por la unidad {{unit.number}} en {{facility.name}}.',
+        '',
+        'Actualice su tarjeta: {{links.update_card}}',
+        'O pague de otra forma: {{links.pay_now}}',
+        '',
+        'Su acceso a la unidad no ha cambiado en nada.',
+        '',
+        '¿Preguntas? Llame al {{facility.phone}}.',
+      ].join('\n'),
+    },
     requiredMergeFields: [
       'tenant.first_name',
       'payment.failure_line',
@@ -551,6 +820,21 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
       '',
       'Questions? Call {{facility.phone}}.',
     ].join('\n'),
+    es: {
+      subject: 'Siguen pendientes {{payment.amount}} por la unidad {{unit.number}}',
+      bodyText: [
+        'Hola {{tenant.first_name}}:',
+        '',
+        'Siguen pendientes {{payment.amount}} por la unidad {{unit.number}} en {{facility.name}}.',
+        '',
+        '{{payment.retry_line}}',
+        '',
+        'Actualice su tarjeta: {{links.update_card}}',
+        'O pague de otra forma: {{links.pay_now}}',
+        '',
+        '¿Preguntas? Llame al {{facility.phone}}.',
+      ].join('\n'),
+    },
     requiredMergeFields: [
       'tenant.first_name',
       'payment.amount',
@@ -568,6 +852,10 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
     channel: 'sms',
     bodyText:
       '{{facility.name}}: {{payment.amount}} is still outstanding for unit {{unit.number}}. {{payment.retry_line}} Pay: {{links.pay_now}}',
+    es: {
+      bodyText:
+        '{{facility.name}}: siguen pendientes {{payment.amount}} por la unidad {{unit.number}}. {{payment.retry_line}} Pague: {{links.pay_now}}',
+    },
     requiredMergeFields: ['payment.amount', 'unit.number', 'facility.name', 'payment.retry_line', 'links.pay_now'],
   },
   {
@@ -594,6 +882,22 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
       '',
       'Questions? Call {{facility.phone}}.',
     ].join('\n'),
+    es: {
+      subject: 'La tarjeta registrada en {{facility.name}} vence {{card.expires}}',
+      bodyText: [
+        'Hola {{tenant.first_name}}:',
+        '',
+        'La tarjeta que tiene registrada para su cuenta en {{facility.name}} vence {{card.expires}}.',
+        '',
+        '{{card.urgency_line}}',
+        '',
+        'Actualícela aquí: {{links.update_card}}',
+        '',
+        'No hay nada mal con su cuenta y ningún pago ha fallado — preferimos avisarle ahora a que un pago se rechace después.',
+        '',
+        '¿Preguntas? Llame al {{facility.phone}}.',
+      ].join('\n'),
+    },
     requiredMergeFields: [
       'tenant.first_name',
       'facility.name',
@@ -608,6 +912,10 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
     classification: 'operational',
     channel: 'sms',
     bodyText: '{{facility.name}}: the card on file expires {{card.expires}}. Update it: {{links.update_card}}',
+    es: {
+      bodyText:
+        '{{facility.name}}: la tarjeta registrada vence {{card.expires}}. Actualícela: {{links.update_card}}',
+    },
     requiredMergeFields: ['facility.name', 'card.expires', 'links.update_card'],
   },
   {
@@ -632,6 +940,22 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
       '',
       'Questions? Call {{facility.phone}}.',
     ].join('\n'),
+    es: {
+      subject: 'Se trasladó a la unidad {{transfer.to_unit}} en {{facility.name}}',
+      bodyText: [
+        'Hola {{tenant.first_name}}:',
+        '',
+        'Se trasladó de la unidad {{transfer.from_unit}} a la unidad {{transfer.to_unit}} en {{facility.name}}, a partir del {{transfer.date}}.',
+        '',
+        'Su nueva renta es de {{transfer.new_rate}} al mes. {{transfer.settlement_line}}',
+        '',
+        'Su código de la puerta no cambia y ya funciona en la nueva unidad.',
+        '',
+        'Su cuenta: {{links.portal}}',
+        '',
+        '¿Preguntas? Llame al {{facility.phone}}.',
+      ].join('\n'),
+    },
     requiredMergeFields: [
       'tenant.first_name',
       'transfer.from_unit',
@@ -674,6 +998,23 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
       '',
       'If you have questions, or this does not look right, call {{facility.phone}} and we will go through it with you.',
     ].join('\n'),
+    es: {
+      subject: 'Su renta de la unidad {{unit.number}} cambia el {{rate.effective_date}}',
+      bodyText: [
+        'Hola {{tenant.first_name}}:',
+        '',
+        'Este es un aviso con {{rate.notice_days}} días de anticipación de que la renta de la unidad {{unit.number}} en {{facility.name}} va a cambiar.',
+        '',
+        'Ahora: {{rate.old}} al mes',
+        'A partir del {{rate.effective_date}}: {{rate.new}} al mes',
+        '',
+        'Nada cambia antes del {{rate.effective_date}}, y usted no tiene que hacer nada — el nuevo monto aparecerá en la primera factura emitida en esa fecha o después.',
+        '',
+        'Su cuenta: {{links.portal}}',
+        '',
+        'Si tiene preguntas, o si esto no le parece correcto, llame al {{facility.phone}} y lo revisamos con usted.',
+      ].join('\n'),
+    },
     requiredMergeFields: [
       'tenant.first_name',
       'unit.number',
@@ -702,6 +1043,20 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
       '',
       'Your account: {{links.portal}}',
     ].join('\n'),
+    es: {
+      subject: 'Su comprobante de seguro de la unidad {{unit.number}} vence el {{protection.expires_on}}',
+      bodyText: [
+        'Hola {{tenant.first_name}}:',
+        '',
+        'El seguro que nos mostró para la unidad {{unit.number}} en {{facility.name}} vence el {{protection.expires_on}}.',
+        '',
+        'Envíenos la nueva página de declaraciones antes de esa fecha y nada cambia. Llame al {{facility.phone}} o responda a este correo y le decimos a dónde enviarla.',
+        '',
+        'Si después de esa fecha no tenemos una cobertura vigente registrada, su contrato puede quedar inscrito en el plan de protección de la instalación y se le cobrará por él.',
+        '',
+        'Su cuenta: {{links.portal}}',
+      ].join('\n'),
+    },
     requiredMergeFields: [
       'tenant.first_name',
       'unit.number',
@@ -725,6 +1080,18 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
       '',
       'Questions, or ready to book? Call {{facility.phone}}.',
     ].join('\n'),
+    es: {
+      subject: 'Su cotización de {{unit.size}} en {{facility.name}}',
+      bodyText: [
+        'Hola {{tenant.first_name}}:',
+        '',
+        'Gracias por preguntar por almacenamiento de {{unit.size}} en {{facility.name}}. El precio actual es {{lead.quoted_price}}.',
+        '',
+        'Vea fotos, horarios y disponibilidad exacta aquí: {{links.facility_page}}',
+        '',
+        '¿Preguntas, o listo para rentar? Llame al {{facility.phone}}.',
+      ].join('\n'),
+    },
     requiredMergeFields: [
       'tenant.first_name',
       'unit.size',
@@ -748,6 +1115,16 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
       '',
       'No pressure — call {{facility.phone}} whenever you are ready, or if you have a question we can answer faster than a web page can.',
     ].join('\n'),
+    es: {
+      subject: 'Lo que la gente dice de {{facility.name}}',
+      bodyText: [
+        'Hola {{tenant.first_name}}:',
+        '',
+        '¿Todavía lo está pensando? Esto es lo que dicen los clientes actuales de {{facility.name}}, y un vistazo más de cerca a la propiedad: {{links.facility_page}}',
+        '',
+        'Sin presión — llame al {{facility.phone}} cuando esté listo, o si tiene una pregunta que podamos responderle más rápido que una página web.',
+      ].join('\n'),
+    },
     requiredMergeFields: ['tenant.first_name', 'facility.name', 'links.facility_page', 'facility.phone'],
   },
   {
@@ -767,6 +1144,18 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
       '',
       'Questions? Call {{facility.phone}}.',
     ].join('\n'),
+    es: {
+      subject: 'Una razón para rentar su {{unit.size}} en {{facility.name}} esta semana',
+      bodyText: [
+        'Hola {{tenant.first_name}}:',
+        '',
+        'Ahora mismo: {{lead.promo_line}} en almacenamiento de {{unit.size}} en {{facility.name}}.',
+        '',
+        'Rente en línea: {{links.facility_page}}',
+        '',
+        '¿Preguntas? Llame al {{facility.phone}}.',
+      ].join('\n'),
+    },
     requiredMergeFields: [
       'tenant.first_name',
       'unit.size',
@@ -799,6 +1188,10 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
     channel: 'sms',
     bodyText:
       '{{facility.name}}: your {{unit.size}} quote is {{lead.quoted_price}}. Details and availability: {{links.facility_page}}',
+    es: {
+      bodyText:
+        '{{facility.name}}: su cotización de {{unit.size}} es {{lead.quoted_price}}. Detalles y disponibilidad: {{links.facility_page}}',
+    },
     requiredMergeFields: [
       'facility.name',
       'unit.size',
@@ -815,6 +1208,10 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
     // sent for no reason, which on this channel the recipient pays for.
     bodyText:
       '{{facility.name}}: {{lead.promo_line}} on {{unit.size}} storage right now. Book: {{links.facility_page}}',
+    es: {
+      bodyText:
+        '{{facility.name}}: {{lead.promo_line}} en almacenamiento de {{unit.size}} ahora mismo. Rente: {{links.facility_page}}',
+    },
     requiredMergeFields: [
       'facility.name',
       'lead.promo_line',
@@ -845,6 +1242,18 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
       '',
       'Thank you for the recommendation. It genuinely helps.',
     ].join('\n'),
+    es: {
+      subject: 'Su crédito por recomendación viene en camino',
+      bodyText: [
+        'Hola {{tenant.first_name}}:',
+        '',
+        'Buenas noticias — la persona que recomendó a {{facility.name}} ya se instaló y su primer pago se procesó, así que su crédito por recomendación está confirmado.',
+        '',
+        '{{referral.reward_line}}',
+        '',
+        'Gracias por la recomendación. De verdad nos ayuda.',
+      ].join('\n'),
+    },
     requiredMergeFields: ['tenant.first_name', 'facility.name', 'referral.reward_line'],
   },
   {
@@ -860,6 +1269,18 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
       '',
       'Nothing to do — it will be on the invoice when it arrives.',
     ].join('\n'),
+    es: {
+      subject: 'Un crédito se aplicará a su primera factura',
+      bodyText: [
+        'Hola {{tenant.first_name}}:',
+        '',
+        'Bienvenido a {{facility.name}}. Como llegó con nosotros por la invitación de una amistad, se aplica un crédito a su cuenta.',
+        '',
+        '{{referral.reward_line}}',
+        '',
+        'No tiene que hacer nada — aparecerá en la factura cuando llegue.',
+      ].join('\n'),
+    },
     requiredMergeFields: ['tenant.first_name', 'facility.name', 'referral.reward_line'],
   },
   {
@@ -880,6 +1301,18 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
       '',
       'If that does not look right, call {{facility.phone}} and we will go through it with you.',
     ].join('\n'),
+    es: {
+      subject: 'Sobre su recomendación en {{facility.name}}',
+      bodyText: [
+        'Hola {{tenant.first_name}}:',
+        '',
+        'Revisamos una recomendación en su cuenta y esta vez no calificó para un crédito. Esta es la razón:',
+        '',
+        '{{referral.refusal_reason}}',
+        '',
+        'Si esto no le parece correcto, llame al {{facility.phone}} y lo revisamos con usted.',
+      ].join('\n'),
+    },
     requiredMergeFields: [
       'tenant.first_name',
       'facility.name',
@@ -904,6 +1337,18 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
       '',
       'Thanks either way — and if anything about your unit or your account needs attention, call {{facility.phone}} and we will sort it out.',
     ].join('\n'),
+    es: {
+      subject: '¿Qué tal le está funcionando su unidad en {{facility.name}}?',
+      bodyText: [
+        'Hola {{tenant.first_name}}:',
+        '',
+        'Ya lleva un tiempo instalado en la unidad {{unit.number}} en {{facility.name}}, y nos encantaría saber cómo le va.',
+        '',
+        'Si tiene un minuto, una reseña ayuda a que otras personas nos encuentren y nos ayuda a saber qué estamos haciendo bien: {{links.google_review}}',
+        '',
+        'Gracias de todos modos — y si algo de su unidad o de su cuenta necesita atención, llame al {{facility.phone}} y lo resolvemos.',
+      ].join('\n'),
+    },
     requiredMergeFields: [
       'tenant.first_name',
       'unit.number',
@@ -930,6 +1375,20 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
       '',
       'Your account: {{links.portal}}',
     ].join('\n'),
+    es: {
+      subject: 'La unidad {{unit.number}} quedó inscrita en {{protection.plan_name}} a {{protection.premium}}/mes',
+      bodyText: [
+        'Hola {{tenant.first_name}}:',
+        '',
+        'No tenemos un comprobante de seguro vigente para la unidad {{unit.number}} en {{facility.name}}, así que la unidad quedó inscrita en {{protection.plan_name}}.',
+        '',
+        'Esto agrega {{protection.premium}} al mes a su renta, a partir de su próxima factura.',
+        '',
+        'Si sí tiene cobertura y simplemente no la hemos visto, llame al {{facility.phone}} — envíenos la página de declaraciones y quitamos el cargo.',
+        '',
+        'Su cuenta: {{links.portal}}',
+      ].join('\n'),
+    },
     requiredMergeFields: [
       'tenant.first_name',
       'unit.number',
@@ -954,6 +1413,18 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
       '',
       'Questions? Call {{facility.phone}}.',
     ].join('\n'),
+    es: {
+      subject: 'Su unidad de {{unit.size}} en {{facility.name}} sigue esperándolo',
+      bodyText: [
+        'Hola {{tenant.first_name}}:',
+        '',
+        'Empezó a rentar una unidad de {{unit.size}} en {{facility.name}} por {{checkout.quoted_price}}, pero no terminó.',
+        '',
+        'Continúe justo donde se quedó — la misma unidad, al mismo precio: {{links.resume_checkout}}',
+        '',
+        '¿Preguntas? Llame al {{facility.phone}}.',
+      ].join('\n'),
+    },
     requiredMergeFields: [
       'tenant.first_name',
       'unit.size',
@@ -978,6 +1449,18 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
       '',
       'No rush — call {{facility.phone}} if you have a question first.',
     ].join('\n'),
+    es: {
+      subject: '¿Sigue interesado en almacenamiento en {{facility.name}}?',
+      bodyText: [
+        'Hola {{tenant.first_name}}:',
+        '',
+        'Su unidad de {{unit.size}} en {{facility.name}} sigue cotizada en {{checkout.quoted_price}} — no ha cambiado nada.',
+        '',
+        'Termine de rentar aquí: {{links.resume_checkout}}',
+        '',
+        'Sin prisa — llame al {{facility.phone}} si primero tiene alguna pregunta.',
+      ].join('\n'),
+    },
     requiredMergeFields: [
       'tenant.first_name',
       'unit.size',
@@ -1004,6 +1487,18 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
       '',
       'Call {{facility.phone}} if you would rather book over the phone.',
     ].join('\n'),
+    es: {
+      subject: 'Última oportunidad: {{checkout.promo_line}} en su {{unit.size}} en {{facility.name}}',
+      bodyText: [
+        'Hola {{tenant.first_name}}:',
+        '',
+        'Su unidad de {{unit.size}} en {{facility.name}} sigue reservada en {{checkout.quoted_price}} — y ahora mismo, {{checkout.promo_line}}.',
+        '',
+        'Termine de rentar aquí: {{links.resume_checkout}}',
+        '',
+        'Llame al {{facility.phone}} si prefiere rentar por teléfono.',
+      ].join('\n'),
+    },
     requiredMergeFields: [
       'tenant.first_name',
       'unit.size',
@@ -1047,6 +1542,26 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
       '',
       'Questions? Call {{facility.phone}}.',
     ].join('\n'),
+    es: {
+      subject: 'Su plan de pagos en {{facility.name}}',
+      bodyText: [
+        'Hola {{tenant.first_name}}:',
+        '',
+        'Este es el plan de pagos que acordamos para la unidad {{unit.number}} en {{facility.name}}. El total es de {{plan.total}}.',
+        '',
+        '{{plan.schedule}}',
+        '',
+        '{{plan.collection_line}}',
+        '',
+        'Mientras cumpla con estas fechas, no aplicamos cargos por atraso, no le enviamos avisos de cobro y no le cortamos el acceso a la puerta. {{plan.grace_line}}',
+        '',
+        'La renta de cada mes nuevo es aparte de este plan y sigue venciendo en su fecha de siempre.',
+        '',
+        'Consulte su plan cuando quiera: {{links.plan}}',
+        '',
+        '¿Preguntas? Llame al {{facility.phone}}.',
+      ].join('\n'),
+    },
     requiredMergeFields: [
       'tenant.first_name',
       'unit.number',
@@ -1080,6 +1595,22 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
       '',
       'Questions? Call {{facility.phone}}.',
     ].join('\n'),
+    es: {
+      subject: 'Su pago del plan vence el {{plan.installment_due_date}}',
+      bodyText: [
+        'Hola {{tenant.first_name}}:',
+        '',
+        'Su próximo pago del plan para la unidad {{unit.number}} en {{facility.name}} es de {{plan.installment_amount}}, con vencimiento el {{plan.installment_due_date}}.',
+        '',
+        '{{plan.collection_line}}',
+        '',
+        '{{plan.grace_line}}',
+        '',
+        'Pague ahora: {{links.pay_now}}',
+        '',
+        '¿Preguntas? Llame al {{facility.phone}}.',
+      ].join('\n'),
+    },
     requiredMergeFields: [
       'tenant.first_name',
       'unit.number',
@@ -1121,6 +1652,24 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
     // no route to the schedule B-193 built for exactly this moment was the
     // gap. Both are REQUIRED, so a break with no identifiable installment
     // fails loudly rather than mailing a sentence with a hole in it.
+    es: {
+      subject: 'Su plan de pagos en {{facility.name}} ha terminado',
+      bodyText: [
+        'Hola {{tenant.first_name}}:',
+        '',
+        'No se hizo un pago de su plan para la unidad {{unit.number}} en {{facility.name}}, así que el plan ha terminado.',
+        '',
+        'El pago que no recibimos fue de {{plan.missed_amount}}, con vencimiento el {{plan.missed_due_date}}.',
+        '',
+        'Ahora se deben {{plan.balance}} en su totalidad. Los cargos por atraso vuelven a aplicarse a partir de hoy, se reanudan los avisos de cobro y se le puede cortar el acceso a la puerta.',
+        '',
+        'Para resolverlo, pague {{plan.balance}} — o llame hoy al {{facility.phone}} y lo revisamos con usted. Siempre es mejor hablar con nosotros que dejarlo pasar.',
+        '',
+        'Pague ahora: {{links.pay_now}}',
+        '',
+        'Su plan y todo lo pagado a cuenta de él: {{links.plan}}',
+      ].join('\n'),
+    },
     requiredMergeFields: [
       'tenant.first_name',
       'unit.number',
@@ -1165,6 +1714,24 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
     // date required: a tenant who believes they paid their rent has nothing to
     // check against without them, and a break with no identifiable invoice
     // should fail loudly rather than mail a sentence with a hole in it.
+    es: {
+      subject: 'Su plan de pagos en {{facility.name}} ha terminado',
+      bodyText: [
+        'Hola {{tenant.first_name}}:',
+        '',
+        'Usted cumplió con los pagos de su plan para la unidad {{unit.number}} en {{facility.name}}, y queremos decirlo primero.',
+        '',
+        'El plan cubría lo que debía cuando lo acordamos. La renta cobrada desde entonces seguía venciendo en su fecha de siempre, y {{invoice.amount}} con vencimiento el {{invoice.due_date}} no se ha pagado — así que el plan ha terminado.',
+        '',
+        'Ahora se deben {{plan.balance}} en su totalidad. Los cargos por atraso vuelven a aplicarse a partir de hoy, se reanudan los avisos de cobro y se le puede cortar el acceso a la puerta.',
+        '',
+        'Para resolverlo, pague {{plan.balance}} — o llame hoy al {{facility.phone}} y lo revisamos con usted. Siempre es mejor hablar con nosotros que dejarlo pasar.',
+        '',
+        'Pague ahora: {{links.pay_now}}',
+        '',
+        'Su plan y todo lo pagado a cuenta de él: {{links.plan}}',
+      ].join('\n'),
+    },
     requiredMergeFields: [
       'tenant.first_name',
       'unit.number',
@@ -1201,6 +1768,22 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
       '',
       'Pay now: {{links.pay_now}}',
     ].join('\n'),
+    es: {
+      subject: 'Su plan de pagos en {{facility.name}} ha sido cancelado',
+      bodyText: [
+        'Hola {{tenant.first_name}}:',
+        '',
+        'Cancelamos el plan de pagos de la unidad {{unit.number}} en {{facility.name}}. No se dejó de hacer ningún pago — esta fue una decisión nuestra, y la razón que registramos es:',
+        '',
+        '{{plan.cancel_reason}}',
+        '',
+        'Ahora se deben {{plan.balance}} en su totalidad. Los cargos por atraso vuelven a aplicarse a partir de hoy, se reanudan los avisos de cobro y se le puede cortar el acceso a la puerta.',
+        '',
+        'Si esto no es lo que esperaba, llame hoy al {{facility.phone}} y lo revisamos con usted — incluso si podemos acordar un plan nuevo.',
+        '',
+        'Pague ahora: {{links.pay_now}}',
+      ].join('\n'),
+    },
     requiredMergeFields: [
       'tenant.first_name',
       'unit.number',
@@ -1226,6 +1809,20 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
       '',
       'Questions? Call {{facility.phone}}.',
     ].join('\n'),
+    es: {
+      subject: 'Su plan de pagos en {{facility.name}} está saldado',
+      bodyText: [
+        'Hola {{tenant.first_name}}:',
+        '',
+        'Terminó de pagar su plan de pagos para la unidad {{unit.number}} en {{facility.name}} — {{plan.total}} en total. Gracias por cumplirlo.',
+        '',
+        'No queda nada del plan. La renta de cada mes nuevo sigue como siempre, con vencimiento en su fecha de siempre.',
+        '',
+        'Consulte su cuenta: {{links.portal}}',
+        '',
+        '¿Preguntas? Llame al {{facility.phone}}.',
+      ].join('\n'),
+    },
     requiredMergeFields: [
       'tenant.first_name',
       'unit.number',
@@ -1270,6 +1867,17 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
       '{{facility.name}}',
       '{{facility.address}}',
     ].join('\n'),
+    es: {
+      subject: '{{facility.name}}: {{broadcast.subject}}',
+      bodyText: [
+        'Hola {{tenant.first_name}}:',
+        '',
+        '{{broadcast.message}}',
+        '',
+        '{{facility.name}}',
+        '{{facility.address}}',
+      ].join('\n'),
+    },
     requiredMergeFields: [
       'tenant.first_name',
       'facility.name',
@@ -1289,6 +1897,16 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
       '',
       'Your account: {{links.portal}}',
     ].join('\n'),
+    es: {
+      subject: '{{broadcast.subject}}',
+      bodyText: [
+        'Hola {{tenant.first_name}}:',
+        '',
+        '{{broadcast.message}}',
+        '',
+        'Su cuenta: {{links.portal}}',
+      ].join('\n'),
+    },
     requiredMergeFields: [
       'tenant.first_name',
       'broadcast.subject',

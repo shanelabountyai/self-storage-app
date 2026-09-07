@@ -1,6 +1,7 @@
 import { prisma } from '@storage/db'
-import type { FieldErrors } from '@/lib/admin/form-state'
+import type { KeyedFieldErrors } from '@/lib/admin/form-state'
 import { localityForZip } from '@/lib/geo/geocode'
+import type { Locale } from '@/lib/i18n'
 
 // PRD 01 US-501 step 1 / FR-5.1. "Your details", and the implicit account.
 
@@ -33,57 +34,11 @@ export type LeaseDeclarations = {
   activeDutyMilitary?: boolean
 }
 
-/// PRD 05 CN-15 / §6.2. Unchecked by default (D-10: draft copy, attorney
-/// review pending — PRD 05 Q2). Covers every element CN-15's AC lists: who is
-/// texting, purpose, frequency, rates, opt-out, and that consent is not a
-/// condition of rental — the last one matters most, since the checkbox sits
-/// right next to fields that are required.
-export const SMS_CONSENT_DISCLOSURE =
-  'I agree to receive account and payment text messages (like payment reminders and gate codes) from this facility. Message frequency varies. Message and data rates may apply. Reply STOP to opt out, HELP for help. This is not required to rent a unit.'
-
-/// Bumped when the disclosure text above changes; recorded on every consent
-/// row so a later dispute reads exactly what the renter was shown, not
-/// whatever the copy currently says.
-export const SMS_CONSENT_DISCLOSURE_VERSION = 'v1'
-
-/// PRD 04 US-13 AC1 / US-9 AC3 (B-073). Unchecked by default, same as SMS
-/// above. This is the ONLY thing that makes the abandonment follow-up (US-9)
-/// legal to send at all — "no consent, no sequence" — since a checkout
-/// session has no other consent-capture point before it might be abandoned.
-export const MARKETING_EMAIL_CHECKOUT_DISCLOSURE =
-  'Send me occasional emails about pricing and promotions. You can unsubscribe any time. This is not required to rent a unit.'
-
-export const MARKETING_EMAIL_CHECKOUT_DISCLOSURE_VERSION = 'v1'
-
-/// PRD 04 US-13 AC1/AC3, D-51 (B-123). The MARKETING text lane, and the reason
-/// it is a fourth checkbox rather than a clause bolted onto the SMS one above.
-///
-/// TCPA treats promotional texts differently from transactional ones: they need
-/// express WRITTEN consent, and that consent must be to receive marketing
-/// specifically — a tenant agreeing to gate codes by text has not agreed to be
-/// texted about a sale, and merging the two would make it impossible to show
-/// which they actually said yes to. The two lanes stay separate all the way
-/// down: separate consent channel, separate disclosure, separate version,
-/// separate opt-out, separate check at send time (`smsConsentGranted`).
-///
-/// The FCC's own conditions are the reason each clause is here: it names the
-/// sender, says what will be sent, states that consent is not a condition of
-/// purchase, gives the opt-out, and warns about rates.
-///
-/// **DRAFT COPY, and this one is not merely the usual D-10 caveat.** PRD 04's
-/// own AC3 defers the final wording to legal review (Open Questions Q5), and
-/// nothing may send on this lane until that lands AND a separate A2P 10DLC
-/// MARKETING campaign is registered (PRD 05 §6.3) — a transactional
-/// registration does not cover promotional traffic. D-51 records both, and
-/// records that the lane ships dark because of them.
-export const MARKETING_SMS_DISCLOSURE =
-  'I agree to receive marketing text messages about promotions and pricing from this facility at the number above. Consent is not a condition of renting. Message frequency varies. Message and data rates may apply. Reply STOP to opt out, HELP for help.'
-
-/// Bumped when the text above changes — and it WILL change, because it is
-/// awaiting the legal review AC3 names. Recorded on every consent row so a
-/// dispute reads what the renter was actually shown; a version that never moved
-/// while the copy did would make every row before the change unprovable.
-export const MARKETING_SMS_DISCLOSURE_VERSION = 'v1-draft'
+// B-259 (D-125). The three consent disclosures that used to live here moved
+// to `lib/consent/disclosures.ts`, where each one's text and its version are a
+// single object per language. They were split across two files and six flat
+// constants, which is what let B-090f's Spanish checkout reach step 1 with
+// English disclosures on it and no way to record which words were shown.
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 /// Deliberately loose. This is a trust boundary, so the job is to reject
@@ -94,23 +49,27 @@ const PHONE_DIGITS = /\d/g
 /// Validation with a *suggestion* per error, not just an identification
 /// (3.3.3). The messages are the ones the renter reads, so they say what to do
 /// rather than what went wrong.
-export function validateDetails(input: Partial<DetailsInput>): FieldErrors {
-  const errors: FieldErrors = {}
+///
+/// B-263: message KEYS, not messages. This runs on the Spanish checkout as
+/// well as the English one, and it is pure — it has no request and no
+/// dictionary, so the caller resolves them.
+export function validateDetails(input: Partial<DetailsInput>): KeyedFieldErrors {
+  const errors: KeyedFieldErrors = {}
 
-  if (!input.firstName?.trim()) errors.firstName = 'Enter your first name.'
-  if (!input.lastName?.trim()) errors.lastName = 'Enter your last name.'
+  if (!input.firstName?.trim()) errors.firstName = { key: 'err.firstName' }
+  if (!input.lastName?.trim()) errors.lastName = { key: 'err.lastName' }
 
   const email = input.email?.trim() ?? ''
   if (!EMAIL.test(email)) {
-    errors.email = 'Enter an email address we can send your lease and receipt to.'
+    errors.email = { key: 'err.email' }
   }
 
   const digits = (input.phone ?? '').match(PHONE_DIGITS)?.length ?? 0
   if (digits < 10) {
-    errors.phone = 'Enter a mobile number with area code, for example 512-555-0100.'
+    errors.phone = { key: 'err.phone' }
   }
 
-  if (!input.addressLine1?.trim()) errors.addressLine1 = 'Enter your street address.'
+  if (!input.addressLine1?.trim()) errors.addressLine1 = { key: 'err.addressLine1' }
 
   // B-112. City and state come from the zip. They are only validated when the
   // renter has opened the disclosure and typed them, which is the escape hatch
@@ -120,18 +79,18 @@ export function validateDetails(input: Partial<DetailsInput>): FieldErrors {
   const typedEither = typedCity !== '' || typedState !== ''
 
   if (!/^\d{5}(-\d{4})?$/.test(input.postalCode?.trim() ?? '')) {
-    errors.postalCode = 'Enter a 5-digit zip code, for example 78704.'
+    errors.postalCode = { key: 'err.postalCode' }
   } else if (!typedEither && !localityForZip(input.postalCode!)) {
     // Not "invalid zip" — the zip may be perfectly real and simply newer than
-    // the dataset. 3.3.3 wants the way out, not just the refusal.
-    errors.postalCode =
-      "We don't recognise that zip code. Open \u201cEnter my city and state myself\u201d below and fill them in."
+    // the dataset. 3.3.3 wants the way out, not just the refusal. The message
+    // quotes the disclosure's own label, in whichever language it was rendered.
+    errors.postalCode = { key: 'err.postalCodeUnknown' }
   }
 
   if (typedEither) {
-    if (!typedCity) errors.city = 'Enter your city.'
+    if (!typedCity) errors.city = { key: 'err.city' }
     if (!/^[A-Za-z]{2}$/.test(typedState)) {
-      errors.state = 'State must be a 2-letter code, for example TX.'
+      errors.state = { key: 'err.state' }
     }
   }
 
@@ -166,6 +125,11 @@ export function localityFor(
 export async function upsertTenantForCheckout(
   input: DetailsInput,
   locality: { city: string; state: string },
+  /// B-261. The language step 1 was RENDERED in — the same value B-259 stamps
+  /// on the consent rows, from the FORM rather than the cookie, so a renter
+  /// who used the header toggle between the render and the submit is recorded
+  /// against the language they actually read.
+  locale: Locale,
 ): Promise<{
   tenantId: string
   created: boolean
@@ -185,6 +149,7 @@ export async function upsertTenantForCheckout(
         city: locality.city,
         state: locality.state,
         postalCode: input.postalCode.trim(),
+        preferredLocale: locale,
       },
     })
     return { tenantId: tenant.id, created: true }
@@ -199,6 +164,18 @@ export async function upsertTenantForCheckout(
     city: existing.city ?? locality.city,
     state: existing.state ?? locality.state,
     postalCode: existing.postalCode ?? input.postalCode.trim(),
+    // B-261, and additive for exactly the reason the rest of this object is:
+    // this form is unauthenticated, so anyone who knows an email address must
+    // not be able to switch the language every future email and text to that
+    // account goes out in — including the dunning ladder, which is the one
+    // where being unreadable matters most.
+    //
+    // Null is what makes that possible: it means "never told us" rather than
+    // "chose English" (see `Tenant.preferredLocale`), so a returning renter
+    // who has never expressed a preference gets one filled in from the
+    // language they just rented in, and one who HAS keeps theirs. The portal
+    // control is the authenticated way to change it.
+    preferredLocale: existing.preferredLocale ?? locale,
   }
 
   await prisma.tenant.update({ where: { id: existing.id }, data: fillBlanks })
@@ -248,14 +225,14 @@ export async function recordLeaseDeclarations(
 
 /// The alternate contact is optional, but a number we cannot dial is worse than
 /// none — it looks like a fallback and is not one.
-export function validateDeclarations(input: LeaseDeclarations): FieldErrors {
-  const errors: FieldErrors = {}
+export function validateDeclarations(input: LeaseDeclarations): KeyedFieldErrors {
+  const errors: KeyedFieldErrors = {}
   const phone = input.altContactPhone?.trim() ?? ''
   if (phone !== '' && (phone.match(PHONE_DIGITS)?.length ?? 0) < 10) {
-    errors.altContactPhone = 'Enter a number with area code, for example 512-555-0100, or leave it blank.'
+    errors.altContactPhone = { key: 'err.altContactPhone' }
   }
   if (input.altContactName?.trim() && phone === '') {
-    errors.altContactPhone = 'Add a number for your alternate contact, or clear their name.'
+    errors.altContactPhone = { key: 'err.altContactPhoneMissing' }
   }
   return errors
 }

@@ -1,12 +1,12 @@
 import { AdminForm, Field } from '@/components/admin/form'
 import { submitDetailsAction } from '@/app/(public)/checkout/actions'
+import { type DetailsInput } from '@/lib/checkout/details'
 import {
-  MARKETING_EMAIL_CHECKOUT_DISCLOSURE,
-  MARKETING_SMS_DISCLOSURE,
-  SMS_CONSENT_DISCLOSURE,
-  type DetailsInput,
-} from '@/lib/checkout/details'
-import { translate, type Dictionary, type MessageKey } from '@/lib/i18n'
+  MARKETING_EMAIL_CHECKOUT_CONSENT,
+  MARKETING_SMS_CONSENT,
+  SMS_CONSENT,
+} from '@/lib/consent/disclosures'
+import { translate, type Dictionary, type Locale, type MessageKey } from '@/lib/i18n'
 
 // PRD 01 US-501 step 1. One screen, and every field carries its autocomplete
 // token (1.3.5 Identify Input Purpose) and a keyboard that matches the data
@@ -44,6 +44,7 @@ export function DetailsStep({
   prefill,
   manualLocality = false,
   dict,
+  locale,
 }: {
   token: string
   prefill: Partial<DetailsInput>
@@ -54,6 +55,10 @@ export function DetailsStep({
   /// back over the field cap for anyone who came back to it.
   manualLocality?: boolean
   dict: Dictionary
+  /// B-259. Separate from `dict` on purpose: the disclosures below are NOT
+  /// dictionary entries — each is a versioned consent text — so the step needs
+  /// to know which language it is rendering, not just which words to use.
+  locale: Locale
 }) {
   const t = (key: MessageKey, vars?: Record<string, string | number>) =>
     translate(dict, key, vars)
@@ -65,6 +70,12 @@ export function DetailsStep({
       className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2"
     >
       <input type="hidden" name="token" value={token} />
+      {/* B-259. Which language these disclosures were RENDERED in, carried to
+          the action so the consent rows are stamped with the words that were
+          actually on screen. Reading the cookie again at submit time would get
+          this wrong for anyone who used the header language toggle after the
+          page rendered. */}
+      <input type="hidden" name="disclosureLocale" value={locale} />
 
       <Field
         name="firstName"
@@ -182,16 +193,15 @@ export function DetailsStep({
         </button>
       </div>
 
-      {/* B-090 part 6 (D-122): the three disclosure strings below are NOT
-          translated, and that is deliberate rather than unfinished. Each is a
-          versioned consent text (`SMS_CONSENT_DISCLOSURE_VERSION` and friends)
-          recorded against the tenant as evidence of what they agreed to, and
-          TCPA wants express written consent to the words actually shown. A
-          translation is a different disclosure and needs its own version
-          constant and a legal read before it can be displayed, not a
-          dictionary entry — B-259 owns that. Showing English here is the
-          honest state; silently recording an English version number against
-          Spanish words would not be. */}
+      {/* B-259 (D-125). The three disclosures below are translated and still
+          NOT dictionary entries. Each one is a versioned consent text, and the
+          version is the evidence of what words the renter agreed to — TCPA
+          wants express written consent to the wording actually shown. So the
+          Spanish carries its OWN version (`v1-es`), the locale that was
+          rendered rides along in the hidden field above, and the pair is what
+          a later dispute reads. `lib/consent/disclosures.ts` keeps the text
+          and its version in one object per language so neither can be changed
+          without the other. */}
       {/* Below the primary action on purpose (B-112). Neither is required to
           rent, and the marketing one exists for us rather than for the renter —
           it has no business sitting between their phone number and their
@@ -201,7 +211,7 @@ export function DetailsStep({
             implied by entering a phone number above. */}
         <label className="flex items-start gap-2 text-sm">
           <input type="checkbox" name="smsConsent" value="yes" className="mt-1" />
-          <span>{SMS_CONSENT_DISCLOSURE}</span>
+          <span>{SMS_CONSENT[locale].text}</span>
         </label>
 
         {/* PRD 04 US-13 AC1 / US-9 AC3: unchecked by default. This is the ONLY
@@ -209,7 +219,7 @@ export function DetailsStep({
             send at all — "no consent, no sequence." */}
         <label className="flex items-start gap-2 text-sm">
           <input type="checkbox" name="marketingConsent" value="yes" className="mt-1" />
-          <span>{MARKETING_EMAIL_CHECKOUT_DISCLOSURE}</span>
+          <span>{MARKETING_EMAIL_CHECKOUT_CONSENT[locale].text}</span>
         </label>
 
         {/* PRD 04 US-13 AC1/AC3, D-51 (B-123). A FOURTH box, and separate from
@@ -222,7 +232,7 @@ export function DetailsStep({
             asks for the most and offers the renter the least. */}
         <label className="flex items-start gap-2 text-sm">
           <input type="checkbox" name="marketingSmsConsent" value="yes" className="mt-1" />
-          <span>{MARKETING_SMS_DISCLOSURE}</span>
+          <span>{MARKETING_SMS_CONSENT[locale].text}</span>
         </label>
       </div>
     </AdminForm>

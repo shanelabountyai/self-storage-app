@@ -8,7 +8,9 @@ import {
   LAST_TOUCH_COOKIE,
 } from '@storage/core/marketing'
 import { captureLead } from '@/lib/marketing/lead-capture'
-import { fieldError, parseDate, success, type FormState } from '@/lib/admin/form-state'
+import { keyedFieldError, parseDate, success, type FormState } from '@/lib/admin/form-state'
+import { isLocale, type Locale } from '@/lib/i18n'
+import { getLocale, messages } from '@/lib/i18n/server'
 import { track } from '@/lib/analytics/track'
 import { trackingContext } from '@/lib/analytics/request'
 
@@ -19,8 +21,23 @@ import { trackingContext } from '@/lib/analytics/request'
 // referrer, UTMs, gclid, first/last touch — comes from headers and cookies. A
 // hidden input carrying its own attribution is one a bot can set to anything,
 // and the whole point of these numbers is deciding where to spend money.
+//
+// B-264 (D-122, D-125). Everything this action says back is translated, and
+// the consent it records is stamped with the language whose words were on
+// screen. The one exception is the attribution above, which is not copy.
+
+/// B-259's rule, on this form's disclosure. The page is a server render and
+/// the cookie is read again at submit time, so a visitor who used the header
+/// language toggle in between would otherwise have `es` recorded against the
+/// English sentence they actually ticked. Untrusted input, narrowed by
+/// `isLocale`, with the cookie as the fallback.
+async function shownLocale(formData: FormData): Promise<Locale> {
+  const claimed = formData.get('disclosureLocale')
+  return isLocale(claimed) ? claimed : await getLocale()
+}
 
 export async function submitLeadAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const { t } = await messages()
   const headerList = await headers()
   const cookieStore = await cookies()
 
@@ -44,6 +61,7 @@ export async function submitLeadAction(_prev: FormState, formData: FormData): Pr
       kind: formData.get('kind') === 'callback' ? 'callback' : 'quote',
       honeypot: String(formData.get('company') ?? ''),
       marketingConsent: formData.get('marketingConsent') === 'yes',
+      consentLocale: await shownLocale(formData),
     },
     {
       firstTouch: decodeTouch(cookieStore.get(FIRST_TOUCH_COOKIE)?.value),
@@ -65,10 +83,15 @@ export async function submitLeadAction(_prev: FormState, formData: FormData): Pr
   )
 
   if (!result.ok) {
-    // A bot gets the same answer a person does. Telling it the honeypot fired
-    // is how it learns to try again without filling that field.
-    if (result.field === 'silent') return success(THANKS)
-    return fieldError({ [result.field]: result.problem })
+    // A bot gets the same answer a person does — `field: 'silent'`, and no
+    // message, which is what the null is. Telling it the honeypot fired is how
+    // it learns to try again without filling that field.
+    if (!result.problem) return success(t('lead.thanks'))
+    // B-263's shape: the keys came back from `captureLead`, and this is the
+    // only layer that knows whose request it is. The summary heading above the
+    // field list is translated with them — that sentence is what B-263 found
+    // still English after every validator had been fixed.
+    return keyedFieldError({ [result.field]: result.problem }, t)
   }
 
   // US-15 AC2's `quote_form_submit` / `callback_request`. Fired on success
@@ -85,11 +108,8 @@ export async function submitLeadAction(_prev: FormState, formData: FormData): Pr
     })
   }
 
-  return success(THANKS)
+  return success(t('lead.thanks'))
 }
-
-const THANKS =
-  'Got it — somebody from this facility will be in touch. If it is urgent, calling is faster.'
 
 /// PRD 04 US-15 AC2's `page_view`, fired from the server.
 ///

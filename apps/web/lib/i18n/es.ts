@@ -30,13 +30,19 @@ export const es: Dictionary = {
   'chrome.payBillSr': ' o entrar a mi cuenta',
   'chrome.questionsCall': '¿Preguntas? Llame al',
   'chrome.orEmail': 'o escriba a',
-  // Deliberately says one thing more than the English (D-122): the legal
-  // pages, the contract and every notice are English-only, and the Spanish
+  // Deliberately says one thing more than the English (D-122): the contract,
+  // the notices and the pages a lawyer wrote are English-only, and the Spanish
   // reader is the only one for whom that is news. Translating a lien notice
   // is a liability, not a feature — so the honest move is to say where the
   // Spanish stops, on the page where they can still read it.
+  //
+  // B-259 NAMES the pages instead of saying "las páginas legales". It used to
+  // say every legal page was English, and `/messaging-policy` is Spanish now —
+  // a sentence whose whole job is to mark the boundary honestly cannot be left
+  // one merge behind the boundary. What is listed is what is actually English:
+  // `/terms`, `/privacy`, the lease and every notice.
   'chrome.disclaimer':
-    '{name} es un proyecto de aprendizaje. Nada en este sitio es una oferta real de almacenamiento, y las páginas legales son borradores sin revisión legal. Las páginas legales, el contrato y los avisos están únicamente en inglés.',
+    '{name} es un proyecto de aprendizaje. Nada en este sitio es una oferta real de almacenamiento, y las páginas legales son borradores sin revisión legal. Los términos, la política de privacidad, el contrato y los avisos están únicamente en inglés.',
 
   // --- Language toggle ---------------------------------------------------
   'lang.label': 'Idioma',
@@ -229,6 +235,22 @@ export const es: Dictionary = {
   'facility.questionsPeopleAsk': 'Preguntas frecuentes',
   'facility.otherLocations': 'vea otras sucursales',
   'facility.sizeGuideOr': ', o',
+
+  // --- The lead form on the facility page (US-8, B-264) ------------------
+  'lead.legend': '¿Qué desea?',
+  'lead.quote': 'Una cotización',
+  'lead.callback': 'Que le llamemos',
+  'lead.name': 'Su nombre',
+  'lead.email': 'Correo electrónico',
+  'lead.phone': 'Teléfono',
+  'lead.phoneHint': 'Obligatorio si desea que le llamemos.',
+  'lead.size': 'Tamaño que le interesa',
+  'lead.sizeUnsure': 'Todavía no sé',
+  'lead.moveInDate': 'Cuándo se mudaría',
+  'lead.note': '¿Algo más?',
+  'lead.send': 'Enviar',
+  'lead.thanks':
+    'Listo: alguien de esta sucursal se pondrá en contacto con usted. Si es urgente, es más rápido llamarnos.',
 
   // --- Move-in cost lines (US-301, shared with checkout) -----------------
   'cost.rent': 'Renta del primer mes',
@@ -429,6 +451,52 @@ export const es: Dictionary = {
   'act.unitAddedNote': 'Unidad {number} agregada — {name} de {width}×{length}.',
   'act.unitRemovedNote': 'Quitamos la unidad {number} de su renta.',
   'act.unitRemovedNoNumber': 'Esa unidad se quitó de su renta.',
+
+  // --- Field errors (B-263, 3.3.3) --------------------------------------
+  // Cada mensaje dice qué hacer, no solo qué salió mal. `err.postalCodeUnknown`
+  // cita `details.enterMyself` palabra por palabra — si esa etiqueta cambia,
+  // este mensaje también.
+  'err.oneField': 'Hay un problema con un campo.',
+  'err.someFields': 'Hay problemas con {count} campos.',
+  'err.firstName': 'Escriba su nombre.',
+  'err.lastName': 'Escriba su apellido.',
+  'err.email': 'Escriba un correo electrónico al que podamos enviarle el contrato y el recibo.',
+  'err.phone': 'Escriba un número de celular con clave de área, por ejemplo 512-555-0100.',
+  'err.addressLine1': 'Escriba su dirección.',
+  'err.postalCode': 'Escriba un código postal de 5 dígitos, por ejemplo 78704.',
+  'err.postalCodeUnknown':
+    'No reconocemos ese código postal. Abra «Escribir mi ciudad y estado yo mismo» abajo y escríbalos.',
+  'err.city': 'Escriba su ciudad.',
+  'err.state': 'El estado debe ser un código de dos letras, por ejemplo TX.',
+  'err.altContactPhone':
+    'Escriba un número con clave de área, por ejemplo 512-555-0100, o déjelo en blanco.',
+  'err.altContactPhoneMissing':
+    'Agregue un número para su contacto alterno, o borre su nombre.',
+  'err.typedNameEmpty': 'Escriba su nombre completo — {name} — para firmar.',
+  'err.typedNameMismatch':
+    'Eso no coincide con el nombre del contrato. Escríbalo así: {name}.',
+  'err.consented': 'Marque la casilla para aceptar firmar electrónicamente.',
+  'err.protectionChoose': 'Elija un plan de protección, o cuéntenos sobre su propio seguro.',
+  'err.protectionPlan': 'Elija uno de los planes de protección de la lista.',
+  'err.carrier': 'Escriba el nombre de su aseguradora, por ejemplo State Farm.',
+  'err.policyNumber': 'Escriba su número de póliza — viene en su carátula de póliza.',
+  'err.expiresAt': 'Escriba la fecha en que vence su póliza, como aaaa-mm-dd.',
+  'err.expiresAtPast': 'Esa póliza ya venció. Escriba una cobertura que siga vigente.',
+  'err.attested': 'Marque la casilla para confirmar que tiene su propio seguro.',
+  'err.startDateFormat': 'Escriba la fecha como año-mes-día, así: {date}.',
+  'err.startDateEarly':
+    'Una mudanza no puede empezar antes de hoy. La fecha más temprana que puede elegir es {date}.',
+  'err.startDateLate':
+    'Podemos programar una mudanza hasta con {days} días de anticipación. La fecha más lejana que puede elegir es {date}.',
+
+  // B-264. Los rechazos del formulario de contacto.
+  'err.leadName': 'Díganos cómo dirigirnos a usted.',
+  'err.leadContact':
+    'Un correo electrónico o un teléfono: necesitamos alguna forma de responderle.',
+  'err.leadEmail': 'Revise el correo electrónico: parece estar incompleto.',
+  'err.leadPhone': 'Un teléfono con al menos 10 dígitos, para que alguien pueda llamarle.',
+  'err.leadRateLimited':
+    'Son muchas consultas desde un mismo lugar en poco tiempo. Espere unos minutos, o llámenos.',
 
   // --- Checkout announcer (4.1.3, 2.4.3) --------------------------------
   'announce.movedToSize': 'Lo cambiamos a la {size}. No se perdió nada de lo que escribió.',
@@ -967,6 +1035,16 @@ export const es: Dictionary = {
   'notif.turnOffTexts': 'Desactivar los mensajes de texto',
   'notif.stopNote':
     'Esto tiene el mismo efecto que responder STOP a un mensaje nuestro: se detiene de inmediato todo mensaje de texto a este número, incluidos los de la cuenta y los de pagos.',
+  'notif.languageHeading': 'El idioma en el que le escribimos',
+  'notif.languageIntro':
+    'Le enviaremos sus recibos, recordatorios de pago y avisos de la cuenta en este idioma. El selector de la parte superior de la página cambia lo que usted ve en este dispositivo; este cambia lo que le enviamos.',
+  'notif.languageLabel': 'Idioma para correos y mensajes de texto',
+  'notif.languageSave': 'Guardar idioma',
+  'notif.languageNeverSet':
+    'Usted no ha elegido uno, así que le escribimos en inglés.',
+  'notif.languageSaved': 'Guardado. A partir de ahora le escribiremos en español.',
+  'notif.languageLegalNote':
+    'Su contrato y cualquier aviso formal que estemos obligados a enviarle por correo postal se mantienen en inglés.',
   'notif.marketingHeading': 'Mensajes de texto promocionales',
   'notif.marketingIntro':
     'Aparte de los mensajes de la cuenta de arriba. Desactivarlos nunca afecta los recordatorios de pago ni los códigos de la puerta, y activarlos no es requisito para rentar.',
@@ -1191,4 +1269,207 @@ export const es: Dictionary = {
   'tr.problem.same_unit': 'Esa es la unidad en la que ya está.',
   'tr.problem.no_rate_for_unit_type':
     'Esa unidad no tiene tarifa publicada, así que no podemos cotizarla.',
+
+  // --- Páginas informativas: FAQ, Acerca de, Contacto (B-262) ------------
+  // Lo que un inquilino LEE, no lo que opera. `/terms` y `/privacy` no están
+  // aquí a propósito: D-122 deja en inglés todo lo que escribió un abogado, y
+  // el pie de página en español los nombra. `/messaging-policy` tampoco estaba,
+  // por lo mismo, hasta que B-259 le dio una versión en español a los avisos
+  // que esa página explica; sus claves están al final de este archivo.
+  'faq.title': 'Preguntas frecuentes',
+  'faq.intro':
+    'Respuestas breves a lo que más nos preguntan. Si la suya no está, llámenos.',
+  'faq.reserve.q': '¿Tengo que pagar para reservar una unidad?',
+  'faq.reserve.a':
+    'No. Las reservaciones son gratis, no piden tarjeta y no piden cuenta — solo su nombre, correo, teléfono y la fecha en que quiere entrar. El apartado vence solo si usted no se muda.',
+  'faq.online.q': '¿Puedo rentar todo en línea?',
+  'faq.online.a':
+    'Sí. Usted elige una unidad, firma el contrato electrónicamente, paga el primer monto y recibe su código de la puerta — sin ir a una oficina.',
+  'faq.term.q': '¿Hay un contrato a largo plazo?',
+  'faq.term.a':
+    'No. La renta es mes a mes. Usted avisa según lo que dice su contrato y se muda.',
+  'faq.price.q': '¿Cuál es la diferencia entre el precio en línea y el precio en tienda?',
+  'faq.price.a':
+    'Algunos tamaños cuestan menos si renta en línea que si renta en el mostrador. Los dos precios se muestran antes de que usted se comprometa, así que puede ver cuál le aplica. Reservar no cambia el precio — lo que lo cambia es rentar en línea.',
+  'faq.size.q': '¿Qué tamaño necesito?',
+  'faq.size.intro': 'Una guía aproximada, y con gusto lo vemos con usted por teléfono:',
+  'faq.size.5x5.term': '5 por 5 pies',
+  'faq.size.5x5.body':
+    'un clóset grande. Cajas, adornos de temporada, una bicicleta, algunos muebles pequeños.',
+  'faq.size.10x10.term': '10 por 10 pies',
+  'faq.size.10x10.body':
+    'como medio garaje, o lo que hay en un departamento de una recámara, incluyendo un sofá y un juego de colchón.',
+  'faq.size.10x20.term': '10 por 20 pies',
+  'faq.size.10x20.body':
+    'un garaje sencillo. Una casa de tres recámaras, o un carro y todavía sobra espacio.',
+  'faq.size.tail':
+    'Si está entre dos tamaños, tome el más grande. Pagar un poco más es mejor que descubrir el día de la mudanza que lo último ya no cabe.',
+  'faq.hours.q': '¿Cuándo puedo llegar a mi unidad?',
+  'faq.hours.a':
+    'El horario de oficina y el horario de la puerta son distintos, y los dos están en la página de cada sucursal. El horario de la puerta es cuando usted puede llegar a su unidad; el horario de oficina es cuando hay personal.',
+  'faq.else.q': '¿Algo más?',
+  'faq.else.call': 'Llame al',
+
+  'about.title': 'Acerca de nosotros',
+  'about.intro':
+    'Un operador pequeño de bodegas de autoalmacenamiento, con software propio.',
+  'about.what.heading': 'Quiénes somos',
+  'about.what.body':
+    'Operamos unas cuantas sucursales de autoalmacenamiento y construimos el software que las opera, en vez de rentarlo por sucursal cada mes. Eso quiere decir que los precios y la disponibilidad que usted ve salen del mismo sistema que usa el mostrador — no de una exportación nocturna.',
+  'about.site.heading': 'Una nota sobre este sitio',
+  'about.site.body':
+    'Este es un proyecto de aprendizaje construido con estándares de producción. Las sucursales, los inquilinos y los precios que se muestran son datos de demostración, y nada de esto es una oferta real de almacenamiento.',
+
+  'contact.title': 'Contacto',
+  'contact.intro': 'La forma más rápida de comunicarse con nosotros es por teléfono.',
+  'contact.phone': 'Teléfono',
+  'contact.email': 'Correo electrónico',
+  'contact.facility.heading': 'Una sucursal en particular',
+  'contact.facility.body':
+    'Cada sucursal publica su propio teléfono, su horario de oficina y su horario de la puerta en su página. Esos números llegan directo a la sucursal.',
+
+  // --- Declaración de accesibilidad (/accessibility, B-262) --------------
+  // Cada frase de aquí es una afirmación pública sobre lo que el sistema hace,
+  // ahora en un segundo idioma — así que el español se sostiene con la misma
+  // vara que el inglés.
+  'a11y.title': 'Accesibilidad',
+  'a11y.intro':
+    'Nuestra meta es cumplir con WCAG 2.1 nivel AA en cada página y en cada proceso. Esta página dice hasta dónde hemos llegado de verdad.',
+  'a11y.target.heading': 'Cuál es nuestra meta',
+  'a11y.target.body':
+    'Las Pautas de Accesibilidad para el Contenido Web (WCAG) 2.1, nivel AA. Eso abarca el manejo con teclado, el uso con lector de pantalla, el contraste de color, el cambio de tamaño del texto y el reajuste en pantallas pequeñas.',
+  'a11y.true.heading': 'Qué es cierto hoy',
+  'a11y.true.keyboard':
+    'Todas las páginas de este sitio público funcionan solo con el teclado, y el indicador de foco cumple el contraste de 3:1 que piden las pautas.',
+  'a11y.true.colour':
+    'El color nunca es la única forma en que le decimos algo — un estado que se muestra con color también va escrito con palabras.',
+  'a11y.true.resize':
+    'El texto se puede agrandar al 200% y la página se reajusta a 320px de ancho sin desplazamiento horizontal.',
+  'a11y.true.labels':
+    'Los campos de los formularios tienen etiquetas de verdad, no solo texto de ejemplo.',
+  'a11y.true.errors':
+    'Cuando un formulario rechaza algo que usted escribió, el mensaje va unido al campo mismo, así que un lector de pantalla lo lee junto con ese campo en vez de dejarlo buscándolo — y lo que ya había escrito sigue ahí, así que corrige solo lo que le pedimos en vez de llenar el formulario otra vez. Un guardado exitoso también se anuncia.',
+  'a11y.true.motion':
+    'La animación respeta la preferencia de movimiento reducido de su sistema.',
+  'a11y.true.maps':
+    'Donde mostramos un mapa, la información va primero como texto y el mapa queda plegado detrás de un botón que usted tiene que presionar. En la página de una sucursal ese texto es la dirección y un enlace para llegar; en los resultados de búsqueda es la lista misma de sucursales, con distancias y precios. Nunca necesita el mapa, y si uno no carga se lo decimos en vez de dejar un recuadro vacío.',
+  'a11y.check.heading': 'Cómo lo revisamos',
+  'a11y.check.ci':
+    'Las pruebas automáticas de accesibilidad corren a lo ancho de un teléfono y de una computadora en cada cambio que sube a nuestra rama principal, y en cada solicitud de cambios que está abierta a revisión. No son una traba para publicar: si una falla nos avisa, no detiene la publicación. Una revisión que la herramienta no puede decidir también reprueba la corrida, en cada página de esa corrida, para que «no revisamos eso» nunca se lea calladamente como «eso pasó».',
+  'a11y.check.waivedIntro':
+    'Algunas de esas revisiones sin decidir ya las vimos y resultaron ser un límite de la herramienta y no un problema real. Se dejan de lado de tres maneras distintas, y preferimos nombrar cada una en vez de redondearlas:',
+  'a11y.check.waived.page':
+    'Algunas se dejan de lado solo en la página donde se revisaron — una barra que se encima a la página a propósito para quedar al alcance, un fondo rayado que el revisor no puede atravesar. La misma revisión sigue teniendo que pasar en todo lo demás.',
+  'a11y.check.waived.site':
+    'Algunas se dejan de lado en todo el sitio, pero solo donde la prueba misma vuelve a revisar lo que confundió a la herramienta. Una celda que se salió de vista en una tabla ancha es una de ellas: se deja de lado solo donde usted tiene una barra de desplazamiento que la trae de vuelta, y algo pintado de verdad fuera del borde de la pantalla sigue reprobando.',
+  'a11y.check.waived.thirdParty':
+    'El contenido dentro de un marco que sirve otra empresa — el formulario de la tarjeta, el mapa — no lo revisan estas pruebas. Esa es su página, no la nuestra. Un marco que construimos nosotros se revisa como cualquier otra cosa.',
+  'a11y.check.routesIntro':
+    'Todavía no lo cubren todo. Estas son las páginas que quedan fuera de esa corrida, y la razón de cada una:',
+  'a11y.check.routesTail':
+    'Preferimos nombrar cada hueco en vez de taparlo con una afirmación general. Esta lista se genera del mismo archivo que leen las pruebas, así que una página que deja de revisarse aparece aquí en vez de desaparecer calladamente de las dos.',
+  'a11y.check.statesIntro':
+    'Esa lista nombra páginas. Algunas pantallas además tienen estados — un mensaje de error, un apartado que venció, un tamaño que se agotó mientras usted decidía — que solo aparecen una vez que usted hizo algo en ellas. Estos son los que sabemos que no están cubiertos, y por qué:',
+  'a11y.check.statesTail':
+    'Es probable que existan más estados que todavía no hemos encontrado ni nombrado — a diferencia de la lista de páginas de arriba, esta no puede decir que está completa.',
+  'a11y.check.floor':
+    'La prueba automática es un piso, no un techo — atrapa más o menos una tercera parte de los problemas reales, y no puede juzgar si un lector de pantalla dice algo que tenga sentido.',
+  'a11y.check.noManualPass':
+    'Todavía no se ha hecho ni una revisión completa con lector de pantalla ni una revisión registrada con teclado',
+  'a11y.check.noManualPassTail': 'así que nada de esta página se apoya en una.',
+  'a11y.short.heading': 'En qué nos quedamos cortos hoy',
+  'a11y.short.intro':
+    'Este sitio está en construcción activa. Estos son los problemas que conocemos, al {date}. Si alguno le impide seguir, díganos y le ayudamos a terminar lo que estaba haciendo por teléfono o por correo mientras tanto.',
+  'a11y.short.js.term': 'Rentar en línea sin JavaScript.',
+  'a11y.short.js.body':
+    'Todo el proceso de renta funciona con JavaScript apagado, pero la cuenta regresiva del apartado de 30 minutos no: muestra el tiempo que quedaba cuando se dibujó la página y no va bajando, así que si usted está leyendo el contrato cuando se acaba, el vencimiento puede ser lo primero que sepa. Con JavaScript encendido le avisamos cinco minutos antes y puede extender el apartado con un solo toque.',
+  'a11y.short.staff.term': 'Nuestras pantallas para el personal',
+  'a11y.short.staff.body':
+    'tienen problemas conocidos. Las listas largas de Tareas, Prospectos, Morosidad y Sesiones de soporte no están paginadas. Ningún cliente las usa, pero no vamos a describirlas como terminadas.',
+  'a11y.short.maps.term': 'Los mapas que mostramos no son totalmente accesibles',
+  'a11y.short.maps.body':
+    'y no está en nuestras manos arreglarlos. La página de una sucursal inserta OpenStreetMap, cuyos controles de acercamiento se llaman «+» y «−» y cuyo marcador no tiene texto alternativo. Los resultados de búsqueda pueden mostrar un segundo mapa de otro proveedor, donde nosotros controlamos los marcadores de precio pero no los mosaicos ni los controles propios del proveedor que están debajo; todavía no hemos evaluado ese contra un mapa en vivo, así que nada de aquí se apoya en eso. Los dos quedan plegados detrás de un botón, y ninguno es nunca la única forma de obtener la información.',
+  'a11y.short.reviewed': 'Última revisión: {date}.',
+  'a11y.tell.heading': 'Díganos cuando nos equivoquemos',
+  'a11y.tell.before': 'Si algo aquí le impide seguir, escriba a',
+  'a11y.tell.orCall': 'o llame al',
+  'a11y.tell.tail':
+    'Díganos en qué página fue y qué pasó, y lo arreglamos y le contestamos. Una barrera de accesibilidad es un error, y la tratamos como tal.',
+
+  // --- /messaging-policy (B-259, D-124/D-125) ---------------------------------
+  // Se traduce ahora que los avisos de consentimiento tienen su propia versión
+  // en español (`lib/consent/disclosures.ts`). `/terms` y `/privacy` siguen
+  // solo en inglés (D-122), y esta página lo dice al enlazarlos.
+  //
+  // Las PALABRAS CLAVE (STOP, HELP, START…) nunca se escriben aquí: se
+  // interpolan desde el código que las reconoce. No son palabras, son las
+  // cadenas exactas que hay que enviar; traducirlas daría una instrucción que
+  // no funciona.
+  'msgpol.title': 'Política de mensajes de texto',
+  'msgpol.reviewed': '{name} · Última revisión: {date}',
+  'msgpol.intro':
+    'Esta página explica los mensajes de texto que envía {name}, cómo acepta usted recibirlos y cómo detenerlos en cualquier momento. Aplica a todos los números de celular que tenemos.',
+
+  'msgpol.consent.heading': 'Cómo acepta usted recibir mensajes de texto',
+  'msgpol.consent.never':
+    'Nunca enviamos mensajes a un número que no haya aceptado recibirlos.',
+  'msgpol.consent.optInLead':
+    'Envíe {join} al {number} y luego responda {yes} cuando se lo pidamos.',
+  'msgpol.consent.optInBody':
+    'Enviar la palabra clave no lo suscribe por sí solo: le contestamos pidiéndole que confirme, y solo su {yes} activa los mensajes. Las dos respuestas nuestras le dicen con qué frecuencia enviamos mensajes, que pueden aplicarse tarifas de mensajes y datos, y cómo detenerlos.',
+  'msgpol.consent.unknownNumber':
+    'Si no reconocemos el número desde el que nos escribe, se lo decimos y no suscribimos nada: llámenos y lo agregamos primero a su cuenta.',
+  'msgpol.consent.selfServe':
+    'También puede activar los mensajes de texto usted mismo, en la sección Notificaciones de su cuenta en línea, o pidiéndole a nuestro personal que se los active.',
+  'msgpol.consent.record':
+    'Cuando lo hace, registramos la fecha y la hora, de dónde vino el consentimiento, la versión exacta del texto que usted aceptó y en qué idioma se le mostró ese texto. Todo eso lo puede ver cuando quiera en su propia página de Notificaciones, incluido el hecho de que nunca se lo hemos pedido, si no se lo hemos pedido.',
+  'msgpol.consent.notConditionLead': 'El consentimiento no es condición para rentar con nosotros.',
+  'msgpol.consent.notConditionBody':
+    'Usted puede rentar, pagar y manejar su unidad completamente sin mensajes de texto; en ese caso le escribimos por correo electrónico.',
+
+  'msgpol.what.heading': 'Qué enviamos',
+  'msgpol.what.accountTerm': 'Mensajes de su cuenta y sus pagos',
+  'msgpol.what.accountBody':
+    'su código de la puerta cuando se muda, un recordatorio antes de que venza la renta, un aviso si un pago falla y un mensaje si cambia su acceso a la puerta.',
+  'msgpol.what.offersTerm': 'Ofertas ocasionales',
+  'msgpol.what.offersBody':
+    'solo si aceptó por separado recibir mensajes promocionales. Es un permiso distinto del de los mensajes de cuenta de arriba, y puede tener uno sin el otro.',
+  'msgpol.what.frequencyLead': 'La frecuencia de los mensajes varía.',
+  'msgpol.what.frequencyBody':
+    'La mayoría de los meses recibirá entre uno y cuatro mensajes. Un mes en el que falle un pago, o en el que su cuenta se atrase, tendrá más.',
+
+  'msgpol.stop.heading': 'Cómo detenerlos',
+  'msgpol.stop.reply':
+    'Responda {stop} a cualquier mensaje nuestro. También aceptamos {others}. Recibirá un mensaje confirmándolo y después nada más a ese número.',
+  'msgpol.stop.stopsAll':
+    'Detener los mensajes de texto los detiene todos, incluidos los de su cuenta y sus pagos, no solo las ofertas. Le seguiremos escribiendo por correo electrónico sobre su cuenta, porque esos mensajes son parte de su contrato de renta.',
+  'msgpol.stop.offersOnlyLead': 'Si lo único que quiere detener son las ofertas:',
+  'msgpol.stop.offersOnlyBody':
+    'no responda {stop}. En vez de eso, apague los mensajes promocionales en su página de Notificaciones. Así siguen funcionando los mensajes de su cuenta y sus pagos, y puede volver a encender las ofertas ahí cuando quiera.',
+  'msgpol.stop.restart':
+    'Para volver a empezar, responda {start}, o vuelva a encender los mensajes desde su página de Notificaciones. Para obtener ayuda, responda {help}: recibirá nuestro número de teléfono y un enlace de regreso a esta página.',
+  'msgpol.stop.portal':
+    'También puede apagarlos usted mismo, sin enviar ningún mensaje, en la sección Notificaciones de su cuenta en línea. Eso tiene exactamente el mismo efecto que responder {stop}.',
+
+  'msgpol.hours.heading': 'Cuándo los enviamos',
+  'msgpol.hours.body':
+    'Solo enviamos mensajes entre las 8 a. m. y las 9 p. m. en la hora local de la sucursal donde usted renta, y eso aplica a todos los mensajes, incluidos los de cuenta y pagos. Lo que caiga fuera de ese horario espera, o se envía por correo electrónico. Algunas sucursales pueden usar un horario más corto donde su estado lo exige.',
+
+  'msgpol.cost.heading': 'Costo',
+  'msgpol.cost.lead': 'Pueden aplicarse tarifas de mensajes y datos.',
+  'msgpol.cost.body':
+    'Nosotros no le cobramos por los mensajes de texto; su compañía de celular puede cobrarle, según su plan. Las compañías no son responsables de mensajes demorados o no entregados.',
+
+  'msgpol.privacy.heading': 'Su información',
+  'msgpol.privacy.body':
+    'No vendemos su número de celular y no lo compartimos con nadie para su propia publicidad. Lo compartimos únicamente con el proveedor de mensajería que entrega los mensajes por nosotros.',
+  // Dicen una cosa más que el inglés, igual que `chrome.disclaimer`: quien lee
+  // en español es el único para quien es noticia que esas dos páginas no están
+  // traducidas, y es el momento de decírselo — justo antes de que las abra.
+  'msgpol.privacy.privacyLink': 'Nuestra política de privacidad',
+  'msgpol.privacy.privacyTail':
+    'explica qué más guardamos y por qué. Está únicamente en inglés.',
+  'msgpol.privacy.termsLink': 'Nuestros términos',
+  'msgpol.privacy.termsTail':
+    'cubren su contrato de renta. Están únicamente en inglés.',
 }

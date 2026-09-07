@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { isLocale } from "@/lib/i18n";
 import { applyCreditByStaff } from "@/lib/billing/credit";
 import { requireStaffActor } from "@/lib/rbac/session";
 import {
@@ -54,11 +55,18 @@ export async function updateContactAction(
   const actor = await requireStaffActor();
   const tenantId = String(formData.get("tenantId") ?? "");
 
+  // B-261. "" is the deliberate "no stated preference" option on the select,
+  // which stores null — different from asserting English on behalf of a
+  // tenant who was never asked. Anything unrecognised is treated the same way
+  // rather than written through.
+  const claimedLocale = formData.get("preferredLocale");
+
   const problems = await updateTenantContact(actor, tenantId, {
     phone: String(formData.get("phone") ?? ""),
     altContactName: String(formData.get("altContactName") ?? ""),
     altContactPhone: String(formData.get("altContactPhone") ?? ""),
     altContactEmail: String(formData.get("altContactEmail") ?? ""),
+    preferredLocale: isLocale(claimedLocale) ? claimedLocale : null,
   });
   if (Object.keys(problems).length > 0) return fieldError(problems);
 

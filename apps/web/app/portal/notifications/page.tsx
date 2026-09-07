@@ -2,11 +2,21 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { AdminForm } from '@/components/admin/form'
 import { requireTenantActor } from '@/lib/rbac/session'
-import { currentPreferences, NOTIFICATION_CATEGORIES, smsConsentView } from '@/lib/portal/notifications'
-import { MARKETING_SMS_DISCLOSURE } from '@/lib/checkout/details'
-import { revokeSmsAction, setMarketingSmsAction, setPreferencesAction } from './actions'
+import {
+  currentPreferences,
+  currentWritingLocale,
+  NOTIFICATION_CATEGORIES,
+  smsConsentView,
+} from '@/lib/portal/notifications'
+import { MARKETING_SMS_CONSENT } from '@/lib/consent/disclosures'
+import {
+  revokeSmsAction,
+  setMarketingSmsAction,
+  setPreferencesAction,
+  setWritingLocaleAction,
+} from './actions'
 import { ScrollRegion } from '@/components/ui/scroll-region'
-import { dictionaryFor, translate, type MessageKey } from '@/lib/i18n'
+import { dictionaryFor, LOCALE_NAMES, LOCALES, translate, type MessageKey } from '@/lib/i18n'
 import { getLocale } from '@/lib/i18n/server'
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -33,10 +43,11 @@ function formatWhen(date: Date, locale: string): string {
 
 export default async function NotificationsPage() {
   const actor = await requireTenantActor()
-  const [grid, consent, marketingSms] = await Promise.all([
+  const [grid, consent, marketingSms, writingLocale] = await Promise.all([
     currentPreferences(actor.tenantId),
     smsConsentView(actor.tenantId),
     smsConsentView(actor.tenantId, 'marketing_sms'),
+    currentWritingLocale(actor.tenantId),
   ])
   const locale = await getLocale()
   const dict = dictionaryFor(locale)
@@ -46,6 +57,61 @@ export default async function NotificationsPage() {
   return (
     <div className="flex flex-col gap-8">
       <h1 className="text-xl font-semibold">{t('notif.title')}</h1>
+
+      {/* B-261 (D-122). First on the page deliberately: it governs the
+          language of every message the grid below is about, so it reads in the
+          order it applies. The repo rule that put it here rather than in a
+          later row — "a new column that configures behaviour gets its control
+          in the same item" — matters more than usual on this one, because the
+          tenant who needs it is the one least able to read the English screen
+          that would otherwise be the only way to reach it. */}
+      <section aria-labelledby="language-heading" className="flex flex-col gap-3">
+        <h2 id="language-heading" className="font-medium">
+          {t('notif.languageHeading')}
+        </h2>
+        <p className="text-muted-foreground max-w-prose text-sm text-pretty">
+          {t('notif.languageIntro')}
+        </p>
+        {writingLocale === null && (
+          <p className="text-muted-foreground text-sm">{t('notif.languageNeverSet')}</p>
+        )}
+        <AdminForm
+          action={setWritingLocaleAction}
+          label={t('notif.languageHeading')}
+          className="flex flex-col gap-2"
+        >
+          <label htmlFor="writingLocale" className="text-sm font-medium">
+            {t('notif.languageLabel')}
+          </label>
+          <select
+            id="writingLocale"
+            name="writingLocale"
+            defaultValue={writingLocale ?? locale}
+            className="border-input min-h-11 max-w-xs rounded-md border px-3 text-sm"
+          >
+            {LOCALES.map((option) => (
+              // Each name written in the language it names — the same rule
+              // `LOCALE_NAMES` states, and the reason it is never translated:
+              // "Spanish" is useless to somebody who cannot read the English.
+              <option key={option} value={option}>
+                {LOCALE_NAMES[option]}
+              </option>
+            ))}
+          </select>
+          <button
+            type="submit"
+            className="border-input hover:bg-accent inline-flex min-h-11 items-center justify-center self-start rounded-md border px-4 text-sm font-medium"
+          >
+            {t('notif.languageSave')}
+          </button>
+        </AdminForm>
+        {/* D-122 keeps legal documents in one language, and B-261 does not
+            change that. Saying so where the choice is made is the same
+            honesty B-259 wrote into the Spanish E-SIGN sentence. */}
+        <p className="text-muted-foreground max-w-prose text-xs text-pretty">
+          {t('notif.languageLegalNote')}
+        </p>
+      </section>
 
       <section aria-labelledby="grid-heading" className="flex flex-col gap-3">
         <h2 id="grid-heading" className="font-medium">
@@ -213,10 +279,19 @@ export default async function NotificationsPage() {
           {/* The disclosure is shown HERE, at the point of granting, not only
               at checkout — express written consent is consent to the words the
               person was actually shown, and a bare "on" switch is consent to
-              nothing in particular. The version recorded is this text's. */}
+              nothing in particular. The version recorded is this text's.
+
+              B-259 (D-125): B-260 translated this page and left this sentence
+              English, so a Spanish tenant was granting marketing-SMS consent
+              against words they could not read — the same defect as checkout
+              step 1, on the second and last surface that shows a disclosure.
+              The rendered locale rides in the hidden field below for the same
+              reason it does in checkout: the version stamped on the row has to
+              name the wording that was on screen. */}
           <p className="text-muted-foreground max-w-prose text-xs text-pretty">
-            {MARKETING_SMS_DISCLOSURE}
+            {MARKETING_SMS_CONSENT[locale].text}
           </p>
+          <input type="hidden" name="disclosureLocale" value={locale} />
           <input
             type="hidden"
             name="marketingSms"

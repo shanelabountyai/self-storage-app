@@ -9,11 +9,9 @@ import {
   isWithinDedupWindow,
   type TouchPoint,
 } from '@storage/core/marketing'
-
-/// PRD 04 US-13 AC1: "explicit opt-in, unchecked-by-default checkbox with
-/// disclosure text at capture." Bumped when the sentence in `LeadForm`
-/// changes — the same device `ELECTRONIC_RECORDS_CONSENT_VERSION` uses.
-export const MARKETING_EMAIL_CONSENT_VERSION = 'v1'
+import { MARKETING_EMAIL_LEAD_CONSENT } from '@/lib/consent/disclosures'
+import { DEFAULT_LOCALE, type Locale } from '@/lib/i18n'
+import type { FieldMessage } from '@/lib/admin/form-state'
 
 // PRD 04 §3.5 US-8, FR-LEAD-1..3 (B-068). The web half of lead capture.
 //
@@ -38,6 +36,13 @@ export type LeadFormInput = {
   /// writes anything — a box somebody left unchecked is silence, not a
   /// recorded decline (see the note on `recordConsent` below).
   marketingConsent?: boolean
+  /// B-264 (D-125). The language the disclosure beside that box was RENDERED
+  /// in, which decides both the version stamped on the row and the words that
+  /// version names. Defaults to English rather than being required, because
+  /// the marketplace caller (`captureMarketplaceLead`) has no renter, no page
+  /// and no consent — a partner cannot consent on somebody's behalf — so a
+  /// mandatory locale there would be a value invented to satisfy a type.
+  consentLocale?: Locale
 }
 
 export type LeadContext = {
@@ -60,11 +65,18 @@ export type LeadContext = {
 
 export type CaptureResult =
   | { ok: true; leadId: string; deduplicated: boolean }
-  | { ok: false; field: string; problem: string }
-  /// Silently accepted and thrown away. Returned distinctly so the route can
-  /// answer with the same success page a real submission gets — telling a bot
-  /// it was detected is how it learns to try again differently.
-  | { ok: false; field: 'silent'; problem: 'discarded' }
+  /// B-264. A message KEY, not a sentence. This runs for a Spanish visitor on
+  /// a Spanish facility page and for an authenticated marketplace partner that
+  /// wants a machine-readable field name, and it has no request to read a
+  /// locale from — so the caller that knows whose submission this is resolves
+  /// the words. Same shape B-263 gave the checkout's validators.
+  ///
+  /// `problem` is null for exactly one refusal: `field: 'silent'`, the
+  /// honeypot. Silently accepted and thrown away, so the caller answers with
+  /// the same success a real submission gets — telling a bot it was detected
+  /// is how it learns to try again differently. There is nothing to say to it,
+  /// which is what the null means.
+  | { ok: false; field: string; problem: FieldMessage | null }
 
 /// US-8 AC4: "honeypot + rate limiting; CAPTCHA only as escalation (protect
 /// conversion rate)."
@@ -83,25 +95,30 @@ export async function captureLead(
   // Honeypot first, before any validation. A bot that filled it gets the same
   // shaped response as a success and nothing is written.
   if (input.honeypot?.trim()) {
-    return { ok: false, field: 'silent', problem: 'discarded' }
+    return { ok: false, field: 'silent', problem: null }
   }
 
+  // B-264 (D-125). What the two `recordConsent` calls below stamp their rows
+  // with. Read once here so the granted-and-deduplicated path and the
+  // granted-and-new path cannot drift apart.
+  const consentLocale = input.consentLocale ?? DEFAULT_LOCALE
+
   const name = input.name.trim()
-  if (!name) return { ok: false, field: 'name', problem: 'Tell us what to call you.' }
+  if (!name) return { ok: false, field: 'name', problem: { key: 'err.leadName' } }
 
   const email = input.email.trim().toLowerCase()
   const phone = input.phone.trim()
 
   if (!email && !phone) {
-    return { ok: false, field: 'email', problem: 'An email address or a phone number — we need one way to reply.' }
+    return { ok: false, field: 'email', problem: { key: 'err.leadContact' } }
   }
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    return { ok: false, field: 'email', problem: 'Check the email address — it looks incomplete.' }
+    return { ok: false, field: 'email', problem: { key: 'err.leadEmail' } }
   }
   if (input.kind === 'callback' && phone.replace(/\D/g, '').length < 10) {
     // AC1 makes phone required for a callback, and the reason is in the word:
     // there is nothing to call back without it.
-    return { ok: false, field: 'phone', problem: 'A phone number with at least 10 digits, so somebody can call you.' }
+    return { ok: false, field: 'phone', problem: { key: 'err.leadPhone' } }
   }
 
   const submitterHash = hashSubmitter(context.ip)
@@ -109,7 +126,7 @@ export async function captureLead(
     return {
       ok: false,
       field: 'name',
-      problem: 'That is a lot of enquiries from one place in a short time. Give it a few minutes, or call us.',
+      problem: { key: 'err.leadRateLimited' },
     }
   }
 
@@ -203,7 +220,8 @@ export async function captureLead(
         channel: 'marketing_email',
         state: 'granted',
         source: 'lead_form',
-        disclosureVersion: MARKETING_EMAIL_CONSENT_VERSION,
+        disclosureVersion: MARKETING_EMAIL_LEAD_CONSENT[consentLocale].version,
+        locale: consentLocale,
         ipAddress: context.ip,
       })
     }
@@ -248,7 +266,8 @@ export async function captureLead(
       channel: 'marketing_email',
       state: 'granted',
       source: 'lead_form',
-      disclosureVersion: MARKETING_EMAIL_CONSENT_VERSION,
+      disclosureVersion: MARKETING_EMAIL_LEAD_CONSENT[consentLocale].version,
+      locale: consentLocale,
       ipAddress: context.ip,
     })
   }

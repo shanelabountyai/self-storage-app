@@ -8,6 +8,7 @@ import {
   validateDeclarations,
   validateDetails,
 } from '../apps/web/lib/checkout/details'
+import { LOCALES, dictionaryFor, translate } from '../apps/web/lib/i18n'
 
 // B-021 / PRD 01 US-501 step 1, FR-5.1.
 
@@ -33,16 +34,34 @@ describe('validateDetails', () => {
     expect(validateDetails(VALID)).toEqual({})
   })
 
-  it('gives every error a suggestion, not just an identification', () => {
-    // 3.3.3. The renter reads these, so they have to say what to do.
+  it('names a message key rather than building a sentence (B-263)', () => {
+    // 3.3.3. The renter reads these, so they have to say what to do — and the
+    // renter may be reading Spanish, which is why the sentence is built by the
+    // caller that knows the language rather than here.
     const errors = validateDetails({})
-    expect(errors.email).toMatch(/send your lease/)
-    expect(errors.phone).toMatch(/for example/)
-    expect(errors.postalCode).toMatch(/for example 78704/)
+    expect(errors.email).toEqual({ key: 'err.email' })
+    expect(errors.phone).toEqual({ key: 'err.phone' })
+    expect(errors.postalCode).toEqual({ key: 'err.postalCode' })
     // State is only validated when the renter has opened the disclosure and
     // typed one — it is not a field on the step otherwise.
     expect(errors.state).toBeUndefined()
-    expect(validateDetails({ ...VALID, state: 'Texas' }).state).toMatch(/for example TX/)
+    expect(validateDetails({ ...VALID, state: 'Texas' }).state).toEqual({ key: 'err.state' })
+  })
+
+  it('resolves to a suggestion in whichever language the renter is reading', () => {
+    // The defect B-263 exists for: a Spanish form corrected in English at the
+    // one moment 3.3.3 wants an instruction the renter can act on.
+    const errors = validateDetails({})
+    for (const locale of LOCALES) {
+      const dict = dictionaryFor(locale)
+      for (const [field, message] of Object.entries(errors)) {
+        expect(translate(dict, message.key, message.vars), `${locale} ${field}`).not.toMatch(
+          /[{}]/,
+        )
+      }
+    }
+    expect(translate(dictionaryFor('en'), errors.postalCode!.key)).toMatch(/for example 78704/)
+    expect(translate(dictionaryFor('es'), errors.postalCode!.key)).toMatch(/por ejemplo 78704/)
   })
 
   it('accepts a phone number however the renter chooses to punctuate it', () => {
@@ -72,7 +91,7 @@ describe('validateDetails', () => {
     // right — new zips, retired zips, PO-box ranges — so the message is a way
     // through rather than a flat refusal (3.3.3).
     const errors = validateDetails({ ...VALID, postalCode: '00000' })
-    expect(errors.postalCode).toMatch(/city and state myself/)
+    expect(errors.postalCode).toEqual({ key: 'err.postalCodeUnknown' })
   })
 
   it('lets a typed city and state override the zip', () => {
@@ -96,8 +115,12 @@ describe('validateDeclarations (B-112)', () => {
   it('refuses an alternate contact we could not actually call', () => {
     // A number we cannot dial is worse than none: it looks like a fallback and
     // is not one, and this is the contact a bounced lien notice falls back to.
-    expect(validateDeclarations({ altContactPhone: '555' }).altContactPhone).toBeDefined()
-    expect(validateDeclarations({ altContactName: 'Pat Kin' }).altContactPhone).toBeDefined()
+    expect(validateDeclarations({ altContactPhone: '555' }).altContactPhone).toEqual({
+      key: 'err.altContactPhone',
+    })
+    expect(validateDeclarations({ altContactName: 'Pat Kin' }).altContactPhone).toEqual({
+      key: 'err.altContactPhoneMissing',
+    })
     expect(
       validateDeclarations({ altContactName: 'Pat Kin', altContactPhone: '512-555-0199' }),
     ).toEqual({})
@@ -119,7 +142,7 @@ describeDb('implicit account creation', () => {
   it('creates an account with no password and no verification wall', async () => {
     // FR-5.1: email is the identifier, the account is implicit, and nothing
     // blocks a move-in on verifying it.
-    const result = await upsertTenantForCheckout(VALID, AUSTIN)
+    const result = await upsertTenantForCheckout(VALID, AUSTIN, 'en')
     expect(result.created).toBe(true)
 
     const tenant = await prisma.tenant.findUniqueOrThrow({ where: { id: result.tenantId } })
@@ -133,6 +156,7 @@ describeDb('implicit account creation', () => {
     const again = await upsertTenantForCheckout(
       { ...VALID, email: VALID.email.toUpperCase() },
       AUSTIN,
+      'en',
     )
     expect(again.created).toBe(false)
     expect(await prisma.tenant.count({ where: { email: VALID.email } })).toBe(1)
@@ -167,6 +191,7 @@ describeDb('implicit account creation', () => {
         phone: '555-555-5555',
       },
       { city: 'Nowhere', state: 'CA' },
+      'en',
     )
     // B-112 moved the alternate contact to the lease step; it is additive
     // there for exactly the same reason.
@@ -188,7 +213,7 @@ describeDb('implicit account creation', () => {
     const email = `blanks-${suffix}@example.com`
     await prisma.tenant.create({ data: { email, firstName: 'Sparse', lastName: 'Record' } })
 
-    await upsertTenantForCheckout({ ...VALID, email }, AUSTIN)
+    await upsertTenantForCheckout({ ...VALID, email }, AUSTIN, 'en')
 
     const tenant = await prisma.tenant.findUniqueOrThrow({ where: { email } })
     expect(tenant.addressLine1).toBe(VALID.addressLine1)
@@ -197,7 +222,7 @@ describeDb('implicit account creation', () => {
 
   it('records a self-declared SCRA flag — now from the lease step (B-112)', async () => {
     const email = `scra-${suffix}@example.com`
-    const result = await upsertTenantForCheckout({ ...VALID, email }, AUSTIN)
+    const result = await upsertTenantForCheckout({ ...VALID, email }, AUSTIN, 'en')
     // Step 1 no longer asks, so it is still null at this point.
     expect(
       (await prisma.tenant.findUniqueOrThrow({ where: { id: result.tenantId } }))
@@ -212,9 +237,51 @@ describeDb('implicit account creation', () => {
 
   it('leaves the flag null when never asked', async () => {
     const email = `noscra-${suffix}@example.com`
-    const result = await upsertTenantForCheckout({ ...VALID, email }, AUSTIN)
+    const result = await upsertTenantForCheckout({ ...VALID, email }, AUSTIN, 'en')
     await recordLeaseDeclarations(result.tenantId, {})
     const tenant = await prisma.tenant.findUniqueOrThrow({ where: { id: result.tenantId } })
     expect(tenant.activeDutyMilitary).toBeNull()
+  })
+
+  // ── B-261. The language every future email and text goes out in. ──────────
+
+  it('stores the language the renter checked out in', async () => {
+    const email = `locale-new-${suffix}@example.com`
+    const result = await upsertTenantForCheckout({ ...VALID, email }, AUSTIN, 'es')
+    const tenant = await prisma.tenant.findUniqueOrThrow({ where: { id: result.tenantId } })
+    expect(tenant.preferredLocale).toBe('es')
+  })
+
+  it('never switches an existing tenant’s language from this unauthenticated form', async () => {
+    // The same security property the address rule above has, and it matters
+    // for the same reason: anyone who knows an email address could otherwise
+    // start a checkout and change the language every future message to that
+    // account is written in — including the dunning ladder, where being
+    // unreadable is the whole harm.
+    const email = `locale-existing-${suffix}@example.com`
+    await prisma.tenant.create({
+      data: { email, firstName: 'Real', lastName: 'Tenant', preferredLocale: 'es' },
+    })
+
+    await upsertTenantForCheckout({ ...VALID, email }, AUSTIN, 'en')
+
+    const tenant = await prisma.tenant.findUniqueOrThrow({ where: { email } })
+    expect(tenant.preferredLocale).toBe('es')
+  })
+
+  it('fills in the language for a returning tenant who has never stated one', async () => {
+    // Additive, exactly like the blank address fields beside it — null means
+    // "never told us", so there is nothing to overwrite.
+    const email = `locale-blank-${suffix}@example.com`
+    await prisma.tenant.create({
+      data: { email, firstName: 'Real', lastName: 'Tenant' },
+    })
+    expect(
+      (await prisma.tenant.findUniqueOrThrow({ where: { email } })).preferredLocale,
+    ).toBeNull()
+
+    await upsertTenantForCheckout({ ...VALID, email }, AUSTIN, 'es')
+
+    expect((await prisma.tenant.findUniqueOrThrow({ where: { email } })).preferredLocale).toBe('es')
   })
 })

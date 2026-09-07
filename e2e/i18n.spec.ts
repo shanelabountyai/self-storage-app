@@ -94,6 +94,127 @@ test('a renter can reach the Spanish checkout from a Spanish facility page', asy
   await expect(page.locator('html')).toHaveAttribute('lang', 'es')
   await expect(page.getByRole('heading', { level: 1 })).toContainText('Múdese en línea')
   await expect(page.getByLabel('Correo electrónico')).toBeVisible()
+
+  // B-259 (D-125). The three consent boxes were the last English thing on this
+  // screen, and the one that mattered most: a renter cannot give express
+  // written consent to words they cannot read. Asserted here rather than in a
+  // unit test because the failure mode is a page that renders — the strings
+  // are not dictionary entries, so `Dictionary` cannot catch a missing one.
+  await expect(page.getByText('Acepto recibir mensajes de texto sobre mi cuenta')).toBeVisible()
+  await expect(page.getByText('Envíenme correos electrónicos ocasionales')).toBeVisible()
+  await expect(page.getByText('Acepto recibir mensajes de texto promocionales')).toBeVisible()
+
+  // STOP and HELP are the literal strings the classifier matches, so they stay
+  // English inside the Spanish sentence. A translated keyword is an
+  // instruction that does nothing.
+  await expect(page.getByText('Responda STOP para darse de baja').first()).toBeVisible()
+
+  // The locale that was RENDERED, carried to the action — this is what stamps
+  // the consent rows, and reading the cookie again at submit time would get it
+  // wrong for anyone who used the language toggle after the page drew.
+  await expect(page.locator('input[name="disclosureLocale"]')).toHaveValue('es')
+})
+
+test('the Spanish checkout refuses you in Spanish (B-263)', async ({ page, context }) => {
+  await context.addCookies([SPANISH])
+  await page.goto('/storage/tx/austin/demo-austin-south')
+  await page.getByRole('button', { name: 'Rentar ahora' }).first().click()
+  await expect(page).toHaveURL(/\/checkout\?token=/)
+
+  // Every field on step 1 is `required`, so an empty submit is refused by the
+  // browser and never reaches the server — the refusal this item is about only
+  // happens on input the browser accepts and the server does not. `00000` is
+  // syntactically a zip and is not a place, which is the one refusal on this
+  // step that carries a way out rather than a restatement.
+  await page.getByLabel('Nombre', { exact: true }).fill('Ada')
+  await page.getByLabel('Apellido', { exact: true }).fill('Renter')
+  await page.getByLabel('Correo electrónico', { exact: true }).fill('ada.i18n@example.com')
+  await page.getByLabel('Número de celular', { exact: true }).fill('512-555-0100')
+  await page.getByLabel('Dirección', { exact: true }).fill('2400 South Congress Ave')
+  await page.getByLabel('Código postal', { exact: true }).fill('00000')
+
+  // Nothing is written on a refusal — the action returns before it touches a
+  // tenant — so this mutates no shared fixture and needs neither a scope nor a
+  // self-skip (the B-120 rule).
+  await page.getByRole('button', { name: 'Continuar' }).click()
+
+  // Scoped through `main` for the reason the portal specs are: Next's own route
+  // announcer is an empty `role="alert"` outside it. Everything is asserted
+  // INSIDE the box, because `AdminForm` renders each message twice on purpose —
+  // once in the summary list, once beside its field — so an unscoped
+  // `getByText` is a strict-mode violation rather than a meaningful failure.
+  const alert = page.getByRole('main').getByRole('alert')
+
+  // The summary heading above the fields was the last English string on a
+  // refused Spanish step, and it came from `fieldError`, not from a validator —
+  // which is why translating the three functions the row named would have left
+  // it. One error here, so this is the singular.
+  await expect(alert).toContainText('Hay un problema con un campo.')
+
+  // 3.3.3 in the renter's language: the message says what to DO, and it names
+  // the control to open by that language's own name for it. Asserted end to end
+  // rather than in a unit test because what broke was the WIRING — the
+  // validator was reached, the dictionary was loaded, and the sentence in
+  // between was built in English.
+  //
+  // That the quoted control's name matches the one actually rendered is checked
+  // in `tests/i18n.test.ts`, against the dictionary, rather than by locating the
+  // <details> here — its accessible name is not the summary's text in every
+  // engine, and a locator that flakes on that would say nothing about language.
+  await expect(alert).toContainText(
+    'No reconocemos ese código postal. Abra «Escribir mi ciudad y estado yo mismo» abajo y escríbalos.',
+  )
+})
+
+test('the Spanish lead form asks, refuses and consents in Spanish (B-264)', async ({
+  page,
+  context,
+}) => {
+  await context.addCookies([SPANISH])
+  await page.goto('/storage/tx/austin/demo-austin-south')
+
+  const form = page
+    .getByRole('main')
+    .locator('section:has(h2:text("¿Todavía no se decide?"))')
+
+  // The labels. B-090f translated the page this form sits inside and never
+  // reached the form, so a Spanish visitor read Spanish all the way down and
+  // then met English at the only place they are asked to type.
+  await expect(form.getByLabel('Su nombre')).toBeVisible()
+  await expect(form.getByLabel('Teléfono', { exact: true })).toBeVisible()
+
+  // D-125, and the reason this row was not folded into B-259. The sentence is
+  // a versioned consent text rather than a dictionary entry, so `Dictionary`
+  // cannot catch a missing translation — only a rendered page can.
+  await expect(
+    form.getByText('Envíenme correos electrónicos ocasionales sobre precios y promociones de esta sucursal'),
+  ).toBeVisible()
+  // Which language those words were in, carried to the action. This is what
+  // stamps `v1-es` rather than `v1` on the `Consent` row.
+  await expect(form.locator('input[name="disclosureLocale"]')).toHaveValue('es')
+
+  // The refusal. Neither contact field is `required`, so this reaches the
+  // SERVER rather than being stopped by the browser — which is the only way
+  // the translated message is the one under test. Refused before any `Lead`
+  // row is written, so it mutates no shared fixture (B-120) and does not walk
+  // toward US-8 AC4's five-per-ten-minutes limit the way a success would.
+  await form.getByLabel('Su nombre').fill('Ada i18n');
+  await form.getByRole('button', { name: 'Enviar' }).click()
+
+  // Two assertions in two places, because `FormResult` puts only the SUMMARY in
+  // the live region and `Field` puts the message beside its own input (3.3.1) —
+  // unlike `AdminForm`, which renders each one twice. Both halves are needed:
+  // the summary came from `fieldError` and not from `captureLead`, so
+  // translating the refusals alone would have left the sentence announced above
+  // them in English.
+  await expect(form.getByRole('status')).toContainText('Hay un problema con un campo.')
+  await expect(
+    form.getByText('Un correo electrónico o un teléfono: necesitamos alguna forma de responderle.'),
+  ).toBeVisible()
+  await expect(form.getByLabel('Correo electrónico', { exact: true })).toHaveAttribute(
+    'aria-invalid',
+    'true',
+  )
 })
 
 // --- B-260: the portal ------------------------------------------------------
@@ -165,5 +286,139 @@ test.describe('the portal in Spanish', () => {
     // and access branches rather than an empty account.
     // a11y-state: /portal | Spanish
     await assertNoAxeViolations(page)
+  })
+})
+
+// --- B-262: the static pages ------------------------------------------------
+//
+// The prose a renter READS rather than operates. Two claims, and the second is
+// the one worth a test: the pages that were translated are Spanish, and the
+// pages D-122 keeps in English are still English. That second half is a
+// decision, not an omission — a later session translating `/terms` out of
+// tidiness would reverse it silently, and this is where that shows up.
+
+test.describe('the static pages in Spanish', () => {
+  test.beforeEach(async ({ context }) => {
+    await context.addCookies([SPANISH])
+  })
+
+  const TRANSLATED: [string, RegExp][] = [
+    ['/faq', /Preguntas frecuentes/],
+    ['/about', /Acerca de nosotros/],
+    ['/contact', /Contacto/],
+    ['/accessibility', /Accesibilidad/],
+    // B-259 (D-124/D-125).
+    ['/messaging-policy', /Política de mensajes de texto/],
+  ]
+
+  for (const [route, heading] of TRANSLATED) {
+    test(`${route} renders in Spanish`, async ({ page }) => {
+      await page.goto(route)
+      await expect(page.locator('html')).toHaveAttribute('lang', 'es')
+      await expect(page.getByRole('heading', { level: 1 })).toContainText(heading)
+    })
+  }
+
+  // D-122: anything a lawyer wrote stays English until somebody with a licence
+  // says otherwise. `/messaging-policy` LEFT this list at B-259 — it is the
+  // TCPA / A2P 10DLC disclosure, and it could only be translated once the
+  // disclosures it explains had a Spanish version of their own to point at.
+  const ENGLISH_ONLY: [string, RegExp][] = [
+    ['/terms', /Terms of service/],
+    ['/privacy', /Privacy/],
+  ]
+
+  for (const [route, heading] of ENGLISH_ONLY) {
+    test(`${route} is deliberately still English`, async ({ page }) => {
+      await page.goto(route)
+      await expect(page.getByRole('heading', { level: 1 })).toContainText(heading)
+    })
+  }
+
+  // B-259. The keywords are rendered from `sms-keywords.ts` rather than typed
+  // into the prose, which is what stops a translated page from publishing an
+  // instruction that does nothing — and what stops the published list drifting
+  // from what `classifySmsKeyword` accepts.
+  test('the Spanish messaging policy keeps the keywords in English', async ({ page }) => {
+    await page.goto('/messaging-policy')
+    await expect(page.locator('html')).toHaveAttribute('lang', 'es')
+    await expect(page.getByText('Responda STOP a cualquier mensaje nuestro')).toBeVisible()
+    await expect(page.getByText('STOPALL, UNSUBSCRIBE, CANCEL, END y QUIT')).toBeVisible()
+    await expect(page.getByText('responda START o UNSTOP')).toBeVisible()
+
+    // One constant, formatted per locale — the English page dates itself
+    // "August 2026" and cannot be rendered in a second language as prose.
+    await expect(page.getByText('Última revisión: agosto de 2026')).toBeVisible()
+  })
+
+  test('the accessibility statement names its gaps in Spanish too', async ({ page }) => {
+    await page.goto('/accessibility')
+
+    // The generated half. Both exception lists are rendered from
+    // `scan-coverage.ts`, and rendering half a list of gaps in the reader's
+    // language reads as though the untranslated rows did not matter.
+    await expect(page.getByText('las corridas de revisión automática no llevan la cookie')).toBeVisible()
+    await expect(page.getByText('el recibo de un pago que de verdad se aprobó')).toBeVisible()
+
+    // One constant, formatted per locale — the English page dates itself
+    // "19 August 2026" and this one must not silently slide a day (B-228).
+    await expect(page.getByText('Última revisión: 19 de agosto de 2026.')).toBeVisible()
+  })
+})
+
+// --- B-261: the language we WRITE to a tenant in ----------------------------
+//
+// The control for `Tenant.preferredLocale`, which is a different fact from the
+// `st_locale` cookie every spec above exercises: the cookie is this browser,
+// this device, and it is gone with the cache; this is what `deliverForRule`
+// reads when it sends a receipt, a payment reminder or a dunning email six
+// months from now.
+//
+// **Shared-state discipline (B-120).** This mutates the demo tenant, so it
+// takes protection (1): the mutation is scoped to a column no other spec
+// asserts a fixed value against — nothing in the suite reads
+// `preferredLocale`, because nothing in the suite sends an email. The spec
+// also puts it back, so a full sweep run twice sees the same starting state
+// both times; the restore is belt-and-braces rather than the protection
+// itself, because a failure between the two halves must not be able to break
+// a neighbouring spec, and here it cannot.
+
+test.describe('the language a tenant is written to in', () => {
+  test('a tenant can choose it, and it is not the same switch as the header toggle', async ({
+    page,
+    context,
+  }) => {
+    await context.addCookies([SPANISH])
+    await signInAsDemoTenant(page)
+    await page.goto('/portal/notifications')
+
+    const select = page.getByLabel('Idioma para correos y mensajes de texto')
+    await expect(select).toBeVisible()
+
+    // The options are named in the language each one NAMES, so "Español" is
+    // legible to exactly the person who needs to find it.
+    await expect(select.locator('option')).toHaveText(['English', 'Español'])
+
+    await select.selectOption('es')
+    await page.getByRole('button', { name: 'Guardar idioma' }).click()
+
+    // Confirmed in the language just chosen — it is the first sentence of the
+    // change taking effect, not a report about it.
+    await expect(page.getByText('A partir de ahora le escribiremos en español')).toBeVisible()
+    await expect(page.locator('html')).toHaveAttribute('lang', 'es')
+
+    // D-122 is stated where the choice is made: the lease and any mailed
+    // notice stay English, and a tenant choosing Spanish must not be left
+    // believing otherwise.
+    await expect(
+      page.getByText('Su contrato y cualquier aviso formal', { exact: false }),
+    ).toBeVisible()
+
+    // Put it back, so the sweep is repeatable — and prove the control works in
+    // both directions while doing it.
+    await page.getByLabel('Idioma para correos y mensajes de texto').selectOption('en')
+    await page.getByRole('button', { name: 'Guardar idioma' }).click()
+    await expect(page.getByText('We will write to you in English from now on')).toBeVisible()
+    await expect(page.locator('html')).toHaveAttribute('lang', 'en')
   })
 })

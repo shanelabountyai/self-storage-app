@@ -1,9 +1,22 @@
 const currency = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' })
 
+/// B-261. The BCP-47 tag a caller passes to get its output in another
+/// language. Optional and defaulted throughout this file: D-122 keeps the
+/// admin surface English, so every existing caller keeps the formatting it
+/// has and only the send path (`lib/comms/prose.ts` supplies the tag) asks for
+/// anything else.
+const DEFAULT_TAG = 'en-US'
+
 /// Money is stored as integer cents everywhere (CLAUDE.md); this is the one
 /// place it becomes a dollar string for display.
-export function formatCents(cents: number): string {
-  return currency.format(cents / 100)
+///
+/// USD in a Spanish locale formats identically to English (`$129.00`), which
+/// is the point rather than a coincidence: a tenant comparing an email against
+/// the portal must see the same figure written the same way. The tag is
+/// accepted anyway so the one formatter stays the one formatter.
+export function formatCents(cents: number, tag: string = DEFAULT_TAG): string {
+  if (tag === DEFAULT_TAG) return currency.format(cents / 100)
+  return new Intl.NumberFormat(tag, { style: 'currency', currency: 'USD' }).format(cents / 100)
 }
 
 /// The customer-facing form: whole dollars unless the rate genuinely has cents,
@@ -52,6 +65,7 @@ export function formatDay(iso: string): string {
 export function formatCalendarDate(
   date: Date,
   options: Intl.DateTimeFormatOptions = { month: 'long', day: 'numeric', year: 'numeric' },
+  tag: string = DEFAULT_TAG,
 ): string {
-  return new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', ...options }).format(date)
+  return new Intl.DateTimeFormat(tag, { timeZone: 'UTC', ...options }).format(date)
 }

@@ -1,4 +1,5 @@
 import { prisma, type ConsentState } from '@storage/db'
+import { isLocale, type Locale } from '@/lib/i18n'
 import { currentConsent, recordConsent } from '@storage/core/consent'
 import {
   defaultNotificationPreference,
@@ -115,6 +116,10 @@ export async function setMarketingSmsConsent(
   tenantId: string,
   granted: boolean,
   disclosureVersion: string,
+  /// B-259. The language that version's words were shown in. Required rather
+  /// than optional: the two are only evidence together, and a default here
+  /// would be a silent claim about a screen this function never saw.
+  locale: string,
 ): Promise<void> {
   await recordConsent({
     tenantId,
@@ -122,6 +127,7 @@ export async function setMarketingSmsConsent(
     state: granted ? 'granted' : 'revoked',
     source: 'portal_preferences',
     disclosureVersion,
+    locale,
   })
 }
 
@@ -135,4 +141,31 @@ export async function revokeSmsFromPortal(tenantId: string): Promise<RevokeSmsRe
   if (!tenant?.phone) return { revoked: false }
   const result = await applySmsStop({ rawPhone: tenant.phone, source: 'portal_revoke', tenantId })
   return { revoked: result.suppressed }
+}
+
+/// B-261 (D-122). The tenant's own control over `Tenant.preferredLocale` —
+/// the language every email and text `deliverForRule` sends them is written
+/// in.
+///
+/// It has to exist in the same item as the column: this repo has shipped five
+/// behaviour-configuring columns reachable only from a database client, and
+/// each was individually defensible to defer. This one is worse than most,
+/// because the tenant it matters to is the one who cannot read the screen that
+/// would otherwise be the only way to change it.
+///
+/// Null is a real state and is preserved as one — `preferredLocale` means
+/// "never told us" when null, which is what lets the unauthenticated checkout
+/// fill it in additively. Choosing English HERE writes `'en'`, which is a
+/// different fact: it says this tenant asked for English, so a later checkout
+/// in Spanish will not quietly change it.
+export async function currentWritingLocale(tenantId: string): Promise<Locale | null> {
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { preferredLocale: true },
+  })
+  return isLocale(tenant?.preferredLocale) ? tenant.preferredLocale : null
+}
+
+export async function setWritingLocale(tenantId: string, locale: Locale): Promise<void> {
+  await prisma.tenant.update({ where: { id: tenantId }, data: { preferredLocale: locale } })
 }

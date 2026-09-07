@@ -3,6 +3,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { prisma } from '../packages/db'
 import { dispatchEvents } from '../packages/core/events'
 import { captureLead, type LeadContext } from '../apps/web/lib/marketing/lead-capture'
+import { MARKETING_EMAIL_LEAD_CONSENT } from '../apps/web/lib/consent/disclosures'
 import { LEAD_CONSUMER } from '../apps/web/lib/jobs/registry'
 
 // B-068 / PRD 04 US-8, FR-LEAD-1..3, against real rows.
@@ -255,6 +256,57 @@ describeDb('web lead capture', () => {
       if (!result.ok) return
       const lead = await prisma.lead.findUniqueOrThrow({ where: { id: result.leadId } })
       expect(lead.channel).toBe('organic')
+    })
+  })
+
+  // B-264 (D-125). The half of this item that cannot be undone after the fact.
+  //
+  // A `Consent` row's version is the evidence of WHAT WORDS somebody agreed to,
+  // so a Spanish visitor ticking a Spanish sentence must not be recorded
+  // against the English `v1` — that asserts a consent nobody gave. Asserted on
+  // the row rather than on the constant, because the two ways to get this
+  // wrong are both in the wiring: a locale that never reaches `recordConsent`,
+  // and a version read from the wrong language's object.
+  describe('the consent it records — US-13 AC1, D-125', () => {
+    it('stamps the row with the language whose words were on screen', async () => {
+      const result = await submit({
+        email: `es-${suffix}@example.com`,
+        phone: '',
+        marketingConsent: true,
+        consentLocale: 'es',
+      })
+      if (!result.ok) throw new Error('expected the lead to be captured')
+
+      const consent = await prisma.consent.findFirstOrThrow({
+        where: { leadId: result.leadId, channel: 'marketing_email' },
+      })
+      expect(consent.state).toBe('granted')
+      expect(consent.locale).toBe('es')
+      expect(consent.disclosureVersion).toBe(MARKETING_EMAIL_LEAD_CONSENT.es.version)
+      // The version has to NAME the Spanish words, not merely differ from the
+      // English one — a `-es` suffix on the English text is the same lie.
+      expect(MARKETING_EMAIL_LEAD_CONSENT.es.version).not.toBe(
+        MARKETING_EMAIL_LEAD_CONSENT.en.version,
+      )
+    })
+
+    it('defaults to English for a caller that has no page and no locale', async () => {
+      // `captureMarketplaceLead` is that caller. It never sets
+      // `marketingConsent` — a partner cannot consent on a renter's behalf —
+      // but the default must still be the language the English disclosure
+      // names, not whatever the last web visitor happened to be reading.
+      const result = await submit({
+        email: `default-${suffix}@example.com`,
+        phone: '',
+        marketingConsent: true,
+      })
+      if (!result.ok) throw new Error('expected the lead to be captured')
+
+      const consent = await prisma.consent.findFirstOrThrow({
+        where: { leadId: result.leadId, channel: 'marketing_email' },
+      })
+      expect(consent.locale).toBe('en')
+      expect(consent.disclosureVersion).toBe(MARKETING_EMAIL_LEAD_CONSENT.en.version)
     })
   })
 

@@ -14,6 +14,7 @@ import { commsEnabled, fromAddress, selectProvider, withPostalFooter } from '@/l
 import { requirePermission } from '@/lib/rbac/authorize'
 import { toAuditActor } from '@/lib/rbac/audit-actor'
 import type { Actor } from '@/lib/rbac/actor'
+import { DEFAULT_LOCALE, type Locale } from '@/lib/i18n'
 
 // PRD 05 CN-16 (B-053). Editing templates without a deploy.
 //
@@ -42,6 +43,12 @@ export function eventForTemplateKey(key: string): string | null {
 
 export type TemplateSummary = {
   key: string
+  /// B-261. Which language this row IS. The editor works one language at a
+  /// time — an operator edits the Spanish `dunning_step` or the English one,
+  /// never both at once — because they are two documents with independent
+  /// version histories, which is the whole reason `locale` is a row rather
+  /// than a second body column.
+  locale: Locale
   event: string | null
   classification: string
   version: number
@@ -56,11 +63,15 @@ export type TemplateSummary = {
 
 /// Every template a facility effectively uses: its own override where one
 /// exists, the org default otherwise.
-export async function templatesFor(actor: Actor, facilityId: string): Promise<TemplateSummary[]> {
+export async function templatesFor(
+  actor: Actor,
+  facilityId: string,
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<TemplateSummary[]> {
   requirePermission(actor, 'facility:settings', facilityId)
 
   const rows = await prisma.messageTemplate.findMany({
-    where: { channel: 'email', active: true, OR: [{ facilityId }, { facilityId: null }] },
+    where: { channel: 'email', active: true, locale, OR: [{ facilityId }, { facilityId: null }] },
     orderBy: [{ key: 'asc' }, { version: 'desc' }],
   })
 
@@ -76,6 +87,7 @@ export async function templatesFor(actor: Actor, facilityId: string): Promise<Te
   return [...byKey.values()]
     .map((row) => ({
       key: row.key,
+      locale,
       event: eventForTemplateKey(row.key),
       classification: row.classification,
       version: row.version,
@@ -107,7 +119,13 @@ export type PreviewResult =
 export async function previewTemplate(
   actor: Actor,
   facilityId: string,
-  draft: { key: string; subject: string; bodyText: string; requiredMergeFields: string[] },
+  draft: {
+    key: string
+    subject: string
+    bodyText: string
+    requiredMergeFields: string[]
+    locale?: Locale
+  },
 ): Promise<PreviewResult> {
   requirePermission(actor, 'facility:settings', facilityId)
 
@@ -126,6 +144,7 @@ export async function previewTemplate(
     const rendered = renderEmail(
       { subject: draft.subject, bodyText: draft.bodyText, requiredMergeFields: draft.requiredMergeFields },
       sampleContextFor(event),
+      draft.locale ?? DEFAULT_LOCALE,
     )
     return {
       ok: true,
@@ -165,6 +184,7 @@ export async function saveTemplateVersion(
     bodyText: string
     requiredMergeFields: string[]
     scope: 'facility' | 'org'
+    locale: Locale
   },
 ): Promise<SaveResult> {
   requirePermission(actor, 'facility:settings', facilityId)
@@ -186,19 +206,32 @@ export async function saveTemplateVersion(
 
   const scopeId = draft.scope === 'facility' ? facilityId : null
   const existing = await prisma.messageTemplate.findFirst({
-    where: { key: draft.key, channel: 'email', facilityId: scopeId },
+    where: { key: draft.key, channel: 'email', locale: draft.locale, facilityId: scopeId },
     orderBy: { version: 'desc' },
   })
-  const base = existing ?? (await prisma.messageTemplate.findFirstOrThrow({
-    where: { key: draft.key, channel: 'email', facilityId: null },
-    orderBy: { version: 'desc' },
-  }))
+  // B-261. The classification is copied from a base row, and the fallback
+  // deliberately crosses the language boundary: a facility publishing the very
+  // first Spanish override for a key has no Spanish org default to copy from
+  // when the catalog never carried one, and a classification is a property of
+  // the MESSAGE, not of the language it is written in. Getting it from the
+  // English row is right; refusing to publish would be a language nobody can
+  // ever add.
+  const base =
+    existing ??
+    (await prisma.messageTemplate.findFirst({
+      where: { key: draft.key, channel: 'email', locale: draft.locale, facilityId: null },
+      orderBy: { version: 'desc' },
+    })) ??
+    (await prisma.messageTemplate.findFirstOrThrow({
+      where: { key: draft.key, channel: 'email', locale: DEFAULT_LOCALE, facilityId: null },
+      orderBy: { version: 'desc' },
+    }))
   const version = (existing?.version ?? 0) + 1
 
   await prisma.$transaction(async (tx) => {
     if (existing) {
       await tx.messageTemplate.updateMany({
-        where: { key: draft.key, channel: 'email', facilityId: scopeId },
+        where: { key: draft.key, channel: 'email', locale: draft.locale, facilityId: scopeId },
         data: { active: false },
       })
     }
@@ -206,6 +239,7 @@ export async function saveTemplateVersion(
       data: {
         key: draft.key,
         channel: 'email',
+        locale: draft.locale,
         classification: base.classification,
         facilityId: scopeId,
         version,
@@ -227,6 +261,10 @@ export async function saveTemplateVersion(
           key: draft.key,
           version,
           scope: draft.scope,
+          // Recorded because "who changed the dunning wording" is a question
+          // with a different answer per language now, and the entity id is
+          // still only the key.
+          locale: draft.locale,
           undeclaredFields: check.undeclared,
         },
       },
@@ -254,7 +292,13 @@ export type TestSendResult =
 export async function testSendTemplate(
   actor: Actor,
   facilityId: string,
-  draft: { key: string; subject: string; bodyText: string; requiredMergeFields: string[] },
+  draft: {
+    key: string
+    subject: string
+    bodyText: string
+    requiredMergeFields: string[]
+    locale?: Locale
+  },
 ): Promise<TestSendResult> {
   requirePermission(actor, 'facility:settings', facilityId)
   if (actor.kind !== 'staff') return { ok: false, problem: 'Staff only.' }

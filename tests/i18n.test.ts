@@ -83,6 +83,30 @@ describe('i18n dictionaries', () => {
     expect(curly).toEqual([])
   })
 
+  it('translates every field error, rather than pasting the English (B-263)', () => {
+    // Scoped to `err.` on purpose. Plenty of the dictionary is legitimately
+    // identical across languages — "Email", "TX", a facility name — but every
+    // one of these is a whole sentence a renter reads at the moment they are
+    // refused, so an identical value is an untranslated paste, not a
+    // coincidence. This is the check that would have caught the defect that
+    // made this row: the money path was translated and its refusals were not.
+    const untranslated = Object.keys(en)
+      .filter((key) => key.startsWith('err.'))
+      .filter((key) => es[key as keyof typeof en] === en[key as keyof typeof en])
+    expect(untranslated).toEqual([])
+  })
+
+  it('quotes the control it points at by that language\'s own name for it', () => {
+    // `err.postalCodeUnknown` tells the renter to open a disclosure, by name.
+    // Renaming `details.enterMyself` in one language and not the other leaves
+    // a refusal pointing at a control that is not on the page — with no way
+    // out, for exactly the renter who cannot read the other language.
+    for (const locale of LOCALES) {
+      const dict = dictionaryFor(locale)
+      expect(dict['err.postalCodeUnknown'], locale).toContain(dict['details.enterMyself'])
+    }
+  })
+
   it('leaves no empty translation', () => {
     // An empty string type-checks and renders a blank label.
     const blank = Object.keys(en).filter((key) => !es[key as keyof typeof en].trim())

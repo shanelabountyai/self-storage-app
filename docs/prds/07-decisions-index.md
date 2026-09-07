@@ -10,7 +10,7 @@
 
 One caveat, because it is visible below rather than hidden: the topic column changed style over time. Early rows name a conflict to resolve ("Kiosk mode (master P2 vs PRD 03 P3)"); later ones state the decision outright ("Attaching a lease to a business account does not move the autopay mandate"). Where the source does that, so does this index — it is quoting, not summarising. Either way the binding text is the row in [`07-decisions.md`](07-decisions.md), not the line here.
 
-**127 decisions.**
+**133 decisions.**
 
 | # | Topic |
 |---|---|
@@ -141,3 +141,9 @@ One caveat, because it is visible below rather than hidden: the topic column cha
 | D-120 | **What an authorized user on a business account may do, and what they may see** (settled while building **B-258**, 2026-09-04; the row named three things it had to settle rather than assume, and this is all three) |
 | D-121 | **Native app vs. PWA for Phase 3 Bluetooth unlock** (PRD 03 **OQ-2**, open since the PRD was written and named by **US-8 AC4**; answered by the spike **B-086 part 2** asked for, 2026-09-04) |
 | D-122 | **How a renter gets Spanish, and where the Spanish stops** (settled while building **B-090 part 6**, 2026-09-05; PRD 01 §9 Phase 2 committed to "Spanish-language support (highest-impact i18n)" and specified nothing about it) |
+| D-123 | **Whether the SEO surfaces get Spanish, now that the interface has it** (raised by **B-262**, 2026-09-06; **D-122** settled that the crawler stays on English and left open what that means for the prose the crawler reads) |
+| D-124 | **Where `/messaging-policy` sits, now that the other static pages are Spanish** (settled while building **B-262**, 2026-09-06; the backlog row listed it among "ordinary prose, translate and go" and it is not) |
+| D-125 | **What a Spanish consent record has to look like** (settled with the owner at the start of **B-259**, 2026-09-06; **D-122** left the three checkout disclosures English and **D-124** parked `/messaging-policy` behind this answer) |
+| D-126 | **How a template carries a second language: a second ROW, or a second body column on the one row** (settled while building **B-261**, 2026-09-06) |
+| D-127 | **Whether the courtesy emails that ACCOMPANY a mailed lien notice may be translated, when D-122 keeps the notice itself English** (settled while building **B-261**, 2026-09-06) |
+| D-128 | **Whether an unauthenticated checkout may change the language an EXISTING account is written to in** (settled while building **B-261**, 2026-09-06) |

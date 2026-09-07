@@ -1,4 +1,5 @@
 import { prisma } from "@storage/db";
+import { isLocale, type Locale } from "@/lib/i18n";
 import type { PermissionKey } from "@storage/db/rbac-catalog";
 import { OCCUPYING_LEASE_STATUSES } from "@storage/core/inventory";
 import { recordAudit } from "@storage/core/audit";
@@ -310,6 +311,11 @@ export type TenantProfile = {
   /// On the profile because it changes what a staffer should do next: writing
   /// again will not reach them, so somebody has to phone.
   emailUndeliverableAt: Date | null;
+  /// B-261. The language every email and text to this tenant is written in.
+  /// Null means they have never told us, which sends in English — a distinct
+  /// fact from having chosen English, and the one that lets a later checkout
+  /// fill it in.
+  preferredLocale: Locale | null;
   /// Late fees still outstanding on this tenant's leases (B-047), so a manager
   /// can waive one from the profile rather than from a database client.
   waivableFees: WaivableFee[];
@@ -396,6 +402,7 @@ export async function tenantProfile(
           altContactEmail: true,
           activeDutyMilitary: true,
           emailUndeliverableAt: true,
+          preferredLocale: true,
         },
       }),
       prisma.lease.findMany({
@@ -769,6 +776,10 @@ export async function tenantProfile(
       };
     }),
     emailUndeliverableAt: tenant.emailUndeliverableAt,
+    // B-261. Narrowed on the way out rather than passed through raw, so the
+    // screen shows a real option or "no stated preference" — never a value the
+    // select has no entry for.
+    preferredLocale: isLocale(tenant.preferredLocale) ? tenant.preferredLocale : null,
     editableFacilityIds,
   };
 }
