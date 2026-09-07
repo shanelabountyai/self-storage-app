@@ -8952,7 +8952,7 @@ B-266 translated the sentence around a promo code's outcome and stopped at the t
 
 **A correction to B-268's handoff while it is fresh.** "The tell is the absence of any `[e2e setup]` line" is over-broad: those lines print only when something stale was actually released, so a run against a freshly reseeded database prints none and is not evidence that `DATABASE_URL` was unset. The reliable check is that the command went through `test:e2e` (whose `dotenv -e .env.test -e .env.local` is echoed by npm at the top of the log), not the presence of the release lines.
 
-## B-265 — the emails composed in code, in the reader's language (2026-09-07)
+## B-265 — the emails composed in code, in the reader's language (2026-09-07, `0e8f611`)
 
 B-261 translated the rule-driven send path: an event resolves a recipient, `effectiveTemplate` picks their language, `deliverForRule` sends it. The sends that carry a secret minted in the moment — a resume token, a reservation token, a sign-in link — bypass all of it and compose their own subject and body at the call site. This is those.
 
