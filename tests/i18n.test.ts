@@ -90,8 +90,14 @@ describe('i18n dictionaries', () => {
     // refused, so an identical value is an untranslated paste, not a
     // coincidence. This is the check that would have caught the defect that
     // made this row: the money path was translated and its refusals were not.
+    //
+    // B-267 adds the named list. `reserve.holdUpdated` carries exactly the
+    // weight of an `err.` sentence and is not one — it is the SUCCESS a renter
+    // has to read to understand that their reservation did not vanish, and
+    // `status: 'success'` is the only reason the prefix does not cover it.
+    const MUST_ALSO_DIFFER = ['reserve.holdUpdated'] as const
     const untranslated = Object.keys(en)
-      .filter((key) => key.startsWith('err.'))
+      .filter((key) => key.startsWith('err.') || MUST_ALSO_DIFFER.includes(key as never))
       .filter((key) => es[key as keyof typeof en] === en[key as keyof typeof en])
     expect(untranslated).toEqual([])
   })

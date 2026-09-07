@@ -217,6 +217,61 @@ test('the Spanish lead form asks, refuses and consents in Spanish (B-264)', asyn
   )
 })
 
+test('the Spanish reservation form asks and refuses in Spanish (B-267)', async ({
+  page,
+  context,
+}) => {
+  await context.addCookies([SPANISH])
+  // `demo-e2e` rather than `demo-austin-south`, because this is the facility
+  // the English reservation specs in `smoke.spec.ts` use — its inventory exists
+  // to be held and released, and nothing here holds any of it (see below).
+  await page.goto('/storage/tx/houston/demo-e2e')
+
+  const card = page.getByRole('listitem').filter({ hasText: '10x10 Test' }).first()
+  await card.getByRole('link', { name: 'Reservar gratis' }).click()
+
+  // The page. `reserve/page.tsx` imported nothing from `@/lib/i18n` before this
+  // row, so a Spanish visitor pressed a Spanish button and landed here in
+  // English — the whole surface, not a gap inside a translated one.
+  await expect(page.locator('html')).toHaveAttribute('lang', 'es')
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('Reserve esta unidad')
+  await expect(page.getByRole('main')).toContainText('No necesita tarjeta de crédito')
+  // The trust line is chosen by `holdWindowKey` from the facility's own grace
+  // setting, so this asserts the wiring as well as the words.
+  await expect(page.getByRole('main')).toContainText('Gratis hasta el día siguiente')
+
+  await page.getByLabel('Nombre', { exact: true }).fill('Ada')
+  await page.getByLabel('Apellido', { exact: true }).fill('Prospect')
+  // Syntactically a valid email to the browser and not one to the server, which
+  // is the only refusal on this form that reaches the action at all: all five
+  // fields are `required` and the date carries `min`/`max`, so every other
+  // invalid submission is stopped by the browser and the action never runs.
+  await page.getByLabel('Correo electrónico', { exact: true }).fill('ada@nowhere')
+  await page.getByLabel('Número de celular', { exact: true }).fill('512-555-0142')
+  await page.getByRole('button', { name: 'Reservar gratis' }).click()
+
+  // Refused before `createReservation` is called, so no unit is held and no row
+  // is written — this mutates no shared fixture and needs none of B-120's three
+  // disciplines. It is also why this spec asserts the refusal rather than the
+  // success: a hold would take real inventory from the size the English specs
+  // in `smoke.spec.ts` reserve and release.
+  //
+  // Scoped inside the box, and through `main`: this form is built on
+  // `AdminForm`, which renders every message TWICE on purpose — once in the
+  // summary list, once beside its field — so an unscoped `getByText` is a
+  // strict-mode violation rather than a meaningful failure. (`FormResult`, what
+  // the lead form above uses, is the opposite and needs two separate scopes.)
+  const alert = page.getByRole('main').getByRole('alert')
+  await expect(alert).toContainText('Hay un problema con un campo.')
+  await expect(alert).toContainText(
+    'Escriba un correo electrónico al que podamos enviarle su confirmación.',
+  )
+  await expect(page.getByLabel('Correo electrónico', { exact: true })).toHaveAttribute(
+    'aria-invalid',
+    'true',
+  )
+})
+
 // --- B-260: the portal ------------------------------------------------------
 //
 // B-090f translated the move-in path and then sent the renter to "Ir a mi

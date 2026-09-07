@@ -3,12 +3,12 @@ import { notFound, redirect } from 'next/navigation'
 import { AdminForm, Field } from '@/components/admin/form'
 import { formatRate } from '@/lib/format'
 import { publicFacilityBySlug, facilityPath, formatAddress } from '@/lib/facility/public-facility'
-import { holdWindowSentence } from '@/lib/reservations/reserve'
+import { holdWindowKey } from '@/lib/reservations/reserve'
 import { publicInventoryForFacility } from '@/lib/inventory/public-inventory'
 import { MAX_MOVE_IN_DAYS_AHEAD } from '@/lib/reservations/reserve'
+import { dictionaryFor, translate, type MessageKey } from '@/lib/i18n'
+import { getLocale } from '@/lib/i18n/server'
 import { reserveAction } from './actions'
-
-export const metadata = { title: 'Reserve a unit for free' }
 
 // PRD 01 §4.4 US-401. One screen, five fields, no password and no card (D-7).
 //
@@ -17,6 +17,18 @@ export const metadata = { title: 'Reserve a unit for free' }
 // focused summary and the persistent live region that PRD 01 §6.8.1 asks of
 // every customer-facing form too. Reusing them is how the checkout stepper
 // inherits the same behaviour instead of re-deriving half of it.
+//
+// B-267 (D-122). This whole surface took no dictionary until now: the facility
+// page around it has been `<html lang="es">` since B-090f, and a Spanish
+// visitor who pressed "Reservar gratis" landed on an English form. Both halves
+// are translated together — the labels here and the refusals in `actions.ts` —
+// because translating the questions and leaving the refusals is the defect
+// B-263 existed to fix, one funnel step later.
+
+export async function generateMetadata() {
+  const dict = dictionaryFor(await getLocale())
+  return { title: translate(dict, 'reserve.title') }
+}
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10)
@@ -38,6 +50,10 @@ export default async function ReservePage({
   const { slug } = await params
   const { unitType: unitTypeId } = await searchParams
 
+  const dict = dictionaryFor(await getLocale())
+  const t = (key: MessageKey, vars?: Record<string, string | number>) =>
+    translate(dict, key, vars)
+
   const facility = await publicFacilityBySlug(slug)
   if (!facility) notFound()
 
@@ -53,14 +69,16 @@ export default async function ReservePage({
   if (!unitType) redirect(`${facilityPath(facility)}?unavailable=1`)
 
   return (
-    <div lang="en" className="mx-auto w-full max-w-xl px-4 py-12">
+    <div className="mx-auto w-full max-w-xl px-4 py-12">
       <p className="mb-4 text-sm">
         <Link href={facilityPath(facility)} className="underline underline-offset-4">
-          ← Back to {facility.name}
+          ← {t('reserve.back', { facility: facility.name })}
         </Link>
       </p>
 
-      <h1 className="text-3xl font-semibold tracking-tight text-balance">Reserve this unit</h1>
+      <h1 className="text-3xl font-semibold tracking-tight text-balance">
+        {t('reserve.heading')}
+      </h1>
 
       {/* §6.6: the trust line belongs beside the decision, not in the lease —
           and it has to say what actually happens.
@@ -72,10 +90,16 @@ export default async function ReservePage({
           per-facility setting — so this line is GENERATED from the value
           `holdExpiryFor` will actually use rather than describing it from
           memory. An operator who sets 0 gets a sentence that says 0, without
-          anyone remembering to come back here. */}
+          anyone remembering to come back here.
+
+          B-267 moved the WORDS into the dictionary and left the CHOICE between
+          them beside `holdExpiryFor`, where B-118's argument for keeping the
+          rule and its description together still holds. */}
       <p className="text-muted-foreground mt-2 text-pretty">
-        {holdWindowSentence(facility.reservationHoldGraceDays)} · No credit card needed · Cancel any
-        time
+        {t(holdWindowKey(facility.reservationHoldGraceDays), {
+          days: facility.reservationHoldGraceDays,
+        })}{' '}
+        · {t('reserve.noCard')} · {t('reserve.cancelAnyTime')}
       </p>
 
       <div className="border-input mt-6 rounded-lg border p-4">
@@ -84,13 +108,13 @@ export default async function ReservePage({
             {unitType.widthFt}×{unitType.lengthFt}
           </span>
           <span className="sr-only">
-            {unitType.widthFt} foot by {unitType.lengthFt} foot
+            {t('facility.footBy', { width: unitType.widthFt, length: unitType.lengthFt })}
           </span>{' '}
           — {unitType.name}
         </h2>
         <p className="mt-1 text-sm">
           {formatRate(unitType.webRateCents)}
-          <span className="text-muted-foreground">/mo online</span>
+          <span className="text-muted-foreground">{t('facility.perMonthOnline')}</span>
         </p>
         <address className="text-muted-foreground mt-2 text-sm not-italic">
           {formatAddress(facility)}
@@ -99,29 +123,39 @@ export default async function ReservePage({
 
       <AdminForm
         action={reserveAction}
-        label="Reserve a unit"
+        label={t('reserve.formLabel')}
         className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2"
       >
         <input type="hidden" name="slug" value={slug} />
         <input type="hidden" name="unitTypeId" value={unitType.unitTypeId} />
 
         {/* 1.3.5 Identify Input Purpose: every field carries its autocomplete
-            token, and the keyboard matches the data (§6.2). */}
-        <Field name="firstName" label="First name" autoComplete="given-name" required />
-        <Field name="lastName" label="Last name" autoComplete="family-name" required />
+            token, and the keyboard matches the data (§6.2).
+
+            The four names come from the checkout's `details.*` entries rather
+            than getting a second set of their own: they are the same fields
+            asking for the same things, and one label per field is what stops
+            the two forms answering differently after somebody edits one. */}
+        <Field
+          name="firstName"
+          label={t('details.firstName')}
+          autoComplete="given-name"
+          required
+        />
+        <Field name="lastName" label={t('details.lastName')} autoComplete="family-name" required />
         <Field
           name="email"
-          label="Email"
+          label={t('details.email')}
           type="email"
           autoComplete="email"
           inputMode="email"
           required
           className="flex flex-col gap-1 text-sm sm:col-span-2"
-          hint="Where we send your confirmation and your cancel link."
+          hint={t('reserve.emailHint')}
         />
         <Field
           name="phone"
-          label="Mobile number"
+          label={t('details.phone')}
           type="tel"
           autoComplete="tel"
           inputMode="tel"
@@ -130,14 +164,14 @@ export default async function ReservePage({
         />
         <Field
           name="moveInDate"
-          label="Move-in date"
+          label={t('reserve.moveInDate')}
           type="date"
           defaultValue={todayIso()}
           min={todayIso()}
           max={maxDateIso()}
           required
           className="flex flex-col gap-1 text-sm sm:col-span-2"
-          hint={`We can hold a unit up to ${MAX_MOVE_IN_DAYS_AHEAD} days ahead.`}
+          hint={t('reserve.moveInHint', { days: MAX_MOVE_IN_DAYS_AHEAD })}
         />
 
         <div className="sm:col-span-2">
@@ -145,11 +179,10 @@ export default async function ReservePage({
             type="submit"
             className="bg-primary text-primary-foreground inline-flex min-h-11 w-full items-center justify-center rounded-md px-4 text-base font-medium sm:w-auto"
           >
-            Reserve for free
+            {t('facility.reserveForFree')}
           </button>
           <p className="text-muted-foreground mt-2 text-sm text-pretty">
-            Reserving costs nothing and does not commit you to renting. We hold the unit and this
-            price until the hold expires.
+            {t('reserve.noCommitment')}
           </p>
         </div>
       </AdminForm>

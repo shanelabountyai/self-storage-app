@@ -236,6 +236,24 @@ export const es: Dictionary = {
   'facility.otherLocations': 'vea otras sucursales',
   'facility.sizeGuideOr': ', o',
 
+  // --- The reservation form on the facility page (US-401, B-267) ---------
+  'reserve.title': 'Reserve una unidad gratis',
+  'reserve.back': 'Volver a {facility}',
+  'reserve.heading': 'Reserve esta unidad',
+  'reserve.holdThroughMoveIn': 'Gratis hasta el final del día de su mudanza',
+  'reserve.holdDayAfter': 'Gratis hasta el día siguiente al de su mudanza',
+  'reserve.holdDays': 'Gratis por {days} días después del día de su mudanza',
+  'reserve.noCard': 'No necesita tarjeta de crédito',
+  'reserve.cancelAnyTime': 'Cancele cuando quiera',
+  'reserve.formLabel': 'Reservar una unidad',
+  'reserve.emailHint': 'Ahí le enviamos su confirmación y su enlace para cancelar.',
+  'reserve.moveInDate': 'Fecha de mudanza',
+  'reserve.moveInHint': 'Podemos apartar una unidad hasta con {days} días de anticipación.',
+  'reserve.noCommitment':
+    'Reservar no cuesta nada y no lo compromete a rentar. Apartamos la unidad y este precio hasta que venza la reserva.',
+  'reserve.holdUpdated':
+    'Usted ya tenía una reserva de este tamaño, así que la actualizamos en lugar de apartar una segunda unidad. Su correo de confirmación original todavía tiene el enlace.',
+
   // --- The lead form on the facility page (US-8, B-264) ------------------
   'lead.legend': '¿Qué desea?',
   'lead.quote': 'Una cotización',
@@ -488,6 +506,17 @@ export const es: Dictionary = {
     'Una mudanza no puede empezar antes de hoy. La fecha más temprana que puede elegir es {date}.',
   'err.startDateLate':
     'Podemos programar una mudanza hasta con {days} días de anticipación. La fecha más lejana que puede elegir es {date}.',
+
+  // B-267. Los rechazos del formulario de reserva.
+  'err.reserveEmail': 'Escriba un correo electrónico al que podamos enviarle su confirmación.',
+  'err.reservePhone':
+    'Escriba un número de celular para poder enviarle los detalles por mensaje de texto.',
+  'err.reserveMoveIn': 'Elija la fecha en que quiere mudarse.',
+  'err.reserveMoveInTooFar':
+    'Podemos apartar una unidad hasta con {days} días de anticipación. Elija una fecha dentro de ese plazo.',
+  'err.reserveUnlisted': 'Esa unidad ya no está publicada.',
+  'err.reserveSoldOut':
+    'Alguien tomó la última de ese tamaño mientras usted llenaba este formulario. No se le ha cobrado nada: elija otro tamaño, o llámenos y lo resolvemos.',
 
   // B-264. Los rechazos del formulario de contacto.
   'err.leadName': 'Díganos cómo dirigirnos a usted.',

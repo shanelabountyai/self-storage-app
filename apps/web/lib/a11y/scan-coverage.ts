@@ -58,7 +58,17 @@ export const PUBLIC_SCAN_ROUTES = [
   '/guides',
   '/guides/climate-control',
   '/guides/packing-tips',
-  '/storage/tx/austin/demo-austin-south/reserve?unitType=INVALID',
+  // B-267. This URL REDIRECTS — `unitType=INVALID` matches no unit type, so
+  // `reserve/page.tsx` sends the visitor back to the facility page with
+  // `?unavailable=1`, and the four loops below have always scanned that notice
+  // rather than the reservation form. Named by its real destination now: the
+  // coverage test strips the query string, so as
+  // `.../reserve?unitType=INVALID` it satisfied the
+  // `/storage/[state]/[city]/[slug]/reserve` pattern and the form itself went
+  // unscanned by anything while the public statement counted it as covered.
+  // The form is in `SCANNED_BY_OWN_SPEC` below — it needs a real unit-type
+  // cuid, which no fixed URL can hold across a reseed.
+  '/storage/tx/austin/demo-austin-south?unavailable=1',
   // The token-less and bad-token states of the reservation page are the ones a
   // crawler or a mistyped link reaches; the live states need a real hold.
   // B-090 part 1. The waitlist cancel link's not-found state — what a
@@ -277,6 +287,12 @@ export const SCANNED_BY_OWN_SPEC = [
     route: '/portal/statements/account/[accountId]/[period]',
     spec: 'e2e/portal-billing-account.spec.ts',
   },
+  // B-267. Needs a real unit-type cuid, which a fixed URL cannot hold across a
+  // reseed — the reason the entry that used to stand for it in
+  // `PUBLIC_SCAN_ROUTES` carried `unitType=INVALID` and therefore only ever
+  // scanned the page it redirects to. Reached the way a renter reaches it: a
+  // click on "Reserve for free" from a unit card.
+  { route: '/storage/[state]/[city]/[slug]/reserve', spec: 'e2e/smoke.spec.ts' },
 ] as const
 
 /// Who the page is for. The public statement lists the first two and not
@@ -1038,6 +1054,14 @@ export type EnglishPage = {
 /// Every public page that does NOT render from the dictionary. Each one carries
 /// `lang="en"` in its own markup — the unit test checks that, so removing the
 /// attribute fails the build rather than the page.
+///
+/// **A row leaves this list when its page is translated, not when somebody
+/// remembers.** `/storage/[state]/[city]/[slug]/reserve` was here for the
+/// length of one merge: B-269 marked it `lang="en"` against a `main` where the
+/// form was still English, B-267 translated it, and the walker's
+/// "lists no page that has since been translated" check failed on the merge —
+/// which is the direction it was written for. A page-level `lang="en"` on a
+/// translated page is the mirror defect, so the mark and the row go together.
 export const ENGLISH_UNDER_A_TRANSLATED_SHELL: readonly EnglishPage[] = [
   {
     route: '/terms',
@@ -1058,11 +1082,6 @@ export const ENGLISH_UNDER_A_TRANSLATED_SHELL: readonly EnglishPage[] = [
     route: '/reservations',
     why: 'untranslated',
     note: 'the reservation confirmation and its dead-link state, both English',
-  },
-  {
-    route: '/storage/[state]/[city]/[slug]/reserve',
-    why: 'untranslated',
-    note: 'the reservation form B-267 owns — every string on it is English today, refusals included',
   },
   {
     route: '/checkout/resume/[token]',

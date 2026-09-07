@@ -6,7 +6,7 @@
 
 **Then read the row itself before building the item** — `npm run docs:row -- B-262` prints that one row whole and verbatim, about 2 KB against the file's 490. The columns dropped here are the ones that say what to build.
 
-**274 items — 261 complete, 13 open.**
+**275 items — 262 complete, 13 open.**
 
 ## Open, in build order
 
@@ -22,8 +22,8 @@
 | 90 | B-090 | Split into six parts, 2026-08-20 | XL | B-074, B-081 |
 | 90q | B-265 | The emails composed in code, not from a template, are still English | M | B-261 |
 | 90r | B-266 | The promo code is refused in English on a Spanish checkout | S | B-263 |
-| 90s | B-267 | The reservation form is English end to end on a Spanish facility page | M | B-090f |
-| 93 | B-268 | `reportRange`'s rolling window builds its exclusive end in the wrong coordinate system | S | B-092 |
+| 90t | B-268 | The page a Spanish reservation ends on is English | S | B-267 |
+| 93 | B-271 | Renumbered B-264 → B-266 → B-268 → B-271, and the third time is the same collision as the first two: | S | B-092 |
 | 95 | B-270 | The admin screens are English inside `<html lang="es">`, and the template editor is Spanish inside… | S | B-269 |
 
 > An item stays open until every part of it is done — several above are partly built, and their parts are recorded in [`../PROGRESS.md`](../PROGRESS.md).
@@ -300,9 +300,10 @@
 | 90p | B-264 | ✅ | The lead form on a Spanish facility page is entirely English | S | Phase 2 |
 | 90q | B-265 |  | The emails composed in code, not from a template, are still English | M | Phase 2 |
 | 90r | B-266 |  | The promo code is refused in English on a Spanish checkout | S | Phase 2 |
-| 90s | B-267 |  | The reservation form is English end to end on a Spanish facility page | M | Phase 2 |
+| 90s | B-267 | ✅ | The reservation form is English end to end on a Spanish facility page | M | Phase 2 |
+| 90t | B-268 |  | The page a Spanish reservation ends on is English | S | Phase 2 |
 | 91 | B-091 | ✅ | Split into two parts, 2026-08-19 | L | Phase 2 |
 | 92 | B-092 | ✅ | Impersonation oversight | M | Phase 2 |
-| 93 | B-268 |  | `reportRange`'s rolling window builds its exclusive end in the wrong coordinate system | S | Phase 2 |
+| 93 | B-271 |  | Renumbered B-264 → B-266 → B-268 → B-271, and the third time is the same collision as the first two: | S | Phase 2 |
 | 94 | B-269 | ✅ | English contract prose renders under `<html lang="es">`, and no scan can see it | S | Phase 2 |
 | 95 | B-270 |  | The admin screens are English inside `<html lang="es">`, and the template editor is Spanish inside… | S | Phase 2 |

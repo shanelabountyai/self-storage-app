@@ -767,6 +767,17 @@ test('reserving a unit holds it, for free, with no account', async ({ page }) =>
   await expect(page.getByRole('heading', { level: 1 })).toContainText('Reserve this unit')
   await expect(page.getByRole('main')).toContainText('No credit card needed')
 
+  // B-267. The route's only scan. The entry that stood for it in
+  // `PUBLIC_SCAN_ROUTES` carried `unitType=INVALID`, which redirects — so the
+  // four loops in `a11y.spec.ts` scanned the facility page twice and this form
+  // never at all, while the public statement counted it as covered. It cannot
+  // go back in that list: the URL needs a real unit-type cuid, so it is in
+  // `SCANNED_BY_OWN_SPEC` and reached the way a renter reaches it, by the click
+  // above. Scanned before anything is filled in, which is the state a visitor
+  // arrives in; the refused state is `admin`-free markup shared with every
+  // other `AdminForm` and is scanned on the checkout.
+  await assertNoAxeViolations(page)
+
   const email = `e2e-${Date.now()}@demo.example.com`
   await page.getByLabel('First name').fill('Ada')
   await page.getByLabel('Last name').fill('Prospect')

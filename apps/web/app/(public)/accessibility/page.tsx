@@ -1945,16 +1945,66 @@ function reviewedOn(locale: Locale): string {
 // countdown, the staff screens, and the embedded maps. `LAST_REVIEWED` is not
 // bumped, per D-115 — no manual screen-reader pass was performed, and this
 // item performed none.
-
+// Re-verified 2026-09-07, at B-267 (the reservation form on a Spanish facility
+// page — D-122). Customer-facing, the last untranslated form on the public
+// site, and the same 3.1.2 Language of Parts failure B-263 fixed on the
+// checkout and B-264 on the lead form beside it.
+//
+// **What was wrong, and it was the whole surface.** `reserve/page.tsx`
+// imported nothing from `@/lib/i18n` and `reserveAction` built five field
+// refusals plus two non-field messages as English literals. A Spanish visitor
+// pressed "Reservar gratis" on a Spanish facility page and landed on an
+// English form; refused, they were told why in English under `<html lang="es">`.
+// The two non-field messages are the ones that mattered — a size selling out
+// mid-form, and "you already had a hold, so we updated it", which is the
+// sentence a renter has to read to not believe their reservation vanished.
+//
+// **A CLAIM ON THIS PAGE WAS FALSE, in the overstating direction, and the
+// re-read is what found it.** `/storage/[state]/[city]/[slug]/reserve` was
+// listed in `PUBLIC_SCAN_ROUTES` as
+// `.../reserve?unitType=INVALID` — a URL that REDIRECTS, because no unit type
+// has that id. So all four public loops (axe, 320px reflow, 200% zoom, forced
+// text spacing) have been scanning the facility page's "that size just went"
+// notice, twice, and the reservation form has never been scanned by anything.
+// The coverage test could not see it: it strips the query string, so the entry
+// satisfied the route pattern. Fixed rather than disclaimed — the entry is
+// renamed to the page it actually visits, and the form is in
+// `SCANNED_BY_OWN_SPEC`, reached by a real click in `smoke.spec.ts` with a
+// `REACH` entry in `a11y-own-spec-routes.spec.ts` for the three layout checks.
+// It cannot go back in the URL list: the route needs a real unit-type cuid,
+// which no fixed string holds across a reseed. This is the `/admin/pos/card`
+// arrangement from B-230, for the same reason.
+//
+// **No bullet below changes.** "Form fields have real labels" and the errors
+// bullet are both about mechanism, and translating a label or a refusal
+// neither strengthens nor weakens either — the same reading B-263 and B-264
+// recorded. The reservation form's `<label for>` / `<input>` shape, its
+// `aria-invalid`, its described-by error and its focused summary are
+// `AdminForm`'s and are untouched.
+//
+// **No new state claim.** The Spanish form is asserted by words rather than by
+// axe, so the new spec carries no `a11y-state:` comment: the scan loops carry
+// no locale cookie, which the `/` | Spanish row in `STATE_EXCEPTIONS` has said
+// since B-262, and the refused Spanish form is the refused English form's
+// markup with different sentences in it.
+//
+// The "Where we fall short" list was re-read against this build and all three
+// entries are still true and unchanged in scope — the no-JavaScript countdown
+// is the CHECKOUT's 30-minute hold and not this form, the staff screens, and
+// the embedded maps. `LAST_REVIEWED` is not bumped, per D-115 — no manual
+// screen-reader pass was performed, and this item performed none. The scan-
+// coverage correction above is a fix to a generated list, not a re-verification
+// of the dated claims.
 // Re-verified 2026-09-07, at B-269 (English prose under `<html lang="es">` —
 // SC 3.1.2 Language of Parts, AA). Customer-facing, and a defect this page's
-// own scan contract was structurally unable to see.
+// own scan contract was structurally unable to see. **Merged after B-267
+// above, and the merge changed one of its numbers** — see the last paragraph.
 //
 // **What was wrong.** D-122 puts the locale in a cookie and the root layout
 // sets `<html lang>` from it, so a Spanish visitor was served `<html lang="es">`
 // around the English terms and privacy pages D-123 and D-124 deliberately keep
 // English — a screen reader pronouncing contract text with Spanish phonemes.
-// Ten more public pages were English inside the same shell because nobody has
+// Nine more public pages were English inside the same shell because nobody has
 // translated them yet, which is the same failure arrived at from the other
 // side. Every public page now declares the language of its own content, and
 // `ProsePage` takes `lang` as a REQUIRED prop so the next prose page states it
@@ -1985,6 +2035,15 @@ function reviewedOn(locale: Locale): string {
 // editor — renders Spanish template bodies inside it, which is the mirror
 // defect. Staff-facing, already disclaimed by the "our staff-facing screens
 // have known problems" bullet, and owned by **B-270** rather than fixed here.
+//
+// **The merge with B-267, because it is the guard doing its job rather than a
+// conflict.** B-269 was built against a `main` where the reservation form was
+// still English, and marked it `lang="en"` like the other ten. B-267 then
+// translated that form, which makes the mark a lie in the mirror direction —
+// and `tests/a11y-scan-coverage.test.ts` says so out loud ("lists no page that
+// has since been translated"), which is the direction the walker was written
+// for and the first time it has been paid. The attribute and the row are gone;
+// the page renders from the dictionary and needs neither.
 
 export default async function AccessibilityPage() {
   const locale = await getLocale()
