@@ -7,6 +7,8 @@ import {
   plural,
   translate,
 } from '../apps/web/lib/i18n'
+import type { CodeRejection } from '@storage/core/promotions'
+import { codeOutcomeMessage } from '../apps/web/lib/promotions/message'
 import { en } from '../apps/web/lib/i18n/en'
 import { es } from '../apps/web/lib/i18n/es'
 
@@ -95,7 +97,16 @@ describe('i18n dictionaries', () => {
     // weight of an `err.` sentence and is not one — it is the SUCCESS a renter
     // has to read to understand that their reservation did not vanish, and
     // `status: 'success'` is the only reason the prefix does not cover it.
-    const MUST_ALSO_DIFFER = ['reserve.holdUpdated'] as const
+    //
+    // B-266 adds the two promo-code outcomes that are not refusals. A renter
+    // told in English that their code WORKED, or that a better offer was kept
+    // instead of it, is the same defect as one refused in English — and neither
+    // can wear the `err.` prefix, because the checkout styles that branch red.
+    const MUST_ALSO_DIFFER = [
+      'reserve.holdUpdated',
+      'promo.codeApplied',
+      'promo.codeSuperseded',
+    ] as const
     const untranslated = Object.keys(en)
       .filter((key) => key.startsWith('err.') || MUST_ALSO_DIFFER.includes(key as never))
       .filter((key) => es[key as keyof typeof en] === en[key as keyof typeof en])
@@ -174,5 +185,62 @@ describe('isLocale', () => {
 
   it('defaults to a locale it accepts', () => {
     expect(isLocale(DEFAULT_LOCALE)).toBe(true)
+  })
+})
+
+// B-266. The promo-code outcome, said in the renter's own language.
+//
+// `describeCodeOutcome` built these sentences inside `@storage/core/promotions`
+// and could only ever build them in English. What the dictionary guards above
+// cannot see is the MAPPING — a rejection wired to the wrong key refuses in the
+// right language with the wrong reason, and every dictionary assertion still
+// passes.
+describe('codeOutcomeMessage — B-266', () => {
+  const REJECTIONS: CodeRejection[] = [
+    'unknown_code',
+    'not_for_this_facility',
+    'not_for_this_size',
+    'existing_tenant_only',
+    'window_closed',
+    'fully_redeemed',
+    'not_active',
+  ]
+
+  it('gives every refusal its own sentence, in both languages', () => {
+    // Seven distinct reasons is the whole point of the row B-070 wrote them
+    // for: "that code is not valid" is a support call, and 3.3.3 wants a
+    // refusal the renter can act on. A map that collapsed two of them would
+    // translate perfectly and say the wrong thing.
+    for (const locale of LOCALES) {
+      const dict = dictionaryFor(locale)
+      const said = REJECTIONS.map((rejection) => {
+        const message = codeOutcomeMessage({ kind: 'rejected', rejection })
+        return translate(dict, message.key, message.vars)
+      })
+      expect(new Set(said).size, locale).toBe(REJECTIONS.length)
+    }
+  })
+
+  it('says the terms in the two outcomes that are not refusals', () => {
+    // The trap B-122 set here. A code that APPLIED and one SUPERSEDED by a
+    // better offer both produce a sentence, and both name the terms the renter
+    // is actually getting — a `superseded` message that quoted the code's own
+    // terms would tell them they had a discount they do not have.
+    const applied = codeOutcomeMessage({ kind: 'applied', terms: 'Half off' })
+    const superseded = codeOutcomeMessage({ kind: 'superseded', keptTerms: 'First month free' })
+
+    for (const locale of LOCALES) {
+      const dict = dictionaryFor(locale)
+      expect(translate(dict, applied.key, applied.vars), locale).toContain('Half off')
+      expect(translate(dict, superseded.key, superseded.vars), locale).toContain(
+        'First month free',
+      )
+    }
+
+    // Neither is an `err.` key: the checkout styles that branch red and wires
+    // `aria-invalid`, so a success wearing the prefix would tell somebody who
+    // succeeded that they failed.
+    expect(applied.key.startsWith('err.')).toBe(false)
+    expect(superseded.key.startsWith('err.')).toBe(false)
   })
 })

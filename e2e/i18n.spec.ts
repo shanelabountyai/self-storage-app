@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test'
 import { assertNoAxeViolations } from './a11y-helpers'
 import { signInAsDemoTenant } from './sign-in'
+import { DEMO_PROMO_CODE } from '../apps/web/scripts/demo-credentials'
 
 // B-090 part 6 (D-122). Spanish on the move-in path.
 //
@@ -270,6 +271,53 @@ test('the Spanish reservation form asks and refuses in Spanish (B-267)', async (
     'aria-invalid',
     'true',
   )
+})
+
+
+test('the Spanish promo box refuses AND confirms in Spanish (B-266)', async ({
+  page,
+  context,
+}) => {
+  await context.addCookies([SPANISH])
+
+  // Two outcomes in one spec on purpose. `describeCodeOutcome` built nine
+  // English sentences and seven of them were refusals, so a spec that only
+  // asserted a refusal would have passed over the half of this row that is
+  // easiest to get wrong: a renter told in English that their code WORKED is
+  // the same defect, and the checkout renders that branch green rather than red.
+  //
+  // Neither half mutates anything. The facility-page box is a GET form and the
+  // checkout's `applyPromoAction` writes the promo snapshot onto this test's own
+  // freshly-started session, so this needs none of B-120's three disciplines.
+
+  // The refusal. The seeded promotion is scoped to the sandbox facility, so the
+  // same code at Austin is a real `not_for_this_facility` — a distinct rule with
+  // its own sentence, which is what the seven keys exist for.
+  await page.goto('/storage/tx/austin/demo-austin-south')
+  await page.getByLabel('¿Tiene un código de promoción?').fill(DEMO_PROMO_CODE)
+  await page.getByRole('button', { name: 'Aplicar código' }).click()
+
+  // The label and the button are the checkout's own `promo.*` keys — locating by
+  // them is what proves the box's chrome was translated too, not only the
+  // sentence it renders.
+  await expect(page.getByRole('status').filter({ hasText: 'Ese código es para otra sucursal.' })).toBeVisible()
+  await expect(page.getByLabel('¿Tiene un código de promoción?')).toHaveValue(DEMO_PROMO_CODE)
+
+  // The confirmation, at the facility the code IS for, and through the checkout
+  // rather than the facility page: that is the surface where the message doubles
+  // as a `FormState` and where `problem` used to be read.
+  await page.goto('/storage/tx/houston/demo-e2e')
+  await page.getByRole('button', { name: 'Rentar ahora' }).first().click()
+  await expect(page).toHaveURL(/\/checkout\?token=/)
+
+  await page.getByText('¿Tiene un código de promoción?').click()
+  await page.getByRole('textbox', { name: 'Código de promoción' }).fill(DEMO_PROMO_CODE)
+  await page.getByRole('button', { name: 'Aplicar código' }).click()
+
+  // `promo.codeApplied` names the terms, and `{terms}` is the promotion's own
+  // wording — still English, and B-269's row rather than this one. Asserted on
+  // the translated half only, so this spec does not go red when that ships.
+  await expect(page.getByRole('status').filter({ hasText: 'Código aplicado:' })).toBeVisible()
 })
 
 // --- B-260: the portal ------------------------------------------------------
