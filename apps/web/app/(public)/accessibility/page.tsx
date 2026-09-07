@@ -2021,6 +2021,8 @@ function reviewedOn(locale: Locale): string {
 // **B-269**, filed rather than half-fixed inside this message, because the
 // badges are the larger share of it and fixing one and not the others would
 // leave the page inconsistent about which English is deliberate.
+// *(B-269 closed the generated half of that on 2026-09-07; see the block
+// below for what remains and why.)*
 //
 // **No bullet below changes, and no new claim.** "Form fields have real
 // labels" and the errors bullet are about mechanism; translating a label or a
@@ -2031,6 +2033,56 @@ function reviewedOn(locale: Locale): string {
 // loops carry no locale cookie, which the `/` | Spanish row in
 // `STATE_EXCEPTIONS` has said since B-262, and the new e2e assertions are on
 // words rather than axe.
+//
+// The "Where we fall short" list was re-read against this build and all three
+// entries are still true and unchanged in scope. `LAST_REVIEWED` is not
+// bumped, per D-115 — no manual screen-reader pass was performed, and this
+// item performed none.
+
+// Re-verified 2026-09-07, at B-269 (a promotion's own terms, on every
+// translated surface that quotes them — D-122, D-129). This is the gap the
+// B-266 block above filed, and it closes in one half and is bounded in the
+// other.
+//
+// **What was wrong.** `describeTerms` and `withMinStay` built English prose
+// inside `@storage/core/promotions` — "50% off the first month",
+// "First month free — 6-month minimum stay" — and five surfaces rendered it
+// verbatim: every unit-card badge on a translated facility page (the biggest
+// by far, and one badge per size on a page that may show six), the facility
+// page's "what you'd pay" discount line, the checkout price summary, the
+// applied-code confirmation and the checkout's "currently applied" line. Each
+// was an English phrase inside `<html lang="es">` with nothing to say so, read
+// aloud with Spanish phonemes. The generated half is now keys and their
+// numbers, resolved per surface, so those phrases are Spanish on a Spanish
+// page rather than marked English on one.
+//
+// **What is bounded rather than fixed, and it is a genuine residual.**
+// `Promotion.termsText` is an operator's free text in a database column. There
+// is no key to return for it, and D-129 settles that it is rendered as typed
+// rather than growing a column per language. So on a Spanish page an operator
+// override is still English — correctly so, since nothing translated it — and
+// the honest thing available is to SAY it is English. The unit-card badge does:
+// `OfferTermsText` emits `<span lang="en">` around the operator's words and
+// leaves an appended minimum stay outside it, because that clause IS
+// translated and marking the whole span would mislabel it. Three surfaces do
+// NOT: the applied-code confirmation and the "currently applied" line, because
+// `FormState.message` and `fieldErrors` are string-typed end to end, and the
+// move-in cost `<dt>`, because `costLineLabel` returns text. Turning those
+// into nodes is a change to the form machinery every admin screen shares, and
+// it is not this row's. **This is stated rather than left implied**: a promo
+// with an operator override, read in Spanish, still meets unmarked English in
+// three places.
+//
+// **No bullet below changes, and no new claim.** The "Where we fall short"
+// list names JavaScript, the staff screens and the maps; none of the three is
+// touched, and an untranslated fragment of an operator's own wording is not
+// one of them — it is bounded above and carried by D-129 rather than by a
+// public promise. No route is added: the facility page and the checkout are
+// both already in the scanned set, and this changes strings inside controls
+// whose markup is otherwise untouched. The one markup change is a `<span>`
+// with a `lang` attribute, which is the fix rather than a thing to declare. No
+// new `a11y-state:` — the scan loops carry no locale cookie, which the `/` |
+// Spanish row in `STATE_EXCEPTIONS` has said since B-262.
 //
 // The "Where we fall short" list was re-read against this build and all three
 // entries are still true and unchanged in scope. `LAST_REVIEWED` is not

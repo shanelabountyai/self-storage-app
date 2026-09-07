@@ -1,6 +1,7 @@
 import type { CodeOutcome, CodeRejection } from '@storage/core/promotions'
 import type { FieldMessage } from '@/lib/admin/form-state'
-import type { MessageKey } from '@/lib/i18n'
+import type { Dictionary, MessageKey } from '@/lib/i18n'
+import { offerTermsText } from './terms'
 
 // B-266. The renter-facing sentence for whatever became of a typed promo code.
 //
@@ -39,12 +40,24 @@ const REJECTION_KEY: Record<CodeRejection, MessageKey> = {
 /// and a renter told in English that their code worked is the same defect as one
 /// told in English that it did not. Every branch is translated; only `rejected`
 /// is styled as an error, and its callers decide that from `outcome.kind`.
-export function codeOutcomeMessage(outcome: CodeOutcome): FieldMessage {
+/// B-269 added the dictionary. `outcome.terms` stopped being a sentence and
+/// became the facts one is written from, so the terms quoted INSIDE this
+/// sentence are now resolved in the same language as the sentence around them
+/// — «Código aplicado: 50% off the first month» is the defect that row names.
+///
+/// `offerTermsText` and not `OfferTermsText`: both branches end up in
+/// `FormState.message` and `fieldErrors`, which are string-typed end to end, so
+/// an operator's own wording goes in here unmarked. Named in `/accessibility`
+/// as D-129's residual.
+export function codeOutcomeMessage(outcome: CodeOutcome, dict: Dictionary): FieldMessage {
   switch (outcome.kind) {
     case 'applied':
-      return { key: 'promo.codeApplied', vars: { terms: outcome.terms } }
+      return { key: 'promo.codeApplied', vars: { terms: offerTermsText(dict, outcome.terms) } }
     case 'superseded':
-      return { key: 'promo.codeSuperseded', vars: { terms: outcome.keptTerms } }
+      return {
+        key: 'promo.codeSuperseded',
+        vars: { terms: offerTermsText(dict, outcome.keptTerms) },
+      }
     case 'rejected':
       return { key: REJECTION_KEY[outcome.rejection] }
   }

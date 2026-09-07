@@ -3,6 +3,8 @@ import { calculateMoveInCost } from '@storage/core/pricing'
 import { createChargeIntent } from '@/lib/payments/intents'
 import { paymentsEnabled } from '@/lib/payments/stripe'
 import { promoDiscountOn, type CheckoutSessionView } from '@/lib/checkout/session'
+import { offerTermsText } from '@/lib/promotions/terms'
+import { dictionaryFor } from '@/lib/i18n'
 
 // PRD 01 US-501 step 5 / FR-4.4. What is owed today, and the intent to collect it.
 
@@ -58,7 +60,12 @@ export async function amountDueToday(session: CheckoutSessionView): Promise<Amou
     streetRateCents: basketRateCents,
     adminFeeCents: feeRows[0]?.amountCents,
     promoDiscountCents: promo?.firstPeriodCents,
-    promoTerms: promo?.terms,
+    // English deliberately (B-269). These labels are not a display string:
+    // `provisionMoveIn` writes them onto the invoice lines and the receipt,
+    // which are the business's own record of the charge, and every other label
+    // this function produces ('Protection plan') is English for the same
+    // reason. The renter reads the translated summary above, from `dict`.
+    promoTerms: promo ? offerTermsText(dictionaryFor('en'), promo.terms) : undefined,
     taxRates: taxRows.map((row) => ({
       jurisdiction: row.jurisdiction,
       rateBasisPoints: row.rateBasisPoints,

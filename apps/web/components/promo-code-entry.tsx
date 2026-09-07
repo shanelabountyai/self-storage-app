@@ -48,7 +48,7 @@ export function PromoCodeEntry({ action, carry, outcome, value, dict, children }
   // B-266. Built here, from the outcome's own discriminant — the sentence used
   // to come out of `@storage/core/promotions` already written, in English, onto
   // a page whose every other word had been translated.
-  const outcomeMessage = outcome ? codeOutcomeMessage(outcome) : null
+  const outcomeMessage = outcome ? codeOutcomeMessage(outcome, dict) : null
   const message = outcomeMessage ? t(outcomeMessage.key, outcomeMessage.vars) : null
   // `applied` and `superseded` are not errors: one is the discount working and
   // the other is us keeping a better one. Only `rejected` is wired to

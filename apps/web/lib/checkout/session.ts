@@ -5,6 +5,7 @@ import { currentRateForUnitType } from '@/lib/pricing/unit-type-rates'
 import { offerFor } from '@/lib/promotions/service'
 import { sendDirectEmail } from '@/lib/comms/service'
 import type { MoveSource } from '@storage/core/metrics'
+import type { OfferTerms } from '@storage/core/promotions'
 import { translate, type Dictionary } from '@/lib/i18n'
 import { en } from '@/lib/i18n/en'
 
@@ -91,7 +92,11 @@ async function claimUnit(
 export type PromoSnapshot = {
   promotionId: string
   promoCodeId: string | null
-  terms: string
+  /// B-269. The facts the terms are written from, snapshotted as JSON rather
+  /// than as a finished English sentence — the session outlives the render that
+  /// created it, and the renter who resumes it may not be reading the language
+  /// the sentence was written in.
+  terms: OfferTerms
   /// Off the first period, in cents (positive).
   firstPeriodCents: number
   schedule: { periodIndex: number; amountCents: number }[]
@@ -181,7 +186,7 @@ export async function startCheckout(input: StartInput): Promise<StartResult> {
         data: {
           ...(input.promo
             ? {
-                promoTerms: input.promo.terms,
+                promoTerms: input.promo.terms as unknown as Prisma.InputJsonValue,
                 promoFirstPeriodCents: input.promo.firstPeriodCents,
                 promoSchedule: input.promo.schedule,
               }
@@ -296,7 +301,7 @@ function toView(session: {
 /// so the figure advertised, the figure charged and the figure recorded cannot
 /// come from three different evaluations.
 export function promoDiscountOn(session: CheckoutSessionView): {
-  terms: string
+  terms: OfferTerms
   firstPeriodCents: number
   schedule: { periodIndex: number; amountCents: number }[]
 } | null {
@@ -304,12 +309,29 @@ export function promoDiscountOn(session: CheckoutSessionView): {
   const cents = session.data.promoFirstPeriodCents
   if (typeof cents !== 'number' || cents <= 0) return null
   return {
-    terms: typeof session.data.promoTerms === 'string' ? session.data.promoTerms : 'Promotion',
+    terms: readTerms(session.data.promoTerms),
     firstPeriodCents: cents,
     schedule: Array.isArray(session.data.promoSchedule)
       ? (session.data.promoSchedule as { periodIndex: number; amountCents: number }[])
       : [{ periodIndex: 0, amountCents: cents }],
   }
+}
+
+/// B-269 changed the shape of the snapshot, and a session written before the
+/// deploy still holds the old one: a finished English sentence.
+///
+/// Read back as an operator override, which is exactly what it behaves like —
+/// free text that is rendered as typed and marked `lang="en"`. The minimum
+/// stay is already inside that string (`withMinStay` appended it before it was
+/// stored), so `minStayMonths` is 0 here or it would be stated twice.
+///
+/// ponytail: this branch can be deleted once no session predating the deploy
+/// can still be resumed — checkout locks expire in hours, but a `provisioned`
+/// session's row is kept.
+function readTerms(stored: unknown): OfferTerms {
+  if (typeof stored === 'string') return { kind: 'operator', text: stored, minStayMonths: 0 }
+  if (stored && typeof stored === 'object' && 'kind' in stored) return stored as OfferTerms
+  return { kind: 'operator', text: '', minStayMonths: 0 }
 }
 
 export async function sessionByToken(token: string): Promise<CheckoutSessionView | null> {

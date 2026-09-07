@@ -413,6 +413,16 @@ export const es: Dictionary = {
   'promo.codeSuperseded':
     'Mantuvimos su mejor oferta: {terms}. Solo se aplica una promoción a la vez.',
 
+  // B-269.
+  'promo.terms.freeMonthsOne': 'Primer mes gratis',
+  'promo.terms.freeMonthsOther': 'Primeros {count} meses gratis',
+  'promo.terms.percentOffOne': '{percent}% de descuento el primer mes',
+  'promo.terms.percentOffOther': '{percent}% de descuento los primeros {count} meses',
+  'promo.terms.amountOffOne': '{amount} de descuento el primer mes',
+  'promo.terms.amountOffOther': '{amount} de descuento los primeros {count} meses',
+  'promo.terms.minStayOne': 'estancia mínima de {count} mes',
+  'promo.terms.minStayOther': 'estancia mínima de {count} meses',
+
   // --- Protection step (US-501 step 3) ----------------------------------
   'protection.formLabel': 'Proteja lo que guarda',
   'protection.required':

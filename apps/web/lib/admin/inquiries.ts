@@ -3,6 +3,8 @@ import { recordAudit } from '@storage/core/audit'
 import { isStaffLeadSource, LEAD_SOURCE_LABELS } from '@storage/core/metrics'
 import { calculateMoveInCost } from '@storage/core/pricing'
 import { offerFor } from '@/lib/promotions/service'
+import { offerTermsText } from '@/lib/promotions/terms'
+import { dictionaryFor } from '@/lib/i18n'
 import { createReservation } from '@/lib/reservations/reserve'
 import { publicInventoryForFacility } from '@/lib/inventory/public-inventory'
 import { joinWaitlist, type JoinResult } from '@/lib/waitlist/service'
@@ -161,7 +163,11 @@ export async function quoteForFacility(actor: Actor, facilityId: string): Promis
       streetRateCents: unitType.streetRateCents,
       moveInTotalCents: cost.totalDueTodayCents,
       promo: lookup.offer
-        ? { terms: lookup.offer.terms, firstPeriodCents: lookup.offer.firstPeriodCents }
+        ? {
+            // D-122: the admin lead screen is English.
+            terms: offerTermsText(dictionaryFor('en'), lookup.offer.terms),
+            firstPeriodCents: lookup.offer.firstPeriodCents,
+          }
         : null,
     }
   }))

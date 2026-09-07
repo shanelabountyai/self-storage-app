@@ -385,9 +385,28 @@ test('the Spanish promo box refuses AND confirms in Spanish (B-266)', async ({
   await page.getByRole('button', { name: 'Aplicar código' }).click()
 
   // `promo.codeApplied` names the terms, and `{terms}` is the promotion's own
-  // wording — still English, and B-269's row rather than this one. Asserted on
-  // the translated half only, so this spec does not go red when that ships.
-  await expect(page.getByRole('status').filter({ hasText: 'Código aplicado:' })).toBeVisible()
+  // wording. B-269 made the GENERATED half of that translatable; this promo is
+  // not the generated half — `seed-demo.mts` gives it a `termsText`, so it takes
+  // D-129's operator branch and is rendered as the operator typed it, in
+  // English, inside the Spanish sentence.
+  //
+  // **Both halves asserted deliberately.** The Spanish frame going English again
+  // is B-266's regression; the operator's own words being replaced by a
+  // translation of a different sentence is D-129's, and it is the one nothing
+  // else would catch. The badge on the facility page marks this text
+  // `lang="en"`; this surface cannot, because `FormState.message` is a string
+  // end to end — the residual named in `/accessibility`.
+  await expect(
+    page.getByRole('status').filter({ hasText: 'Código aplicado: Half off your first month.' }),
+  ).toBeVisible()
+
+  // The same override on the facility page's badge, where it IS marked — the
+  // one place the terms are a whole element rather than a fragment of a
+  // sentence (D-129).
+  await page.goto(`/storage/tx/houston/demo-e2e?promo=${DEMO_PROMO_CODE}`)
+  await expect(
+    page.locator('span[lang="en"]').filter({ hasText: 'Half off your first month' }).first(),
+  ).toBeVisible()
 })
 
 // --- B-260: the portal ------------------------------------------------------

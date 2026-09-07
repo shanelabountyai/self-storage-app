@@ -477,9 +477,14 @@ describeDb("promotions", () => {
         monthlyRateCents: RENT,
         isNewTenant: true,
       });
-      expect(offer.offer?.terms).toBe(
-        "First month free — 6-month minimum stay",
-      );
+      // B-269. The offer carries the FACTS; the sentence is written per
+      // surface. The minimum stay is on the value itself rather than appended
+      // to a finished string, so an operator override cannot drop it.
+      expect(offer.offer?.terms).toEqual({
+        kind: "free_months",
+        periods: 1,
+        minStayMonths: 6,
+      });
 
       const started = await startCheckout({
         facilityId,

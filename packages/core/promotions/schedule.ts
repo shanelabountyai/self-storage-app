@@ -99,58 +99,76 @@ export function discountForPeriod(
   );
 }
 
-/// US-12 AC1's "plain-language terms".
+/// US-12 AC1's "plain-language terms" — the FACTS a sentence is built from,
+/// never the sentence.
 ///
+/// B-269. `describeTerms` and `withMinStay` lived here and returned English
+/// prose, so «Código aplicado: 50% off the first month» is what a Spanish
+/// renter read on every unit card, in the checkout summary and on the
+/// applied-code confirmation. This package is pure and has no request to read
+/// a locale from — the same reason `judgeStartDate` (B-263) and
+/// `describeCodeOutcome` (B-266) moved out of one. It returns the discriminant
+/// and the numbers; `apps/web/lib/promotions/terms.tsx` writes the words.
+///
+/// **The two halves stay distinguishable, and that is the whole shape.** The
+/// generated half can become a key plus its numbers. `termsText` cannot — it
+/// is an operator's free text in a database column, with no key to return for
+/// it — so it keeps its own variant and is rendered as typed (D-129). Folding
+/// them into one string is how an operator's own wording gets silently
+/// replaced by a translation of a different sentence.
+export type OfferTerms = { minStayMonths: number } & (
+  /// The operator wrote their own wording, and it WINS over the generated
+  /// sentence.
+  | { kind: "operator"; text: string }
+  | { kind: "free_months"; periods: number }
+  | { kind: "percent_off"; percent: number; periods: number }
+  /// Already capped at the rent it describes: a badge saying "$500 off" on a
+  /// $129 unit is a promise the invoice cannot keep.
+  | { kind: "amount_off"; amountCents: number; periods: number }
+);
+
 /// Generated rather than typed per promo, because a badge that says something
 /// different from what the invoice does is worse than no badge — and an
 /// operator writing "first month free!" on a 50%-off promo is the ordinary way
-/// that happens. An operator can still override with their own wording; this is
-/// what gets used when they do not.
-export function describeTerms(
-  terms: PromotionTerms,
+/// that happens. An operator can still override with their own wording; the
+/// generated variants are what get used when they do not.
+///
+/// `minStayMonths` sits on EVERY variant rather than being appended to a
+/// finished string (B-144's `withMinStay`, folded in here). A minimum stay is a
+/// term the renter is held to — B-145 charges money on it — so an override must
+/// not be able to drop it, and now the type is what guarantees that rather than
+/// the discipline of remembering to call a second function.
+export function offerTerms(
+  promotion: PromotionTerms & {
+    termsText?: string | null;
+    minStayMonths?: number;
+  },
   monthlyRateCents?: number,
-): string {
-  const periods = Math.max(1, Math.floor(terms.durationPeriods));
-  const months =
-    periods === 1 ? "the first month" : `the first ${periods} months`;
+): OfferTerms {
+  const minStayMonths = Math.max(0, Math.floor(promotion.minStayMonths ?? 0));
+  const text = promotion.termsText?.trim();
+  if (text) return { kind: "operator", text, minStayMonths };
 
-  switch (terms.type) {
+  const periods = Math.max(1, Math.floor(promotion.durationPeriods));
+  switch (promotion.type) {
     case "free_months":
-      return periods === 1
-        ? "First month free"
-        : `First ${periods} months free`;
+      return { kind: "free_months", periods, minStayMonths };
     case "percent_off":
-      return `${Math.min(100, terms.value)}% off ${months}`;
-    case "amount_off": {
-      const amount = formatCents(
-        monthlyRateCents === undefined
-          ? terms.value
-          : Math.min(terms.value, monthlyRateCents),
-      );
-      return `${amount} off ${months}`;
-    }
-    default:
-      return "";
+      return {
+        kind: "percent_off",
+        percent: Math.min(100, promotion.value),
+        periods,
+        minStayMonths,
+      };
+    case "amount_off":
+      return {
+        kind: "amount_off",
+        amountCents:
+          monthlyRateCents === undefined
+            ? promotion.value
+            : Math.min(promotion.value, monthlyRateCents),
+        periods,
+        minStayMonths,
+      };
   }
-}
-
-/// B-144. The minimum stay, appended to whatever wording the offer already
-/// has.
-///
-/// Appended rather than folded into `describeTerms`, and that is the point:
-/// `termsText` lets an operator write their own wording and it WINS over the
-/// generated sentence, so a condition living only inside `describeTerms` would
-/// vanish the moment somebody typed "First month free!" into the box. A minimum
-/// stay is a term the renter is held to — B-145 charges money on it — so it is
-/// not a thing an override may quietly drop.
-///
-/// `0` means no condition, which is the column's default and the ordinary case.
-export function withMinStay(terms: string, minStayMonths: number): string {
-  const months = Math.max(0, Math.floor(minStayMonths));
-  if (months < 1 || terms === "") return terms;
-  return `${terms} — ${months === 1 ? "1-month" : `${months}-month`} minimum stay`;
-}
-
-function formatCents(cents: number): string {
-  return `$${(cents / 100).toFixed(cents % 100 === 0 ? 0 : 2)}`;
 }

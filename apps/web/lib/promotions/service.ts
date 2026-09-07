@@ -3,6 +3,7 @@ import {
   evaluatePromotions,
   type CodeOutcome,
   type EligibilityResult,
+  type OfferTerms,
   type PromotionCandidate,
 } from "@storage/core/promotions";
 
@@ -73,7 +74,9 @@ export type PromoOffer = {
   promotionId: string;
   promoCodeId: string | null;
   name: string;
-  terms: string;
+  /// B-269. The facts, not the sentence — every surface that shows these words
+  /// resolves them against its own dictionary through `offerTermsText`.
+  terms: OfferTerms;
   schedule: { periodIndex: number; amountCents: number }[];
   totalCents: number;
   /// What comes off the FIRST period — the number a unit card and the checkout
@@ -85,7 +88,7 @@ export type PromoLookup = {
   offer: PromoOffer | null;
   /// Badges for a facility page: automatic promos only, since a code-gated one
   /// is invisible without its code.
-  badges: { promotionId: string; terms: string }[];
+  badges: { promotionId: string; terms: OfferTerms }[];
   /// B-122. What became of a typed code — applied, superseded by a better offer
   /// already applying, or refused and by which rule. Null when none was typed.
   codeOutcome: CodeOutcome | null;
