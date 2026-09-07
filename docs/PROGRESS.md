@@ -11,7 +11,7 @@ It complements rather than duplicates:
 - `git log` — the change-by-change record
 - `README.md` — how the built thing works today
 
-**Status:** 261 of 274 backlog items complete. Latest entry: B-269.
+**Status:** 261 of 274 backlog items complete. Latest entry: B-269 (`510e866`).
 **Entries:** 291 across 20 part files.
 
 ## Reading one entry
@@ -324,19 +324,19 @@ Append the entry as a `### ` heading at the end of the **highest-numbered** file
 | B-242 — a search result names the size its price belongs to, and carries a photo | `00664ee` | [19-from-b-235](progress/19-from-b-235.md#b-242-a-search-result-names-the-size-its-price-belongs-to-and-carries-a-photo) |
 | B-255 — a web move-in's payment reaches the ledger | `7c9350f` | [19-from-b-235](progress/19-from-b-235.md#b-255-a-web-move-ins-payment-reaches-the-ledger) |
 | B-090d — broadcast sends (B-090 part 4) | `0d4cd9c` | [19-from-b-235](progress/19-from-b-235.md#b-090d-broadcast-sends-b-090-part-4) |
-| B-090e — Business accounts: the payer above the lease (2026-09-04) | — | [19-from-b-235](progress/19-from-b-235.md#b-090e-business-accounts-the-payer-above-the-lease-2026-09-04) |
-| B-257 — One payment settled several leases; the ledger credited one (2026-09-04) | — | [19-from-b-235](progress/19-from-b-235.md#b-257-one-payment-settled-several-leases-the-ledger-credited-one-2026-09-04) |
-| B-256 — The business account's portal half: one card, one Pay button (2026-09-04) | — | [19-from-b-235](progress/19-from-b-235.md#b-256-the-business-accounts-portal-half-one-card-one-pay-button-2026-09-04) |
-| B-258 — Authorized users on a business account: the people allowed to see it (2026-09-04) | — | [20-from-b-258](progress/20-from-b-258.md#b-258-authorized-users-on-a-business-account-the-people-allowed-to-see-it-2026-09-04) |
-| B-086 part 2 — Phone unlock, and the answer to OQ-2 (2026-09-04) | — | [20-from-b-258](progress/20-from-b-258.md#b-086-part-2-phone-unlock-and-the-answer-to-oq-2-2026-09-04) |
-| B-090f — Spanish on the move-in path (B-090 part 6) (2026-09-05) | — | [20-from-b-258](progress/20-from-b-258.md#b-090f-spanish-on-the-move-in-path-b-090-part-6-2026-09-05) |
-| B-260 part 1 — The portal in Spanish (2026-09-05) | — | [20-from-b-258](progress/20-from-b-258.md#b-260-part-1-the-portal-in-spanish-2026-09-05) |
+| B-090e — Business accounts: the payer above the lease (2026-09-04) | `1449a39` | [19-from-b-235](progress/19-from-b-235.md#b-090e-business-accounts-the-payer-above-the-lease-2026-09-04) |
+| B-257 — One payment settled several leases; the ledger credited one (2026-09-04) | `a8588e7` | [19-from-b-235](progress/19-from-b-235.md#b-257-one-payment-settled-several-leases-the-ledger-credited-one-2026-09-04) |
+| B-256 — The business account's portal half: one card, one Pay button (2026-09-04) | `d357e28` | [19-from-b-235](progress/19-from-b-235.md#b-256-the-business-accounts-portal-half-one-card-one-pay-button-2026-09-04) |
+| B-258 — Authorized users on a business account: the people allowed to see it (2026-09-04) | `9d572e5` | [20-from-b-258](progress/20-from-b-258.md#b-258-authorized-users-on-a-business-account-the-people-allowed-to-see-it-2026-09-04) |
+| B-086 part 2 — Phone unlock, and the answer to OQ-2 (2026-09-04) | `68a1cc8` | [20-from-b-258](progress/20-from-b-258.md#b-086-part-2-phone-unlock-and-the-answer-to-oq-2-2026-09-04) |
+| B-090f — Spanish on the move-in path (B-090 part 6) (2026-09-05) | `aba7a48` | [20-from-b-258](progress/20-from-b-258.md#b-090f-spanish-on-the-move-in-path-b-090-part-6-2026-09-05) |
+| B-260 part 1 — The portal in Spanish (2026-09-05) | `dbda712` | [20-from-b-258](progress/20-from-b-258.md#b-260-part-1-the-portal-in-spanish-2026-09-05) |
 | Chore — the build record was too large to read, so no session read it | `e33c60f` `2d63bfe` | [20-from-b-258](progress/20-from-b-258.md#chore-the-build-record-was-too-large-to-read-so-no-session-read-it) |
 | Chore — the decision log gets an index, reversing what the split left behind | `7f8f988` | [20-from-b-258](progress/20-from-b-258.md#chore-the-decision-log-gets-an-index-reversing-what-the-split-left-behind) |
 | Chore — an index gives an address; the row is still in a 493 KB file | `3fa83b3` | [20-from-b-258](progress/20-from-b-258.md#chore-an-index-gives-an-address-the-row-is-still-in-a-493-kb-file) |
-| B-262 — The Spanish reaches the pages a renter reads (2026-09-06) | — | [20-from-b-258](progress/20-from-b-258.md#b-262-the-spanish-reaches-the-pages-a-renter-reads-2026-09-06) |
-| B-259 — A Spanish renter's consent record names Spanish words (2026-09-06) | — | [20-from-b-258](progress/20-from-b-258.md#b-259-a-spanish-renters-consent-record-names-spanish-words-2026-09-06) |
-| B-261 — Every email and text follows the tenant's language (2026-09-06) | — | [20-from-b-258](progress/20-from-b-258.md#b-261-every-email-and-text-follows-the-tenants-language-2026-09-06) |
-| B-263 — The Spanish checkout refuses you in Spanish (2026-09-06) | — | [20-from-b-258](progress/20-from-b-258.md#b-263-the-spanish-checkout-refuses-you-in-spanish-2026-09-06) |
-| B-264 — The lead form on a Spanish facility page is Spanish (2026-09-06) | — | [20-from-b-258](progress/20-from-b-258.md#b-264-the-lead-form-on-a-spanish-facility-page-is-spanish-2026-09-06) |
-| B-269 — English contract prose renders under `<html lang="es">`, and no scan can see it (2026-09-07) | — | [20-from-b-258](progress/20-from-b-258.md#b-269-english-contract-prose-renders-under-html-langes-and-no-scan-can-see-it-2026-09-07) |
+| B-262 — The Spanish reaches the pages a renter reads (2026-09-06) | `f7658aa` | [20-from-b-258](progress/20-from-b-258.md#b-262-the-spanish-reaches-the-pages-a-renter-reads-2026-09-06) |
+| B-259 — A Spanish renter's consent record names Spanish words (2026-09-06) | `0fd8338` | [20-from-b-258](progress/20-from-b-258.md#b-259-a-spanish-renters-consent-record-names-spanish-words-2026-09-06) |
+| B-261 — Every email and text follows the tenant's language (2026-09-06) | `0798c8b` | [20-from-b-258](progress/20-from-b-258.md#b-261-every-email-and-text-follows-the-tenants-language-2026-09-06) |
+| B-263 — The Spanish checkout refuses you in Spanish (2026-09-06) | `618f531` | [20-from-b-258](progress/20-from-b-258.md#b-263-the-spanish-checkout-refuses-you-in-spanish-2026-09-06) |
+| B-264 — The lead form on a Spanish facility page is Spanish (2026-09-06) | `d17f86b` | [20-from-b-258](progress/20-from-b-258.md#b-264-the-lead-form-on-a-spanish-facility-page-is-spanish-2026-09-06) |
+| B-269 — English contract prose renders under `<html lang="es">`, and no scan can see it (2026-09-07) | `510e866` | [20-from-b-258](progress/20-from-b-258.md#b-269-english-contract-prose-renders-under-html-langes-and-no-scan-can-see-it-2026-09-07) |

@@ -71,8 +71,18 @@ function shasFrom(title, body) {
   // naming the pre-merge SHA the merge rewrote ("it was `40ee469` on the
   // branch"), and that commit no longer exists — indexing it would put a dead
   // SHA in the index and light up `docs:audit` for every entry ever corrected.
+  //
+  // B-269. The optional `**Commit:**` label is not cosmetic tolerance. Entries
+  // wrote a bare `` `sha` `` line for 277 entries and then, from B-258 on,
+  // started labelling it — and this function read neither the label nor what
+  // followed it, so the THIRTEEN most recent entries recorded a SHA that
+  // `docs:audit` never checked. Silently: the audit prints what it found and
+  // cannot say what it never looked at, so it went on reporting "every
+  // recorded SHA resolves" while skipping exactly the entries a merge is about
+  // to rewrite. Both spellings are read now, and the leading-run rule is
+  // unchanged — the label may only precede that run, never follow it.
   const first = body.split('\n').find((l) => l.trim() !== '')
-  const lead = first && first.match(/^((?:\s*`[^`]+`\s*,?)+)/)
+  const lead = first && first.replace(/^\*\*Commit:\*\*/, '').match(/^((?:\s*`[^`]+`\s*,?)+)/)
   if (lead) for (const m of lead[1].matchAll(/`([^`]+)`/g)) if (SHA.test(m[1])) out.push(m[1])
   return [...new Set(out)]
 }

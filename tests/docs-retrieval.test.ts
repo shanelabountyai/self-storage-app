@@ -109,6 +109,36 @@ describe('the generated index files', () => {
   })
 })
 
+// B-269. `docs:audit` is the ONE thing that catches a merge rewriting a SHA
+// an entry recorded hours earlier — CLAUDE.md says so, because `docs:index`
+// regenerates the index without verifying that a single SHA it names exists.
+// It reads those SHAs out of the entry with the same helper the index does,
+// and that helper only ever understood a bare `` `sha` `` line. From B-258 the
+// entries started spelling it `**Commit:** `sha``, and for thirteen entries in
+// a row the audit read nothing, said nothing, and reported "every recorded SHA
+// resolves" — while the index printed an em dash in their commit column and
+// nobody read it as a fault.
+//
+// This is the guard, and it is deliberately about the OUTPUT rather than about
+// the regex: any future way of writing that line is fine as long as the SHA
+// still comes out the other end.
+describe('the SHA of every recorded entry', () => {
+  it('survives into the generated index, however the entry spells the line', () => {
+    // Read rather than regenerated: `run('index')` here would WRITE the three
+    // index files mid-suite and quietly repair a source somebody edited without
+    // running it, which is the exact staleness the neighbouring `--check` test
+    // exists to fail on. That test is what makes reading the file enough.
+    const rows = rowsOf('../docs/PROGRESS.md', /^\|\s*B-[0-9]/)
+    expect(rows.length, 'no entry rows parsed — did the index table change shape?').toBeGreaterThan(250)
+
+    const missing = rows.filter((line) => cellsOf(line)[1] === '—').map((line) => cellsOf(line)[0])
+    expect(
+      missing,
+      'these entries record a SHA that `shasFrom` in scripts/docs-index.mjs cannot read, so `npm run docs:audit` silently skips them',
+    ).toEqual([])
+  })
+})
+
 describe('a lookup that misses', () => {
   it('fails rather than printing the wrong row', () => {
     // Silence or a neighbouring row would be worse than an error here: the
