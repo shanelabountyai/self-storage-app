@@ -102,10 +102,16 @@ describe('i18n dictionaries', () => {
     // told in English that their code WORKED, or that a better offer was kept
     // instead of it, is the same defect as one refused in English — and neither
     // can wear the `err.` prefix, because the checkout styles that branch red.
+    //
+    // B-268 adds `res.cancelled`. Same argument a third time: it is the
+    // `status: 'success'` a renter reads after releasing their unit, which is
+    // irreversible, so an untranslated paste there is as bad as one under
+    // `err.` — and the `err.` prefix would style it red.
     const MUST_ALSO_DIFFER = [
       'reserve.holdUpdated',
       'promo.codeApplied',
       'promo.codeSuperseded',
+      'res.cancelled',
     ] as const
     const untranslated = Object.keys(en)
       .filter((key) => key.startsWith('err.') || MUST_ALSO_DIFFER.includes(key as never))

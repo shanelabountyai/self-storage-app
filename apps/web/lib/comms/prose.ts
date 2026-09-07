@@ -41,16 +41,6 @@ import type { Locale } from '@/lib/i18n'
 // whichever language they wrote them, exactly as the admin surface shows them.
 // Translating an operator's own words would put sentences in their mouth.
 
-/// `en` | `es` widened to the BCP-47 tag `Intl` wants. `es-US` rather than
-/// `es-MX` or `es-ES`: the reader is a Spanish speaker in the United States,
-/// which is what makes the currency `$129.00` (identical to English — the same
-/// figure, so a tenant comparing an email to the portal sees one number) while
-/// the date becomes "14 de septiembre de 2026".
-export const LOCALE_TAG: Record<Locale, string> = {
-  en: 'en-US',
-  es: 'es-US',
-}
-
 export type CommsProse = {
   // ── lease.moved_in ────────────────────────────────────────────────────────
   gateCodeIssued: (code: string) => string

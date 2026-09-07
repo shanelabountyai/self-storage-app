@@ -6,34 +6,37 @@ import { cancelReservation, reservationByToken } from '@/lib/reservations/reserv
 import { offerFor } from '@/lib/promotions/service'
 import { startCheckout } from '@/lib/checkout/session'
 import type { FormState } from '@/lib/admin/form-state'
+import { messages } from '@/lib/i18n/server'
 
 /// B-018. The deliberate second step of cancelling: the email link only ever
 /// renders the reservation, and this is what actually releases the unit
 /// (WCAG 3.3.4 — an irreversible action needs a confirmation step, and a GET
 /// that a mail client can prefetch is not one).
+///
+/// B-268 (D-122). Both messages were English literals on a page a Spanish
+/// reservation redirects to. Neither hangs on a field — the only input here is
+/// a hidden token — so they go back as the form's summary and there is no
+/// fourth `keyedFieldError` caller.
 export async function cancelReservationAction(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
+  const { t } = await messages()
   const token = String(formData.get('token') ?? '')
   const result = await cancelReservation(token)
 
   if (!result.ok) {
     return {
       status: 'error',
-      message:
-        result.reason === 'not_held'
-          ? 'That reservation was already cancelled or has ended, so there was nothing to release.'
-          : 'We could not find that reservation. The link may have expired.',
+      message: t(
+        result.reason === 'not_held' ? 'err.reservationNotHeld' : 'err.reservationNotFound',
+      ),
       fieldErrors: {},
     }
   }
 
   revalidatePath('/reservations')
-  return {
-    status: 'success',
-    message: 'Cancelled. The unit is back available and nothing has been charged.',
-  }
+  return { status: 'success', message: t('res.cancelled') }
 }
 
 /// US-401's "a link to complete move-in online" — a real destination for both
@@ -45,14 +48,11 @@ export async function completeMoveInFromReservationAction(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
+  const { t } = await messages()
   const token = String(formData.get('token') ?? '')
   const reservation = await reservationByToken(token)
   if (!reservation || reservation.status !== 'held') {
-    return {
-      status: 'error',
-      message: 'This reservation is no longer live, so there is nothing to continue.',
-      fieldErrors: {},
-    }
+    return { status: 'error', message: t('err.reservationNotLive'), fieldErrors: {} }
   }
 
   // startCheckout reuses the reservation's own unit rather than claiming a
@@ -85,11 +85,7 @@ export async function completeMoveInFromReservationAction(
       : null,
   })
   if (!started.ok) {
-    return {
-      status: 'error',
-      message: 'That unit is no longer available. Call us and we will find you something.',
-      fieldErrors: {},
-    }
+    return { status: 'error', message: t('err.reservationUnitGone'), fieldErrors: {} }
   }
 
   redirect(`/checkout?token=${encodeURIComponent(started.token)}`)

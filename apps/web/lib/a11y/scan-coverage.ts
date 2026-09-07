@@ -1079,11 +1079,6 @@ export const ENGLISH_UNDER_A_TRANSLATED_SHELL: readonly EnglishPage[] = [
     note: 'reached from an email link and never translated; `ProsePage` declares it',
   },
   {
-    route: '/reservations',
-    why: 'untranslated',
-    note: 'the reservation confirmation and its dead-link state, both English',
-  },
-  {
     route: '/checkout/resume/[token]',
     why: 'untranslated',
     note: 'two dead-link sentences, both English, on a page that otherwise redirects',

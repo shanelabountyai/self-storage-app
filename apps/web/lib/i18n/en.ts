@@ -255,6 +255,58 @@ export const en = {
   'reserve.holdUpdated':
     'You already had a hold on this size, so we updated it rather than taking a second unit. Your original confirmation email still has the link.',
 
+  // --- The reservation itself (US-401 / FR-3.2, B-268) -------------------
+  //
+  // `/reservations` is two pages wearing one route: the confirmation a hold
+  // redirects to, and where the cancel link in the email lands. B-267
+  // translated the form and stopped at the redirect, so a renter filled in a
+  // Spanish form and was told in English that their unit was held.
+  //
+  // The DATE is the half that is not in here. `formatWhen` hardcoded 'en-US',
+  // so the one fact on this page with a deadline attached stayed English after
+  // every sentence around it was translated — it takes `LOCALE_TAG` and an
+  // explicit `timeZone` instead (B-228's class, B-262's shape).
+  'res.title': 'Your reservation',
+  'res.headingNew': 'Your unit is reserved',
+  // The dead-link page. Unknown token and expired hold render identically on
+  // purpose, so this is one sentence for both.
+  'res.deadHeading': "This link isn't good any more",
+  'res.deadBody':
+    'Reservation links stop working once the hold ends or is cancelled. Nothing has been charged, and nothing is being held for you.',
+  'res.deadCall': 'Call {phone}',
+  'res.deadOffer': 'and we will tell you what is available, or',
+  'res.deadSearch': 'search again',
+  // One sentence per ended status rather than one sentence quoting the status
+  // word. The status is a database enum — 'cancelled', 'expired', 'converted' —
+  // and interpolating it left an English word inside the Spanish (3.1.2) AND
+  // told somebody who had just MOVED IN that their unit was back on the market.
+  // Three keys is what makes the converted case say something true.
+  'res.endedCancelled':
+    'This reservation is cancelled. Nothing is being held for you and nothing has been charged — the unit is back available for anyone to take.',
+  'res.endedExpired':
+    'This reservation has expired. Nothing is being held for you and nothing has been charged — the unit is back available for anyone to take.',
+  'res.endedConverted':
+    'You have moved in, so the hold is finished — this unit is yours rather than reserved for you.',
+  'res.facility': 'Facility',
+  'res.unit': 'Unit',
+  'res.rateHeld': 'Rate we are holding',
+  'res.holdUntil': 'We hold it until',
+  'res.reassureBefore':
+    'Nothing has been charged. You can move in online before the hold ends, or just turn up — call',
+  'res.reassureAfter': 'if anything changes.',
+  'res.readyHeading': 'Ready to move in?',
+  'res.readyBody':
+    'Finish online in a few minutes — sign the lease, pay, and get your gate code today.',
+  'res.completeMoveIn': 'Complete move-in online',
+  'res.cancelHeading': 'Need to cancel?',
+  'res.cancelBody':
+    'This releases the unit straight away and someone else can take it. You cannot undo it, but you can always reserve again if it is still free.',
+  'res.cancelButton': 'Cancel this reservation',
+  // A success, so no `err.` prefix — the checkout styles that branch red. It
+  // still carries a refusal's weight (it confirms something irreversible), so
+  // `MUST_ALSO_DIFFER` in `tests/i18n.test.ts` names it.
+  'res.cancelled': 'Cancelled. The unit is back available and nothing has been charged.',
+
   // --- The lead form on the facility page (US-8, B-264) ------------------
   //
   // Its marketing-consent sentence is deliberately NOT here: that one is a
@@ -536,6 +588,16 @@ export const en = {
   'err.reserveUnlisted': 'That unit is no longer listed.',
   'err.reserveSoldOut':
     'Someone took the last one of that size while you were filling this in. Nothing has been charged — pick another size, or call us and we will sort it out.',
+
+  // B-268. The refusals `/reservations` returns. None hangs on a field — the
+  // only input on that page is a hidden token — so they arrive as the form's
+  // summary message. `err.` all the same, for the untranslated-paste guard.
+  'err.reservationNotHeld':
+    'That reservation was already cancelled or has ended, so there was nothing to release.',
+  'err.reservationNotFound': 'We could not find that reservation. The link may have expired.',
+  'err.reservationNotLive': 'This reservation is no longer live, so there is nothing to continue.',
+  'err.reservationUnitGone':
+    'That unit is no longer available. Call us and we will find you something.',
 
   // B-266. The seven refusals `CodeRejection` distinguishes, one sentence each
   // rather than a shared "that code is not valid" — 3.3.3 wants a refusal the
