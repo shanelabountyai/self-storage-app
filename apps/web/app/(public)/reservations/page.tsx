@@ -48,7 +48,7 @@ export default async function ReservationPage({
     // learns nothing from the difference, and the renter's next step is the
     // same either way (§6.7: name the problem, then offer a human).
     return (
-      <div className="mx-auto w-full max-w-xl px-4 py-12">
+      <div lang="en" className="mx-auto w-full max-w-xl px-4 py-12">
         <h1 className="text-3xl font-semibold tracking-tight text-balance">
           This link isn&apos;t good any more
         </h1>
@@ -76,7 +76,7 @@ export default async function ReservationPage({
   const live = reservation.status === 'held'
 
   return (
-    <div className="mx-auto w-full max-w-xl px-4 py-12">
+    <div lang="en" className="mx-auto w-full max-w-xl px-4 py-12">
       <h1 className="text-3xl font-semibold tracking-tight text-balance">
         {isNew ? 'Your unit is reserved' : 'Your reservation'}
       </h1>

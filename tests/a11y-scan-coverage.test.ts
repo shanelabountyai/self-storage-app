@@ -11,6 +11,7 @@ import {
   SCANNED_BY_OWN_SPEC,
   SCANNED_STATES,
   STATE_EXCEPTIONS,
+  ENGLISH_UNDER_A_TRANSLATED_SHELL,
 } from '../apps/web/lib/a11y/scan-coverage'
 
 // B-139 / PRD 01 §6.8, PRD 02 §5.5 FR-24. The check that stops the public
@@ -287,6 +288,91 @@ describe('the accessibility scan contract (B-139)', () => {
       expect(shown.every((row) => row.audience !== 'admin')).toBe(true)
       expect(shown.every((row) => row.reason.length > 20)).toBe(true)
       bilingual(shown)
+    })
+  })
+
+  // B-269 / SC 3.1.2 Language of Parts. The third contract in this file, and
+  // the only one whose defect axe cannot see at all: no rule reads prose and
+  // decides what language it is in, so an English page served inside
+  // `<html lang="es">` passes every scan this repo runs while a screen reader
+  // pronounces it with Spanish phonemes. It shipped that way past B-090f,
+  // B-260 and B-262.
+  //
+  // Same shape as the checks above: walk the pages on disk, do not trust a
+  // list. A public page either renders from the dictionary or says here that
+  // it does not — and then has to prove it, because a row whose page carries
+  // no `lang="en"` is the exact state this closes.
+  describe('the language-of-parts contract (B-269)', () => {
+    const PUBLIC_DIR = join(APP_DIR, '(public)')
+
+    /// Every `page.tsx` under `(public)`, as a route and a source.
+    function publicPages(dir: string = PUBLIC_DIR, prefix = ''): { route: string; source: string }[] {
+      const found: { route: string; source: string }[] = []
+      for (const name of readdirSync(dir)) {
+        const full = join(dir, name)
+        if (!statSync(full).isDirectory()) continue
+        const segment = name.startsWith('(') && name.endsWith(')') ? '' : `/${name}`
+        const here = prefix + segment
+        if (readdirSync(full).includes('page.tsx')) {
+          found.push({ route: here || '/', source: readFileSync(join(full, 'page.tsx'), 'utf8') })
+        }
+        found.push(...publicPages(full, here))
+      }
+      return found
+    }
+
+    const PAGES = publicPages()
+    /// The DICTIONARY module, not `@/lib/i18n/server`: a page can read the
+    /// locale (to declare it on a translated child) without rendering a single
+    /// translated string of its own, and `/storage/[state]/[city]` does
+    /// exactly that. Matching the looser prefix would have counted it as
+    /// translated and let its English prose go unmarked.
+    const translated = (source: string) => /from '@\/lib\/i18n'/.test(source)
+
+    it('finds the public pages at all — a broken walk would pass everything', () => {
+      expect(PAGES.map((p) => p.route)).toContain('/terms')
+      expect(PAGES.map((p) => p.route)).toContain('/storage/[state]/[city]/[slug]')
+      expect(PAGES.length).toBeGreaterThan(15)
+    })
+
+    it('leaves no public page both untranslated and undeclared', () => {
+      const listed = new Set(ENGLISH_UNDER_A_TRANSLATED_SHELL.map((row) => row.route))
+      const silent = PAGES.filter((page) => !translated(page.source) && !listed.has(page.route))
+      expect(
+        silent.map((page) => page.route),
+        'a page that renders no dictionary string is English inside `<html lang>` from the cookie (D-122) — add it to ENGLISH_UNDER_A_TRANSLATED_SHELL and give its markup a lang, or translate it',
+      ).toEqual([])
+    })
+
+    it('makes every listed page declare its language in its own markup', () => {
+      const byRoute = new Map(PAGES.map((page) => [page.route, page.source]))
+      for (const row of ENGLISH_UNDER_A_TRANSLATED_SHELL) {
+        const source = byRoute.get(row.route)
+        expect(source, `${row.route} is listed but is not a page under app/(public)`).toBeDefined()
+        // `lang="en"` on the page's own markup, or handed to `ProsePage`,
+        // which puts it on the wrapper it renders.
+        expect(source, `${row.route} declares no language — SC 3.1.2`).toContain('lang="en"')
+        expect(row.note.length, `${row.route} says nothing a reader could disagree with`).toBeGreaterThan(20)
+      }
+    })
+
+    it('lists no page that has since been translated', () => {
+      // The overstating direction, and the one that rots quietly: B-267 will
+      // translate the reservation form, and a row still calling it English
+      // would be a claim about a page that stopped being one.
+      const byRoute = new Map(PAGES.map((page) => [page.route, page.source]))
+      const stale = ENGLISH_UNDER_A_TRANSLATED_SHELL.filter((row) => {
+        const source = byRoute.get(row.route)
+        // `/storage/[state]/[city]` is the mixed page: it renders a translated
+        // form and English prose, so it reads the locale without being
+        // translated itself. The `translated` predicate already excludes
+        // `@/lib/i18n/server` for that reason.
+        return source !== undefined && translated(source)
+      })
+      expect(
+        stale.map((row) => row.route),
+        'these pages render from the dictionary now — drop the row and the page-level lang="en" with it',
+      ).toEqual([])
     })
   })
 })

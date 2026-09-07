@@ -6,6 +6,9 @@ export const metadata = metadataFor('Privacy', 'Draft privacy notice — not leg
 export default function PrivacyPage() {
   return (
     <ProsePage
+      // B-269. English inside whatever shell the visitor chose — see the note
+      // on `/terms`. D-124 is the decision that keeps this page English.
+      lang="en"
       title="Privacy"
       intro="What we collect, why, and what we deliberately don't do."
       draftNotice

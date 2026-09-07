@@ -5,6 +5,12 @@ export const metadata = metadataFor('Terms of service', 'Draft terms — not leg
 export default function TermsPage() {
   return (
     <ProsePage
+      // B-269. English inside whatever shell the visitor chose. D-123 keeps
+      // this page English (it is a contract, not interface copy), and D-122
+      // means a Spanish visitor is served `<html lang="es">` around it — so
+      // the prose declares its own language or a screen reader reads English
+      // legal text with Spanish phonemes (SC 3.1.2).
+      lang="en"
       title="Terms of service"
       intro="The rules for using this website. Your storage rental is governed by the lease you sign, not by this page."
       draftNotice

@@ -1946,6 +1946,46 @@ function reviewedOn(locale: Locale): string {
 // bumped, per D-115 — no manual screen-reader pass was performed, and this
 // item performed none.
 
+// Re-verified 2026-09-07, at B-269 (English prose under `<html lang="es">` —
+// SC 3.1.2 Language of Parts, AA). Customer-facing, and a defect this page's
+// own scan contract was structurally unable to see.
+//
+// **What was wrong.** D-122 puts the locale in a cookie and the root layout
+// sets `<html lang>` from it, so a Spanish visitor was served `<html lang="es">`
+// around the English terms and privacy pages D-123 and D-124 deliberately keep
+// English — a screen reader pronouncing contract text with Spanish phonemes.
+// Ten more public pages were English inside the same shell because nobody has
+// translated them yet, which is the same failure arrived at from the other
+// side. Every public page now declares the language of its own content, and
+// `ProsePage` takes `lang` as a REQUIRED prop so the next prose page states it
+// or fails `npm run typecheck`.
+//
+// **Why no scan caught it, which is the half worth keeping.** Axe cannot: no
+// rule reads prose and decides what language it is in, and `html-has-lang`
+// passes on the broken page. The route loops could not either — they carry no
+// locale cookie, so every automated run visits as an English visitor, where
+// the markup is trivially correct. A contract that cannot enter the broken
+// state cannot fail on it. Two things replace the scan:
+// `ENGLISH_UNDER_A_TRANSLATED_SHELL` in `scan-coverage.ts` lists every public
+// page that renders no dictionary string, and `tests/a11y-scan-coverage.test.ts`
+// walks `app/(public)` and fails when a page is in neither the dictionary nor
+// that list, or is in the list with no `lang` in its markup.
+//
+// **This page's own claims.** No sentence here changed. The statement makes no
+// claim about language in either direction, and none was added — a bullet under
+// "What is true today" would be a new public commitment, which is not what a
+// defect fix is for. Two SCANNED_STATES rows were added (`/terms` and
+// `/privacy` visited as a Spanish reader), so the `/` state-exception row no
+// longer speaks for them and now says so; that row is rendered here, in both
+// languages, and is the only visible change. `LAST_REVIEWED` is not bumped,
+// per D-115 — no manual screen-reader pass was performed.
+//
+// **What is left, named rather than implied.** The ADMIN screens are English
+// under the same cookie-driven shell, and one of them — the message-template
+// editor — renders Spanish template bodies inside it, which is the mirror
+// defect. Staff-facing, already disclaimed by the "our staff-facing screens
+// have known problems" bullet, and owned by **B-270** rather than fixed here.
+
 export default async function AccessibilityPage() {
   const locale = await getLocale()
   const dict = dictionaryFor(locale)
@@ -1961,7 +2001,7 @@ export default async function AccessibilityPage() {
     locale === 'es' ? (row.reasonEs ?? row.reason) : row.reason
 
   return (
-    <ProsePage title={t('a11y.title')} intro={t('a11y.intro')}>
+    <ProsePage lang={locale} title={t('a11y.title')} intro={t('a11y.intro')}>
       <Section heading={t('a11y.target.heading')}>
         <p>{t('a11y.target.body')}</p>
       </Section>

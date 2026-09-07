@@ -53,7 +53,7 @@ export default async function ReservePage({
   if (!unitType) redirect(`${facilityPath(facility)}?unavailable=1`)
 
   return (
-    <div className="mx-auto w-full max-w-xl px-4 py-12">
+    <div lang="en" className="mx-auto w-full max-w-xl px-4 py-12">
       <p className="mb-4 text-sm">
         <Link href={facilityPath(facility)} className="underline underline-offset-4">
           ← Back to {facility.name}

@@ -11,8 +11,8 @@ It complements rather than duplicates:
 - `git log` — the change-by-change record
 - `README.md` — how the built thing works today
 
-**Status:** 260 of 273 backlog items complete. Latest entry: B-264.
-**Entries:** 290 across 20 part files.
+**Status:** 261 of 274 backlog items complete. Latest entry: B-269.
+**Entries:** 291 across 20 part files.
 
 ## Reading one entry
 
@@ -339,3 +339,4 @@ Append the entry as a `### ` heading at the end of the **highest-numbered** file
 | B-261 — Every email and text follows the tenant's language (2026-09-06) | — | [20-from-b-258](progress/20-from-b-258.md#b-261-every-email-and-text-follows-the-tenants-language-2026-09-06) |
 | B-263 — The Spanish checkout refuses you in Spanish (2026-09-06) | — | [20-from-b-258](progress/20-from-b-258.md#b-263-the-spanish-checkout-refuses-you-in-spanish-2026-09-06) |
 | B-264 — The lead form on a Spanish facility page is Spanish (2026-09-06) | — | [20-from-b-258](progress/20-from-b-258.md#b-264-the-lead-form-on-a-spanish-facility-page-is-spanish-2026-09-06) |
+| B-269 — English contract prose renders under `<html lang="es">`, and no scan can see it (2026-09-07) | — | [20-from-b-258](progress/20-from-b-258.md#b-269-english-contract-prose-renders-under-html-langes-and-no-scan-can-see-it-2026-09-07) |

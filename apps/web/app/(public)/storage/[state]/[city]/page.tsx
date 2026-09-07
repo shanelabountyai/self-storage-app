@@ -9,6 +9,7 @@ import {
   type CityFacility,
 } from '@/lib/facility/city-facilities'
 import { FacilitySearchForm } from '@/components/site/facility-search-form'
+import { getLocale } from '@/lib/i18n/server'
 import {
   absoluteUrl,
   breadcrumbJsonLd,
@@ -208,8 +209,17 @@ export default async function CityPage({
     ]),
   ].filter((node): node is NonNullable<typeof node> => node !== null)
 
+  // B-269. This page is the one mixed-language page on the public site: its own
+  // prose is English (untranslated, not deliberately English) and the search
+  // form it embeds is translated. `lang="en"` on the wrapper below is therefore
+  // only half true, and the other half is stated where it stops being true —
+  // the form declares the shell's language back, so a Spanish reader is not
+  // handed Spanish labels announced as English (SC 3.1.2 in the mirror
+  // direction, which is the failure a page-level `lang` INTRODUCES).
+  const locale = await getLocale()
+
   return (
-    <div className="mx-auto w-full max-w-3xl px-4 py-12">
+    <div lang="en" className="mx-auto w-full max-w-3xl px-4 py-12">
       {schema.map((node, index) => (
         <script
           key={index}
@@ -279,7 +289,7 @@ export default async function CityPage({
         <p className="text-muted-foreground mt-1 text-sm text-pretty">
           Search by zip code to see distances from where you are.
         </p>
-        <div className="mt-4">
+        <div lang={locale} className="mt-4">
           <FacilitySearchForm defaultValue={label} labelKey="search.labelZipOrCity" />
         </div>
       </section>

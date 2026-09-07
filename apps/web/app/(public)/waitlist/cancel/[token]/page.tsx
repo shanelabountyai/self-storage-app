@@ -28,6 +28,12 @@ export default async function WaitlistCancelPage({
 
   return (
     <ProsePage
+      // B-269. Untranslated rather than deliberately English: this page is
+      // reached from an email link and nothing here is a dictionary entry yet.
+      // Either way a Spanish visitor gets `<html lang="es">` around it, so the
+      // prose says what it actually is (SC 3.1.2). Translating it later is a
+      // change of this value, not the addition of one.
+      lang="en"
       title="Waitlist"
       intro={
         result.ok
