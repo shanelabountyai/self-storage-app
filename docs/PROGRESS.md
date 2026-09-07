@@ -8890,7 +8890,7 @@ The last of B-263's three children. `describeCodeOutcome` in `@storage/core/prom
 
 **Test verification.** Typecheck clean including `tsconfig.tests.json`. Lint clean — 6 warnings, all pre-existing `_prev`/`_formData`, unchanged in count. Schema drift clean against `.env.test`; no migration in this item. Unit suite **4,378 passed, 8 skipped across 256 files passed and 1 skipped — reconciled to 4,386**. e2e `i18n.spec.ts` + `smoke.spec.ts` on `desktop-chrome`: **106 passed**, `smoke.spec.ts` run in full because five of its promo specs read the English outcome sentences by text — every English string this item moved into the dictionary is character-for-character what it replaced, which is what those assertions confirm.
 
-## B-268 — the page a Spanish reservation ends on is Spanish, date included (2026-09-07, `PENDING`)
+## B-268 — the page a Spanish reservation ends on is Spanish, date included (2026-09-07, `5f60cab`)
 
 B-267 translated the reservation form and stopped at its redirect. `/reservations` is where that redirect goes, and it is also where the cancel link in the confirmation email lands — so it is the page that says a unit is held, the page that shows when the hold ends, and the page that releases it. It imported nothing from `@/lib/i18n`.
 
