@@ -6,7 +6,7 @@
 
 **Then read the row itself before building the item** — `npm run docs:row -- B-262` prints that one row whole and verbatim, about 2 KB against the file's 490. The columns dropped here are the ones that say what to build.
 
-**276 items — 266 complete, 10 open.**
+**276 items — 267 complete, 9 open.**
 
 ## Open, in build order
 
@@ -20,7 +20,6 @@
 | 87a | B-133 | Google reviews ingestion + GBP API sync | M | B-087 |
 | 89a | B-134 | Authored copy for a size page, when a real portfolio needs it | S | B-089 |
 | 90 | B-090 | Split into six parts, 2026-08-20 | XL | B-074, B-081 |
-| 93 | B-271 | Renumbered B-264 → B-266 → B-268 → B-271, and the third time is the same collision as the first two: | S | B-092 |
 | 95 | B-273 | Renumbered B-270 → B-273 with its parent, 2026-09-07. | S | B-272 |
 
 > An item stays open until every part of it is done — several above are partly built, and their parts are recorded in [`../PROGRESS.md`](../PROGRESS.md).
@@ -302,6 +301,6 @@
 | 90u | B-269 | ✅ | A promotion's own terms are English inside every Spanish sentence that quotes them | M | Phase 2 |
 | 91 | B-091 | ✅ | Split into two parts, 2026-08-19 | L | Phase 2 |
 | 92 | B-092 | ✅ | Impersonation oversight | M | Phase 2 |
-| 93 | B-271 |  | Renumbered B-264 → B-266 → B-268 → B-271, and the third time is the same collision as the first two: | S | Phase 2 |
+| 93 | B-271 | ✅ | Renumbered B-264 → B-266 → B-268 → B-271, and the third time is the same collision as the first two: | S | Phase 2 |
 | 94 | B-272 | ✅ | Renumbered B-269 → B-272 on the merge of 2026-09-07, and the row is left saying so. | S | Phase 2 |
 | 95 | B-273 |  | Renumbered B-270 → B-273 with its parent, 2026-09-07. | S | Phase 2 |

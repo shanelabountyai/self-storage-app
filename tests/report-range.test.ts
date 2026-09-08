@@ -100,6 +100,117 @@ describe('reportRange', () => {
     expect(range.end.getTime() - range.start.getTime()).toBe(30 * 86_400_000)
   })
 
+  // B-271. The whole defect, and BOTH halves of the setup are load-bearing: a
+  // facility zone AND a `now` inside 00:00-05:00 UTC. Drop either and this test
+  // goes green against the unfixed code — which is why the original suite could
+  // not see the bug at all. It passed a `now` of 18:30 UTC and no zones, and
+  // with no zones the list falls back to UTC, the single configuration in which
+  // adding a day to the local date happens to be right.
+  //
+  // 04:23 UTC on 6 September is 23:23 on the 5th in Texas. The old end was
+  // `localDate + 1 day` = 2026-09-06T00:00Z, four hours and change BEFORE the
+  // instant the operator is standing at, so an impersonation session opened at
+  // 22:00 local was invisible on the screen that exists to catch it.
+  it('does not end a live log in the past while the local date lags UTC', () => {
+    const lateEvening = new Date('2026-09-06T04:23:00.000Z')
+    const range = reportRange(
+      {},
+      { now: lateEvening, timeZones: ['America/Chicago'], window: 'rolling-30-days' },
+    )
+
+    expect(range.end.getTime()).toBeGreaterThan(lateEvening.getTime())
+
+    // Concretely: a session started at 22:00 local — 03:00 UTC, an hour and a
+    // half before the operator opened the log — is inside the window.
+    const session = new Date('2026-09-06T03:00:00.000Z')
+    expect(session.getTime()).toBeGreaterThanOrEqual(range.start.getTime())
+    expect(session.getTime()).toBeLessThan(range.end.getTime())
+
+    // Still exactly thirty days, and still round-trippable as whole days: the
+    // fix moves which date the window is anchored to, it does not turn the end
+    // into an instant the operator cannot type back into a date input (which is
+    // what clamping to `now` would have done).
+    expect(range.end.getTime() - range.start.getTime()).toBe(30 * 86_400_000)
+    expect(range.toValue).toBe('2026-09-06')
+    expect(range.fromValue).toBe('2026-08-08')
+    const again = reportRange(
+      { from: range.fromValue, to: range.toValue },
+      { now: lateEvening, timeZones: ['America/Chicago'], window: 'rolling-30-days' },
+    )
+    expect(again.end.getTime()).toBe(range.end.getTime())
+    expect(again.start.getTime()).toBe(range.start.getTime())
+  })
+
+  // The property the arithmetic could not state before, asserted as a property
+  // rather than at the one instant that happened to catch it. There is no hour
+  // of the day and no facility on earth for which a live log may end in the
+  // past — that is what "live" means. The bug was invisible for 19 hours out of
+  // 24, which is exactly why one red CI run looked like a flake.
+  it('never ends a live log in the past, at any hour or longitude', () => {
+    const zones = [
+      'Pacific/Honolulu',
+      'America/Anchorage',
+      'America/Los_Angeles',
+      'America/Chicago',
+      'America/New_York',
+      'Europe/London',
+      'Asia/Tokyo',
+      'Pacific/Kiritimati',
+    ]
+    for (const zone of zones) {
+      for (let hour = 0; hour < 24; hour++) {
+        const now = new Date(Date.UTC(2026, 8, 6, hour, 17, 0))
+        const range = reportRange({}, { now, timeZones: [zone], window: 'rolling-30-days' })
+        expect(
+          range.end.getTime(),
+          `${zone} at ${hour}:17 UTC ended its live log in the past`,
+        ).toBeGreaterThan(now.getTime())
+        expect(range.end.getTime() - range.start.getTime()).toBe(30 * 86_400_000)
+      }
+    }
+  })
+
+  // A portfolio is reckoned against OPPOSITE ends for the two windows, and this
+  // is the test that says so on purpose rather than by accident. Same instant,
+  // same zone list: the month waits for Honolulu, the log keeps up with London.
+  it('reckons a log against the easternmost site and a month against the westernmost', () => {
+    const justAfterUtcMidnight = new Date('2026-09-01T00:32:00.000Z')
+    const zones = ['Europe/London', 'America/Chicago', 'Pacific/Honolulu']
+
+    // August has not ended in Honolulu, so the last COMPLETE month is July.
+    expect(reportRange({}, { now: justAfterUtcMidnight, timeZones: zones }).fromValue).toBe(
+      '2026-07-01',
+    )
+    // It is already 1 September in London, and a row written a minute ago is in
+    // the log regardless of which site it belongs to.
+    const log = reportRange(
+      {},
+      { now: justAfterUtcMidnight, timeZones: zones, window: 'rolling-30-days' },
+    )
+    expect(log.toValue).toBe('2026-09-01')
+    expect(log.end.getTime()).toBeGreaterThan(justAfterUtcMidnight.getTime())
+  })
+
+  // B-271 asked for `last-complete-month` to be audited rather than assumed
+  // safe. It bounds a LOCAL month with UTC midnights, so the last few local
+  // hours of a month sit on the wrong side of the boundary — for Chicago,
+  // 31 August 19:00-23:59 local reports in September. That is a boundary
+  // MISCLASSIFICATION and not the rolling window's blind spot, and this is the
+  // difference stated as an assertion: consecutive months still tile exactly,
+  // so every row is in one window and a year still sums. See `DefaultWindow`.
+  it('tiles complete months exactly even though their bounds are UTC midnights', () => {
+    const now = new Date('2026-09-14T12:00:00.000Z')
+    const zones = ['America/Chicago']
+    const august = reportRange({}, { now, timeZones: zones })
+    const july = reportRange({ from: '2026-07-01', to: '2026-07-31' }, { now, timeZones: zones })
+    const september = reportRange(
+      { from: '2026-09-01', to: '2026-09-30' },
+      { now, timeZones: zones },
+    )
+    expect(july.end.getTime()).toBe(august.start.getTime())
+    expect(august.end.getTime()).toBe(september.start.getTime())
+  })
+
   it('includes the whole of the last day picked', () => {
     // Getting this backwards silently drops the last day of every month-long
     // range, which nobody notices until a year-end total is short.

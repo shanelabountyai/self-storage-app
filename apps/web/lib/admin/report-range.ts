@@ -70,8 +70,10 @@ function parseDay(value: string | undefined): Date | null {
 /// helps nobody. The form shows what was actually used.
 export type ReportRangeOptions = {
   now?: Date
-  /// The zones of every facility in scope. The month is reckoned against the
-  /// westernmost of them. See the note above.
+  /// The zones of every facility in scope. A COMPLETE month is reckoned
+  /// against the westernmost of them (see the note above); a rolling LOG
+  /// window is reckoned against the easternmost, UTC included, because it is
+  /// asking the opposite question. See `DefaultWindow` and B-271.
   timeZones?: readonly string[]
   /// Which default applies when the URL names no range. See `DefaultWindow`.
   window?: DefaultWindow
@@ -89,6 +91,22 @@ export type ReportRangeOptions = {
 /// caught exactly that. Neither screen is ever read beside a report, and
 /// neither has to tie out to a billing period, so the objection that sank
 /// "split by report type" in D-109 does not reach them.
+///
+/// The two windows are reckoned against OPPOSITE ends of the portfolio, and
+/// that is not an inconsistency — they ask opposite questions. "Has this month
+/// finished?" is answered by the site that has advanced least; "does this
+/// window still hold what just happened?" is answered by the one that has
+/// advanced most, with UTC among the candidates because the rows themselves are
+/// UTC instants. B-271.
+///
+/// KNOWN, and deliberately NOT changed here (B-271 audit): `last-complete-month`
+/// bounds a local month with UTC midnights, so for a US portfolio the last few
+/// local hours of a month land in the NEXT month's report and the same hours of
+/// the previous month are pulled into this one. That is a boundary
+/// MISCLASSIFICATION, not the rolling window's blind spot: every row still
+/// falls in exactly one window, consecutive ranges still tile with nothing
+/// counted twice or skipped, so a year still sums. Correcting it means bounding
+/// the month in ONE zone, which is the choice B-223 rejected on purpose.
 export type DefaultWindow = 'last-complete-month' | 'rolling-30-days'
 
 export function reportRange(
@@ -107,9 +125,32 @@ export function reportRange(
   // everywhere the figures come from, and taking the minimum says exactly that
   // without computing a single UTC offset.
   const zones = timeZones && timeZones.length > 0 ? timeZones : ['UTC']
-  const today = zones
-    .map((zone) => businessDateFor(now, zone))
-    .reduce((earliest, date) => (date < earliest ? date : earliest))
+  const localDates = zones.map((zone) => businessDateFor(now, zone))
+
+  // A COMPLETE month is reckoned against the site that has advanced LEAST — the
+  // westernmost, which is just the earliest local date (B-223, above).
+  //
+  // A rolling LOG is the opposite question and so takes the opposite end. It
+  // does not ask "has the period finished everywhere", it asks "does the window
+  // still contain what just happened", and the answer has to hold in the
+  // coordinate the rows are actually stored in — which is UTC, not any
+  // facility's local date. So UTC joins the reckoning and the LATEST date wins.
+  //
+  // B-271: it used to take the earliest date for both, and add a day to that
+  // for the rolling end. That adds a day to a LOCAL date and then lets the
+  // result be read as a UTC instant, so for every hour the local date lags the
+  // UTC one — 00:00–05:00 UTC for Texas, wider further west — the "exclusive
+  // end" was already in the PAST and the log hid the rows written in the hours
+  // the operator opened it to look at. Because `max` includes the UTC date, the
+  // end below is always strictly after `now`, which is the property that
+  // matters and the one the old arithmetic could not state.
+  const today =
+    window === 'rolling-30-days'
+      ? [...localDates, businessDateFor(now, 'UTC')].reduce((latest, date) =>
+          date > latest ? date : latest,
+        )
+      : localDates.reduce((earliest, date) => (date < earliest ? date : earliest))
+
   const monthStart =
     window === 'rolling-30-days'
       ? new Date(today.getTime() - 29 * 86_400_000)
