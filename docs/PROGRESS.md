@@ -11,7 +11,7 @@ It complements rather than duplicates:
 - `git log` — the change-by-change record
 - `README.md` — how the built thing works today
 
-**Status:** 267 of 276 backlog items complete. Latest entry: B-271.
+**Status:** 267 of 276 backlog items complete. Latest entry: B-271 (`864e6f0`).
 **Entries:** 297 across 21 part files.
 
 ## Reading one entry
@@ -345,4 +345,4 @@ Append the entry as a `### ` heading at the end of the **highest-numbered** file
 | B-268 — the page a Spanish reservation ends on is Spanish, date included (2026-09-07, `5f60cab`) | `5f60cab` | [21-from-b-268](progress/21-from-b-268.md#b-268-the-page-a-spanish-reservation-ends-on-is-spanish-date-included-2026-09-07-5f60cab) |
 | B-269 — a promotion's own terms, in the reader's language (2026-09-07, `e8e27dd`) | `e8e27dd` | [21-from-b-268](progress/21-from-b-268.md#b-269-a-promotions-own-terms-in-the-readers-language-2026-09-07-e8e27dd) |
 | B-265 — the emails composed in code, in the reader's language (2026-09-07, `0e8f611`) | `0e8f611` | [21-from-b-268](progress/21-from-b-268.md#b-265-the-emails-composed-in-code-in-the-readers-language-2026-09-07-0e8f611) |
-| B-271 — a live log that ends in the past (2026-09-08, `PENDING`) | — | [21-from-b-268](progress/21-from-b-268.md#b-271-a-live-log-that-ends-in-the-past-2026-09-08-pending) |
+| B-271 — a live log that ends in the past (2026-09-08, `864e6f0`) | `864e6f0` | [21-from-b-268](progress/21-from-b-268.md#b-271-a-live-log-that-ends-in-the-past-2026-09-08-864e6f0) |
