@@ -310,6 +310,22 @@ describeDb('inquiry capture', () => {
         joinWaitlistForLead(actor([]), created.leadId, unitTypeId, `refused-${suffix}@example.com`),
       ).rejects.toThrow()
     })
+
+    // B-274. `joinWaitlist` returns a message KEY now, because its other caller
+    // is a public form a Spanish visitor may be reading. This screen is not
+    // (D-122), so the key is resolved to English HERE — and this is the
+    // assertion that says so: a staffer must never be handed `err.waitlistEmail`
+    // to read, which is exactly what shipping the key one layer further up
+    // would do, silently, with every type still satisfied.
+    it('answers the staffer in English, not with the message key (D-122)', async () => {
+      const created = await inquiry()
+      if (!created.ok) throw new Error('unreachable')
+      const result = await joinWaitlistForLead(actor(), created.leadId, unitTypeId, 'not-an-address')
+      expect(result.ok).toBe(false)
+      if (!result.ok) {
+        expect(result.problem).toBe('Enter an email address we can reach you at.')
+      }
+    })
   })
 
   describe('follow-up — US-43’s "never silently ageing"', () => {

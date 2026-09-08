@@ -3,6 +3,7 @@
 import { useActionState, useId } from 'react'
 import { IDLE_FORM_STATE, type FormState } from '@/lib/admin/form-state'
 import { FormResult } from '@/components/marketing/form-result'
+import { useT } from '@/components/i18n/locale-provider'
 
 // PRD 01 §9 Phase 3 (B-090 part 1). The notify-me form on a sold-out size.
 //
@@ -15,6 +16,18 @@ import { FormResult } from '@/components/marketing/form-result'
 // A client component only for `useActionState`, so the answer renders inline.
 // Everything it submits is plain form data: with JavaScript off the form still
 // posts and the page re-renders, the same posture as the lead form.
+//
+// ── B-274: it is inside a page that was already Spanish ─────────────────────
+//
+// Exactly B-264's finding one card further down. The sold-out card around this
+// disclosure has been translated since B-090f — "Todo rentado ahora mismo",
+// then an English "Email me when a 10 foot by 20 foot is free" — and the mail
+// it eventually sends has been Spanish since B-265. Copy comes from `useT()`,
+// the same provider the lead form uses, mounted in `app/(public)/layout.tsx`.
+//
+// `sizeLabel` is NOT translated here and does not need to be: the page builds
+// it from `facility.footBy` in the request's own language before passing it
+// in, so it arrives already spoken correctly.
 
 export function WaitlistForm({
   facilityId,
@@ -30,6 +43,7 @@ export function WaitlistForm({
   action: (prev: FormState, formData: FormData) => Promise<FormState>
 }) {
   const [state, formAction] = useActionState(action, IDLE_FORM_STATE)
+  const t = useT()
   const emailId = useId()
   const errorId = `${emailId}-error`
 
@@ -42,7 +56,7 @@ export function WaitlistForm({
     <FormResult state={state} className="mt-3">
       <details className="mt-3">
         <summary className="inline-flex min-h-11 cursor-pointer items-center text-sm underline underline-offset-4">
-          Email me when a {sizeLabel} is free
+          {t('wait.summary', { size: sizeLabel })}
         </summary>
 
         <form action={formAction} className="mt-3 flex flex-col gap-2">
@@ -51,14 +65,16 @@ export function WaitlistForm({
 
           {/* Hidden from sight AND from assistive technology, same as the lead
               form's: a blind visitor who filled it in would be silently
-              discarded. */}
+              discarded. Its label stays an English literal for the same reason
+              the lead form's does — nothing reads it, and a dictionary key
+              would advertise the field to a translator as one that matters. */}
           <div aria-hidden="true" style={{ display: 'none' }}>
             <label htmlFor={`${emailId}-company`}>Company</label>
             <input id={`${emailId}-company`} name="company" type="text" tabIndex={-1} autoComplete="off" />
           </div>
 
           <label htmlFor={emailId} className="text-sm">
-            Your email
+            {t('wait.email')}
           </label>
           <input
             id={emailId}
@@ -78,16 +94,13 @@ export function WaitlistForm({
             </span>
           )}
 
-          <p className="text-muted-foreground text-xs text-pretty">
-            One email, about this size at this facility only. There is a link in it to take
-            yourself off the list.
-          </p>
+          <p className="text-muted-foreground text-xs text-pretty">{t('wait.hint')}</p>
 
           <button
             type="submit"
             className="border-input hover:bg-accent inline-flex min-h-11 items-center justify-center self-start rounded-md border px-4 text-sm font-medium"
           >
-            Add me to the list
+            {t('wait.join')}
           </button>
         </form>
       </details>

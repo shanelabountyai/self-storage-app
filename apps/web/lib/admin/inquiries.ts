@@ -4,10 +4,10 @@ import { isStaffLeadSource, LEAD_SOURCE_LABELS } from '@storage/core/metrics'
 import { calculateMoveInCost } from '@storage/core/pricing'
 import { offerFor } from '@/lib/promotions/service'
 import { offerTermsText } from '@/lib/promotions/terms'
-import { dictionaryFor } from '@/lib/i18n'
+import { dictionaryFor, translate } from '@/lib/i18n'
 import { createReservation } from '@/lib/reservations/reserve'
 import { publicInventoryForFacility } from '@/lib/inventory/public-inventory'
-import { joinWaitlist, type JoinResult } from '@/lib/waitlist/service'
+import { joinWaitlist } from '@/lib/waitlist/service'
 import { assertFacilityAccess, can, ForbiddenError } from '@/lib/rbac/authorize'
 import { toAuditActor } from '@/lib/rbac/audit-actor'
 import type { Actor } from '@/lib/rbac/actor'
@@ -262,12 +262,21 @@ export async function holdForLead(actor: Actor, leadId: string, unitTypeId: stri
 /// calls (D-79's model, not reinvented here) — the email comes from this
 /// screen rather than the lead's own record, because a caller who gave no
 /// email when the lead was taken still deserves the list.
+/// B-274. `joinWaitlist` returns a KEY now, because its other caller is a
+/// public form whose visitor may be reading Spanish. This screen is not: D-122
+/// keeps admin English, so the key is resolved here rather than travelling one
+/// more layer up, and the shape the lead action already handles — a finished
+/// sentence — is unchanged.
+export type LeadJoinResult =
+  | { ok: true; alreadyOn: boolean; unitTypeName: string; email: string }
+  | { ok: false; problem: string }
+
 export async function joinWaitlistForLead(
   actor: Actor,
   leadId: string,
   unitTypeId: string,
   email: string,
-): Promise<JoinResult> {
+): Promise<LeadJoinResult> {
   const lead = await prisma.lead.findUniqueOrThrow({
     where: { id: leadId },
     select: { id: true, facilityId: true, firstName: true, phone: true, status: true, contactedAt: true },
@@ -286,7 +295,10 @@ export async function joinWaitlistForLead(
     phone: lead.phone,
     firstName: lead.firstName,
   })
-  if (!result.ok) return result
+  // D-122: the admin lead screen is English.
+  if (!result.ok) {
+    return { ok: false, problem: translate(dictionaryFor('en'), result.problem.key, result.problem.vars) }
+  }
 
   // Same disposition rule `holdForLead` uses (US-41): doing something for a
   // caller IS contact, and a waitlist join is not a status a follow-up task

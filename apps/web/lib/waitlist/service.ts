@@ -11,6 +11,7 @@ import {
 } from '@storage/core/waitlist'
 import { sendDirectEmail } from '@/lib/comms/service'
 import { proseFor } from '@/lib/comms/prose'
+import type { FieldMessage } from '@/lib/admin/form-state'
 import { DEFAULT_LOCALE, isLocale, type Locale } from '@/lib/i18n'
 import { siteOrigin } from '@/lib/marketing/origin'
 import { facilityPagePath } from '@/lib/marketing/paths'
@@ -37,7 +38,12 @@ export type JoinResult =
   /// confirm what it actually recorded — the size and the address the mail will
   /// go to — rather than echoing whatever was typed into the box.
   | { ok: true; alreadyOn: boolean; unitTypeName: string; email: string }
-  | { ok: false; problem: string }
+  /// B-274, the shape B-263 settled: a KEY, not a sentence. This module is
+  /// called from a public form whose visitor may be reading Spanish and from an
+  /// admin screen D-122 keeps English, and it has no way to tell which — the
+  /// caller does, so the caller resolves it. `joinWaitlistForLead` resolves
+  /// English on the spot; `joinWaitlistAction` resolves the request's language.
+  | { ok: false; problem: FieldMessage }
 
 /// Adds somebody to the list for one unit type.
 ///
@@ -58,7 +64,7 @@ export async function joinWaitlist(input: {
   locale?: Locale
 }): Promise<JoinResult> {
   if (!isPlausibleEmail(input.email)) {
-    return { ok: false, problem: 'Enter an email address we can reach you at.' }
+    return { ok: false, problem: { key: 'err.waitlistEmail' } }
   }
 
   const email = normaliseEmail(input.email)
@@ -71,7 +77,7 @@ export async function joinWaitlist(input: {
     where: { id: input.unitTypeId, facilityId: input.facilityId, facility: { status: 'active' } },
     select: { id: true, name: true },
   })
-  if (!unitType) return { ok: false, problem: 'That unit is no longer listed.' }
+  if (!unitType) return { ok: false, problem: { key: 'err.waitlistUnlisted' } }
 
   try {
     await prisma.waitlistEntry.create({
@@ -101,7 +107,20 @@ export async function joinWaitlist(input: {
   }
 }
 
-export type CancelResult = { ok: boolean; alreadyClosed: boolean }
+export type CancelResult = {
+  ok: boolean
+  alreadyClosed: boolean
+  /// B-274. The language stored when they joined, handed back so the page this
+  /// link lands on can answer in the language the mail was written in.
+  ///
+  /// The RAW column value, not a `Locale`, for the same reason
+  /// `writingLocale` takes one: a row written before `preferredLocale` existed
+  /// carries null, and a value written before `LOCALES` changed could carry
+  /// anything. Narrowing is the caller's, and `writingLocale` is where it
+  /// happens — which is also what makes an unknown token fall through to the
+  /// visitor's own cookie rather than to a hardcoded English.
+  stated: string | null
+}
 
 /// Leaves the list, from the link in the mail.
 ///
@@ -110,20 +129,21 @@ export type CancelResult = { ok: boolean; alreadyClosed: boolean }
 /// than failing, so a prospect who clicks twice is not told something went
 /// wrong.
 export async function cancelWaitlist(token: string): Promise<CancelResult> {
-  if (!token.trim()) return { ok: false, alreadyClosed: false }
+  if (!token.trim()) return { ok: false, alreadyClosed: false, stated: null }
 
   const entry = await prisma.waitlistEntry.findUnique({
     where: { cancelToken: token },
-    select: { id: true, status: true },
+    select: { id: true, status: true, preferredLocale: true },
   })
-  if (!entry) return { ok: false, alreadyClosed: false }
-  if (entry.status === 'cancelled') return { ok: true, alreadyClosed: true }
+  if (!entry) return { ok: false, alreadyClosed: false, stated: null }
+  const stated = entry.preferredLocale
+  if (entry.status === 'cancelled') return { ok: true, alreadyClosed: true, stated }
 
   await prisma.waitlistEntry.update({
     where: { id: entry.id },
     data: { status: 'cancelled' },
   })
-  return { ok: true, alreadyClosed: false }
+  return { ok: true, alreadyClosed: false, stated }
 }
 
 /// Where somebody sits in the queue for their unit type.

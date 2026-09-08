@@ -1,8 +1,11 @@
 # Next
 
-**The buildable queue is now empty on this branch as well as on `main`.**
-B-271 and B-273 both shipped on 2026-09-08 (`864e6f0`, `482abe6`). Every
-remaining open row is blocked on you rather than on code.
+**The buildable queue is empty again.** B-271, B-273 and **B-274** all shipped
+on 2026-09-08. B-274 was the one thing this file had named as unowned and
+buildable — the waitlist form's own screen copy — and building it found the
+larger half the note had undercounted: the form COMPONENT was English too, and
+so was the cancel page its now-Spanish mail links to. Every remaining open row
+is blocked on you rather than on code.
 ([06-backlog.md](docs/prds/06-backlog.md))
 
 **Seven rows remain and not one of them is a build session's to start:**
@@ -82,15 +85,40 @@ surface, and `tests/a11y-scan-coverage.test.ts` fails if it is deleted.
   markup is trivially correct. If you are about to prove a language claim with a
   scan, you are about to write a green test that tests nothing.
 
-**Two gaps named, neither owned by any row:**
+**One gap named, owned by no row** (the waitlist one below it is closed —
+B-274):
 
-- **The waitlist form's own screen copy is still English** —
-  `joinWaitlistAction`'s two `FormState` messages and `joinWaitlist`'s three
-  refusals. B-263/B-264's class, one surface neither reached. The mail that
-  form produces is Spanish now, which makes the screen the odd one out.
 - **B-268's** live confirmation state of `/reservations` has still never been
   axe-scanned in either language; **B-269's** three string-typed surfaces still
   lose their `lang` marking.
+
+## What B-274 leaves you
+
+**The waitlist cancel page is the only public page whose language comes from a
+DATABASE ROW rather than the cookie, and that is deliberate.** It is reached
+from a link in an email, so `st_locale` is absent exactly when the answer
+matters — a phone, a webmail tab, a browser that has never seen the facility
+page. It uses `writingLocale` (D-130), the same three-step rule that chose the
+language of the mail, which is why `cancelWaitlist` hands back the RAW
+`preferredLocale` column rather than a resolved `Locale`: an unknown token has
+no entry, and null falls through to the visitor's own request instead of a
+hardcoded English. Do not "simplify" it to `getLocale()`.
+
+- **`joinWaitlistAction` deliberately does NOT use `keyedFieldError`**, unlike
+  the lead form beside it. That helper announces "There is a problem with one
+  field." and leaves the sentence beside the input; this form has ONE field and
+  B-171 built its live region to announce something a renter can act on. The
+  first draft used the helper and `smoke.spec.ts`'s ENGLISH refusal spec caught
+  it — a behaviour change smuggled inside a translation. If you route it through
+  the helper, that spec goes red and it is telling you the truth.
+- **The cancel page's `<title>` is still English and no row owns it.** A
+  translated one needs `generateMetadata`, which cannot read the entry without
+  calling `cancelWaitlist` a second time — and that function MUTATES.
+- **One non-reproducing e2e failure was recorded rather than dismissed.**
+  `e2e/i18n.spec.ts -g "waitlist|Spanish"` failed **B-267's** reservation spec
+  once, on the sold-out redirect; it passes alone, on a re-run of the same
+  filter, and on two full-file runs. Not this item's code. If you see it again,
+  it is a shared-state bug and not a flake.
 
 ## Do not reverse without reversing a decision
 

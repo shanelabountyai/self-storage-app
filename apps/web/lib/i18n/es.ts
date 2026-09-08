@@ -301,6 +301,28 @@ export const es: Dictionary = {
   'lead.thanks':
     'Listo: alguien de esta sucursal se pondrá en contacto con usted. Si es urgente, es más rápido llamarnos.',
 
+  // --- The notify-me waitlist on the facility page (B-090 part 1, B-274) --
+  'wait.summary': 'Avísenme por correo cuando se desocupe una de {size}',
+  'wait.email': 'Su correo electrónico',
+  'wait.hint':
+    'Un solo correo, únicamente sobre este tamaño en esta sucursal. Incluye un enlace para darse de baja de la lista.',
+  'wait.join': 'Agrégueme a la lista',
+  'wait.joined': 'Ya está en la lista. Le escribiremos en cuanto se desocupe una.',
+  'wait.alreadyOn': 'Ya está en la lista: le escribiremos en cuanto se desocupe una.',
+  'wait.discarded': 'Ya está en la lista.',
+
+  // The cancel page, reached from the link in that mail (B-274).
+  'wait.cancelTitle': 'Lista de espera',
+  'wait.cancelOff': 'Ya no está en la lista.',
+  'wait.cancelUnknown': 'No encontramos ese enlace de la lista de espera.',
+  'wait.cancelDone':
+    'No volveremos a escribirle sobre este tamaño. Nada más cambia, y puede volver a apuntarse cuando quiera desde la página de la sucursal.',
+  'wait.cancelAlready':
+    'Usted ya no estaba en esta lista: no hay nada más que hacer. No volveremos a escribirle sobre este tamaño.',
+  'wait.cancelBadLink':
+    'Puede que el enlace ya se haya usado, o que su programa de correo lo haya cortado por la mitad. De cualquier forma nada ha cambiado; si sigue recibiendo correos que no quiere, responda a uno y lo resolvemos.',
+  'wait.findStorage': 'Encuentre bodegas cerca de usted',
+
   // --- Move-in cost lines (US-301, shared with checkout) -----------------
   'cost.rent': 'Renta del primer mes',
   'cost.rent.note':
@@ -587,6 +609,10 @@ export const es: Dictionary = {
   'err.leadPhone': 'Un teléfono con al menos 10 dígitos, para que alguien pueda llamarle.',
   'err.leadRateLimited':
     'Son muchas consultas desde un mismo lugar en poco tiempo. Espere unos minutos, o llámenos.',
+
+  // B-274. Los dos rechazos del formulario de lista de espera. Ver `en.ts`.
+  'err.waitlistEmail': 'Escriba un correo electrónico en el que podamos localizarle.',
+  'err.waitlistUnlisted': 'Esa unidad ya no está publicada.',
 
   // --- Checkout announcer (4.1.3, 2.4.3) --------------------------------
   'announce.movedToSize': 'Lo cambiamos a la {size}. No se perdió nada de lo que escribió.',

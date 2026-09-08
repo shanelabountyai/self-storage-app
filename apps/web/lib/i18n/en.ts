@@ -328,6 +328,42 @@ export const en = {
   'lead.thanks':
     'Got it — somebody from this facility will be in touch. If it is urgent, calling is faster.',
 
+  // --- The notify-me waitlist on the facility page (B-090 part 1, B-274) --
+  //
+  // The last customer-facing form on the public site that was still English
+  // inside a Spanish page: B-090f translated the facility page around it,
+  // B-264 translated the lead form beside it, and B-265 translated the mail
+  // this form eventually sends — leaving the form itself, its answers, and
+  // the cancel page the Spanish mail links to as the only English left on the
+  // journey.
+  //
+  // `wait.joined` and `wait.alreadyOn` say the same thing on purpose. The
+  // distinction is ours, not the visitor's: see `joinWaitlistAction`.
+  'wait.summary': 'Email me when a {size} is free',
+  'wait.email': 'Your email',
+  'wait.hint':
+    'One email, about this size at this facility only. There is a link in it to take yourself off the list.',
+  'wait.join': 'Add me to the list',
+  'wait.joined': "You're on the list. We'll email you as soon as one is free.",
+  'wait.alreadyOn': "You're on the list — we'll email you as soon as one is free.",
+  /// The honeypot's answer, and the reason it is a separate key rather than
+  /// `wait.joined`: a bot is told nothing about which check it failed, so it
+  /// gets the shortest true-looking sentence and no promise of a mail.
+  'wait.discarded': "You're on the list.",
+
+  // The cancel page, reached from the link in that mail (B-274). Its language
+  // comes from the ENTRY rather than the cookie — see the page.
+  'wait.cancelTitle': 'Waitlist',
+  'wait.cancelOff': 'You are off the list.',
+  'wait.cancelUnknown': 'We could not find that waitlist link.',
+  'wait.cancelDone':
+    'We will not email you about this size again. Nothing else changes, and you can join again any time from the facility page.',
+  'wait.cancelAlready':
+    'You were already off this list — nothing more to do. We will not email you about this size again.',
+  'wait.cancelBadLink':
+    'The link may have been used already, or it may have been cut in half by an email client. Nothing has changed either way — if you are still getting emails you do not want, reply to one and we will sort it out.',
+  'wait.findStorage': 'Find storage near you',
+
   // --- Move-in cost lines (US-301, shared with checkout) -----------------
   'cost.rent': 'First month rent',
   'cost.rent.note':
@@ -643,6 +679,14 @@ export const en = {
   'err.leadPhone': 'A phone number with at least 10 digits, so somebody can call you.',
   'err.leadRateLimited':
     'That is a lot of enquiries from one place in a short time. Give it a few minutes, or call us.',
+
+  // B-274. The waitlist form's two refusals. `err.waitlistUnlisted` repeats
+  // `err.reserveUnlisted`'s sentence word for word and is deliberately its own
+  // key: the two forms happen to say the same thing about the same fact today,
+  // and a shared key named for the reservation form would be a name that lies
+  // about its second caller the moment either sentence is reworded.
+  'err.waitlistEmail': 'Enter an email address we can reach you at.',
+  'err.waitlistUnlisted': 'That unit is no longer listed.',
 
   // --- Checkout announcer (4.1.3, 2.4.3) --------------------------------
   'announce.movedToSize': 'We moved you to the {size}. Nothing you entered was lost.',

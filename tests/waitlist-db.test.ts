@@ -101,9 +101,15 @@ afterAll(async () => {
 })
 
 describeDb('joining a waitlist', () => {
+  // B-274. Both refusals below assert the KEY, not a sentence. That is the
+  // whole shape of the fix: this module has two callers in two languages —
+  // a public form a Spanish visitor may be reading, and an admin screen D-122
+  // keeps English — so it cannot resolve its own copy, and an English literal
+  // creeping back in is exactly what these two assertions catch.
   it('refuses an address nothing could be delivered to', async () => {
     const result = await join('not-an-address')
     expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.problem).toEqual({ key: 'err.waitlistEmail' })
   })
 
   it('refuses a unit type that is not at the facility named', async () => {
@@ -128,6 +134,7 @@ describeDb('joining a waitlist', () => {
       email: `crafted-${suffix}@example.com`,
     })
     expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.problem).toEqual({ key: 'err.waitlistUnlisted' })
     await prisma.facility.delete({ where: { id: other.id } })
   })
 
@@ -248,9 +255,22 @@ describeDb('the sweep', () => {
       where: { unitTypeId, email },
       select: { cancelToken: true },
     })
-    expect(await cancelWaitlist(entry.cancelToken)).toEqual({ ok: true, alreadyClosed: false })
+    // B-274. `stated` is the language stored at join time — null here, because
+    // `join` above is the admin-shaped call that passes no locale — and it
+    // comes back on BOTH visits, including the idempotent second one. The
+    // cancel page has no other source: the link is opened from a mail client,
+    // where the cookie the rest of the site reads does not exist.
+    expect(await cancelWaitlist(entry.cancelToken)).toEqual({
+      ok: true,
+      alreadyClosed: false,
+      stated: null,
+    })
     // Clicking the link twice is not a failure.
-    expect(await cancelWaitlist(entry.cancelToken)).toEqual({ ok: true, alreadyClosed: true })
+    expect(await cancelWaitlist(entry.cancelToken)).toEqual({
+      ok: true,
+      alreadyClosed: true,
+      stated: null,
+    })
 
     await freeUnits(unitTypeId, 1)
     await sweepWaitlists(new Date())
@@ -258,7 +278,38 @@ describeDb('the sweep', () => {
   })
 
   it('reports nothing for a token that is not ours', async () => {
-    expect(await cancelWaitlist('not-a-real-token')).toEqual({ ok: false, alreadyClosed: false })
+    // B-274: `stated` is null rather than a guessed 'en', so `writingLocale`
+    // falls through to the visitor's own request instead of answering an
+    // unknown link in a language nobody chose.
+    expect(await cancelWaitlist('not-a-real-token')).toEqual({
+      ok: false,
+      alreadyClosed: false,
+      stated: null,
+    })
+  })
+
+  // B-274. The half the two above cannot show: a Spanish joiner's link answers
+  // in Spanish, from the row, with no cookie anywhere in the request.
+  it('hands back the language stored when they joined', async () => {
+    const unitTypeId = await makeType('spanish-cancel', 1)
+    const email = `adios-${suffix}@example.com`
+    const joined = await joinWaitlist({
+      facilityId: state.facilityId,
+      unitTypeId,
+      email,
+      locale: 'es',
+    })
+    expect(joined.ok).toBe(true)
+
+    const entry = await prisma.waitlistEntry.findFirstOrThrow({
+      where: { unitTypeId, email },
+      select: { cancelToken: true },
+    })
+    expect(await cancelWaitlist(entry.cancelToken)).toEqual({
+      ok: true,
+      alreadyClosed: false,
+      stated: 'es',
+    })
   })
 })
 
