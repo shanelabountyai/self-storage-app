@@ -1,13 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
-  describeTerms,
   discountForPeriod,
   discountSchedule,
   evaluatePromotions,
-  withMinStay,
+  offerTerms,
   type PromotionCandidate,
 } from "../packages/core/promotions";
 import { buildInvoice } from "../packages/core/billing/invoice-lines";
+import { offerTermsText } from "../apps/web/lib/promotions/terms";
+import { en } from "../apps/web/lib/i18n/en";
+import { es } from "../apps/web/lib/i18n/es";
 
 // B-070 / PRD 04 §3.6 FR-PROMO-1/3, PRD 02 US-10.
 
@@ -92,31 +94,86 @@ describe("discountSchedule — FR-PROMO-1", () => {
   });
 });
 
-describe("describeTerms — US-12 AC1", () => {
+describe("offerTerms — US-12 AC1", () => {
+  // B-269 split this in two. `describeTerms` returned an English sentence from
+  // a pure package, which is why «Código aplicado: 50% off the first month» was
+  // what a Spanish renter read; `offerTerms` returns the facts and
+  // `offerTermsText` writes the words against a dictionary. The English is
+  // asserted character-for-character because `smoke.spec.ts` locates by it.
+
   it("says what each type actually does", () => {
-    expect(
-      describeTerms({ type: "free_months", value: 0, durationPeriods: 1 }),
-    ).toBe("First month free");
-    expect(
-      describeTerms({ type: "free_months", value: 0, durationPeriods: 3 }),
-    ).toBe("First 3 months free");
-    expect(
-      describeTerms({ type: "percent_off", value: 25, durationPeriods: 1 }),
-    ).toBe("25% off the first month");
-    expect(
-      describeTerms({ type: "amount_off", value: 5_000, durationPeriods: 2 }),
-    ).toBe("$50 off the first 2 months");
+    const say = (candidate: Partial<PromotionCandidate>, rate?: number) =>
+      offerTermsText(en, offerTerms(promo({ termsText: null, ...candidate }), rate));
+
+    expect(say({ type: "free_months", value: 0, durationPeriods: 1 })).toBe(
+      "First month free",
+    );
+    expect(say({ type: "free_months", value: 0, durationPeriods: 3 })).toBe(
+      "First 3 months free",
+    );
+    expect(say({ type: "percent_off", value: 25, durationPeriods: 1 })).toBe(
+      "25% off the first month",
+    );
+    expect(say({ type: "amount_off", value: 5_000, durationPeriods: 2 })).toBe(
+      "$50 off the first 2 months",
+    );
+  });
+
+  it("says the same things in Spanish", () => {
+    // The row itself. Every one of these rendered its English through a
+    // translated sentence before this item.
+    const say = (candidate: Partial<PromotionCandidate>, rate?: number) =>
+      offerTermsText(es, offerTerms(promo({ termsText: null, ...candidate }), rate));
+
+    expect(say({ type: "free_months", value: 0, durationPeriods: 1 })).toBe(
+      "Primer mes gratis",
+    );
+    expect(say({ type: "free_months", value: 0, durationPeriods: 3 })).toBe(
+      "Primeros 3 meses gratis",
+    );
+    expect(say({ type: "percent_off", value: 25, durationPeriods: 1 })).toBe(
+      "25% de descuento el primer mes",
+    );
+    // The FIGURE is deliberately identical — USD in `es-US` is `$50`, and a
+    // renter comparing the badge against an email must see one number.
+    expect(say({ type: "amount_off", value: 5_000, durationPeriods: 2 })).toBe(
+      "$50 de descuento los primeros 2 meses",
+    );
   });
 
   it("caps the stated amount at the rent it is describing", () => {
     // A badge saying "$500 off" on a $129 unit is a promise the invoice cannot
-    // keep — the discount is capped, so the wording must be too.
-    expect(
-      describeTerms(
-        { type: "amount_off", value: 50_000, durationPeriods: 1 },
-        RENT,
-      ),
-    ).toContain("$129");
+    // keep — the discount is capped, so the wording must be too. Capped in the
+    // FACTS now rather than in the sentence, so every language inherits it.
+    const terms = offerTerms(
+      promo({
+        type: "amount_off",
+        value: 50_000,
+        durationPeriods: 1,
+        termsText: null,
+      }),
+      RENT,
+    );
+    expect(terms).toMatchObject({ kind: "amount_off", amountCents: RENT });
+    expect(offerTermsText(en, terms)).toContain("$129");
+    expect(offerTermsText(es, terms)).toContain("$129");
+  });
+
+  it("keeps an operator's own wording apart from the generated half", () => {
+    // The distinction B-269 exists to preserve. `termsText` is free text in a
+    // database column with no key to return for it, so it stays its own
+    // variant — folding it in is how an operator's wording gets silently
+    // replaced by a translation of a different sentence (D-129).
+    expect(offerTerms(promo({ termsText: "First month FREE!" }))).toMatchObject({
+      kind: "operator",
+      text: "First month FREE!",
+    });
+    // Untranslated on purpose, in both dictionaries.
+    for (const dict of [en, es]) {
+      expect(offerTermsText(dict, offerTerms(promo({ termsText: "  Half off!  " })))).toBe(
+        "Half off!",
+      );
+    }
   });
 });
 
@@ -127,16 +184,26 @@ describe("minimum stay — FR-PROMO-1 (B-144)", () => {
   // the operator gave the month away unconditionally or did not run the promo.
 
   it("says nothing when there is no minimum", () => {
-    expect(withMinStay("First month free", 0)).toBe("First month free");
+    const terms = offerTerms(
+      promo({ type: "free_months", durationPeriods: 1, termsText: null, minStayMonths: 0 }),
+    );
+    expect(offerTermsText(en, terms)).toBe("First month free");
+    expect(offerTermsText(es, terms)).toBe("Primer mes gratis");
   });
 
   it("states the minimum on the offer a renter reads", () => {
-    expect(withMinStay("First month free", 6)).toBe(
-      "First month free — 6-month minimum stay",
+    const six = offerTerms(
+      promo({ type: "free_months", durationPeriods: 1, termsText: null, minStayMonths: 6 }),
     );
-    expect(withMinStay("First month free", 1)).toBe(
-      "First month free — 1-month minimum stay",
+    expect(offerTermsText(en, six)).toBe("First month free — 6-month minimum stay");
+    expect(offerTermsText(es, six)).toBe("Primer mes gratis — estancia mínima de 6 meses");
+
+    const one = offerTerms(
+      promo({ type: "free_months", durationPeriods: 1, termsText: null, minStayMonths: 1 }),
     );
+    expect(offerTermsText(en, one)).toBe("First month free — 1-month minimum stay");
+    // Spanish agrees the noun with the count where English does not.
+    expect(offerTermsText(es, one)).toBe("Primer mes gratis — estancia mínima de 1 mes");
   });
 
   it("survives an operator writing their own terms", () => {
@@ -155,7 +222,14 @@ describe("minimum stay — FR-PROMO-1 (B-144)", () => {
       ],
       context,
     ).automatic;
-    expect(result.terms).toBe("First month FREE! — 6-month minimum stay");
+    expect(offerTermsText(en, result.terms)).toBe(
+      "First month FREE! — 6-month minimum stay",
+    );
+    // The operator's own words survive into Spanish; the CONDITION does not
+    // stay English with them.
+    expect(offerTermsText(es, result.terms)).toBe(
+      "First month FREE! — estancia mínima de 6 meses",
+    );
   });
 
   it("carries the minimum onto the generated wording too", () => {
@@ -170,7 +244,9 @@ describe("minimum stay — FR-PROMO-1 (B-144)", () => {
       ],
       context,
     ).automatic;
-    expect(result.terms).toBe("First month free — 6-month minimum stay");
+    expect(offerTermsText(en, result.terms)).toBe(
+      "First month free — 6-month minimum stay",
+    );
   });
 
   it("leaves an unconditional promo unchanged", () => {
@@ -178,7 +254,7 @@ describe("minimum stay — FR-PROMO-1 (B-144)", () => {
       [promo({ minStayMonths: 0 })],
       context,
     ).automatic;
-    expect(result.terms).toBe("50% off the first month");
+    expect(offerTermsText(en, result.terms)).toBe("50% off the first month");
   });
 });
 
@@ -300,10 +376,16 @@ describe("evaluatePromotions — FR-PROMO-3", () => {
     // B-266: the OUTCOME, not a sentence. `keptTerms` is what the renter is
     // actually getting, and carrying it is what lets each surface say so in its
     // own language — the sentence used to be built here, in English, and was
-    // read verbatim by a Spanish checkout.
+    // read verbatim by a Spanish checkout. B-269 took the last of the English
+    // out: `keptTerms` is the facts now, and the words are the assertion below.
     expect(result.codeOutcome).toEqual({
       kind: "superseded",
-      keptTerms: "100% off the first month",
+      keptTerms: {
+        kind: "percent_off",
+        percent: 100,
+        periods: 1,
+        minStayMonths: 0,
+      },
     });
   });
 
@@ -324,7 +406,12 @@ describe("evaluatePromotions — FR-PROMO-3", () => {
     expect(result.best?.promotion.id).toBe("gated");
     expect(result.codeOutcome).toEqual({
       kind: "applied",
-      terms: "100% off the first month",
+      terms: {
+        kind: "percent_off",
+        percent: 100,
+        periods: 1,
+        minStayMonths: 0,
+      },
     });
   });
 

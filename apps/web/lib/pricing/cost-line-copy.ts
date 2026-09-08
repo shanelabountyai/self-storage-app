@@ -9,12 +9,19 @@ import { translate, type Dictionary, type MessageKey } from '@/lib/i18n'
 // function already emits is a stable `key` per line, which is all a lookup
 // needs — so the maths stays where it is and the words move here.
 //
-// Two lines are deliberately NOT translated:
-//   * the promo label when a promotion supplied its own terms, which is text an
-//     operator typed and which appears verbatim on the badge above; and
-//   * any key this map does not know, which falls back to the English label
-//     rather than rendering blank — a new cost line must be visible before it
-//     is translated, never invisible until somebody notices.
+// One line is deliberately NOT translated: any key this map does not know,
+// which falls back to the English label rather than rendering blank — a new
+// cost line must be visible before it is translated, never invisible until
+// somebody notices.
+//
+// B-269 corrected the other half of this note. `promoTerms` used to be an
+// English sentence built in `@storage/core/promotions`, and this comment said
+// so; it is now whatever `offerTermsText` produced for the CALLER's dictionary,
+// so the generated half arrives translated and only an operator's own
+// `termsText` is still their own words (D-129). It is the same string the badge
+// above shows either way, which is the property that matters here: two
+// different descriptions of one discount is what gets argued about at the
+// counter.
 
 const LINE_KEYS: Record<string, MessageKey> = {
   rent: 'cost.rent',
@@ -34,10 +41,9 @@ const NOTE_KEYS: Record<string, MessageKey> = {
 export type CostLine = { key: string; label: string; note?: string }
 
 export function costLineLabel(dict: Dictionary, line: CostLine, promoTerms?: string): string {
-  // An operator's own promotion wording wins over "Promotion" in either
-  // language — it is the same string the badge on the card shows, and two
-  // different descriptions of one discount is what gets argued about at the
-  // counter.
+  // The promotion's own wording wins over "Promotion" in either language — it
+  // is the same string the badge on the card shows, resolved by the caller
+  // against the same dictionary this function was handed.
   if (line.key === 'promo' && promoTerms) return promoTerms
   const key = LINE_KEYS[line.key]
   return key ? translate(dict, key) : line.label

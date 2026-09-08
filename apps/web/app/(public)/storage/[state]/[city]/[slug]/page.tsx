@@ -47,8 +47,9 @@ import {
 import { getLocale } from '@/lib/i18n/server'
 import { costLineLabel, costLineNote } from '@/lib/pricing/cost-line-copy'
 import { offerFor } from '@/lib/promotions/service'
+import { OfferTermsText, offerTermsText } from '@/lib/promotions/terms'
 import { PromoCodeEntry } from '@/components/promo-code-entry'
-import type { CodeOutcome } from '@storage/core/promotions'
+import type { CodeOutcome, OfferTerms } from '@storage/core/promotions'
 import { visibleReviewsForFacility } from '@/lib/reviews/public'
 import {
   applyFilters,
@@ -214,7 +215,7 @@ function CostBreakdown({
 }: {
   unitType: PublicUnitType
   pricing: PublicPricingContext
-  promo: { terms: string; firstPeriodCents: number; fromCode: boolean } | null
+  promo: { terms: OfferTerms; firstPeriodCents: number; fromCode: boolean } | null
   dict: Dictionary
 }) {
   // The one shared calculation (US-301). B-020's checkout stepper calls the
@@ -244,7 +245,7 @@ function CostBreakdown({
     ...(promo
       ? {
           promoDiscountCents: Math.max(0, unitType.webRateCents - promo.firstPeriodCents),
-          promoTerms: promo.terms,
+          promoTerms: offerTermsText(dict, promo.terms),
         }
       : {}),
   })
@@ -268,7 +269,7 @@ function CostBreakdown({
       <dl className="mt-3 flex flex-col gap-2 text-sm">
         {cost.lines.map((line) => (
           <div key={line.key} className="grid grid-cols-[1fr_auto] gap-x-4">
-            <dt>{costLineLabel(dict, line, promo?.terms)}</dt>
+            <dt>{costLineLabel(dict, line, promo ? offerTermsText(dict, promo.terms) : undefined)}</dt>
             <dd className="tabular-nums">
               {line.key === 'protection'
                 ? translate(dict, 'facility.chosenAtCheckout')
@@ -355,7 +356,7 @@ function UnitTypeCard({
   phone: PhoneNumber
   pricing: PublicPricingContext
   facility: PublicFacility
-  promo: { terms: string; firstPeriodCents: number; fromCode: boolean } | null
+  promo: { terms: OfferTerms; firstPeriodCents: number; fromCode: boolean } | null
   /// B-122. Carried into the "Rent now" POST so the route re-evaluates the same
   /// code and locks the same offer onto the session. Without it a renter who
   /// applied a code and pressed Rent now would be quoted the automatic promo,
@@ -399,7 +400,14 @@ function UnitTypeCard({
           somebody argues about at the counter. */}
       {promo && (
         <p className="border-input mt-2 rounded-md border p-2 text-sm">
-          <span className="font-medium">{promo.terms}</span>
+          {/* B-269. `OfferTermsText`, not `offerTermsText`: this badge is the
+              one place the terms are a whole element rather than a fragment of
+              a sentence, so an operator's own wording can carry its own
+              `lang="en"` (D-129) while a minimum stay appended to it stays in
+              the reader's language. */}
+          <span className="font-medium">
+            <OfferTermsText dict={dict} terms={promo.terms} />
+          </span>
           <span className="text-muted-foreground block text-xs">
             {/* B-122: the reassurance splits once a code can unlock a promo.
                 "Nothing to enter" was true of every promotion that could exist
@@ -648,7 +656,7 @@ function UnitList({
   /// Keyed by unit type: eligibility is per size (FR-PROMO-1's unit-type
   /// targeting), so one badge for the whole page would be wrong the moment a
   /// promo applies to 10x10s only.
-  promos: Map<string, { terms: string; firstPeriodCents: number; fromCode: boolean }>
+  promos: Map<string, { terms: OfferTerms; firstPeriodCents: number; fromCode: boolean }>
   dict: Dictionary
 }) {
   const t = (key: MessageKey, vars?: Record<string, string | number>) =>
@@ -885,7 +893,7 @@ export default async function FacilityPage({
   // real badge and a real figure on the card it applies to — the same evaluator
   // and the same numbers the "Rent now" POST will re-derive a moment later.
   const typedCode = query.promo?.trim() || null
-  const promos = new Map<string, { terms: string; firstPeriodCents: number; fromCode: boolean }>()
+  const promos = new Map<string, { terms: OfferTerms; firstPeriodCents: number; fromCode: boolean }>()
   const outcomes: CodeOutcome[] = []
   for (const unitType of unitTypes ?? []) {
     const lookup = await offerFor({

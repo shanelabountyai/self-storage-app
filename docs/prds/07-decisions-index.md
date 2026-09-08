@@ -10,7 +10,7 @@
 
 One caveat, because it is visible below rather than hidden: the topic column changed style over time. Early rows name a conflict to resolve ("Kiosk mode (master P2 vs PRD 03 P3)"); later ones state the decision outright ("Attaching a lease to a business account does not move the autopay mandate"). Where the source does that, so does this index — it is quoting, not summarising. Either way the binding text is the row in [`07-decisions.md`](07-decisions.md), not the line here.
 
-**133 decisions.**
+**135 decisions.**
 
 | # | Topic |
 |---|---|
@@ -147,3 +147,5 @@ One caveat, because it is visible below rather than hidden: the topic column cha
 | D-126 | **How a template carries a second language: a second ROW, or a second body column on the one row** (settled while building **B-261**, 2026-09-06) |
 | D-127 | **Whether the courtesy emails that ACCOMPANY a mailed lien notice may be translated, when D-122 keeps the notice itself English** (settled while building **B-261**, 2026-09-06) |
 | D-128 | **Whether an unauthenticated checkout may change the language an EXISTING account is written to in** (settled while building **B-261**, 2026-09-06) |
+| D-129 | **Whether an operator's own promotion wording gets a per-language column, or is rendered as typed** (settled with the owner while building **B-269**, 2026-09-07; the GENERATED half of a promotion's terms is keys and numbers by that item, and this is the half that cannot be) |
+| D-130 | **What language a message composes itself in when the recipient has no `Tenant` row, or no request to read a cookie from** (settled while building **B-265**, 2026-09-07; the templated path has read `recipient.locale` since **B-261**, and the nine `sendDirectEmail` sends bypass it) |

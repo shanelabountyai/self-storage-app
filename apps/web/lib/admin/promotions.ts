@@ -1,10 +1,11 @@
 import { prisma } from "@storage/db";
 import { recordAudit } from "@storage/core/audit";
 import {
-  describeTerms,
+  offerTerms,
   discountSchedule,
-  withMinStay,
 } from "@storage/core/promotions";
+import { dictionaryFor } from "@/lib/i18n";
+import { offerTermsText } from "@/lib/promotions/terms";
 import { requirePermission } from "@/lib/rbac/authorize";
 import { toAuditActor } from "@/lib/rbac/audit-actor";
 import type { Actor } from "@/lib/rbac/actor";
@@ -77,10 +78,10 @@ export async function promotionsFor(
     endsAt: promotion.endsAt,
     maxRedemptions: promotion.maxRedemptions,
     redemptionCount: promotion.redemptionCount,
-    terms: withMinStay(
-      promotion.termsText?.trim() || describeTerms(promotion),
-      promotion.minStayMonths,
-    ),
+    // D-122 keeps the admin screens English, so this resolves against the
+    // English dictionary explicitly rather than by omission (B-269) — the
+    // package no longer has a language to default to.
+    terms: offerTermsText(dictionaryFor('en'), offerTerms(promotion)),
     codes: promotion.codes.map((code) => ({
       id: code.id,
       code: code.code,

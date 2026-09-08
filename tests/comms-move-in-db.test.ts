@@ -22,12 +22,12 @@ let tenantEmail = ''
 let leaseId = ''
 let unitId = ''
 
-let sends: { to: string; text: string }[] = []
+let sends: { to: string; text: string; html: string }[] = []
 function fakeProvider(): provider.MessageProvider {
   return {
     name: 'test',
     async sendEmail(email) {
-      sends.push({ to: email.to, text: email.text })
+      sends.push({ to: email.to, text: email.text, html: email.html })
       return { ok: true, providerMessageId: `test_${sends.length}` }
     },
   }
@@ -213,6 +213,7 @@ describeDb('sendDirectEmail (B-031)', () => {
       eventId: 'x',
       templateKey: 'direct_test',
       classification: 'transactional' as const,
+      locale: 'en' as const,
       to: address,
       fromName: 'Test',
       subject: 'Subject',
@@ -229,6 +230,32 @@ describeDb('sendDirectEmail (B-031)', () => {
     expect(await prisma.message.count({ where: { idempotencyKey: key } })).toBe(1)
   })
 
+  // B-265. The one thing `sendDirectEmail` does with the locale that no
+  // caller can do for itself. Nine sends composed their own HTML and none of
+  // them carried a language declaration at all, which was survivable only
+  // while every one was English — a Spanish body under no `lang` tells a
+  // screen reader to pronounce Spanish with the document's default phonemes,
+  // the same 3.1.2 failure B-261 fixed on the templated path.
+  it.each(['en', 'es'] as const)(
+    'B-265: declares the message language on the HTML part (%s)',
+    async (locale) => {
+      await sendDirectEmail({
+        idempotencyKey: `direct-lang-${locale}:${randomUUID()}`,
+        eventId: 'x',
+        templateKey: 'direct_test',
+        classification: 'transactional',
+        locale,
+        to: address,
+        fromName: 'Test',
+        subject: 'Subject',
+        html: '<p>Body</p>',
+        text: 'Body',
+      })
+
+      expect(sends.at(-1)?.html).toBe(`<div lang="${locale}"><p>Body</p></div>`)
+    },
+  )
+
   it('withholds from a suppressed address without calling the provider', async () => {
     await suppress({ channel: 'email', address, reason: 'hard_bounce' })
 
@@ -237,6 +264,7 @@ describeDb('sendDirectEmail (B-031)', () => {
       eventId: 'x',
       templateKey: 'direct_test',
       classification: 'transactional',
+      locale: 'en',
       to: address,
       fromName: 'Test',
       subject: 'Subject',

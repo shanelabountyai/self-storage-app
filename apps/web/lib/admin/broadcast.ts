@@ -6,6 +6,7 @@ import { OCCUPYING_LEASE_STATUSES } from '@storage/core/inventory'
 import { renderEmail, RenderError } from '@/lib/comms/render'
 import { commsEnabled } from '@/lib/comms/provider'
 import { sendDirectEmail } from '@/lib/comms/service'
+import { DEFAULT_LOCALE } from '@/lib/i18n'
 import { inParallel } from '@/lib/jobs/queue'
 import { requirePermission } from '@/lib/rbac/authorize'
 import { toAuditActor } from '@/lib/rbac/audit-actor'
@@ -401,6 +402,14 @@ export async function sendBroadcast(actor: Actor, input: BroadcastInput): Promis
       eventId,
       templateKey: input.templateKey,
       classification: template.classification,
+      // B-265 (D-122, D-129). English deliberately, and this is the operator
+      // half rather than the admin surface: the body is `input.message`, free
+      // text a staffer typed, quoted as written the same way a promotion's
+      // `termsText` is. Resolving `recipient.locale` here would put a Spanish
+      // `lang` around English words — the 3.1.2 failure the wrapper exists to
+      // prevent — and the seeded Spanish template it would select cannot
+      // translate the sentence the staffer actually wrote.
+      locale: DEFAULT_LOCALE,
       category,
       to: recipient.email,
       fromName: facility.emailFromName ?? facility.name,

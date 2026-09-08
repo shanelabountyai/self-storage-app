@@ -5,7 +5,9 @@ import { currentRateForUnitType } from '@/lib/pricing/unit-type-rates'
 import { offerFor } from '@/lib/promotions/service'
 import { sendDirectEmail } from '@/lib/comms/service'
 import type { MoveSource } from '@storage/core/metrics'
-import { translate, type Dictionary } from '@/lib/i18n'
+import type { OfferTerms } from '@storage/core/promotions'
+import { proseFor } from '@/lib/comms/prose'
+import { DEFAULT_LOCALE, LOCALE_TAG, translate, type Dictionary, type Locale } from '@/lib/i18n'
 import { en } from '@/lib/i18n/en'
 
 // PRD 01 FR-4.1. The server-side checkout state machine.
@@ -91,7 +93,11 @@ async function claimUnit(
 export type PromoSnapshot = {
   promotionId: string
   promoCodeId: string | null
-  terms: string
+  /// B-269. The facts the terms are written from, snapshotted as JSON rather
+  /// than as a finished English sentence — the session outlives the render that
+  /// created it, and the renter who resumes it may not be reading the language
+  /// the sentence was written in.
+  terms: OfferTerms
   /// Off the first period, in cents (positive).
   firstPeriodCents: number
   schedule: { periodIndex: number; amountCents: number }[]
@@ -181,7 +187,7 @@ export async function startCheckout(input: StartInput): Promise<StartResult> {
         data: {
           ...(input.promo
             ? {
-                promoTerms: input.promo.terms,
+                promoTerms: input.promo.terms as unknown as Prisma.InputJsonValue,
                 promoFirstPeriodCents: input.promo.firstPeriodCents,
                 promoSchedule: input.promo.schedule,
               }
@@ -296,7 +302,7 @@ function toView(session: {
 /// so the figure advertised, the figure charged and the figure recorded cannot
 /// come from three different evaluations.
 export function promoDiscountOn(session: CheckoutSessionView): {
-  terms: string
+  terms: OfferTerms
   firstPeriodCents: number
   schedule: { periodIndex: number; amountCents: number }[]
 } | null {
@@ -304,12 +310,29 @@ export function promoDiscountOn(session: CheckoutSessionView): {
   const cents = session.data.promoFirstPeriodCents
   if (typeof cents !== 'number' || cents <= 0) return null
   return {
-    terms: typeof session.data.promoTerms === 'string' ? session.data.promoTerms : 'Promotion',
+    terms: readTerms(session.data.promoTerms),
     firstPeriodCents: cents,
     schedule: Array.isArray(session.data.promoSchedule)
       ? (session.data.promoSchedule as { periodIndex: number; amountCents: number }[])
       : [{ periodIndex: 0, amountCents: cents }],
   }
+}
+
+/// B-269 changed the shape of the snapshot, and a session written before the
+/// deploy still holds the old one: a finished English sentence.
+///
+/// Read back as an operator override, which is exactly what it behaves like —
+/// free text that is rendered as typed and marked `lang="en"`. The minimum
+/// stay is already inside that string (`withMinStay` appended it before it was
+/// stored), so `minStayMonths` is 0 here or it would be stated twice.
+///
+/// ponytail: this branch can be deleted once no session predating the deploy
+/// can still be resumed — checkout locks expire in hours, but a `provisioned`
+/// session's row is kept.
+function readTerms(stored: unknown): OfferTerms {
+  if (typeof stored === 'string') return { kind: 'operator', text: stored, minStayMonths: 0 }
+  if (stored && typeof stored === 'object' && 'kind' in stored) return stored as OfferTerms
+  return { kind: 'operator', text: '', minStayMonths: 0 }
 }
 
 export async function sessionByToken(token: string): Promise<CheckoutSessionView | null> {
@@ -637,7 +660,11 @@ export async function goBack(token: string, to: Step): Promise<GoBackResult> {
 /// The link always resolves to whatever step the session is *currently* on —
 /// `sessionByToken` already resumes at `session.step` (B-020) — so there is no
 /// step to encode here, just the token.
-export async function sendCheckoutResumeLink(sessionId: string, token: string): Promise<void> {
+export async function sendCheckoutResumeLink(
+  sessionId: string,
+  token: string,
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<void> {
   const session = await prisma.checkoutSession.findUnique({
     where: { id: sessionId },
     select: {
@@ -650,7 +677,7 @@ export async function sendCheckoutResumeLink(sessionId: string, token: string): 
 
   const base = (process.env.AUTH_URL ?? 'http://localhost:3000').replace(/\/$/, '')
   const link = `${base}/checkout?token=${encodeURIComponent(token)}`
-  const holdUntil = new Intl.DateTimeFormat('en-US', {
+  const holdUntil = new Intl.DateTimeFormat(LOCALE_TAG[locale], {
     timeZone: session.facility.timezone,
     weekday: 'long',
     month: 'long',
@@ -659,20 +686,18 @@ export async function sendCheckoutResumeLink(sessionId: string, token: string): 
     minute: '2-digit',
   }).format(session.lockExpiresAt)
 
-  const text = [
-    `We're holding this unit for you until ${holdUntil}. After that it goes back on sale.`,
-    '',
-    `Finish moving in where you left off: ${link}`,
-  ].join('\n')
+  const say = proseFor(locale).direct
+  const text = [say.resumeHolding(holdUntil), '', say.resumeFinish(link)].join('\n')
 
   await sendDirectEmail({
     idempotencyKey: `checkout-resume-link:${sessionId}`,
     eventId: sessionId,
     templateKey: 'checkout_resume_link',
     classification: 'transactional',
+    locale,
     to: session.email,
     fromName: session.facility.name,
-    subject: 'Finish moving in online',
+    subject: say.resumeSubject,
     html: `<p>${text.replace(/\n/g, '<br>')}</p>`,
     text,
     facilityId: session.facility.id,

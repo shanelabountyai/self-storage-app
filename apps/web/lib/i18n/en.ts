@@ -439,13 +439,34 @@ export const en = {
   // in `MUST_ALSO_DIFFER` in `tests/i18n.test.ts` — an identical value in both
   // locales is still an untranslated paste here.
   //
-  // `{terms}` is the promotion's own wording and is still English on a Spanish
-  // page — an operator's `termsText` or `describeTerms`' generated sentence.
-  // That is the badge text on every unit card too, so it is B-269's row rather
-  // than a thing to half-fix inside this sentence.
+  // `{terms}` was still English on a Spanish page until B-269 — an operator's
+  // `termsText` or `describeTerms`' generated sentence, and the badge text on
+  // every unit card besides. `promo.terms.*` below is that half, and
+  // `offerTermsText` is what fills this placeholder now.
   'promo.codeApplied': 'Code applied \u2014 {terms}.',
   'promo.codeSuperseded':
     'We kept your better offer \u2014 {terms}. Only one promotion applies at a time.',
+
+  // B-269. US-12 AC1's plain-language terms, as keys and their numbers.
+  //
+  // `describeTerms` built these in `@storage/core/promotions` and could only
+  // build them in English. Split one/other because Spanish agrees the noun with
+  // the count where English gets away with `{count} months` — and the min-stay
+  // pair is deliberately identical in English for the same reason
+  // `facility.onlyLeft*` is.
+  //
+  // The em dash that joins a minimum stay to the offer lives in
+  // `offerTermsSegments`, not in these values: the two halves are separate
+  // segments so an operator's own wording can carry `lang="en"` (D-129) while
+  // the clause appended to it stays in the reader's language.
+  'promo.terms.freeMonthsOne': 'First month free',
+  'promo.terms.freeMonthsOther': 'First {count} months free',
+  'promo.terms.percentOffOne': '{percent}% off the first month',
+  'promo.terms.percentOffOther': '{percent}% off the first {count} months',
+  'promo.terms.amountOffOne': '{amount} off the first month',
+  'promo.terms.amountOffOther': '{amount} off the first {count} months',
+  'promo.terms.minStayOne': '{count}-month minimum stay',
+  'promo.terms.minStayOther': '{count}-month minimum stay',
 
   // --- Protection step (US-501 step 3) ----------------------------------
   'protection.formLabel': 'Protect what you store',

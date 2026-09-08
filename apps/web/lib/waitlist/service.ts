@@ -10,6 +10,8 @@ import {
   type WaitlistPosition,
 } from '@storage/core/waitlist'
 import { sendDirectEmail } from '@/lib/comms/service'
+import { proseFor } from '@/lib/comms/prose'
+import { DEFAULT_LOCALE, isLocale, type Locale } from '@/lib/i18n'
 import { siteOrigin } from '@/lib/marketing/origin'
 import { facilityPagePath } from '@/lib/marketing/paths'
 
@@ -49,6 +51,11 @@ export async function joinWaitlist(input: {
   email: string
   phone?: string | null
   firstName?: string | null
+  /// B-265 (D-130). Captured here because it cannot be recovered later — the
+  /// mail is sent by a sweep with no request to read a cookie from. Optional
+  /// and English by default for the admin caller (`joinWaitlistForLead`),
+  /// where the person at the keyboard is staff and not the recipient.
+  locale?: Locale
 }): Promise<JoinResult> {
   if (!isPlausibleEmail(input.email)) {
     return { ok: false, problem: 'Enter an email address we can reach you at.' }
@@ -74,6 +81,7 @@ export async function joinWaitlist(input: {
         email,
         phone: input.phone?.trim() || null,
         firstName: input.firstName?.trim() || null,
+        preferredLocale: input.locale ?? null,
         // 32 bytes of base64url. The only credential a non-tenant has for their
         // own record, so it is generated rather than derived from anything
         // guessable — an id-based cancel link would let anybody cancel anybody.
@@ -203,7 +211,7 @@ export async function sweepWaitlists(now: Date = new Date()): Promise<SweepResul
 
     const waiting = await prisma.waitlistEntry.findMany({
       where: { unitTypeId, status: 'waiting' },
-      select: { id: true, email: true, firstName: true, cancelToken: true },
+      select: { id: true, email: true, firstName: true, cancelToken: true, preferredLocale: true },
       // FIFO. Not a ranking of prospects — see the note in the core module.
       orderBy: { createdAt: 'asc' },
     })
@@ -233,7 +241,13 @@ export async function sweepWaitlists(now: Date = new Date()): Promise<SweepResul
 }
 
 async function sendAvailabilityEmail(
-  entry: { id: string; email: string; firstName: string | null; cancelToken: string },
+  entry: {
+    id: string
+    email: string
+    firstName: string | null
+    cancelToken: string
+    preferredLocale: string | null
+  },
   unitType: {
     name: string
     widthFt: number
@@ -246,20 +260,28 @@ async function sendAvailabilityEmail(
   const facilityUrl = absoluteUrl(origin, facilityPagePath(unitType.facility))
   const cancelUrl = absoluteUrl(origin, `/waitlist/cancel/${entry.cancelToken}`)
 
+  // B-265 (D-130). Read from the row, not from a request: this runs in the
+  // hourly sweep. `isLocale` rather than a cast for the same reason
+  // `localeOf` narrows `Tenant.preferredLocale` — an entry written before the
+  // column existed carries null, and one written before `LOCALES` changed
+  // could carry anything.
+  const locale = isLocale(entry.preferredLocale) ? entry.preferredLocale : DEFAULT_LOCALE
+  const say = proseFor(locale).direct
+
   const text = [
-    entry.firstName ? `Hi ${entry.firstName},` : 'Hi,',
+    say.hi(entry.firstName),
     '',
-    `A ${size} unit has come free at ${unitType.facility.name}.`,
+    say.waitlistAvailable(size, unitType.facility.name),
     '',
     // D-87: no unit hold. This stays a race against everyone else who can see
     // it on the website, and the copy says so rather than implying a claim
     // that does not exist.
-    `You asked us to tell you — it's on sale to everyone else too, so the first person to complete a rental gets it.`,
+    say.waitlistRace,
     '',
-    `Rent it online: ${facilityUrl}`,
-    ...(unitType.facility.phone ? ['', `Or call us on ${unitType.facility.phone}.`] : []),
+    say.waitlistRent(facilityUrl),
+    ...(unitType.facility.phone ? ['', say.waitlistCall(unitType.facility.phone)] : []),
     '',
-    `If you no longer need a unit, take yourself off the list: ${cancelUrl}`,
+    say.waitlistCancel(cancelUrl),
   ].join('\n')
 
   await sendDirectEmail({
@@ -273,9 +295,10 @@ async function sendAvailabilityEmail(
     // facility, and this is the single message that answers that request. It
     // carries a cancel link regardless.
     classification: 'transactional',
+    locale,
     to: entry.email,
     fromName: unitType.facility.name,
-    subject: `A ${size} unit is free at ${unitType.facility.name}`,
+    subject: say.waitlistSubject(size, unitType.facility.name),
     html: `<p>${text.replace(/\n/g, '<br>')}</p>`,
     text,
     facilityId: unitType.facility.id,

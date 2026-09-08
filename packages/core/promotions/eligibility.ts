@@ -1,8 +1,8 @@
 import {
-  describeTerms,
+  offerTerms,
   discountSchedule,
-  withMinStay,
   type DiscountSchedule,
+  type OfferTerms,
   type PromotionTerms,
 } from "./schedule.ts";
 
@@ -61,8 +61,10 @@ export type EligibilityContext = {
 export type EligibilityResult = {
   promotion: PromotionCandidate;
   schedule: DiscountSchedule;
-  /// US-12 AC1's "plain-language terms".
-  terms: string;
+  /// US-12 AC1's "plain-language terms", as facts rather than a sentence
+  /// (B-269). Every renter-facing surface reads a locale and builds its own
+  /// wording; nothing in this package writes English any more.
+  terms: OfferTerms;
   /// The code that unlocked it, for `code`-mode promos. Recorded on the
   /// redemption (FR-PROMO-4) so "which code did this come from" is answerable.
   code: string | null;
@@ -90,10 +92,10 @@ export type CodeRejection =
 /// been told nothing at all. `superseded` is that case, said out loud.
 export type CodeOutcome =
   /// The typed code won and is the offer now applied.
-  | { kind: "applied"; terms: string }
+  | { kind: "applied"; terms: OfferTerms }
   /// The code is real but a better offer was already applying. FR-PROMO-4's
   /// no-stacking rule, stated to the renter rather than silently enforced.
-  | { kind: "superseded"; keptTerms: string }
+  | { kind: "superseded"; keptTerms: OfferTerms }
   /// It did not apply, and this is which rule refused it.
   | { kind: "rejected"; rejection: CodeRejection };
 
@@ -142,11 +144,7 @@ export function evaluatePromotions(
     applicable.push({
       promotion,
       schedule,
-      terms: withMinStay(
-        promotion.termsText?.trim() ||
-          describeTerms(promotion, context.monthlyRateCents),
-        promotion.minStayMonths,
-      ),
+      terms: offerTerms(promotion, context.monthlyRateCents),
       code: matchedCode,
     });
   }

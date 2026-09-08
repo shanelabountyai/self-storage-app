@@ -107,11 +107,24 @@ describe('i18n dictionaries', () => {
     // `status: 'success'` a renter reads after releasing their unit, which is
     // irreversible, so an untranslated paste there is as bad as one under
     // `err.` — and the `err.` prefix would style it red.
+    //
+    // B-269 adds the terms themselves. They are the WORDS INSIDE
+    // `promo.codeApplied` and the whole text of every unit-card badge, so an
+    // identical value here is the exact defect that row was written for — a
+    // Spanish sentence quoting an English discount.
     const MUST_ALSO_DIFFER = [
       'reserve.holdUpdated',
       'promo.codeApplied',
       'promo.codeSuperseded',
       'res.cancelled',
+      'promo.terms.freeMonthsOne',
+      'promo.terms.freeMonthsOther',
+      'promo.terms.percentOffOne',
+      'promo.terms.percentOffOther',
+      'promo.terms.amountOffOne',
+      'promo.terms.amountOffOther',
+      'promo.terms.minStayOne',
+      'promo.terms.minStayOther',
     ] as const
     const untranslated = Object.keys(en)
       .filter((key) => key.startsWith('err.') || MUST_ALSO_DIFFER.includes(key as never))
@@ -220,7 +233,7 @@ describe('codeOutcomeMessage — B-266', () => {
     for (const locale of LOCALES) {
       const dict = dictionaryFor(locale)
       const said = REJECTIONS.map((rejection) => {
-        const message = codeOutcomeMessage({ kind: 'rejected', rejection })
+        const message = codeOutcomeMessage({ kind: 'rejected', rejection }, dict)
         return translate(dict, message.key, message.vars)
       })
       expect(new Set(said).size, locale).toBe(REJECTIONS.length)
@@ -232,16 +245,28 @@ describe('codeOutcomeMessage — B-266', () => {
     // better offer both produce a sentence, and both name the terms the renter
     // is actually getting — a `superseded` message that quoted the code's own
     // terms would tell them they had a discount they do not have.
-    const applied = codeOutcomeMessage({ kind: 'applied', terms: 'Half off' })
-    const superseded = codeOutcomeMessage({ kind: 'superseded', keptTerms: 'First month free' })
+    //
+    // B-269 made the terms facts rather than a sentence, so an operator's own
+    // wording is what stays verbatim in both languages (D-129) — which is what
+    // makes it usable as the fixture here.
+    const halfOff = { kind: 'operator', text: 'Half off', minStayMonths: 0 } as const
+    const firstFree = { kind: 'operator', text: 'First month free', minStayMonths: 0 } as const
 
     for (const locale of LOCALES) {
       const dict = dictionaryFor(locale)
+      const applied = codeOutcomeMessage({ kind: 'applied', terms: halfOff }, dict)
+      const superseded = codeOutcomeMessage(
+        { kind: 'superseded', keptTerms: firstFree },
+        dict,
+      )
       expect(translate(dict, applied.key, applied.vars), locale).toContain('Half off')
       expect(translate(dict, superseded.key, superseded.vars), locale).toContain(
         'First month free',
       )
     }
+
+    const applied = codeOutcomeMessage({ kind: 'applied', terms: halfOff }, en)
+    const superseded = codeOutcomeMessage({ kind: 'superseded', keptTerms: firstFree }, en)
 
     // Neither is an `err.` key: the checkout styles that branch red and wires
     // `aria-invalid`, so a success wearing the prefix would tell somebody who

@@ -320,4 +320,25 @@ describeDb('the sweep email (D-87)', () => {
     expect(message.bodySnapshot.toLowerCase()).not.toContain('holding your place')
     expect(message.bodySnapshot).toContain('first person to complete a rental gets it')
   })
+
+  it('B-265: writes it in the language stored when they joined', async () => {
+    const unitTypeId = await makeType('espanol', 1)
+    const email = `espanol-${suffix}@example.com`
+    await joinWaitlist({ facilityId: state.facilityId, unitTypeId, email, locale: 'es' })
+    await freeUnits(unitTypeId, 1)
+    await sweepWaitlists(new Date())
+
+    const message = await prisma.message.findFirstOrThrow({
+      where: { templateKey: 'waitlist_unit_available', facilityId: state.facilityId, toAddress: email },
+    })
+    // This is the send that PROVES the column has to exist: the sweep runs
+    // hours after the join, in a cron, with no request to read a cookie from.
+    // Every other direct send resolves its language at send time.
+    expect(message.subjectSnapshot).toContain('libre en')
+    expect(message.bodySnapshot).toContain('se la queda la primera persona que complete la renta')
+    // D-87 in the other language too — a translation that softens "we are not
+    // holding it for you" would promise a claim that does not exist to the
+    // reader least able to check it.
+    expect(message.bodySnapshot).not.toContain('first person to complete a rental gets it')
+  })
 })

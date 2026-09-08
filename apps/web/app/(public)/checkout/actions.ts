@@ -195,7 +195,11 @@ export async function submitDetailsAction(
   // still open. A comms failure must never fail step 1, which has already
   // succeeded and committed.
   try {
-    await sendCheckoutResumeLink(result.session.id, token)
+    // In the language the renter just filled the form in, which is the same
+    // `locale` the consent rows above record — read from the FORM rather than
+    // the cookie (B-259), so a header toggle between render and submit cannot
+    // mail them the language they were not looking at.
+    await sendCheckoutResumeLink(result.session.id, token, locale)
   } catch {
     // sendDirectEmail records its own failure in the Message log; this only
     // guards against something throwing before it gets that far.
@@ -450,7 +454,7 @@ export async function applyPromoCodeAction(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  const { t } = await messages()
+  const { dict, t } = await messages()
   const token = String(formData.get('token') ?? '')
   const session = await sessionByToken(token)
   if (!session) {
@@ -494,7 +498,7 @@ export async function applyPromoCodeAction(
     // ("There is a problem with one field."), and this refusal has a sentence
     // worth reading rather than a count. The summary and the field error are
     // deliberately the same words, which is what `AdminForm` renders twice.
-    const refused = codeOutcomeMessage(lookup.codeOutcome)
+    const refused = codeOutcomeMessage(lookup.codeOutcome, dict)
     const refusal = t(refused.key, refused.vars)
     return { status: 'error', message: refusal, fieldErrors: { promo: refusal } }
   }
@@ -506,7 +510,7 @@ export async function applyPromoCodeAction(
       promoCodeId: lookup.offer?.promoCodeId ?? null,
       data: {
         ...session.data,
-        promoTerms: lookup.offer?.terms ?? null,
+        promoTerms: (lookup.offer?.terms ?? null) as never,
         promoFirstPeriodCents: lookup.offer?.firstPeriodCents ?? null,
         promoSchedule: lookup.offer?.schedule ?? null,
         // Deliberately CLEARED, not written.
@@ -533,7 +537,7 @@ export async function applyPromoCodeAction(
   // "code applied" would be a lie about which promotion they are getting.
   // `act.codeApplied` survives as the fallback for the branch the types allow
   // and `outcomeFor` cannot reach — a non-empty code always produces an outcome.
-  const outcome = lookup.codeOutcome ? codeOutcomeMessage(lookup.codeOutcome) : null
+  const outcome = lookup.codeOutcome ? codeOutcomeMessage(lookup.codeOutcome, dict) : null
   return {
     status: 'success',
     message: outcome ? t(outcome.key, outcome.vars) : t('act.codeApplied'),

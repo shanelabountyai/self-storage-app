@@ -2069,6 +2069,8 @@ function reviewedOn(locale: Locale): string {
 // **B-269**, filed rather than half-fixed inside this message, because the
 // badges are the larger share of it and fixing one and not the others would
 // leave the page inconsistent about which English is deliberate.
+// *(B-269 closed the generated half of that on 2026-09-07; see the block
+// below for what remains and why.)*
 //
 // **No bullet below changes, and no new claim.** "Form fields have real
 // labels" and the errors bullet are about mechanism; translating a label or a
@@ -2084,6 +2086,92 @@ function reviewedOn(locale: Locale): string {
 // entries are still true and unchanged in scope. `LAST_REVIEWED` is not
 // bumped, per D-115 — no manual screen-reader pass was performed, and this
 // item performed none.
+
+// Re-verified 2026-09-07, at B-269 (a promotion's own terms, on every
+// translated surface that quotes them — D-122, D-129). This is the gap the
+// B-266 block above filed, and it closes in one half and is bounded in the
+// other.
+//
+// **What was wrong.** `describeTerms` and `withMinStay` built English prose
+// inside `@storage/core/promotions` — "50% off the first month",
+// "First month free — 6-month minimum stay" — and five surfaces rendered it
+// verbatim: every unit-card badge on a translated facility page (the biggest
+// by far, and one badge per size on a page that may show six), the facility
+// page's "what you'd pay" discount line, the checkout price summary, the
+// applied-code confirmation and the checkout's "currently applied" line. Each
+// was an English phrase inside `<html lang="es">` with nothing to say so, read
+// aloud with Spanish phonemes. The generated half is now keys and their
+// numbers, resolved per surface, so those phrases are Spanish on a Spanish
+// page rather than marked English on one.
+//
+// **What is bounded rather than fixed, and it is a genuine residual.**
+// `Promotion.termsText` is an operator's free text in a database column. There
+// is no key to return for it, and D-129 settles that it is rendered as typed
+// rather than growing a column per language. So on a Spanish page an operator
+// override is still English — correctly so, since nothing translated it — and
+// the honest thing available is to SAY it is English. The unit-card badge does:
+// `OfferTermsText` emits `<span lang="en">` around the operator's words and
+// leaves an appended minimum stay outside it, because that clause IS
+// translated and marking the whole span would mislabel it. Three surfaces do
+// NOT: the applied-code confirmation and the "currently applied" line, because
+// `FormState.message` and `fieldErrors` are string-typed end to end, and the
+// move-in cost `<dt>`, because `costLineLabel` returns text. Turning those
+// into nodes is a change to the form machinery every admin screen shares, and
+// it is not this row's. **This is stated rather than left implied**: a promo
+// with an operator override, read in Spanish, still meets unmarked English in
+// three places.
+//
+// **No bullet below changes, and no new claim.** The "Where we fall short"
+// list names JavaScript, the staff screens and the maps; none of the three is
+// touched, and an untranslated fragment of an operator's own wording is not
+// one of them — it is bounded above and carried by D-129 rather than by a
+// public promise. No route is added: the facility page and the checkout are
+// both already in the scanned set, and this changes strings inside controls
+// whose markup is otherwise untouched. The one markup change is a `<span>`
+// with a `lang` attribute, which is the fix rather than a thing to declare. No
+// new `a11y-state:` — the scan loops carry no locale cookie, which the `/` |
+// Spanish row in `STATE_EXCEPTIONS` has said since B-262.
+//
+// The "Where we fall short" list was re-read against this build and all three
+// entries are still true and unchanged in scope. `LAST_REVIEWED` is not
+// bumped, per D-115 — no manual screen-reader pass was performed, and this
+// item performed none.
+
+// Re-verified 2026-09-07, at B-265 (the emails composed in code, not from a
+// template — D-122, D-130). Customer-facing, and it closes a real 3.1.2 gap
+// that this page had NOT overstated in either direction.
+//
+// **What was wrong.** B-261 fixed `renderEmail`'s hardcoded `<div lang="en">`,
+// which the note above records. It fixed the TEMPLATED path only. Nine sends
+// go out through `sendDirectEmail`, which composes no document and passed the
+// caller's HTML to the provider untouched — so the reservation confirmation,
+// the checkout resume link, the sign-in and reset links, both halves of the
+// email-change flow, the waitlist availability mail, the platform alert, the
+// scheduled report and every broadcast carried NO language declaration at all.
+// That was survivable only while every one of them was English; the moment
+// four of them became Spanish it is 3.1.2 on a document a renter reads.
+//
+// **Where the fix went is the part worth recording.** Not at the nine call
+// sites — in `sendDirectEmail` itself, which now requires the locale and wraps
+// the HTML in it. A caller that can forget the declaration is a caller that
+// will, and the failure is invisible: a message with no `lang` looks the same
+// in every inbox and only sounds wrong. The three sends that stay English say
+// so where they pass `en`, so "English" is a decision in the code rather than
+// the absence of one.
+//
+// **A second, smaller defect was fixed on the way.** Both email-change
+// messages interpolated the tenant's own first name raw into their HTML part.
+// It is escaped now, through the same `escapeHtml` the render path uses.
+//
+// **No claim below changes, and none needed correcting.** This page has said
+// nothing about email since B-198 settled that it says nothing in either
+// direction, and that sentence held: nothing here was disclaimed that has
+// since shipped, and nothing was claimed that had not. The "Where we fall
+// short" list was re-read against this build — the no-JavaScript hold
+// countdown, the staff screens, the embedded maps — and all three are still
+// true and unchanged in scope. No route and no `a11y-state:` is added: this
+// changes no page. `LAST_REVIEWED` is not bumped, per D-115 — no manual
+// screen-reader pass was performed, and this item performed none.
 
 export default async function AccessibilityPage() {
   const locale = await getLocale()

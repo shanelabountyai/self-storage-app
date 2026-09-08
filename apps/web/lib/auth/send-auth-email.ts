@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto'
 import type { AuthTokenPurpose } from '@storage/db'
 import { SITE } from '@/lib/site-config'
 import { sendDirectEmail } from '@/lib/comms/service'
+import { proseFor } from '@/lib/comms/prose'
+import type { Locale } from '@/lib/i18n'
 
 // Delivery seam, now wired to B-030's provider (this comment used to point
 // forward to that item by name; B-030 has shipped, so this closes the loop
@@ -27,21 +29,17 @@ type SendArgs = {
   purpose: LinkEmailPurpose
   url: string
   expiresAt: Date
+  /// B-265 (D-130). Resolved by the caller, which is the only thing that knows
+  /// whose account this is: `requestPasswordReset` serves STAFF as well as
+  /// tenants, and D-122 keeps the staff side English regardless of what the
+  /// browser asking for the link happens to be set to.
+  locale: Locale
 }
 
-const SUBJECT: Record<LinkEmailPurpose, string> = {
-  magic_link: `Sign in to ${SITE.name}`,
-  password_reset: `Reset your ${SITE.name} password`,
-}
-
-const INTRO: Record<LinkEmailPurpose, string> = {
-  magic_link: 'Use this link to sign in:',
-  password_reset: 'Use this link to choose a new password:',
-}
-
-export async function sendAuthEmail({ to, purpose, url, expiresAt }: SendArgs): Promise<void> {
+export async function sendAuthEmail({ to, purpose, url, expiresAt, locale }: SendArgs): Promise<void> {
   const minutes = Math.round((expiresAt.getTime() - Date.now()) / 60_000)
-  const text = `${INTRO[purpose]}\n\n${url}\n\nThis link expires in ${minutes} minutes. If you did not request this, you can ignore this email.`
+  const say = proseFor(locale).direct
+  const text = `${say.authIntro[purpose]}\n\n${url}\n\n${say.authExpiry(minutes)}`
 
   // Auth tokens are minted once per request (no stable id to key an
   // idempotency column on), so a random key is correct here — unlike a
@@ -54,9 +52,10 @@ export async function sendAuthEmail({ to, purpose, url, expiresAt }: SendArgs): 
     eventId: `auth:${purpose}`,
     templateKey: `auth_${purpose}`,
     classification: 'transactional',
+    locale,
     to,
     fromName: SITE.name,
-    subject: SUBJECT[purpose],
+    subject: say.authSubject[purpose](SITE.name),
     html: `<p>${text.replace(/\n/g, '<br>')}</p>`,
     text,
   })

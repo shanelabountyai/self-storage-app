@@ -5068,6 +5068,19 @@ model WaitlistEntry {
   /// Never messaged: there is no consent for that.
   phone       String?
   firstName   String?
+  /// B-265 (D-130). The language the "a unit came free" mail is written in.
+  ///
+  /// Stored rather than resolved at send time, and it is the ONLY direct send
+  /// that needs a column: every other one happens inside the request that
+  /// caused it, where the locale cookie is still readable. This one is sent by
+  /// the hourly sweep, hours or days later, to somebody who has no `Tenant`
+  /// row to have stated a preference on — so if the language is not captured
+  /// at join time it is not recoverable at all.
+  ///
+  /// Nullable, and null means "never told us" exactly as `Tenant.preferredLocale`
+  /// does: this column did not exist for the entries already on the lists, and
+  /// they must not be recorded as having chosen English.
+  preferredLocale String?
   status      WaitlistStatus @default(waiting)
   /// When the "one is free" mail went out. Null while waiting. Load-bearing
   /// rather than decorative: the sweep counts entries notified inside the

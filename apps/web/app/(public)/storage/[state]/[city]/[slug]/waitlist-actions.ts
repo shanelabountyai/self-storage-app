@@ -2,6 +2,7 @@
 
 import type { FormState } from '@/lib/admin/form-state'
 import { joinWaitlist } from '@/lib/waitlist/service'
+import { getLocale } from '@/lib/i18n/server'
 
 // PRD 01 §9 Phase 3 (B-090 part 1). "Waitlists for sold-out unit types with
 // notify-me."
@@ -29,6 +30,11 @@ export async function joinWaitlistAction(_prev: FormState, formData: FormData): 
     email,
     phone: formData.get('phone') ? String(formData.get('phone')) : null,
     firstName: formData.get('firstName') ? String(formData.get('firstName')) : null,
+    // B-265 (D-130). Captured now because the mail is sent by the sweep, with
+    // no request to read this from — see the column's own note. The action's
+    // OWN messages below are still English; that is the waitlist form's
+    // screen copy, which no row covers yet.
+    locale: await getLocale(),
   })
 
   if (!result.ok) {
