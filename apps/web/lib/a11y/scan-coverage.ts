@@ -1045,8 +1045,15 @@ export type EnglishPage = {
   route: string
   /// Why this page is English, which is a different fact from whether it is
   /// marked: `decision` is settled (a decision row keeps it English),
-  /// `untranslated` is a gap somebody will close.
-  why: 'decision' | 'untranslated'
+  /// `untranslated` is a gap somebody will close, and `mixed` (B-273) is a page
+  /// that renders BOTH on purpose and is not waiting for anybody.
+  ///
+  /// `mixed` is the value that carries an obligation the other two do not. A
+  /// page-level `lang` on a mixed page is a lie about the half it does not
+  /// describe — the failure a page-level `lang` INTRODUCES rather than fixes —
+  /// so a `mixed` row has to declare the OTHER language back on the parts that
+  /// are in it, and the walker checks for exactly that.
+  why: 'decision' | 'untranslated' | 'mixed'
   /// What a reader is owed, in one line.
   note: string
 }
@@ -1105,7 +1112,61 @@ export const ENGLISH_UNDER_A_TRANSLATED_SHELL: readonly EnglishPage[] = [
   },
   {
     route: '/storage/[state]/[city]',
-    why: 'untranslated',
+    why: 'mixed',
     note: 'the one MIXED page on the public site: English prose around a translated search form, so the wrapper says `en` and the form declares the shell language back',
   },
 ]
+
+// B-273 / SC 3.1.2, the staff mirror of everything above. Same defect, same
+// cookie, opposite direction — and it needed a different SHAPE of guard rather
+// than a copy of this one, which is the part worth reading before extending it
+// again.
+//
+// ── Why admin is not a list of pages ────────────────────────────────────────
+//
+// The public site has no shell that could speak for all of it: `(public)` wraps
+// pages that are translated and pages that are not, so the claim has to be made
+// per page and the list above is that claim. Admin is the opposite. NOTHING
+// under `app/admin` renders a dictionary string except the message-template
+// editor, so `app/admin/layout.tsx` carries ONE `lang="en"` and it is true for
+// the whole surface at once — eighty rows saying "English" would be eighty
+// chances to forget one, guarding a fact that a single attribute already states.
+//
+// So the admin half of the walker checks two things instead of a list:
+//
+//  1. The admin layout still declares `lang="en"`. Delete it and the whole
+//     surface silently goes back to being announced in Spanish.
+//  2. Any admin page that DOES render from the dictionary is listed below as
+//     `mixed` and declares the locale back in its own markup. That is the
+//     mirror defect — a blanket `lang="en"` above a Spanish template body makes
+//     it a lie in the OTHER direction — and it is the check that stops this
+//     recurring when somebody translates a second admin screen.
+//
+// Kept in the same file and the same type as the public list on purpose: the
+// two halves are one criterion, and splitting them is how the second one gets
+// forgotten.
+//
+// ── The limit of this guard, stated rather than discovered ──────────────────
+//
+// The walker reads each `page.tsx` and asks whether IT imports the dictionary.
+// An admin page that renders a translated CHILD COMPONENT without importing
+// `@/lib/i18n` itself would pass while announcing Spanish under `lang="en"`.
+// `StatementView` is exactly that shape — `app/admin/tenants/[tenantId]/ledger/
+// [leaseId]/statements/[period]` renders it and imports no dictionary — and it
+// is safe today only because B-260 gave `dict` an English DEFAULT on the
+// argument that the admin surface is English throughout. That default is now
+// load-bearing for SC 3.1.2 as well as for copy, which is a thing to know
+// before somebody makes it required and passes the tenant's locale in from the
+// admin ledger to be helpful. Widening the walk to components is a bigger
+// change than this row, and no admin screen is in that state now.
+export const TRANSLATED_UNDER_THE_ADMIN_SHELL: readonly EnglishPage[] = [
+  {
+    route: '/admin/settings/templates',
+    why: 'mixed',
+    note: 'B-261 gave the editor a language switcher, so it renders the Spanish half of the catalog inside an English shell: the locale links, the subject input, the body textarea and the preview each declare `lang={locale}` back',
+  },
+]
+
+/// The admin layout, relative to the repo root. The walker reads it to prove
+/// the one-line half of B-273 is still there.
+export const ADMIN_SHELL_LAYOUT = 'apps/web/app/admin/layout.tsx'

@@ -56,7 +56,25 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     // with forty rows worked at a desk all day. Set here rather than passed
     // down, so nothing between this layout and an <input> has to know, and so a
     // new admin screen inherits it without opting in.
-    <div className="flex min-h-screen flex-col" style={{ '--control-h': '2.25rem' } as React.CSSProperties}>
+    //
+    // B-273 / WCAG 2.1 SC 3.1.2 Language of Parts (AA). D-122 keeps the chosen
+    // language in a cookie and the ROOT layout sets `<html lang>` from it on
+    // every route, admin included — so a staff user who ever pressed *Español*
+    // on the way in was served `<html lang="es">` around every admin screen for
+    // the life of that cookie, and a screen reader announced English admin prose
+    // with Spanish phonemes. Nothing under here renders a dictionary string, so
+    // one `lang="en"` is true for the whole surface at once.
+    //
+    // It is the SHELL language, not a claim about every descendant. The
+    // message-template editor deliberately renders Spanish inside it and
+    // declares `lang={locale}` back on the parts that are — which is the mirror
+    // defect this attribute would otherwise INTRODUCE, and the same shape
+    // B-272 solved on `/storage/[state]/[city]`.
+    <div
+      lang="en"
+      className="flex min-h-screen flex-col"
+      style={{ '--control-h': '2.25rem' } as React.CSSProperties}
+    >
       {/* First in the document, ahead of the skip link — FR-15: a screen-reader
           user must not work a dashboard for several seconds before finding out
           whose dashboard it is. */}

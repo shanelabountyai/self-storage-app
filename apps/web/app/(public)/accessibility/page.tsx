@@ -2035,6 +2035,9 @@ function reviewedOn(locale: Locale): string {
 // editor — renders Spanish template bodies inside it, which is the mirror
 // defect. Staff-facing, already disclaimed by the "our staff-facing screens
 // have known problems" bullet, and owned by **B-273** rather than fixed here.
+// (B-273 closed it on 2026-09-08. Noted so this paragraph is not read as an
+// open gap; NO sentence rendered on this page changed, in either direction,
+// because none of it was ever about staff screens — see B-273's own entry.)
 //
 // **The merge with B-267, because it is the guard doing its job rather than a
 // conflict.** B-272 was built against a `main` where the reservation form was

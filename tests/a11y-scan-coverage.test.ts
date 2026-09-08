@@ -12,6 +12,8 @@ import {
   SCANNED_STATES,
   STATE_EXCEPTIONS,
   ENGLISH_UNDER_A_TRANSLATED_SHELL,
+  TRANSLATED_UNDER_THE_ADMIN_SHELL,
+  ADMIN_SHELL_LAYOUT,
 } from '../apps/web/lib/a11y/scan-coverage'
 
 // B-139 / PRD 01 §6.8, PRD 02 §5.5 FR-24. The check that stops the public
@@ -373,6 +375,106 @@ describe('the accessibility scan contract (B-139)', () => {
         stale.map((row) => row.route),
         'these pages render from the dictionary now — drop the row and the page-level lang="en" with it',
       ).toEqual([])
+    })
+
+    // B-273. The staff mirror, and deliberately a DIFFERENT shape of check
+    // rather than a copy of the four above — see the note on
+    // `TRANSLATED_UNDER_THE_ADMIN_SHELL`. The public site has no shell that can
+    // speak for all of it, so its claim is per page. Admin does: nothing under
+    // `app/admin` renders a dictionary string except the template editor, so one
+    // `lang="en"` on the layout is true for eighty screens at once, and listing
+    // them would be eighty chances to forget one.
+    describe('the admin half (B-273)', () => {
+      const ADMIN_DIR = join(APP_DIR, 'admin')
+
+      function adminPages(dir: string = ADMIN_DIR, prefix = '/admin'): { route: string; source: string }[] {
+        const found: { route: string; source: string }[] = []
+        for (const name of readdirSync(dir)) {
+          const full = join(dir, name)
+          if (!statSync(full).isDirectory()) continue
+          const segment = name.startsWith('(') && name.endsWith(')') ? '' : `/${name}`
+          const here = prefix + segment
+          if (readdirSync(full).includes('page.tsx')) {
+            found.push({ route: here, source: readFileSync(join(full, 'page.tsx'), 'utf8') })
+          }
+          found.push(...adminPages(full, here))
+        }
+        return found
+      }
+
+      const ADMIN_PAGES = adminPages()
+      /// Same predicate as the public half, and the same reason for matching the
+      /// DICTIONARY module rather than `@/lib/i18n/server`: a page can read the
+      /// locale without rendering a translated string of its own.
+      const translated = (source: string) => /from '@\/lib\/i18n'/.test(source)
+
+      it('finds the admin pages at all — a broken walk would pass everything', () => {
+        const routes = ADMIN_PAGES.map((page) => page.route)
+        expect(routes).toContain('/admin/settings/templates')
+        expect(routes).toContain('/admin/impersonation')
+        expect(ADMIN_PAGES.length).toBeGreaterThan(30)
+      })
+
+      // Half one, and it is the whole of the English surface. Delete this
+      // attribute and every admin screen goes back to being announced in
+      // Spanish to any staff user who ever pressed *Español* on the way in —
+      // silently, because axe cannot read prose and decide what language it is.
+      it('keeps the admin shell declaring its language', () => {
+        const layout = readFileSync(join(process.cwd(), ADMIN_SHELL_LAYOUT), 'utf8')
+        expect(layout, `${ADMIN_SHELL_LAYOUT} declares no shell language — SC 3.1.2`).toContain(
+          'lang="en"',
+        )
+      })
+
+      it('leaves no translated admin page undeclared', () => {
+        const listed = new Set(TRANSLATED_UNDER_THE_ADMIN_SHELL.map((row) => row.route))
+        const silent = ADMIN_PAGES.filter((page) => translated(page.source) && !listed.has(page.route))
+        expect(
+          silent.map((page) => page.route),
+          'this admin page renders dictionary strings under the shell’s `lang="en"` — add it to TRANSLATED_UNDER_THE_ADMIN_SHELL and declare `lang={locale}` on the parts that are translated',
+        ).toEqual([])
+      })
+
+      it('makes every listed admin page declare the other language back', () => {
+        const byRoute = new Map(ADMIN_PAGES.map((page) => [page.route, page.source]))
+        for (const row of TRANSLATED_UNDER_THE_ADMIN_SHELL) {
+          const source = byRoute.get(row.route)
+          expect(source, `${row.route} is listed but is not a page under app/admin`).toBeDefined()
+          // A dynamic `lang`, not a literal: the whole point is that the marked
+          // parts follow the locale being edited. `lang="en"` here would be the
+          // mirror defect the row exists to prevent.
+          expect(source, `${row.route} declares no dynamic language — SC 3.1.2`).toMatch(
+            /lang=\{(locale|option)\}/,
+          )
+          expect(row.why, `${row.route} is under the admin shell, so it is mixed by definition`).toBe(
+            'mixed',
+          )
+          expect(row.note.length, `${row.route} says nothing a reader could disagree with`).toBeGreaterThan(20)
+        }
+      })
+
+      it('lists no admin page that stopped being translated', () => {
+        // The overstating direction, same as the public half: a row claiming a
+        // screen renders Spanish after somebody took the switcher off it.
+        const byRoute = new Map(ADMIN_PAGES.map((page) => [page.route, page.source]))
+        const stale = TRANSLATED_UNDER_THE_ADMIN_SHELL.filter((row) => {
+          const source = byRoute.get(row.route)
+          return source !== undefined && !translated(source)
+        })
+        expect(
+          stale.map((row) => row.route),
+          'these admin pages render no dictionary string now — drop the row and the `lang={locale}` marks with it',
+        ).toEqual([])
+      })
+
+      // The two lists describe different surfaces and must not overlap: a route
+      // in both would be claimed as English-under-a-Spanish-shell AND
+      // Spanish-under-an-English-one.
+      it('keeps the public and admin lists disjoint', () => {
+        const publicRoutes = new Set(ENGLISH_UNDER_A_TRANSLATED_SHELL.map((row) => row.route))
+        const both = TRANSLATED_UNDER_THE_ADMIN_SHELL.filter((row) => publicRoutes.has(row.route))
+        expect(both.map((row) => row.route)).toEqual([])
+      })
     })
   })
 })
