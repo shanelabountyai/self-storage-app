@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation'
 import { requireStaffActor } from '@/lib/rbac/session'
 import { fieldError, parseDate, success, type FormState } from '@/lib/admin/form-state'
 import { createInquiry, holdForLead, joinWaitlistForLead, setLeadStatus } from '@/lib/admin/inquiries'
+import { dictionaryFor, translate } from '@/lib/i18n'
 
 // PRD 02 US-43 (B-097). Every gate lives in lib/admin/inquiries.ts; these turn
 // a refusal into a sentence.
@@ -71,7 +72,11 @@ export async function joinWaitlistForLeadAction(_prev: FormState, formData: Form
   }
 
   const result = await joinWaitlistForLead(actor, leadId, unitTypeId, String(formData.get('email') ?? ''))
-  if (!result.ok) return fieldError({ email: result.problem })
+  // `joinWaitlist` returns a KEY, because its other caller is the public form
+  // and its reader may be reading Spanish. This one is a staff screen, which
+  // D-122 keeps English whatever the staffer's own cookie says — so the
+  // dictionary is pinned rather than resolved from the request.
+  if (!result.ok) return fieldError({ email: translate(dictionaryFor('en'), result.problem.key) })
 
   revalidatePath(`/admin/leads/${leadId}`)
   revalidatePath('/admin/leads')

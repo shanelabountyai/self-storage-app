@@ -112,7 +112,12 @@ describe('i18n dictionaries', () => {
     // `promo.codeApplied` and the whole text of every unit-card badge, so an
     // identical value here is the exact defect that row was written for — a
     // Spanish sentence quoting an English discount.
+    //
+    // B-270 adds `waitlist.joined`, on the `res.cancelled` argument again: it is
+    // the `status: 'success'` a visitor reads to know a stranger's email address
+    // was actually recorded, and the `err.` prefix would style that red.
     const MUST_ALSO_DIFFER = [
+      'waitlist.joined',
       'reserve.holdUpdated',
       'promo.codeApplied',
       'promo.codeSuperseded',

@@ -3,6 +3,7 @@
 import { useActionState, useId } from 'react'
 import { IDLE_FORM_STATE, type FormState } from '@/lib/admin/form-state'
 import { FormResult } from '@/components/marketing/form-result'
+import { useT } from '@/components/i18n/locale-provider'
 
 // PRD 01 §9 Phase 3 (B-090 part 1). The notify-me form on a sold-out size.
 //
@@ -15,6 +16,12 @@ import { FormResult } from '@/components/marketing/form-result'
 // A client component only for `useActionState`, so the answer renders inline.
 // Everything it submits is plain form data: with JavaScript off the form still
 // posts and the page re-renders, the same posture as the lead form.
+//
+// Copy comes from `useT()` for the reason B-264 translated the lead form beside
+// it: the facility page has been Spanish since B-090f and B-265 made the mail
+// this form produces Spanish too, which left the box in between as the one
+// English thing in the sequence. The honeypot's label stays English on purpose
+// — it is `aria-hidden` and `display:none`, so its only reader is a bot.
 
 export function WaitlistForm({
   facilityId,
@@ -30,6 +37,7 @@ export function WaitlistForm({
   action: (prev: FormState, formData: FormData) => Promise<FormState>
 }) {
   const [state, formAction] = useActionState(action, IDLE_FORM_STATE)
+  const t = useT()
   const emailId = useId()
   const errorId = `${emailId}-error`
 
@@ -42,7 +50,7 @@ export function WaitlistForm({
     <FormResult state={state} className="mt-3">
       <details className="mt-3">
         <summary className="inline-flex min-h-11 cursor-pointer items-center text-sm underline underline-offset-4">
-          Email me when a {sizeLabel} is free
+          {t('waitlist.summary', { size: sizeLabel })}
         </summary>
 
         <form action={formAction} className="mt-3 flex flex-col gap-2">
@@ -58,7 +66,7 @@ export function WaitlistForm({
           </div>
 
           <label htmlFor={emailId} className="text-sm">
-            Your email
+            {t('waitlist.email')}
           </label>
           <input
             id={emailId}
@@ -78,16 +86,13 @@ export function WaitlistForm({
             </span>
           )}
 
-          <p className="text-muted-foreground text-xs text-pretty">
-            One email, about this size at this facility only. There is a link in it to take
-            yourself off the list.
-          </p>
+          <p className="text-muted-foreground text-xs text-pretty">{t('waitlist.scope')}</p>
 
           <button
             type="submit"
             className="border-input hover:bg-accent inline-flex min-h-11 items-center justify-center self-start rounded-md border px-4 text-sm font-medium"
           >
-            Add me to the list
+            {t('waitlist.add')}
           </button>
         </form>
       </details>

@@ -328,6 +328,24 @@ export const en = {
   'lead.thanks':
     'Got it — somebody from this facility will be in touch. If it is urgent, calling is faster.',
 
+  // --- The waitlist form on a sold-out size (US-30, B-090 part 1) --------
+  //
+  // The form sits on the same facility page the lead form does and was the
+  // last thing on it still in English: B-265 taught the waitlist MAIL to write
+  // Spanish, which left a Spanish visitor filling in an English box to be
+  // emailed in Spanish.
+  //
+  // One `joined` key, not two. The action deliberately answers "already on it"
+  // and "just joined" with the same words — the distinction is ours, not the
+  // visitor's — and two dictionary entries for one sentence is how the two
+  // halves drift into saying different things.
+  'waitlist.summary': 'Email me when a {size} is free',
+  'waitlist.email': 'Your email',
+  'waitlist.scope':
+    'One email, about this size at this facility only. There is a link in it to take yourself off the list.',
+  'waitlist.add': 'Add me to the list',
+  'waitlist.joined': "You're on the list. We'll email you as soon as one is free.",
+
   // --- Move-in cost lines (US-301, shared with checkout) -----------------
   'cost.rent': 'First month rent',
   'cost.rent.note':
@@ -643,6 +661,14 @@ export const en = {
   'err.leadPhone': 'A phone number with at least 10 digits, so somebody can call you.',
   'err.leadRateLimited':
     'That is a lot of enquiries from one place in a short time. Give it a few minutes, or call us.',
+
+  // The waitlist form's refusals. `err.waitlistNoFacility` is reached only from
+  // the admin screen (`joinWaitlistForLead`), which D-122 keeps English — it is
+  // here because it travels on the same `JoinResult`, and a key with no Spanish
+  // is a key the next renter-facing caller pastes English from.
+  'err.waitlistEmail': 'Enter an email address we can reach you at.',
+  'err.waitlistUnitGone': 'That unit is no longer listed.',
+  'err.waitlistNoFacility': 'This inquiry is not attached to a facility.',
 
   // --- Checkout announcer (4.1.3, 2.4.3) --------------------------------
   'announce.movedToSize': 'We moved you to the {size}. Nothing you entered was lost.',

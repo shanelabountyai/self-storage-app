@@ -225,6 +225,53 @@ test('the Spanish lead form asks, refuses and consents in Spanish (B-264)', asyn
   )
 })
 
+test('the Spanish waitlist form asks and refuses in Spanish (B-270)', async ({
+  page,
+  context,
+}) => {
+  await context.addCookies([SPANISH])
+  await page.goto('/storage/tx/austin/demo-austin-south')
+
+  // The same sold-out size `smoke.spec.ts` uses for the English half, located
+  // by its Spanish label — which is itself the first assertion: `sizeLabel` is
+  // `t('facility.footBy')`, so a size still rendered as "5 foot by 15 foot"
+  // here would mean the page around the form had stopped following the cookie.
+  const card = page.getByRole('listitem').filter({ hasText: '5 pies por 15 pies' }).first()
+
+  // The disclosure, which is where the size label is interpolated. Opening it
+  // rather than asserting the collapsed text is deliberate: the label and the
+  // button are what a visitor is asked to act on, and both were English until
+  // this row.
+  await card.locator('summary').click()
+  const email = card.getByLabel('Su correo electrónico')
+  await expect(email).toBeVisible()
+  await expect(card.getByRole('button', { name: 'Agrégueme a la lista' })).toBeVisible()
+
+  // The refusal, and the reason this spec exists rather than resting on
+  // `tests/i18n.test.ts`: the dictionary test proves the Spanish EXISTS, and
+  // only a rendered page proves `useT()` reaches this component and that the
+  // server's answer came back in the reader's language too.
+  //
+  // `someone@localhost` passes the browser's own `type="email"` check and fails
+  // `isPlausibleEmail` on the server, which is the only way to reach the
+  // translated message in a real browser (smoke.spec.ts:1664 says the same).
+  // Refused before any `WaitlistEntry` is written, so it mutates no shared
+  // fixture and needs none of B-120's three disciplines.
+  await email.fill('someone@localhost')
+  await card.getByRole('button', { name: 'Agrégueme a la lista' }).click()
+
+  // ONE assertion on the live region, not two, and that is the point of the
+  // row. This form has a single field, so the action deliberately does NOT use
+  // `keyedFieldError` — the announced summary IS the refusal rather than a
+  // count of fields, which is what the lead form above asserts instead
+  // ("Hay un problema con un campo."). The first cut of B-270 used the helper
+  // and traded 3.3.3 away for that count in both languages at once.
+  await expect(card.getByRole('status')).toContainText(
+    'Escriba un correo electrónico donde podamos localizarle.',
+  )
+  await expect(email).toHaveAttribute('aria-invalid', 'true')
+})
+
 test('the Spanish reservation form asks and refuses in Spanish (B-267)', async ({
   page,
   context,

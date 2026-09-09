@@ -2125,6 +2125,51 @@ function reviewedOn(locale: Locale): string {
 // changes no page. `LAST_REVIEWED` is not bumped, per D-115 — no manual
 // screen-reader pass was performed, and this item performed none.
 
+// Re-verified 2026-09-09, at B-270 (the waitlist form's own screen copy —
+// D-122, D-130). Customer-facing, and it closes a 3.1.2 gap on a control this
+// page already lists and already scans.
+//
+// **What was wrong.** The notify-me form on a sold-out size had no dictionary
+// entry at all — its disclosure, its label, its button and every answer it
+// gives back were English inside a facility page translated since B-090f, and
+// since B-265 the email it produces has been Spanish. A Spanish visitor read
+// Spanish, filled in English, and was written to in Spanish.
+//
+// **No claim below changes, and none needed correcting.** `/storage/...` is
+// already in the scanned set and gains no state and no exception: the form is
+// the same disclosure, the same one input and the same live region it was, in
+// different words. The `/` | Spanish state exception still says exactly what
+// it said — the scan loops carry no locale cookie, so this form's Spanish
+// rendering is unscanned in the same way the rest of the public site's is —
+// and translating it neither widens nor narrows that gap. The "Where we fall
+// short" list was re-read against this build; the no-JavaScript hold
+// countdown, the staff screens and the embedded maps are all still true and
+// unchanged in scope.
+//
+// **The item's own first cut regressed 3.3.3 here, and the e2e suite is what
+// caught it.** Routing the refusal through `keyedFieldError` — the helper the
+// lead form beside this one uses — replaced the announced sentence with that
+// helper's field COUNT, so a screen-reader user who submitted a bad address
+// would have heard a problem identified (3.3.1) and nothing suggesting what to
+// do about it (3.3.3). Typecheck, lint, the build and 4,392 unit tests were all
+// green with that in place; `smoke.spec.ts:1664` was the only thing that
+// failed. It is recorded here rather than only in `PROGRESS.md` because this
+// page's "Clear labels and errors" claim is exactly the claim it broke, and the
+// claim is true again only because a spec asserted the announcement rather than
+// the field.
+//
+// **One thing this DID make true that was previously only intended.** The
+// action's own comment said the "already on the list" and "just joined"
+// answers get the same words on purpose, and they did not — the two differed
+// in punctuation and the honeypot's silent-discard answer was a third, shorter
+// sentence. All three are one dictionary key now, so a visitor whose second
+// submit is a double-click hears the identical announcement in either
+// language rather than a slightly different one that invites them to wonder
+// whether the first worked.
+//
+// `LAST_REVIEWED` is not bumped, per D-115 — no manual screen-reader pass was
+// performed, and this item performed none.
+
 export default async function AccessibilityPage() {
   const locale = await getLocale()
   const dict = dictionaryFor(locale)

@@ -301,6 +301,14 @@ export const es: Dictionary = {
   'lead.thanks':
     'Listo: alguien de esta sucursal se pondrá en contacto con usted. Si es urgente, es más rápido llamarnos.',
 
+  // --- El formulario de lista de espera de un tamaño agotado (US-30) -----
+  'waitlist.summary': 'Avísenme por correo cuando se desocupe una unidad de {size}',
+  'waitlist.email': 'Su correo electrónico',
+  'waitlist.scope':
+    'Un solo correo, sobre este tamaño en esta sucursal únicamente. Lleva un enlace para darse de baja de la lista.',
+  'waitlist.add': 'Agrégueme a la lista',
+  'waitlist.joined': 'Ya está en la lista. Le escribiremos en cuanto se desocupe una unidad.',
+
   // --- Move-in cost lines (US-301, shared with checkout) -----------------
   'cost.rent': 'Renta del primer mes',
   'cost.rent.note':
@@ -587,6 +595,11 @@ export const es: Dictionary = {
   'err.leadPhone': 'Un teléfono con al menos 10 dígitos, para que alguien pueda llamarle.',
   'err.leadRateLimited':
     'Son muchas consultas desde un mismo lugar en poco tiempo. Espere unos minutos, o llámenos.',
+
+  // Los rechazos del formulario de lista de espera.
+  'err.waitlistEmail': 'Escriba un correo electrónico donde podamos localizarle.',
+  'err.waitlistUnitGone': 'Esa unidad ya no está publicada.',
+  'err.waitlistNoFacility': 'Esta consulta no está asociada a ninguna sucursal.',
 
   // --- Checkout announcer (4.1.3, 2.4.3) --------------------------------
   'announce.movedToSize': 'Lo cambiamos a la {size}. No se perdió nada de lo que escribió.',

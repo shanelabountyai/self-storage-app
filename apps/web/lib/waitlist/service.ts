@@ -9,6 +9,7 @@ import {
   positionOf,
   type WaitlistPosition,
 } from '@storage/core/waitlist'
+import type { FieldMessage } from '@/lib/admin/form-state'
 import { sendDirectEmail } from '@/lib/comms/service'
 import { proseFor } from '@/lib/comms/prose'
 import { DEFAULT_LOCALE, isLocale, type Locale } from '@/lib/i18n'
@@ -37,7 +38,11 @@ export type JoinResult =
   /// confirm what it actually recorded — the size and the address the mail will
   /// go to — rather than echoing whatever was typed into the box.
   | { ok: true; alreadyOn: boolean; unitTypeName: string; email: string }
-  | { ok: false; problem: string }
+  /// `problem` is a dictionary KEY, not a sentence — `captureLead`'s shape, for
+  /// `captureLead`'s reason: the refusal is read by a renter who may be reading
+  /// Spanish, and this module is also called from a cron with no request to
+  /// resolve a language from. The action that has the request resolves it.
+  | { ok: false; problem: FieldMessage }
 
 /// Adds somebody to the list for one unit type.
 ///
@@ -58,7 +63,7 @@ export async function joinWaitlist(input: {
   locale?: Locale
 }): Promise<JoinResult> {
   if (!isPlausibleEmail(input.email)) {
-    return { ok: false, problem: 'Enter an email address we can reach you at.' }
+    return { ok: false, problem: { key: 'err.waitlistEmail' } }
   }
 
   const email = normaliseEmail(input.email)
@@ -71,7 +76,7 @@ export async function joinWaitlist(input: {
     where: { id: input.unitTypeId, facilityId: input.facilityId, facility: { status: 'active' } },
     select: { id: true, name: true },
   })
-  if (!unitType) return { ok: false, problem: 'That unit is no longer listed.' }
+  if (!unitType) return { ok: false, problem: { key: 'err.waitlistUnitGone' } }
 
   try {
     await prisma.waitlistEntry.create({
