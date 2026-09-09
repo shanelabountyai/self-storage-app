@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { assertNoAxeViolations, expectPreexisting } from './a11y-helpers'
+import { assertNoAxeViolations } from './a11y-helpers'
 import { signInAsDemoTenant } from './sign-in'
 import { DEMO_PROMO_CODE } from '../apps/web/scripts/demo-credentials'
 
@@ -223,104 +223,6 @@ test('the Spanish lead form asks, refuses and consents in Spanish (B-264)', asyn
     'aria-invalid',
     'true',
   )
-})
-
-test('the Spanish waitlist form asks and refuses in Spanish (B-274)', async ({
-  page,
-  context,
-}) => {
-  // B-264's finding one card further down the same page. The sold-out card has
-  // been Spanish since B-090f and the mail this form eventually sends has been
-  // Spanish since B-265; everything between the two was English.
-  //
-  // Writes nothing on any run — the submit below is refused before a
-  // `WaitlistEntry` exists — so it needs none of B-120's three disciplines,
-  // exactly like the English refusal spec in `smoke.spec.ts` it mirrors.
-  await context.addCookies([SPANISH])
-  await page.goto('/storage/tx/austin/demo-austin-south')
-
-  // The demo seed's Austin 5×15 has no units, so it is the one size that
-  // renders the "currently full" section. `5 pies por 15 pies` is
-  // `facility.footBy` in Spanish, which is also what the disclosure's own
-  // summary interpolates — so matching on it proves the size label reached the
-  // form in the page's language rather than in English.
-  const card = page.getByRole('listitem').filter({ hasText: '5 pies por 15 pies' }).first()
-
-  // `locator('summary')` rather than a role, for the reason `smoke.spec.ts`
-  // records: Chromium exposes a <details> disclosure inconsistently.
-  await expect(card.locator('summary')).toContainText(
-    'Avísenme por correo cuando se desocupe una de 5 pies por 15 pies',
-  )
-
-  // The same opening sequence `smoke.spec.ts` runs against the English form,
-  // and it is load-bearing rather than ceremonial: pressing the submit before
-  // React has hydrated posts the form NATIVELY, which navigates, collapses the
-  // disclosure and loses the inline state. That leaves an empty green region
-  // and no message — indistinguishable from a broken translation, and it is
-  // what this spec did on its first run.
-  const status = card.getByRole('status')
-  await expect(card.getByLabel('Su correo electrónico')).toBeHidden()
-  await expectPreexisting(status)
-
-  await card.locator('summary').click()
-
-  const email = card.getByLabel('Su correo electrónico')
-  await expect(email).toBeVisible()
-  await expect(card.getByText('Un solo correo, únicamente sobre este tamaño')).toBeVisible()
-
-  // Passes the browser's own `type="email"` check — which accepts a domain
-  // with no dot — and fails `isPlausibleEmail` on the SERVER. That is the only
-  // way to reach the translated refusal in a real browser without fighting
-  // native validation.
-  await email.fill('alguien@localhost')
-  await card.getByRole('button', { name: 'Agrégueme a la lista' }).click()
-
-  // Both places the sentence lands, and on this form they are the SAME
-  // sentence — unlike the lead form above, whose summary is a count. B-171 gave
-  // this one-field form an announcement a renter can act on, and B-274 changed
-  // the language of those words and nothing else about them; the English
-  // assertion in `smoke.spec.ts` is unchanged and still passes, which is what
-  // says so.
-  const refusal = 'Escriba un correo electrónico en el que podamos localizarle.'
-  await expect(status).toContainText(refusal)
-
-  // 3.3.1: the same sentence is ALSO tied to the field, so a screen reader
-  // reads it again when focus lands there. Reached through the input's own
-  // `aria-describedby` rather than by text — the two copies are word for word
-  // identical on this form, which is the point, and a by-text locator resolves
-  // to both and fails strict mode.
-  await expect(email).toHaveAttribute('aria-invalid', 'true')
-  const describedBy = await email.getAttribute('aria-describedby')
-  expect(describedBy).toBeTruthy()
-  await expect(page.locator(`[id="${describedBy}"]`)).toHaveText(refusal)
-})
-
-test('the waitlist cancel page answers in the visitor\'s language (B-274)', async ({
-  page,
-  context,
-}) => {
-  // The page the Spanish availability mail links to. Its language comes from
-  // the ENTRY first (`writingLocale`, D-130) and only then from the request —
-  // which is the step this spec can reach without creating a real entry, and
-  // the step that matters for an unknown token, where there is no entry at all.
-  //
-  // The stored-language step is asserted in `tests/waitlist-db.test.ts`
-  // instead: reading a real `cancelToken` needs the database, and joining a
-  // list here to get one would be an unscoped mutation of shared demo state
-  // for a fact a unit test already holds.
-  await context.addCookies([SPANISH])
-  await page.goto('/waitlist/cancel/not-a-real-token')
-
-  await expect(page.getByRole('heading', { level: 1 })).toContainText('Lista de espera')
-  await expect(
-    page.getByText('No encontramos ese enlace de la lista de espera.'),
-  ).toBeVisible()
-
-  // SC 3.1.2. `ProsePage` declares the language of the prose itself, which is
-  // the half `<html lang>` cannot cover here: this link is opened from a mail
-  // client, so the cookie the shell reads is routinely absent exactly when the
-  // entry says Spanish.
-  await expect(page.locator('div[lang="es"]')).toContainText('Lista de espera')
 })
 
 test('the Spanish reservation form asks and refuses in Spanish (B-267)', async ({

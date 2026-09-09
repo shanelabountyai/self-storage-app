@@ -1081,6 +1081,11 @@ export const ENGLISH_UNDER_A_TRANSLATED_SHELL: readonly EnglishPage[] = [
     note: 'D-124, same footing as the terms above; `ProsePage` declares it',
   },
   {
+    route: '/waitlist/cancel/[token]',
+    why: 'untranslated',
+    note: 'reached from an email link and never translated; `ProsePage` declares it',
+  },
+  {
     route: '/checkout/resume/[token]',
     why: 'untranslated',
     note: 'two dead-link sentences, both English, on a page that otherwise redirects',

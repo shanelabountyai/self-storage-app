@@ -11,8 +11,8 @@ It complements rather than duplicates:
 - `git log` — the change-by-change record
 - `README.md` — how the built thing works today
 
-**Status:** 269 of 277 backlog items complete. Latest entry: B-274 (`48749dc`).
-**Entries:** 299 across 21 part files.
+**Status:** 268 of 276 backlog items complete. Latest entry: B-273 (`482abe6`).
+**Entries:** 298 across 21 part files.
 
 ## Reading one entry
 
@@ -347,4 +347,3 @@ Append the entry as a `### ` heading at the end of the **highest-numbered** file
 | B-265 — the emails composed in code, in the reader's language (2026-09-07, `0e8f611`) | `0e8f611` | [21-from-b-268](progress/21-from-b-268.md#b-265-the-emails-composed-in-code-in-the-readers-language-2026-09-07-0e8f611) |
 | B-271 — a live log that ends in the past (2026-09-08, `864e6f0`) | `864e6f0` | [21-from-b-268](progress/21-from-b-268.md#b-271-a-live-log-that-ends-in-the-past-2026-09-08-864e6f0) |
 | B-273 — the staff mirror: English under `lang="es"`, and Spanish under `lang="en"` (2026-09-08, `482abe6`) | `482abe6` | [21-from-b-268](progress/21-from-b-268.md#b-273-the-staff-mirror-english-under-langes-and-spanish-under-langen-2026-09-08-482abe6) |
-| B-274 — the waitlist speaks the visitor's language, form to cancel link (2026-09-08) | `48749dc` | [21-from-b-268](progress/21-from-b-268.md#b-274-the-waitlist-speaks-the-visitors-language-form-to-cancel-link-2026-09-08) |

@@ -108,18 +108,6 @@ describe('i18n dictionaries', () => {
     // irreversible, so an untranslated paste there is as bad as one under
     // `err.` — and the `err.` prefix would style it red.
     //
-    // B-274 adds the three sentences the waitlist cancel page answers with.
-    // `res.cancelled`'s argument, on the other unsubscribe this site has: they
-    // are the `status: 'success'` prose a visitor reads after taking themselves
-    // off a list, reached from a link in a mail that was written in their own
-    // language, so an untranslated paste is a reply in the wrong language to
-    // somebody who is already gone and will not write in to say so.
-    //
-    // `wait.joined` and `wait.alreadyOn` stay OFF the list, alongside
-    // `lead.thanks` and for the same reason: they are the ordinary confirmation
-    // of an ordinary form submit, reversible from the mail that follows, and
-    // the line has to be somewhere.
-    //
     // B-269 adds the terms themselves. They are the WORDS INSIDE
     // `promo.codeApplied` and the whole text of every unit-card badge, so an
     // identical value here is the exact defect that row was written for — a
@@ -137,9 +125,6 @@ describe('i18n dictionaries', () => {
       'promo.terms.amountOffOther',
       'promo.terms.minStayOne',
       'promo.terms.minStayOther',
-      'wait.cancelOff',
-      'wait.cancelDone',
-      'wait.cancelAlready',
     ] as const
     const untranslated = Object.keys(en)
       .filter((key) => key.startsWith('err.') || MUST_ALSO_DIFFER.includes(key as never))

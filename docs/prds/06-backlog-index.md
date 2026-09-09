@@ -6,7 +6,7 @@
 
 **Then read the row itself before building the item** — `npm run docs:row -- B-262` prints that one row whole and verbatim, about 2 KB against the file's 490. The columns dropped here are the ones that say what to build.
 
-**277 items — 269 complete, 8 open.**
+**276 items — 268 complete, 8 open.**
 
 ## Open, in build order
 
@@ -303,4 +303,3 @@
 | 93 | B-271 | ✅ | Renumbered B-264 → B-266 → B-268 → B-271, and the third time is the same collision as the first two: | S | Phase 2 |
 | 94 | B-272 | ✅ | Renumbered B-269 → B-272 on the merge of 2026-09-07, and the row is left saying so. | S | Phase 2 |
 | 95 | B-273 | ✅ | Renumbered B-270 → B-273 with its parent, 2026-09-07. | S | Phase 2 |
-| 96 | B-274 | ✅ | The waitlist form is English inside a Spanish page, and so is the page its Spanish email links to | S | Phase 2 |
