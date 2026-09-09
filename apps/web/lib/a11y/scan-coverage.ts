@@ -780,6 +780,35 @@ export const SCANNED_STATES: readonly ScannedState[] = [
     layoutException:
       "The same builder as the state above, which IS measured — this differs only in which error branch renders inside it, not in the grid that could overflow.",
   },
+  // B-272. Carried by B-268 and owned by no row until now: `/reservations` has
+  // been in `PUBLIC_SCAN_ROUTES` since B-090 as
+  // `?token=not-a-real-token`, so the four public loops scan and measure the
+  // DEAD LINK — the state a crawler or a mistyped URL reaches — while the page
+  // a renter actually ends a reservation on had never been given to axe at
+  // all. The comment beside that entry says as much ("the live states need a
+  // real hold") and nothing had closed it.
+  //
+  // Two entries rather than one because what differs between them is not
+  // markup: the Spanish state is the same DOM with a different `lang`, ~20%
+  // longer strings, and a held-until date produced by a different formatter —
+  // the exact defect B-268 shipped to fix. Scanning the English state says
+  // nothing about any of that.
+  {
+    route: '/reservations',
+    state: 'live hold confirmation',
+    spec: 'e2e/smoke.spec.ts',
+    layout: 'excepted',
+    layoutException:
+      "The dead-link state of this same route is in PUBLIC_SCAN_ROUTES, so all four public loops already measure the container at 320px, 200% zoom and forced text spacing; the confirmation adds a date sentence and two buttons inside it, in one column.",
+  },
+  {
+    route: '/reservations',
+    state: 'live hold confirmation, Spanish',
+    spec: 'e2e/i18n.spec.ts',
+    layout: 'excepted',
+    layoutException:
+      "Same single-column container as the English state above, and the one thing Spanish changes here — string length — has its tightest public case measured on the facility page, which STATE_REACH does reach in Spanish.",
+  },
 ] as const
 
 export type StateException = {

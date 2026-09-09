@@ -1,4 +1,4 @@
-import { translate, type Dictionary, type MessageKey } from '@/lib/i18n'
+import { translate, type Dictionary, type MessageKey, type MessageSegment } from '@/lib/i18n'
 
 // B-090 part 6. The move-in cost lines, in the reader's language.
 //
@@ -40,13 +40,26 @@ const NOTE_KEYS: Record<string, MessageKey> = {
 
 export type CostLine = { key: string; label: string; note?: string }
 
-export function costLineLabel(dict: Dictionary, line: CostLine, promoTerms?: string): string {
+// B-272 returns RUNS rather than one string, and only the promo line ever has
+// more than one of them. `promoTerms` is `offerTermsSegments`' output now, not
+// a finished sentence: an operator's own `termsText` carries `lang: 'en'`
+// (D-129), and flattening it here is exactly how this `<dt>` came to be one of
+// the three surfaces B-269 left with English unannounced inside `lang="es"`.
+//
+// A `<dt>` cannot take a component, so the callers render these through
+// `MessageSegments`. Every other line is a single unmarked run, which that
+// renderer emits as the same bare text node it always was.
+export function costLineLabel(
+  dict: Dictionary,
+  line: CostLine,
+  promoTerms?: readonly MessageSegment[],
+): readonly MessageSegment[] {
   // The promotion's own wording wins over "Promotion" in either language — it
-  // is the same string the badge on the card shows, resolved by the caller
+  // is the same runs the badge on the card shows, resolved by the caller
   // against the same dictionary this function was handed.
-  if (line.key === 'promo' && promoTerms) return promoTerms
+  if (line.key === 'promo' && promoTerms && promoTerms.length > 0) return promoTerms
   const key = LINE_KEYS[line.key]
-  return key ? translate(dict, key) : line.label
+  return [{ text: key ? translate(dict, key) : line.label }]
 }
 
 export function costLineNote(dict: Dictionary, line: CostLine): string | undefined {

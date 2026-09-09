@@ -375,6 +375,19 @@ test('the page a Spanish reservation lands on is Spanish, date included (B-268)'
 
   await expect(page.getByRole('button', { name: 'Completar la mudanza en línea' })).toBeVisible()
 
+  // B-272, and the Spanish half is the one worth having separately: the
+  // English confirmation is scanned in `smoke.spec.ts`, and what differs here
+  // is not markup but the strings inside it — a `lang` that has to be `es` on
+  // the whole document, and a date this row's own assertion above proves is
+  // produced by a different formatter. An axe run on the English state says
+  // nothing about either.
+  //
+  // Before the cancel click, same as the English one: the post-cancel
+  // paragraph is a different state.
+  //
+  // a11y-state: /reservations | live hold confirmation, Spanish
+  await assertNoAxeViolations(page, { state: 'live hold confirmation, Spanish' })
+
   // Give the unit back — the same reason the English spec does, and what keeps
   // this test's mutation its own. Asserting the outcome and releasing the
   // inventory are the same click.

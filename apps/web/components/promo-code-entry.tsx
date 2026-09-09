@@ -1,6 +1,13 @@
 import type { CodeOutcome } from '@storage/core/promotions'
 import { codeOutcomeMessage } from '@/lib/promotions/message'
-import { translate, type Dictionary, type MessageKey } from '@/lib/i18n'
+import { MessageSegments } from '@/components/message-segments'
+import {
+  segmentsText,
+  translate,
+  translateSegments,
+  type Dictionary,
+  type MessageKey,
+} from '@/lib/i18n'
 
 // PRD 04 §3.6 US-11 AC3, §4.5 FR-PROMO-2/3 (B-122). Where a renter types a
 // promo code.
@@ -49,7 +56,15 @@ export function PromoCodeEntry({ action, carry, outcome, value, dict, children }
   // to come out of `@storage/core/promotions` already written, in English, onto
   // a page whose every other word had been translated.
   const outcomeMessage = outcome ? codeOutcomeMessage(outcome, dict) : null
-  const message = outcomeMessage ? t(outcomeMessage.key, outcomeMessage.vars) : null
+  // B-272. Runs, not a string: this box is a FOURTH surface that quoted an
+  // operator's own `termsText` unmarked inside a translated sentence, and
+  // B-269's note listed three — it counted the ones on the checkout and missed
+  // the one on the facility page beside it. `message` survives for
+  // `aria-describedby`, which needs to know only whether there is a sentence.
+  const parts = outcomeMessage
+    ? translateSegments(dict, outcomeMessage.key, outcomeMessage.vars ?? {})
+    : null
+  const message = parts ? segmentsText(parts) : null
   // `applied` and `superseded` are not errors: one is the discount working and
   // the other is us keeping a better one. Only `rejected` is wired to
   // `aria-invalid` and the error styling, or a renter who typed a valid code
@@ -106,7 +121,7 @@ export function PromoCodeEntry({ action, carry, outcome, value, dict, children }
         role="status"
         className={`mt-2 text-sm empty:mt-0 ${failed ? 'text-red-700' : 'font-medium'}`}
       >
-        {message ?? ''}
+        {parts ? <MessageSegments segments={parts} /> : ''}
       </p>
 
       {children}

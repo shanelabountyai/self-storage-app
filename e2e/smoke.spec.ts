@@ -792,6 +792,19 @@ test('reserving a unit holds it, for free, with no account', async ({ page }) =>
   await expect(page.getByRole('main')).toContainText('We hold it until')
   await expect(page.getByRole('main')).toContainText('Nothing has been charged')
 
+  // B-272. The state the four public loops cannot reach: they scan
+  // `/reservations?token=not-a-real-token`, which is the dead link, and the
+  // live hold needs inventory no fixed URL can hold across a reseed. So the
+  // page a renter actually ends their reservation on — the held-until date,
+  // the move-in button, the cancel form — had never been given to axe in
+  // either language, while the route counted as covered.
+  //
+  // Scanned BEFORE the cancel click: the post-cancel paragraph is a different
+  // state, and one this spec would have to keep alive to claim.
+  //
+  // a11y-state: /reservations | live hold confirmation
+  await assertNoAxeViolations(page, { state: 'live hold confirmation' })
+
   // Give the unit back. Unlike every other test in this suite these hold real
   // inventory, and the demo facility has a finite number of lockers — a test
   // that keeps what it takes quietly sells the size out after a few runs and

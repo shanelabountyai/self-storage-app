@@ -1,7 +1,7 @@
-import { Fragment } from 'react'
 import type { OfferTerms } from '@storage/core/promotions'
+import { MessageSegments } from '@/components/message-segments'
 import { formatRate } from '@/lib/format'
-import { plural, type Dictionary } from '@/lib/i18n'
+import { plural, segmentsText, type Dictionary, type MessageSegment } from '@/lib/i18n'
 
 // B-269. A promotion's terms, said in the reader's own language.
 //
@@ -29,7 +29,12 @@ import { plural, type Dictionary } from '@/lib/i18n'
 /// English unannounced inside `<html lang="es">`. A minimum stay appended to it
 /// IS translated, so the two cannot share one element — marking the whole span
 /// `en` would mislabel the Spanish clause.
-export type TermsSegment = { text: string; lang?: 'en' }
+///
+/// B-272 moved the type to `lib/i18n` as `MessageSegment` and kept this name
+/// as an alias: the three surfaces that could not take these segments now
+/// interpolate them into whole sentences through `translateSegments`, which
+/// has no business importing a promotions module.
+export type TermsSegment = MessageSegment
 
 export function offerTermsSegments(dict: Dictionary, terms: OfferTerms): TermsSegment[] {
   const segments: TermsSegment[] =
@@ -51,34 +56,23 @@ export function offerTermsSegments(dict: Dictionary, terms: OfferTerms): TermsSe
 
 /// The terms as one string, for the surfaces that can only take one.
 ///
-/// `FormState.message` and `fieldErrors` are string-typed end to end, and
-/// `costLineLabel` returns the text of a `<dt>` — so the applied-code
-/// confirmation, the checkout's "currently applied" line and the cost lines
-/// use this and lose the `lang` marking on an operator override. That is a
-/// residual of D-129, named in `/accessibility`, not an oversight: turning
-/// `FormState` into nodes is a change to the form machinery every admin screen
-/// shares, which is a bigger item than this one.
+/// B-269 left three surfaces on this function that should not have been —
+/// the applied-code confirmation, the checkout's "currently applied" line and
+/// the move-in cost `<dt>` — because each of them lost the `lang` marking on
+/// an operator override. B-272 moved all three onto the segments above, and
+/// this is now what it says it is: the form for a recipient that genuinely
+/// cannot take runs. Those are the templated emails and the staff surfaces
+/// D-122 keeps English, neither of which has a `lang` to be wrong about.
+///
+/// Joining the segments is still the definition, so the string a mail merges
+/// and the runs a page renders can never describe one discount differently.
 export function offerTermsText(dict: Dictionary, terms: OfferTerms): string {
-  return offerTermsSegments(dict, terms)
-    .map((segment) => segment.text)
-    .join('')
+  return segmentsText(offerTermsSegments(dict, terms))
 }
 
 /// The terms as nodes, with the operator's own wording marked.
 export function OfferTermsText({ dict, terms }: { dict: Dictionary; terms: OfferTerms }) {
-  return (
-    <>
-      {offerTermsSegments(dict, terms).map((segment, index) =>
-        segment.lang ? (
-          <span key={index} lang={segment.lang}>
-            {segment.text}
-          </span>
-        ) : (
-          <Fragment key={index}>{segment.text}</Fragment>
-        ),
-      )}
-    </>
-  )
+  return <MessageSegments segments={offerTermsSegments(dict, terms)} />
 }
 
 function generated(

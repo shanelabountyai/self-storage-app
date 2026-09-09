@@ -24,7 +24,7 @@ import {
 import { prisma } from '@storage/db'
 import { formatRate } from '@/lib/format'
 import { labelForStep } from '@/components/checkout/stepper'
-import { isLocale, type Locale, type MessageKey } from '@/lib/i18n'
+import { isLocale, translateSegments, type Locale, type MessageKey } from '@/lib/i18n'
 import { getLocale, messages } from '@/lib/i18n/server'
 import {
   ELECTRONIC_RECORDS_CONSENT,
@@ -590,6 +590,13 @@ export async function applyPromoCodeAction(
   return {
     status: 'success',
     message: outcome ? t(outcome.key, outcome.vars) : t('act.codeApplied'),
+    // B-272. The same sentence as runs, so `AdminForm` can mark the operator's
+    // own terms `lang="en"` inside a Spanish confirmation (D-129). `message`
+    // above stays the flattened string — it is what a live region announces —
+    // and joining these reproduces it.
+    ...(outcome
+      ? { messageParts: translateSegments(dict, outcome.key, outcome.vars ?? {}) }
+      : {}),
   }
 }
 

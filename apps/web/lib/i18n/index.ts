@@ -76,16 +76,84 @@ export function dictionaryFor(locale: Locale): Dictionary {
 ///
 /// A missing key cannot happen — `es` is typed as `Dictionary`, so typecheck
 /// fails on an untranslated key rather than a visitor seeing `home.title`.
-export function translate(
-  dict: Dictionary,
-  key: MessageKey,
-  vars?: Record<string, string | number>,
-): string {
+/// B-272. A var may be RUNS rather than a scalar, and `translate` flattens
+/// them: the same `vars` object then feeds both this and `translateSegments`,
+/// so the string a live region announces and the nodes a page renders can
+/// never be two different sentences.
+export type MessageVars = Record<string, string | number | readonly MessageSegment[]>
+
+export function translate(dict: Dictionary, key: MessageKey, vars?: MessageVars): string {
   const message = dict[key]
   if (!vars) return message
-  return message.replace(/\{(\w+)\}/g, (whole, name: string) =>
-    name in vars ? String(vars[name]) : whole,
-  )
+  return message.replace(/\{(\w+)\}/g, (whole, name: string) => {
+    if (!(name in vars)) return whole
+    const value = vars[name]
+    return Array.isArray(value) ? segmentsText(value) : String(value)
+  })
+}
+
+/// B-272. A run of message text and the language it is in, when that is not
+/// the page's.
+///
+/// `lang` is set only on a run that is NOT in the reader's language — an
+/// operator's own `termsText`, which D-129 renders as typed. Everything else
+/// leaves it undefined, so a renderer emits a bare string and no page gains a
+/// span per sentence.
+///
+/// Plain data on purpose. This type crosses the server-action boundary inside
+/// `FormState`, and it is read by client components that must not pull the
+/// dictionaries into their bundles.
+export type MessageSegment = { text: string; lang?: Locale }
+
+/// `translate`, for a message one of whose vars is itself segmented.
+///
+/// The three surfaces B-269 left behind all had the same shape and none of
+/// them could use `translate`: the operator's words arrive already marked, and
+/// interpolating them into a template as a STRING is what threw the marking
+/// away. Splitting the template on its own placeholders keeps it.
+///
+/// Joining the result's `text` reproduces `translate` exactly, which is what
+/// lets a caller keep a plain string for a live region beside the segments it
+/// renders.
+export function translateSegments(
+  dict: Dictionary,
+  key: MessageKey,
+  vars: MessageVars,
+): MessageSegment[] {
+  const out: MessageSegment[] = []
+  const push = (segment: MessageSegment) => {
+    // Merge with the run before it when both are unmarked, so a template with
+    // three plain vars is one text node rather than seven.
+    const last = out[out.length - 1]
+    if (last && last.lang === undefined && segment.lang === undefined) last.text += segment.text
+    else out.push({ ...segment })
+  }
+
+  // The capturing group keeps the placeholders, so odd indexes are the names.
+  const parts = dict[key].split(/\{(\w+)\}/g)
+  for (const [index, part] of parts.entries()) {
+    if (index % 2 === 0) {
+      if (part) push({ text: part })
+      continue
+    }
+    const value = vars[part]
+    // Unknown name: `translate` leaves the placeholder in place, and so does
+    // this — a missing var must be visible, never silently blank.
+    if (value === undefined) push({ text: `{${part}}` })
+    else if (Array.isArray(value)) for (const segment of value) push(segment)
+    else push({ text: String(value) })
+  }
+  return out
+}
+
+/// The segments flattened back to one string.
+///
+/// For the consumers that genuinely cannot take runs and never could: a
+/// templated email, a value handed to `calculateMoveInCost` as a line label,
+/// a staff screen D-122 keeps English. Defining the string AS the join is what
+/// stops a page and the mail about it describing one discount differently.
+export function segmentsText(segments: readonly MessageSegment[]): string {
+  return segments.map((segment) => segment.text).join('')
 }
 
 /// Pick a singular or plural message.
@@ -100,7 +168,7 @@ export function plural(
   count: number,
   one: MessageKey,
   other: MessageKey,
-  vars?: Record<string, string | number>,
+  vars?: MessageVars,
 ): string {
   return translate(dict, count === 1 ? one : other, { count, ...vars })
 }

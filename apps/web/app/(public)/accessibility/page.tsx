@@ -2073,6 +2073,12 @@ function reviewedOn(locale: Locale): string {
 // with an operator override, read in Spanish, still meets unmarked English in
 // three places.
 //
+// **CORRECTED at B-272 (2026-09-09), and the count was wrong as well as the
+// state.** All of those surfaces now carry the marking, and there were FOUR of
+// them — the facility page's own code box was never counted. The paragraph
+// above is left standing as written because it is what this page said for two
+// days; the entry at the end of this log records what replaced it.
+//
 // **No bullet below changes, and no new claim.** The "Where we fall short"
 // list names JavaScript, the staff screens and the maps; none of the three is
 // touched, and an untranslated fragment of an operator's own wording is not
@@ -2253,6 +2259,61 @@ function reviewedOn(locale: Locale): string {
 // claim and both exception lists are untouched. `LAST_REVIEWED` is not bumped,
 // per D-115: no manual screen-reader pass was performed, and this item
 // performed none.
+
+// Re-verified 2026-09-09, at B-272 (the three surfaces B-269 left, and the
+// axe scan B-268 left — the two carried gaps no backlog row owned).
+// Customer-facing on both halves, and it closes rather than bounds.
+//
+// **The 3.1.2 half, and the correction above is the important part of it.**
+// B-269 marked an operator's own promotion terms `lang="en"` where they stand
+// alone and listed three surfaces that could not take the marking. All three
+// lost it at the same step — interpolating already-marked runs into a
+// translated sentence as a STRING — so one helper closes all of them:
+// `translateSegments` splits the template on its own placeholders instead.
+// **There were four, not three.** The facility page's own code box renders
+// `codeOutcomeMessage` too, and B-269's note counted only the checkout's. A
+// Spanish reader who typed a code on a facility page met the same unannounced
+// English as one who typed it at checkout, and no list said so.
+//
+// **`FormState.message` is still a string, deliberately.** The bounded version
+// of this fix was "turn the form machinery into nodes", which is what made it
+// a bigger item than B-269. It is not what shipped: `message` is what
+// `announceOutside` hands to `AnnounceRegion` as plain text and what crosses
+// the server-action boundary, so it stays a string, and an OPTIONAL
+// `messageParts` carries the same sentence as runs beside it. Joining the
+// parts reproduces `message` exactly — a unit test pins that, because a live
+// region announcing one sentence while the page shows another is a worse
+// defect than the one being fixed — and every admin action that supplies no
+// parts renders exactly what it always did.
+//
+// **The axe half closes a coverage claim that was true by accident.**
+// `/reservations` has been in the scanned set since B-090, as
+// `?token=not-a-real-token` — the DEAD LINK. So the page a renter actually
+// ends a reservation on, with its held-until date, its move-in button and its
+// cancel form, had never been given to axe in either language while the route
+// counted as covered. Two `SCANNED_STATES` entries now name it, English in
+// `smoke.spec.ts` and Spanish in `i18n.spec.ts`, both scanned at the live
+// state those specs already reach. **Two entries rather than one on purpose**:
+// what differs between them is not markup but a `lang`, ~20% longer strings
+// and a date from a different formatter, which is the exact defect B-268
+// shipped to fix — scanning the English state proves nothing about it.
+//
+// **Both are `layout: 'excepted'` and the reason is on each row.** The
+// dead-link state of the same route is in `PUBLIC_SCAN_ROUTES`, so all four
+// public loops already measure that container at 320px, at 200% zoom and under
+// forced text spacing; the confirmation adds a date sentence and two buttons
+// inside it, in one column. That is a reason a person can disagree with, which
+// is what B-246 requires of an exception, rather than "not done yet".
+//
+// **No new markup and no new claim below.** The one DOM change is a `<span
+// lang="en">` where a bare text node stood, which is the fix rather than a
+// thing to declare. "Where we fall short" was re-read against this build — the
+// no-JavaScript hold countdown, the staff screens, the embedded maps — and all
+// three are still true and unchanged in scope; an operator's untranslated
+// wording was never one of them, and it is now marked rather than bounded.
+// `LAST_REVIEWED` is not bumped, per D-115: no manual screen-reader pass was
+// performed, and this item performed none. **B-254 is still the only thing
+// that can move that date, and no agent may tick it.**
 
 export default async function AccessibilityPage() {
   const locale = await getLocale()

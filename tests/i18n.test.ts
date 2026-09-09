@@ -5,7 +5,9 @@ import {
   dictionaryFor,
   isLocale,
   plural,
+  segmentsText,
   translate,
+  translateSegments,
 } from '../apps/web/lib/i18n'
 import type { CodeRejection } from '@storage/core/promotions'
 import { codeOutcomeMessage } from '../apps/web/lib/promotions/message'
@@ -278,5 +280,56 @@ describe('codeOutcomeMessage — B-266', () => {
     // succeeded that they failed.
     expect(applied.key.startsWith('err.')).toBe(false)
     expect(superseded.key.startsWith('err.')).toBe(false)
+  })
+})
+
+// B-272. The three surfaces B-269 left behind — and a fourth it had not
+// counted, the facility page's own code box — all lost an operator's `lang`
+// marking at the same step: interpolating already-marked terms into a
+// translated sentence as a STRING. `translateSegments` is the fix, and what
+// makes the fix safe is that it agrees with `translate` exactly, since one of
+// them feeds a live region and the other the DOM beside it.
+describe('translateSegments (B-272)', () => {
+  const dict = dictionaryFor('es')
+  const terms = [
+    { text: '50% off the first month', lang: 'en' as const },
+    { text: ' — mínimo 3 meses' },
+  ]
+
+  it('joins back to exactly what translate produces', () => {
+    // The invariant `FormState.messageParts` rests on. If these ever disagree,
+    // a screen reader hears one sentence and the page shows another.
+    for (const key of ['promo.codeApplied', 'promo.currentlyApplied'] as const) {
+      expect(segmentsText(translateSegments(dict, key, { terms }))).toBe(
+        translate(dict, key, { terms }),
+      )
+    }
+  })
+
+  it('keeps the operator run marked and leaves the translated ones bare', () => {
+    const parts = translateSegments(dict, 'promo.codeApplied', { terms })
+    expect(parts.filter((p) => p.lang === 'en').map((p) => p.text)).toEqual([
+      '50% off the first month',
+    ])
+    // The Spanish frame and the minimum-stay clause are one language, so
+    // neither may carry a `lang` — marking them `en` is the mirror-image 3.1.2
+    // failure and is not caught by "some span exists".
+    expect(parts.some((p) => p.lang === undefined && p.text.includes('mínimo'))).toBe(true)
+  })
+
+  it('merges adjacent unmarked runs so a plain sentence is still one node', () => {
+    const parts = translateSegments(dict, 'promo.codeApplied', {
+      terms: [{ text: 'medio mes gratis' }],
+    })
+    expect(parts).toHaveLength(1)
+    expect(parts[0].lang).toBeUndefined()
+  })
+
+  it('leaves an unknown placeholder visible, the same as translate', () => {
+    // A var that silently vanishes is worse than one that shows its own name:
+    // "Code applied: ." reads as a bug nobody can report.
+    const key = 'promo.codeApplied'
+    expect(segmentsText(translateSegments(dict, key, {}))).toBe(translate(dict, key, {}))
+    expect(segmentsText(translateSegments(dict, key, {}))).toContain('{terms}')
   })
 })

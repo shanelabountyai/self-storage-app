@@ -1,7 +1,14 @@
 import { Fragment } from 'react'
 import { calculateMoveInCost, type TaxRate } from '@storage/core/pricing'
 import { formatRate } from '@/lib/format'
-import { translate, type Dictionary, type MessageKey } from '@/lib/i18n'
+import {
+  segmentsText,
+  translate,
+  type Dictionary,
+  type MessageKey,
+  type MessageSegment,
+} from '@/lib/i18n'
+import { MessageSegments } from '@/components/message-segments'
 import { costLineLabel } from '@/lib/pricing/cost-line-copy'
 
 // PRD 01 §6.4 / US-301, and B-020's row: the price summary is the stepper's
@@ -43,7 +50,11 @@ export type PriceSummaryProps = {
   /// period, with the terms as its label. Passed through rather than
   /// re-evaluated so the summary, the amount due and the redemption all agree.
   promoDiscountCents?: number
-  promoTerms?: string
+  /// B-272: the terms as RUNS, not a finished sentence. `calculateMoveInCost`
+  /// still takes the joined string — it writes a line label, not markup — and
+  /// the `<dt>` below renders the runs, which is what keeps an operator's own
+  /// `termsText` marked `lang="en"` inside a Spanish summary (D-129).
+  promoTerms?: readonly MessageSegment[]
   /// Rendered when a step has changed the totals, e.g. "Protection plan added".
   /// §6.4: a total that moves without an explicit cause is a defect, so the
   /// cause is stated rather than left to be inferred from a changed number.
@@ -77,7 +88,7 @@ export function PriceSummary({
     adminFeeCents,
     taxRates,
     promoDiscountCents,
-    promoTerms,
+    promoTerms: promoTerms && promoTerms.length > 0 ? segmentsText(promoTerms) : undefined,
   })
   const premiumPerUnit = protectionPremiumCents ?? 0
   const premium = premiumPerUnit * units.length
@@ -131,7 +142,9 @@ export function PriceSummary({
             // to keep every group a direct child.
             <Fragment key={line.key}>
               <div className="flex justify-between gap-4">
-                <dt>{costLineLabel(dict, line, promoTerms)}</dt>
+                <dt>
+                  <MessageSegments segments={costLineLabel(dict, line, promoTerms)} />
+                </dt>
                 <dd className="tabular-nums">
                   {line.key === 'protection' ? (
                     protectionPremiumCents === undefined ? (

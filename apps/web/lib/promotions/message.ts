@@ -1,7 +1,7 @@
 import type { CodeOutcome, CodeRejection } from '@storage/core/promotions'
 import type { FieldMessage } from '@/lib/admin/form-state'
 import type { Dictionary, MessageKey } from '@/lib/i18n'
-import { offerTermsText } from './terms'
+import { offerTermsSegments } from './terms'
 
 // B-266. The renter-facing sentence for whatever became of a typed promo code.
 //
@@ -45,18 +45,19 @@ const REJECTION_KEY: Record<CodeRejection, MessageKey> = {
 /// sentence are now resolved in the same language as the sentence around them
 /// — «Código aplicado: 50% off the first month» is the defect that row names.
 ///
-/// `offerTermsText` and not `OfferTermsText`: both branches end up in
-/// `FormState.message` and `fieldErrors`, which are string-typed end to end, so
-/// an operator's own wording goes in here unmarked. Named in `/accessibility`
-/// as D-129's residual.
+/// B-272 returns the terms as RUNS in `vars`, which is what closes D-129's
+/// residual. `translate` flattens them for `FormState.message` — the string a
+/// live region announces — and `translateSegments` keeps the operator's own
+/// wording marked `lang="en"` for the two places that render this as nodes:
+/// the facility page's code box and the checkout's `messageParts`.
 export function codeOutcomeMessage(outcome: CodeOutcome, dict: Dictionary): FieldMessage {
   switch (outcome.kind) {
     case 'applied':
-      return { key: 'promo.codeApplied', vars: { terms: offerTermsText(dict, outcome.terms) } }
+      return { key: 'promo.codeApplied', vars: { terms: offerTermsSegments(dict, outcome.terms) } }
     case 'superseded':
       return {
         key: 'promo.codeSuperseded',
-        vars: { terms: offerTermsText(dict, outcome.keptTerms) },
+        vars: { terms: offerTermsSegments(dict, outcome.keptTerms) },
       }
     case 'rejected':
       return { key: REJECTION_KEY[outcome.rejection] }
