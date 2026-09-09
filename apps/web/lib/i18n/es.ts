@@ -527,7 +527,6 @@ export const es: Dictionary = {
   // Cada mensaje dice qué hacer, no solo qué salió mal. `err.postalCodeUnknown`
   // cita `details.enterMyself` palabra por palabra — si esa etiqueta cambia,
   // este mensaje también.
-  'err.oneField': 'Hay un problema con un campo.',
   'err.someFields': 'Hay problemas con {count} campos.',
   'err.firstName': 'Escriba su nombre.',
   'err.lastName': 'Escriba su apellido.',

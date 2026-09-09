@@ -98,14 +98,31 @@ export function fieldError(fields: FieldErrors): FormState {
 /// `@/lib/i18n` would put both dictionaries in their browser bundles.
 export type Translator = (key: MessageKey, vars?: MessageVars) => string
 
+/// B-273. With ONE error the summary is that error's own sentence, not a count
+/// of it. A count identifies a problem and suggests nothing, which is 3.3.3
+/// traded away — and it is traded away where it costs most, because the forms
+/// that refuse on a single field are the renter-facing ones. `FormResult` (the
+/// lead and waitlist forms) announces `message` and NOTHING else: the sentence
+/// saying what to do sits beside the input, reachable only by swiping back to
+/// it, so "There is a problem with one field." was the entire announcement.
+/// `AdminForm` renders the list inside the same `role="alert"`, so it read both
+/// halves and only wasted the first — the same defect, quieter.
+///
+/// Two callers had already hand-rolled this shape with comments explaining why
+/// the helper was wrong for them (checkout's promo refusal, the waitlist form);
+/// both call the helper again. `fieldError` above is deliberately NOT changed:
+/// every one of its callers is an `AdminForm` staff screen where the suggestion
+/// is already announced, and the count is a redundancy there rather than a loss.
 export function keyedFieldError(errors: KeyedFieldErrors, t: Translator): FormState {
-  const entries = Object.entries(errors)
+  const fieldErrors = Object.fromEntries(
+    Object.entries(errors).map(([field, { key, vars }]) => [field, t(key, vars)]),
+  )
+  const messages = Object.values(fieldErrors)
   return {
     status: 'error',
-    message: entries.length === 1 ? t('err.oneField') : t('err.someFields', { count: entries.length }),
-    fieldErrors: Object.fromEntries(
-      entries.map(([field, { key, vars }]) => [field, t(key, vars)]),
-    ),
+    message:
+      messages.length === 1 ? messages[0] : t('err.someFields', { count: messages.length }),
+    fieldErrors,
   }
 }
 

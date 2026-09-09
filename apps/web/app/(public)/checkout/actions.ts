@@ -543,13 +543,13 @@ export async function applyPromoCodeAction(
     // out of `@storage/core/promotions` as English, which put a Spanish renter
     // one field away from B-263's defect — same screen, same submit.
     //
-    // Not `keyedFieldError`: that helper counts the fields to pick its summary
-    // ("There is a problem with one field."), and this refusal has a sentence
-    // worth reading rather than a count. The summary and the field error are
-    // deliberately the same words, which is what `AdminForm` renders twice.
-    const refused = codeOutcomeMessage(lookup.codeOutcome, dict)
-    const refusal = t(refused.key, refused.vars)
-    return { status: 'error', message: refusal, fieldErrors: { promo: refusal } }
+    // B-273. This spelled `keyedFieldError` out by hand because the helper
+    // used to count the fields to pick its summary ("There is a problem with
+    // one field.") and this refusal has a sentence worth reading rather than a
+    // count. The helper no longer counts on one field, so it produces exactly
+    // this: the summary and the field error are the same words, which is what
+    // `AdminForm` renders twice.
+    return keyedFieldError({ promo: codeOutcomeMessage(lookup.codeOutcome, dict) }, t)
   }
 
   await prisma.checkoutSession.update({

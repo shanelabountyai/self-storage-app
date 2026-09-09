@@ -1,6 +1,6 @@
 'use server'
 
-import { success, type FormState } from '@/lib/admin/form-state'
+import { keyedFieldError, success, type FormState } from '@/lib/admin/form-state'
 import { joinWaitlist } from '@/lib/waitlist/service'
 import { getLocale, messages } from '@/lib/i18n/server'
 
@@ -39,20 +39,11 @@ export async function joinWaitlistAction(_prev: FormState, formData: FormData): 
   // B-263's shape: the service returns a key and this is the only layer that
   // knows whose request it is.
   //
-  // NOT `keyedFieldError`, which the lead form beside this one uses. That helper
-  // puts a generic summary ("There is a problem with one field.") in
-  // `message` and the real sentence only in `fieldErrors` — right for a form
-  // with twelve fields, where the summary counts them and each field carries
-  // its own suggestion. This form has ONE field and its `role="status"` region
-  // announces `message`, so the helper would replace "Enter an email address we
-  // can reach you at" with a sentence that identifies a problem and suggests
-  // nothing (3.3.3 lost, 3.3.1 kept). Both halves get the same resolved
-  // sentence instead, which is exactly what this action did before it was
-  // translated.
-  if (!result.ok) {
-    const message = t(result.problem.key)
-    return { status: 'error', message, fieldErrors: { email: message } }
-  }
+  // B-273. This spelled the helper out by hand until the helper stopped
+  // counting: with one field `keyedFieldError` now puts the refusal itself in
+  // `message`, which is what this form's `role="status"` region announces and
+  // the only place a screen-reader user hears it.
+  if (!result.ok) return keyedFieldError({ email: result.problem }, t)
 
   // "Already on it" and "just joined" get the same words on purpose. The
   // distinction is ours, not the visitor's — they asked to be told when a unit

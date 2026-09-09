@@ -1728,7 +1728,15 @@ test('the lead form announces and takes focus when it REFUSES', async ({ page })
   await form.getByLabel('Your name').fill('E2E Prospect')
   await form.getByRole('button', { name: 'Send' }).click()
 
-  await expectAnnounced(status, /problem/)
+  // B-273. This asserted `/problem/` and passed on the word inside "There is a
+  // problem with one field." — the summary `keyedFieldError` produced by
+  // counting. That is the announcement this form made on every refusal it has
+  // ever served: a problem identified (3.3.1) and nothing suggesting what to do
+  // about it (3.3.3), with the sentence that does sitting beside the input.
+  // `FormResult` announces `message` and nothing else, so the region is the
+  // whole announcement — asserted as the sentence now, not as a word that a
+  // count happens to contain.
+  await expectAnnounced(status, /An email address or a phone number/)
   await expect(status).toBeFocused()
   await expect(form.getByLabel('Email', { exact: true })).toHaveAttribute('aria-invalid', 'true')
 

@@ -2315,6 +2315,53 @@ function reviewedOn(locale: Locale): string {
 // performed, and this item performed none. **B-254 is still the only thing
 // that can move that date, and no agent may tick it.**
 
+// Re-verified 2026-09-09, at B-273 (a one-field refusal announces the refusal,
+// not a count of fields). Customer-facing: it changes what the lead form, the
+// waitlist box, the reservation form and three checkout steps say when they
+// refuse.
+//
+// **This page's own B-270 note described the defect and left it in the helper.**
+// That note records that routing the waitlist refusal through
+// `keyedFieldError` "replaced the announced sentence with that helper's field
+// COUNT", and that a spec caught it. What it did not say is that the count was
+// still there for everything else: `keyedFieldError` picked its summary by
+// counting entries, so with one entry it announced "There is a problem with one
+// field." and the sentence saying what to DO survived only in `fieldErrors`.
+// Two actions had already written the helper out by hand rather than use it —
+// the waitlist form and checkout's promo refusal — each with a comment
+// explaining why, which is the tell that it was a defect and not a style. The
+// helper is fixed instead: with one field the summary IS that field's sentence.
+// Both callers use it again.
+//
+// **The lead form is the surface where this was a real loss rather than a
+// wasted line.** `AdminForm` puts the field list INSIDE the same `role="alert"`
+// as the summary, so checkout and the reservation form read the suggestion out
+// either way and only wasted the heading. `FormResult` — the lead and waitlist
+// forms — announces `message` and nothing else, and moves focus to it. A
+// Spanish visitor refused by the lead form heard "Hay un problema con un
+// campo." and had to swipe back to the input to find out what to do about it
+// (3.3.1 kept, 3.3.3 lost). `lead-actions.ts` has passed exactly one field to
+// this helper since B-264.
+//
+// **`fieldError` is deliberately NOT changed, and that asymmetry is the
+// decision.** Every one of its callers is an `AdminForm` staff screen, where
+// the suggestion is already inside the announced box; changing it would rewrite
+// admin assertions for no reader. The two helpers now differ on purpose and
+// each says so above itself.
+//
+// **No claim below changes, and none needed correcting.** "When a form rejects
+// something you typed, the message is tied to the field itself" was true before
+// this row and is true after it — this row is about the SUMMARY above that
+// message, which the claim does not describe and did not overstate. No route,
+// no state and no exception changes: the same forms, the same live regions,
+// different words inside them. "Where we fall short" was re-read against this
+// build — the no-JavaScript hold countdown, the staff screens, the embedded
+// maps — and all three are still true and unchanged in scope.
+//
+// `LAST_REVIEWED` is not bumped, per D-115: no manual screen-reader pass was
+// performed, and this item performed none. **B-254 is still the only thing that
+// can move that date, and no agent may tick it.**
+
 export default async function AccessibilityPage() {
   const locale = await getLocale()
   const dict = dictionaryFor(locale)

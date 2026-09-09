@@ -576,7 +576,6 @@ export const en = {
   // and because a validator that resolved its own copy would have to know
   // whether it was serving the Spanish checkout or a staff screen D-122 keeps
   // English. Every one carries a suggestion, not just an identification.
-  'err.oneField': 'There is a problem with one field.',
   'err.someFields': 'There are problems with {count} fields.',
   'err.firstName': 'Enter your first name.',
   'err.lastName': 'Enter your last name.',
