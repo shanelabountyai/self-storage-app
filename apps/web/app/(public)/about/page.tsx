@@ -8,11 +8,12 @@ import { getLocale } from '@/lib/i18n/server'
 export const metadata = metadataFor('About', 'What this project is.')
 
 export default async function AboutPage() {
-  const dict = dictionaryFor(await getLocale())
+  const locale = await getLocale()
+  const dict = dictionaryFor(locale)
   const t = (key: MessageKey) => translate(dict, key)
 
   return (
-    <ProsePage title={t('about.title')} intro={t('about.intro')}>
+    <ProsePage lang={locale} title={t('about.title')} intro={t('about.intro')}>
       <Section heading={t('about.what.heading')}>
         <p>{t('about.what.body')}</p>
       </Section>

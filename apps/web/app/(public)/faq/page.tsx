@@ -20,11 +20,12 @@ const SIZES = [
 ] as const satisfies readonly { term: MessageKey; body: MessageKey }[]
 
 export default async function FaqPage() {
-  const dict = dictionaryFor(await getLocale())
+  const locale = await getLocale()
+  const dict = dictionaryFor(locale)
   const t = (key: MessageKey) => translate(dict, key)
 
   return (
-    <ProsePage title={t('faq.title')} intro={t('faq.intro')}>
+    <ProsePage lang={locale} title={t('faq.title')} intro={t('faq.intro')}>
       <Section heading={t('faq.reserve.q')}>
         <p>{t('faq.reserve.a')}</p>
       </Section>

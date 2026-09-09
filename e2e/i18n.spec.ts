@@ -594,10 +594,39 @@ test.describe('the static pages in Spanish', () => {
     ['/privacy', /Privacy/],
   ]
 
+  // B-272 / SC 3.1.2 Language of Parts (AA). The two states below are the only
+  // ones in which this item's defect could ever have existed, and the reason it
+  // survived B-090f, B-260 and B-262: the a11y route loops carry no locale
+  // cookie, so every automated scan visits these pages as an English visitor,
+  // where the markup is trivially correct. A scan contract that cannot enter
+  // the broken state cannot fail on it.
+  //
+  // The scan is here rather than in `a11y.spec.ts` because axe cannot see this
+  // one either — no rule reads prose and decides what language it is in, and
+  // `html-has-lang` passes on the broken page. What axe is doing here is
+  // guarding the rest of the markup in a state nothing else scans; the `lang`
+  // assertion below is the part that would have caught the defect.
+  // a11y-state: /terms | Spanish
+  // a11y-state: /privacy | Spanish
   for (const [route, heading] of ENGLISH_ONLY) {
-    test(`${route} is deliberately still English`, async ({ page }) => {
+    test(`${route} is deliberately still English, and says so in the markup`, async ({ page }) => {
       await page.goto(route)
       await expect(page.getByRole('heading', { level: 1 })).toContainText(heading)
+
+      // The shell really IS Spanish — without this the assertion below would
+      // pass on an English page for the wrong reason, which is the shape of
+      // every green test that tests nothing.
+      await expect(page.locator('html')).toHaveAttribute('lang', 'es')
+
+      // And the English prose declares itself, inside `main` rather than
+      // anywhere on the page: the language toggle's own buttons each carry a
+      // `lang` (they are the other half of 3.1.2, from B-090 part 6), so an
+      // unscoped `[lang="en"]` would match the header and pass with the
+      // contract text still undeclared.
+      const declared = page.getByRole('main').locator('[lang="en"]').first()
+      await expect(declared.getByRole('heading', { level: 1 })).toContainText(heading)
+
+      await assertNoAxeViolations(page)
     })
   }
 

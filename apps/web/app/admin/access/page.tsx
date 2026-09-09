@@ -153,89 +153,108 @@ export default async function AccessEventsPage({
         </section>
       )}
 
-      <ScrollRegion aria-label="Gate attempts">
-        <table className="w-full min-w-3xl border-collapse text-sm">
-          <caption className="sr-only">Gate attempts for {range.label}, newest first</caption>
-          <thead>
-            <tr className="border-input border-b text-left">
-              <th scope="col" className="py-2 pr-4">
-                When
-              </th>
-              <th scope="col" className="py-2 pr-4">
-                Facility
-              </th>
-              <th scope="col" className="py-2 pr-4">
-                Who
-              </th>
-              <th scope="col" className="py-2 pr-4">
-                Unit
-              </th>
-              <th scope="col" className="py-2 pr-4">
-                How
-              </th>
-              <th scope="col" className="py-2 pr-4">
-                Result
-              </th>
-              <th scope="col" className="py-2 pr-4">
-                Flags
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => (
-              <tr key={row.id} className="border-input border-b">
-                <td className="py-2 pr-4 whitespace-nowrap">{formatWhen(row.occurredAt, 'UTC')}</td>
-                <td className="py-2 pr-4">{row.facilityName}</td>
-                <td className="py-2 pr-4">
-                  {row.tenantId ? (
-                    <Link
-                      href={`/admin/tenants/${row.tenantId}`}
-                      className="underline underline-offset-2"
-                    >
-                      {row.tenantName}
-                    </Link>
-                  ) : (
-                    <span className="text-muted-foreground">Unknown</span>
-                  )}
-                </td>
-                {/* B-086 part 2. "Keypad" and "Phone" are different facts
-                    after a theft claim: a phone unlock can be sent from
-                    anywhere, so the log stops implying the holder was standing
-                    at the gate. */}
-                <td className="py-2 pr-4">{ENTRY_METHOD_LABELS[row.entryMethod ?? 'unknown']}</td>
-                {/* The result is a word, never a colour alone (WCAG 1.4.1). */}
-                <td className="py-2 pr-4">
-                  {row.result === 'granted' ? 'Opened' : 'Denied'}
-                  <span className="text-muted-foreground"> · {REASON_LABELS[row.reason] ?? row.reason}</span>
-                </td>
-                <td className="py-2 pr-4">
-                  {row.flags.length === 0 ? (
-                    <span className="text-muted-foreground">—</span>
-                  ) : (
-                    <ul className="flex flex-wrap gap-1">
-                      {row.flags.map((flag) => (
-                        <li
-                          key={flag}
-                          className="border-input rounded-md border px-2 py-0.5 text-xs"
-                        >
-                          {ACCESS_FLAG_LABELS[flag]}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </td>
+      {/* An empty table is a headers-only table, and axe cannot decide
+          `th-has-data-cells` against seven `<th scope="col">` and a single
+          `colSpan={7}` cell — it returned "incomplete" on this route, which
+          fails the scan contract rather than passing it. Every other admin
+          table already renders a sentence instead (`/admin/rate-increases`,
+          `/admin/tasks`, `/admin/delinquency`); this one was the outlier. A
+          header row over no rows tells a reader nothing either way, so this is
+          the product fix and the scan result follows from it rather than being
+          the point of it. */}
+      {rows.length === 0 ? (
+        <p className="text-muted-foreground text-sm">Nothing at the gate in this range.</p>
+      ) : (
+        <ScrollRegion aria-label="Gate attempts">
+          <table className="w-full min-w-3xl border-collapse text-sm">
+            <caption className="sr-only">Gate attempts for {range.label}, newest first</caption>
+            <thead>
+              <tr className="border-input border-b text-left">
+                <th scope="col" className="py-2 pr-4">
+                  When
+                </th>
+                <th scope="col" className="py-2 pr-4">
+                  Facility
+                </th>
+                <th scope="col" className="py-2 pr-4">
+                  Who
+                </th>
+                <th scope="col" className="py-2 pr-4">
+                  Unit
+                </th>
+                <th scope="col" className="py-2 pr-4">
+                  How
+                </th>
+                <th scope="col" className="py-2 pr-4">
+                  Result
+                </th>
+                <th scope="col" className="py-2 pr-4">
+                  Flags
+                </th>
               </tr>
-            ))}
-            {rows.length === 0 && (
-              <tr>
-                <td colSpan={7} className="text-muted-foreground py-3">
-                  Nothing at the gate in this range.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </ScrollRegion>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr key={row.id} className="border-input border-b">
+                  <td className="py-2 pr-4 whitespace-nowrap">{formatWhen(row.occurredAt, 'UTC')}</td>
+                  <td className="py-2 pr-4">{row.facilityName}</td>
+                  <td className="py-2 pr-4">
+                    {row.tenantId ? (
+                      <Link
+                        href={`/admin/tenants/${row.tenantId}`}
+                        className="underline underline-offset-2"
+                      >
+                        {row.tenantName}
+                      </Link>
+                    ) : (
+                      <span className="text-muted-foreground">Unknown</span>
+                    )}
+                  </td>
+                  {/* The "Unit" header has promised this cell since B-064 and
+                      no cell rendered it: seven `<th scope="col">` over six
+                      `<td>`, so every column after "Who" was announced under
+                      its left-hand neighbour's header and `unitNumber` — which
+                      `accessEventLog` has always selected — reached nobody. A
+                      denied attempt is read to work out WHICH unit somebody was
+                      standing at, so this is the column the log exists for. Null
+                      is the unknown-code row, where there is no credential and
+                      so no unit, the same fact `ENTRY_METHOD_LABELS.unknown`
+                      states with the same dash. */}
+                  <td className="py-2 pr-4">
+                    {row.unitNumber ?? <span className="text-muted-foreground">—</span>}
+                  </td>
+                  {/* B-086 part 2. "Keypad" and "Phone" are different facts
+                      after a theft claim: a phone unlock can be sent from
+                      anywhere, so the log stops implying the holder was standing
+                      at the gate. */}
+                  <td className="py-2 pr-4">{ENTRY_METHOD_LABELS[row.entryMethod ?? 'unknown']}</td>
+                  {/* The result is a word, never a colour alone (WCAG 1.4.1). */}
+                  <td className="py-2 pr-4">
+                    {row.result === 'granted' ? 'Opened' : 'Denied'}
+                    <span className="text-muted-foreground"> · {REASON_LABELS[row.reason] ?? row.reason}</span>
+                  </td>
+                  <td className="py-2 pr-4">
+                    {row.flags.length === 0 ? (
+                      <span className="text-muted-foreground">—</span>
+                    ) : (
+                      <ul className="flex flex-wrap gap-1">
+                        {row.flags.map((flag) => (
+                          <li
+                            key={flag}
+                            className="border-input rounded-md border px-2 py-0.5 text-xs"
+                          >
+                            {ACCESS_FLAG_LABELS[flag]}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </ScrollRegion>
+      )}
     </div>
   )
 }

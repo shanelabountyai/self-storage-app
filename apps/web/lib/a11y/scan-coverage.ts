@@ -482,6 +482,35 @@ export const SCANNED_STATES: readonly ScannedState[] = [
     layoutException:
       'the portal reflow loops measure /portal as the same tenant at every width; Spanish changes string length inside the same single-column cards, and the tightest translated layout — the facility page — is measured above',
   },
+  // B-272. The two pages D-123 and D-124 keep in ENGLISH, visited as a Spanish
+  // reader. Not a translation check — there is nothing to translate — but the
+  // one state in which the defect this item fixed could exist at all: the shell
+  // is `<html lang="es">` and the prose inside it is English, so the markup
+  // either declares the part's language (SC 3.1.2) or reads legal text aloud
+  // with Spanish phonemes. Scanning them as an English visitor, which is all
+  // the route loops have ever done, enters the state where the markup is
+  // trivially correct and can never fail.
+  //
+  // `layout: 'excepted'` and the reason is unusually solid for once: the
+  // rendered STRINGS are byte-for-byte the ones the public reflow, zoom and
+  // text-spacing loops already measure on these two routes. What changes
+  // between the two states is one attribute, which has no width.
+  {
+    route: '/terms',
+    state: 'Spanish',
+    spec: 'e2e/i18n.spec.ts',
+    layout: 'excepted',
+    layoutException:
+      'the English strings on this route are identical in both states and are already measured at 320px, 200% zoom and forced text spacing by the public route loops; what the Spanish state changes is the lang attribute, which has no layout',
+  },
+  {
+    route: '/privacy',
+    state: 'Spanish',
+    spec: 'e2e/i18n.spec.ts',
+    layout: 'excepted',
+    layoutException:
+      'the English strings on this route are identical in both states and are already measured at 320px, 200% zoom and forced text spacing by the public route loops; what the Spanish state changes is the lang attribute, which has no layout',
+  },
   // B-256. The portal route loop scans `/portal` and `/portal/pay` as Dana,
   // who holds units of her own and pays for no account — so a business
   // account's card, its units table and the consolidated bill on the pay
@@ -843,9 +872,9 @@ export const STATE_EXCEPTIONS: readonly StateException[] = [
     state: 'Spanish',
     audience: 'public',
     reason:
-      'the a11y route loops carry no locale cookie, so every public route is scanned in English only; the facility page is scanned and measured in Spanish (above) and the rest of the public site, this route included, is not yet',
+      'the a11y route loops carry no locale cookie, so every public route is scanned in English only; the facility page is scanned and measured in Spanish, and the two English legal pages are scanned as a Spanish reader sees them (both above), while the rest of the public site, this route included, is not yet',
     reasonEs:
-      'las corridas de revisión automática no llevan la cookie de idioma, así que cada página pública se revisa solo en inglés; la página de una sucursal sí se revisa y se mide en español (arriba) y el resto del sitio público, incluida esta página, todavía no',
+      'las corridas de revisión automática no llevan la cookie de idioma, así que cada página pública se revisa solo en inglés; la página de una sucursal sí se revisa y se mide en español, y las dos páginas legales en inglés se revisan tal como las ve quien lee en español (ambas arriba), mientras que el resto del sitio público, incluida esta página, todavía no',
   },
   // B-260. The same gap one level in: the portal route loop signs a tenant in
   // with no locale cookie, so it scans English. `/portal` itself is scanned in
@@ -1015,3 +1044,158 @@ export const STATE_EXCEPTIONS: readonly StateException[] = [
 export function customerFacingStateExceptions(): readonly StateException[] {
   return STATE_EXCEPTIONS.filter((row) => row.audience !== 'admin')
 }
+
+// B-272 / WCAG 2.1 SC 3.1.2 Language of Parts (AA). The third contract in this
+// file, and it exists for the same reason as the other two: a defect that no
+// scan can see.
+//
+// ── Why axe cannot close this one ───────────────────────────────────────────
+//
+// D-122 keeps the chosen language in a cookie and the root layout sets
+// `<html lang>` from it, so a Spanish visitor is served `<html lang="es">` on
+// EVERY route — including the pages that are English, whether by decision
+// (`/terms`, `/privacy`; D-123, D-124) or because nobody has translated them
+// yet. English prose inside a Spanish document is announced with Spanish
+// phonemes, and axe cannot detect it: no rule reads prose and decides what
+// language it is in. `html-has-lang` and `valid-lang` both pass on the broken
+// page. The route loops made it worse rather than better — they carry no
+// locale cookie, so every automated scan visits as an English visitor, where
+// the markup is trivially correct and the defect does not exist.
+//
+// So this is a LIST, checked by `tests/a11y-scan-coverage.test.ts` against the
+// pages on disk, in the same shape as everything above: a public page either
+// translates, or it says here that it does not and declares its language in
+// its own markup. The next English page added under the translated shell is a
+// failing unit test in the fast CI lane rather than a sentence somebody
+// notices while reading markup for another reason.
+export type EnglishPage = {
+  /// The route, as Next.js names it — `[param]` segments kept, route groups
+  /// stripped, the same spelling the lists above use.
+  route: string
+  /// Why this page is English, which is a different fact from whether it is
+  /// marked: `decision` is settled (a decision row keeps it English),
+  /// `untranslated` is a gap somebody will close, and `mixed` (B-273) is a page
+  /// that renders BOTH on purpose and is not waiting for anybody.
+  ///
+  /// `mixed` is the value that carries an obligation the other two do not. A
+  /// page-level `lang` on a mixed page is a lie about the half it does not
+  /// describe — the failure a page-level `lang` INTRODUCES rather than fixes —
+  /// so a `mixed` row has to declare the OTHER language back on the parts that
+  /// are in it, and the walker checks for exactly that.
+  why: 'decision' | 'untranslated' | 'mixed'
+  /// What a reader is owed, in one line.
+  note: string
+}
+
+/// Every public page that does NOT render from the dictionary. Each one carries
+/// `lang="en"` in its own markup — the unit test checks that, so removing the
+/// attribute fails the build rather than the page.
+///
+/// **A row leaves this list when its page is translated, not when somebody
+/// remembers.** `/storage/[state]/[city]/[slug]/reserve` was here for the
+/// length of one merge: B-272 marked it `lang="en"` against a `main` where the
+/// form was still English, B-267 translated it, and the walker's
+/// "lists no page that has since been translated" check failed on the merge —
+/// which is the direction it was written for. A page-level `lang="en"` on a
+/// translated page is the mirror defect, so the mark and the row go together.
+export const ENGLISH_UNDER_A_TRANSLATED_SHELL: readonly EnglishPage[] = [
+  {
+    route: '/terms',
+    why: 'decision',
+    note: 'D-123 keeps the terms English until a lawyer says otherwise; `ProsePage` declares it',
+  },
+  {
+    route: '/privacy',
+    why: 'decision',
+    note: 'D-124, same footing as the terms above; `ProsePage` declares it',
+  },
+  {
+    route: '/waitlist/cancel/[token]',
+    why: 'untranslated',
+    note: 'reached from an email link and never translated; `ProsePage` declares it',
+  },
+  {
+    route: '/checkout/resume/[token]',
+    why: 'untranslated',
+    note: 'two dead-link sentences, both English, on a page that otherwise redirects',
+  },
+  {
+    route: '/guides',
+    why: 'untranslated',
+    note: 'the content hub; the guides themselves are authored English MDX',
+  },
+  {
+    route: '/guides/[slug]',
+    why: 'untranslated',
+    note: 'one authored English guide, and translating the catalogue is not a dictionary change',
+  },
+  {
+    route: '/storage/size-guide',
+    why: 'untranslated',
+    note: 'authored English marketing prose, same as the guides above',
+  },
+  {
+    route: '/storage/[state]/[city]/size/[dimension]',
+    why: 'untranslated',
+    note: 'the generated per-city/size landing page, English generator and all',
+  },
+  {
+    route: '/storage/[state]/[city]',
+    why: 'mixed',
+    note: 'the one MIXED page on the public site: English prose around a translated search form, so the wrapper says `en` and the form declares the shell language back',
+  },
+]
+
+// B-273 / SC 3.1.2, the staff mirror of everything above. Same defect, same
+// cookie, opposite direction — and it needed a different SHAPE of guard rather
+// than a copy of this one, which is the part worth reading before extending it
+// again.
+//
+// ── Why admin is not a list of pages ────────────────────────────────────────
+//
+// The public site has no shell that could speak for all of it: `(public)` wraps
+// pages that are translated and pages that are not, so the claim has to be made
+// per page and the list above is that claim. Admin is the opposite. NOTHING
+// under `app/admin` renders a dictionary string except the message-template
+// editor, so `app/admin/layout.tsx` carries ONE `lang="en"` and it is true for
+// the whole surface at once — eighty rows saying "English" would be eighty
+// chances to forget one, guarding a fact that a single attribute already states.
+//
+// So the admin half of the walker checks two things instead of a list:
+//
+//  1. The admin layout still declares `lang="en"`. Delete it and the whole
+//     surface silently goes back to being announced in Spanish.
+//  2. Any admin page that DOES render from the dictionary is listed below as
+//     `mixed` and declares the locale back in its own markup. That is the
+//     mirror defect — a blanket `lang="en"` above a Spanish template body makes
+//     it a lie in the OTHER direction — and it is the check that stops this
+//     recurring when somebody translates a second admin screen.
+//
+// Kept in the same file and the same type as the public list on purpose: the
+// two halves are one criterion, and splitting them is how the second one gets
+// forgotten.
+//
+// ── The limit of this guard, stated rather than discovered ──────────────────
+//
+// The walker reads each `page.tsx` and asks whether IT imports the dictionary.
+// An admin page that renders a translated CHILD COMPONENT without importing
+// `@/lib/i18n` itself would pass while announcing Spanish under `lang="en"`.
+// `StatementView` is exactly that shape — `app/admin/tenants/[tenantId]/ledger/
+// [leaseId]/statements/[period]` renders it and imports no dictionary — and it
+// is safe today only because B-260 gave `dict` an English DEFAULT on the
+// argument that the admin surface is English throughout. That default is now
+// load-bearing for SC 3.1.2 as well as for copy, which is a thing to know
+// before somebody makes it required and passes the tenant's locale in from the
+// admin ledger to be helpful. Widening the walk to components is a bigger
+// change than this row, and no admin screen is in that state now.
+export const TRANSLATED_UNDER_THE_ADMIN_SHELL: readonly EnglishPage[] = [
+  {
+    route: '/admin/settings/templates',
+    why: 'mixed',
+    note: 'B-261 gave the editor a language switcher, so it renders the Spanish half of the catalog inside an English shell: the locale links, the subject input, the body textarea and the preview each declare `lang={locale}` back',
+  },
+]
+
+/// The admin layout, relative to the repo root. The walker reads it to prove
+/// the one-line half of B-273 is still there.
+export const ADMIN_SHELL_LAYOUT = 'apps/web/app/admin/layout.tsx'

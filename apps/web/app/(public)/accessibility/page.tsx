@@ -1945,7 +1945,6 @@ function reviewedOn(locale: Locale): string {
 // countdown, the staff screens, and the embedded maps. `LAST_REVIEWED` is not
 // bumped, per D-115 — no manual screen-reader pass was performed, and this
 // item performed none.
-
 // Re-verified 2026-09-07, at B-267 (the reservation form on a Spanish facility
 // page — D-122). Customer-facing, the last untranslated form on the public
 // site, and the same 3.1.2 Language of Parts failure B-263 fixed on the
@@ -1996,6 +1995,58 @@ function reviewedOn(locale: Locale): string {
 // screen-reader pass was performed, and this item performed none. The scan-
 // coverage correction above is a fix to a generated list, not a re-verification
 // of the dated claims.
+// Re-verified 2026-09-07, at B-272 (English prose under `<html lang="es">` —
+// SC 3.1.2 Language of Parts, AA). Customer-facing, and a defect this page's
+// own scan contract was structurally unable to see. **Merged after B-267
+// above, and the merge changed one of its numbers** — see the last paragraph.
+//
+// **What was wrong.** D-122 puts the locale in a cookie and the root layout
+// sets `<html lang>` from it, so a Spanish visitor was served `<html lang="es">`
+// around the English terms and privacy pages D-123 and D-124 deliberately keep
+// English — a screen reader pronouncing contract text with Spanish phonemes.
+// Nine more public pages were English inside the same shell because nobody has
+// translated them yet, which is the same failure arrived at from the other
+// side. Every public page now declares the language of its own content, and
+// `ProsePage` takes `lang` as a REQUIRED prop so the next prose page states it
+// or fails `npm run typecheck`.
+//
+// **Why no scan caught it, which is the half worth keeping.** Axe cannot: no
+// rule reads prose and decides what language it is in, and `html-has-lang`
+// passes on the broken page. The route loops could not either — they carry no
+// locale cookie, so every automated run visits as an English visitor, where
+// the markup is trivially correct. A contract that cannot enter the broken
+// state cannot fail on it. Two things replace the scan:
+// `ENGLISH_UNDER_A_TRANSLATED_SHELL` in `scan-coverage.ts` lists every public
+// page that renders no dictionary string, and `tests/a11y-scan-coverage.test.ts`
+// walks `app/(public)` and fails when a page is in neither the dictionary nor
+// that list, or is in the list with no `lang` in its markup.
+//
+// **This page's own claims.** No sentence here changed. The statement makes no
+// claim about language in either direction, and none was added — a bullet under
+// "What is true today" would be a new public commitment, which is not what a
+// defect fix is for. Two SCANNED_STATES rows were added (`/terms` and
+// `/privacy` visited as a Spanish reader), so the `/` state-exception row no
+// longer speaks for them and now says so; that row is rendered here, in both
+// languages, and is the only visible change. `LAST_REVIEWED` is not bumped,
+// per D-115 — no manual screen-reader pass was performed.
+//
+// **What is left, named rather than implied.** The ADMIN screens are English
+// under the same cookie-driven shell, and one of them — the message-template
+// editor — renders Spanish template bodies inside it, which is the mirror
+// defect. Staff-facing, already disclaimed by the "our staff-facing screens
+// have known problems" bullet, and owned by **B-273** rather than fixed here.
+// (B-273 closed it on 2026-09-08. Noted so this paragraph is not read as an
+// open gap; NO sentence rendered on this page changed, in either direction,
+// because none of it was ever about staff screens — see B-273's own entry.)
+//
+// **The merge with B-267, because it is the guard doing its job rather than a
+// conflict.** B-272 was built against a `main` where the reservation form was
+// still English, and marked it `lang="en"` like the other ten. B-267 then
+// translated that form, which makes the mark a lie in the mirror direction —
+// and `tests/a11y-scan-coverage.test.ts` says so out loud ("lists no page that
+// has since been translated"), which is the direction the walker was written
+// for and the first time it has been paid. The attribute and the row are gone;
+// the page renders from the dictionary and needs neither.
 
 // Re-verified 2026-09-07, at B-266 (the promo code box on a Spanish checkout
 // and a Spanish facility page — D-122). Customer-facing, on the money path,
@@ -2377,7 +2428,7 @@ export default async function AccessibilityPage() {
     locale === 'es' ? (row.reasonEs ?? row.reason) : row.reason
 
   return (
-    <ProsePage title={t('a11y.title')} intro={t('a11y.intro')}>
+    <ProsePage lang={locale} title={t('a11y.title')} intro={t('a11y.intro')}>
       <Section heading={t('a11y.target.heading')}>
         <p>{t('a11y.target.body')}</p>
       </Section>

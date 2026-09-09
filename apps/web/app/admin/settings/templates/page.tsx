@@ -71,10 +71,15 @@ export default async function TemplatesPage({
           nobody and overridable per facility by nobody — the exact "a column
           that configures behaviour shipped with no control" this repo has
           already paid for five times. */}
+      {/* B-273 / SC 3.1.2. `lang={option}` on each link, because the label IS
+          the language it names — "Español" announced with English phonemes
+          under the admin shell's `lang="en"` is the same failure in miniature
+          that the shell attribute fixes at the top. */}
       <nav aria-label="Language" className="flex flex-wrap gap-2">
         {LOCALES.map((option) => (
           <Link
             key={option}
+            lang={option}
             href={`/admin/settings/templates?locale=${option}${key ? `&key=${key}` : ''}`}
             aria-current={option === locale ? 'page' : undefined}
             className={
@@ -121,7 +126,7 @@ export default async function TemplatesPage({
             <input type="hidden" name="requiredMergeFields" value={active.requiredMergeFields.join(',')} />
 
             <p className="text-muted-foreground text-xs">
-              {LOCALE_NAMES[locale]} · version {active.version}
+              <span lang={locale}>{LOCALE_NAMES[locale]}</span> · version {active.version}
               {active.isOverride ? ' · this facility’s own copy' : ' · the shared default'}
               {active.event === BROADCAST_EVENT
                 ? ' · sent by hand from Announcements'
@@ -130,11 +135,20 @@ export default async function TemplatesPage({
                   : ' · not wired to an event yet'}
             </p>
 
-            <Field name="subject" label="Subject" defaultValue={active.subject ?? ''} />
+            {/* B-273 / SC 3.1.2. The `lang` goes on the CONTROL, not on the
+                label: the label ("Subject", "Message") is English admin
+                chrome, and the VALUE is the template — Spanish when this
+                editor is on the Spanish half of the catalog (B-261). Marking
+                the whole block would be the mirror defect one level down.
+                `Field` needs no change to carry it: `lang` arrives through
+                `React.InputHTMLAttributes` and is spread onto the `<input>`
+                alone, which is exactly where it belongs. */}
+            <Field name="subject" label="Subject" defaultValue={active.subject ?? ''} lang={locale} />
             <label className="flex flex-col gap-1 text-sm">
               Message
               <textarea
                 name="bodyText"
+                lang={locale}
                 rows={16}
                 defaultValue={active.bodyText}
                 className="border-input bg-background rounded-md border p-2 font-mono text-sm"
@@ -184,8 +198,14 @@ export default async function TemplatesPage({
                 <div className="border-input mt-2 rounded-lg border p-3 text-xs">
                   <p className="text-muted-foreground">From: {preview.from}</p>
                   {preview.replyTo && <p className="text-muted-foreground">Reply-to: {preview.replyTo}</p>}
-                  <p className="mt-2 font-medium">{preview.subject}</p>
-                  <pre className="mt-2 whitespace-pre-wrap font-sans">{preview.text}</pre>
+                  {/* B-273. The row named the subject input, the body textarea
+                      and the locale links; the PREVIEW is the fourth surface and
+                      the one most worth marking, because it is the only place
+                      the template is read as prose rather than as the value of a
+                      form control. The `From:`/`Reply-to:` lines above are
+                      English chrome around an address and stay unmarked. */}
+                  <p lang={locale} className="mt-2 font-medium">{preview.subject}</p>
+                  <pre lang={locale} className="mt-2 whitespace-pre-wrap font-sans">{preview.text}</pre>
                 </div>
               ) : (
                 <p role="alert" className="border-input mt-2 rounded-lg border p-3 text-xs text-pretty">

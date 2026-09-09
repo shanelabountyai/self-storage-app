@@ -38,7 +38,7 @@ const SIZES = UNIT_SIZE_ORDER.map((key) => {
 
 export default function SizeGuidePage() {
   return (
-    <div className="mx-auto w-full max-w-3xl px-4 py-12">
+    <div lang="en" className="mx-auto w-full max-w-3xl px-4 py-12">
       <h1 className="text-3xl font-semibold tracking-tight text-balance">
         What size storage unit do I need?
       </h1>
