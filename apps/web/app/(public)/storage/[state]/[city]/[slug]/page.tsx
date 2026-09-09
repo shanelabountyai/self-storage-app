@@ -47,7 +47,8 @@ import {
 import { getLocale } from '@/lib/i18n/server'
 import { costLineLabel, costLineNote } from '@/lib/pricing/cost-line-copy'
 import { offerFor } from '@/lib/promotions/service'
-import { OfferTermsText, offerTermsText } from '@/lib/promotions/terms'
+import { MessageSegments } from '@/components/message-segments'
+import { OfferTermsText, offerTermsSegments, offerTermsText } from '@/lib/promotions/terms'
 import { PromoCodeEntry } from '@/components/promo-code-entry'
 import type { CodeOutcome, OfferTerms } from '@storage/core/promotions'
 import { visibleReviewsForFacility } from '@/lib/reviews/public'
@@ -269,7 +270,15 @@ function CostBreakdown({
       <dl className="mt-3 flex flex-col gap-2 text-sm">
         {cost.lines.map((line) => (
           <div key={line.key} className="grid grid-cols-[1fr_auto] gap-x-4">
-            <dt>{costLineLabel(dict, line, promo ? offerTermsText(dict, promo.terms) : undefined)}</dt>
+            <dt>
+              <MessageSegments
+                segments={costLineLabel(
+                  dict,
+                  line,
+                  promo ? offerTermsSegments(dict, promo.terms) : undefined,
+                )}
+              />
+            </dt>
             <dd className="tabular-nums">
               {line.key === 'protection'
                 ? translate(dict, 'facility.chosenAtCheckout')

@@ -99,7 +99,7 @@ describeDb('SMS consent at checkout step 1', () => {
     const email = `consent-checked-${randomUUID()}@example.com`
     await callAction(() => submitDetailsAction({} as never, detailsForm({ token: started.token, email, smsConsent: 'yes' })))
 
-    const tenant = await prisma.tenant.findUniqueOrThrow({ where: { email } })
+    const tenant = await prisma.tenant.findFirstOrThrow({ where: { email } })
     const consent = await prisma.consent.findFirstOrThrow({
       where: { tenantId: tenant.id, channel: 'account_sms' },
     })
@@ -135,7 +135,7 @@ describeDb('SMS consent at checkout step 1', () => {
       ),
     )
 
-    const tenant = await prisma.tenant.findUniqueOrThrow({ where: { email } })
+    const tenant = await prisma.tenant.findFirstOrThrow({ where: { email } })
     const rows = await prisma.consent.findMany({ where: { tenantId: tenant.id } })
 
     expect(rows).toHaveLength(3)
@@ -170,7 +170,7 @@ describeDb('SMS consent at checkout step 1', () => {
       ),
     )
 
-    const tenant = await prisma.tenant.findUniqueOrThrow({ where: { email } })
+    const tenant = await prisma.tenant.findFirstOrThrow({ where: { email } })
     const consent = await prisma.consent.findFirstOrThrow({
       where: { tenantId: tenant.id, channel: 'account_sms' },
     })
@@ -185,7 +185,7 @@ describeDb('SMS consent at checkout step 1', () => {
     const email = `consent-unchecked-${randomUUID()}@example.com`
     await callAction(() => submitDetailsAction({} as never, detailsForm({ token: started.token, email })))
 
-    const tenant = await prisma.tenant.findUniqueOrThrow({ where: { email } })
+    const tenant = await prisma.tenant.findFirstOrThrow({ where: { email } })
     const consent = await prisma.consent.findFirstOrThrow({
       where: { tenantId: tenant.id, channel: 'account_sms' },
     })
@@ -197,7 +197,7 @@ describeDb('SMS consent at checkout step 1', () => {
     const email = `consent-scope-${randomUUID()}@example.com`
     await callAction(() => submitDetailsAction({} as never, detailsForm({ token: started.token, email, smsConsent: 'yes' })))
 
-    const tenant = await prisma.tenant.findUniqueOrThrow({ where: { email } })
+    const tenant = await prisma.tenant.findFirstOrThrow({ where: { email } })
     expect(await prisma.consent.count({ where: { tenantId: tenant.id, channel: 'notice_email' } })).toBe(0)
   })
 })

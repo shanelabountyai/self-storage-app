@@ -21,6 +21,9 @@ const staffOnly = `audience-staff-${suffix}@demo.example.com`
 const tenantOnly = `audience-tenant-${suffix}@demo.example.com`
 const both = `audience-both-${suffix}@demo.example.com`
 const nobody = `audience-nobody-${suffix}@demo.example.com`
+/// D-111 / B-238. One household inbox, two tenants — the husband and wife the
+/// dropped unique constraint exists to allow.
+const shared = `audience-shared-${suffix}@demo.example.com`
 
 let disabledStaffId: string
 
@@ -41,11 +44,20 @@ beforeAll(async () => {
   await prisma.tenant.create({
     data: { email: both, firstName: 'Bo', lastName: 'Both' },
   })
+
+  // D-111 / B-238. Two tenants on one address, which the schema refused until
+  // B-238 dropped `@unique` from `Tenant.email`.
+  await prisma.tenant.createMany({
+    data: [
+      { email: shared, firstName: 'Hal', lastName: 'Household' },
+      { email: shared, firstName: 'Wendy', lastName: 'Household' },
+    ],
+  })
 })
 
 afterAll(async () => {
   await prisma.staffUser.deleteMany({ where: { email: { in: [staffOnly, both] } } })
-  await prisma.tenant.deleteMany({ where: { email: { in: [tenantOnly, both] } } })
+  await prisma.tenant.deleteMany({ where: { email: { in: [tenantOnly, both, shared] } } })
 })
 
 describe('resolveAudience', () => {
@@ -111,12 +123,33 @@ describe('resolveAudience', () => {
     expect(await resolveAudience(`  ${staffOnly.toUpperCase()}  `, null)).toBe('staff')
   })
 
+  // ── D-111 / B-238 ──────────────────────────────────────────────────────────
+  //
+  // Dropping the unique constraint is what lets two people share a household
+  // inbox, and it is also what makes an address stop identifying a person. The
+  // choice made in `findAccount` is that a shared address resolves to NOBODY:
+  // signing somebody into their spouse's account — their ledger, their unit,
+  // their card on file — is a worse failure than an address that cannot sign
+  // in. This is the assertion that stops a later session "fixing" the null by
+  // reaching for `findFirst` and silently picking whichever row came back.
+  it('refuses to resolve an address two tenants share, rather than guessing', async () => {
+    expect(await resolveAudience(shared, 'tenant')).toBeNull()
+    expect(await resolveAudience(shared, null)).toBeNull()
+  })
+
+  // Both people still exist and still hold everything that does not require
+  // identifying them — the shared address is a portal limitation, not a
+  // refusal to rent to them.
+  it('keeps both tenants on the shared address', async () => {
+    expect(await prisma.tenant.count({ where: { email: shared } })).toBe(2)
+  })
+
   // Guards the one thing resolution must never do: a password set for a staff
   // account must not be findable as a tenant's, or resolution would be a
   // cross-audience account-takeover rather than a lookup.
   it('does not let a staff password satisfy a tenant lookup', async () => {
     await setPassword(disabledStaffId, 'staff', 'correct horse battery staple')
-    const tenant = await prisma.tenant.findUnique({ where: { email: both } })
+    const tenant = await prisma.tenant.findFirst({ where: { email: both } })
     expect(tenant?.passwordHash).toBeNull()
   })
 })

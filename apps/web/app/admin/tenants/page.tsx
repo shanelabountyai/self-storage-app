@@ -154,7 +154,16 @@ export default async function TenantsPage({
                   </Link>
                 </td>
                 <td className="py-2">
-                  <div>{tenant.email}</div>
+                  {/* D-111: a renter may have no address, and a blank cell
+                      reads as a column that failed to load rather than as a
+                      fact. Said in words — and it is the fact staff most need
+                      here, since it is why this tenant gets no receipt and no
+                      dunning email. */}
+                  {tenant.email ? (
+                    <div>{tenant.email}</div>
+                  ) : (
+                    <div className="text-muted-foreground">No email address</div>
+                  )}
                   {tenant.phone && <div className="text-muted-foreground">{tenant.phone}</div>}
                 </td>
                 <td className="py-2">

@@ -2124,6 +2124,12 @@ function reviewedOn(locale: Locale): string {
 // with an operator override, read in Spanish, still meets unmarked English in
 // three places.
 //
+// **CORRECTED at B-272 (2026-09-09), and the count was wrong as well as the
+// state.** All of those surfaces now carry the marking, and there were FOUR of
+// them — the facility page's own code box was never counted. The paragraph
+// above is left standing as written because it is what this page said for two
+// days; the entry at the end of this log records what replaced it.
+//
 // **No bullet below changes, and no new claim.** The "Where we fall short"
 // list names JavaScript, the staff screens and the maps; none of the three is
 // touched, and an untranslated fragment of an operator's own wording is not
@@ -2175,6 +2181,237 @@ function reviewedOn(locale: Locale): string {
 // true and unchanged in scope. No route and no `a11y-state:` is added: this
 // changes no page. `LAST_REVIEWED` is not bumped, per D-115 — no manual
 // screen-reader pass was performed, and this item performed none.
+
+// Re-verified 2026-09-09, at B-270 (the waitlist form's own screen copy —
+// D-122, D-130). Customer-facing, and it closes a 3.1.2 gap on a control this
+// page already lists and already scans.
+//
+// **What was wrong.** The notify-me form on a sold-out size had no dictionary
+// entry at all — its disclosure, its label, its button and every answer it
+// gives back were English inside a facility page translated since B-090f, and
+// since B-265 the email it produces has been Spanish. A Spanish visitor read
+// Spanish, filled in English, and was written to in Spanish.
+//
+// **No claim below changes, and none needed correcting.** `/storage/...` is
+// already in the scanned set and gains no state and no exception: the form is
+// the same disclosure, the same one input and the same live region it was, in
+// different words. The `/` | Spanish state exception still says exactly what
+// it said — the scan loops carry no locale cookie, so this form's Spanish
+// rendering is unscanned in the same way the rest of the public site's is —
+// and translating it neither widens nor narrows that gap. The "Where we fall
+// short" list was re-read against this build; the no-JavaScript hold
+// countdown, the staff screens and the embedded maps are all still true and
+// unchanged in scope.
+//
+// **The item's own first cut regressed 3.3.3 here, and the e2e suite is what
+// caught it.** Routing the refusal through `keyedFieldError` — the helper the
+// lead form beside this one uses — replaced the announced sentence with that
+// helper's field COUNT, so a screen-reader user who submitted a bad address
+// would have heard a problem identified (3.3.1) and nothing suggesting what to
+// do about it (3.3.3). Typecheck, lint, the build and 4,392 unit tests were all
+// green with that in place; `smoke.spec.ts:1664` was the only thing that
+// failed. It is recorded here rather than only in `PROGRESS.md` because this
+// page's "Clear labels and errors" claim is exactly the claim it broke, and the
+// claim is true again only because a spec asserted the announcement rather than
+// the field.
+//
+// **One thing this DID make true that was previously only intended.** The
+// action's own comment said the "already on the list" and "just joined"
+// answers get the same words on purpose, and they did not — the two differed
+// in punctuation and the honeypot's silent-discard answer was a third, shorter
+// sentence. All three are one dictionary key now, so a visitor whose second
+// submit is a double-click hears the identical announcement in either
+// language rather than a slightly different one that invites them to wonder
+// whether the first worked.
+//
+// `LAST_REVIEWED` is not bumped, per D-115 — no manual screen-reader pass was
+// performed, and this item performed none.
+//
+// Re-verified 2026-09-09, at B-238 (a renter with no email address can be
+// leased — D-111). Customer-facing: it changes one field on checkout step 1,
+// which is the first screen a renter meets after "Rent now".
+//
+// **What it adds is an instruction, and that is the whole accessibility
+// content of the row.** Where the email field stops being required — only on a
+// counter-started session, never on the public site — it carries a `hint`
+// naming what the renter loses by leaving it blank: no emailed receipt, no pay
+// link, and no notice when a payment is late or a unit is scheduled for sale.
+// `Field` wires `hint` into `aria-describedby`, so that is **SC 3.3.2 Labels or
+// Instructions (A)** satisfied programmatically rather than by an asterisk.
+// The row's own backlog text is explicit that dropping `required` and leaving
+// the field silently optional is the version that produces
+// `nobody@example.com`, so the instruction is the feature and not decoration.
+//
+// **This state is NOT axe-scanned, and that is a real gap rather than a
+// rounding of one.** The optional rendering appears only when the session
+// carries `acquisitionSource: 'walk_in'`, which no URL reaches — the same
+// route-versus-state problem **B-184** owns, and the same shape as the
+// checkout branches the B-149 and B-172 entries above argued about. `/checkout`
+// stays in the scanned set at its ordinary rendering and gains no route and no
+// new exception, because the field, its label, its error and its live region
+// are unchanged in structure; what differs is one `required` attribute and
+// which of two hint strings is read. Nothing here is asserted as scanned that
+// was not scanned.
+//
+// **No claim below changes.** The "Where we fall short" list was re-read
+// against this build and is still true and still correctly scoped. The
+// generated coverage claim and the route-keyed exception list are untouched.
+//
+// **Two strings were added in both languages**, so this introduces no 3.1.2
+// gap of its own: `details.emailHintOptional` exists in `en` and `es`, and the
+// step already renders in whichever language the renter is reading. The
+// caveat the B-270 entry states still applies unchanged — the scan loops carry
+// no locale cookie, so the Spanish rendering of this hint is unscanned in
+// exactly the way the rest of the public site's Spanish is.
+//
+// `LAST_REVIEWED` is not bumped, per D-115. No manual screen-reader pass was
+// performed, and this item performed none.
+
+// Re-verified 2026-09-09, at B-271 (the counter says so before it puts a
+// walk-in on somebody else's account — D-111's unbuilt half). Customer-facing:
+// it adds a state to checkout step 1, the same screen B-238 changed above.
+//
+// **It is an SC 3.3.4 Error Prevention (Legal, Financial, Data) control, and
+// that is what it is for.** Submitting step 1 with an address another tenant
+// already holds used to attach this renter's lease, ledger and gate code to
+// that tenant, silently and with no way back from the form. The submission is
+// now CONFIRMED: the action returns `status: 'confirm'`, the form echoes what
+// it understood — the address, who already holds it, who is renting now — and
+// nothing is written until a second, differently-named press. That is 3.3.4's
+// "reversible, checked, or confirmed" satisfied by the third of the three, on
+// the screen immediately before a lease and a payment.
+//
+// **It introduces no new markup.** The state is `AdminForm`'s existing confirm
+// branch, whose behaviour this page has relied on since B-108: the message is
+// written into a live region that was mounted empty and pre-exists the event
+// (FR-20), the summary takes focus, `role="alert"` is deliberately withheld so
+// the sentence is not announced twice, and B-124's restore keeps every typed
+// field. Nothing was added here that could regress those, and nothing was
+// styled by colour alone (1.4.1) — the confirm box carries the same border and
+// text treatment every other form's does.
+//
+// **This state is NOT axe-scanned, for exactly the reason B-238's is not.** It
+// renders only for a session carrying `acquisitionSource: 'walk_in'` AND an
+// address already held by a differently-named tenant — a post-interaction,
+// data-dependent state that no URL reaches. **B-184** owns route-versus-state
+// and still does; this adds one more instance to that gap rather than a new
+// exception, and `/checkout` keeps its existing coverage and its existing
+// entry. It is stated here rather than left implied, and it is NOT claimed as
+// scanned.
+//
+// **Four strings, both languages**, so no 3.1.2 gap of its own:
+// `details.sharedEmail`, `.sharedEmailHeldBy`, `.sharedEmailRenting` and
+// `.sharedEmailConfirm` exist in `en` and `es`. The B-270 caveat still holds
+// unchanged — the scan loops carry no locale cookie, so the Spanish rendering
+// is unscanned the way the rest of the public site's Spanish is.
+//
+// **No claim below changes.** "Where we fall short" was re-read against this
+// build and is still true and still correctly scoped; the generated coverage
+// claim and both exception lists are untouched. `LAST_REVIEWED` is not bumped,
+// per D-115: no manual screen-reader pass was performed, and this item
+// performed none.
+
+// Re-verified 2026-09-09, at B-272 (the three surfaces B-269 left, and the
+// axe scan B-268 left — the two carried gaps no backlog row owned).
+// Customer-facing on both halves, and it closes rather than bounds.
+//
+// **The 3.1.2 half, and the correction above is the important part of it.**
+// B-269 marked an operator's own promotion terms `lang="en"` where they stand
+// alone and listed three surfaces that could not take the marking. All three
+// lost it at the same step — interpolating already-marked runs into a
+// translated sentence as a STRING — so one helper closes all of them:
+// `translateSegments` splits the template on its own placeholders instead.
+// **There were four, not three.** The facility page's own code box renders
+// `codeOutcomeMessage` too, and B-269's note counted only the checkout's. A
+// Spanish reader who typed a code on a facility page met the same unannounced
+// English as one who typed it at checkout, and no list said so.
+//
+// **`FormState.message` is still a string, deliberately.** The bounded version
+// of this fix was "turn the form machinery into nodes", which is what made it
+// a bigger item than B-269. It is not what shipped: `message` is what
+// `announceOutside` hands to `AnnounceRegion` as plain text and what crosses
+// the server-action boundary, so it stays a string, and an OPTIONAL
+// `messageParts` carries the same sentence as runs beside it. Joining the
+// parts reproduces `message` exactly — a unit test pins that, because a live
+// region announcing one sentence while the page shows another is a worse
+// defect than the one being fixed — and every admin action that supplies no
+// parts renders exactly what it always did.
+//
+// **The axe half closes a coverage claim that was true by accident.**
+// `/reservations` has been in the scanned set since B-090, as
+// `?token=not-a-real-token` — the DEAD LINK. So the page a renter actually
+// ends a reservation on, with its held-until date, its move-in button and its
+// cancel form, had never been given to axe in either language while the route
+// counted as covered. Two `SCANNED_STATES` entries now name it, English in
+// `smoke.spec.ts` and Spanish in `i18n.spec.ts`, both scanned at the live
+// state those specs already reach. **Two entries rather than one on purpose**:
+// what differs between them is not markup but a `lang`, ~20% longer strings
+// and a date from a different formatter, which is the exact defect B-268
+// shipped to fix — scanning the English state proves nothing about it.
+//
+// **Both are `layout: 'excepted'` and the reason is on each row.** The
+// dead-link state of the same route is in `PUBLIC_SCAN_ROUTES`, so all four
+// public loops already measure that container at 320px, at 200% zoom and under
+// forced text spacing; the confirmation adds a date sentence and two buttons
+// inside it, in one column. That is a reason a person can disagree with, which
+// is what B-246 requires of an exception, rather than "not done yet".
+//
+// **No new markup and no new claim below.** The one DOM change is a `<span
+// lang="en">` where a bare text node stood, which is the fix rather than a
+// thing to declare. "Where we fall short" was re-read against this build — the
+// no-JavaScript hold countdown, the staff screens, the embedded maps — and all
+// three are still true and unchanged in scope; an operator's untranslated
+// wording was never one of them, and it is now marked rather than bounded.
+// `LAST_REVIEWED` is not bumped, per D-115: no manual screen-reader pass was
+// performed, and this item performed none. **B-254 is still the only thing
+// that can move that date, and no agent may tick it.**
+
+// Re-verified 2026-09-09, at B-273 (a one-field refusal announces the refusal,
+// not a count of fields). Customer-facing: it changes what the lead form, the
+// waitlist box, the reservation form and three checkout steps say when they
+// refuse.
+//
+// **This page's own B-270 note described the defect and left it in the helper.**
+// That note records that routing the waitlist refusal through
+// `keyedFieldError` "replaced the announced sentence with that helper's field
+// COUNT", and that a spec caught it. What it did not say is that the count was
+// still there for everything else: `keyedFieldError` picked its summary by
+// counting entries, so with one entry it announced "There is a problem with one
+// field." and the sentence saying what to DO survived only in `fieldErrors`.
+// Two actions had already written the helper out by hand rather than use it —
+// the waitlist form and checkout's promo refusal — each with a comment
+// explaining why, which is the tell that it was a defect and not a style. The
+// helper is fixed instead: with one field the summary IS that field's sentence.
+// Both callers use it again.
+//
+// **The lead form is the surface where this was a real loss rather than a
+// wasted line.** `AdminForm` puts the field list INSIDE the same `role="alert"`
+// as the summary, so checkout and the reservation form read the suggestion out
+// either way and only wasted the heading. `FormResult` — the lead and waitlist
+// forms — announces `message` and nothing else, and moves focus to it. A
+// Spanish visitor refused by the lead form heard "Hay un problema con un
+// campo." and had to swipe back to the input to find out what to do about it
+// (3.3.1 kept, 3.3.3 lost). `lead-actions.ts` has passed exactly one field to
+// this helper since B-264.
+//
+// **`fieldError` is deliberately NOT changed, and that asymmetry is the
+// decision.** Every one of its callers is an `AdminForm` staff screen, where
+// the suggestion is already inside the announced box; changing it would rewrite
+// admin assertions for no reader. The two helpers now differ on purpose and
+// each says so above itself.
+//
+// **No claim below changes, and none needed correcting.** "When a form rejects
+// something you typed, the message is tied to the field itself" was true before
+// this row and is true after it — this row is about the SUMMARY above that
+// message, which the claim does not describe and did not overstate. No route,
+// no state and no exception changes: the same forms, the same live regions,
+// different words inside them. "Where we fall short" was re-read against this
+// build — the no-JavaScript hold countdown, the staff screens, the embedded
+// maps — and all three are still true and unchanged in scope.
+//
+// `LAST_REVIEWED` is not bumped, per D-115: no manual screen-reader pass was
+// performed, and this item performed none. **B-254 is still the only thing that
+// can move that date, and no agent may tick it.**
 
 export default async function AccessibilityPage() {
   const locale = await getLocale()

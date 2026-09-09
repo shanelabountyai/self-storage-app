@@ -157,6 +157,10 @@ export default async function ContactPage() {
           {t('cont.emailSection')}
         </h2>
         <p className="text-sm">
+          {/* Non-null by construction: D-111 made the column nullable, and
+              `loadSubject` refuses to issue a portal session to a subject with
+              no address — signing in requires one exactly where a portal login
+              exists. A tenant with none never reaches this page. */}
           {t('cont.emailIsBefore')} <strong>{tenant.email}</strong>. {t('cont.emailIsAfter')}
         </p>
         <p className="text-muted-foreground text-sm text-pretty">

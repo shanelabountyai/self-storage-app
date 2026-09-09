@@ -46,6 +46,32 @@ const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 /// person with an unusual number. Anything with ten or more digits is dialable.
 const PHONE_DIGITS = /\d/g
 
+/// **Whether this checkout may omit an email address — D-111 / B-238.**
+///
+/// True for a counter-started session and nothing else. `startWalkInMoveInAction`
+/// stamps `acquisitionSource: 'walk_in'` on the session and hands staff into
+/// this same public checkout (deliberately — one set of move-in rules), so that
+/// stamp is the only fact distinguishing the two, and it is already trusted for
+/// how the lease reports its channel.
+///
+/// **The public site keeps email required, and that is the point of scoping it.**
+/// Online, the address is how the renter receives the lease they just signed,
+/// the gate code they need to get in, and the receipt — FR-5.1 makes it the
+/// identifier for exactly that reason, and an optional field there would invite
+/// every self-serve renter to skip it. At the counter none of that holds: staff
+/// hand over the gate code and print the receipt, and the renter standing there
+/// may genuinely not have an address. That renter is who B-238 is about.
+///
+/// One definition, read by the step that renders the field and the action that
+/// validates it, so the form and the rule cannot disagree about which it is.
+export function emailOptionalFor(data: unknown): boolean {
+  return (
+    typeof data === 'object' &&
+    data !== null &&
+    (data as { acquisitionSource?: unknown }).acquisitionSource === 'walk_in'
+  )
+}
+
 /// Validation with a *suggestion* per error, not just an identification
 /// (3.3.3). The messages are the ones the renter reads, so they say what to do
 /// rather than what went wrong.
@@ -53,14 +79,22 @@ const PHONE_DIGITS = /\d/g
 /// B-263: message KEYS, not messages. This runs on the Spanish checkout as
 /// well as the English one, and it is pure — it has no request and no
 /// dictionary, so the caller resolves them.
-export function validateDetails(input: Partial<DetailsInput>): KeyedFieldErrors {
+export function validateDetails(
+  input: Partial<DetailsInput>,
+  /// D-111 / B-238. True only for a counter-started session (see
+  /// `emailOptionalFor`). A blank address is then accepted as a fact — this
+  /// renter has no email — instead of being refused into
+  /// `nobody@example.com`. A typed one is still format-checked: optional
+  /// means "may be absent", never "may be nonsense".
+  options: { emailOptional?: boolean } = {},
+): KeyedFieldErrors {
   const errors: KeyedFieldErrors = {}
 
   if (!input.firstName?.trim()) errors.firstName = { key: 'err.firstName' }
   if (!input.lastName?.trim()) errors.lastName = { key: 'err.lastName' }
 
   const email = input.email?.trim() ?? ''
-  if (!EMAIL.test(email)) {
+  if (!(options.emailOptional && email === '') && !EMAIL.test(email)) {
     errors.email = { key: 'err.email' }
   }
 
@@ -110,6 +144,52 @@ export function localityFor(
   return localityForZip(input.postalCode ?? '')
 }
 
+/// **B-271 / D-111. The tenant an address already belongs to, when that tenant
+/// is somebody ELSE.**
+///
+/// D-111 dropped the unique constraint so "a husband and wife may each hold an
+/// account on one household inbox", and said the counter "says so at the moment
+/// it creates the second account". B-238 built the schema half and left this
+/// one, so the sentence was unkeepable in both directions: staff could not
+/// create the second account at all, and the form put the walk-in's lease onto
+/// the spouse's account without saying a word.
+///
+/// **The name is what separates the two cases, and it is the only fact on the
+/// form that can.** A returning renter types the address AND the name that
+/// already sit on the record, and linking them is FR-5.3 working — interrupting
+/// that with a confirm on every repeat move-in is how a warning gets clicked
+/// through. A DIFFERENT name on a known address is the one D-111 is about, and
+/// it is the one that silently attached a lease, a ledger and a gate code to
+/// the wrong person.
+///
+/// Two people of the same name on one inbox link, as they did before. That is
+/// the status quo, not a regression, and no field on this form distinguishes
+/// them.
+///
+/// `orderBy` matches `upsertTenantForCheckout`'s, so the record named here is
+/// the record that would be linked to. Anything else would echo one tenant and
+/// attach to another.
+export async function otherTenantOnEmail(
+  rawEmail: string,
+  name: { firstName: string; lastName: string },
+): Promise<{ id: string; firstName: string; lastName: string } | null> {
+  const email = rawEmail.trim().toLowerCase()
+  if (email === '') return null
+
+  const existing = await prisma.tenant.findFirst({
+    where: { email },
+    orderBy: { createdAt: 'asc' },
+    select: { id: true, firstName: true, lastName: true },
+  })
+  if (!existing) return null
+
+  const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase()
+  if (same(existing.firstName, name.firstName) && same(existing.lastName, name.lastName)) {
+    return null
+  }
+  return existing
+}
+
 /// Creates or links the tenant this checkout belongs to.
 ///
 /// FR-5.1: email is the identifier and the account is created implicitly — no
@@ -130,17 +210,44 @@ export async function upsertTenantForCheckout(
   /// who used the header toggle between the render and the submit is recorded
   /// against the language they actually read.
   locale: Locale,
+  /// B-271 / D-111. Staff have looked at `otherTenantOnEmail`'s answer and said
+  /// this is a DIFFERENT person on the same household inbox — so create rather
+  /// than link, which is the case D-111 dropped the unique constraint for.
+  ///
+  /// Only ever true on a counter session that came back through the confirm
+  /// step; the public form has no way to set it (see `submitDetailsAction`),
+  /// because linking a returning renter to their own account is FR-5.3 and the
+  /// public form is unauthenticated.
+  options: { separateAccount?: boolean } = {},
 ): Promise<{
   tenantId: string
   created: boolean
 }> {
   const email = input.email.trim().toLowerCase()
-  const existing = await prisma.tenant.findUnique({ where: { email } })
+
+  // **A blank address links to nobody and always creates — D-111 / B-238.**
+  //
+  // `email` is optional only on a counter-started session (`emailOptionalFor`),
+  // and there it is a fact rather than a gap: this renter has no address. There
+  // is consequently nothing to match on, and matching on "no address" would be
+  // the worst possible identifier — every no-email renter at every facility
+  // would collapse into one tenant holding all of their leases. The renter in
+  // front of staff gets their own record; if they are a returning tenant, the
+  // tenant screen's merge is the deliberate way to say so.
+  //
+  // `findFirst`, not `findUnique`: the column is no longer unique, so two
+  // tenants may share a household inbox. The oldest match is the one an
+  // unauthenticated form may add to, which is the conservative half — this
+  // function is additive-only (see below), so linking to the earlier record can
+  // fill blanks on it and can overwrite nothing.
+  const existing = email === '' || options.separateAccount
+    ? null
+    : await prisma.tenant.findFirst({ where: { email }, orderBy: { createdAt: 'asc' } })
 
   if (!existing) {
     const tenant = await prisma.tenant.create({
       data: {
-        email,
+        email: email === '' ? null : email,
         firstName: input.firstName.trim(),
         lastName: input.lastName.trim(),
         phone: input.phone.trim(),

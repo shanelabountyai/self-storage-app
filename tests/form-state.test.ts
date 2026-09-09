@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { fieldError, parseDate, parseScaled, stalePreview } from '../apps/web/lib/admin/form-state'
+import {
+  fieldError,
+  keyedFieldError,
+  parseDate,
+  parseScaled,
+  stalePreview,
+} from '../apps/web/lib/admin/form-state'
+import type { MessageKey, MessageVars } from '../apps/web/lib/i18n'
 
 // B-094 / WCAG 3.3.4 Error Prevention (Legal, Financial, Data).
 //
@@ -73,6 +80,46 @@ describe('fieldError', () => {
     const two = fieldError({ state: 'bad', name: 'bad' })
     if (two.status !== 'error') throw new Error('unreachable')
     expect(two.message).toContain('2 fields')
+  })
+})
+
+// B-273 / WCAG 3.3.3 Error Suggestion. The renter-facing forms hold KEYS and
+// resolve them here, and two of them refuse on a single field — the lead form
+// and the waitlist box. `FormResult` announces `message` and nothing else, so a
+// summary that counts the fields is the whole announcement a screen-reader user
+// gets: a problem identified, no suggestion, and the sentence saying what to do
+// sitting silently beside the input.
+describe('keyedFieldError', () => {
+  // The real dictionary is not the subject — the summary's PROVENANCE is.
+  const t = (key: MessageKey, vars?: MessageVars) =>
+    vars ? `${key}:${JSON.stringify(vars)}` : String(key)
+
+  it('makes the lone error its own summary rather than counting it', () => {
+    const one = keyedFieldError({ email: { key: 'err.email' } }, t)
+    if (one.status !== 'error') throw new Error('unreachable')
+    expect(one.message).toBe(one.fieldErrors.email)
+    expect(one.message).toBe('err.email')
+  })
+
+  it('still counts once there is more than one', () => {
+    const two = keyedFieldError(
+      { email: { key: 'err.email' }, phone: { key: 'err.phone' } },
+      t,
+    )
+    if (two.status !== 'error') throw new Error('unreachable')
+    expect(two.message).toBe('err.someFields:{"count":2}')
+    expect(Object.keys(two.fieldErrors)).toEqual(['email', 'phone'])
+  })
+
+  it('resolves the vars into the summary too, not just into the field', () => {
+    // The reservation form's only refusal carries a number. A summary built
+    // from the key alone would announce a sentence with a hole in it.
+    const one = keyedFieldError(
+      { moveInDate: { key: 'err.reserveMoveInTooFar', vars: { days: 30 } } },
+      t,
+    )
+    if (one.status !== 'error') throw new Error('unreachable')
+    expect(one.message).toBe('err.reserveMoveInTooFar:{"days":30}')
   })
 })
 

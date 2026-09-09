@@ -328,6 +328,24 @@ export const en = {
   'lead.thanks':
     'Got it — somebody from this facility will be in touch. If it is urgent, calling is faster.',
 
+  // --- The waitlist form on a sold-out size (US-30, B-090 part 1) --------
+  //
+  // The form sits on the same facility page the lead form does and was the
+  // last thing on it still in English: B-265 taught the waitlist MAIL to write
+  // Spanish, which left a Spanish visitor filling in an English box to be
+  // emailed in Spanish.
+  //
+  // One `joined` key, not two. The action deliberately answers "already on it"
+  // and "just joined" with the same words — the distinction is ours, not the
+  // visitor's — and two dictionary entries for one sentence is how the two
+  // halves drift into saying different things.
+  'waitlist.summary': 'Email me when a {size} is free',
+  'waitlist.email': 'Your email',
+  'waitlist.scope':
+    'One email, about this size at this facility only. There is a link in it to take yourself off the list.',
+  'waitlist.add': 'Add me to the list',
+  'waitlist.joined': "You're on the list. We'll email you as soon as one is free.",
+
   // --- Move-in cost lines (US-301, shared with checkout) -----------------
   'cost.rent': 'First month rent',
   'cost.rent.note':
@@ -558,7 +576,6 @@ export const en = {
   // and because a validator that resolved its own copy would have to know
   // whether it was serving the Spanish checkout or a staff screen D-122 keeps
   // English. Every one carries a suggestion, not just an identification.
-  'err.oneField': 'There is a problem with one field.',
   'err.someFields': 'There are problems with {count} fields.',
   'err.firstName': 'Enter your first name.',
   'err.lastName': 'Enter your last name.',
@@ -644,6 +661,14 @@ export const en = {
   'err.leadRateLimited':
     'That is a lot of enquiries from one place in a short time. Give it a few minutes, or call us.',
 
+  // The waitlist form's refusals. `err.waitlistNoFacility` is reached only from
+  // the admin screen (`joinWaitlistForLead`), which D-122 keeps English — it is
+  // here because it travels on the same `JoinResult`, and a key with no Spanish
+  // is a key the next renter-facing caller pastes English from.
+  'err.waitlistEmail': 'Enter an email address we can reach you at.',
+  'err.waitlistUnitGone': 'That unit is no longer listed.',
+  'err.waitlistNoFacility': 'This inquiry is not attached to a facility.',
+
   // --- Checkout announcer (4.1.3, 2.4.3) --------------------------------
   'announce.movedToSize': 'We moved you to the {size}. Nothing you entered was lost.',
   'announce.foundSameSize': 'We found you another unit the same size. Nothing you entered was lost.',
@@ -687,6 +712,28 @@ export const en = {
   'details.email': 'Email',
   'details.emailHint':
     'This is your account. We send your lease, receipt and gate code here — no password needed.',
+  // D-111 / B-238. The counter's version, and SC 3.3.2's whole point: it names
+  // what is lost rather than saying "optional". A renter who hears the list and
+  // still has no address has made a choice; staff who see only "(optional)"
+  // invent `nobody@example.com`, which is the harm the row is about.
+  'details.emailHintOptional':
+    'Optional. Without it there is no online account: no emailed receipt, no pay link, and no notice when a payment is late or a unit is scheduled for sale — those go by post and phone instead. Leave it blank rather than entering an address that is not theirs.',
+  // ── B-271 / D-111: the second account on one household inbox ──────────────
+  //
+  // Counter-only (`emailOptionalFor`), so it may name the tenant who holds the
+  // address; the public form never reaches this and must not, because naming a
+  // tenant to an unauthenticated visitor is an enumeration answer.
+  //
+  // The sentence states the CONSEQUENCE, not the collision. "This email is
+  // already in use" is a fact staff cannot act on; "neither will be able to
+  // sign in" is the thing they have to tell the person standing there, and it
+  // is what D-111 bought deliberately when it made a shared address resolve to
+  // nobody.
+  'details.sharedEmail':
+    'This email address already belongs to {heldBy}. If that is the person renting, go back and correct the name — this unit goes on their existing account. If it is someone else at the same address, both accounts keep their lease, notices and mail, but NEITHER will be able to sign in to the online portal.',
+  'details.sharedEmailHeldBy': 'Already used by',
+  'details.sharedEmailRenting': 'Renting now',
+  'details.sharedEmailConfirm': 'Yes, give {renting} their own account',
   'details.phone': 'Mobile number',
   'details.address1': 'Street address',
   'details.address2': 'Flat, suite or unit (optional)',

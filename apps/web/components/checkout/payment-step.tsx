@@ -6,6 +6,7 @@ import { formatRate } from '@/lib/format'
 import { SITE } from '@/lib/site-config'
 import type { AmountDue, PaymentSetup } from '@/lib/checkout/payment'
 import { translate, type Dictionary, type MessageKey } from '@/lib/i18n'
+import { MessageSegments } from '@/components/message-segments'
 import { costLineLabel } from '@/lib/pricing/cost-line-copy'
 
 // PRD 01 US-501 step 5 / §4.6, §6.9.
@@ -53,7 +54,9 @@ export function PaymentStep({
         <dl className="mt-3 flex flex-col gap-2 text-sm">
           {due.lines.map((line) => (
             <div key={line.key} className="flex justify-between gap-4">
-              <dt>{costLineLabel(dict, line)}</dt>
+              <dt>
+                <MessageSegments segments={costLineLabel(dict, line)} />
+              </dt>
               <dd className="tabular-nums">{formatRate(line.amountCents)}</dd>
             </div>
           ))}

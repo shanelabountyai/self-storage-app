@@ -15,14 +15,16 @@ import {
 import {
   localityFor,
   recordLeaseDeclarations,
+  otherTenantOnEmail,
   upsertTenantForCheckout,
   validateDeclarations,
   validateDetails,
+  emailOptionalFor,
 } from '@/lib/checkout/details'
 import { prisma } from '@storage/db'
 import { formatRate } from '@/lib/format'
 import { labelForStep } from '@/components/checkout/stepper'
-import { isLocale, type Locale, type MessageKey } from '@/lib/i18n'
+import { isLocale, translateSegments, type Locale, type MessageKey } from '@/lib/i18n'
 import { getLocale, messages } from '@/lib/i18n/server'
 import {
   ELECTRONIC_RECORDS_CONSENT,
@@ -112,7 +114,14 @@ export async function submitDetailsAction(
   // D-51 (B-123). Its own box, never inferred from the two above.
   const marketingSmsChecked = formData.get('marketingSmsConsent') === 'yes'
 
-  const errors = validateDetails(input)
+  // D-111 / B-238. Whether this session may omit an address is the SESSION's
+  // fact, not the form's — a hidden field saying "email optional" would be a
+  // hidden field anyone can set. Read from the same `emailOptionalFor` the step
+  // rendered the field from, so the rule and the control cannot disagree.
+  const session = await sessionByToken(token)
+  const emailOptional = emailOptionalFor(session?.data)
+
+  const errors = validateDetails(input, { emailOptional })
   if (Object.keys(errors).length > 0) return keyedFieldError(errors, t)
 
   // B-112: city and state come from the zip unless the renter opened the
@@ -120,7 +129,47 @@ export async function submitDetailsAction(
   // where neither is available, so this is present.
   const locality = localityFor(input)!
 
-  const { tenantId } = await upsertTenantForCheckout(input, locality, locale)
+  // ── B-271 / D-111: the counter says so at the moment it creates the second
+  // account ─────────────────────────────────────────────────────────────────
+  //
+  // Gated on `emailOptional`, which is the SESSION's `walk_in` stamp and not
+  // anything the form can claim — the same discipline B-238 used above, and for
+  // a second reason here: the echo NAMES an existing tenant, so on the public
+  // form it would turn an unauthenticated checkout into a way to ask "who holds
+  // this address?". Staff have the person in front of them; a stranger does not.
+  //
+  // `confirmed=yes` is the flag `AdminForm`'s confirm button posts. It means
+  // "different person", so it becomes `separateAccount` — the ONE thing that
+  // makes `upsertTenantForCheckout` create on a known address instead of link.
+  //
+  // No `stalePreview` guard (B-173), and the asymmetry is why: editing the
+  // address after the echo was rendered and then pressing confirm can only ever
+  // CREATE a tenant on the edited address. `separateAccount` has no branch that
+  // links, so the direction this whole item exists to stop — a lease landing on
+  // a stranger's account — is unreachable from here by construction. The worst
+  // case is one extra tenant record, which is the outcome staff just asked for.
+  const separateAccount = emailOptional && formData.get('confirmed') === 'yes'
+  if (emailOptional && !separateAccount) {
+    const other = await otherTenantOnEmail(input.email, input)
+    if (other) {
+      const heldBy = `${other.firstName} ${other.lastName}`.trim()
+      const renting = `${input.firstName.trim()} ${input.lastName.trim()}`.trim()
+      return {
+        status: 'confirm',
+        message: t('details.sharedEmail', { heldBy }),
+        echo: [
+          { label: t('details.email'), value: input.email.trim().toLowerCase() },
+          { label: t('details.sharedEmailHeldBy'), value: heldBy },
+          { label: t('details.sharedEmailRenting'), value: renting },
+        ],
+        confirmLabel: t('details.sharedEmailConfirm', { renting }),
+      }
+    }
+  }
+
+  const { tenantId } = await upsertTenantForCheckout(input, locality, locale, {
+    separateAccount,
+  })
 
   const result = await advance(token, 'details', {
     ...input,
@@ -494,13 +543,13 @@ export async function applyPromoCodeAction(
     // out of `@storage/core/promotions` as English, which put a Spanish renter
     // one field away from B-263's defect — same screen, same submit.
     //
-    // Not `keyedFieldError`: that helper counts the fields to pick its summary
-    // ("There is a problem with one field."), and this refusal has a sentence
-    // worth reading rather than a count. The summary and the field error are
-    // deliberately the same words, which is what `AdminForm` renders twice.
-    const refused = codeOutcomeMessage(lookup.codeOutcome, dict)
-    const refusal = t(refused.key, refused.vars)
-    return { status: 'error', message: refusal, fieldErrors: { promo: refusal } }
+    // B-273. This spelled `keyedFieldError` out by hand because the helper
+    // used to count the fields to pick its summary ("There is a problem with
+    // one field.") and this refusal has a sentence worth reading rather than a
+    // count. The helper no longer counts on one field, so it produces exactly
+    // this: the summary and the field error are the same words, which is what
+    // `AdminForm` renders twice.
+    return keyedFieldError({ promo: codeOutcomeMessage(lookup.codeOutcome, dict) }, t)
   }
 
   await prisma.checkoutSession.update({
@@ -541,6 +590,13 @@ export async function applyPromoCodeAction(
   return {
     status: 'success',
     message: outcome ? t(outcome.key, outcome.vars) : t('act.codeApplied'),
+    // B-272. The same sentence as runs, so `AdminForm` can mark the operator's
+    // own terms `lang="en"` inside a Spanish confirmation (D-129). `message`
+    // above stays the flattened string — it is what a live region announces —
+    // and joining these reproduces it.
+    ...(outcome
+      ? { messageParts: translateSegments(dict, outcome.key, outcome.vars ?? {}) }
+      : {}),
   }
 }
 

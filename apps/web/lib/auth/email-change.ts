@@ -44,13 +44,28 @@ export async function requestEmailChange(
     where: { id: tenantId },
     select: { id: true, email: true, firstName: true, preferredLocale: true },
   })
-  if (newEmail === tenant.email.toLowerCase()) return { ok: false, reason: 'unchanged' }
+  // D-111 made the column nullable, so "no address on file" is a real state
+  // here and it is never `unchanged` — it is the case where the tenant is
+  // adding their first one.
+  if (tenant.email !== null && newEmail === tenant.email.toLowerCase()) {
+    return { ok: false, reason: 'unchanged' }
+  }
 
-  // Told plainly rather than hidden behind a generic success. Email is the
-  // account identifier and it is unique — a silent no-op would leave someone
-  // waiting for a message that is never coming. This does leak that an
-  // address is registered, which is the same fact the sign-up path exposes
-  // anyway, and the alternative is a flow that appears to work and does not.
+  // Told plainly rather than hidden behind a generic success. A silent no-op
+  // would leave someone waiting for a message that is never coming. This does
+  // leak that an address is registered, which is the same fact the sign-up path
+  // exposes anyway, and the alternative is a flow that appears to work and
+  // does not.
+  //
+  // **This refusal is now POLICY rather than a constraint, and it must stay.**
+  // D-111 dropped the unique index so that two people at one household inbox
+  // can both be tenants; what it did not do is make an address able to identify
+  // one of them at a sign-in box. `findAccount` resolves a shared address to
+  // nobody, so allowing this change would take a working portal login away from
+  // BOTH tenants — the one moving in and the one already there — as a side
+  // effect of a screen that says it is updating an email address. The counter
+  // is where a shared address is a deliberate choice with its consequence
+  // stated; this screen is not.
   const taken = await prisma.tenant.findFirst({
     where: { email: newEmail, id: { not: tenantId } },
     select: { id: true },
@@ -95,6 +110,11 @@ export async function requestEmailChange(
     html: `<p>${escapeHtml(greeting)}</p><p>${escapeHtml(say.emailChangeConfirmIntro(SITE.name))}</p><p><a href="${link}">${escapeHtml(say.emailChangeConfirmCta)}</a></p><p>${escapeHtml(say.emailChangeConfirmIgnore)}</p>`,
     text: `${greeting}\n\n${say.emailChangeConfirmText(SITE.name)}\n${link}\n\n${say.emailChangeConfirmIgnore}`,
   })
+
+  // No old address means nobody to warn — a tenant adding their first one
+  // (D-111). The token above is already minted; skipping the alert is not
+  // skipping the change.
+  if (tenant.email === null) return { ok: true }
 
   // Deliberately linkless. Anyone who can read this mailbox but did not ask
   // for the change needs a way to react, and that way is the phone number —

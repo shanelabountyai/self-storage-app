@@ -22,7 +22,7 @@ import {
 import { CallLink, phoneFor } from '@/components/marketing/call-link'
 import { WaitlistForm } from '@/components/marketing/waitlist-form'
 import { joinWaitlistAction } from '../storage/[state]/[city]/[slug]/waitlist-actions'
-import { prefillFromReservation } from '@/lib/checkout/details'
+import { emailOptionalFor, prefillFromReservation } from '@/lib/checkout/details'
 import { currentActor } from '@/lib/rbac/session'
 import { can } from '@/lib/rbac/authorize'
 import { localityForZip } from '@/lib/geo/geocode'
@@ -32,7 +32,7 @@ import { ProtectionStep } from '@/components/checkout/protection-step'
 import { LeaseStep } from '@/components/checkout/lease-step'
 import { PaymentStep } from '@/components/checkout/payment-step'
 import { amountDueToday, preparePayment } from '@/lib/checkout/payment'
-import { offerTermsText } from '@/lib/promotions/terms'
+import { offerTermsSegments } from '@/lib/promotions/terms'
 import { currentPlans, defaultTier } from '@/lib/protection/plans'
 import { buildLeaseDocuments, existingLeaseDocuments } from '@/lib/lease/build'
 import { bodyOf, renderTemplate } from '@/lib/documents/render'
@@ -647,6 +647,10 @@ export default async function CheckoutPage({
               token={token!}
               prefill={detailsPrefill}
               manualLocality={manualLocality}
+              // D-111 / B-238. The same predicate `submitDetailsAction` reads,
+              // so the field that renders optional is the field the rule
+              // accepts blank.
+              emailOptional={emailOptionalFor(session.data)}
               dict={dict}
               locale={locale}
             />
@@ -923,7 +927,7 @@ export default async function CheckoutPage({
             // session at "Rent now". Until this shipped the card said "50% off"
             // and every figure from here on said full price.
             promoDiscountCents={lockedPromo?.firstPeriodCents}
-            promoTerms={lockedPromo ? offerTermsText(dict, lockedPromo.terms) : undefined}
+            promoTerms={lockedPromo ? offerTermsSegments(dict, lockedPromo.terms) : undefined}
             // §6.4: the prop has existed since B-020 and was passed by nobody,
             // which is why choosing a $12/mo protection tier moved both totals
             // with no stated cause one screen before the card form. `advance`
@@ -943,7 +947,7 @@ export default async function CheckoutPage({
             <PromoCodeStep
               token={token!}
               action={applyPromoCodeAction}
-              appliedTerms={lockedPromo ? offerTermsText(dict, lockedPromo.terms) : null}
+              appliedTerms={lockedPromo ? offerTermsSegments(dict, lockedPromo.terms) : null}
               dict={dict}
             />
           )}

@@ -292,7 +292,7 @@ describeDb('referral program core', () => {
       if (!minted.ok) throw new Error('unreachable')
       const referrer = await prisma.tenant.findUniqueOrThrow({ where: { id: referrerId } })
       // A different tenant row, same email — the first thing anyone tries.
-      const { referee, leaseId } = await refereeWithLease({ email: referrer.email.toUpperCase() })
+      const { referee, leaseId } = await refereeWithLease({ email: referrer.email!.toUpperCase() })
 
       const result = await qualifyReferral({
         inviteId: minted.inviteId,
@@ -682,7 +682,7 @@ describeDb('referral program core', () => {
       const selfReferral =
         (await prisma.tenant.findFirst({
           where: { email: { equals: referrer.email, mode: 'insensitive' }, id: { not: referrerId } },
-        })) ?? (await makeTenant({ email: referrer.email.toUpperCase() }))
+        })) ?? (await makeTenant({ email: referrer.email!.toUpperCase() }))
       const leaseId = await makeLease(selfReferral.id)
 
       await qualifyReferral({

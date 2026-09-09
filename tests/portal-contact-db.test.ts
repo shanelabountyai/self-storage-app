@@ -269,7 +269,7 @@ describeDb('portal contact, email and documents', () => {
       const other = await prisma.tenant.findUniqueOrThrow({
         where: { id: otherTenantId },
       })
-      expect(await requestEmailChange(tenantId, other.email)).toEqual({
+      expect(await requestEmailChange(tenantId, other.email!)).toEqual({
         ok: false,
         reason: 'taken',
       })
@@ -279,7 +279,7 @@ describeDb('portal contact, email and documents', () => {
       const tenant = await prisma.tenant.findUniqueOrThrow({
         where: { id: tenantId },
       })
-      expect(await requestEmailChange(tenantId, tenant.email)).toEqual({
+      expect(await requestEmailChange(tenantId, tenant.email!)).toEqual({
         ok: false,
         reason: 'unchanged',
       })
@@ -337,7 +337,7 @@ describeDb('portal contact, email and documents', () => {
         purpose: 'email_change',
         audience: 'tenant',
         subjectId: tenantId,
-        email: other.email,
+        email: other.email!,
       })
       expect(await confirmEmailChange(token)).toEqual({
         ok: false,

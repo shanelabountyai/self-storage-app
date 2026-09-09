@@ -390,7 +390,13 @@ export async function requestTransfer(
           status: 'held',
           firstName: tenant.firstName,
           lastName: tenant.lastName,
-          email: tenant.email,
+          // `Reservation.email` is still required — a hold is D-7's anonymous
+          // path and the address is how an unauthenticated holder is written
+          // to. This hold is neither: it belongs to a tenant we already have,
+          // and it is `TRANSFER_HOLD_SOURCE`, never emailed as a reservation.
+          // Empty rather than a placeholder, so nothing here can be mistaken
+          // for an address to send to (D-111).
+          email: tenant.email ?? '',
           phone: tenant.phone,
           quotedRateCents: preview.newRateCents,
           moveInDate: transferDate,

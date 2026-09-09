@@ -744,14 +744,17 @@ async function closeUndeliveredNoticeTask(
 /// forty fresh tasks — a loop that looks like work and gives no tenant notice.
 async function addressStillBad(
   noticeEventId: string,
-  tenant: { email: string; phone: string | null },
+  tenant: { email: string | null; phone: string | null },
 ): Promise<string | null> {
   const messages = await prisma.message.findMany({
     where: { eventId: noticeEventId },
     select: { channel: true, toAddress: true, status: true },
   })
   const current = new Map<string, string | null>([
-    ['email', tenant.email.trim().toLowerCase()],
+    // D-111: null stays null. The map's own `if (!now) continue` below already
+    // means "no current address on this channel, so nothing to compare the
+    // dead one against" — which is the right reading for a tenant who has none.
+    ['email', tenant.email?.trim().toLowerCase() ?? null],
     ['sms', tenant.phone],
   ])
   for (const message of messages) {

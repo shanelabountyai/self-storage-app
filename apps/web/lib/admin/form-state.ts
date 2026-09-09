@@ -1,4 +1,4 @@
-import type { MessageKey } from '@/lib/i18n'
+import type { MessageKey, MessageSegment, MessageVars } from '@/lib/i18n'
 
 // The return shape every admin server action uses, per PRD 02 FR-19.
 //
@@ -23,7 +23,7 @@ export type FieldErrors = Record<string, string>
 // The import is type-only on purpose. Three client components import
 // `IDLE_FORM_STATE` from this file as a value, and a runtime import of the
 // dictionaries here would pull both languages into their bundles.
-export type FieldMessage = { key: MessageKey; vars?: Record<string, string | number> }
+export type FieldMessage = { key: MessageKey; vars?: MessageVars }
 export type KeyedFieldErrors = Record<string, FieldMessage>
 
 export type FormState =
@@ -35,7 +35,23 @@ export type FormState =
   /// never be shown again — MFA recovery codes are the case it was added for
   /// (B-079). It is rendered as a list rather than folded into `message`
   /// because a live region reading ten codes as one sentence is unusable.
-  | { status: 'success'; message: string; details?: string[] }
+  ///
+  /// B-272. `messageParts` is the SAME sentence split into runs, and it exists
+  /// for one thing: a run in a language the rest of the page is not (3.1.2).
+  /// The applied-code confirmation quotes an operator's own `termsText`, which
+  /// D-129 renders as typed, so «Código aplicado: 50% off the first month»
+  /// needs a `lang="en"` on its second half.
+  ///
+  /// Additive rather than widening `message` to a node, and the reason is not
+  /// timidity: `message` is what `announceOutside` hands to `AnnounceRegion`
+  /// as a plain string, and it crosses the server-action boundary. It stays a
+  /// string. A renderer that has parts uses them and falls back to `message`
+  /// when it has none, so every other action in the app is untouched.
+  ///
+  /// The invariant, and it is what makes the fallback safe: joining the parts
+  /// reproduces `message` exactly. `translate` and `translateSegments` take
+  /// the same `vars` for that reason.
+  | { status: 'success'; message: string; messageParts?: MessageSegment[]; details?: string[] }
   /// `message` is the summary heading; `fieldErrors` maps field name → message.
   /// A field error must carry a *suggestion*, not just an identification
   /// (3.3.3): "State must be a 2-letter code, e.g. TX."
@@ -80,16 +96,33 @@ export function fieldError(fields: FieldErrors): FormState {
 /// keeps the `MessageKey` import above type-only — three client components
 /// import `IDLE_FORM_STATE` from this file as a value, and a runtime import of
 /// `@/lib/i18n` would put both dictionaries in their browser bundles.
-export type Translator = (key: MessageKey, vars?: Record<string, string | number>) => string
+export type Translator = (key: MessageKey, vars?: MessageVars) => string
 
+/// B-273. With ONE error the summary is that error's own sentence, not a count
+/// of it. A count identifies a problem and suggests nothing, which is 3.3.3
+/// traded away — and it is traded away where it costs most, because the forms
+/// that refuse on a single field are the renter-facing ones. `FormResult` (the
+/// lead and waitlist forms) announces `message` and NOTHING else: the sentence
+/// saying what to do sits beside the input, reachable only by swiping back to
+/// it, so "There is a problem with one field." was the entire announcement.
+/// `AdminForm` renders the list inside the same `role="alert"`, so it read both
+/// halves and only wasted the first — the same defect, quieter.
+///
+/// Two callers had already hand-rolled this shape with comments explaining why
+/// the helper was wrong for them (checkout's promo refusal, the waitlist form);
+/// both call the helper again. `fieldError` above is deliberately NOT changed:
+/// every one of its callers is an `AdminForm` staff screen where the suggestion
+/// is already announced, and the count is a redundancy there rather than a loss.
 export function keyedFieldError(errors: KeyedFieldErrors, t: Translator): FormState {
-  const entries = Object.entries(errors)
+  const fieldErrors = Object.fromEntries(
+    Object.entries(errors).map(([field, { key, vars }]) => [field, t(key, vars)]),
+  )
+  const messages = Object.values(fieldErrors)
   return {
     status: 'error',
-    message: entries.length === 1 ? t('err.oneField') : t('err.someFields', { count: entries.length }),
-    fieldErrors: Object.fromEntries(
-      entries.map(([field, { key, vars }]) => [field, t(key, vars)]),
-    ),
+    message:
+      messages.length === 1 ? messages[0] : t('err.someFields', { count: messages.length }),
+    fieldErrors,
   }
 }
 

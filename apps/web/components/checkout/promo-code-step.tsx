@@ -1,6 +1,13 @@
 import { AdminForm, Field } from '@/components/admin/form'
 import type { FormState } from '@/lib/admin/form-state'
-import { translate, type Dictionary, type MessageKey } from '@/lib/i18n'
+import { MessageSegments } from '@/components/message-segments'
+import {
+  translate,
+  translateSegments,
+  type Dictionary,
+  type MessageKey,
+  type MessageSegment,
+} from '@/lib/i18n'
 
 // PRD 04 §3.6 US-11 AC3 (B-122). The code box inside the checkout.
 //
@@ -35,7 +42,11 @@ export function PromoCodeStep({
   /// The promotion currently on this checkout, if any. Shown so the renter can
   /// see what a code would be competing with — FR-PROMO-4 allows only one, and
   /// "why did nothing change" is the support call this prevents.
-  appliedTerms?: string | null
+  ///
+  /// B-272: runs rather than a string. This line quotes an operator's own
+  /// `termsText` inside a translated sentence, which is one of the three
+  /// places B-269 left English unannounced under `<html lang="es">`.
+  appliedTerms?: readonly MessageSegment[] | null
   dict: Dictionary
 }) {
   const t = (key: MessageKey, vars?: Record<string, string | number>) =>
@@ -49,9 +60,11 @@ export function PromoCodeStep({
           abandon a checkout. */}
       <summary className="cursor-pointer text-sm font-medium">{t('promo.haveACode')}</summary>
 
-      {appliedTerms && (
+      {appliedTerms && appliedTerms.length > 0 && (
         <p className="text-muted-foreground mt-2 text-sm">
-          {t('promo.currentlyApplied', { terms: appliedTerms })}
+          <MessageSegments
+            segments={translateSegments(dict, 'promo.currentlyApplied', { terms: appliedTerms })}
+          />
         </p>
       )}
 

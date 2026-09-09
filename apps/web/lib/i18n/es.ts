@@ -301,6 +301,14 @@ export const es: Dictionary = {
   'lead.thanks':
     'Listo: alguien de esta sucursal se pondrá en contacto con usted. Si es urgente, es más rápido llamarnos.',
 
+  // --- El formulario de lista de espera de un tamaño agotado (US-30) -----
+  'waitlist.summary': 'Avísenme por correo cuando se desocupe una unidad de {size}',
+  'waitlist.email': 'Su correo electrónico',
+  'waitlist.scope':
+    'Un solo correo, sobre este tamaño en esta sucursal únicamente. Lleva un enlace para darse de baja de la lista.',
+  'waitlist.add': 'Agrégueme a la lista',
+  'waitlist.joined': 'Ya está en la lista. Le escribiremos en cuanto se desocupe una unidad.',
+
   // --- Move-in cost lines (US-301, shared with checkout) -----------------
   'cost.rent': 'Renta del primer mes',
   'cost.rent.note':
@@ -519,7 +527,6 @@ export const es: Dictionary = {
   // Cada mensaje dice qué hacer, no solo qué salió mal. `err.postalCodeUnknown`
   // cita `details.enterMyself` palabra por palabra — si esa etiqueta cambia,
   // este mensaje también.
-  'err.oneField': 'Hay un problema con un campo.',
   'err.someFields': 'Hay problemas con {count} campos.',
   'err.firstName': 'Escriba su nombre.',
   'err.lastName': 'Escriba su apellido.',
@@ -588,6 +595,11 @@ export const es: Dictionary = {
   'err.leadRateLimited':
     'Son muchas consultas desde un mismo lugar en poco tiempo. Espere unos minutos, o llámenos.',
 
+  // Los rechazos del formulario de lista de espera.
+  'err.waitlistEmail': 'Escriba un correo electrónico donde podamos localizarle.',
+  'err.waitlistUnitGone': 'Esa unidad ya no está publicada.',
+  'err.waitlistNoFacility': 'Esta consulta no está asociada a ninguna sucursal.',
+
   // --- Checkout announcer (4.1.3, 2.4.3) --------------------------------
   'announce.movedToSize': 'Lo cambiamos a la {size}. No se perdió nada de lo que escribió.',
   'announce.foundSameSize':
@@ -635,6 +647,17 @@ export const es: Dictionary = {
   'details.email': 'Correo electrónico',
   'details.emailHint':
     'Esta es su cuenta. Aquí le enviamos su contrato, su recibo y su código de la puerta — sin contraseña.',
+  // D-111 / B-238. La versión del mostrador — nombra lo que se pierde, no dice
+  // solo «opcional».
+  'details.emailHintOptional':
+    'Opcional. Sin él no hay cuenta en línea: ni recibo por correo electrónico, ni enlace de pago, ni aviso cuando un pago se atrasa o una unidad se programa para venta — eso va por correo postal y por teléfono. Déjelo en blanco antes que poner una dirección que no sea suya.',
+  // B-271 / D-111. Solo en el mostrador. Nombra la CONSECUENCIA — que ninguna
+  // de las dos cuentas podrá entrar al portal — no solo la coincidencia.
+  'details.sharedEmail':
+    'Este correo electrónico ya es de {heldBy}. Si es la persona que está rentando, regrese y corrija el nombre — esta unidad va en su cuenta actual. Si es otra persona de la misma dirección, ambas cuentas conservan su contrato, sus avisos y su correo postal, pero NINGUNA de las dos podrá entrar al portal en línea.',
+  'details.sharedEmailHeldBy': 'Ya lo usa',
+  'details.sharedEmailRenting': 'Está rentando ahora',
+  'details.sharedEmailConfirm': 'Sí, darle a {renting} su propia cuenta',
   'details.phone': 'Número de celular',
   'details.address1': 'Dirección',
   'details.address2': 'Departamento, suite o unidad (opcional)',

@@ -6,14 +6,14 @@
 
 **Then read the row itself before building the item** — `npm run docs:row -- B-262` prints that one row whole and verbatim, about 2 KB against the file's 490. The columns dropped here are the ones that say what to build.
 
-**276 items — 268 complete, 8 open.**
+**281 items — 273 complete, 8 open.**
 
 ## Open, in build order
 
 | # | ID | Item | Size | Depends on |
 |---|---|---|---|---|
 | 83a | B-129 | Online auction platform listing from the auction pipeline | M | B-062, B-083 |
-| 83bya | B-238 | A renter with no email address cannot be leased, and two people cannot share one | L | B-038 |
+| 83aa | B-274 | Nothing in the product says where a unit will be sold | Master PRD §8 OQ-9; PRD 02 US-30; PRD 01 §6.8; D-131, D-10, D-63, D-104 | S |
 | 83byf | B-243 | A certified letter that comes back is nobody's work item | M | B-083 |
 | 83byma | B-254 | `LAST_REVIEWED` on the public accessibility statement has a bump trigger | S | B-250, D-115 |
 | 85 | B-085 | First real gate-vendor driver (OpenTech CIA or PTI StorLogix Cloud — needs partner agreement, PRD… | L | B-080 |
@@ -211,6 +211,7 @@
 | 83bwp | B-200 | ✅ | Three e2e tests in `admin-reports.spec.ts` assert stale expectations, and one of them means the… | S | MVP |
 | 83bwq | B-201 | ✅ | No dynamic admin route has ever been reflow-checked, and `[contain:layout]` means the check that… | S | MVP |
 | 83a | B-129 |  | Online auction platform listing from the auction pipeline | M | Phase 2 |
+| 83aa | B-274 |  | Nothing in the product says where a unit will be sold | Master PRD §8 OQ-9; PRD 02 US-30; PRD 01 §6.8; D-131, D-10, D-63, D-104 | B-083, B-129, D-131 |
 | 83bwr | B-202 | ✅ | A payment plan does not stop a scheduled auction, and today's lot sheet will advertise the unit… | S | Phase 2 |
 | 83bws | B-203 | ✅ | A tenant who pays exactly the installment they were told to pay still breaks their plan | M | Phase 2 |
 | 83bwt | B-204 | ✅ | An installment charge ignores `halt_autopay`, so we take money from a bankrupt, a servicemember… | S | Phase 2 |
@@ -248,7 +249,10 @@
 | 83bxx | B-235 | ✅ | The approvals the product itself requires have no cross-facility worklist | M | Phase 2 |
 | 83bxy | B-236 | ✅ | The hourly cron runs every facility serially inside one 300-second request, and what it drops is… | M | Phase 2 |
 | 83bxz | B-237 | ✅ | There is no way to create a facility, and one created by hand takes rent and does nothing else | M | Phase 2 |
-| 83bya | B-238 |  | A renter with no email address cannot be leased, and two people cannot share one | L | Phase 2 |
+| 83bya | B-238 | ✅ | A renter with no email address cannot be leased, and two people cannot share one | L | Phase 2 |
+| 83byaa | B-271 | ✅ | The counter says so before it puts a walk-in on somebody else's account | S | Phase 2 |
+| 83byab | B-272 | ✅ | The two carried gaps no row owned | S | Phase 2 |
+| 83byac | B-273 | ✅ | A one-field refusal announces a count instead of the refusal | XS | Phase 2 |
 | 83byb | B-239 | ✅ | The move-in confirmation hands the renter nothing to do next, and the portal's one permanent… | M | Phase 2 |
 | 83byc | B-240 | ✅ | The tenant profile is 2,086 lines in one column with no way to reach anything | PRD 02 US-13; D-95; D-114; B-217 | B-217 |
 | 83byd | B-241 | ✅ | Sixteen reports in one flat row, under a navigation label that is wrong for a third of them | S | Phase 2 |
@@ -298,8 +302,9 @@
 | 90s | B-267 | ✅ | The reservation form is English end to end on a Spanish facility page | M | Phase 2 |
 | 90t | B-268 | ✅ | The page a Spanish reservation ends on is English | PRD 01 US-401, FR-3.2; D-122 | B-267 |
 | 90u | B-269 | ✅ | A promotion's own terms are English inside every Spanish sentence that quotes them | M | Phase 2 |
+| 90v | B-270 | ✅ | The waitlist form is English on a Spanish facility page, and the mail it produces is Spanish | S | Phase 2 |
 | 91 | B-091 | ✅ | Split into two parts, 2026-08-19 | L | Phase 2 |
 | 92 | B-092 | ✅ | Impersonation oversight | M | Phase 2 |
-| 93 | B-271 | ✅ | Renumbered B-264 → B-266 → B-268 → B-271, and the third time is the same collision as the first two: | S | Phase 2 |
-| 94 | B-272 | ✅ | Renumbered B-269 → B-272 on the merge of 2026-09-07, and the row is left saying so. | S | Phase 2 |
-| 95 | B-273 | ✅ | Renumbered B-270 → B-273 with its parent, 2026-09-07. | S | Phase 2 |
+| 93 | B-275 | ✅ | Renumbered B-264 → B-266 → B-268 → B-271 → B-275, and the fourth time is the same collision as the… | S | Phase 2 |
+| 94 | B-276 | ✅ | Renumbered B-269 → B-272 → B-276, on the merges of 2026-09-07 and 2026-09-09, and the row is left… | S | Phase 2 |
+| 95 | B-277 | ✅ | Renumbered B-270 → B-273 → B-277 with its parent, on the merges of 2026-09-07 and 2026-09-09 | S | Phase 2 |

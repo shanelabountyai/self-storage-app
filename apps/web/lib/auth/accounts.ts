@@ -20,6 +20,30 @@ type AccountRecord = {
   disabled: boolean
 }
 
+/// **A tenant address is no longer unique (D-111), so this no longer looks one
+/// up — it counts them, and refuses to guess.**
+///
+/// `Tenant.email` was `String @unique` until B-238, and dropping that
+/// constraint is what lets a husband and wife each hold an account on one
+/// household inbox. It also means an address can name two people, and an
+/// address that names two people identifies neither: there is no fact
+/// available here that says which of them is typing. Signing somebody into
+/// their spouse's account — their ledger, their unit, their card on file — is
+/// a far worse failure than an address that cannot sign in, so a shared
+/// address resolves to nobody. `take: 2` because the only question is "more
+/// than one", and the caller does not need the third.
+///
+/// Both people keep everything that does not require identifying them: the
+/// lease, the notices, the mail. What they lose is the portal, and the counter
+/// says so at the moment it creates the second account rather than leaving the
+/// first renter to discover it at a sign-in box.
+///
+/// **Nothing here is enumerable, and that survives the change.** An ambiguous
+/// address returns exactly what an unknown one returns, so the shared-inbox
+/// case is indistinguishable from "no account" to anyone probing from outside.
+///
+/// Staff are unchanged: `StaffUser.email` is still unique, because a staff
+/// account is a person the operator employs and not a renter at a counter.
 async function findAccount(
   email: string,
   audience: AuthAudience,
@@ -27,9 +51,10 @@ async function findAccount(
   const normalized = email.trim().toLowerCase()
 
   if (audience === 'tenant') {
-    const tenant = await prisma.tenant.findUnique({ where: { email: normalized } })
-    if (!tenant) return null
-    return { ...tenant, disabled: tenant.deletedAt !== null }
+    const tenants = await prisma.tenant.findMany({ where: { email: normalized }, take: 2 })
+    if (tenants.length !== 1) return null
+    const tenant = tenants[0]!
+    return { ...tenant, email: normalized, disabled: tenant.deletedAt !== null }
   }
 
   const staff = await prisma.staffUser.findUnique({ where: { email: normalized } })
@@ -175,6 +200,14 @@ export async function loadSubject(
   const disabled =
     account.deletedAt !== null || ('status' in account && account.status !== 'active')
   if (disabled) return null
+
+  // D-111: a tenant may now have no email address at all, and a subject with
+  // no address cannot hold a portal session — sign-in requires a non-null
+  // email exactly where a portal login exists. Every route into this function
+  // consumed a token minted against an address, so reaching here with a null
+  // one means the address was cleared in between; the session is refused
+  // rather than issued to a subject we can no longer write to.
+  if (account.email === null) return null
 
   return {
     id: account.id,

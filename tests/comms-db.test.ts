@@ -114,7 +114,7 @@ describeDb('comms pipeline', () => {
       data: { email: `comms-${suffix}@example.com`, firstName: 'Ada', lastName: 'Renter' },
     })
     tenantId = tenant.id
-    tenantEmail = tenant.email
+    tenantEmail = tenant.email!
 
     const unitType = await prisma.unitType.create({
       data: { facilityId, name: `10x10 ${suffix}`, widthFt: 10, lengthFt: 10 },
@@ -198,6 +198,45 @@ describeDb('comms pipeline', () => {
     expect(result).toMatchObject({ sent: 0, suppressed: 0, cancelled: 0, failed: 0, skipped: 0 })
     expect(sends).toHaveLength(0)
     expect(await prisma.message.count({ where: { facilityId } })).toBe(0)
+  })
+
+  // ── D-111 / B-238 ──────────────────────────────────────────────────────────
+  //
+  // The argument for letting a renter have no email at all was that the
+  // alternative — staff typing `nobody@example.com` — sends the receipt, the
+  // dunning ladder and the lien-notice supplement into a hole WITHOUT TELLING
+  // ANYONE. A `failed` row nobody reads is that same hole with better
+  // bookkeeping, so the send has to leave a thing on somebody's list. The task
+  // is the same `no_reachable_channel` the bounce path raises, which is what
+  // puts it in CN-19's failure queue and on the deliverability report already.
+  it('opens a staff task when a tenant has no address, instead of failing quietly', async () => {
+    await seedTemplate({ key: `welcome_${suffix}`, bodyText: 'Hi {{tenant.first_name}}' })
+    await seedRule({ event: 'test.lease_event', templateKey: `welcome_${suffix}` })
+    await prisma.tenant.update({ where: { id: tenantId }, data: { email: null } })
+
+    try {
+      const result = await processCommsEvent(await moveInEvent())
+      expect(result.failed).toBe(1)
+      expect(sends).toHaveLength(0)
+
+      // Still recorded as a failure: "we did not reach this person" is the
+      // answer a lien file asks for, and it must survive in the message log.
+      const message = await prisma.message.findFirstOrThrow({ where: { facilityId } })
+      expect(message.status).toBe('failed')
+      expect(message.error).toBe('no reachable email address')
+
+      const task = await prisma.task.findFirstOrThrow({
+        where: { facilityId, type: 'no_reachable_channel', entityId: tenantId },
+      })
+      expect(task.status).toBe('open')
+      expect(task.priority).toBe('high')
+    } finally {
+      await prisma.tenant.update({
+        where: { id: tenantId },
+        data: { email: tenantEmail },
+      })
+      await prisma.task.deleteMany({ where: { facilityId } })
+    }
   })
 
   it('withholds to a hard-bounced address and records why', async () => {

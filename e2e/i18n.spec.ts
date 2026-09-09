@@ -156,9 +156,9 @@ test('the Spanish checkout refuses you in Spanish (B-263)', async ({ page, conte
   // The summary heading above the fields was the last English string on a
   // refused Spanish step, and it came from `fieldError`, not from a validator —
   // which is why translating the three functions the row named would have left
-  // it. One error here, so this is the singular.
-  await expect(alert).toContainText('Hay un problema con un campo.')
-
+  // it. B-273: with one error that heading IS the refusal, so the assertion
+  // below covers both halves of the box rather than a count above a sentence.
+  //
   // 3.3.3 in the renter's language: the message says what to DO, and it names
   // the control to open by that language's own name for it. Asserted end to end
   // rather than in a unit test because what broke was the WIRING — the
@@ -215,14 +215,75 @@ test('the Spanish lead form asks, refuses and consents in Spanish (B-264)', asyn
   // the summary came from `fieldError` and not from `captureLead`, so
   // translating the refusals alone would have left the sentence announced above
   // them in English.
-  await expect(form.getByRole('status')).toContainText('Hay un problema con un campo.')
+  //
+  // B-273 is why they are now the SAME sentence, and this form is the surface
+  // the row is about: the live region is the only thing a screen-reader user
+  // hears, and it used to announce "Hay un problema con un campo." — a count,
+  // in Spanish, with the sentence saying what to do reachable only by swiping
+  // back to the input.
+  await expect(form.getByRole('status')).toContainText(
+    'Un correo electrónico o un teléfono: necesitamos alguna forma de responderle.',
+  )
+  // TWO renderings, which is the row: the live region announces the refusal and
+  // `Field` still puts it beside the input (3.3.1). Counted rather than asserted
+  // visible, because a single-element locator is a strict-mode violation now
+  // that both halves say the same words — the state `AdminForm` has always been
+  // in, and the reason its specs scope everything inside the alert box.
   await expect(
     form.getByText('Un correo electrónico o un teléfono: necesitamos alguna forma de responderle.'),
-  ).toBeVisible()
+  ).toHaveCount(2)
   await expect(form.getByLabel('Correo electrónico', { exact: true })).toHaveAttribute(
     'aria-invalid',
     'true',
   )
+})
+
+test('the Spanish waitlist form asks and refuses in Spanish (B-270)', async ({
+  page,
+  context,
+}) => {
+  await context.addCookies([SPANISH])
+  await page.goto('/storage/tx/austin/demo-austin-south')
+
+  // The same sold-out size `smoke.spec.ts` uses for the English half, located
+  // by its Spanish label — which is itself the first assertion: `sizeLabel` is
+  // `t('facility.footBy')`, so a size still rendered as "5 foot by 15 foot"
+  // here would mean the page around the form had stopped following the cookie.
+  const card = page.getByRole('listitem').filter({ hasText: '5 pies por 15 pies' }).first()
+
+  // The disclosure, which is where the size label is interpolated. Opening it
+  // rather than asserting the collapsed text is deliberate: the label and the
+  // button are what a visitor is asked to act on, and both were English until
+  // this row.
+  await card.locator('summary').click()
+  const email = card.getByLabel('Su correo electrónico')
+  await expect(email).toBeVisible()
+  await expect(card.getByRole('button', { name: 'Agrégueme a la lista' })).toBeVisible()
+
+  // The refusal, and the reason this spec exists rather than resting on
+  // `tests/i18n.test.ts`: the dictionary test proves the Spanish EXISTS, and
+  // only a rendered page proves `useT()` reaches this component and that the
+  // server's answer came back in the reader's language too.
+  //
+  // `someone@localhost` passes the browser's own `type="email"` check and fails
+  // `isPlausibleEmail` on the server, which is the only way to reach the
+  // translated message in a real browser (smoke.spec.ts:1664 says the same).
+  // Refused before any `WaitlistEntry` is written, so it mutates no shared
+  // fixture and needs none of B-120's three disciplines.
+  await email.fill('someone@localhost')
+  await card.getByRole('button', { name: 'Agrégueme a la lista' }).click()
+
+  // ONE assertion on the live region, not two, and that is the point of the
+  // row. This form has a single field, so the announced summary IS the refusal
+  // rather than a count of fields. B-270 got here by spelling the helper out by
+  // hand after its first cut used `keyedFieldError` and traded 3.3.3 away for
+  // that count in both languages at once; B-273 fixed the helper instead, so
+  // the action calls it again and the lead form above now asserts the same
+  // shape rather than the count.
+  await expect(card.getByRole('status')).toContainText(
+    'Escriba un correo electrónico donde podamos localizarle.',
+  )
+  await expect(email).toHaveAttribute('aria-invalid', 'true')
 })
 
 test('the Spanish reservation form asks and refuses in Spanish (B-267)', async ({
@@ -270,7 +331,7 @@ test('the Spanish reservation form asks and refuses in Spanish (B-267)', async (
   // strict-mode violation rather than a meaningful failure. (`FormResult`, what
   // the lead form above uses, is the opposite and needs two separate scopes.)
   const alert = page.getByRole('main').getByRole('alert')
-  await expect(alert).toContainText('Hay un problema con un campo.')
+  // B-273: one error, so the summary above the list is the refusal itself.
   await expect(alert).toContainText(
     'Escriba un correo electrónico al que podamos enviarle su confirmación.',
   )
@@ -327,6 +388,19 @@ test('the page a Spanish reservation lands on is Spanish, date included (B-268)'
   )
 
   await expect(page.getByRole('button', { name: 'Completar la mudanza en línea' })).toBeVisible()
+
+  // B-272, and the Spanish half is the one worth having separately: the
+  // English confirmation is scanned in `smoke.spec.ts`, and what differs here
+  // is not markup but the strings inside it — a `lang` that has to be `es` on
+  // the whole document, and a date this row's own assertion above proves is
+  // produced by a different formatter. An axe run on the English state says
+  // nothing about either.
+  //
+  // Before the cancel click, same as the English one: the post-cancel
+  // paragraph is a different state.
+  //
+  // a11y-state: /reservations | live hold confirmation, Spanish
+  await assertNoAxeViolations(page, { state: 'live hold confirmation, Spanish' })
 
   // Give the unit back — the same reason the English spec does, and what keeps
   // this test's mutation its own. Asserting the outcome and releasing the

@@ -10,7 +10,7 @@
 
 One caveat, because it is visible below rather than hidden: the topic column changed style over time. Early rows name a conflict to resolve ("Kiosk mode (master P2 vs PRD 03 P3)"); later ones state the decision outright ("Attaching a lease to a business account does not move the autopay mandate"). Where the source does that, so does this index — it is quoting, not summarising. Either way the binding text is the row in [`07-decisions.md`](07-decisions.md), not the line here.
 
-**135 decisions.**
+**136 decisions.**
 
 | # | Topic |
 |---|---|
@@ -129,7 +129,7 @@ One caveat, because it is visible below rather than hidden: the topic column cha
 | D-108 | **Whether a plan cancelled the day it was agreed spends one of the lease's two for the year** (settled while building **B-209**, 2026-08-31) |
 | D-109 | **What date window a report opens on when the URL names none** (raised by **B-220**, 2026-09-01; **owner decision**) |
 | D-110 | **Whether `reports:financial` is meant to gate the balance figure the counter needs to take a payment** (raised by the digital-experience review, 2026-09-01; **answered by the owner 2026-09-02**; built by **B-231**) |
-| D-111 | **Whether `Tenant.email` stops being required and unique** (raised by the operator review, 2026-09-01; **blocks B-238**) |
+| D-111 | **Whether `Tenant.email` stops being required and unique** (raised by the operator review, 2026-09-01; **answered by the owner 2026-09-09**; built by **B-238**) |
 | D-112 | **Whether a pay link may survive move-out for a lease that still owes money** (raised by the operator review, 2026-09-01; **amends D-30 if accepted**) |
 | D-113 | **What a tenant may pay ahead, and what becomes of a credit balance at move-out** (raised by the operator review, 2026-09-01; **blocks B-225's disposition branch only**) |
 | D-114 | **Whether the tenant profile's `Actions` region moves above the reference sections** (raised by the digital-experience review, 2026-09-01; **amends D-95 if accepted**; **B-240 builds the half that does not need it**) |
@@ -149,3 +149,4 @@ One caveat, because it is visible below rather than hidden: the topic column cha
 | D-128 | **Whether an unauthenticated checkout may change the language an EXISTING account is written to in** (settled while building **B-261**, 2026-09-06) |
 | D-129 | **Whether an operator's own promotion wording gets a per-language column, or is rendered as typed** (settled with the owner while building **B-269**, 2026-09-07; the GENERATED half of a promotion's terms is keys and numbers by that item, and this is the half that cannot be) |
 | D-130 | **What language a message composes itself in when the recipient has no `Tenant` row, or no request to read a cookie from** (settled while building **B-265**, 2026-09-07; the templated path has read `recipient.locale` since **B-261**, and the nine `sendDirectEmail` sends bypass it) |
+| D-131 | **Auction channel — live on-site sales versus online** (master PRD §8 open question 9, answered by the owner **2026-09-09**. Open since the master PRD was written; **blocking** since **D-63** (2026-08-18) split **B-129** out rather than answer it by building a driver, and deliberately left unanswered again by **D-104** (2026-08-29) when B-129 shipped the lot sheet — the half that is neutral between the two. Answered at a desk, at the request of a session with an empty buildable queue, rather than out of building a row) |

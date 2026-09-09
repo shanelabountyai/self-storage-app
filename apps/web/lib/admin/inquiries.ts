@@ -272,7 +272,7 @@ export async function joinWaitlistForLead(
     where: { id: leadId },
     select: { id: true, facilityId: true, firstName: true, phone: true, status: true, contactedAt: true },
   })
-  if (!lead.facilityId) return { ok: false, problem: 'This inquiry is not attached to a facility.' }
+  if (!lead.facilityId) return { ok: false, problem: { key: 'err.waitlistNoFacility' } }
 
   assertFacilityAccess(actor, lead.facilityId)
   if (!can(actor, 'tenants:edit', lead.facilityId)) {

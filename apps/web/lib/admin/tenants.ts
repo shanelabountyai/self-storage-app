@@ -90,7 +90,10 @@ export const TENANT_SEARCH_LIMIT = 25;
 export type TenantSearchResult = {
   tenantId: string;
   name: string;
-  email: string;
+  /// Null since D-111 — a renter may have no email address. Staff screens say
+  /// so in words rather than rendering an empty cell, because "no address on
+  /// file" and "this column failed to load" look identical when blank.
+  email: string | null;
   phone: string | null;
   units: { facilityName: string; unitNumber: string }[];
 };
@@ -288,7 +291,8 @@ export type TenantProfile = {
   tenantId: string;
   firstName: string;
   lastName: string;
-  email: string;
+  /// Null since D-111. See `TenantSearchResult.email`.
+  email: string | null;
   phone: string | null;
   altContactName: string | null;
   altContactPhone: string | null;

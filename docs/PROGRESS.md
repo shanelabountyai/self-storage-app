@@ -11,8 +11,8 @@ It complements rather than duplicates:
 - `git log` — the change-by-change record
 - `README.md` — how the built thing works today
 
-**Status:** 268 of 276 backlog items complete. Latest entry: B-273 (`482abe6`).
-**Entries:** 298 across 21 part files.
+**Status:** 273 of 281 backlog items complete. Latest entry: B-273 (`53d425f`).
+**Entries:** 303 across 21 part files.
 
 ## Reading one entry
 
@@ -341,9 +341,14 @@ Append the entry as a `### ` heading at the end of the **highest-numbered** file
 | B-264 — The lead form on a Spanish facility page is Spanish (2026-09-06) | `d17f86b` | [20-from-b-258](progress/20-from-b-258.md#b-264-the-lead-form-on-a-spanish-facility-page-is-spanish-2026-09-06) |
 | B-267 — the reservation form on a Spanish facility page is Spanish (2026-09-07) | `5a1cf0c` | [20-from-b-258](progress/20-from-b-258.md#b-267-the-reservation-form-on-a-spanish-facility-page-is-spanish-2026-09-07) |
 | B-266 — the promo code answers in the renter’s own language, applied or refused (2026-09-07) | `a0f82e4` | [20-from-b-258](progress/20-from-b-258.md#b-266-the-promo-code-answers-in-the-renters-own-language-applied-or-refused-2026-09-07) |
-| B-272 — English contract prose renders under `<html lang="es">`, and no scan can see it (2026-09-07) | `510e866` | [20-from-b-258](progress/20-from-b-258.md#b-272-english-contract-prose-renders-under-html-langes-and-no-scan-can-see-it-2026-09-07) |
+| B-276 — English contract prose renders under `<html lang="es">`, and no scan can see it (2026-09-07) | `510e866` | [20-from-b-258](progress/20-from-b-258.md#b-276-english-contract-prose-renders-under-html-langes-and-no-scan-can-see-it-2026-09-07) |
 | B-268 — the page a Spanish reservation ends on is Spanish, date included (2026-09-07, `5f60cab`) | `5f60cab` | [21-from-b-268](progress/21-from-b-268.md#b-268-the-page-a-spanish-reservation-ends-on-is-spanish-date-included-2026-09-07-5f60cab) |
 | B-269 — a promotion's own terms, in the reader's language (2026-09-07, `e8e27dd`) | `e8e27dd` | [21-from-b-268](progress/21-from-b-268.md#b-269-a-promotions-own-terms-in-the-readers-language-2026-09-07-e8e27dd) |
 | B-265 — the emails composed in code, in the reader's language (2026-09-07, `0e8f611`) | `0e8f611` | [21-from-b-268](progress/21-from-b-268.md#b-265-the-emails-composed-in-code-in-the-readers-language-2026-09-07-0e8f611) |
-| B-271 — a live log that ends in the past (2026-09-08, `864e6f0`) | `864e6f0` | [21-from-b-268](progress/21-from-b-268.md#b-271-a-live-log-that-ends-in-the-past-2026-09-08-864e6f0) |
-| B-273 — the staff mirror: English under `lang="es"`, and Spanish under `lang="en"` (2026-09-08, `482abe6`) | `482abe6` | [21-from-b-268](progress/21-from-b-268.md#b-273-the-staff-mirror-english-under-langes-and-spanish-under-langen-2026-09-08-482abe6) |
+| B-275 — a live log that ends in the past (2026-09-08, `864e6f0`) | `864e6f0` | [21-from-b-268](progress/21-from-b-268.md#b-275-a-live-log-that-ends-in-the-past-2026-09-08-864e6f0) |
+| B-277 — the staff mirror: English under `lang="es"`, and Spanish under `lang="en"` (2026-09-08, `482abe6`) | `482abe6` | [21-from-b-268](progress/21-from-b-268.md#b-277-the-staff-mirror-english-under-langes-and-spanish-under-langen-2026-09-08-482abe6) |
+| B-270 — the waitlist form, in the reader's language (2026-09-09, `5cfe382`) | `5cfe382` | [21-from-b-268](progress/21-from-b-268.md#b-270-the-waitlist-form-in-the-readers-language-2026-09-09-5cfe382) |
+| B-238 — a renter with no email address can be leased (2026-09-09, `017d77f`) | `017d77f` | [21-from-b-268](progress/21-from-b-268.md#b-238-a-renter-with-no-email-address-can-be-leased-2026-09-09-017d77f) |
+| B-271 — the counter says so before it puts a walk-in on somebody else's account (2026-09-09, `c31f85c`) | `c31f85c` | [21-from-b-268](progress/21-from-b-268.md#b-271-the-counter-says-so-before-it-puts-a-walk-in-on-somebody-elses-account-2026-09-09-c31f85c) |
+| B-272 — the two carried gaps nobody owned (2026-09-09, `e624977`) | `e624977` | [21-from-b-268](progress/21-from-b-268.md#b-272-the-two-carried-gaps-nobody-owned-2026-09-09-e624977) |
+| B-273 — a one-field refusal announces the refusal, not a count of fields (2026-09-09, `53d425f`) | `53d425f` | [21-from-b-268](progress/21-from-b-268.md#b-273-a-one-field-refusal-announces-the-refusal-not-a-count-of-fields-2026-09-09-53d425f) |

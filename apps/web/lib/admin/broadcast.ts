@@ -58,7 +58,11 @@ export type BroadcastFilter = {
 
 export type BroadcastRecipient = {
   tenantId: string
-  email: string
+  /// Null since D-111 — a tenant may have no email address at all. Kept in the
+  /// list rather than filtered out of the query, so the operator's "143
+  /// tenants" still counts the property and the result says how many of them
+  /// could not be reached, instead of the number quietly shrinking.
+  email: string | null
   firstName: string
   lastName: string
   /// Every unit this tenant holds that the filter matched. Shown on the review
@@ -388,7 +392,17 @@ export async function sendBroadcast(actor: Actor, input: BroadcastInput): Promis
   // outage notice and no record of where it stopped.
   const unrenderable: string[] = []
 
+  // D-111 / B-238. A tenant with no email address at all — a different fact
+  // from a row that would not render, and counted separately so the audit
+  // context says which. Held the same way and for the same reason: one
+  // unreachable tenant must not abandon the sends queued behind them.
+  const unaddressable: string[] = []
+
   await inParallel(recipients, SEND_CONCURRENCY, async (recipient) => {
+    if (!recipient.email) {
+      unaddressable.push(recipient.tenantId)
+      return
+    }
     let rendered
     try {
       rendered = renderEmail(template, contextFor(recipient, facility, input, origin))
@@ -445,6 +459,7 @@ export async function sendBroadcast(actor: Actor, input: BroadcastInput): Promis
       unitNumbers: [...(input.filter.unitNumbers ?? [])],
       recipients: recipients.length,
       unrenderable: unrenderable.length,
+      unaddressable: unaddressable.length,
       subject: input.subject,
       // The wording, not just the count. "What exactly did you tell them" is
       // the question a complaint asks, and the `Message` bodies answer it only
@@ -460,8 +475,9 @@ export async function sendBroadcast(actor: Actor, input: BroadcastInput): Promis
     sent: total('sent', 'delivered'),
     suppressed: total('suppressed'),
     cancelled: total('cancelled'),
-    // The unrenderable rows are failures and are counted as such, so the four
-    // numbers plus nothing else always add up to `recipients`.
-    failed: total('failed') + unrenderable.length,
+    // The unrenderable and unaddressable rows are failures and are counted as
+    // such, so the four numbers plus nothing else always add up to
+    // `recipients`.
+    failed: total('failed') + unrenderable.length + unaddressable.length,
   }
 }

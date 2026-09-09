@@ -9,6 +9,7 @@ import {
   useId,
   useRef,
 } from 'react'
+import { MessageSegments } from '@/components/message-segments'
 import { IDLE_FORM_STATE, type FormState } from '@/lib/admin/form-state'
 import { RecoveryCodes } from '@/components/auth/recovery-codes'
 import { useAnnounceOutside } from '@/components/admin/announce'
@@ -178,9 +179,23 @@ export function AdminForm({
               : 'col-span-full text-sm font-medium text-green-700'
           }
         >
-          {(state.status === 'success' && !announceOutside) || state.status === 'confirm'
-            ? state.message
-            : ''}
+          {/* B-272. `messageParts` when the action supplied them, which is the
+              one case where this sentence contains a run in another language
+              — the checkout's applied-code confirmation quoting an operator's
+              own terms (D-129). Joining the parts reproduces `message`, so
+              this is the same sentence either way and every other action here
+              falls through to the string it always returned. */}
+          {state.status === 'success' && !announceOutside ? (
+            state.messageParts && state.messageParts.length > 0 ? (
+              <MessageSegments segments={state.messageParts} />
+            ) : (
+              state.message
+            )
+          ) : state.status === 'confirm' ? (
+            state.message
+          ) : (
+            ''
+          )}
         </p>
 
         {/* Outside the live region on purpose. A list the user has to read,
