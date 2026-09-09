@@ -1,76 +1,64 @@
 # Next
 
-**Pick up B-274.** It is the only buildable row and it did not exist yesterday.
-([06-backlog.md](docs/prds/06-backlog.md), row `83aa`)
+**The buildable queue is empty.** B-274 was the only row on it and it shipped
+(`2822230`). Nothing below is a build session's to start without either an
+owner decision, a credential, or a new review pass.
 
-The 2026-09-09 session found the queue empty and asked; the owner answered
-**master PRD §8 OQ-9 — the auction channel — as online, with the manner of sale
-a per-facility setting (D-131)**. No code shipped. What the answer produced is
-one row, and it needs no credentials, no partner and no decision.
+## The choice for the next session
 
-## B-274 — nothing in the product says where a unit will be sold
+**A seventh review pass is the only thing that produces buildable rows.** The
+last was 2026-08-25 (B-187–B-196) for the reviewer block; B-224–B-251 on
+2026-09-01 was the sixth. Everything from B-197 on came from a reviewer report
+or a previous item's left-behind note, and B-274 came from an ANSWER — a
+provenance that has happened exactly once and cannot be relied on twice.
 
-`EXAMPLE_SALE_STATEMENTS` in `packages/core/notices/templates.ts` hedges the
-whole consequence to *"the property may be advertised and sold to satisfy the
-lien... governed by state law"*, and **no field in the schema carries a sale
-venue**. Correct about the law, useless to the person receiving it: a tenant who
-wants to attend, bid, or send a relative to buy their own property back cannot
-learn from anything this product mails them whether the sale is at the facility
-on a Saturday or on a website — and if a website, which one.
+Run the three reviewers (`storage-operator`, `ux-reviewer`,
+`accessibility-reviewer`) over **B-252 onward** and hand the findings to
+`product-owner` to write as rows, the way the six previous blocks were built.
+Each reviewer declares its own model tier; do not let them inherit Opus.
 
-**Build:** `Facility.auctionSaleManner` (`online` | `live_onsite`, seeded
-`online`) plus a venue string the `online` value requires, with its control on
-`/admin/settings/delinquency` beside `auctionSaleTerms` — same page, same item,
-because a column that configures behaviour ships with its form field. Two
-consumers, both silent today: the pre-lien and lien `saleStatement`, and the lot
-sheet (`/admin/auctions/lots.csv`).
+## One real gap this item found, and it needs an owner decision
 
-**Three things the row must not do**, and they are in the row text:
+**`db:migrate:cloud` now refuses with P3005 — "the database schema is not
+empty".** The Neon dev branch has a schema and no `_prisma_migrations`
+baseline, so `migrate deploy` will not write a first row into it. This is not
+new and B-274 did not cause it: it is the same condition B-272 recorded as "the
+116 the `.env.local` half reports as unapplied", presenting as an error instead
+of a count now that there is a migration to apply.
 
-1. **No marketplace driver.** B-129 stays open on the partner agreement, D-63
-   stands, advertising stays `AuctionAdvertisement` rows a person types.
-2. **`live_onsite` is not a degraded branch.** D-131 kept it first-class; a
-   single-facility operator running their own sale is a supported answer.
-3. **A null venue on an `online` facility is a refusal, not a blank.** A notice
-   naming no site is worse than the hedge it replaces, so `auctionReadiness`
-   gains the check and `/admin/auctions` names the facility — the same way it
-   already names every other dropped-lot blocker.
+**Nothing was done about it, deliberately.** Baselining is a deliberate act
+against shared cloud infrastructure and is precisely what B-253 exists to stop
+happening as a side effect of an ordinary item. It wants a D-number and a row,
+not a keystroke at a prompt. Local (`storage_test` schema) and e2e (`public`)
+both carry `20260909224550_auction_sale_manner`.
 
-Every word of the new statement is draft legal text under D-10 and keeps the
-attorney-review caveat.
-
-## The blocked list is five now, not six
-
-B-129 lost one of its two blockers and kept the harder one. Still not a build
-session's to start:
+## The blocked list is still five, plus B-129
 
 | Row | Blocked on | Kind |
 |---|---|---|
 | **B-254** — `LAST_REVIEWED` never moves | **D-115** — a real VoiceOver/NVDA pass by a person | owner action |
-| **B-129** — auction marketplace driver | partner agreement (OQ-9 no longer) | credentials |
+| **B-129** — auction marketplace driver | partner agreement | credentials |
 | **B-243** — returned certified mail | a real provider key; D-63 forbids a simulator | credentials |
 | **B-085** — first real gate-vendor driver | partner agreement | credentials |
 | **B-133** — Google reviews / GBP sync | approved GBP application | credentials |
 | **B-134** — authored size-page copy | a real portfolio tripping D-77's gate | a trigger that has not fired |
 
-**B-254 is still the most valuable thing on this list and still not mine to do.**
-A person runs a screen reader through move-in and payment; no agent may tick it.
+**B-254 is still the most valuable thing on this list and still not mine to
+do.** A person runs a screen reader through move-in and payment; no agent may
+tick it.
 
-After B-274 the queue is empty again. **A seventh review pass is the only thing
-that produces buildable rows** — the last was 2026-08-25 (B-187–B-196), and
-everything from B-197 on came from a reviewer report or a previous item's
-left-behind note.
+## What B-274 learned
 
-## What answering OQ-9 learned
+**A row can pre-decide its refusals and still leave the interesting judgement
+open.** The row said a null venue is "a refusal, not a blank" and named
+`auctionReadiness` and `/admin/auctions` as the surfaces — it did not say what
+the NOTICE does in that state. The answer is that it renders the old hedge word
+for word, because the refusal belongs on the sale rather than on a pre-lien
+notice for a half-configured facility, and because readiness blocking is what
+guarantees the hedge can never be the last thing a tenant is told. That is
+recorded in `PROGRESS.md` rather than left to be re-derived.
 
-**An open question can hide a gap that has nothing to do with the question.**
-OQ-9 asked which channel; the product's actual defect was that it names no
-channel at all, to anybody, ever. Three items (B-062, B-083, B-129) built
-around that question and none of them noticed the notice was silent, because
-each was checking whether it could answer OQ-9 rather than what OQ-9's absence
-was costing. **The row a decision unblocks is not always the row it was blocking.**
-
-**B-129's own row cited the wrong PRD section for two weeks.** It said "master
-PRD §11 OQ-9"; the open questions are §8 and there is no §11. Corrected in the
-row and in the numbering note. Nobody followed the reference, which is the
-point — a citation that is never checked is a citation that can be wrong.
+**A required field on an input type is a gate a test cannot be.** Making
+`saleManner`/`saleVenue` required on `ReadinessInput` rather than optional is
+what stops a future caller failing open into the exact silence this row closed
+— and the compiler then named the single fixture that needed updating.
