@@ -9059,7 +9059,7 @@ Migration `20260909152814_tenant_email_optional`: drop `tenant_email_key`, drop 
 
 **Test verification.** Typecheck clean including `tsconfig.tests.json`. Lint clean — 6 warnings, all pre-existing `_prev`/`_formData`, unchanged in count from B-238. Schema drift clean against `.env.test`; no migration. `npm run build` green. Unit suite **4,397 passed, 8 skipped across 256 files passed and 1 skipped — reconciled to 4,405**, exactly +5 on B-238's 4,400, which is the five tests added. `tests/checkout-details-db.test.ts` was run **twice** (B-120), because it creates tenants sharing one address and its `afterAll` reclaims them by email suffix. **The two assertions the row turns on are the ones a row-counting test would pass**: two DISTINCT ids holding the SAME address after a confirm, and a link (not a create) with the existing first name **unchanged** when staff did not confirm — the second is the additive-only property, which an unauthenticated form must not be able to break by typing a different name against a known address.
 
-## B-272 — the two carried gaps nobody owned (2026-09-09, `PENDING`)
+## B-272 — the two carried gaps nobody owned (2026-09-09, `e624977`)
 
 `NEXT.md` had named two gaps for four items running, under the heading "no row owns either": B-268's live confirmation state of `/reservations` had never been axe-scanned in either language, and B-269's three string-typed surfaces still lost their `lang` marking. Both were still open exactly as described, and one of the two descriptions turned out to be wrong.
 
