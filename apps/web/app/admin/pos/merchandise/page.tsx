@@ -157,7 +157,10 @@ export default async function MerchandisePage({
             <Field name="tenantId" label="Tenant" as="select" required className="flex flex-col gap-1 text-sm">
               {tenants.map((tenant) => (
                 <option key={tenant.tenantId} value={tenant.tenantId}>
-                  {tenant.name} — {tenant.email}
+                  {/* The address is here to tell two renters of the same name
+                      apart, so when there is none (D-111) the phone does that
+                      job instead of the option collapsing to a bare name. */}
+                  {tenant.name} — {tenant.email ?? tenant.phone ?? 'no email or phone'}
                 </option>
               ))}
             </Field>

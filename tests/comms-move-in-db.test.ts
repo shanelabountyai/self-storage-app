@@ -53,7 +53,7 @@ describeDb('comms: real seeded content', () => {
       data: { email: `comms-movein-${suffix}@example.com`, firstName: 'Ada', lastName: 'Renter' },
     })
     tenantId = tenant.id
-    tenantEmail = tenant.email
+    tenantEmail = tenant.email!
 
     const unitType = await prisma.unitType.create({
       data: { facilityId, name: `10x10 ${suffix}`, widthFt: 10, lengthFt: 10 },

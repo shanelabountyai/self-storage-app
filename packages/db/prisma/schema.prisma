@@ -1139,7 +1139,29 @@ model UnitStatusHistory {
 
 model Tenant {
   id                           String    @id @default(cuid())
-  email                        String    @unique
+  /// **Nullable and non-unique since D-111 (B-238).** It was `String @unique`,
+  /// and that constraint turned three ordinary renters away at the counter: the
+  /// contractor with no email, the elderly tenant whose daughter handles the
+  /// account, and the husband and wife who each want their own account on one
+  /// household inbox. The workaround was the harmful part — staff typed
+  /// `nobody@example.com`, and then the receipt, the dunning ladder, the
+  /// lien-notice supplement and the pay link all went into a hole, on the
+  /// account most likely to end up in a lien file.
+  ///
+  /// Null means **no email address**, which is a fact and not a gap: the
+  /// alternative contact of record is `phone` or the postal address, and the
+  /// comms layer has a defined behaviour for it — `raiseNoReachableChannel`
+  /// records the message `failed` and opens a `no_reachable_channel` task, so
+  /// an unreachable tenant is a thing on somebody's list rather than silence.
+  /// Notice generation snapshots the postal address it rendered (D-21), so the
+  /// lien path never depended on this column.
+  ///
+  /// **Non-unique has a sign-in consequence, and it is deliberate**: an address
+  /// shared by two tenants identifies neither, so `findAccount` resolves it to
+  /// nobody rather than guessing — signing somebody into their spouse's account
+  /// is a worse failure than an address that cannot sign in. The counter says so
+  /// at the point it creates the second one.
+  email                        String?
   /// Optional forever — magic-link sign-in is a first-class path, not just
   /// onboarding (PRD 01 FR-5.1). Never a plaintext or reversible value.
   passwordHash                 String?
@@ -1230,6 +1252,11 @@ model Tenant {
   billingAccountMemberships BillingAccountMember[]
 
   @@index([lastName, firstName])
+  /// D-111 dropped `@unique` from `email`, which took its index with it — and
+  /// every sign-in, every magic link and every checkout looks a tenant up by
+  /// address. A plain index, because the lookup stayed and only the constraint
+  /// went.
+  @@index([email])
   @@map("tenant")
 }
 

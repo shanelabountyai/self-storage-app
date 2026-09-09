@@ -713,6 +713,12 @@ export const en = {
   'details.email': 'Email',
   'details.emailHint':
     'This is your account. We send your lease, receipt and gate code here — no password needed.',
+  // D-111 / B-238. The counter's version, and SC 3.3.2's whole point: it names
+  // what is lost rather than saying "optional". A renter who hears the list and
+  // still has no address has made a choice; staff who see only "(optional)"
+  // invent `nobody@example.com`, which is the harm the row is about.
+  'details.emailHintOptional':
+    'Optional. Without it there is no online account: no emailed receipt, no pay link, and no notice when a payment is late or a unit is scheduled for sale — those go by post and phone instead. Leave it blank rather than entering an address that is not theirs.',
   'details.phone': 'Mobile number',
   'details.address1': 'Street address',
   'details.address2': 'Flat, suite or unit (optional)',

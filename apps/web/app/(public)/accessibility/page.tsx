@@ -2169,6 +2169,46 @@ function reviewedOn(locale: Locale): string {
 //
 // `LAST_REVIEWED` is not bumped, per D-115 — no manual screen-reader pass was
 // performed, and this item performed none.
+//
+// Re-verified 2026-09-09, at B-238 (a renter with no email address can be
+// leased — D-111). Customer-facing: it changes one field on checkout step 1,
+// which is the first screen a renter meets after "Rent now".
+//
+// **What it adds is an instruction, and that is the whole accessibility
+// content of the row.** Where the email field stops being required — only on a
+// counter-started session, never on the public site — it carries a `hint`
+// naming what the renter loses by leaving it blank: no emailed receipt, no pay
+// link, and no notice when a payment is late or a unit is scheduled for sale.
+// `Field` wires `hint` into `aria-describedby`, so that is **SC 3.3.2 Labels or
+// Instructions (A)** satisfied programmatically rather than by an asterisk.
+// The row's own backlog text is explicit that dropping `required` and leaving
+// the field silently optional is the version that produces
+// `nobody@example.com`, so the instruction is the feature and not decoration.
+//
+// **This state is NOT axe-scanned, and that is a real gap rather than a
+// rounding of one.** The optional rendering appears only when the session
+// carries `acquisitionSource: 'walk_in'`, which no URL reaches — the same
+// route-versus-state problem **B-184** owns, and the same shape as the
+// checkout branches the B-149 and B-172 entries above argued about. `/checkout`
+// stays in the scanned set at its ordinary rendering and gains no route and no
+// new exception, because the field, its label, its error and its live region
+// are unchanged in structure; what differs is one `required` attribute and
+// which of two hint strings is read. Nothing here is asserted as scanned that
+// was not scanned.
+//
+// **No claim below changes.** The "Where we fall short" list was re-read
+// against this build and is still true and still correctly scoped. The
+// generated coverage claim and the route-keyed exception list are untouched.
+//
+// **Two strings were added in both languages**, so this introduces no 3.1.2
+// gap of its own: `details.emailHintOptional` exists in `en` and `es`, and the
+// step already renders in whichever language the renter is reading. The
+// caveat the B-270 entry states still applies unchanged — the scan loops carry
+// no locale cookie, so the Spanish rendering of this hint is unscanned in
+// exactly the way the rest of the public site's Spanish is.
+//
+// `LAST_REVIEWED` is not bumped, per D-115. No manual screen-reader pass was
+// performed, and this item performed none.
 
 export default async function AccessibilityPage() {
   const locale = await getLocale()

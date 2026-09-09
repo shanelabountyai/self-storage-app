@@ -43,11 +43,16 @@ export function DetailsStep({
   token,
   prefill,
   manualLocality = false,
+  emailOptional = false,
   dict,
   locale,
 }: {
   token: string
   prefill: Partial<DetailsInput>
+  /// D-111 / B-238. True only on a counter-started session
+  /// (`emailOptionalFor`), where the renter in front of staff may genuinely
+  /// have no address. Defaults false, so the public site is unchanged.
+  emailOptional?: boolean
   /// True only when the stored city/state DISAGREE with what the zip derives —
   /// which is the only way they got there by hand. Without the distinction the
   /// disclosure would spring open on every return visit, because the session
@@ -91,6 +96,15 @@ export function DetailsStep({
         defaultValue={prefill.lastName ?? ''}
         required
       />
+      {/* B-238's accessibility criterion, SC 3.3.2 Labels or Instructions (A):
+          where this field stops being required, the consequence of leaving it
+          blank is a programmatic instruction ON the control — `hint` wires into
+          `aria-describedby` — and it NAMES what the renter loses: no receipt,
+          no pay link, no dunning notice, no lien-notice supplement. Dropping
+          `required` and leaving the field silently optional is the version that
+          produces `nobody@example.com`, which is the harm B-238 is about. A
+          blank the renter chose is a fact; a blank nobody explained is a hole
+          in the dunning ladder. */}
       <Field
         name="email"
         label={t('details.email')}
@@ -98,9 +112,9 @@ export function DetailsStep({
         inputMode="email"
         autoComplete="email"
         defaultValue={prefill.email ?? ''}
-        required
+        required={!emailOptional}
         className="flex flex-col gap-1 text-sm sm:col-span-2"
-        hint={t('details.emailHint')}
+        hint={t(emailOptional ? 'details.emailHintOptional' : 'details.emailHint')}
       />
       <Field
         name="phone"

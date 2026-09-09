@@ -25,6 +25,7 @@ import { offerFor } from '@/lib/promotions/service'
 import { offerTermsText } from '@/lib/promotions/terms'
 import { defaultNotificationPreference, isMarketingQuietHours, isSmsQuietHours, normalizePhoneE164, tableHtml } from '@storage/core/comms'
 import { currentConsent } from '@storage/core/consent'
+import { createTask } from '@/lib/admin/tasks'
 import { mintUnsubscribeToken, unsubscribeUrl } from './unsubscribe-token'
 import { mintCheckoutResumeToken, checkoutResumeUrl } from '@/lib/checkout/resume-token'
 import {
@@ -1698,6 +1699,75 @@ type DeliveryOutcome = 'sent' | 'suppressed' | 'cancelled' | 'failed' | 'skipped
 /// Upserts the append-only Message row for one (event, rule, recipient, channel)
 /// to a terminal state. Keyed by the idempotency key, so a redelivery lands on
 /// the same row instead of a duplicate.
+/// **A recipient with no email address, recorded as a thing on somebody's list
+/// — D-111 / B-238.**
+///
+/// Until `Tenant.email` became nullable this branch described a rare accident
+/// (a reservation or lead with no address). D-111 made it an ordinary,
+/// deliberate state: the contractor with no email, the elderly tenant whose
+/// daughter handles the account. What it did NOT do is make silence acceptable
+/// — the whole argument for allowing a blank address was that the alternative,
+/// `nobody@example.com`, sends a receipt, a dunning notice and a lien-notice
+/// supplement into a hole *without telling anyone*. A `failed` row nobody reads
+/// is the same hole with better bookkeeping.
+///
+/// So the message is still written `failed` — the log keeps saying we did not
+/// reach this person, which is the answer a lien file asks for — and a
+/// `no_reachable_channel` task now opens beside it. That is the same task type
+/// the bounce path raises (`lib/comms/delivery.ts`), the same one CN-19's
+/// failure queue counts, and the same one `/admin/reports/deliverability`
+/// already links to; the tenant unreachable because they never had an address
+/// and the tenant unreachable because theirs bounced are the same problem for
+/// the staff member who has to go and get a phone number.
+///
+/// **Both dead-ends route through here, not just the one D-111 widened.** The
+/// SMS-fallback path had its own copy of the write, and a guard added to the
+/// caller the row happened to name would have left its sibling still silent.
+/// `error` still distinguishes them for anyone reading the message log.
+///
+/// The task needs a facility and a tenant to hang off, and a lead or an
+/// anonymous reservation has neither — those write the failure alone, exactly
+/// as before. Nothing here throws: `createTask` failing must not turn a
+/// recorded failure into an unrecorded one.
+async function noReachableEmail(
+  idempotencyKey: string,
+  base: {
+    event: DomainEvent
+    ruleId: string
+    templateKey: string
+    classification: MessageClassification
+    recipient: Recipient
+  },
+  error: string,
+): Promise<DeliveryOutcome> {
+  await writeMessage(idempotencyKey, {
+    ...base,
+    templateVersion: 0,
+    toAddress: '',
+    subject: null,
+    body: '',
+    status: 'failed',
+    error,
+  })
+
+  const { tenantId, facility } = base.recipient
+  if (tenantId && facility) {
+    await createTask({
+      facilityId: facility.id,
+      type: 'no_reachable_channel',
+      entityType: 'Tenant',
+      entityId: tenantId,
+      priority: 'high',
+      // B-169's one sentence of context: the card otherwise says only that a
+      // channel is unreachable, and "has no address on file" and "their
+      // address bounced" want different things done about them.
+      detail: `No email address on file — ${base.templateKey} could not be sent.`,
+    })
+  }
+
+  return 'failed'
+}
+
 async function writeMessage(
   idempotencyKey: string,
   data: {
@@ -1813,11 +1883,11 @@ async function sendEmailFallback(
   base: { event: DomainEvent; ruleId: string; templateKey: string; classification: MessageClassification; recipient: Recipient },
 ): Promise<DeliveryOutcome> {
   if (!recipient.email) {
-    await writeMessage(idempotencyKey, {
-      ...base, templateVersion: 0, toAddress: '', subject: null, body: '',
-      status: 'failed', error: 'no reachable email address (sms fallback)',
-    })
-    return 'failed'
+    return await noReachableEmail(
+      idempotencyKey,
+      base,
+      'no reachable email address (sms fallback)',
+    )
   }
   const address = recipient.email.toLowerCase()
 
@@ -2157,19 +2227,10 @@ async function deliverForRule(
     return 'cancelled'
   }
 
-  // No reachable email is a real dead-end (CN-19 will make this a staff task);
-  // recorded as a failure so it is visible rather than silently dropped.
+  // No reachable email is a real dead-end. CN-19's staff task is now raised
+  // rather than promised — see `noReachableEmail`.
   if (!recipient.email) {
-    await writeMessage(idempotencyKey, {
-      ...base,
-      templateVersion: 0,
-      toAddress: '',
-      subject: null,
-      body: '',
-      status: 'failed',
-      error: 'no reachable email address',
-    })
-    return 'failed'
+    return await noReachableEmail(idempotencyKey, base, 'no reachable email address')
   }
   const address = recipient.email.toLowerCase()
 

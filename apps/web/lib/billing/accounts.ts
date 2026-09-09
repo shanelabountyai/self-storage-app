@@ -58,8 +58,11 @@ export function payableLeaseWhere(tenantId: string): Prisma.LeaseWhereInput {
 
 export type AccountMember = {
   tenantId: string
+  /// Null since D-111 — a member is a tenant, and a tenant may have none. They
+  /// were still added by somebody typing an address, so in practice this is set;
+  /// it is nullable because a member's address can be cleared afterwards.
+  email: string | null
   name: string
-  email: string
   since: Date
 }
 
@@ -76,7 +79,8 @@ export type AccountSummary = {
   name: string
   payerTenantId: string
   payerName: string
-  payerEmail: string
+  /// Null since D-111. The payer is a tenant like any other.
+  payerEmail: string | null
   leaseCount: number
   monthlyRateCents: number
   balanceCents: number
@@ -240,23 +244,39 @@ export async function accountDetail(
 /// Creating one from either form would mint an identity that can sign in and
 /// see other people's balances, which is a move-in's job and not this screen's.
 ///
-/// **This is also where D-111 lands, and B-258 deliberately leaves it there.**
-/// `Tenant.email` is required and unique, so two people sharing one household
-/// address cannot both be tenants and therefore cannot both be members. That is
-/// the same constraint that stops a husband and wife each having an account;
-/// B-238 owns it, and a second answer invented here would be a second answer to
-/// contradict.
+/// **D-111 is now ANSWERED, and the answer reaches this function.** B-258 left
+/// the question here because `Tenant.email` was required and unique, so two
+/// people at one household inbox could not both be tenants and therefore could
+/// not both be members. B-238 dropped that constraint: they can now both exist,
+/// which means an address typed into this form can name two people.
+///
+/// It refuses rather than picking one. Every use of this function attaches
+/// somebody to an account — as its payer, who moves money, or as a member, who
+/// sees what the units owe and who rents them — and attaching the wrong half of
+/// a married couple to a business account is a disclosure nobody can undo by
+/// noticing later. `take: 2` because the only question is "more than one".
+///
+/// The same reasoning as `findAccount`'s, in the same shape, for the same
+/// reason: an address shared by two tenants identifies neither.
 async function existingTenantByEmail(
   raw: string,
   field: string,
   then: string,
 ): Promise<{ id: string; email: string }> {
   const email = raw.trim().toLowerCase()
-  const tenant = await prisma.tenant.findUnique({
-    where: { email },
-    select: { id: true, deletedAt: true },
+  const matches = await prisma.tenant.findMany({
+    where: { email, deletedAt: null },
+    select: { id: true },
+    take: 2,
   })
-  if (!tenant || tenant.deletedAt) {
+  if (matches.length > 1) {
+    throw new AccountError(
+      field,
+      `Two tenants here have the email ${email}, so it does not say which person you mean. Give one of them their own address on their tenant record first, then ${then}.`,
+    )
+  }
+  const tenant = matches[0]
+  if (!tenant) {
     throw new AccountError(
       field,
       `No tenant here has the email ${email}. Add them as a tenant first, then ${then}.`,

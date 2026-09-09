@@ -18,6 +18,7 @@ import {
   upsertTenantForCheckout,
   validateDeclarations,
   validateDetails,
+  emailOptionalFor,
 } from '@/lib/checkout/details'
 import { prisma } from '@storage/db'
 import { formatRate } from '@/lib/format'
@@ -112,7 +113,14 @@ export async function submitDetailsAction(
   // D-51 (B-123). Its own box, never inferred from the two above.
   const marketingSmsChecked = formData.get('marketingSmsConsent') === 'yes'
 
-  const errors = validateDetails(input)
+  // D-111 / B-238. Whether this session may omit an address is the SESSION's
+  // fact, not the form's — a hidden field saying "email optional" would be a
+  // hidden field anyone can set. Read from the same `emailOptionalFor` the step
+  // rendered the field from, so the rule and the control cannot disagree.
+  const session = await sessionByToken(token)
+  const emailOptional = emailOptionalFor(session?.data)
+
+  const errors = validateDetails(input, { emailOptional })
   if (Object.keys(errors).length > 0) return keyedFieldError(errors, t)
 
   // B-112: city and state come from the zip unless the renter opened the

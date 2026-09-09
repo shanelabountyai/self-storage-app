@@ -124,7 +124,7 @@ describeDb('broadcast (CN-21)', () => {
     ).id
     const bTenant = await tenantWithUnits('building-b', [{ number: `B-01-${suffix}`, building: 'B' }])
     buildingBTenantId = bTenant.id
-    buildingBEmail = bTenant.email
+    buildingBEmail = bTenant.email!
     // A former tenant, who is not a channel (D-30).
     await tenantWithUnits('moved-out', [{ number: `C-01-${suffix}`, building: 'C' }], 'ended')
   })

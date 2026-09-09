@@ -46,6 +46,32 @@ const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 /// person with an unusual number. Anything with ten or more digits is dialable.
 const PHONE_DIGITS = /\d/g
 
+/// **Whether this checkout may omit an email address — D-111 / B-238.**
+///
+/// True for a counter-started session and nothing else. `startWalkInMoveInAction`
+/// stamps `acquisitionSource: 'walk_in'` on the session and hands staff into
+/// this same public checkout (deliberately — one set of move-in rules), so that
+/// stamp is the only fact distinguishing the two, and it is already trusted for
+/// how the lease reports its channel.
+///
+/// **The public site keeps email required, and that is the point of scoping it.**
+/// Online, the address is how the renter receives the lease they just signed,
+/// the gate code they need to get in, and the receipt — FR-5.1 makes it the
+/// identifier for exactly that reason, and an optional field there would invite
+/// every self-serve renter to skip it. At the counter none of that holds: staff
+/// hand over the gate code and print the receipt, and the renter standing there
+/// may genuinely not have an address. That renter is who B-238 is about.
+///
+/// One definition, read by the step that renders the field and the action that
+/// validates it, so the form and the rule cannot disagree about which it is.
+export function emailOptionalFor(data: unknown): boolean {
+  return (
+    typeof data === 'object' &&
+    data !== null &&
+    (data as { acquisitionSource?: unknown }).acquisitionSource === 'walk_in'
+  )
+}
+
 /// Validation with a *suggestion* per error, not just an identification
 /// (3.3.3). The messages are the ones the renter reads, so they say what to do
 /// rather than what went wrong.
@@ -53,14 +79,22 @@ const PHONE_DIGITS = /\d/g
 /// B-263: message KEYS, not messages. This runs on the Spanish checkout as
 /// well as the English one, and it is pure — it has no request and no
 /// dictionary, so the caller resolves them.
-export function validateDetails(input: Partial<DetailsInput>): KeyedFieldErrors {
+export function validateDetails(
+  input: Partial<DetailsInput>,
+  /// D-111 / B-238. True only for a counter-started session (see
+  /// `emailOptionalFor`). A blank address is then accepted as a fact — this
+  /// renter has no email — instead of being refused into
+  /// `nobody@example.com`. A typed one is still format-checked: optional
+  /// means "may be absent", never "may be nonsense".
+  options: { emailOptional?: boolean } = {},
+): KeyedFieldErrors {
   const errors: KeyedFieldErrors = {}
 
   if (!input.firstName?.trim()) errors.firstName = { key: 'err.firstName' }
   if (!input.lastName?.trim()) errors.lastName = { key: 'err.lastName' }
 
   const email = input.email?.trim() ?? ''
-  if (!EMAIL.test(email)) {
+  if (!(options.emailOptional && email === '') && !EMAIL.test(email)) {
     errors.email = { key: 'err.email' }
   }
 
@@ -135,12 +169,30 @@ export async function upsertTenantForCheckout(
   created: boolean
 }> {
   const email = input.email.trim().toLowerCase()
-  const existing = await prisma.tenant.findUnique({ where: { email } })
+
+  // **A blank address links to nobody and always creates — D-111 / B-238.**
+  //
+  // `email` is optional only on a counter-started session (`emailOptionalFor`),
+  // and there it is a fact rather than a gap: this renter has no address. There
+  // is consequently nothing to match on, and matching on "no address" would be
+  // the worst possible identifier — every no-email renter at every facility
+  // would collapse into one tenant holding all of their leases. The renter in
+  // front of staff gets their own record; if they are a returning tenant, the
+  // tenant screen's merge is the deliberate way to say so.
+  //
+  // `findFirst`, not `findUnique`: the column is no longer unique, so two
+  // tenants may share a household inbox. The oldest match is the one an
+  // unauthenticated form may add to, which is the conservative half — this
+  // function is additive-only (see below), so linking to the earlier record can
+  // fill blanks on it and can overwrite nothing.
+  const existing = email === ''
+    ? null
+    : await prisma.tenant.findFirst({ where: { email }, orderBy: { createdAt: 'asc' } })
 
   if (!existing) {
     const tenant = await prisma.tenant.create({
       data: {
-        email,
+        email: email === '' ? null : email,
         firstName: input.firstName.trim(),
         lastName: input.lastName.trim(),
         phone: input.phone.trim(),

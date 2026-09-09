@@ -7,6 +7,7 @@ import {
   upsertTenantForCheckout,
   validateDeclarations,
   validateDetails,
+  emailOptionalFor,
 } from '../apps/web/lib/checkout/details'
 import { LOCALES, dictionaryFor, translate } from '../apps/web/lib/i18n'
 
@@ -32,6 +33,38 @@ const AUSTIN = { city: 'Austin', state: 'TX' }
 describe('validateDetails', () => {
   it('accepts a complete, ordinary set of details', () => {
     expect(validateDetails(VALID)).toEqual({})
+  })
+
+  // ── D-111 / B-238: the counter's optional address ──────────────────────────
+  //
+  // The public site keeps email REQUIRED (FR-5.1 — it is how a self-serve
+  // renter receives the lease, the gate code and the receipt). It becomes
+  // optional only on a counter-started session, where staff hand those over in
+  // person and the renter in front of them may genuinely have no address. The
+  // first assertion is the one that matters most: if it ever goes green
+  // unconditionally, every online renter has been invited to skip the field.
+  it('still refuses a blank address on the public checkout', () => {
+    expect(validateDetails({ ...VALID, email: '' }).email).toEqual({ key: 'err.email' })
+  })
+
+  it('accepts a blank address at the counter, which is what stops nobody@example.com', () => {
+    expect(validateDetails({ ...VALID, email: '' }, { emailOptional: true })).toEqual({})
+  })
+
+  // Optional means "may be absent", never "may be nonsense" — a typo'd address
+  // at the counter is still a typo, and accepting it would put the receipt and
+  // the dunning ladder into the same hole the placeholder did.
+  it('still format-checks an address that was typed at the counter', () => {
+    expect(validateDetails({ ...VALID, email: 'not-an-address' }, { emailOptional: true }).email)
+      .toEqual({ key: 'err.email' })
+  })
+
+  it('reads the counter from the session, not from the form', () => {
+    expect(emailOptionalFor({ acquisitionSource: 'walk_in' })).toBe(true)
+    expect(emailOptionalFor({ acquisitionSource: 'web' })).toBe(false)
+    expect(emailOptionalFor({})).toBe(false)
+    expect(emailOptionalFor(null)).toBe(false)
+    expect(emailOptionalFor(undefined)).toBe(false)
   })
 
   it('names a message key rather than building a sentence (B-263)', () => {
@@ -151,6 +184,40 @@ describeDb('implicit account creation', () => {
     expect(tenant.state).toBe('TX')
   })
 
+  // ── D-111 / B-238: the blank address, and the trap under it ────────────────
+  //
+  // This is the assertion the whole row turns on. A blank address is a FACT
+  // (this renter has no email), and the reflex fix — reuse the "existing"
+  // tenant whose email matches — matches every other no-email renter at every
+  // facility, because they all match each other. That would collapse the
+  // contractor, the elderly tenant and the next twenty walk-ins into ONE tenant
+  // record holding all of their leases, all of their ledgers and all of their
+  // gate codes. It would also pass a test that only counted rows.
+  it('gives every renter with no address their own record, never a shared one', async () => {
+    const first = await upsertTenantForCheckout({ ...VALID, email: '' }, AUSTIN, 'en')
+    const second = await upsertTenantForCheckout(
+      { ...VALID, email: '', firstName: 'Bruno' },
+      AUSTIN,
+      'en',
+    )
+
+    expect(first.created).toBe(true)
+    expect(second.created).toBe(true)
+    expect(second.tenantId).not.toBe(first.tenantId)
+
+    // Null, not '' — an empty string is an address, and it would make every
+    // one of these renters share one again through the ordinary lookup.
+    const rows = await prisma.tenant.findMany({
+      where: { id: { in: [first.tenantId, second.tenantId] } },
+      select: { email: true },
+    })
+    expect(rows.map((row) => row.email)).toEqual([null, null])
+
+    await prisma.tenant.deleteMany({
+      where: { id: { in: [first.tenantId, second.tenantId] } },
+    })
+  })
+
   it('reuses the account on a second move-in rather than making another', async () => {
     // FR-5.3: one account holds leases across facilities.
     const again = await upsertTenantForCheckout(
@@ -196,11 +263,11 @@ describeDb('implicit account creation', () => {
     // B-112 moved the alternate contact to the lease step; it is additive
     // there for exactly the same reason.
     await recordLeaseDeclarations(
-      (await prisma.tenant.findUniqueOrThrow({ where: { email } })).id,
+      (await prisma.tenant.findFirstOrThrow({ where: { email } })).id,
       { altContactName: 'Impostor Alternate' },
     )
 
-    const tenant = await prisma.tenant.findUniqueOrThrow({ where: { email } })
+    const tenant = await prisma.tenant.findFirstOrThrow({ where: { email } })
     expect(tenant.addressLine1).toBe('1 Real Street')
     expect(tenant.city).toBe('Austin')
     expect(tenant.state).toBe('TX')
@@ -215,7 +282,7 @@ describeDb('implicit account creation', () => {
 
     await upsertTenantForCheckout({ ...VALID, email }, AUSTIN, 'en')
 
-    const tenant = await prisma.tenant.findUniqueOrThrow({ where: { email } })
+    const tenant = await prisma.tenant.findFirstOrThrow({ where: { email } })
     expect(tenant.addressLine1).toBe(VALID.addressLine1)
     expect(tenant.postalCode).toBe('78704')
   })
@@ -265,7 +332,7 @@ describeDb('implicit account creation', () => {
 
     await upsertTenantForCheckout({ ...VALID, email }, AUSTIN, 'en')
 
-    const tenant = await prisma.tenant.findUniqueOrThrow({ where: { email } })
+    const tenant = await prisma.tenant.findFirstOrThrow({ where: { email } })
     expect(tenant.preferredLocale).toBe('es')
   })
 
@@ -277,11 +344,11 @@ describeDb('implicit account creation', () => {
       data: { email, firstName: 'Real', lastName: 'Tenant' },
     })
     expect(
-      (await prisma.tenant.findUniqueOrThrow({ where: { email } })).preferredLocale,
+      (await prisma.tenant.findFirstOrThrow({ where: { email } })).preferredLocale,
     ).toBeNull()
 
     await upsertTenantForCheckout({ ...VALID, email }, AUSTIN, 'es')
 
-    expect((await prisma.tenant.findUniqueOrThrow({ where: { email } })).preferredLocale).toBe('es')
+    expect((await prisma.tenant.findFirstOrThrow({ where: { email } })).preferredLocale).toBe('es')
   })
 })

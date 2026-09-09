@@ -22,7 +22,7 @@ import {
 import { CallLink, phoneFor } from '@/components/marketing/call-link'
 import { WaitlistForm } from '@/components/marketing/waitlist-form'
 import { joinWaitlistAction } from '../storage/[state]/[city]/[slug]/waitlist-actions'
-import { prefillFromReservation } from '@/lib/checkout/details'
+import { emailOptionalFor, prefillFromReservation } from '@/lib/checkout/details'
 import { currentActor } from '@/lib/rbac/session'
 import { can } from '@/lib/rbac/authorize'
 import { localityForZip } from '@/lib/geo/geocode'
@@ -647,6 +647,10 @@ export default async function CheckoutPage({
               token={token!}
               prefill={detailsPrefill}
               manualLocality={manualLocality}
+              // D-111 / B-238. The same predicate `submitDetailsAction` reads,
+              // so the field that renders optional is the field the rule
+              // accepts blank.
+              emailOptional={emailOptionalFor(session.data)}
               dict={dict}
               locale={locale}
             />

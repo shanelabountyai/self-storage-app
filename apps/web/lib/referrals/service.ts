@@ -172,7 +172,13 @@ async function gatherFacts(input: {
   const last10 = (value: string | null) => (value ?? '').replace(/\D/g, '').slice(-10)
   const isSelfReferral =
     referee.id === invite.referrerTenantId ||
-    referee.email.trim().toLowerCase() === invite.referrerTenant.email.trim().toLowerCase() ||
+    // D-111: either address may be null, and two nulls are NOT a match — "no
+    // address" is not a shared identity, and treating it as one would refuse
+    // every referral between two tenants who happen to have none.
+    (referee.email !== null &&
+      invite.referrerTenant.email !== null &&
+      referee.email.trim().toLowerCase() ===
+        invite.referrerTenant.email.trim().toLowerCase()) ||
     (last10(referee.phone).length === 10 &&
       last10(referee.phone) === last10(invite.referrerTenant.phone))
 

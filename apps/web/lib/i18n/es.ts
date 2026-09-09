@@ -648,6 +648,10 @@ export const es: Dictionary = {
   'details.email': 'Correo electrónico',
   'details.emailHint':
     'Esta es su cuenta. Aquí le enviamos su contrato, su recibo y su código de la puerta — sin contraseña.',
+  // D-111 / B-238. La versión del mostrador — nombra lo que se pierde, no dice
+  // solo «opcional».
+  'details.emailHintOptional':
+    'Opcional. Sin él no hay cuenta en línea: ni recibo por correo electrónico, ni enlace de pago, ni aviso cuando un pago se atrasa o una unidad se programa para venta — eso va por correo postal y por teléfono. Déjelo en blanco antes que poner una dirección que no sea suya.',
   'details.phone': 'Número de celular',
   'details.address1': 'Dirección',
   'details.address2': 'Departamento, suite o unidad (opcional)',

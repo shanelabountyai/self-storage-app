@@ -28,7 +28,10 @@ export async function ensureStripeCustomer(tenantId: string): Promise<string> {
   const stripe = requireStripe()
   const customer = await stripe.customers.create(
     {
-      email: tenant.email,
+      // D-111: a tenant may have no address. Stripe treats an absent email as
+      // absent, which is the truth — the alternative is a Customer record
+      // carrying a placeholder that Stripe's own receipts would then try.
+      email: tenant.email ?? undefined,
       name: `${tenant.firstName} ${tenant.lastName}`.trim(),
       phone: tenant.phone ?? undefined,
       // Our id travels with the Stripe record so a support conversation that

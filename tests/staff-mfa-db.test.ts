@@ -300,8 +300,8 @@ describeDb('staff MFA (PRD 00 §7.1)', () => {
         data: { email: `mfa-t-${suffix}@example.com`, firstName: 'Ada', lastName: 'Renter' },
       })
       await setPassword(tenant.id, 'tenant', PASSWORD)
-      expect((await authenticateWithPassword(tenant.email, PASSWORD, 'tenant'))?.id).toBe(tenant.id)
-      await prisma.loginAttempt.deleteMany({ where: { email: tenant.email } })
+      expect((await authenticateWithPassword(tenant.email!, PASSWORD, 'tenant'))?.id).toBe(tenant.id)
+      await prisma.loginAttempt.deleteMany({ where: { email: tenant.email! } })
       await prisma.tenant.delete({ where: { id: tenant.id } })
     })
 

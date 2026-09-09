@@ -750,7 +750,9 @@ async function seedLifecycleStates(
       status: 'held',
       firstName: reserving.firstName,
       lastName: reserving.lastName,
-      email: reserving.email,
+      // `makeTenant` always sets one; `Reservation.email` is still required
+      // and `Tenant.email` is not (D-111), so the narrowing is stated here.
+      email: reserving.email ?? '',
       quotedRateCents: reservedSlot.rate,
       moveInDate: daysFromNow(3),
       expiresAt: daysFromNow(7),

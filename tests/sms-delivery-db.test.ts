@@ -219,7 +219,7 @@ describeDb('SMS delivery (FR-5/FR-7/FR-8)', () => {
 
   it('a genuine dead end (no phone, email suppressed) reaches neither channel', async () => {
     const tenant = await makeTenant({ phone: null })
-    await suppress({ channel: 'email', address: tenant.email.toLowerCase(), reason: 'hard_bounce', note: 'test' })
+    await suppress({ channel: 'email', address: tenant.email!.toLowerCase(), reason: 'hard_bounce', note: 'test' })
 
     const result = await raisePaymentMethodExpiring(tenant.id)
     expect(result.suppressed).toBe(1)
