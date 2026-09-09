@@ -1,58 +1,76 @@
 # Next
 
-**The buildable queue is EMPTY. Every open row is blocked on you, not on code,
-and this file no longer carries an unowned gap.**
-([06-backlog.md](docs/prds/06-backlog.md))
+**Pick up B-274.** It is the only buildable row and it did not exist yesterday.
+([06-backlog.md](docs/prds/06-backlog.md), row `83aa`)
 
-B-273 shipped on 2026-09-09 (`53d425f`). It took the one buildable thing this
-file named — `keyedFieldError` announcing a count instead of the refusal on a
-one-field form. **That gap is closed and nothing replaced it.**
+The 2026-09-09 session found the queue empty and asked; the owner answered
+**master PRD §8 OQ-9 — the auction channel — as online, with the manner of sale
+a per-facility setting (D-131)**. No code shipped. What the answer produced is
+one row, and it needs no credentials, no partner and no decision.
 
-**Six rows remain and not one of them is a build session's to start:**
+## B-274 — nothing in the product says where a unit will be sold
+
+`EXAMPLE_SALE_STATEMENTS` in `packages/core/notices/templates.ts` hedges the
+whole consequence to *"the property may be advertised and sold to satisfy the
+lien... governed by state law"*, and **no field in the schema carries a sale
+venue**. Correct about the law, useless to the person receiving it: a tenant who
+wants to attend, bid, or send a relative to buy their own property back cannot
+learn from anything this product mails them whether the sale is at the facility
+on a Saturday or on a website — and if a website, which one.
+
+**Build:** `Facility.auctionSaleManner` (`online` | `live_onsite`, seeded
+`online`) plus a venue string the `online` value requires, with its control on
+`/admin/settings/delinquency` beside `auctionSaleTerms` — same page, same item,
+because a column that configures behaviour ships with its form field. Two
+consumers, both silent today: the pre-lien and lien `saleStatement`, and the lot
+sheet (`/admin/auctions/lots.csv`).
+
+**Three things the row must not do**, and they are in the row text:
+
+1. **No marketplace driver.** B-129 stays open on the partner agreement, D-63
+   stands, advertising stays `AuctionAdvertisement` rows a person types.
+2. **`live_onsite` is not a degraded branch.** D-131 kept it first-class; a
+   single-facility operator running their own sale is a supported answer.
+3. **A null venue on an `online` facility is a refusal, not a blank.** A notice
+   naming no site is worse than the hedge it replaces, so `auctionReadiness`
+   gains the check and `/admin/auctions` names the facility — the same way it
+   already names every other dropped-lot blocker.
+
+Every word of the new statement is draft legal text under D-10 and keeps the
+attorney-review caveat.
+
+## The blocked list is five now, not six
+
+B-129 lost one of its two blockers and kept the harder one. Still not a build
+session's to start:
 
 | Row | Blocked on | Kind |
 |---|---|---|
 | **B-254** — `LAST_REVIEWED` never moves | **D-115** — a real VoiceOver/NVDA pass by a person | owner action |
-| **B-129** — auction marketplace listing | Master PRD §11 **OQ-9, open** | owner decision |
+| **B-129** — auction marketplace driver | partner agreement (OQ-9 no longer) | credentials |
 | **B-243** — returned certified mail | a real provider key; D-63 forbids a simulator | credentials |
 | **B-085** — first real gate-vendor driver | partner agreement | credentials |
 | **B-133** — Google reviews / GBP sync | approved GBP application | credentials |
 | **B-134** — authored size-page copy | a real portfolio tripping D-77's gate | a trigger that has not fired |
 
-**The cheapest one to unblock is B-129**, because OQ-9 is a decision you can make
-at a desk. **The most valuable is B-254**, which is not a decision at all: it is a
-person running a screen reader through move-in and payment, and it converts the
-largest unverified claim in this codebase into a verified one. **No agent may
-tick it.**
+**B-254 is still the most valuable thing on this list and still not mine to do.**
+A person runs a screen reader through move-in and payment; no agent may tick it.
 
-**There is nothing for a fresh session to pick up.** A seventh review pass is the
-only thing that would produce buildable rows — the last one was 2026-08-25
-(B-187–B-196), and everything from B-197 onward has come from a reviewer report
-or from a previous item's own left-behind note. Say so if you want one.
+After B-274 the queue is empty again. **A seventh review pass is the only thing
+that produces buildable rows** — the last was 2026-08-25 (B-187–B-196), and
+everything from B-197 on came from a reviewer report or a previous item's
+left-behind note.
 
-## What B-273 learned
+## What answering OQ-9 learned
 
-**A comment that describes a defect accurately is not a fix, and two of them are
-a signal that nobody read them together.** B-266 and B-270 each hit this helper,
-each wrote a paragraph saying it would trade 3.3.3 for a field count, and each
-wrote the shape out by hand instead. `/accessibility` even carries B-270's note
-saying the e2e suite caught it. Nobody noticed the helper was still wrong for
-every OTHER caller — including the lead form beside the one B-270 fixed, which
-has passed it exactly one field since B-264. **Two independent workarounds with
-the same explanation means fix the thing being worked around.** The fix was
-smaller than either workaround.
+**An open question can hide a gap that has nothing to do with the question.**
+OQ-9 asked which channel; the product's actual defect was that it names no
+channel at all, to anybody, ever. Three items (B-062, B-083, B-129) built
+around that question and none of them noticed the notice was silent, because
+each was checking whether it could answer OQ-9 rather than what OQ-9's absence
+was costing. **The row a decision unblocks is not always the row it was blocking.**
 
-**A weak assertion can keep a defect green for months.** `smoke.spec.ts:1730`
-asserted `expectAnnounced(status, /problem/)` on the English lead form's
-refusal. It was matching the word inside "There is a **problem** with one
-field." — so the spec that exists to prove the refusal is announced was passing
-on a string containing no suggestion at all. **A regex loose enough to match the
-bug is a regex that will match the bug.** It asserts the sentence now.
-
-**`NEXT.md` said three call sites route around it; the count was not the point
-but it was wrong again.** Two route around this specific defect
-(`waitlist-actions.ts`, `checkout/actions.ts`); the two others that mention the
-"one field" summary — `portal/access/actions.ts` and `admin/impersonation/actions.ts`
-— route around something else entirely (attaching a message to a hidden input),
-were unaffected, and stayed as they were. **Third item running where a carried
-note's number did not survive a grep.**
+**B-129's own row cited the wrong PRD section for two weeks.** It said "master
+PRD §11 OQ-9"; the open questions are §8 and there is no §11. Corrected in the
+row and in the numbering note. Nobody followed the reference, which is the
+point — a citation that is never checked is a citation that can be wrong.
