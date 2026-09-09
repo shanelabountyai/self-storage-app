@@ -15,6 +15,7 @@ import {
 import {
   localityFor,
   recordLeaseDeclarations,
+  otherTenantOnEmail,
   upsertTenantForCheckout,
   validateDeclarations,
   validateDetails,
@@ -128,7 +129,47 @@ export async function submitDetailsAction(
   // where neither is available, so this is present.
   const locality = localityFor(input)!
 
-  const { tenantId } = await upsertTenantForCheckout(input, locality, locale)
+  // ── B-271 / D-111: the counter says so at the moment it creates the second
+  // account ─────────────────────────────────────────────────────────────────
+  //
+  // Gated on `emailOptional`, which is the SESSION's `walk_in` stamp and not
+  // anything the form can claim — the same discipline B-238 used above, and for
+  // a second reason here: the echo NAMES an existing tenant, so on the public
+  // form it would turn an unauthenticated checkout into a way to ask "who holds
+  // this address?". Staff have the person in front of them; a stranger does not.
+  //
+  // `confirmed=yes` is the flag `AdminForm`'s confirm button posts. It means
+  // "different person", so it becomes `separateAccount` — the ONE thing that
+  // makes `upsertTenantForCheckout` create on a known address instead of link.
+  //
+  // No `stalePreview` guard (B-173), and the asymmetry is why: editing the
+  // address after the echo was rendered and then pressing confirm can only ever
+  // CREATE a tenant on the edited address. `separateAccount` has no branch that
+  // links, so the direction this whole item exists to stop — a lease landing on
+  // a stranger's account — is unreachable from here by construction. The worst
+  // case is one extra tenant record, which is the outcome staff just asked for.
+  const separateAccount = emailOptional && formData.get('confirmed') === 'yes'
+  if (emailOptional && !separateAccount) {
+    const other = await otherTenantOnEmail(input.email, input)
+    if (other) {
+      const heldBy = `${other.firstName} ${other.lastName}`.trim()
+      const renting = `${input.firstName.trim()} ${input.lastName.trim()}`.trim()
+      return {
+        status: 'confirm',
+        message: t('details.sharedEmail', { heldBy }),
+        echo: [
+          { label: t('details.email'), value: input.email.trim().toLowerCase() },
+          { label: t('details.sharedEmailHeldBy'), value: heldBy },
+          { label: t('details.sharedEmailRenting'), value: renting },
+        ],
+        confirmLabel: t('details.sharedEmailConfirm', { renting }),
+      }
+    }
+  }
+
+  const { tenantId } = await upsertTenantForCheckout(input, locality, locale, {
+    separateAccount,
+  })
 
   const result = await advance(token, 'details', {
     ...input,

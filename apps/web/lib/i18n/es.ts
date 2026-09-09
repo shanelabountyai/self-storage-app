@@ -652,6 +652,13 @@ export const es: Dictionary = {
   // solo «opcional».
   'details.emailHintOptional':
     'Opcional. Sin él no hay cuenta en línea: ni recibo por correo electrónico, ni enlace de pago, ni aviso cuando un pago se atrasa o una unidad se programa para venta — eso va por correo postal y por teléfono. Déjelo en blanco antes que poner una dirección que no sea suya.',
+  // B-271 / D-111. Solo en el mostrador. Nombra la CONSECUENCIA — que ninguna
+  // de las dos cuentas podrá entrar al portal — no solo la coincidencia.
+  'details.sharedEmail':
+    'Este correo electrónico ya es de {heldBy}. Si es la persona que está rentando, regrese y corrija el nombre — esta unidad va en su cuenta actual. Si es otra persona de la misma dirección, ambas cuentas conservan su contrato, sus avisos y su correo postal, pero NINGUNA de las dos podrá entrar al portal en línea.',
+  'details.sharedEmailHeldBy': 'Ya lo usa',
+  'details.sharedEmailRenting': 'Está rentando ahora',
+  'details.sharedEmailConfirm': 'Sí, darle a {renting} su propia cuenta',
   'details.phone': 'Número de celular',
   'details.address1': 'Dirección',
   'details.address2': 'Departamento, suite o unidad (opcional)',

@@ -2210,6 +2210,50 @@ function reviewedOn(locale: Locale): string {
 // `LAST_REVIEWED` is not bumped, per D-115. No manual screen-reader pass was
 // performed, and this item performed none.
 
+// Re-verified 2026-09-09, at B-271 (the counter says so before it puts a
+// walk-in on somebody else's account — D-111's unbuilt half). Customer-facing:
+// it adds a state to checkout step 1, the same screen B-238 changed above.
+//
+// **It is an SC 3.3.4 Error Prevention (Legal, Financial, Data) control, and
+// that is what it is for.** Submitting step 1 with an address another tenant
+// already holds used to attach this renter's lease, ledger and gate code to
+// that tenant, silently and with no way back from the form. The submission is
+// now CONFIRMED: the action returns `status: 'confirm'`, the form echoes what
+// it understood — the address, who already holds it, who is renting now — and
+// nothing is written until a second, differently-named press. That is 3.3.4's
+// "reversible, checked, or confirmed" satisfied by the third of the three, on
+// the screen immediately before a lease and a payment.
+//
+// **It introduces no new markup.** The state is `AdminForm`'s existing confirm
+// branch, whose behaviour this page has relied on since B-108: the message is
+// written into a live region that was mounted empty and pre-exists the event
+// (FR-20), the summary takes focus, `role="alert"` is deliberately withheld so
+// the sentence is not announced twice, and B-124's restore keeps every typed
+// field. Nothing was added here that could regress those, and nothing was
+// styled by colour alone (1.4.1) — the confirm box carries the same border and
+// text treatment every other form's does.
+//
+// **This state is NOT axe-scanned, for exactly the reason B-238's is not.** It
+// renders only for a session carrying `acquisitionSource: 'walk_in'` AND an
+// address already held by a differently-named tenant — a post-interaction,
+// data-dependent state that no URL reaches. **B-184** owns route-versus-state
+// and still does; this adds one more instance to that gap rather than a new
+// exception, and `/checkout` keeps its existing coverage and its existing
+// entry. It is stated here rather than left implied, and it is NOT claimed as
+// scanned.
+//
+// **Four strings, both languages**, so no 3.1.2 gap of its own:
+// `details.sharedEmail`, `.sharedEmailHeldBy`, `.sharedEmailRenting` and
+// `.sharedEmailConfirm` exist in `en` and `es`. The B-270 caveat still holds
+// unchanged — the scan loops carry no locale cookie, so the Spanish rendering
+// is unscanned the way the rest of the public site's Spanish is.
+//
+// **No claim below changes.** "Where we fall short" was re-read against this
+// build and is still true and still correctly scoped; the generated coverage
+// claim and both exception lists are untouched. `LAST_REVIEWED` is not bumped,
+// per D-115: no manual screen-reader pass was performed, and this item
+// performed none.
+
 export default async function AccessibilityPage() {
   const locale = await getLocale()
   const dict = dictionaryFor(locale)

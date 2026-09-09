@@ -3,6 +3,7 @@ import { afterAll, describe, expect, it } from 'vitest'
 import { prisma } from '../packages/db'
 import {
   localityFor,
+  otherTenantOnEmail,
   recordLeaseDeclarations,
   upsertTenantForCheckout,
   validateDeclarations,
@@ -215,6 +216,91 @@ describeDb('implicit account creation', () => {
 
     await prisma.tenant.deleteMany({
       where: { id: { in: [first.tenantId, second.tenantId] } },
+    })
+  })
+
+  // ── B-271 / D-111: the second account on one household inbox ───────────────
+  //
+  // D-111 dropped the unique constraint so a husband and wife may each hold an
+  // account on one inbox, and said "the counter says so at the moment it
+  // creates the second account". B-238 built the schema and neither half of the
+  // sentence, so the state the constraint was dropped FOR could not be reached
+  // and the form silently attached a walk-in's lease to the spouse's account.
+  describe('a second person on an address already in use', () => {
+    it('names the tenant who holds the address when the name is somebody else', async () => {
+      const email = `shared-${suffix}@example.com`
+      const held = await upsertTenantForCheckout({ ...VALID, email }, AUSTIN, 'en')
+
+      const other = await otherTenantOnEmail(email, { firstName: 'Bruno', lastName: 'Renter' })
+      expect(other?.id).toBe(held.tenantId)
+      expect(other?.firstName).toBe('Ada')
+    })
+
+    it('stays quiet for the returning renter, who is the same name on the same address', async () => {
+      // FR-5.3 working. A confirm on every repeat move-in is a confirm that
+      // gets clicked through, which is how the one that matters stops working.
+      const email = `returning-${suffix}@example.com`
+      await upsertTenantForCheckout({ ...VALID, email }, AUSTIN, 'en')
+
+      expect(await otherTenantOnEmail(email, VALID)).toBeNull()
+      // Case and spacing are how a person retypes their own name, not a
+      // different person.
+      expect(
+        await otherTenantOnEmail(email.toUpperCase(), {
+          firstName: '  ada ',
+          lastName: 'RENTER',
+        }),
+      ).toBeNull()
+    })
+
+    it('has nothing to say about an unknown address, or a blank one', async () => {
+      expect(await otherTenantOnEmail(`nobody-${suffix}@example.com`, VALID)).toBeNull()
+      // The blank case never reaches a lookup: every no-email renter matches
+      // every other, so a match here would name a stranger to staff and then
+      // link the two together.
+      expect(await otherTenantOnEmail('', VALID)).toBeNull()
+      expect(await otherTenantOnEmail('   ', VALID)).toBeNull()
+    })
+
+    it('gives the second person their OWN record on the same address once staff confirm', async () => {
+      // The assertion this row turns on, and the one a row-counting test would
+      // pass while the lease went onto the spouse's account: two DISTINCT ids
+      // holding the SAME address. Without `separateAccount` the second call
+      // links, which is what shipped.
+      const email = `household-${suffix}@example.com`
+      const wife = await upsertTenantForCheckout({ ...VALID, email }, AUSTIN, 'en')
+      const husband = await upsertTenantForCheckout(
+        { ...VALID, email, firstName: 'Bruno' },
+        AUSTIN,
+        'en',
+        { separateAccount: true },
+      )
+
+      expect(husband.created).toBe(true)
+      expect(husband.tenantId).not.toBe(wife.tenantId)
+
+      const rows = await prisma.tenant.findMany({
+        where: { id: { in: [wife.tenantId, husband.tenantId] } },
+        select: { email: true },
+      })
+      expect(rows.map((row) => row.email)).toEqual([email, email])
+    })
+
+    it('links, not creates, when staff did not confirm', async () => {
+      const email = `nolink-${suffix}@example.com`
+      const first = await upsertTenantForCheckout({ ...VALID, email }, AUSTIN, 'en')
+      const second = await upsertTenantForCheckout(
+        { ...VALID, email, firstName: 'Bruno' },
+        AUSTIN,
+        'en',
+      )
+
+      expect(second.created).toBe(false)
+      expect(second.tenantId).toBe(first.tenantId)
+      // Additive-only still holds: an unauthenticated form did not rename
+      // somebody by typing a different first name against their address.
+      const tenant = await prisma.tenant.findUniqueOrThrow({ where: { id: first.tenantId } })
+      expect(tenant.firstName).toBe('Ada')
     })
   })
 
