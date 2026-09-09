@@ -197,6 +197,10 @@ export async function auctionCase(actor: Actor, caseId: string): Promise<Auction
     where: { id: caseId },
     include: {
       unit: { select: { number: true } },
+      // B-274 / D-131. Readiness now asks where this facility sells, so an
+      // online facility with no site set refuses instead of serving a notice
+      // that says "sold online" and names nowhere.
+      facility: { select: { auctionSaleManner: true, auctionSaleVenue: true } },
       timeline: { select: { label: true, version: true, steps: true, minDaysNoticeToSale: true } },
       advertisements: { orderBy: { runDate: 'asc' } },
       lease: {
@@ -292,6 +296,8 @@ export async function auctionCase(actor: Actor, caseId: string): Promise<Auction
     lienNoticeServed: Boolean(servedLienNotice),
     noticeUnitChanged: goodsMoved && !servedLienNotice,
     blockedByHold,
+    saleManner: row.facility.auctionSaleManner,
+    saleVenue: row.facility.auctionSaleVenue,
     approved: Boolean(row.approvedAt),
     outstandingCents,
     status: row.status,
@@ -1163,6 +1169,12 @@ export type LotSheet = {
     /// Null when nobody has set the time of sale. Same posture as the terms:
     /// blank column, said out loud on screen, nothing invented (B-205).
     saleTime: string | null
+    /// B-274 / D-131. How the sale is held, and — for an online sale — where.
+    /// NOT the terms' posture: a `null` venue on an `online` facility drops
+    /// every lot into `refused` via `auctionReadiness`, so a sheet that reaches
+    /// this far with one is a sheet with no lots on it.
+    saleManner: 'online' | 'live_onsite'
+    saleVenue: string | null
   }
   lots: ListingLot[]
   refused: LotRefusal[]
@@ -1204,6 +1216,8 @@ export async function auctionLotSheet(actor: Actor, facilityId: string): Promise
         postalCode: true,
         auctionSaleTerms: true,
         auctionSaleTime: true,
+        auctionSaleManner: true,
+        auctionSaleVenue: true,
       },
     }),
     // The unit the goods are in NOW, which is what `unitId` on the view already
@@ -1235,6 +1249,8 @@ export async function auctionLotSheet(actor: Actor, facilityId: string): Promise
       postalCode: facility.postalCode,
       saleTerms: facility.auctionSaleTerms,
       saleTime: facility.auctionSaleTime,
+      saleManner: facility.auctionSaleManner,
+      saleVenue: facility.auctionSaleVenue,
     },
     lots: sized.map((one) => ({
       caseId: one.caseId,

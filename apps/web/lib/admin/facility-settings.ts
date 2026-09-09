@@ -848,23 +848,44 @@ export async function updateGateAdapter(
 /// and splitting them would put two `facility.settings_changed` rows in the log
 /// for a single save. `time` is optional so the existing single-argument tests
 /// and any caller that only knows about the terms keep working unchanged.
+/// B-274 / D-131: the manner and venue save through here too, for the reason
+/// above — one form, one decision, one audit row. Both optional so the
+/// single-argument callers that only know about the terms keep working.
 export async function updateAuctionSaleTerms(
   actor: Actor,
   facilityId: string,
   terms: string,
   time?: string,
+  sale?: { manner?: string; venue?: string },
 ): Promise<void> {
   requirePermission(actor, "facility:settings", facilityId);
 
   const value = terms.trim() || null;
   const timeValue = time === undefined ? undefined : time.trim() || null;
+  // Anything that is not the one other legal value stays `online`, the seeded
+  // default: a hand-posted form must not be able to talk this facility into a
+  // manner nobody chose, and the column is an enum the write would reject
+  // anyway — with a 500 rather than a setting.
+  const manner =
+    sale?.manner === undefined ? undefined : sale.manner === "live_onsite" ? "live_onsite" : "online";
+  const venue = sale?.venue === undefined ? undefined : sale.venue.trim() || null;
   const before = await prisma.facility.findUniqueOrThrow({
     where: { id: facilityId },
-    select: { auctionSaleTerms: true, auctionSaleTime: true },
+    select: {
+      auctionSaleTerms: true,
+      auctionSaleTime: true,
+      auctionSaleManner: true,
+      auctionSaleVenue: true,
+    },
   });
   await prisma.facility.update({
     where: { id: facilityId },
-    data: { auctionSaleTerms: value, ...(timeValue === undefined ? {} : { auctionSaleTime: timeValue }) },
+    data: {
+      auctionSaleTerms: value,
+      ...(timeValue === undefined ? {} : { auctionSaleTime: timeValue }),
+      ...(manner === undefined ? {} : { auctionSaleManner: manner }),
+      ...(venue === undefined ? {} : { auctionSaleVenue: venue }),
+    },
   });
 
   await recordAudit({
@@ -873,10 +894,17 @@ export async function updateAuctionSaleTerms(
     entityType: "Facility",
     entityId: facilityId,
     facilityId,
-    before: { auctionSaleTerms: before.auctionSaleTerms, auctionSaleTime: before.auctionSaleTime },
+    before: {
+      auctionSaleTerms: before.auctionSaleTerms,
+      auctionSaleTime: before.auctionSaleTime,
+      auctionSaleManner: before.auctionSaleManner,
+      auctionSaleVenue: before.auctionSaleVenue,
+    },
     after: {
       auctionSaleTerms: value,
       auctionSaleTime: timeValue === undefined ? before.auctionSaleTime : timeValue,
+      auctionSaleManner: manner === undefined ? before.auctionSaleManner : manner,
+      auctionSaleVenue: venue === undefined ? before.auctionSaleVenue : venue,
     },
   });
 }

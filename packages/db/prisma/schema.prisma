@@ -482,18 +482,18 @@ enum AddressSource {
 // ------------------------------------------------------------ inventory ----
 
 model Facility {
-  id                       String         @id @default(cuid())
+  id                       String            @id @default(cuid())
   name                     String
   /// URL segment for location pages; SEO-sensitive, see PRD 04 OQ-7.
-  slug                     String         @unique
-  status                   FacilityStatus @default(active)
+  slug                     String            @unique
+  status                   FacilityStatus    @default(active)
   addressLine1             String
   addressLine2             String?
   city                     String
   /// Two-letter code. Drives compliance config; Texas is the seeded default (D-10).
   state                    String
   postalCode               String
-  country                  String         @default("US")
+  country                  String            @default("US")
   latitude                 Float?
   longitude                Float?
   /// IANA name, e.g. "America/Chicago". All display time is derived from this.
@@ -521,12 +521,12 @@ model Facility {
   /// PRD 02 US-43. How long a new lead may sit uncontacted before it becomes
   /// a task. Business hours are overkill here — a lead is a person waiting for
   /// a call back, and four hours on a Sunday still feels like four hours.
-  leadFollowUpHours        Int            @default(4)
-  gbpVerifiedAt            DateTime?      @db.Timestamptz(6)
+  leadFollowUpHours        Int               @default(4)
+  gbpVerifiedAt            DateTime?         @db.Timestamptz(6)
   /// Which checklist items were ticked at that verification. A string array
   /// rather than six booleans: the checklist is US-5 AC1's list today and will
   /// grow, and each addition would otherwise be a migration.
-  gbpCheckedItems          String[]       @default([])
+  gbpCheckedItems          String[]          @default([])
   /// PRD 04 US-7 AC1 (B-071). The link the review-request email sends people
   /// to. Null means the request cannot go out at all — a review ask with
   /// nowhere to leave the review is worse than not asking, so the job that
@@ -563,18 +563,48 @@ model Facility {
   /// sale" is a real and common phrasing that no time column can hold. Null
   /// stays a real state, exactly as the terms do.
   auctionSaleTime          String?
+  /// B-274 / D-131. How this facility conducts a lien sale, and where.
+  ///
+  /// Master PRD §8 OQ-9 was open from the day the PRD was written: live
+  /// on-site sales, or online. D-131 answered it **online, per facility** —
+  /// so this is a setting and not a constant, and `live_onsite` is a
+  /// first-class answer rather than a legacy flag. A single-site operator who
+  /// runs their own sale in the driveway is a supported install, and the wrong
+  /// default there is a notice naming a website nobody will ever open.
+  ///
+  /// The gap it closes is NOT the marketplace integration (B-129 is still
+  /// blocked on a partner agreement, and D-63 still forbids a simulator). It
+  /// is that nothing in the product told the TENANT where their own property
+  /// would be sold. The lien and pre-lien `saleStatement` hedged the entire
+  /// consequence to "governed by state law", which is true and useless to
+  /// somebody who wants to attend, bid, or send a relative to buy their things
+  /// back.
+  auctionSaleManner        AuctionSaleManner @default(online)
+  /// The site an `online` sale is conducted on — "StorageTreasures.com", or
+  /// whatever this facility actually lists on. Free text for the same reason
+  /// the terms and the time are: it is read down a phone and printed on a
+  /// sheet, and this product has no account with any marketplace to validate
+  /// it against.
+  ///
+  /// **Null is a REFUSAL here, not a blank.** The terms and the time degrade
+  /// to an empty column because a sale with unstated terms is still a lawful
+  /// sale; a notice that says "sold online" and names no site is worse than
+  /// the hedge it replaced, so `auctionReadiness` blocks the sale instead and
+  /// `/admin/auctions` names the facility. Unread on a `live_onsite` facility,
+  /// where the facility address on the notice already gives the place.
+  auctionSaleVenue         String?
   googleReviewUrl          String?
   /// US-7 AC1: "N days after move-in completion (default 7, configurable per
   /// facility)." Its own control ships in this item, per this repo's own rule
   /// — a column that changes behaviour with no form field is how five of them
   /// end up reachable only from a database client.
-  reviewRequestDelayDays   Int            @default(7)
+  reviewRequestDelayDays   Int               @default(7)
   /// PRD 04 US-9 AC2 (B-073). "Follow-up sequence: +1h, +24h, +72h
   /// (configurable)." The STRUCTURE (three steps) is fixed
   /// (packages/core/checkout/abandonment.ts); this is only the timing, with
   /// its own control shipped in this item per the same repo rule as the
   /// review-request delay above.
-  abandonmentFollowUpHours Int[]          @default([1, 24, 72])
+  abandonmentFollowUpHours Int[]             @default([1, 24, 72])
 
   /// PRD 03 FR-3 / US-6. Which gate controller this facility talks to.
   ///
@@ -1224,29 +1254,29 @@ model Tenant {
   /// Optimistic locking (PRD 02 FR-11).
   version                      Int       @default(0)
 
-  leases                  Lease[]
-  payLinks                PayLink[]
-  addresses               TenantAddress[]
-  notes                   TenantNote[]
-  payments                Payment[]
-  accessGrants            AccessGrant[]
-  reservations            Reservation[]
-  checkoutSessions        CheckoutSession[]
+  leases                    Lease[]
+  payLinks                  PayLink[]
+  addresses                 TenantAddress[]
+  notes                     TenantNote[]
+  payments                  Payment[]
+  accessGrants              AccessGrant[]
+  reservations              Reservation[]
+  checkoutSessions          CheckoutSession[]
   // PRD 10 (B-100). Three relations because a tenant plays three roles: the
   // one who mints invites, the one credited for a referral, and the one who
   // was referred.
-  referralInvites         ReferralInvite[]         @relation("ReferralInvitesMinted")
-  referralsMade           Referral[]               @relation("ReferralsMade")
-  referralsReceived       Referral[]               @relation("ReferralsReceived")
-  leads                   Lead[]
-  consents                Consent[]
-  messages                Message[]
-  notificationPreferences NotificationPreference[]
-  merchandiseSales        MerchandiseSale[]
+  referralInvites           ReferralInvite[]         @relation("ReferralInvitesMinted")
+  referralsMade             Referral[]               @relation("ReferralsMade")
+  referralsReceived         Referral[]               @relation("ReferralsReceived")
+  leads                     Lead[]
+  consents                  Consent[]
+  messages                  Message[]
+  notificationPreferences   NotificationPreference[]
+  merchandiseSales          MerchandiseSale[]
   /// B-090 part 5. Accounts this tenant is the payer for. A tenant can be the
   /// payer on several — one per facility their company rents at — and can hold
   /// leases of their own that are on none of them.
-  billingAccountsPaid     BillingAccount[]         @relation("BillingAccountPayer")
+  billingAccountsPaid       BillingAccount[]         @relation("BillingAccountPayer")
   /// B-258. Accounts this tenant may SEE but does not pay for — the office
   /// manager, the second director, the bookkeeper.
   billingAccountMemberships BillingAccountMember[]
@@ -1526,8 +1556,8 @@ model BillingAccount {
   createdAt     DateTime @default(now()) @db.Timestamptz(6)
   updatedAt     DateTime @updatedAt @db.Timestamptz(6)
 
-  facility Facility @relation(fields: [facilityId], references: [id], onDelete: Restrict)
-  payer    Tenant   @relation("BillingAccountPayer", fields: [payerTenantId], references: [id], onDelete: Restrict)
+  facility Facility               @relation(fields: [facilityId], references: [id], onDelete: Restrict)
+  payer    Tenant                 @relation("BillingAccountPayer", fields: [payerTenantId], references: [id], onDelete: Restrict)
   leases   Lease[]
   members  BillingAccountMember[]
 
@@ -1678,48 +1708,48 @@ model InvoiceLineItem {
 }
 
 model Payment {
-  id                    String        @id @default(cuid())
-  facilityId            String
-  tenantId              String
-  amountCents           Int
-  method                PaymentMethod
-  status                PaymentStatus @default(pending)
+  id                       String        @id @default(cuid())
+  facilityId               String
+  tenantId                 String
+  amountCents              Int
+  method                   PaymentMethod
+  status                   PaymentStatus @default(pending)
   /// Token only — card data never touches our servers (master PRD §7.4).
-  stripePaymentIntentId String?       @unique
+  stripePaymentIntentId    String?       @unique
   /// Cash drawer detail; the drawer session itself is B-078.
-  tenderedCents         Int?
-  changeCents           Int?
-  checkNumber           String?
-  receivedAt            DateTime      @default(now()) @db.Timestamptz(6)
-  failureReason         String?
+  tenderedCents            Int?
+  changeCents              Int?
+  checkNumber              String?
+  receivedAt               DateTime      @default(now()) @db.Timestamptz(6)
+  failureReason            String?
   /// The provider's machine-readable decline code, e.g. `expired_card`. Kept
   /// beside the human message because they answer different questions: the
   /// message is what a manager reads, and this is what US-20's retry schedule
   /// branches on. A card that has expired must not be retried three more
   /// times, and deciding that by matching on prose would be a bug waiting for
   /// Stripe to reword something.
-  failureCode           String?
+  failureCode              String?
   /// Set on a refund payment, pointing at the payment being refunded.
-  refundOfPaymentId     String?
+  refundOfPaymentId        String?
   /// US-32 attribution. The staff member who physically took the money, read
   /// from the session actor and never from a form field. Required for cash,
   /// check and money order (enforced in `lib/admin/pos.ts`, not by the column,
   /// because a card payment taken online legitimately has no one behind the
   /// counter). A cash payment with a facility, a timestamp and no human
   /// attached is how money walks out of a storage facility unnoticed.
-  receivedByStaffId     String?
+  receivedByStaffId        String?
   /// US-32: gapless per-facility receipt number, assigned in the same
   /// transaction as the payment (see ReceiptCounter). Null for payments that
   /// never went through a counter — the Stripe-driven online path — because a
   /// receipt book with holes where the web rentals were is not gapless, it is
   /// just confusing.
-  receiptNumber         Int?
+  receiptNumber            Int?
   /// US-33 (B-078). The drawer session this money went into, for cash,
   /// cheque and money-order payments taken while one was open. Null for a
   /// card or online payment — that money never touches a drawer — and null
   /// for a counter payment taken with no session open, which is legal and
   /// is exactly what the deposits report flags as unreconciled.
-  drawerSessionId       String?
+  drawerSessionId          String?
   /// B-189. The plan installment this charge was raised to collect, for the
   /// auto-collected half of a payment plan. Null for every other payment.
   ///
@@ -1731,19 +1761,19 @@ model Payment {
   /// attempt history, which means no US-20 ladder and no way for the breach
   /// job to tell a decline from a decision not to pay (CN-6).
   paymentPlanInstallmentId String?
-  createdAt             DateTime      @default(now()) @db.Timestamptz(6)
-  updatedAt             DateTime      @updatedAt @db.Timestamptz(6)
+  createdAt                DateTime      @default(now()) @db.Timestamptz(6)
+  updatedAt                DateTime      @updatedAt @db.Timestamptz(6)
 
-  facility        Facility            @relation(fields: [facilityId], references: [id], onDelete: Restrict)
-  tenant          Tenant              @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  drawerSession   DrawerSession?      @relation(fields: [drawerSessionId], references: [id], onDelete: SetNull)
-  receivedByStaff StaffUser?          @relation(fields: [receivedByStaffId], references: [id], onDelete: Restrict)
-  refundOf        Payment?            @relation("PaymentRefund", fields: [refundOfPaymentId], references: [id], onDelete: Restrict)
-  refunds         Payment[]           @relation("PaymentRefund")
-  allocations     PaymentAllocation[]
-  ledgerEntries   LedgerEntry[]
-  payLink         PayLink?
-  merchandiseSale MerchandiseSale?
+  facility               Facility                @relation(fields: [facilityId], references: [id], onDelete: Restrict)
+  tenant                 Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  drawerSession          DrawerSession?          @relation(fields: [drawerSessionId], references: [id], onDelete: SetNull)
+  receivedByStaff        StaffUser?              @relation(fields: [receivedByStaffId], references: [id], onDelete: Restrict)
+  refundOf               Payment?                @relation("PaymentRefund", fields: [refundOfPaymentId], references: [id], onDelete: Restrict)
+  refunds                Payment[]               @relation("PaymentRefund")
+  allocations            PaymentAllocation[]
+  ledgerEntries          LedgerEntry[]
+  payLink                PayLink?
+  merchandiseSale        MerchandiseSale?
   /// SetNull, not Restrict: the installment is a line in a schedule, and a
   /// plan that is deleted must not take the record of a real card charge with
   /// it — the money moved whatever happened to the schedule afterwards.
@@ -2861,37 +2891,37 @@ model City {
 /// it** (US-25's own AC) — and a lien file whose timeline has been rewritten
 /// since is a lien file that cannot be defended.
 model DelinquencyTimeline {
-  id                String   @id @default(cuid())
-  facilityId        String
-  version           Int
-  active            Boolean  @default(false)
+  id                  String   @id @default(cuid())
+  facilityId          String
+  version             Int
+  active              Boolean  @default(false)
   /// What the operator called this revision: "after the 2026 attorney review".
-  label             String
+  label               String
   /// US-25's AC: paying this halts the pipeline.
-  qualifyingAmount  String   @default("full_balance")
+  qualifyingAmount    String   @default("full_balance")
   /// D-92 (B-161). Days of grace a reversal-re-opened arrear gets before the
   /// ladder may move again. A returned ACH or a chargeback re-opens an invoice
   /// at its ORIGINAL due date (D-25), so without this the tenant is instantly
   /// back at full age and the whole ladder is due at once.
-  reversalGraceDays Int      @default(10)
+  reversalGraceDays   Int      @default(10)
   /// B-224 / D-10. Days required between the served lien notice's own deadline
   /// and the sale, ON TOP of that deadline. The deadline comparison is the hard
   /// rule and is correct with no number at all, which is why this defaults to
   /// 0: an existing facility gets the rule and no surprise margin. Per-state
   /// configuration, presented as an example and never as compliant (US-29).
-  minDaysNoticeToSale Int  @default(0)
+  minDaysNoticeToSale Int      @default(0)
   /// D-92 (B-161). Where the ladder picks up after a reversal: `true` resumes
   /// at the stage already reached, `false` restarts at day one and re-serves
   /// every notice. Resume is the default — it closes the pay-then-reverse loop
   /// that otherwise defers auction for ever.
-  reversalResumes   Boolean  @default(true)
+  reversalResumes     Boolean  @default(true)
   /// The steps, as an ordered array of the shape in
   /// packages/core/delinquency. JSON rather than a table: a version is
   /// immutable once activated, so there is nothing to update in place and
   /// nothing joins to an individual step.
-  steps             Json
-  createdByStaffId  String?
-  createdAt         DateTime @default(now()) @db.Timestamptz(6)
+  steps               Json
+  createdByStaffId    String?
+  createdAt           DateTime @default(now()) @db.Timestamptz(6)
 
   facility       Facility             @relation(fields: [facilityId], references: [id], onDelete: Cascade)
   createdByStaff StaffUser?           @relation(fields: [createdByStaffId], references: [id], onDelete: SetNull)
@@ -4139,9 +4169,9 @@ model Role {
 
   // Monetary authority, configured per role at the org level (PRD 02 RBAC-2).
   // null means unlimited; 0 means no authority at all.
-  maxFeeWaiverCents Int?
-  maxRefundCents    Int?
-  maxCreditCents    Int?
+  maxFeeWaiverCents    Int?
+  maxRefundCents       Int?
+  maxCreditCents       Int?
   /// D-98 (B-190). The most ARREARS this role may agree to defer onto a
   /// payment plan. Its own limit and not `maxFeeWaiverCents`, because a
   /// deferral is not a waiver: the money is still owed and the tenant is
@@ -4337,19 +4367,19 @@ model LeaseHold {
 /// `lib/admin/holds.ts` already has and already audits; this model only adds
 /// what a payment plan needs on top of it.
 model PaymentPlan {
-  id        String            @id @default(cuid())
-  leaseId   String
+  id                 String            @id @default(cuid())
+  leaseId            String
   /// The hold that actually stops collections. Restrict, not Cascade: the
   /// hold is evidence in its own right (US-42) and must outlive whatever
   /// happens to the plan record referencing it.
-  holdId    String            @unique
-  status    PaymentPlanStatus @default(active)
+  holdId             String            @unique
+  status             PaymentPlanStatus @default(active)
   /// The arrears the plan promises to clear, frozen at creation — the lease's
   /// outstanding balance on every invoice already due at the moment a person
   /// agreed to it, which `validateSchedule` requires the installments to add
   /// up to exactly (B-188). Never recomputed: a rate change or a new month's
   /// rent afterward does not retroactively change what was promised.
-  totalCents Int
+  totalCents         Int
   /// The invoices this plan covers, frozen at creation — every invoice already
   /// due and not fully settled when the plan was agreed. **Progress is
   /// `totalCents` less what is still outstanding on THESE invoices** (D-96),
@@ -4364,10 +4394,10 @@ model PaymentPlan {
   /// date and would silently join the covered set, making progress fall for a
   /// charge the plan never promised to clear. No FK: an invoice is voided,
   /// never deleted.
-  invoiceIds String[] @default([])
+  invoiceIds         String[]          @default([])
   /// Free text a staffer can leave about the conversation. Not the record of
   /// WHAT was agreed — the installments are that — only anything about HOW.
-  note       String?
+  note               String?
   /// Whether an installment is charged from the tenant's saved card on its due
   /// date (D-97). Default true and un-tickable at agreement: auto-collection
   /// is kinder and collects more, but a tenant who wants "I kept to the plan"
@@ -4379,20 +4409,20 @@ model PaymentPlan {
   /// A plan is forbearance on the arrears it froze into `invoiceIds`, not a
   /// rent holiday, so `runAutopay` skips exactly those invoices and collects
   /// current rent as usual.
-  autoCollect Boolean @default(true)
+  autoCollect        Boolean           @default(true)
   createdByStaffId   String
-  createdAt          DateTime  @default(now()) @db.Timestamptz(6)
-  completedAt        DateTime? @db.Timestamptz(6)
-  brokenAt           DateTime? @db.Timestamptz(6)
-  cancelledAt        DateTime? @db.Timestamptz(6)
+  createdAt          DateTime          @default(now()) @db.Timestamptz(6)
+  completedAt        DateTime?         @db.Timestamptz(6)
+  brokenAt           DateTime?         @db.Timestamptz(6)
+  cancelledAt        DateTime?         @db.Timestamptz(6)
   cancelledByStaffId String?
   cancelReason       String?
 
-  lease           Lease                   @relation(fields: [leaseId], references: [id], onDelete: Restrict)
-  hold            LeaseHold               @relation(fields: [holdId], references: [id], onDelete: Restrict)
-  createdByStaff  StaffUser               @relation("PaymentPlanCreatedBy", fields: [createdByStaffId], references: [id], onDelete: Restrict)
-  cancelledByStaff StaffUser?             @relation("PaymentPlanCancelledBy", fields: [cancelledByStaffId], references: [id], onDelete: Restrict)
-  installments    PaymentPlanInstallment[]
+  lease            Lease                    @relation(fields: [leaseId], references: [id], onDelete: Restrict)
+  hold             LeaseHold                @relation(fields: [holdId], references: [id], onDelete: Restrict)
+  createdByStaff   StaffUser                @relation("PaymentPlanCreatedBy", fields: [createdByStaffId], references: [id], onDelete: Restrict)
+  cancelledByStaff StaffUser?               @relation("PaymentPlanCancelledBy", fields: [cancelledByStaffId], references: [id], onDelete: Restrict)
+  installments     PaymentPlanInstallment[]
 
   // A lease can have at most one ACTIVE plan at a time — enforced in
   // `lib/admin/payment-plans.ts` rather than here, because a partial unique
@@ -4810,6 +4840,16 @@ enum AuctionStatus {
   cancelled
 }
 
+/// B-274 / D-131. The manner in which this facility holds a lien sale.
+///
+/// Two values because the owner's answer to master PRD §8 OQ-9 had two, and
+/// neither is a fallback for the other. Seeded `online` because that is where
+/// the operators this product is for actually list.
+enum AuctionSaleManner {
+  online
+  live_onsite
+}
+
 enum SurplusDisposition {
   no_surplus
   held
@@ -5084,17 +5124,17 @@ model Referral {
 /// abandonment mail and B-020's resume links already use) rather than through
 /// the rule engine, which resolves recipients from `Tenant`.
 model WaitlistEntry {
-  id          String         @id @default(cuid())
-  facilityId  String
-  unitTypeId  String
+  id              String         @id @default(cuid())
+  facilityId      String
+  unitTypeId      String
   /// Required — it is the whole point of the record, and the only channel this
   /// item ships. SMS would need a TCPA consent record of its own; see the note
   /// in PROGRESS.
-  email       String
+  email           String
   /// Optional, and captured only so staff can call somebody who is waiting.
   /// Never messaged: there is no consent for that.
-  phone       String?
-  firstName   String?
+  phone           String?
+  firstName       String?
   /// B-265 (D-130). The language the "a unit came free" mail is written in.
   ///
   /// Stored rather than resolved at send time, and it is the ONLY direct send
@@ -5108,18 +5148,18 @@ model WaitlistEntry {
   /// does: this column did not exist for the entries already on the lists, and
   /// they must not be recorded as having chosen English.
   preferredLocale String?
-  status      WaitlistStatus @default(waiting)
+  status          WaitlistStatus @default(waiting)
   /// When the "one is free" mail went out. Null while waiting. Load-bearing
   /// rather than decorative: the sweep counts entries notified inside the
   /// claim window against the available units, which is what stops twelve
   /// people being told about one unit.
-  notifiedAt  DateTime?      @db.Timestamptz(6)
+  notifiedAt      DateTime?      @db.Timestamptz(6)
   /// Single-use, URL-safe. The cancel link in the mail, and the only way a
   /// prospect who is not a tenant can act on their own record — they have no
   /// account to sign in to.
-  cancelToken String         @unique
-  createdAt   DateTime       @default(now()) @db.Timestamptz(6)
-  updatedAt   DateTime       @updatedAt @db.Timestamptz(6)
+  cancelToken     String         @unique
+  createdAt       DateTime       @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime       @updatedAt @db.Timestamptz(6)
 
   facility Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
   unitType UnitType @relation(fields: [unitTypeId], references: [id], onDelete: Cascade)

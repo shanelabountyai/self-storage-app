@@ -63,6 +63,7 @@ export async function GET(request: Request): Promise<Response> {
       'Sq ft',
       'Sale date',
       'Sale time',
+      'Where the sale is held',
       'Terms',
       'Case reference',
     ],
@@ -89,6 +90,15 @@ export async function GET(request: Request): Promise<Response> {
       // Blank when unset, same as the terms — a sale time nobody chose is a
       // worse thing to print than an empty column somebody has to fill in.
       facility.saleTime ?? '',
+      // B-274 / D-131. One column and a whole phrase rather than a code and a
+      // blank: this file is read down a phone to a classifieds clerk and
+      // handed to whoever runs the sale, and "online" beside an empty cell is
+      // the ambiguity the row exists to remove. Never blank — an online
+      // facility with no venue has no lots on the sheet at all, because
+      // `auctionReadiness` refuses every one of them.
+      facility.saleManner === 'live_onsite'
+        ? 'Live, at the facility address above'
+        : `Online, at ${facility.saleVenue ?? ''}`.trim(),
       // Blank when nobody has set them. The screen says so; the file does not
       // invent a term the operator never agreed to.
       facility.saleTerms ?? '',

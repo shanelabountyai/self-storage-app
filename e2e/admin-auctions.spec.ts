@@ -68,7 +68,7 @@ test.describe('signed in as the demo owner', () => {
     // `Tenant`, `Sale time` and `Description of goods` are the three
     // elements a lien advertisement must carry, and all three were missing.
     expect((await response.text()).split('\r\n')[0]).toBe(
-      'Facility,Address,City,State,ZIP,Unit,Tenant,Description of goods,Size,Width ft,Length ft,Sq ft,Sale date,Sale time,Terms,Case reference',
+      'Facility,Address,City,State,ZIP,Unit,Tenant,Description of goods,Size,Width ft,Length ft,Sq ft,Sale date,Sale time,Where the sale is held,Terms,Case reference',
     )
   })
 

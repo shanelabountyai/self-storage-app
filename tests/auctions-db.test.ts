@@ -153,6 +153,12 @@ describeDb('the auction pipeline', () => {
         postalCode: '78704',
         timezone: 'America/Chicago',
         surplusHoldDays: 90,
+        // B-274 / D-131. `auctionSaleManner` seeds `online`, and an online
+        // facility with no site set blocks every sale here — which is the
+        // point of the column and would otherwise make this whole suite a test
+        // of that one blocker. The venue is set once, and the one test that
+        // cares clears it.
+        auctionSaleVenue: 'StorageTreasures.com',
       },
     })
     facilityId = facility.id
@@ -548,6 +554,61 @@ describeDb('the auction pipeline', () => {
       // And the case itself was not edited to achieve that.
       const row = await prisma.auctionCase.findUniqueOrThrow({ where: { id: caseId } })
       expect(row.status).toBe('scheduled')
+    })
+
+    // B-274 / D-131. The one place in this file where a missing SETTING drops
+    // a lot, rather than missing evidence. A notice that says "sold online"
+    // and names no site is worse than the hedge it replaced, so the sale is
+    // refused instead of the sheet printing a blank column.
+    it('drops every lot at an online facility with no site set, by name', async () => {
+      const caseId = await makeReadyCase()
+      await scheduleSale(regional(), caseId, saleDay())
+      expect((await auctionLotSheet(regional(), facilityId))!.lots.map((one) => one.caseId)).toContain(
+        caseId,
+      )
+
+      await prisma.facility.update({ where: { id: facilityId }, data: { auctionSaleVenue: null } })
+      const sheet = await auctionLotSheet(regional(), facilityId)
+      expect(sheet!.facility.saleVenue).toBeNull()
+      expect(sheet!.lots.map((one) => one.caseId)).not.toContain(caseId)
+      const refusal = sheet!.refused.find((one) => one.caseId === caseId)
+      expect(refusal?.kind).toBe('not_ready')
+      expect(refusal?.reason).toContain('no site is set')
+
+      // A facility that runs its own sale needs no site: the address on the
+      // notice is the place, and D-131 kept that a first-class answer.
+      await prisma.facility.update({
+        where: { id: facilityId },
+        data: { auctionSaleManner: 'live_onsite' },
+      })
+      expect((await auctionLotSheet(regional(), facilityId))!.lots.map((one) => one.caseId)).toContain(
+        caseId,
+      )
+
+      await prisma.facility.update({
+        where: { id: facilityId },
+        data: { auctionSaleManner: 'online', auctionSaleVenue: 'StorageTreasures.com' },
+      })
+    })
+
+    it('saves the manner and the venue through the settings form (B-274)', async () => {
+      await updateAuctionSaleTerms(settingsAdmin(), facilityId, 'Cash only.', '10:00 AM', {
+        manner: 'live_onsite',
+        venue: '  Bidder.example  ',
+      })
+      const saved = await auctionLotSheet(regional(), facilityId)
+      expect(saved!.facility.saleManner).toBe('live_onsite')
+      // Trimmed to a value, the same as the terms and the time.
+      expect(saved!.facility.saleVenue).toBe('Bidder.example')
+
+      // A posted value that is neither of the two stays `online`, the seeded
+      // default — the column is an enum and the write would 500 rather than
+      // set it.
+      await updateAuctionSaleTerms(settingsAdmin(), facilityId, 'Cash only.', '10:00 AM', {
+        manner: 'whatever',
+        venue: 'StorageTreasures.com',
+      })
+      expect((await auctionLotSheet(regional(), facilityId))!.facility.saleManner).toBe('online')
     })
 
     it('leaves the terms null until somebody sets them', async () => {

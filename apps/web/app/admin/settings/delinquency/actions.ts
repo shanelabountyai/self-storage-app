@@ -115,9 +115,13 @@ export async function saveAuctionTermsAction(
     facilityId,
     String(formData.get('auctionSaleTerms') ?? ''),
     String(formData.get('auctionSaleTime') ?? ''),
+    {
+      manner: String(formData.get('auctionSaleManner') ?? ''),
+      venue: String(formData.get('auctionSaleVenue') ?? ''),
+    },
   )
 
   revalidatePath('/admin/settings/delinquency')
   revalidatePath('/admin/auctions')
-  return success('Saved. This prints on every lot on the auction sheet.')
+  return success('Saved. This prints on every lot on the auction sheet, and where the sale is held is named in the lien notice.')
 }

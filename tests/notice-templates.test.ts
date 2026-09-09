@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  EXAMPLE_SALE_STATEMENTS,
+  saleStatement,
   EXAMPLE_TEMPLATE_LABEL,
   EXAMPLE_TEMPLATES,
   NOTICE_DISCLAIMER,
@@ -71,8 +71,44 @@ describe('the example templates — US-29’s guardrails', () => {
   it.each(NOTICE_TYPES)('%s hedges the sale statement rather than asserting the law', (type) => {
     // "Governed by state law" is the honest version. A draft that stated a
     // specific statutory consequence would be exactly the false authority
-    // US-29 exists to prevent.
-    expect(EXAMPLE_SALE_STATEMENTS[type].toLowerCase()).toContain('state law')
+    // US-29 exists to prevent. B-274 made the statement say WHERE, which is a
+    // fact about this facility rather than a claim about the statute — so the
+    // hedge stays, on every branch.
+    for (const sale of [
+      { manner: 'online', venue: 'StorageTreasures.com' },
+      { manner: 'online', venue: null },
+      { manner: 'live_onsite', venue: null },
+    ] as const) {
+      expect(saleStatement(type, sale).toLowerCase()).toContain('state law')
+    }
+  })
+
+  // B-274 / D-131. The gap OQ-9 was hiding: a tenant who wants to attend, bid,
+  // or send a relative to buy their own property back could not learn from
+  // anything this product mailed them where the sale would be.
+  it.each(NOTICE_TYPES)('%s names the site an online sale is held on', (type) => {
+    const text = saleStatement(type, { manner: 'online', venue: '  StorageTreasures.com  ' })
+    expect(text).toContain('online auction at StorageTreasures.com')
+    // Trimmed, because it is typed into a free-text field and lands mid-sentence.
+    expect(text).not.toContain('at  StorageTreasures')
+  })
+
+  it.each(NOTICE_TYPES)('%s sends a live sale to the facility address, not to a website', (type) => {
+    // D-131 kept `live_onsite` first-class: a single-site operator running
+    // their own sale gets a real sentence, not a degraded one.
+    const text = saleStatement(type, { manner: 'live_onsite', venue: null })
+    expect(text).toContain('at public auction held at the facility address above')
+    expect(text).not.toContain('online')
+  })
+
+  it.each(NOTICE_TYPES)('%s falls back to the old hedge rather than naming nowhere', (type) => {
+    // An online facility nobody has finished configuring. "Sold online" naming
+    // no site is worse than the hedge, so the refusal lives in
+    // `auctionReadiness` — which stops the SALE — and the notice says exactly
+    // what it said before B-274.
+    const text = saleStatement(type, { manner: 'online', venue: null })
+    expect(text).not.toContain('online auction')
+    expect(text).toContain('sold to satisfy')
   })
 
   it('renders end to end once every merge value is supplied', () => {

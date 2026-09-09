@@ -159,17 +159,52 @@ ${CLAIM_BLOCK}
   },
 }
 
+/// B-274 / D-131. How this facility holds a lien sale, as the notice needs it.
+export type FacilitySale = {
+  manner: 'online' | 'live_onsite'
+  /// The site an online sale is held on. Null on an `online` facility only
+  /// while nobody has set one — a state `auctionReadiness` refuses the sale in,
+  /// so the hedge below can never be the last word a tenant gets before a sale.
+  venue: string | null
+}
+
 /// The `saleStatement` merge value. Kept here rather than in a template so the
 /// two notice types cannot drift into saying different things about the same
 /// consequence, and so the hedging language stays in one place.
-export const EXAMPLE_SALE_STATEMENTS: Readonly<Record<LienNoticeType, string>> = {
-  pre_lien:
-    'If this balance is not paid, your account may proceed to a lien on the property stored in your ' +
-    'unit, and that property may eventually be sold to satisfy the amount owed. The specific steps, ' +
-    'timing and notice required are governed by state law.',
-  lien:
-    'A lien is claimed against the property stored in your unit. If the amount above is not paid by ' +
-    'the deadline, the property may be advertised and sold to satisfy the lien, and your right to ' +
-    'access the unit may remain suspended until the balance is paid. The specific steps, timing and ' +
-    'notice required are governed by state law.',
+///
+/// B-274. Until D-131 answered master PRD §8 OQ-9 this was two constants that
+/// hedged the entire consequence to "governed by state law" — correct about
+/// the law, and useless to the person it is sent to. A tenant who wants to
+/// attend, bid, or send a relative to buy their own property back could not
+/// learn from anything this product mailed them whether the sale was at the
+/// facility on a Saturday or on a website, let alone which one.
+///
+/// **An `online` facility with no venue set renders the old sentence, word for
+/// word.** That is deliberate and it is not the fix quietly failing open: a
+/// notice that says "sold online" and names no site is worse than the hedge,
+/// so the refusal lives in `auctionReadiness`, where it stops the SALE rather
+/// than the warning about it. A pre-lien notice going out on a facility
+/// somebody has not finished configuring should not be blocked by that.
+///
+/// Every word here is draft legal text under D-10 and carries `NOTICE_DISCLAIMER`
+/// in the body of the template that renders it. Naming a venue makes the
+/// sentence more specific, which raises the cost of getting it wrong — which is
+/// the argument for the readiness check, not against saying it.
+export function saleStatement(type: LienNoticeType, sale: FacilitySale): string {
+  const venue = sale.venue?.trim()
+  const where =
+    sale.manner === 'live_onsite'
+      ? ' at public auction held at the facility address above'
+      : venue
+        ? ` at public online auction at ${venue}`
+        : ''
+
+  return type === 'pre_lien'
+    ? 'If this balance is not paid, your account may proceed to a lien on the property stored in ' +
+        `your unit, and that property may eventually be sold${where} to satisfy the amount owed. ` +
+        'The specific steps, timing and notice required are governed by state law.'
+    : 'A lien is claimed against the property stored in your unit. If the amount above is not paid ' +
+        `by the deadline, the property may be advertised and sold${where} to satisfy the lien, and ` +
+        'your right to access the unit may remain suspended until the balance is paid. The specific ' +
+        'steps, timing and notice required are governed by state law.'
 }

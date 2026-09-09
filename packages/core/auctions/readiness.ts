@@ -17,6 +17,7 @@ export type BlockerKind =
   | 'no_lien_notice_served'
   | 'notice_names_another_unit'
   | 'sale_before_notice_deadline'
+  | 'no_sale_venue'
   | 'not_approved'
   | 'balance_settled'
   | 'already_sold'
@@ -88,6 +89,14 @@ export type ReadinessInput = {
   /// only rule, which is the safe default and the one every existing facility
   /// gets.
   minDaysNoticeToSale?: number
+  /// B-274 / D-131. How this facility holds its sales, and — for an online
+  /// sale — the site it holds them on.
+  ///
+  /// Required rather than optional, so a new caller cannot fail open into the
+  /// silence this row exists to close. `live_onsite` reads neither: the
+  /// facility address on the notice is the place.
+  saleManner: 'online' | 'live_onsite'
+  saleVenue: string | null
   /// Regional or owner approval, per the AC.
   approved: boolean
   /// What the lease still owes. A tenant who paid is not auctionable, whatever
@@ -216,6 +225,25 @@ export function auctionReadiness(input: ReadinessInput): Readiness {
               'served notice behind it cannot be defended.',
           },
     )
+  }
+
+  // B-274 / D-131. An online sale with no site named.
+  //
+  // The only place in this file where the missing thing is a SETTING rather
+  // than evidence, and it blocks for the same reason everything else here
+  // does: the notice the tenant was served says the property will be sold
+  // online, and a tenant who wants to attend, bid, or send a relative to buy
+  // their own things back cannot act on that. The terms and the time degrade
+  // to a blank column because a sale with unstated terms is still lawful;
+  // "somewhere on the internet" is not a place, so this refuses instead.
+  if (input.saleManner === 'online' && !input.saleVenue?.trim()) {
+    blockers.push({
+      kind: 'no_sale_venue',
+      message:
+        'This facility sells online but no site is set, so nothing the tenant was sent says where ' +
+        'their property will be sold. Set the venue under Settings → Delinquency, or set the ' +
+        'facility to sell on site.',
+    })
   }
 
   if (!input.approved) {

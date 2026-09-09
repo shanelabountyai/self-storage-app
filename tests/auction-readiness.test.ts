@@ -35,6 +35,8 @@ function ready(overrides: Partial<ReadinessInput> = {}): ReadinessInput {
     containsVehicle: false,
     lienNoticeServed: true,
     blockedByHold: false,
+    saleManner: 'online',
+    saleVenue: 'StorageTreasures.com',
     approved: true,
     outstandingCents: 60_000,
     status: 'eligible',
@@ -45,6 +47,37 @@ function ready(overrides: Partial<ReadinessInput> = {}): ReadinessInput {
 describe('auctionReadiness — the happy path', () => {
   it('is ready when every rule is satisfied', () => {
     expect(auctionReadiness(ready())).toEqual({ ready: true, blockers: [] })
+  })
+})
+
+// B-274 / D-131. Master PRD §8 OQ-9 was answered "online, per facility", and
+// answering it exposed that nothing in the product told the tenant WHERE their
+// property would be sold. The terms and the time of sale degrade to a blank
+// column because a sale on unstated terms is still lawful; "somewhere on the
+// internet" is not a place, so this one refuses.
+describe('auctionReadiness — where the sale is held', () => {
+  it('blocks an online sale at a facility with no site set', () => {
+    const result = auctionReadiness(ready({ saleManner: 'online', saleVenue: null }))
+    expect(result.ready).toBe(false)
+    const blocker = result.blockers.find((one) => one.kind === 'no_sale_venue')!
+    // Names the fix, not just the gap: it is one field on one facility, and
+    // the person reading this is not the person who filled the form in.
+    expect(blocker.message).toContain('Delinquency')
+  })
+
+  it('treats a whitespace venue as no venue', () => {
+    expect(
+      auctionReadiness(ready({ saleVenue: '   ' })).blockers.map((one) => one.kind),
+    ).toContain('no_sale_venue')
+  })
+
+  it('asks a live on-site sale for no venue at all', () => {
+    // D-131 kept `live_onsite` first-class rather than a legacy flag: the
+    // facility address on the notice is the place, so there is nothing to set.
+    expect(auctionReadiness(ready({ saleManner: 'live_onsite', saleVenue: null }))).toEqual({
+      ready: true,
+      blockers: [],
+    })
   })
 })
 

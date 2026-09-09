@@ -2361,6 +2361,24 @@ function reviewedOn(locale: Locale): string {
 // `LAST_REVIEWED` is not bumped, per D-115: no manual screen-reader pass was
 // performed, and this item performed none. **B-254 is still the only thing that
 // can move that date, and no agent may tick it.**
+//
+// Re-read 2026-09-09, at B-274 (nothing in the product said where a unit would
+// be sold). **No public route, no public page and no rendered customer screen
+// changed**, so nothing on this page needed correcting in either direction —
+// the two screens it touches, `/admin/settings/delinquency` and
+// `/admin/auctions`, are staff-only and are the "staff screens" this page's
+// "where we fall short" list already names, unchanged in scope.
+//
+// It is written down rather than skipped because the row DOES change something
+// a customer receives: the sale statement inside a lien notice, which is a
+// generated document rather than a page. Both new controls go through the
+// shipped `Field`, one of them a native `<select>` with a real `<option>` per
+// value, and the venue's hint states the consequence of leaving it empty in
+// text — but a mailed document is outside every claim on this page, and none
+// of them was widened to cover one.
+//
+// The three "where we fall short" entries were re-read against this build and
+// all three are still true and still in scope.
 
 export default async function AccessibilityPage() {
   const locale = await getLocale()

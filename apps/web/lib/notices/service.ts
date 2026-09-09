@@ -11,7 +11,7 @@ import {
 import {
   canDeliver,
   claimForNotice,
-  EXAMPLE_SALE_STATEMENTS,
+  saleStatement,
   letterRequest,
   mailingAddress,
   noticeTypeLabel,
@@ -165,6 +165,10 @@ export async function noticeContext(
           phone: true,
           email: true,
           timezone: true,
+          // B-274 / D-131. Where this facility's lien sales are held, which is
+          // what `saleStatement` needs to stop hedging.
+          auctionSaleManner: true,
+          auctionSaleVenue: true,
         },
       },
       unit: { select: { number: true } },
@@ -282,7 +286,10 @@ export async function noticeContext(
         claimTotal: formatCents(claim.totalCents),
         oldestAccrualDate: claim.oldestAccrualAt ? formatDate(claim.oldestAccrualAt) : formatDate(noticeDate),
         deadlineDate: formatDate(deadlineDate),
-        saleStatement: EXAMPLE_SALE_STATEMENTS[type],
+        saleStatement: saleStatement(type, {
+          manner: lease.facility.auctionSaleManner,
+          venue: lease.facility.auctionSaleVenue,
+        }),
         noticeDate: formatDate(noticeDate),
       },
     },

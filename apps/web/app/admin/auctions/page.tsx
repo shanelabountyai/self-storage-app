@@ -70,6 +70,18 @@ export default async function AuctionsPage({
   // and the operator is one click from it here.
   const undescribed = sheet?.lots.filter((lot) => lot.goodsDescription === null) ?? []
 
+  // B-274 / D-131. Null in exactly one state — an online facility with no site
+  // set — which the warning above owns, so the echo below stays silent rather
+  // than saying it a second time.
+  const saleWhere =
+    sheet === null
+      ? null
+      : sheet.facility.saleManner === 'live_onsite'
+        ? 'Live, at the facility address'
+        : sheet.facility.saleVenue
+          ? `Online, at ${sheet.facility.saleVenue}`
+          : null
+
   return (
     <div className="flex flex-col gap-8">
       <div>
@@ -201,6 +213,27 @@ export default async function AuctionsPage({
             </p>
           )}
 
+          {/* B-274 / D-131. Not the terms' or the time's note, deliberately: a
+              missing venue is not a blank column, it drops every lot at this
+              facility off the sheet through `auctionReadiness`. Named here as
+              well as on each refused lot below, because the fix is one field
+              on one facility and the refusal list would otherwise repeat it
+              once per unit without ever saying it is one setting. */}
+          {sheet.facility.saleManner === 'online' && !sheet.facility.saleVenue && (
+            <p role="note" className="border-input rounded-lg border p-3 text-sm text-pretty">
+              <strong className="font-medium">
+                {sheet.facility.name} sells online but no site is set
+              </strong>
+              , so nothing the tenant was sent says where their property will be sold and{' '}
+              <strong className="font-medium">no sale here can be scheduled</strong>. Set the site
+              in{' '}
+              <Link href="/admin/settings/delinquency" className="underline underline-offset-2">
+                delinquency settings
+              </Link>
+              , or set this facility to sell on site.
+            </p>
+          )}
+
           {(sheet.facility.saleTerms === null || sheet.facility.saleTime === null) && (
             <p role="note" className="border-input rounded-lg border p-3 text-sm text-pretty">
               <strong className="font-medium">
@@ -224,8 +257,19 @@ export default async function AuctionsPage({
           {/* Echoed here, where the operator is about to read it to an
               auctioneer or a classifieds clerk. Seeing the sentence is the
               preview the settings form cannot give. */}
-          {(sheet.facility.saleTime !== null || sheet.facility.saleTerms !== null) && (
+          {(saleWhere !== null || sheet.facility.saleTime !== null || sheet.facility.saleTerms !== null) && (
             <dl className="border-input flex flex-col gap-2 rounded-lg border p-3 text-sm">
+              {/* Echoed with the time and terms because it is the same
+                  sentence an operator reads out, and because it is the one
+                  line here the TENANT has already been sent. Null only in the
+                  state the warning above already covers, so it is not said
+                  twice. */}
+              {saleWhere !== null && (
+                <div className="flex flex-wrap gap-x-2">
+                  <dt className="font-medium">Where the sale is held</dt>
+                  <dd className="text-muted-foreground text-pretty">{saleWhere}</dd>
+                </div>
+              )}
               {sheet.facility.saleTime !== null && (
                 <div className="flex flex-wrap gap-x-2">
                   <dt className="font-medium">Time of sale</dt>

@@ -68,7 +68,13 @@ export default async function DelinquencyTimelinePage({
     activeTimeline(facilityId),
     prisma.facility.findUniqueOrThrow({
       where: { id: facilityId },
-      select: { state: true, auctionSaleTerms: true, auctionSaleTime: true },
+      select: {
+        state: true,
+        auctionSaleTerms: true,
+        auctionSaleTime: true,
+        auctionSaleManner: true,
+        auctionSaleVenue: true,
+      },
     }),
     noticeTemplateKeys(facilityId),
   ])
@@ -310,15 +316,16 @@ export default async function DelinquencyTimelinePage({
           them accumulated. */}
       <AdminForm
         action={saveAuctionTermsAction}
-        label="Terms of sale"
+        label="Sale of goods at auction"
         className="flex flex-col gap-3"
       >
         <input type="hidden" name="facilityId" value={facilityId} />
-        <h2 className="font-medium">Time and terms of sale at auction</h2>
+        <h2 className="font-medium">Where, when and on what terms a sale is held</h2>
         <p className="text-muted-foreground max-w-prose text-sm text-pretty">
-          Both are printed on every lot of the auction sheet you download from the auctions
-          screen. Left empty, that column on the sheet is blank and the auctions screen says so;
-          nothing is filled in on your behalf.
+          All of these are printed on every lot of the auction sheet you download from the
+          auctions screen, and where the sale is held is named in the lien notice the tenant is
+          sent. Leave the time or the terms empty and that column on the sheet is blank and the
+          auctions screen says so; nothing is filled in on your behalf.
         </p>
         {/* B-205. The time of sale is one of the three things a lien
             advertisement has to carry, alongside the name of the person whose
@@ -343,8 +350,34 @@ export default async function DelinquencyTimelinePage({
           defaultValue={facility.auctionSaleTerms ?? ''}
           hint="One line — it is printed on every lot. For example: Cash only, 10% buyer's premium, contents sold as seen, unit to be emptied within 48 hours."
         />
+        {/* B-274 / D-131. Master PRD §8 OQ-9 — live on-site sales or online —
+            was answered "online, per facility", so this is a setting and
+            `On site` is a real answer rather than a legacy branch. Its control
+            ships with its column, beside the terms, for the same reason.
+
+            Unlike the two fields above, an empty venue on an online facility
+            is not a blank column: `auctionReadiness` refuses the sale and the
+            auctions screen says which facility. The hint says so, because the
+            person filling this in is not the person who will read the refusal
+            eight months from now. */}
+        <Field
+          name="auctionSaleManner"
+          label="How the sale is held"
+          as="select"
+          defaultValue={facility.auctionSaleManner}
+        >
+          <option value="online">Online auction</option>
+          <option value="live_onsite">Live, at the facility</option>
+        </Field>
+        <Field
+          name="auctionSaleVenue"
+          label="Site the online sale is held on"
+          as="input"
+          defaultValue={facility.auctionSaleVenue ?? ''}
+          hint="Named in the lien notice sent to the tenant, so they can attend or bid. Required for an online sale — until it is set, no sale at this facility can be scheduled. Not used for a sale held at the facility."
+        />
         <div>
-          <Button type="submit">Save time and terms</Button>
+          <Button type="submit">Save sale settings</Button>
         </div>
       </AdminForm>
 
