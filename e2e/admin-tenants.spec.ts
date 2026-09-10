@@ -533,8 +533,13 @@ test.describe('payment plans on the tenant profile', () => {
   // B-212. The builder used to render for every non-ended lease with no active
   // plan, so a current tenant got twelve fields over "$0.00 is past due" that
   // refused every submit.
+  //
+  // A Dallas lease, deliberately: nothing seeds arrears on it and no spec pays
+  // it. This pointed at `alex.active5` until B-256 put that Austin lease on the
+  // business account with an unpaid month, after which the builder was
+  // correctly offered and this failed on every `main` run from 2026-09-05.
   test('is not offered on a lease with nothing past due', async ({ page }) => {
-    await page.goto('/admin/tenants?q=alex.active5@demo.example.com')
+    await page.goto('/admin/tenants?q=alex.active14@demo.example.com')
     await page.getByRole('link', { name: 'Alex Active' }).first().click()
 
     await expect(page.getByRole('region', { name: 'Actions' })).toBeVisible()

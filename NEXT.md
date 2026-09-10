@@ -1,22 +1,22 @@
 # Next
 
-**B-282 and B-293 are done (one commit, a noted cluster).** B-293 was found
-while verifying B-282: `/admin/access` rendered six cells under seven headers,
-and it was one of the three failures on `main`'s e2e lane.
+**`main`'s last red e2e test is fixed (spec-only).** `admin-tenants.spec.ts`
+"payment plans … is not offered on a lease with nothing past due" had failed on
+every `main` run since `cf92793` (2026-09-05), not just the last three. The
+product was right: B-256 put `alex.active5`'s lease on the business account
+with an unpaid month, so the builder was correctly offered. The spec now uses
+`alex.active14` (Dallas North, active, no plan, no invoices, no spec touches it).
 
 ## Start here
 
-**First: the other red test on `main`.** `e2e/admin-tenants.spec.ts:536`
-("payment plans on the tenant profile › is not offered on a lease with nothing
-past due") fails on both projects at `3830ead`. It was **not investigated**. The
-last three `main` runs failed and only the latest log was read. A red lane hides
-the next real failure, so look before building on it.
-
-**Then: B-278** (the receipt's `take: 1` with no `orderBy`, and the nav's pay
+**B-278** (the receipt's `take: 1` with no `orderBy`, and the nav's pay
 link titled with somebody else's unit). Its emailed-receipt half is marked
 `needs confirmation at build time` and must not be quietly upgraded to verified.
 The nav half was seen live during B-282: Casey Contractor's nav "Pay $161"
 points at `/portal/pay?lease=…`.
+
+**Check the first `main` run after this push is green.** If it is not, the
+failure is new: the 2 failures on `aaf1c30` were both this test.
 
 ## Owner actions
 
@@ -47,6 +47,16 @@ B-243 / B-085 / B-133 (credentials or partner agreements), B-134 (trigger not
 fired). **B-275** is buildable and authorised by D-132.
 
 ## What this session learned
+
+**A seed change can break a spec in another topic file that names a fixture by
+index.** B-256 edited the business-account block and its own specs passed; the
+break was in `admin-tenants.spec.ts`, which reached the same lease as
+`alex.active5`. Before giving a seeded lease new money state, grep `e2e/` for
+the tenant's email as well as its name.
+
+**Only the latest red run's log was read, so seven red runs looked like three.**
+`gh run view <id> --log-failed` on each run back to the last green one finds
+the first failure in minutes.
 
 **A reseed leaves `.next/cache/fetch-cache` serving the old ids.**
 `db:migrate:e2e` recreates the demo facilities, and every unit-type id changes.
