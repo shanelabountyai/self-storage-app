@@ -9164,7 +9164,7 @@ Migration `20260909152814_tenant_email_optional`: drop `tenant_email_key`, drop 
 
 **Test verification.** Typecheck clean including `tsconfig.tests.json`. Lint clean — 6 warnings, all pre-existing `_prev`/`_formData`, unchanged in count from B-274. `prisma migrate diff` against `.env.test` reports "No difference detected". Migration applied to `storage_test` (`db:migrate:test`) and to `public` (`db:migrate:e2e`, which reseeded the demo). Unit suite **4,424 passed + 8 skipped across 256 files passed and 1 skipped — reconciled to 4,432**, +9 on B-274: seven in `tests/auction-readiness.test.ts` (a changed site blocks and names both, a manner switch in either direction blocks, an unchanged sale is silent, a live sale ignores a venue string, case and whitespace are not a change, a pre-B-276 null snapshot is silent, and no served notice means no comparison), one in `tests/notices-db.test.ts` (generation writes both columns and the document carries the same site), and one in `tests/auctions-db.test.ts` (a scheduled lot on a real case goes un-ready, drops off the lot sheet into its refusals naming the served site, and comes back when the setting is restored). No e2e spec was touched and no admin screen changed shape, so none was run locally; CI's e2e lane owns the sweep.
 
-## B-292 — every lease that had paid an invoice failed reconciliation, and the notice gate refused it (2026-09-10, `__SHA__`)
+## B-292 — every lease that had paid an invoice failed reconciliation, and the notice gate refused it (2026-09-10, `3830ead`)
 
 Found while starting B-277, and **verified on real rows before any code changed.** B-277's remedy was "reuse `reconcile()`", so the first step was to run that arithmetic in SQL over `storage_test`'s 722 leases. **25 leases had an invoice paid through the real payment path, and all 25 failed. None passed.**
 
@@ -9186,7 +9186,7 @@ Found while starting B-277, and **verified on real rows before any code changed.
 - **A partially paid invoice moved by a transfer (B-086) reads as a gap of the paid part on the old lease.** The payment's entry stays on the old lease while the invoice moves. This is rare (a partial payment followed by a transfer) and shows up on B-277's list rather than hiding. Nothing owns it yet.
 - **Production has been refusing lien notices on this ground since B-061.** No data needs repairing, but any notice staff were refused should be retried. That is recorded in `NEXT.md` as an owner question.
 
-## B-277 — nothing swept for leases whose ledger and invoices disagree (2026-09-10, `__SHA__`)
+## B-277 — nothing swept for leases whose ledger and invoices disagree (2026-09-10, `3830ead`)
 
 Built on B-292, in the same commit. Without B-292 the list would have named every lease that had paid an invoice.
 
