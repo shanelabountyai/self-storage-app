@@ -81,6 +81,79 @@ describe('auctionReadiness — where the sale is held', () => {
   })
 })
 
+// B-276. B-274 built the venue and not its drift check: readiness reads the
+// facility as it stands today, and the served notice says what it said in July.
+describe('auctionReadiness — the venue the notice named', () => {
+  const served = { noticeSaleManner: 'online' as const, noticeSaleVenue: 'StorageTreasures.com' }
+
+  it('blocks a sale at a site the served notice never named', () => {
+    const result = auctionReadiness(ready({ ...served, saleVenue: 'Bidder.example' }))
+    expect(result.ready).toBe(false)
+    const blocker = result.blockers.find((one) => one.kind === 'notice_names_another_venue')!
+    // Both halves, because the manager reading it has to decide which one is
+    // wrong — the setting, or the notice.
+    expect(blocker.message).toContain('StorageTreasures.com')
+    expect(blocker.message).toContain('Bidder.example')
+  })
+
+  it('blocks a switch of manner in either direction', () => {
+    expect(
+      auctionReadiness(ready({ ...served, saleManner: 'live_onsite', saleVenue: null })).blockers.map(
+        (one) => one.kind,
+      ),
+    ).toContain('notice_names_another_venue')
+    expect(
+      auctionReadiness(
+        ready({
+          noticeSaleManner: 'live_onsite',
+          noticeSaleVenue: null,
+          saleManner: 'online',
+          saleVenue: 'StorageTreasures.com',
+        }),
+      ).blockers.map((one) => one.kind),
+    ).toContain('notice_names_another_venue')
+  })
+
+  it('says nothing when the facility has not moved its sale', () => {
+    expect(auctionReadiness(ready(served))).toEqual({ ready: true, blockers: [] })
+  })
+
+  it('reads no venue on a live on-site sale, so re-typing one is not a change', () => {
+    expect(
+      auctionReadiness(
+        ready({
+          noticeSaleManner: 'live_onsite',
+          noticeSaleVenue: 'ignored',
+          saleManner: 'live_onsite',
+          saleVenue: null,
+        }),
+      ),
+    ).toEqual({ ready: true, blockers: [] })
+  })
+
+  it('treats case and surrounding whitespace as the same venue', () => {
+    expect(
+      auctionReadiness(ready({ ...served, saleVenue: '  storagetreasures.com  ' })).blockers,
+    ).toEqual([])
+  })
+
+  it('infers nothing from a notice generated before the snapshot existed', () => {
+    // An absent snapshot is not a mismatch — every notice served before B-276
+    // has null columns, and blocking those would stop sales nobody can fix.
+    expect(
+      auctionReadiness(ready({ noticeSaleManner: null, saleVenue: 'Bidder.example' })),
+    ).toEqual({ ready: true, blockers: [] })
+  })
+
+  it('says nothing when no notice is served at all', () => {
+    const kinds = auctionReadiness(
+      ready({ lienNoticeServed: false, ...served, saleVenue: 'Bidder.example' }),
+    ).blockers.map((one) => one.kind)
+    expect(kinds).toContain('no_lien_notice_served')
+    expect(kinds).not.toContain('notice_names_another_venue')
+  })
+})
+
 describe('auctionReadiness — the hard blocks', () => {
   // B-121. `block_auction` sat in the holds catalog from B-096 and nothing read
   // it. The nightly engine halting on `halt_dunning` first is what hid it: no

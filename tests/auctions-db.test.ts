@@ -591,6 +591,43 @@ describeDb('the auction pipeline', () => {
       })
     })
 
+    // B-276. B-274 built the venue and stopped there: readiness reads the
+    // facility as it stands TODAY, so a manner or venue changed after service
+    // left the case green while the tenant had been told somewhere else.
+    it('drops a lot whose facility moved its sale after the notice was served', async () => {
+      const caseId = await makeReadyCase()
+      // The served notice, as B-276 now snapshots it at generation.
+      await prisma.notice.updateMany({
+        where: { leaseId, type: 'lien', status: 'delivered' },
+        data: { renderedSaleManner: 'online', renderedSaleVenue: 'StorageTreasures.com' },
+      })
+      await scheduleSale(regional(), caseId, saleDay())
+      expect((await auctionCase(regional(), caseId))!.readiness.ready).toBe(true)
+
+      await prisma.facility.update({
+        where: { id: facilityId },
+        data: { auctionSaleVenue: 'Bidder.example' },
+      })
+      const moved = (await auctionCase(regional(), caseId))!
+      expect(moved.readiness.ready).toBe(false)
+      expect(moved.readiness.blockers.map((one) => one.kind)).toContain('notice_names_another_venue')
+      // Same shape as the moved-unit case: off the sheet, named in the
+      // refusals rather than vanishing from both lists.
+      const sheet = await auctionLotSheet(regional(), facilityId)
+      expect(sheet!.lots.map((one) => one.caseId)).not.toContain(caseId)
+      expect(sheet!.refused.find((one) => one.caseId === caseId)?.reason).toContain(
+        'StorageTreasures.com',
+      )
+
+      // Restoring the setting is one of the two fixes the blocker names; the
+      // other is re-serving, which is the moved-unit test above.
+      await prisma.facility.update({
+        where: { id: facilityId },
+        data: { auctionSaleVenue: 'StorageTreasures.com' },
+      })
+      expect((await auctionCase(regional(), caseId))!.readiness.ready).toBe(true)
+    })
+
     it('saves the manner and the venue through the settings form (B-274)', async () => {
       await updateAuctionSaleTerms(settingsAdmin(), facilityId, 'Cash only.', '10:00 AM', {
         manner: 'live_onsite',

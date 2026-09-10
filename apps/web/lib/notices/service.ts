@@ -132,6 +132,10 @@ export type NoticeContext = {
     returnedMailAt: Date | null
   }
   template: { id: string; version: number; title: string; body: string }
+  /// B-276. What `saleStatement` was rendered from, so the notice row can
+  /// snapshot it beside the address and `auctionReadiness` can tell later that
+  /// the facility has moved its sale somewhere the tenant was never told about.
+  sale: { manner: 'online' | 'live_onsite'; venue: string | null }
   values: Record<string, string>
 }
 
@@ -259,6 +263,7 @@ export async function noticeContext(
         returnedMailAt: address.returnedMailAt,
       },
       template,
+      sale: { manner: lease.facility.auctionSaleManner, venue: lease.facility.auctionSaleVenue },
       values: {
         tenantName: `${lease.tenant.firstName} ${lease.tenant.lastName}`,
         tenantAddress: [
@@ -445,6 +450,9 @@ export async function generateNotice(
         renderedState: context.address.state,
         renderedPostalCode: context.address.postalCode,
         tenantAddressId: context.address.id,
+        // B-276. Beside the address, and snapshotted for the same reason.
+        renderedSaleManner: context.sale.manner,
+        renderedSaleVenue: context.sale.venue,
         claimSnapshot: context.claim as unknown as Prisma.InputJsonValue,
         claimTotalCents: context.claim.totalCents,
         deadlineDate: context.deadlineDate,

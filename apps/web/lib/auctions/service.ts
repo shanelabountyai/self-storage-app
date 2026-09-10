@@ -249,7 +249,14 @@ export async function auctionCase(actor: Actor, caseId: string): Promise<Auction
       where: { leaseId: currentLeaseId, type: 'lien', status: 'delivered', supersededAt: null },
       // B-224: `deadlineDate` too — the date the notice told the tenant they
       // had until, which is the earliest a sale may be set for.
-      select: { id: true, deadlineDate: true },
+      // B-276: and where it told them the sale would be held, which the
+      // facility setting can have moved away from since.
+      select: {
+        id: true,
+        deadlineDate: true,
+        renderedSaleManner: true,
+        renderedSaleVenue: true,
+      },
     }),
     row.approvedByStaffId
       ? prisma.staffUser.findUnique({
@@ -298,6 +305,9 @@ export async function auctionCase(actor: Actor, caseId: string): Promise<Auction
     blockedByHold,
     saleManner: row.facility.auctionSaleManner,
     saleVenue: row.facility.auctionSaleVenue,
+    // B-276. What the served notice said, against what the facility says now.
+    noticeSaleManner: servedLienNotice?.renderedSaleManner ?? null,
+    noticeSaleVenue: servedLienNotice?.renderedSaleVenue ?? null,
     approved: Boolean(row.approvedAt),
     outstandingCents,
     status: row.status,

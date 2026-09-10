@@ -190,6 +190,28 @@ describeDb('lien notices', () => {
       expect(notice.tenantAddressId).toBeTruthy()
     })
 
+    it('stores where it said the sale would be held — B-276', async () => {
+      // Snapshotted beside the address and for the same reason: the facility
+      // setting keeps moving, and `auctionReadiness` has to be able to tell
+      // that it moved AFTER this notice went out.
+      await prisma.facility.update({
+        where: { id: facilityId },
+        data: { auctionSaleManner: 'online', auctionSaleVenue: 'StorageTreasures.com' },
+      })
+      await oweOneMonth()
+      const result = await generateNotice(actor(), leaseId, 'lien')
+      if (!result.ok) throw new Error('unreachable')
+
+      const notice = await prisma.notice.findUniqueOrThrow({ where: { id: result.noticeId } })
+      expect(notice.renderedSaleManner).toBe('online')
+      expect(notice.renderedSaleVenue).toBe('StorageTreasures.com')
+      // And it is the same sentence the document carries.
+      const document = await prisma.document.findUniqueOrThrow({
+        where: { id: notice.documentId! },
+      })
+      expect(document.content).toContain('StorageTreasures.com')
+    })
+
     it('keeps saying where it was sent after the tenant moves', async () => {
       // The whole reason the address is snapshotted rather than joined. On day
       // 40 of a lien cycle the tenant updates their address; the notice already

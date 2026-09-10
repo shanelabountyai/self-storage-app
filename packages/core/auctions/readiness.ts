@@ -16,6 +16,7 @@ export type BlockerKind =
   | 'step_lacks_proof'
   | 'no_lien_notice_served'
   | 'notice_names_another_unit'
+  | 'notice_names_another_venue'
   | 'sale_before_notice_deadline'
   | 'no_sale_venue'
   | 'not_approved'
@@ -97,6 +98,18 @@ export type ReadinessInput = {
   /// facility address on the notice is the place.
   saleManner: 'online' | 'live_onsite'
   saleVenue: string | null
+  /// B-276. The same two values as the SERVED lien notice stated them,
+  /// snapshotted on the `Notice` row at generation. The pair above is the
+  /// facility as it stands TODAY; a manager who serves a notice saying the
+  /// property will be sold on one site and then switches the setting three
+  /// weeks later sells at a venue the notice never named, which is the second
+  /// commonest wrongful-sale claim after "no notice was served".
+  ///
+  /// Null on any notice generated before B-276, and an absent snapshot is not
+  /// a mismatch — nothing is inferred from silence, the same way
+  /// `noticeDeadline` says nothing when no notice is served.
+  noticeSaleManner?: 'online' | 'live_onsite' | null
+  noticeSaleVenue?: string | null
   /// Regional or owner approval, per the AC.
   approved: boolean
   /// What the lease still owes. A tenant who paid is not auctionable, whatever
@@ -246,6 +259,30 @@ export function auctionReadiness(input: ReadinessInput): Readiness {
     })
   }
 
+  // B-276. The notice on file names somewhere the sale will not be held.
+  //
+  // Same shape as `notice_names_another_unit` above and for the same reason:
+  // the block is not that the paperwork is missing, it is that the paperwork
+  // describes a sale other than the one about to happen. Only checked once a
+  // notice is served — before that `no_lien_notice_served` is already blocking
+  // and there is nothing to compare against.
+  if (input.lienNoticeServed && input.noticeSaleManner) {
+    const served = saleKey(input.noticeSaleManner, input.noticeSaleVenue)
+    const current = saleKey(input.saleManner, input.saleVenue)
+    if (served !== current) {
+      blockers.push({
+        kind: 'notice_names_another_venue',
+        message:
+          `The lien notice on file tells the tenant their property will be sold at ` +
+          `${saleDescription(input.noticeSaleManner, input.noticeSaleVenue)}, but this facility ` +
+          `now sells at ${saleDescription(input.saleManner, input.saleVenue)}. Either restore the ` +
+          'setting under Settings → Delinquency, or serve a new lien notice naming where the sale ' +
+          'will actually be held. The notice period runs again from that service; what the tenant ' +
+          'owes, and how long they have owed it, are unchanged.',
+      })
+    }
+  }
+
   if (!input.approved) {
     blockers.push({
       kind: 'not_approved',
@@ -266,6 +303,28 @@ export function auctionReadiness(input: ReadinessInput): Readiness {
   }
 
   return { ready: blockers.length === 0, blockers }
+}
+
+/// B-276. Two sale statements are the same statement, or they are not.
+///
+/// Case- and whitespace-insensitive on the venue because the setting is free
+/// text read down a phone (see `Facility.auctionSaleVenue`), and re-typing
+/// "storagetreasures.com" is not a change of venue. A `live_onsite` sale reads
+/// no venue at all: the facility address on the notice is the place.
+function saleKey(manner: 'online' | 'live_onsite', venue: string | null | undefined): string {
+  return manner === 'live_onsite' ? 'live_onsite' : `online:${(venue ?? '').trim().toLowerCase()}`
+}
+
+/// The same pair as a manager reads it. "no named site" is reachable only from
+/// a snapshot taken while the facility was mid-configuration — `no_sale_venue`
+/// refuses that state going forward.
+function saleDescription(
+  manner: 'online' | 'live_onsite',
+  venue: string | null | undefined,
+): string {
+  if (manner === 'live_onsite') return 'a live auction at the facility'
+  const named = venue?.trim()
+  return named ? `an online auction at ${named}` : 'an online auction at no named site'
 }
 
 /// B-224. Whether a sale date falls before the tenant was told it could.

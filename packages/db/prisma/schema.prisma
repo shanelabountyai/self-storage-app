@@ -4016,6 +4016,16 @@ model Notice {
   /// notice → address row → who changed it and when.
   tenantAddressId      String?
 
+  /// B-276. Where the notice told the tenant the sale would be held, snapshotted
+  /// for the same reason the address above is: the facility setting keeps
+  /// moving, and this has to keep saying what the tenant was told. Read by
+  /// `auctionReadiness` — a facility that changes manner or venue after service
+  /// blocks the sale rather than holding it somewhere the served notice never
+  /// named. Null on every notice generated before this row, and an absent
+  /// snapshot is not a mismatch.
+  renderedSaleManner   AuctionSaleManner?
+  renderedSaleVenue    String?
+
   /// The itemized claim as it stood at generation, and its total. US-27's
   /// "reconciles to the ledger at generation time" — snapshotted because the
   /// ledger keeps moving and the notice has to keep saying what it said.
