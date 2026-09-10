@@ -15,8 +15,8 @@ link titled with somebody else's unit). Its emailed-receipt half is marked
 The nav half was seen live during B-282: Casey Contractor's nav "Pay $161"
 points at `/portal/pay?lease=…`.
 
-**Check the first `main` run after this push is green.** If it is not, the
-failure is new: the 2 failures on `aaf1c30` were both this test.
+**`main` is green** at `83e2206` (run 34529629357): 1509 passed, 9 skipped,
+0 failed, 0 flaky. That is the first green `main` since 2026-09-04.
 
 ## Owner actions
 
