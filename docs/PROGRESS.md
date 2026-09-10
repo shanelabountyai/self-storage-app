@@ -9212,7 +9212,7 @@ Built on B-292, in the same commit. Without B-292 the list would have named ever
 
 **Test verification (both items).** Typecheck clean, including `tsconfig.tests.json`. Lint 0 errors, 6 warnings, all pre-existing and unchanged in count from B-276. No schema change, so there is nothing for the drift check to see. **New `tests/ledger-exceptions-db.test.ts` (7 cases)**, driven through `recordCounterPayment` rather than hand-written payment rows, because a hand-written fixture is what hid B-292. **Mutation-checked:** with the allocation add-back switched off, 4 of the 7 fail. They are the paid-lease reconciliation, the notice not being refused, and the paid lease staying off both the list and the hourly count. The other three guard the opposite direction (over-broad add-back, the gate still refusing, and scoping). The seven files the loader touches passed 105/105 together. **Full unit suite, second run: 4,433 passed + 8 skipped = 4,441** (257 files passed, 1 skipped — the live-integration file), exit 0, totals reconcile. **The first full run was stopped at its first alarm:** four `marketplace-db.test.ts` feed tests failed with *"Timed out fetching a new connection from the connection pool"*. That is B-185's recorded `storage_test` accumulation (2,842 facilities), in a file this diff does not touch. Stopping it left **nine orphaned vitest workers holding 49 connections to `storage_test`**, because `pkill -f "$PWD.*vitest"` matches the `dotenv` wrapper only: the workers retitle themselves `node (vitest N)` and carry no path. They were killed by working directory (`lsof -a -d cwd`), which leaves other projects' workers alone. After `npm run db:reset-test`, the second run was green. **e2e:** `npm run test:e2e -- e2e/admin.spec.ts -g ledger-exceptions` ran the page through `ADMIN_SCAN_ROUTES`' four checks (axe WCAG 2.1 AA, 320px reflow, 200% zoom, forced text spacing) against the production build, on desktop and mobile Chrome. **10 passed** (the 8 checks plus 2 auth setups), exit 0. No `[e2e setup]` line appeared in that output. These checks only read the page and mutate nothing, so a stale hold or lock could not have changed them, but the run is not evidence that global setup ran. **What that scan did NOT cover: the table.** The demo `public` schema has no lease that fails reconciliation, so the page rendered its empty state. The table's markup follows `plans-holds`' scanned table (caption, `scope`, `ScrollRegion`), but no axe pass has seen it with rows in it.
 
-## B-282 — three customer money-path tables were scroll wrappers a keyboard could not focus (2026-09-10, `__SHA__`)
+## B-282 — three customer money-path tables were scroll wrappers a keyboard could not focus (2026-09-10, `041c9d5`)
 
 **What it built.**
 
@@ -9247,7 +9247,7 @@ Built on B-292, in the same commit. Without B-292 the list would have named ever
 - **Two local-only failures were environment, not code.** (1) `/reserve`'s layout test failed after `db:migrate:e2e`, because `.next/cache/fetch-cache` survives builds and served the pre-reseed unit-type ids. It passed on both projects once the cache was cleared. (2) `/admin/access` failed its axe test, which is B-293.
 - **The nav's "Pay $161" points at `?lease=`** for the payer. That was seen in the probe snapshot and is already B-278.
 
-## B-293 — the gate log's rows had six cells under seven headers (2026-09-10, `__SHA__`)
+## B-293 — the gate log's rows had six cells under seven headers (2026-09-10, `041c9d5`)
 
 Found while verifying B-282 and fixed in the same commit, by owner choice.
 
