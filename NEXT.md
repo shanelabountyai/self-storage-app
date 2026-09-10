@@ -1,22 +1,23 @@
 # Next
 
-**B-278 is done.** The receipt for a payment that settled several units now
-lists every unit it credited, with a total and the balance across those units.
-That covers `/portal/pay/done`, the pay-link receipt `/pay/[token]/done` and
-the emailed receipt. The portal nav's Pay link opens `/portal/pay?account=`
-for a payer.
+**B-279 is done** (`2eeba53`). A business account's payer now receives the bill
+(`invoice.due_soon`, `invoice.due_today`) and the past-due ladder
+(`delinquency.day_reached`) beside the lease's tenant, in the payer's own
+language. The lien supplements stay tenant-only (D-118). The owner settled the
+scope as **D-136**: a list of event names, because entity type cannot separate
+the dunning email from the lien supplement. `/admin/billing/accounts/[id]` shows
+days past due and the ladder stage.
 
 ## Start here
 
-**B-279** (a business account's payer is never sent a bill or a past-due
-notice). It is the next unbuilt row in order. **B-275** (the Neon dev branch's
-drift) is still open ABOVE it: buildable, authorised by D-132, and it needs a
-session with Neon access.
+**B-280** (a business account cannot pay at the counter, and forcing it through
+mis-posts the money). It is the next unbuilt row in order. **B-275** (the Neon
+dev branch's drift) is still open ABOVE it: buildable, authorised by D-132, and
+it needs a session with Neon access.
 
-**B-278 left one thing for a later row.** The emailed receipt's seeded wording
-is "for unit {{unit.number}}", so a split payment reads "for unit C-7 and
-C-8". The fix is a template edit in both languages, which is seeded state
-(B-206's reseed trap), so it did not go in with a merge-field change.
+**Two things B-278 and B-279 left to template edits** (seeded state, B-206's
+reseed trap, no row yet): the receipt reads "for unit C-7 and C-8", and a
+payer's reminder reads "the balance on unit C-7" without naming the tenant on it.
 
 ## Owner actions
 
@@ -48,29 +49,12 @@ fired). **B-275** is buildable and authorised by D-132.
 
 ## What this session learned
 
-**A seed change can break a spec in another topic file that names a fixture by
-index.** B-256 edited the business-account block and its own specs passed; the
-break was in `admin-tenants.spec.ts`, which reached the same lease as
-`alex.active5`. Before giving a seeded lease new money state, grep `e2e/` for
-the tenant's email as well as its name.
+**zsh does not word-split an unquoted variable.** `files="a b"; npm test -- $files`
+hands vitest ONE filter string, and it answers "No test files found" with exit
+1. Pass the paths literally, or use `${=files}`.
 
-**Only the latest red run's log was read, so seven red runs looked like three.**
-`gh run view <id> --log-failed` on each run back to the last green one finds
-the first failure in minutes.
+**A second recipient on one event shares the pay-link revocation.**
+`mintPayLink` revoked any live link for the same event and lease, so adding the
+payer would have killed the tenant's link. It is now scoped by tenant too. Check
+every per-event side effect in a context extender before fanning an event out.
 
-**A reseed leaves `.next/cache/fetch-cache` serving the old ids.**
-`db:migrate:e2e` recreates the demo facilities, and every unit-type id changes.
-The data cache survives `next build`, so the facility page links a dead
-`?unitType=` and the `/reserve` layout test fails on "That size isn't available
-here any more", which reads like a broken reserve flow. `rm -rf
-apps/web/.next/cache/fetch-cache` after any reseed. CI never sees it.
-
-**An accessible name added to a container can break a substring locator.**
-Naming the dashboard's table region "Units billed to Acme Contracting" made
-`getByRole('region', { name: 'Acme Contracting' })` match two elements. Pass
-`exact: true` when a region locator names something a child region's name
-might contain.
-
-**A `page.setContent` fixture needs a viewport meta on the Pixel 7 project.**
-Without one, mobile emulation lays the page out at 980px and a 900px fixture
-fits, so the assertion meant to fail passes.

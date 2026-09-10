@@ -9284,7 +9284,7 @@ Found while verifying B-282 and fixed in the same commit, by owner choice.
 - **The multi-unit receipt table is not axe-scanned.** `/portal/pay/done`'s `succeeded` state is a stated exception in `scan-coverage.ts`, because the demo seed makes no payments. The statement's log entry says so.
 - **The nav with SEVERAL owing leases still sums the positive balances and opens Overview.** For a payer whose account nets a credit, that figure can be higher than the account card's. It is pre-existing, and outside this row.
 
-## B-279 — a business account's payer was never sent a bill or a past-due notice (2026-09-10, `SHA_PENDING`)
+## B-279 — a business account's payer was never sent a bill or a past-due notice (2026-09-10, `2eeba53`)
 
 **What it built.**
 
