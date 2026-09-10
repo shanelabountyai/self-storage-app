@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
-import { formatRate } from '@/lib/format'
+import { formatCents, formatRate } from '@/lib/format'
+import { ScrollRegion } from '@/components/ui/scroll-region'
 import { checkPayLink } from '@/lib/portal/pay-links'
 import { paymentReceipt } from '@/lib/portal/payment'
 import { SITE } from '@/lib/site-config'
@@ -78,12 +79,11 @@ export default async function PayLinkDonePage({
                 <dt>When</dt>
                 <dd>{formatWhen(receipt.receivedAt)}</dd>
               </div>
-              {receipt.unitNumber && (
+              {receipt.credits.length === 1 && (
                 <div className="mt-2 flex justify-between gap-4">
                   <dt>Unit</dt>
                   <dd>
-                    {receipt.unitNumber}
-                    {receipt.facilityName ? ` — ${receipt.facilityName}` : ''}
+                    {receipt.credits[0].unitNumber} — {receipt.facilityName}
                   </dd>
                 </div>
               )}
@@ -94,6 +94,54 @@ export default async function PayLinkDonePage({
                 </div>
               )}
             </dl>
+
+            {/* B-278. A link is minted for one lease, but the payment is
+                allocated across every unit that owes, so it can settle several.
+                Same table as the portal receipt. */}
+            {receipt.credits.length > 1 && (
+              <ScrollRegion
+                aria-label={`Applied to units at ${receipt.facilityName}`}
+                className="border-input rounded-lg border"
+              >
+                <table className="w-full text-sm">
+                  <caption className="px-4 pt-4 text-left font-medium">
+                    Applied to units at {receipt.facilityName}
+                  </caption>
+                  <thead>
+                    <tr className="text-left">
+                      <th scope="col" className="px-4 py-2 font-medium">
+                        Unit
+                      </th>
+                      <th scope="col" className="px-4 py-2 text-right font-medium">
+                        Amount
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {receipt.credits.map((credit) => (
+                      <tr key={credit.leaseId} className="border-t">
+                        <th scope="row" className="px-4 py-2 text-left font-normal">
+                          {credit.unitNumber}
+                        </th>
+                        <td className="px-4 py-2 text-right tabular-nums">
+                          {formatCents(credit.amountCents)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t font-medium">
+                      <th scope="row" className="px-4 py-2 text-left">
+                        Total
+                      </th>
+                      <td className="px-4 py-2 text-right tabular-nums">
+                        {formatCents(receipt.credits.reduce((sum, credit) => sum + credit.amountCents, 0))}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </ScrollRegion>
+            )}
 
             {receipt.status === 'pending' && (
               <p className="text-sm text-pretty">

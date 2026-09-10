@@ -299,6 +299,59 @@ describeDb('billing notices', () => {
 
       expect(sends).toHaveLength(1)
     })
+
+    it('names every unit a split payment credited and the balance across them (B-278)', async () => {
+      // Started EARLIER than C-7, so the recipient's fallback lease is C-7 and
+      // the old receipt read "unit C-7" with C-7's $0.00.
+      const unit = await prisma.unit.create({ data: { facilityId, unitTypeId, number: 'C-8' } })
+      const second = await prisma.lease.create({
+        data: {
+          facilityId,
+          tenantId,
+          unitId: unit.id,
+          status: 'active',
+          startDate: new Date('2026-07-01T00:00:00.000Z'),
+          billingDay: 1,
+          monthlyRateCents: 15_000,
+        },
+      })
+      const payment = await prisma.payment.create({
+        data: { facilityId, tenantId, amountCents: 22_800, method: 'card', status: 'succeeded' },
+      })
+      await prisma.ledgerEntry.createMany({
+        data: [
+          { facilityId, leaseId, type: 'charge', amountCents: 12_900, description: 'Rent' },
+          { facilityId, leaseId: second.id, type: 'charge', amountCents: 15_000, description: 'Rent' },
+          {
+            facilityId,
+            leaseId: second.id,
+            type: 'payment',
+            amountCents: -9_900,
+            description: 'Card payment',
+            paymentId: payment.id,
+          },
+          {
+            facilityId,
+            leaseId,
+            type: 'payment',
+            amountCents: -12_900,
+            description: 'Card payment',
+            paymentId: payment.id,
+          },
+        ],
+      })
+
+      await emit('payment.succeeded', 'Payment', payment.id)
+
+      expect(sends).toHaveLength(1)
+      expect(sends[0].subject).toContain('C-7 and C-8')
+      // $0.00 left on C-7 and $51.00 on C-8.
+      expect(sends[0].body).toContain('$51.00')
+
+      await prisma.ledgerEntry.deleteMany({ where: { leaseId: second.id } })
+      await prisma.lease.delete({ where: { id: second.id } })
+      await prisma.unit.delete({ where: { id: unit.id } })
+    })
   })
 
   describe('failures and the fix path', () => {

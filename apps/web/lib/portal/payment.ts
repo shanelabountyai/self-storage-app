@@ -7,6 +7,7 @@ import {
   portalAccountsFor,
   type AccountLease,
 } from '@/lib/billing/accounts'
+import { paymentCredits } from '@/lib/billing/allocation'
 
 // PRD 01 §4.7 US-703 / §4.6. A tenant paying their own balance from the
 // portal. The amount is decided here, server-side, from the ledger — never
@@ -359,8 +360,11 @@ export type PaymentReceipt = {
   status: 'succeeded' | 'pending' | 'processing' | 'failed'
   amountCents: number
   receivedAt: Date
-  unitNumber: string | null
-  facilityName: string | null
+  facilityName: string
+  /// B-278. One row per lease this payment credited, in unit order. Empty
+  /// until the webhook has posted it.
+  credits: { leaseId: string; unitNumber: string; amountCents: number }[]
+  /// Across exactly the leases in `credits`; null while there are none.
   balanceCents: number | null
   failureReason: string | null
 }
@@ -384,23 +388,16 @@ export async function paymentReceipt(
       status: true,
       receivedAt: true,
       failureReason: true,
-      facilityId: true,
-      ledgerEntries: { select: { leaseId: true }, take: 1 },
+      facility: { select: { name: true } },
     },
   })
   if (!payment) return null
 
-  const leaseId = payment.ledgerEntries[0]?.leaseId ?? null
-  const lease = leaseId
-    ? await prisma.lease.findUnique({
-        where: { id: leaseId },
-        select: { facility: { select: { name: true } }, unit: { select: { number: true } } },
-      })
-    : null
-
-  const balance = leaseId
-    ? await prisma.ledgerEntry.aggregate({ where: { leaseId }, _sum: { amountCents: true } })
-    : null
+  // B-278. Every lease this payment credited, not `take: 1` of them with
+  // nothing ordering the take: since B-256 one payment settles a whole
+  // account, and the receipt was headed with whichever entry came back first
+  // and carried that one lease's balance.
+  const credits = await paymentCredits(paymentId)
 
   return {
     // Anything not yet marked succeeded or failed is still in flight. The
@@ -418,9 +415,9 @@ export async function paymentReceipt(
             : 'succeeded',
     amountCents: payment.amountCents,
     receivedAt: payment.receivedAt,
-    unitNumber: lease?.unit.number ?? null,
-    facilityName: lease?.facility.name ?? null,
-    balanceCents: balance ? (balance._sum.amountCents ?? 0) : null,
+    facilityName: payment.facility.name,
+    credits: credits.lines,
+    balanceCents: credits.lines.length > 0 ? credits.balanceCents : null,
     failureReason: payment.failureReason,
   }
 }

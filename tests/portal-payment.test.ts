@@ -338,6 +338,66 @@ describeDb('portal payment against real records', () => {
       })
       expect(await paymentReceipt(otherTenantId, payment.id)).toBeNull()
     })
+
+    it('lists every unit a payment credited, in unit order, with the balance across them (B-278)', async () => {
+      const unitType = await prisma.unitType.findFirstOrThrow({ where: { facilityId } })
+      const unitC = await prisma.unit.create({
+        data: { facilityId, unitTypeId: unitType.id, number: 'C-3' },
+      })
+      const leaseC = await prisma.lease.create({
+        data: {
+          facilityId,
+          tenantId,
+          unitId: unitC.id,
+          status: 'active',
+          startDate: new Date('2026-03-01T00:00:00Z'),
+          monthlyRateCents: 9_900,
+          billingDay: 1,
+        },
+      })
+      const payment = await prisma.payment.create({
+        data: {
+          facilityId,
+          tenantId,
+          amountCents: 18_000,
+          method: 'card',
+          status: 'succeeded',
+          stripePaymentIntentId: `pi_${suffix}_receipt_split`,
+        },
+      })
+      const credit = (leaseId: string, amountCents: number) => ({
+        facilityId,
+        leaseId,
+        type: 'payment' as const,
+        amountCents: -amountCents,
+        description: 'Card payment',
+        paymentId: payment.id,
+      })
+      // Written out of unit order, so the order on the receipt is the read's
+      // and not the insert's.
+      await prisma.ledgerEntry.createMany({
+        data: [credit(leaseC.id, 7_000), credit(leaseAId, 5_000), credit(leaseBId, 6_000)],
+      })
+
+      const receipt = await paymentReceipt(tenantId, payment.id)
+      expect(receipt?.credits.map((row) => [row.unitNumber, row.amountCents])).toEqual([
+        ['A-1', 5_000],
+        ['B-2', 6_000],
+        ['C-3', 7_000],
+      ])
+      expect(
+        receipt?.credits.reduce((sum, row) => sum + row.amountCents, 0),
+        'the rows add up to the payment',
+      ).toBe(18_000)
+
+      const { _sum } = await prisma.ledgerEntry.aggregate({
+        where: { leaseId: { in: [leaseAId, leaseBId, leaseC.id] } },
+        _sum: { amountCents: true },
+      })
+      expect(receipt?.balanceCents, 'the balance of all three leases, not one').toBe(_sum.amountCents)
+
+      expect(await paymentReceipt(tenantId, payment.id), 'a second read agrees').toEqual(receipt)
+    })
   })
 })
 

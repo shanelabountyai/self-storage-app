@@ -933,6 +933,8 @@ export const es: Dictionary = {
   'rcpt.unitValue': '{facility} — {unit}',
   'rcpt.date': 'Fecha',
   'rcpt.balanceNow': 'Saldo actual',
+  'rcpt.creditsCaption': 'Aplicado a unidades en {facility}',
+  'rcpt.total': 'Total',
 
   // --- Statements list --------------------------------------------------
   'stmt.title': 'Estados de cuenta',

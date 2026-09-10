@@ -2,7 +2,8 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { requireTenantActor } from '@/lib/rbac/session'
 import { paymentReceipt } from '@/lib/portal/payment'
-import { formatRate } from '@/lib/format'
+import { formatCents, formatRate } from '@/lib/format'
+import { ScrollRegion } from '@/components/ui/scroll-region'
 import { SITE } from '@/lib/site-config'
 import { dictionaryFor, translate, type MessageKey } from '@/lib/i18n'
 import { getLocale } from '@/lib/i18n/server'
@@ -105,13 +106,13 @@ export default async function PaymentDonePage({
           <dt className="text-muted-foreground">{t('rcpt.amount')}</dt>
           <dd className="font-medium tabular-nums">{formatRate(receipt.amountCents)}</dd>
         </div>
-        {receipt.unitNumber && (
+        {receipt.credits.length === 1 && (
           <div className="flex justify-between gap-4">
             <dt className="text-muted-foreground">{t('rcpt.unit')}</dt>
             <dd>
               {t('rcpt.unitValue', {
-                facility: receipt.facilityName ?? '',
-                unit: receipt.unitNumber,
+                facility: receipt.facilityName,
+                unit: receipt.credits[0].unitNumber,
               })}
             </dd>
           </div>
@@ -127,6 +128,54 @@ export default async function PaymentDonePage({
           </div>
         )}
       </dl>
+
+      {/* B-278. A payment that settled several units says what each one got.
+          A real table (1.3.1) with the total in its own row, so the parts and
+          the sum are related in markup rather than only by position. */}
+      {receipt.credits.length > 1 && (
+        <ScrollRegion
+          aria-label={t('rcpt.creditsCaption', { facility: receipt.facilityName })}
+          className="border-input rounded-lg border"
+        >
+          <table className="w-full text-sm">
+            <caption className="px-4 pt-4 text-left font-medium">
+              {t('rcpt.creditsCaption', { facility: receipt.facilityName })}
+            </caption>
+            <thead>
+              <tr className="text-left">
+                <th scope="col" className="px-4 py-2 font-medium">
+                  {t('rcpt.unit')}
+                </th>
+                <th scope="col" className="px-4 py-2 text-right font-medium">
+                  {t('rcpt.amount')}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {receipt.credits.map((credit) => (
+                <tr key={credit.leaseId} className="border-t">
+                  <th scope="row" className="px-4 py-2 text-left font-normal">
+                    {credit.unitNumber}
+                  </th>
+                  <td className="px-4 py-2 text-right tabular-nums">
+                    {formatCents(credit.amountCents)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="border-t font-medium">
+                <th scope="row" className="px-4 py-2 text-left">
+                  {t('rcpt.total')}
+                </th>
+                <td className="px-4 py-2 text-right tabular-nums">
+                  {formatCents(receipt.credits.reduce((sum, credit) => sum + credit.amountCents, 0))}
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        </ScrollRegion>
+      )}
 
       <Link href="/portal" className="text-sm underline underline-offset-4">
         {t('paypg.backToAccount')}

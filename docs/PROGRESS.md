@@ -9258,3 +9258,28 @@ Found while verifying B-282 and fixed in the same commit, by owner choice.
 **What it decided.** Only the cell. The query and the column set are untouched.
 
 **What it left behind.** Nothing owned. `/admin/access` passes axe on both projects with gate attempts in the range (12 in the last 30 days in the local e2e database).
+
+## B-278 — the receipt named one arbitrary unit for a payment that settled several, and the nav sent a payer to somebody else's bill (2026-09-10, `TBD`)
+
+**What it built.**
+
+1. **`paymentCredits(paymentId)`** (`lib/billing/allocation.ts`, next to `postPaymentLedger`). It groups a payment's `type: 'payment'` ledger entries by lease and returns one row per lease, sorted by unit number (lease id breaks ties). It also returns the balance across exactly those leases. The receipt screen, the pay-link receipt and the emailed receipt all read it.
+2. **`paymentReceipt`** drops `ledgerEntries … take: 1` (which had no `orderBy`) and returns `credits` plus a `balanceCents` summed over them. **`/portal/pay/done` and `/pay/[token]/done`** keep the old Unit row when one lease was credited. When several were, they render a `<table>` inside `ScrollRegion`, with a caption, `th scope="row"` per unit and a Total row. Two new keys in both dictionaries: `rcpt.creditsCaption` and `rcpt.total`. The pay-link page is English-only, as the rest of it already was.
+3. **The emailed receipt** (`payment.succeeded` extender in `lib/comms/service.ts`) overrides `unit.number` with an `Intl.ListFormat` list of the credited units, and `balance.total` with the balance across them. It falls back to the recipient's lease only while nothing has posted.
+4. **The portal nav** (`app/portal/layout.tsx`): when exactly one lease owes and it sits on an account the viewer pays (`portalAccountsFor`, `payable`), Pay opens `/portal/pay?account=`. Its label carries the account's net balance, and the link disappears when that balance is ≤ 0.
+5. **Tests.** `portal-payment.test.ts`: three credited leases written out of unit order come back as three rows in unit order, summing to the payment, with the three-lease balance, and a second read gives the same result. `comms-billing-db.test.ts`: a split payment's email names "C-7 and C-8" and the balance across both, where the old code named C-7 with C-7's $0.00. `portal-billing-account.spec.ts`: no Pay link on the payer's page carries `lease=`.
+
+**What it decided.**
+
+- **The emailed half was traced, and the defect was real.** The row marked it "needs confirmation at build time". Tracing found that the recipient's lease is the earliest allocation's invoice, falling back to the newest occupying lease. So a split payment was receipted as one unit with that lease's balance, and a payer holding no unit was receipted with an employee's unit. It was fixed here rather than raised as a row, because it is the same payment and the same entry set.
+- **Only `type: 'payment'` entries count.** A returned payment's `adjustment` carries the same `paymentId` (`reversals.ts`). The old `take: 1` could have landed on it.
+- **The nav's label follows its destination.** The demo account has $161 owed on one unit and $75 credit on the other. Pointing at the account while still saying "Pay $161" would have opened a screen asking for $86. The label now says what the screen asks for.
+- **Allocation is untouched** (D-28), and so is `payableLeaseWhere`.
+
+**Verification.** Typecheck clean; lint clean (the 6 warnings were already there, in `mfa/actions.ts`, `portal/notifications/actions.ts` and `portal/refer/actions.ts`). `portal-payment` and `comms-billing-db`: 46 passed. `i18n`, `accessibility-statement`, `a11y-scan-coverage` and `scroll-regions`: 40 passed. `portal-billing-account.spec.ts` against a production build, both projects: 12 passed, 0 failed, 12 listed.
+
+**What it left behind.**
+
+- **The email's wording.** The seeded template still says "for unit {{unit.number}}", so a split payment reads "for unit C-7 and C-8" (Spanish: "por la unidad C-7 y C-8"). Pluralising it is a template edit in both languages, which is seeded state (B-206), so it did not go in here. No row owns it yet.
+- **The multi-unit receipt table is not axe-scanned.** `/portal/pay/done`'s `succeeded` state is a stated exception in `scan-coverage.ts`, because the demo seed makes no payments. The statement's log entry says so.
+- **The nav with SEVERAL owing leases still sums the positive balances and opens Overview.** For a payer whose account nets a credit, that figure can be higher than the account card's. It is pre-existing, and outside this row.

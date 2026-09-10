@@ -417,6 +417,56 @@ export async function postPaymentLedger(
   }
 }
 
+/// B-278. What one payment credited, per lease, read back from the entries
+/// `postPaymentLedger` wrote — and the balance now across exactly those leases.
+///
+/// The receipt screen and the emailed receipt both read this, so the two cannot
+/// name different units for one payment. Only `type: 'payment'`: a returned
+/// payment's `adjustment` carries the same `paymentId` (`reversals.ts`) and is
+/// not what the receipt is about. Sorted by unit number the way the account
+/// card sorts its units, so two reads of one receipt list them in one order.
+export async function paymentCredits(paymentId: string): Promise<{
+  lines: { leaseId: string; unitNumber: string; amountCents: number }[]
+  balanceCents: number
+}> {
+  const credited = await prisma.ledgerEntry.groupBy({
+    by: ['leaseId'],
+    where: { paymentId, type: 'payment' },
+    _sum: { amountCents: true },
+  })
+  const leaseIds = credited.map((row) => row.leaseId)
+  if (leaseIds.length === 0) return { lines: [], balanceCents: 0 }
+
+  const [leases, balance] = await Promise.all([
+    prisma.lease.findMany({
+      where: { id: { in: leaseIds } },
+      select: { id: true, unit: { select: { number: true } } },
+    }),
+    prisma.ledgerEntry.aggregate({
+      where: { leaseId: { in: leaseIds } },
+      _sum: { amountCents: true },
+    }),
+  ])
+  const unitOf = new Map(leases.map((lease) => [lease.id, lease.unit.number]))
+
+  return {
+    lines: credited
+      .map((row) => ({
+        leaseId: row.leaseId,
+        unitNumber: unitOf.get(row.leaseId) ?? '',
+        // Signed on the ledger, where a payment reduces the balance. A receipt
+        // says what was paid.
+        amountCents: -(row._sum.amountCents ?? 0),
+      }))
+      .sort(
+        (a, b) =>
+          a.unitNumber.localeCompare(b.unitNumber, undefined, { numeric: true }) ||
+          a.leaseId.localeCompare(b.leaseId),
+      ),
+    balanceCents: balance._sum.amountCents ?? 0,
+  }
+}
+
 /// Leases with money in flight — a bank debit accepted but not yet settled.
 ///
 /// B-103. Only ACH reaches `processing`, and while it is there the tenant has

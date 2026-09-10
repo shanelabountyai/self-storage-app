@@ -2398,6 +2398,18 @@ function reviewedOn(locale: Locale): string {
 // screens" entry, and needs no line of its own. `LAST_REVIEWED` is not bumped,
 // per D-115: no manual screen-reader pass was performed.
 
+// Re-verified 2026-09-10, at B-278 (the receipt for a payment that settled
+// several units named one of them). Customer-facing: `/portal/pay/done` and
+// the pay-link receipt `/pay/[token]/done` gain a per-unit table (a real
+// `<table>` with a caption, row headers and a total row, inside
+// `ScrollRegion`), and the portal nav's Pay link opens `/portal/pay?account=`
+// for a payer. Nothing on this page claims or disclaims receipts specifically,
+// so no visible line changes. **The new table is not scanned:** the receipt's
+// `succeeded` state is a stated exception in `scan-coverage.ts`, because the
+// demo seed makes no payments, and this row did not change that. The nav's
+// markup is unchanged; only its href moved. `LAST_REVIEWED` is not bumped, per
+// D-115.
+
 export default async function AccessibilityPage() {
   const locale = await getLocale()
   const dict = dictionaryFor(locale)

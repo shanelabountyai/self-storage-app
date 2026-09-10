@@ -16,6 +16,7 @@ import { restoreShortfallCents } from '@storage/core/access'
 import { OCCUPYING_LEASE_STATUSES } from '@storage/core/inventory'
 import { isAutoCollecting } from '@storage/core/payment-plans'
 import { formatCalendarDate, formatCents } from '@/lib/format'
+import { paymentCredits } from '@/lib/billing/allocation'
 import { DEFAULT_LOCALE, dictionaryFor, isLocale, LOCALE_TAG, type Locale } from '@/lib/i18n'
 import { proseFor } from './prose'
 import { facilityPath } from '@/lib/facility/public-facility'
@@ -1044,14 +1045,31 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
   // payload for the same reason — a partial refund between the charge and the
   // send would otherwise be invisible in a document the tenant keeps.
   'payment.succeeded': async (event, recipient) => {
-    const payment = await prisma.payment.findUnique({
-      where: { id: event.entityId },
-      select: { amountCents: true, receivedAt: true, method: true },
-    })
+    const [payment, credits] = await Promise.all([
+      prisma.payment.findUnique({
+        where: { id: event.entityId },
+        select: { amountCents: true, receivedAt: true, method: true },
+      }),
+      paymentCredits(event.entityId),
+    ])
     if (!payment) return {} as MergeContext
     const timezone = recipient.facility?.timezone ?? 'America/Chicago'
     const tag = LOCALE_TAG[recipient.locale]
+    // B-278. The units this payment credited and the balance across exactly
+    // those — the set the receipt screen lists. The recipient's lease is ONE
+    // allocation's invoice, so a payment across several units was receipted as
+    // one of them with that lease's balance, and for a payer holding no unit it
+    // was an employee's. It stays the fallback only while nothing has posted (a
+    // checkout payment posts after provisioning).
+    const units = credits.lines.map((line) => line.unitNumber)
     return {
+      ...(units.length > 0
+        ? {
+            'unit.number': new Intl.ListFormat(tag, { style: 'long', type: 'conjunction' }).format(
+              units,
+            ),
+          }
+        : {}),
       'payment.amount': formatCents(payment.amountCents, tag),
       'payment.date': new Intl.DateTimeFormat(tag, {
         timeZone: timezone,
@@ -1062,7 +1080,12 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
       // reads "money order" and there is no punctuation trick that makes it
       // read "giro postal".
       'payment.method': proseFor(recipient.locale).paymentMethods[payment.method],
-      'balance.total': formatCents(await leaseBalanceCents(recipient.lease?.id ?? null), tag),
+      'balance.total': formatCents(
+        units.length > 0
+          ? Math.max(0, credits.balanceCents)
+          : await leaseBalanceCents(recipient.lease?.id ?? null),
+        tag,
+      ),
     }
   },
 

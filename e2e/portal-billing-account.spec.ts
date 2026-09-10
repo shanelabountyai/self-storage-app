@@ -66,10 +66,17 @@ test.describe('signed in as the business account payer', () => {
 
     // The payer holds no lease of their own, so the account's is the ONLY Pay
     // button in the page body — the whole defect this row fixes was eleven of
-    // them. Scoped to `main` because the portal nav carries its own (B-239),
-    // which is a different control pointing at a lease.
+    // them. Scoped to `main` because the portal nav carries its own (B-239).
     const payLinks = page.getByRole('main').getByRole('link', { name: /^Pay \$/ })
     await expect(payLinks).toHaveCount(1)
+
+    // B-278. Casey holds no unit, so a Pay link anywhere on the page that
+    // names a `lease=` opens a bill titled with somebody else's. One owing unit
+    // opens the account; several open Overview.
+    const payHrefs = await page
+      .getByRole('link', { name: /^Pay \$/ })
+      .evaluateAll((links) => links.map((link) => link.getAttribute('href') ?? ''))
+    expect(payHrefs.filter((href) => href.includes('lease='))).toEqual([])
 
     // The one claim that has to hold at any balance: the total offered is the
     // sum of the rows shown under it. A card that asked for a different figure

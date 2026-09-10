@@ -1,22 +1,22 @@
 # Next
 
-**`main`'s last red e2e test is fixed (spec-only).** `admin-tenants.spec.ts`
-"payment plans … is not offered on a lease with nothing past due" had failed on
-every `main` run since `cf92793` (2026-09-05), not just the last three. The
-product was right: B-256 put `alex.active5`'s lease on the business account
-with an unpaid month, so the builder was correctly offered. The spec now uses
-`alex.active14` (Dallas North, active, no plan, no invoices, no spec touches it).
+**B-278 is done.** The receipt for a payment that settled several units now
+lists every unit it credited, with a total and the balance across those units.
+That covers `/portal/pay/done`, the pay-link receipt `/pay/[token]/done` and
+the emailed receipt. The portal nav's Pay link opens `/portal/pay?account=`
+for a payer.
 
 ## Start here
 
-**B-278** (the receipt's `take: 1` with no `orderBy`, and the nav's pay
-link titled with somebody else's unit). Its emailed-receipt half is marked
-`needs confirmation at build time` and must not be quietly upgraded to verified.
-The nav half was seen live during B-282: Casey Contractor's nav "Pay $161"
-points at `/portal/pay?lease=…`.
+**B-279** (a business account's payer is never sent a bill or a past-due
+notice). It is the next unbuilt row in order. **B-275** (the Neon dev branch's
+drift) is still open ABOVE it: buildable, authorised by D-132, and it needs a
+session with Neon access.
 
-**`main` is green** at `83e2206` (run 34529629357): 1509 passed, 9 skipped,
-0 failed, 0 flaky. That is the first green `main` since 2026-09-04.
+**B-278 left one thing for a later row.** The emailed receipt's seeded wording
+is "for unit {{unit.number}}", so a split payment reads "for unit C-7 and
+C-8". The fix is a template edit in both languages, which is seeded state
+(B-206's reseed trap), so it did not go in with a merge-field change.
 
 ## Owner actions
 

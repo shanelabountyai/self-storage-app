@@ -1007,6 +1007,8 @@ export const en = {
   'rcpt.unitValue': '{facility} — {unit}',
   'rcpt.date': 'Date',
   'rcpt.balanceNow': 'Balance now',
+  'rcpt.creditsCaption': 'Applied to units at {facility}',
+  'rcpt.total': 'Total',
 
   // --- Statements list --------------------------------------------------
   'stmt.title': 'Statements',

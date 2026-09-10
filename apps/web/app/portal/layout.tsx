@@ -4,6 +4,7 @@ import { auth, signOut } from '@/auth'
 import { requireTenantActor } from '@/lib/rbac/session'
 import { hasAnyPaymentPlan } from '@/lib/portal/payment-plan'
 import { owingLeases } from '@/lib/portal/dashboard'
+import { portalAccountsFor } from '@/lib/billing/accounts'
 import { formatRate } from '@/lib/format'
 import { PortalNav } from '@/components/portal/portal-nav'
 import { ForbiddenError } from '@/lib/rbac/authorize'
@@ -70,13 +71,33 @@ export default async function PortalLayout({ children }: { children: React.React
   // leases go to Overview rather than to `/portal/pay`, which takes exactly one
   // lease — Overview already renders a "Pay $X now" per unit, so it is the
   // chooser, and the total is still the honest figure to put on the link.
+  //
+  // B-278. One owing lease on an account this viewer PAYS opens the account,
+  // not the lease: the lease's screen is titled with its renter's unit, and a
+  // payer holding no unit was sent to a bill headed with an employee's. The
+  // account screen asks for the account's net balance, so the label carries
+  // that figure too — a credit on another of its units is already counted, and
+  // an account the credit covers offers no Pay link here, as its card offers
+  // none.
   const owing = await owingLeases(tenantId)
-  const owedCents = owing.reduce((sum, lease) => sum + lease.balanceCents, 0)
+  const account =
+    owing.length === 1
+      ? (await portalAccountsFor(tenantId)).find(
+          (row) => row.payable && row.units.some((unit) => unit.leaseId === owing[0].leaseId),
+        )
+      : undefined
+  const owedCents = account
+    ? account.balanceCents
+    : owing.reduce((sum, lease) => sum + lease.balanceCents, 0)
   const pay =
-    owing.length === 0
+    owedCents <= 0
       ? null
       : {
-          href: owing.length === 1 ? `/portal/pay?lease=${owing[0].leaseId}` : '/portal',
+          href: account
+            ? `/portal/pay?account=${account.id}`
+            : owing.length === 1
+              ? `/portal/pay?lease=${owing[0].leaseId}`
+              : '/portal',
           label: t('portal.pay', { amount: formatRate(owedCents) }),
         }
 
