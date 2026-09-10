@@ -1,77 +1,51 @@
 # Next
 
-**The buildable queue has fourteen rows on it.** `3b1d751` added B-275; `5d60df1`
-added B-276–B-291 from the review block over B-252–B-274. Fourteen of those
-sixteen are buildable today; two are blocked on new open questions.
+**B-292 and B-277 are done (one commit, a noted cluster).** B-292 was found
+while starting B-277: `reconcile()` counted a payment twice, so every lease that
+had paid an invoice reported a discrepancy and **the lien-notice gate refused
+every such tenant**. B-277's exception list sits on top of the fix.
 
 ## Start here
 
-**B-276 is done (`f43a561`)** — a served lien notice now snapshots the sale
-manner and venue, and `auctionReadiness` blocks with `notice_names_another_venue`
-when the facility has moved its sale since. Pre-B-276 notices (null snapshot)
-do not block. `db:migrate:cloud` was not run: the Neon dev branch still refuses
-with P3005 until **B-275**.
+**Next: B-282** (three customer money-path tables bypass `ScrollRegion`, SC
+2.1.1 Level A), then **B-278** (the receipt's `take: 1` with no `orderBy`).
+Read the row before starting: several carry a `needs confirmation at build time`
+clause that must not be quietly upgraded to verified.
 
-**Next: B-277** (nothing sweeps for ledger/invoice skew), then **B-282** (three
-customer money-path tables bypass `ScrollRegion`, SC 2.1.1 Level A). Read the
-row before starting — several carry a `needs confirmation at build time` clause
-that must not be quietly upgraded to verified.
+## Owner actions
 
-## Two questions are the owner's
+| What | Why it is yours |
+|---|---|
+| **Fill in `.env.prod-ops`, then run `npx dotenv -e .env.prod-ops -- npm run db:backfill:move-in-payments`** (dry: it writes nothing without `--apply`) and paste the output into B-277's `PROGRESS.md` entry | `DATABASE_URL`, `DIRECT_URL` and `EXPECTED_DEV_DB_HOST` are all empty, so B-277's dry run could not happen. |
+| **After the next deploy, look at the first cron response's `ledgerExceptions` and the new `ledger_does_not_reconcile` tasks** | This is the first time production has been swept, and the fix means leases that used to look broken now reconcile. |
+| **Ask whether anyone tried to generate a lien notice and was refused** | Before B-292, `ledger_does_not_reconcile` refused every tenant who had paid an invoice. A refused notice is a delayed lien clock. |
+
+**The sweep does not find B-255's phantom balances.** A move-in charge with no
+invoice reconciles by design (`tests/ledger-db.test.ts`, "reconciles a move-in
+charge that never became an invoice"), so an unposted move-in payment is not a
+ledger/invoice skew. B-277's row assumed otherwise. Only the backfill script's
+`planMoveInBackfill` detects those leases. If they need an alarm, that is a new
+row, not a change to `reconcile()`.
+
+## Two questions are the owner's (unchanged)
 
 | Q | Blocks | The call |
 |---|---|---|
-| **D-133** | B-290 | Does the site OFFER Spanish to a browser that prefers it? There is no `Accept-Language` reader anywhere in the app, so thirteen items of Spanish work sit behind a button that wraps to a second row at 320px. The reviewer recommends a dismissible offer, not an auto-switch. Does not reverse D-122. |
-| **D-134** | B-291 | Does `<title>` follow the reader on `/faq`, `/about`, `/contact`, `/accessibility` while `description`/`alternates` stay English? D-122/D-123's crawler argument covers the description and not the announced page name. |
+| **D-133** | B-290 | Does the site OFFER Spanish to a browser that prefers it? |
+| **D-134** | B-291 | Does `<title>` follow the reader on `/faq`, `/about`, `/contact`, `/accessibility`? |
 
-## One thing that is not a row and is worth doing early
+## The blocked list is unchanged
 
-**`db:backfill:move-in-payments` has never been run against production.** Every
-card move-in predating B-255 carries a phantom ledger balance, and at the
-default `full_balance` setting that *prevents cure* — a tenant who has paid
-stays overlocked and stays on the ladder. The script writes nothing without
-`--apply`; run it dry and record the output. B-277 owns the detection, not the
-repair.
-
-## The blocked list is unchanged, plus the two new questions
-
-| Row | Blocked on | Kind |
-|---|---|---|
-| **B-254** — `LAST_REVIEWED` never moves | **D-115** — a real VoiceOver/NVDA pass by a person | owner action |
-| **B-290** | **D-133** | owner decision |
-| **B-291** | **D-134** | owner decision |
-| **B-275** — Neon dev branch baseline | nothing — **buildable, and authorised by D-132** | ready |
-| **B-129** — auction marketplace driver | partner agreement | credentials |
-| **B-243** — returned certified mail | a real provider key; D-63 forbids a simulator | credentials |
-| **B-085** — first real gate-vendor driver | partner agreement | credentials |
-| **B-133** — Google reviews / GBP sync | approved GBP application | credentials |
-| **B-134** — authored size-page copy | a real portfolio tripping D-77's gate | a trigger that has not fired |
-
-**B-254 grew a fourth coverage gap and is still not mine to do.** Three things
-in this block resolve to "what does VoiceOver actually say", and the one the
-reviewer most wants heard is not on any row: pressing the language toggle
-re-renders the whole tree in the other language with no focus move and no
-announcement, and a pre-mounted live region cannot fix it because the re-render
-replaces the region too. That is beyond AA, and it is exactly what an axe pass
-calls green and a screen-reader user calls broken.
+B-254 (D-115, a real screen-reader pass), B-290 (D-133), B-291 (D-134), B-129 /
+B-243 / B-085 / B-133 (credentials or partner agreements), B-134 (trigger not
+fired). **B-275** is buildable and authorised by D-132.
 
 ## What this session learned
 
-**The ordinal drifted and the range is the real name.** The numbering note
-already called B-224–B-243 "the seventh review block" while `NEXT.md` called it
-the sixth. Rather than silently write a second "seventh", the note now says the
-ordinal has drifted and that **what identifies a block here is the range it
-reviewed**. Do not renumber the old ones.
-
-**A drifted schema is not an un-baselined one, and the difference decides the
-fix.** `migrate resolve --applied` is the standard baseline move and it was
-wrong here: the Neon dev branch carries three indexes no migration creates, so
-there was no honest point in the recorded history to resolve it to. That is
-D-132, and B-275 is the one authorised reset. A later `migrate reset` against
-`.env.local` without a new D-number is still the thing B-253 forbids.
-
-**Two lanes finding the same defect independently is worth more than either
-report.** The operator and digital-experience reviewers both landed on
-`payment.ts:388`'s `take: 1` with no `orderBy`, from opposite directions — one
-counting money, one reading a receipt. It became one row, B-278, and the
-agreement is recorded on it.
+**A fixture that mirrors an assumption hides the bug the assumption is.**
+`reports-financial-db.test.ts` writes payment ledger entries WITH an
+`invoiceId`, which is what B-049's reconciliation assumed. No production writer
+does that, so every real paid lease failed and every fixture passed. What found
+it was running the arithmetic in SQL over `storage_test`'s 722 leases, whose
+rows came through the real payment path. Do that before trusting a
+reconciliation rule.

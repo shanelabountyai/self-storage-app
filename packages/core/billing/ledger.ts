@@ -148,8 +148,11 @@ export type ReconciliationInput = {
   /// Sum of (total − paid) across the lease's open invoices — what the AR
   /// report and the ageing buckets are built on.
   invoiceOutstandingCents: number
-  /// Charges posted to the ledger that no invoice accounts for. The move-in
-  /// charge is the real example: B-026 posts it before invoicing exists.
+  /// Ledger money no invoice accounts for. The move-in charge is the real
+  /// example: B-026 posts it before invoicing exists. A payment's entry names no
+  /// invoice either, so the part of it that settled an invoice on the same
+  /// lease is NOT in this term — the invoice side already counts it (B-292,
+  /// `reconciliationInputs` in apps/web/lib/admin/ledger.ts).
   uninvoicedChargeCents: number
 }
 

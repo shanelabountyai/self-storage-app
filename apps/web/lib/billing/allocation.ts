@@ -296,7 +296,7 @@ export async function applyPayment(
 /// stopped counting, and an invoice they had part-paid snapped to
 /// `amountPaidCents: 0`. The allocations are the truth; the status is a summary
 /// of the payment, not of what it settled.
-const SETTLING_STATUSES = ['succeeded', 'partially_refunded', 'refunded'] as const
+export const SETTLING_STATUSES = ['succeeded', 'partially_refunded', 'refunded'] as const
 
 /// Recomputes paid totals from the allocations rather than incrementing them.
 ///

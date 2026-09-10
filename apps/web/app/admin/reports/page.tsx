@@ -220,6 +220,9 @@ const REPORT_GROUPS = [
       // which of the receivable is halted, behind what, and whether the plans
       // that halted it are being kept.
       { href: '/admin/reports/plans-holds', label: 'Plans & holds — what is not being chased' },
+      // B-277. Beside plans & holds because both answer "is this balance what
+      // it looks like" before anybody chases it.
+      { href: '/admin/reports/ledger-exceptions', label: 'Ledger exceptions — balances the invoices do not back' },
       { href: '/admin/reports/deposits', label: 'Deposits — recorded vs counted' },
       { href: '/admin/reports/close', label: 'Monthly close — file a month so its figures stop moving' },
       { href: '/admin/reports/pack', label: 'Management pack — the whole month on one page' },

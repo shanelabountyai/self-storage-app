@@ -9,6 +9,7 @@ import { CONSUMERS } from '@/lib/jobs/registry'
 import { dueRunQueue, inParallel } from '@/lib/jobs/queue'
 import { raiseStaleMoneyJobTasks, runScheduledJob } from '@/lib/jobs/run'
 import { sweepWaitlists } from '@/lib/waitlist/service'
+import { raiseLedgerExceptionTasks } from '@/lib/admin/ledger'
 
 // Vercel Cron hits this hourly (see vercel.json). Master PRD §5 lists Vercel
 // Cron as the MVP option; there is no Inngest/Trigger.dev account to manage and
@@ -147,6 +148,15 @@ export async function GET(request: Request) {
   // caught up is not alarmed on for the two days it was behind.
   const staleMoneyJobs = await raiseStaleMoneyJobTasks(now, facilities)
 
+  // B-277. Leases whose ledger and invoices disagree. Every tick, not once a
+  // business day: a phantom balance keeps a paid-up tenant on the delinquency
+  // ladder, and the task it raises is deduplicated per day anyway. After the
+  // jobs, so a lease tonight's billing has just put right is not counted.
+  const ledgerExceptions = await raiseLedgerExceptionTasks(
+    now,
+    facilities.map((facility) => facility.id),
+  )
+
   return Response.json({
     ranAt: now.toISOString(),
     durationMs: Date.now() - started,
@@ -163,5 +173,6 @@ export async function GET(request: Request) {
     // sees a tick that never fired at all, which no self-report could.
     deferred,
     staleMoneyJobs,
+    ledgerExceptions,
   })
 }

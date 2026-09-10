@@ -217,6 +217,7 @@ export const ADMIN_SCAN_ROUTES = [
   // furniture, the two tables' headers and the month picker. The populated
   // state needs the demo `PaymentPlan` and hold that B-196 owns.
   '/admin/reports/plans-holds',
+  '/admin/reports/ledger-exceptions',
   // B-163.
   '/admin/reports/protection',
   '/admin/reports/rent-roll',

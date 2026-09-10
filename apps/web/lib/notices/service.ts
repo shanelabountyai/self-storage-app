@@ -28,6 +28,7 @@ import { postIncurredNoticeCost } from '@/lib/billing/charges'
 import { storeGeneratedDocument } from '@/lib/documents/store'
 import { renderDocument } from '@/lib/documents/render'
 import { formatCents } from '@/lib/format'
+import { reconciliationInputs } from '@/lib/admin/ledger'
 
 // PRD 02 §4.6 US-27 / §4.2 US-13 (B-061). Generating and serving lien notices.
 //
@@ -314,7 +315,7 @@ export const DEFAULT_DEADLINE_DAYS = 14
 /// The claim, with both US-27 checks applied. Exported so a screen can show
 /// why a notice cannot be generated without generating one.
 export async function claimForLease(leaseId: string) {
-  const [entries, invoices] = await Promise.all([
+  const [entries, inputs] = await Promise.all([
     prisma.ledgerEntry.findMany({
       where: { leaseId },
       orderBy: { occurredAt: 'asc' },
@@ -327,10 +328,7 @@ export async function claimForLease(leaseId: string) {
         invoice: { select: { number: true } },
       },
     }),
-    prisma.invoice.findMany({
-      where: { leaseId, status: { in: ['open', 'partially_paid'] } },
-      select: { totalCents: true, amountPaidCents: true },
-    }),
+    reconciliationInputs({ leaseIds: [leaseId] }),
   ])
 
   const rows: LedgerRow[] = entries.map((entry) => ({
@@ -342,21 +340,15 @@ export async function claimForLease(leaseId: string) {
     invoiceNumber: entry.invoice?.number ?? null,
   }))
 
-  // Exactly the terms `leaseLedger` uses for the same reconciliation — a second
-  // definition of "uninvoiced" here would let the ledger screen and the notice
-  // disagree about whether this lease reconciles, which is the one thing that
-  // must not happen.
-  const uninvoiced = entries
-    .filter((entry) => entry.invoice === null)
-    .reduce((sum, entry) => sum + entry.amountCents, 0)
-
+  // The terms `leaseLedger` reconciles with, from the one loader (B-292). A
+  // second definition here would let the ledger screen and the notice disagree
+  // about whether this lease reconciles, which is the one thing that must not
+  // happen.
+  const input = inputs.get(leaseId)
   return claimForNotice({
     rows,
-    invoiceOutstandingCents: invoices.reduce(
-      (sum, invoice) => sum + Math.max(0, invoice.totalCents - invoice.amountPaidCents),
-      0,
-    ),
-    uninvoicedChargeCents: uninvoiced,
+    invoiceOutstandingCents: input?.invoiceOutstandingCents ?? 0,
+    uninvoicedChargeCents: input?.uninvoicedChargeCents ?? 0,
   })
 }
 

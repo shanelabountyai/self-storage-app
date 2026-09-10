@@ -356,6 +356,20 @@ export const TASK_TYPES = [
     sensitive: true,
   },
   {
+    // B-277. PRD 02 US-24's AC — the ledger always reconciles to the invoices —
+    // swept hourly instead of checked only on the one lease somebody opens.
+    // One task per facility per business day, the subject the facility, and
+    // `detail` the count; the list itself is Reports → Ledger exceptions.
+    //
+    // Sensitive for the reason `job_failed` is: what somebody did about a
+    // lease whose balance is wrong — an adjustment, a refund, deciding it was
+    // right — is the question asked when the month does not close.
+    type: "ledger_does_not_reconcile",
+    label: "A ledger disagrees with its invoices",
+    requiredProofFields: ["note"],
+    sensitive: true,
+  },
+  {
     // PRD 02 §4.6 US-28 (B-234). A sale left money over and the former tenant
     // has not been told it is being held for them.
     //

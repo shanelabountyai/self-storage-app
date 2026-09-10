@@ -9163,3 +9163,51 @@ Migration `20260909152814_tenant_email_optional`: drop `tenant_email_key`, drop 
 **`/accessibility` re-read not required.** Nothing a customer touches changed: the notice document's wording is untouched, and the new blocker message renders only on the staff auctions screens, which are already on the "where we fall short" list.
 
 **Test verification.** Typecheck clean including `tsconfig.tests.json`. Lint clean — 6 warnings, all pre-existing `_prev`/`_formData`, unchanged in count from B-274. `prisma migrate diff` against `.env.test` reports "No difference detected". Migration applied to `storage_test` (`db:migrate:test`) and to `public` (`db:migrate:e2e`, which reseeded the demo). Unit suite **4,424 passed + 8 skipped across 256 files passed and 1 skipped — reconciled to 4,432**, +9 on B-274: seven in `tests/auction-readiness.test.ts` (a changed site blocks and names both, a manner switch in either direction blocks, an unchanged sale is silent, a live sale ignores a venue string, case and whitespace are not a change, a pre-B-276 null snapshot is silent, and no served notice means no comparison), one in `tests/notices-db.test.ts` (generation writes both columns and the document carries the same site), and one in `tests/auctions-db.test.ts` (a scheduled lot on a real case goes un-ready, drops off the lot sheet into its refusals naming the served site, and comes back when the setting is restored). No e2e spec was touched and no admin screen changed shape, so none was run locally; CI's e2e lane owns the sweep.
+
+## B-292 — every lease that had paid an invoice failed reconciliation, and the notice gate refused it (2026-09-10, `__SHA__`)
+
+Found while starting B-277, and **verified on real rows before any code changed.** B-277's remedy was "reuse `reconcile()`", so the first step was to run that arithmetic in SQL over `storage_test`'s 722 leases. **25 leases had an invoice paid through the real payment path, and all 25 failed. None passed.**
+
+**The defect.** `postPaymentLedger` (B-257) posts a payment's ledger entry per lease with **no `invoiceId`**; which invoices the money settled lives in `PaymentAllocation`. Both callers of `reconcile()` (the ledger screen and `claimForLease`) passed *every* entry without an invoice as expected uninvoiced money. The invoice side already counts the settled amount, so it was counted twice. A paid $129 invoice read **+$129, "something was charged to the ledger without an invoice behind it"**, and `claimForNotice` refused a lien notice with `ledger_does_not_reconcile` for any tenant who had ever paid an invoice through the product. The fixtures hid it: `reports-financial-db.test.ts` writes payment entries *with* an invoice id, which is what B-049 assumed and what no production writer does.
+
+**What it built.**
+
+1. **`reconciliationInputs(scope)`** (`apps/web/lib/admin/ledger.ts`). The one loader for `reconcile()`'s three terms, per lease, scoped by lease ids or facility ids. It uses five queries whatever the lease count. `leaseLedger` and `claimForLease` both call it now, and their two hand-summed copies are gone.
+2. **`SETTLING_STATUSES`** exported from `apps/web/lib/billing/allocation.ts`, so the add-back counts exactly the payments `recomputeInvoices` counts.
+
+**What it decided.**
+
+- **Allocations come back out of the uninvoiced term only when the payment has an uninvoiced `payment` entry on the SAME lease.** Adding back every allocation of the payment would read a pre-B-257 multi-unit payment (whole amount on lease P, invoices on P and Q both paid) as Q reconciled. Scoped this way, Q shows its +$100 gap. Lease P still reads as reconciled, the same shape as a legitimate prepayment; Q is the lease that surfaces the pair.
+- **An entry that already names its invoice is left on the invoice side**, so the fixture shape still reconciles, and `storage_test` goes from **25 failing leases to 0** with the fixture rows included.
+- **`claimForNotice` and `reconcile()` are unchanged.** What the gate refuses is still "the two sources disagree". Only the inputs were wrong.
+
+**What it left behind.**
+
+- **A partially paid invoice moved by a transfer (B-086) reads as a gap of the paid part on the old lease.** The payment's entry stays on the old lease while the invoice moves. This is rare (a partial payment followed by a transfer) and shows up on B-277's list rather than hiding. Nothing owns it yet.
+- **Production has been refusing lien notices on this ground since B-061.** No data needs repairing, but any notice staff were refused should be retried. That is recorded in `NEXT.md` as an owner question.
+
+## B-277 — nothing swept for leases whose ledger and invoices disagree (2026-09-10, `__SHA__`)
+
+Built on B-292, in the same commit. Without B-292 the list would have named every lease that had paid an invoice.
+
+**What it built.**
+
+1. **`ledgerExceptions(facilityIds)` and `ledgerExceptionsFor(actor)`** (`apps/web/lib/admin/ledger.ts`). Every lease that fails `reconcile()`, with facility, tenant, unit, ledger balance, invoices outstanding and the signed difference, largest gap first within each facility. The actor form scopes through `financialFacilities`, as every other money report does.
+2. **`/admin/reports/ledger-exceptions`**, linked from the reports index's Money group beside Plans & holds. Each tenant name links to that lease's ledger, the table sits in `ScrollRegion` with a caption, and the page is registered in `ADMIN_SCAN_ROUTES`.
+3. **`raiseLedgerExceptionTasks(now, facilityIds)`**, called at the end of every cron tick. The cron response gains `ledgerExceptions` (the count), and one high-priority `ledger_does_not_reconcile` task is raised per facility per business day while any lease fails. The new task type sits in `packages/core/tasks/catalog.ts` with a required note and `sensitive`, like `job_failed`.
+
+**What it decided.**
+
+- **Every tick, not once a business day.** A phantom balance keeps a paid-up tenant on the ladder, and `createTask`'s (type, entity, business date) key already stops a second task. The sweep runs after the job queue, so a lease tonight's billing just fixed is not counted.
+- **The task's subject is the facility and its detail is the count at the time it was raised.** Later ticks find today's task and leave it alone, so the sentence says "when this was raised" instead of claiming to be current. The list is the report.
+- **All leases, ended ones included.** A skew on a moved-out lease is still wrong former-tenant money.
+- **`claimForNotice` is untouched**, as the row required.
+
+**What it left behind.**
+
+- **The production dry run of `db:backfill:move-in-payments` was not done.** `.env.prod-ops` has `DATABASE_URL`, `DIRECT_URL` and `EXPECTED_DEV_DB_HOST` all empty, so there was nothing to connect with. It is an owner action in `NEXT.md`.
+- **The sweep does not find B-255's phantom move-in balances, whatever the row assumed.** An uninvoiced move-in charge reconciles by design (`tests/ledger-db.test.ts`, "reconciles a move-in charge that never became an invoice"), so an unposted move-in payment is not a ledger/invoice skew. Only `planMoveInBackfill` detects those leases. An alarm for them would be a new row, not a change to `reconcile()`.
+
+**`/accessibility` re-read not required.** Nothing a customer touches changed. The new page is staff-only.
+
+**Test verification (both items).** Typecheck clean, including `tsconfig.tests.json`. Lint 0 errors, 6 warnings, all pre-existing and unchanged in count from B-276. No schema change, so there is nothing for the drift check to see. **New `tests/ledger-exceptions-db.test.ts` (7 cases)**, driven through `recordCounterPayment` rather than hand-written payment rows, because a hand-written fixture is what hid B-292. **Mutation-checked:** with the allocation add-back switched off, 4 of the 7 fail. They are the paid-lease reconciliation, the notice not being refused, and the paid lease staying off both the list and the hourly count. The other three guard the opposite direction (over-broad add-back, the gate still refusing, and scoping). The seven files the loader touches passed 105/105 together. **Full unit suite, second run: 4,433 passed + 8 skipped = 4,441** (257 files passed, 1 skipped — the live-integration file), exit 0, totals reconcile. **The first full run was stopped at its first alarm:** four `marketplace-db.test.ts` feed tests failed with *"Timed out fetching a new connection from the connection pool"*. That is B-185's recorded `storage_test` accumulation (2,842 facilities), in a file this diff does not touch. Stopping it left **nine orphaned vitest workers holding 49 connections to `storage_test`**, because `pkill -f "$PWD.*vitest"` matches the `dotenv` wrapper only: the workers retitle themselves `node (vitest N)` and carry no path. They were killed by working directory (`lsof -a -d cwd`), which leaves other projects' workers alone. After `npm run db:reset-test`, the second run was green. **e2e:** `npm run test:e2e -- e2e/admin.spec.ts -g ledger-exceptions` ran the page through `ADMIN_SCAN_ROUTES`' four checks (axe WCAG 2.1 AA, 320px reflow, 200% zoom, forced text spacing) against the production build, on desktop and mobile Chrome. **10 passed** (the 8 checks plus 2 auth setups), exit 0. No `[e2e setup]` line appeared in that output. These checks only read the page and mutate nothing, so a stale hold or lock could not have changed them, but the run is not evidence that global setup ran. **What that scan did NOT cover: the table.** The demo `public` schema has no lease that fails reconciliation, so the page rendered its empty state. The table's markup follows `plans-holds`' scanned table (caption, `scope`, `ScrollRegion`), but no axe pass has seen it with rows in it.
