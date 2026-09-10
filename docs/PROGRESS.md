@@ -9259,7 +9259,7 @@ Found while verifying B-282 and fixed in the same commit, by owner choice.
 
 **What it left behind.** Nothing owned. `/admin/access` passes axe on both projects with gate attempts in the range (12 in the last 30 days in the local e2e database).
 
-## B-278 — the receipt named one arbitrary unit for a payment that settled several, and the nav sent a payer to somebody else's bill (2026-09-10, `TBD`)
+## B-278 — the receipt named one arbitrary unit for a payment that settled several, and the nav sent a payer to somebody else's bill (2026-09-10, `ff797e3`)
 
 **What it built.**
 
