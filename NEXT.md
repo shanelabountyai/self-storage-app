@@ -1,22 +1,18 @@
 # Next
 
-**The buildable queue has fifteen rows on it.** `3b1d751` added B-275; `5d60df1`
+**The buildable queue has fourteen rows on it.** `3b1d751` added B-275; `5d60df1`
 added B-276–B-291 from the review block over B-252–B-274. Fourteen of those
 sixteen are buildable today; two are blocked on new open questions.
 
 ## Start here
 
-**B-276 (`83ac`) — the auction lot can be sold at a venue the served notice
-never named.** It leads the block on the same ground B-224, B-202 and B-137 led
-theirs: it is the only finding that costs a wrongful-sale claim rather than
-money. B-274 built `Facility.auctionSaleVenue` and did not build its drift
-check — `auctionReadiness` reads the facility setting *as it stands today*,
-while `Notice` snapshots the rendered address and the document hash and no sale
-statement at all. Serve the notice, change the venue three weeks later, and
-readiness stays green. The precedent is in the same file: `notice_names_another_unit`
-already blocks for exactly this reason.
+**B-276 is done (`f43a561`)** — a served lien notice now snapshots the sale
+manner and venue, and `auctionReadiness` blocks with `notice_names_another_venue`
+when the facility has moved its sale since. Pre-B-276 notices (null snapshot)
+do not block. `db:migrate:cloud` was not run: the Neon dev branch still refuses
+with P3005 until **B-275**.
 
-Then **B-277** (nothing sweeps for ledger/invoice skew) and **B-282** (three
+**Next: B-277** (nothing sweeps for ledger/invoice skew), then **B-282** (three
 customer money-path tables bypass `ScrollRegion`, SC 2.1.1 Level A). Read the
 row before starting — several carry a `needs confirmation at build time` clause
 that must not be quietly upgraded to verified.
