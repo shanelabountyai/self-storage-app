@@ -2409,6 +2409,16 @@ function reviewedOn(locale: Locale): string {
 // demo seed makes no payments, and this row did not change that. The nav's
 // markup is unchanged; only its href moved. `LAST_REVIEWED` is not bumped, per
 // D-115.
+//
+// Re-verified 2026-09-10, at B-279 (a business account's payer is sent the bill
+// and the past-due ladder). Customer-facing: the payer now receives
+// `invoice_due_soon`, `invoice_due_today` and `dunning_step`, which are the
+// existing seeded templates in the existing language-declared wrapper (PRD 05
+// FR-9a), in the payer's own language. No template changed and no page did.
+// The other half is `/admin/billing/accounts/[id]`, where two `<dl>` entries
+// say "Current" or a number, and a stage or "None", in words. It is staff-facing,
+// and this page makes no claims about that screen. No visible line changes.
+// `LAST_REVIEWED` is not bumped, per D-115.
 
 export default async function AccessibilityPage() {
   const locale = await getLocale()

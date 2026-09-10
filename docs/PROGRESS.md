@@ -9283,3 +9283,34 @@ Found while verifying B-282 and fixed in the same commit, by owner choice.
 - **The email's wording.** The seeded template still says "for unit {{unit.number}}", so a split payment reads "for unit C-7 and C-8" (Spanish: "por la unidad C-7 y C-8"). Pluralising it is a template edit in both languages, which is seeded state (B-206), so it did not go in here. No row owns it yet.
 - **The multi-unit receipt table is not axe-scanned.** `/portal/pay/done`'s `succeeded` state is a stated exception in `scan-coverage.ts`, because the demo seed makes no payments. The statement's log entry says so.
 - **The nav with SEVERAL owing leases still sums the positive balances and opens Overview.** For a payer whose account nets a credit, that figure can be higher than the account card's. It is pre-existing, and outside this row.
+
+## B-279 — a business account's payer was never sent a bill or a past-due notice (2026-09-10, `SHA_PENDING`)
+
+**What it built.**
+
+1. **`resolveRecipients(event)`** (`lib/comms/service.ts`). It wraps `resolveRecipient` and, for an event named in **`PAYER_EVENTS`** (`invoice.due_soon`, `invoice.due_today`, `delinquency.day_reached`) on a lease with a `billingAccount`, adds the account's payer as a second `Recipient`. The payer gets their own language, address, phone, name and `recipientKey`, and shares the tenant's `lease`. When the payer is the lease's own tenant, it adds nobody. `processCommsEvent` loops over recipients and builds the merge context once per recipient, no longer once per event, because the language and the pay link belong to the recipient.
+2. **`mintPayLink`** (`lib/portal/pay-links.ts`) now scopes its "revoke the previous link for this event" lookup by `tenantId` as well as lease. **This was a real bug the fan-out would have caused:** the payer's link for the same event and lease would have revoked the tenant's link the moment it was minted. `payableLease` already admits a payer (B-256), so the payer's link opens the pay screen.
+3. **`accountDetail`** (`lib/billing/accounts.ts`) returns `daysPastDue`, the worst unit's figure from rent invoices only, as the ladder counts it. It also returns `stage`, the label of the furthest open-episode `DelinquencyStepRun` across the account's leases, read along the transfer chain (B-138). `/admin/billing/accounts/[id]` shows both as two more `<dl>` entries in the existing summary: "Current" or a number, and a stage or "None". Both are in words, not colour.
+4. **Tests.** `comms-billing-account-db.test.ts` runs against the seeded catalog:
+   - A due-soon invoice on an account lease writes two `Message` rows, the tenant's in English and the payer's in Spanish, and both pay links stay live.
+   - The same event on a lease with no account writes one row.
+   - `delinquency.day_reached` reaches both recipients.
+   - A lien `notice.generated` writes rows for the tenant only.
+   - `accountDetail` reports 20 days and "Pre-lien notice", ignoring a superseded day-45 run.
+
+   `admin-billing-accounts.spec.ts` asserts that the two new terms render.
+
+**What it decided.**
+
+- **D-136: the payer gets the bill AND the courtesy past-due ladder, by event name.** The row's remedy said "Invoice events", but `delinquency.day_reached` is a `Lease` event, so that wording would have fixed only half of the title. Its "no Notice-entity event" guard matches nothing, because `notice.generated` is a `Lease` event too. Entity type cannot draw D-118's line, so the rule is a list of names, and an event not on it is tenant-only.
+- **The payer is added, never swapped.** The tenant keeps every message, as the row required.
+- **`autopay_covers_it` reads the tenant's card for both recipients.** That card is the one autopay charges (D-119), so the payer is not chased for a bill that card is about to cover.
+
+**Verification.** Typecheck clean. Lint clean (the same 6 existing warnings). `comms-billing-account-db` passed 5 of 5. `comms-db`, `comms-delinquency-stage-db`, `billing-accounts-db`, `billing-account-members-db`, `sms-delivery-db`, `dunning-db`, `dunning` and `pay-links-db` passed 113 of 113, on a freshly reseeded `storage_test`. `accessibility-statement` and `a11y-scan-coverage`: 17 passed, 0 failed. `admin-billing-accounts.spec.ts` against a production build: 10 passed, 0 failed, 10 listed, across both projects.
+
+**What it left behind.**
+
+- **One email per invoice, not one per account.** An eleven-unit account's payer gets eleven due-soon reminders on the same day. A consolidated account reminder is a new template and a new event, and no row owns it.
+- **The account LIST (`/admin/billing/accounts`) still shows balances only.** The row asked for the detail screen, and the list is unchanged.
+- **The overlock flag** the row's problem statement mentions is not on the account screen. The remedy named days past due and stage only.
+- **The wording addresses the payer as if the unit were theirs** ("The balance on unit C-7…", "Hi Pat"). It is accurate, and it names the unit, but it does not name the tenant. Changing it is a template edit, which is seeded state (B-206).

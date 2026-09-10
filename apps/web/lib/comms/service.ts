@@ -407,6 +407,58 @@ async function resolveRecipient(event: DomainEvent): Promise<Recipient | null> {
   return null
 }
 
+/// B-279 (D-136). The events a business account's payer receives as well as
+/// the lease's own tenant: the bill and the courtesy past-due ladder.
+///
+/// A list of names rather than an entity type, because the type cannot draw the
+/// line: `delinquency.day_reached` and `notice.generated` are both `Lease`
+/// events, and only the first is the payer's business. A lien notice is served
+/// on the person whose goods are in the unit (D-118), so its supplement, the
+/// overlock and gate notices, and anything about the tenant's own card (D-119)
+/// stay with the tenant. An event absent from this list is tenant-only, which is
+/// the safe direction for a new one to default to.
+const PAYER_EVENTS: ReadonlySet<string> = new Set([
+  'invoice.due_soon',
+  'invoice.due_today',
+  'delinquency.day_reached',
+])
+
+/// Everyone one event is delivered to: the resolved recipient, plus the
+/// account's payer for a `PAYER_EVENTS` event on a lease somebody else pays.
+///
+/// ADDED, never swapped — the tenant keeps every message. The payer shares the
+/// tenant's `lease`, so every skip condition reads the same facts for both:
+/// `autopay_covers_it` is still the tenant's own card, which is the card
+/// autopay charges (D-119). Language, address, preferences and consent are the
+/// payer's own.
+async function resolveRecipients(event: DomainEvent): Promise<Recipient[]> {
+  const recipient = await resolveRecipient(event)
+  if (!recipient) return []
+  if (!PAYER_EVENTS.has(event.name) || !recipient.lease) return [recipient]
+
+  const lease = await prisma.lease.findUnique({
+    where: { id: recipient.lease.id },
+    select: { billingAccount: { select: { payer: { select: TENANT_SELECT } } } },
+  })
+  const payer = lease?.billingAccount?.payer
+  // A payer who is also this lease's tenant is already the recipient.
+  if (!payer || payer.id === recipient.tenantId) return [recipient]
+
+  return [
+    recipient,
+    {
+      ...recipient,
+      locale: localeOf(payer),
+      recipientKey: payer.id,
+      tenantId: payer.id,
+      email: payer.email,
+      phone: payer.phone,
+      firstName: payer.firstName,
+      lastName: payer.lastName,
+    },
+  ]
+}
+
 /// Shared shape for the two resolvers that reach a tenant through a lease.
 function recipientFromLease(
   lease: {
@@ -2494,21 +2546,24 @@ export async function processCommsEvent(event: DomainEvent, now: Date = new Date
   const rules = await applicableRules(event)
   if (rules.length === 0) return result
 
-  const recipient = await resolveRecipient(event)
-  // No recipient resolver for this entity type yet, or the entity is gone.
-  if (!recipient) return result
-
-  // Computed once per event, not per rule — several rules on the same event
-  // would otherwise re-run the same extender query redundantly.
+  // Empty when there is no recipient resolver for this entity type yet, or the
+  // entity is gone.
+  const recipients = await resolveRecipients(event)
   const extender = CONTEXT_EXTENDERS[event.name]
-  const context = { ...mergeContextFor(recipient), ...(extender ? await extender(event, recipient) : {}) }
 
-  for (const rule of rules) {
-    const outcome =
-      rule.channel === 'sms'
-        ? await deliverSmsForRule(event, rule, recipient, context, now)
-        : await deliverForRule(event, rule, recipient, context)
-    result[outcome] += 1
+  for (const recipient of recipients) {
+    // Computed once per recipient, not per rule — several rules on the same
+    // event would otherwise re-run the same extender query redundantly. Not
+    // once per event: the language and the pay link are the recipient's.
+    const context = { ...mergeContextFor(recipient), ...(extender ? await extender(event, recipient) : {}) }
+
+    for (const rule of rules) {
+      const outcome =
+        rule.channel === 'sms'
+          ? await deliverSmsForRule(event, rule, recipient, context, now)
+          : await deliverForRule(event, rule, recipient, context)
+      result[outcome] += 1
+    }
   }
   return result
 }

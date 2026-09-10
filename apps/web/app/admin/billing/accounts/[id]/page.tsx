@@ -67,6 +67,18 @@ export default async function BillingAccountPage({
             <dt className="text-muted-foreground text-xs">Balance now</dt>
             <dd className="text-base font-semibold">{formatCents(account.balanceCents)}</dd>
           </div>
+          {/* B-279. Whether the account is late, in words — the answer to "is
+              this account late" was not on the one screen a manager checks. */}
+          <div>
+            <dt className="text-muted-foreground text-xs">Days past due</dt>
+            <dd className="text-base font-semibold">
+              {account.daysPastDue > 0 ? account.daysPastDue : 'Current'}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground text-xs">Delinquency stage</dt>
+            <dd className="text-base font-semibold">{account.stage ?? 'None'}</dd>
+          </div>
         </dl>
 
         {account.leases.length === 0 ? (

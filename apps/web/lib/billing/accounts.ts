@@ -1,6 +1,8 @@
 import { prisma, type Prisma } from '@storage/db'
 import { recordAudit } from '@storage/core/audit'
 import { OCCUPYING_LEASE_STATUSES } from '@storage/core/inventory'
+import { daysPastDue } from '@storage/core/metrics'
+import { allChainIds, leaseChainIds } from '@/lib/billing/transfer-chain'
 import { assertFacilityAccess, can, ForbiddenError } from '@/lib/rbac/authorize'
 import { toAuditActor } from '@/lib/rbac/audit-actor'
 import type { Actor } from '@/lib/rbac/actor'
@@ -169,6 +171,13 @@ export type AccountDetail = AccountSummary & {
   leases: AccountLease[]
   /// B-258. The people who may see this account without paying for it.
   members: AccountMember[]
+  /// B-279. The worst unit's days past due, 0 when every unit is current. Rent
+  /// invoices only, as the delinquency ladder counts them, so this figure and
+  /// `stage` beside it cannot disagree about whether the account is late.
+  daysPastDue: number
+  /// B-279. The furthest ladder step any unit on the account has reached in
+  /// its open episode ("Pre-lien notice"), or null when none has.
+  stage: string | null
 }
 
 export async function accountDetail(
@@ -191,6 +200,10 @@ export async function accountDetail(
           monthlyRateCents: true,
           unit: { select: { number: true } },
           tenant: { select: { firstName: true, lastName: true } },
+          invoices: {
+            where: { kind: 'rent' },
+            select: { dueDate: true, totalCents: true, amountPaidCents: true },
+          },
         },
       },
       members: {
@@ -206,7 +219,16 @@ export async function accountDetail(
   if (!account) return null
   assertFacilityAccess(actor, account.facilityId)
 
-  const balances = await balancesFor(account.leases.map((lease) => lease.id))
+  const leaseIds = account.leases.map((lease) => lease.id)
+  const balances = await balancesFor(leaseIds)
+  // Read along the transfer chain, as the ladder itself does (B-138): a unit
+  // transferred while behind keeps its position on the lease it left.
+  const furthest = await prisma.delinquencyStepRun.findFirst({
+    where: { leaseId: { in: allChainIds(await leaseChainIds(leaseIds)) }, supersededAt: null },
+    orderBy: { dayOffset: 'desc' },
+    select: { label: true },
+  })
+  const asOf = new Date()
   const leases: AccountLease[] = account.leases
     .map((lease) => ({
       leaseId: lease.id,
@@ -235,6 +257,8 @@ export async function accountDetail(
       email: member.tenant.email,
       since: member.createdAt,
     })),
+    daysPastDue: Math.max(0, ...account.leases.map((lease) => daysPastDue(lease.invoices, asOf))),
+    stage: furthest?.label ?? null,
   }
 }
 

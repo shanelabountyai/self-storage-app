@@ -63,7 +63,10 @@ export async function mintPayLink(input: {
 }): Promise<{ token: string; expiresAt: Date } | null> {
   if (input.eventId) {
     const existing = await prisma.payLink.findFirst({
-      where: { eventId: input.eventId, leaseId: input.leaseId, revokedAt: null },
+      // B-279. Per tenant too: a business account's payer gets a link to the
+      // same lease from the same event, and revoking by lease alone would kill
+      // the tenant's link the moment the payer's was minted.
+      where: { eventId: input.eventId, leaseId: input.leaseId, tenantId: input.tenantId, revokedAt: null },
       select: { id: true },
     })
     // The plaintext is unrecoverable by design, so a reused event has to mint a

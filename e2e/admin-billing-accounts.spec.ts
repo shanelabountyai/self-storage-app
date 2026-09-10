@@ -59,6 +59,10 @@ test.describe('signed in as the demo owner', () => {
     await expect(page.getByText('paid by Casey Contractor')).toBeVisible()
     await expect(page.getByRole('table')).toContainText('Alex Active')
     await expect(page.getByRole('rowheader', { name: 'Total' })).toBeVisible()
+    // B-279. Whether the account is late, in the summary. The terms only: the
+    // values follow the demo seed's dates, which move with the calendar.
+    await expect(page.getByRole('term').filter({ hasText: 'Days past due' })).toBeVisible()
+    await expect(page.getByRole('term').filter({ hasText: 'Delinquency stage' })).toBeVisible()
 
     // B-258. Who may SEE the account, beside who pays it. Read-only here: the
     // add and remove controls are exercised by the unit suite against its own
