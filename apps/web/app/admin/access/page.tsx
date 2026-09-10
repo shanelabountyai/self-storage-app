@@ -198,6 +198,12 @@ export default async function AccessEventsPage({
                     <span className="text-muted-foreground">Unknown</span>
                   )}
                 </td>
+                {/* B-293. This cell went missing in B-086 part 2 while its
+                    header stayed, so every figure from here on sat one column
+                    left of its heading and "Flags" had nothing under it. */}
+                <td className="py-2 pr-4">
+                  {row.unitNumber ?? <span className="text-muted-foreground">—</span>}
+                </td>
                 {/* B-086 part 2. "Keypad" and "Phone" are different facts
                     after a theft claim: a phone unlock can be sent from
                     anywhere, so the log stops implying the holder was standing

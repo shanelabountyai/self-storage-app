@@ -1564,6 +1564,9 @@ export const en = {
   'a11y.short.maps.term': 'The maps we show are not fully accessible',
   'a11y.short.maps.body':
     "and they are not ours to fix. A facility page embeds OpenStreetMap, whose zoom controls are named “+” and “−” and whose marker has no text alternative. Search results can show a second map from a different provider, where we control the price markers but not the tiles or the vendor's own controls beneath them; we have not yet assessed that one against a live map, so nothing here rests on it. Both stay collapsed behind a button, and neither is ever the only way to get the information.",
+  'a11y.short.statementTable.term': 'The consolidated statement for a business account, on the narrowest phone screens (fixed 10 September 2026).',
+  'a11y.short.statementTable.body':
+    'From 4 to 10 September 2026, at 320 pixels wide the table of units on that statement was wider than the screen and scrolled sideways only with a mouse or a finger, so a keyboard could not reach its right-hand columns. The table now takes keyboard focus and scrolls with the arrow keys. We list it because it was on a page about money and we did not catch it before it shipped.',
   'a11y.short.reviewed': 'Last reviewed: {date}.',
   'a11y.tell.heading': 'Tell us when we get it wrong',
   'a11y.tell.before': 'If something here blocks you, email',

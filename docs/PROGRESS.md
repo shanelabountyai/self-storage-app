@@ -9211,3 +9211,50 @@ Built on B-292, in the same commit. Without B-292 the list would have named ever
 **`/accessibility` re-read not required.** Nothing a customer touches changed. The new page is staff-only.
 
 **Test verification (both items).** Typecheck clean, including `tsconfig.tests.json`. Lint 0 errors, 6 warnings, all pre-existing and unchanged in count from B-276. No schema change, so there is nothing for the drift check to see. **New `tests/ledger-exceptions-db.test.ts` (7 cases)**, driven through `recordCounterPayment` rather than hand-written payment rows, because a hand-written fixture is what hid B-292. **Mutation-checked:** with the allocation add-back switched off, 4 of the 7 fail. They are the paid-lease reconciliation, the notice not being refused, and the paid lease staying off both the list and the hourly count. The other three guard the opposite direction (over-broad add-back, the gate still refusing, and scoping). The seven files the loader touches passed 105/105 together. **Full unit suite, second run: 4,433 passed + 8 skipped = 4,441** (257 files passed, 1 skipped — the live-integration file), exit 0, totals reconcile. **The first full run was stopped at its first alarm:** four `marketplace-db.test.ts` feed tests failed with *"Timed out fetching a new connection from the connection pool"*. That is B-185's recorded `storage_test` accumulation (2,842 facilities), in a file this diff does not touch. Stopping it left **nine orphaned vitest workers holding 49 connections to `storage_test`**, because `pkill -f "$PWD.*vitest"` matches the `dotenv` wrapper only: the workers retitle themselves `node (vitest N)` and carry no path. They were killed by working directory (`lsof -a -d cwd`), which leaves other projects' workers alone. After `npm run db:reset-test`, the second run was green. **e2e:** `npm run test:e2e -- e2e/admin.spec.ts -g ledger-exceptions` ran the page through `ADMIN_SCAN_ROUTES`' four checks (axe WCAG 2.1 AA, 320px reflow, 200% zoom, forced text spacing) against the production build, on desktop and mobile Chrome. **10 passed** (the 8 checks plus 2 auth setups), exit 0. No `[e2e setup]` line appeared in that output. These checks only read the page and mutate nothing, so a stale hold or lock could not have changed them, but the run is not evidence that global setup ran. **What that scan did NOT cover: the table.** The demo `public` schema has no lease that fails reconciliation, so the page rendered its empty state. The table's markup follows `plans-holds`' scanned table (caption, `scope`, `ScrollRegion`), but no axe pass has seen it with rows in it.
+
+## B-282 — three customer money-path tables were scroll wrappers a keyboard could not focus (2026-09-10, `__SHA__`)
+
+**What it built.**
+
+1. **The three bare `overflow-x-auto` wrappers are `<ScrollRegion>`**: the account card's units table on `/portal`, the bill on `/portal/pay`, and the consolidated statement. Each name comes from the table's existing caption key (`acct.tableCaption`, `paypg.captionAccount` / `paypg.captionUnit`, `astmt.caption`), so no new keys were added. They now carry `role="region"`, `tabindex="0"` and B-217's visible scrollbar.
+2. **`offscreenOffenders` (`e2e/a11y-helpers.ts`) waives overflow only when a keyboard can reach it.** Its scroll-ancestor walk now also asks whether the scroller is focusable or the content is. `e2e/a11y.spec.ts` gains a fixture test with three cases: a bare wrapper of text fails, a `tabindex="0"` wrapper passes, a bare wrapper of links passes.
+3. **One axe scan of `/portal/pay?account=` in Spanish** in `e2e/portal-billing-account.spec.ts`, as the payer, claimed in `SCANNED_STATES` as `business account, Spanish`. The portal Spanish `STATE_EXCEPTIONS` reason now names that screen as scanned.
+4. **The accessibility statement names the gap it closed.** A visible, dated "Where we fall short" entry in both dictionaries (`a11y.short.statementTable.*`), plus a re-read log entry (D-135).
+
+**What it decided.**
+
+- **The overflow was measured, not assumed.** A throwaway probe, signed in as the demo payer on both projects at 320px, 320px with text spacing, 200% zoom and default viewport with text spacing, found the dashboard and pay-screen tables never overflowed. **The consolidated statement's table did: 301px in a 270px box at 320px, 345px under text spacing.** From B-256 (2026-09-04) to this commit, a keyboard could not reach its right-hand columns at that width. Nothing overflowed at 200% zoom.
+- **The waiver is wider than the row's "require `tabindex="0"`", and deliberately.** The admin nav's mobile strip (`components/admin/side-nav.tsx`) is a bare `overflow-x-auto` whose content is all links, and every link is a focus stop that scrolls itself into view. The literal condition would fail it on every admin 320px test for something a keyboard can reach. The rule used is axe's `scrollable-region-focusable` rule: focusable scroller, or focusable content.
+- **`nothingOverlaps`'s copy of the walk is NOT changed.** It decides contrast, which a cell has however it is reached. Its comment now says the two copies differ on purpose.
+- **D-135 (owner): the closed gap is named on the page, dated and marked fixed.** The recommendation was log-only, on the grounds that the list describes the current state; the owner chose the visible entry. When it comes off is left to B-254.
+- **`a11y.true.keyboard` is unchanged and `LAST_REVIEWED` is not bumped.** The claim is scoped to the public site and was not false; D-115 still owns the date.
+
+**Two bugs found by its own tests, both fixed here.**
+
+- **The region's name broke two locators.** "Units billed to Acme Contracting" made `getByRole('region', { name: DEMO_BUSINESS_ACCOUNT_NAME })` match two elements. Both card locators now pass `exact: true`.
+- **The first fixture passed on Pixel 7 when it should have failed.** `page.setContent` with no viewport meta lays out at 980px, so the 900px table fitted. The fixture now carries `width=device-width`.
+
+**Verification.** Typecheck and lint are clean (the 6 warnings were already there). `scroll-regions`, `a11y-scan-coverage`, `accessibility-statement` and `i18n` unit suites: 40 passed. e2e was run file by file rather than as one sweep, because runs were stopped on alarms and re-run:
+
+- **Mobile:** `a11y-own-spec-routes` (21), `a11y.spec` (123) and `admin.spec` (283) all passed; the two tests named below were excluded. `portal.spec` 144 passed, 0 failed.
+- **Desktop:** `a11y-own-spec-routes` 21 passed. `a11y.spec` plus `admin.spec` 409 passed, 0 failed.
+- **Both projects:** `portal-billing-account` 10 passed, the Spanish scan included. `/accessibility` (axe, 320px, 200%, text spacing) and `/admin/access` axe: 12 passed.
+- **`i18n.spec` on both projects:** 72 passed. That includes the Spanish portal dashboard's axe scan over the new region and the Spanish statement page.
+
+**What it left behind.**
+
+- **The full sweep was not run locally**; CI owns it. `e2e/admin-tenants.spec.ts:536` fails on `main` at `3830ead` and was not investigated. `NEXT.md` puts it first.
+- **Two local-only failures were environment, not code.** (1) `/reserve`'s layout test failed after `db:migrate:e2e`, because `.next/cache/fetch-cache` survives builds and served the pre-reseed unit-type ids. It passed on both projects once the cache was cleared. (2) `/admin/access` failed its axe test, which is B-293.
+- **The nav's "Pay $161" points at `?lease=`** for the payer. That was seen in the probe snapshot and is already B-278.
+
+## B-293 — the gate log's rows had six cells under seven headers (2026-09-10, `__SHA__`)
+
+Found while verifying B-282 and fixed in the same commit, by owner choice.
+
+**What it built.** The Unit `<td>` on `/admin/access`, restored from `row.unitNumber`, which `accessEventLog` already returned, with "—" when there is none.
+
+**The defect.** `68a1cc8` (B-086 part 2) dropped the cell and kept the `<th>`, so How read under Unit, Result under How, Flags under Result, and Flags had no data cells (SC 1.3.1, Level A). axe reports it as `th-has-data-cells` *incomplete*, and only when the range holds gate attempts: an empty range renders a `colSpan={7}` row and passes. That is why it failed in some runs and not others, and it is one of the three failures on `main`'s e2e lane at `3830ead`.
+
+**What it decided.** Only the cell. The query and the column set are untouched.
+
+**What it left behind.** Nothing owned. `/admin/access` passes axe on both projects with gate attempts in the range (12 in the last 30 days in the local e2e database).

@@ -1502,6 +1502,9 @@ export const es: Dictionary = {
   'a11y.short.maps.term': 'Los mapas que mostramos no son totalmente accesibles',
   'a11y.short.maps.body':
     'y no está en nuestras manos arreglarlos. La página de una sucursal inserta OpenStreetMap, cuyos controles de acercamiento se llaman «+» y «−» y cuyo marcador no tiene texto alternativo. Los resultados de búsqueda pueden mostrar un segundo mapa de otro proveedor, donde nosotros controlamos los marcadores de precio pero no los mosaicos ni los controles propios del proveedor que están debajo; todavía no hemos evaluado ese contra un mapa en vivo, así que nada de aquí se apoya en eso. Los dos quedan plegados detrás de un botón, y ninguno es nunca la única forma de obtener la información.',
+  'a11y.short.statementTable.term': 'El estado de cuenta consolidado de una cuenta de empresa, en las pantallas de teléfono más angostas (corregido el 10 de septiembre de 2026).',
+  'a11y.short.statementTable.body':
+    'Del 4 al 10 de septiembre de 2026, a 320 píxeles de ancho la tabla de unidades de ese estado de cuenta era más ancha que la pantalla y solo se desplazaba de lado con el ratón o con el dedo, así que con el teclado no se llegaba a sus columnas de la derecha. Ahora la tabla recibe el foco del teclado y se desplaza con las flechas. La anotamos porque estaba en una página de dinero y no la detectamos antes de publicarla.',
   'a11y.short.reviewed': 'Última revisión: {date}.',
   'a11y.tell.heading': 'Díganos cuando nos equivoquemos',
   'a11y.tell.before': 'Si algo aquí le impide seguir, escriba a',

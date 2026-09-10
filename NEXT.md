@@ -1,16 +1,22 @@
 # Next
 
-**B-292 and B-277 are done (one commit, a noted cluster).** B-292 was found
-while starting B-277: `reconcile()` counted a payment twice, so every lease that
-had paid an invoice reported a discrepancy and **the lien-notice gate refused
-every such tenant**. B-277's exception list sits on top of the fix.
+**B-282 and B-293 are done (one commit, a noted cluster).** B-293 was found
+while verifying B-282: `/admin/access` rendered six cells under seven headers,
+and it was one of the three failures on `main`'s e2e lane.
 
 ## Start here
 
-**Next: B-282** (three customer money-path tables bypass `ScrollRegion`, SC
-2.1.1 Level A), then **B-278** (the receipt's `take: 1` with no `orderBy`).
-Read the row before starting: several carry a `needs confirmation at build time`
-clause that must not be quietly upgraded to verified.
+**First: the other red test on `main`.** `e2e/admin-tenants.spec.ts:536`
+("payment plans on the tenant profile › is not offered on a lease with nothing
+past due") fails on both projects at `3830ead`. It was **not investigated**. The
+last three `main` runs failed and only the latest log was read. A red lane hides
+the next real failure, so look before building on it.
+
+**Then: B-278** (the receipt's `take: 1` with no `orderBy`, and the nav's pay
+link titled with somebody else's unit). Its emailed-receipt half is marked
+`needs confirmation at build time` and must not be quietly upgraded to verified.
+The nav half was seen live during B-282: Casey Contractor's nav "Pay $161"
+points at `/portal/pay?lease=…`.
 
 ## Owner actions
 
@@ -42,10 +48,19 @@ fired). **B-275** is buildable and authorised by D-132.
 
 ## What this session learned
 
-**A fixture that mirrors an assumption hides the bug the assumption is.**
-`reports-financial-db.test.ts` writes payment ledger entries WITH an
-`invoiceId`, which is what B-049's reconciliation assumed. No production writer
-does that, so every real paid lease failed and every fixture passed. What found
-it was running the arithmetic in SQL over `storage_test`'s 722 leases, whose
-rows came through the real payment path. Do that before trusting a
-reconciliation rule.
+**A reseed leaves `.next/cache/fetch-cache` serving the old ids.**
+`db:migrate:e2e` recreates the demo facilities, and every unit-type id changes.
+The data cache survives `next build`, so the facility page links a dead
+`?unitType=` and the `/reserve` layout test fails on "That size isn't available
+here any more", which reads like a broken reserve flow. `rm -rf
+apps/web/.next/cache/fetch-cache` after any reseed. CI never sees it.
+
+**An accessible name added to a container can break a substring locator.**
+Naming the dashboard's table region "Units billed to Acme Contracting" made
+`getByRole('region', { name: 'Acme Contracting' })` match two elements. Pass
+`exact: true` when a region locator names something a child region's name
+might contain.
+
+**A `page.setContent` fixture needs a viewport meta on the Pixel 7 project.**
+Without one, mobile emulation lays the page out at 980px and a 900px fixture
+fits, so the assertion meant to fail passes.

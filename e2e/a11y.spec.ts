@@ -121,3 +121,30 @@ test('the waitlist form has no WCAG 2.1 AA violations once opened', async ({ pag
 
   await assertNoAxeViolations(page, { message: 'axe found accessibility violations in the opened waitlist form' })
 })
+
+// B-282. `expectNoHorizontalOverflow` used to waive anything with an
+// `overflow-x: auto` ancestor — true for a mouse, false for a keyboard, since a
+// wrapper with no `tabindex` is not a focus stop. Three customer money-path
+// tables shipped in bare wrappers and the layout loops could not fail on them
+// by construction. Fixtures rather than a route, because the product no longer
+// has an offender to point at.
+test('the overflow check fails content only a mouse can scroll to', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 800 })
+  // The viewport meta is load-bearing: without it the Pixel 7 project lays the
+  // page out at 980px, the 900px table fits, and the bare case passes.
+  const meta = '<meta name="viewport" content="width=device-width, initial-scale=1">'
+  const table = '<table style="width:900px"><tr><td>Unit 12</td><td>$161.00</td></tr></table>'
+
+  await page.setContent(`${meta}<div style="overflow-x:auto">${table}</div>`)
+  await expect(expectNoHorizontalOverflow(page, 'in a bare wrapper')).rejects.toThrow(/painted past the right edge/)
+
+  await page.setContent(`${meta}<div tabindex="0" style="overflow-x:auto">${table}</div>`)
+  await expectNoHorizontalOverflow(page, 'in a focusable wrapper')
+
+  // The admin nav's mobile strip: a bare wrapper whose content is all links,
+  // each a focus stop that scrolls itself into view.
+  await page.setContent(
+    `${meta}<div style="overflow-x:auto"><ul style="display:flex;gap:400px"><li><a href="#a">Today</a></li><li><a href="#b">Tasks</a></li></ul></div>`,
+  )
+  await expectNoHorizontalOverflow(page, 'in a bare wrapper of links')
+})

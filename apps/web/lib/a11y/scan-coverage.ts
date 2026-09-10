@@ -500,6 +500,16 @@ export const SCANNED_STATES: readonly ScannedState[] = [
     spec: 'e2e/portal-billing-account.spec.ts',
     layout: 'reached',
   },
+  // B-282. The same bill in Spanish — the customer money path had been
+  // measured by nothing in the second language.
+  {
+    route: '/portal/pay',
+    state: 'business account, Spanish',
+    spec: 'e2e/portal-billing-account.spec.ts',
+    layout: 'excepted',
+    layoutException:
+      'STATE_REACH measures the English state of this screen at every width, and Spanish changes string length inside the same table — whose column headers run 4–15 characters against 4–13 in English (seventh review block) — inside a ScrollRegion since B-282',
+  },
   // B-258. The MEMBER's half of that card is different markup, not a subset of
   // it: no Pay button, one fewer column in the units table, and a paragraph
   // saying who does pay. A scan of the payer's card measures none of it.
@@ -856,9 +866,9 @@ export const STATE_EXCEPTIONS: readonly StateException[] = [
     state: 'Spanish',
     audience: 'portal',
     reason:
-      'the portal a11y route loop carries no locale cookie, so every portal route but /portal is scanned in English only',
+      'the portal a11y route loop carries no locale cookie, so every portal route but /portal and the business account pay screen is scanned in English only',
     reasonEs:
-      'la corrida de revisión de la cuenta en línea no lleva la cookie de idioma, así que todas sus páginas menos /portal se revisan solo en inglés',
+      'la corrida de revisión de la cuenta en línea no lleva la cookie de idioma, así que todas sus páginas menos /portal y la pantalla de pago de una cuenta de empresa se revisan solo en inglés',
   },
   {
     route: '/checkout',

@@ -7,6 +7,7 @@ import { leaseStatement } from '@/lib/billing/statements'
 import { parseStatementPeriod, statementPeriodSegment } from '@/lib/billing/statement-period'
 import { formatCents } from '@/lib/format'
 import { SITE } from '@/lib/site-config'
+import { ScrollRegion } from '@/components/ui/scroll-region'
 import { dictionaryFor, plural, translate, type Dictionary, type MessageKey } from '@/lib/i18n'
 import { getLocale } from '@/lib/i18n/server'
 
@@ -122,7 +123,10 @@ export default async function AccountStatementPage({
           time. `formatCents` throughout — a column of money is checked by
           eye, and a row reading "$129" beside one reading "$20.00" is harder
           to check than one where every figure carries its cents. */}
-      <div className="border-input overflow-x-auto rounded-lg border">
+      <ScrollRegion
+        aria-label={t('astmt.caption', { account: account.name, label })}
+        className="border-input rounded-lg border"
+      >
         <table className="w-full text-sm">
           <caption className="px-4 pt-4 text-left font-medium">
             {t('astmt.caption', { account: account.name, label })}
@@ -186,7 +190,7 @@ export default async function AccountStatementPage({
             </tr>
           </tfoot>
         </table>
-      </div>
+      </ScrollRegion>
 
       <p className="text-muted-foreground text-xs text-pretty">
         {t('astmt.note', { facility: account.facilityName })}

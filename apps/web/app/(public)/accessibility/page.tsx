@@ -2379,6 +2379,24 @@ function reviewedOn(locale: Locale): string {
 //
 // The three "where we fall short" entries were re-read against this build and
 // all three are still true and still in scope.
+//
+// Re-verified 2026-09-10, at B-282 (three customer money-path tables sat in
+// bare scroll wrappers) and B-293 (the staff gate log's missing Unit cell).
+// Customer-facing: `/portal`, `/portal/pay?account=` and the consolidated
+// statement. **Measured rather than assumed, and the answer was not the same
+// for all three.** A probe signed in as the demo payer at 320px, 200% zoom and
+// forced text spacing found the dashboard and pay-screen tables never
+// overflowed, so those wrappers were inert. The consolidated statement's table
+// was 301px inside a 270px box at 320px (345px under text spacing), so from
+// B-256 (2026-09-04) until this commit a keyboard could not reach its
+// right-hand columns. **The portal keyboard gap was real, and the owner chose
+// to name it in the visible list, dated and marked fixed (D-135)**, rather
+// than only here.
+//
+// `a11y.true.keyboard` is scoped to the public site, was not false, and is
+// unchanged. B-293 is a staff screen, covered by the existing "staff-facing
+// screens" entry, and needs no line of its own. `LAST_REVIEWED` is not bumped,
+// per D-115: no manual screen-reader pass was performed.
 
 export default async function AccessibilityPage() {
   const locale = await getLocale()
@@ -2451,6 +2469,9 @@ export default async function AccessibilityPage() {
           </li>
           <li>
             <strong>{t('a11y.short.maps.term')}</strong>, {t('a11y.short.maps.body')}
+          </li>
+          <li>
+            <strong>{t('a11y.short.statementTable.term')}</strong> {t('a11y.short.statementTable.body')}
           </li>
         </ul>
         <p className="text-muted-foreground text-sm">

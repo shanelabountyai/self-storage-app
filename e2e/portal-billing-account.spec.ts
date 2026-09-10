@@ -59,7 +59,9 @@ test.describe('signed in as the business account payer', () => {
     await page.goto('/portal')
     await expect(page.getByRole('main')).toBeVisible()
 
-    const card = page.getByRole('region', { name: DEMO_BUSINESS_ACCOUNT_NAME })
+    // `exact`: since B-282 the units table inside the card is a region named
+    // "Units billed to {account}", which a substring match also finds.
+    const card = page.getByRole('region', { name: DEMO_BUSINESS_ACCOUNT_NAME, exact: true })
     await expect(card).toBeVisible()
 
     // The payer holds no lease of their own, so the account's is the ONLY Pay
@@ -130,6 +132,23 @@ test.describe('signed in as the business account payer', () => {
 
     await assertNoAxeViolations(page)
   })
+
+  // a11y-state: /portal/pay | business account, Spanish
+  //
+  // B-282. The consolidated bill had never been rendered in Spanish for any
+  // check: the portal route loop carries no locale cookie, and `/checkout |
+  // Spanish` stops at step 1 and asserts the language rather than running axe.
+  // The same screen as the English state above, reached the same way.
+  test('the account pay screen passes axe in Spanish', async ({ page }) => {
+    await page.context().addCookies([{ name: 'st_locale', value: 'es', url: 'http://localhost:3000' }])
+    await page.goto('/portal')
+    await page.getByRole('main').getByRole('link', { name: /^Pagar \$/ }).click()
+    await page.waitForURL(/\/portal\/pay\?account=/)
+    await expect(page.locator('html')).toHaveAttribute('lang', 'es')
+    await expect(page.getByRole('region', { name: `Lo que debe ${DEMO_BUSINESS_ACCOUNT_NAME}` })).toBeVisible()
+
+    await assertNoAxeViolations(page)
+  })
 })
 
 // B-258 / PRD 01 §12. The other half of the same card: somebody who may SEE the
@@ -149,7 +168,9 @@ test.describe('signed in as an authorized member of the business account', () =>
     await page.goto('/portal')
     await expect(page.getByRole('main')).toBeVisible()
 
-    const card = page.getByRole('region', { name: DEMO_BUSINESS_ACCOUNT_NAME })
+    // `exact`: since B-282 the units table inside the card is a region named
+    // "Units billed to {account}", which a substring match also finds.
+    const card = page.getByRole('region', { name: DEMO_BUSINESS_ACCOUNT_NAME, exact: true })
     await expect(card).toBeVisible()
     // The units and their money are there — sight of the account is the point.
     await expect(card.locator('tbody tr')).not.toHaveCount(0)

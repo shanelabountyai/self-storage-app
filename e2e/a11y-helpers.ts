@@ -180,7 +180,10 @@ async function nothingOverlaps(page: Page, selector: string): Promise<boolean> {
 
     // The same DOM-ancestor walk `offscreenOffenders` does below, duplicated
     // rather than shared: a closure cannot cross the `page.evaluate` boundary.
-    // Two copies, kept in step by hand — change one, change the other.
+    // Two copies, kept in step by hand — change one, change the other. ONE
+    // deliberate difference: that copy also asks whether a keyboard can do the
+    // scrolling (B-282). This one is about contrast, which a cell has whether
+    // it is reached by mouse or by keyboard, so it does not.
     const scrollsHorizontally = (node: Element) => {
       for (let a = node.parentElement; a; a = a.parentElement) {
         const { overflowX } = getComputedStyle(a)
@@ -400,10 +403,21 @@ async function offscreenOffenders(page: Page): Promise<string[]> {
     // containing-block one: what matters is whether the reader has a scrollbar
     // that brings this into view, and for everything in normal flow the two
     // agree.
+    //
+    // B-282: and whether a KEYBOARD can work that scrollbar. A bare
+    // `overflow-x-auto` wrapper scrolls for a mouse and is not a focus stop, so
+    // text in it is unreachable by keyboard (2.1.1 A) — and this used to waive
+    // it, while axe, which would catch it, never runs at 320px. Three customer
+    // money-path tables shipped that way. Reachable means what axe's
+    // `scrollable-region-focusable` means: the scroller is focusable, or the
+    // content is (tabbing to a link scrolls it into view — the admin nav's
+    // mobile strip is all links in a bare wrapper, and is fine).
+    const FOCUSABLE = 'a[href], button, input, select, textarea, summary, [tabindex]:not([tabindex="-1"])'
     const scrollsHorizontally = (el: Element) => {
       for (let a = el.parentElement; a; a = a.parentElement) {
         const { overflowX } = getComputedStyle(a)
-        if (overflowX === 'auto' || overflowX === 'scroll') return true
+        if (overflowX === 'auto' || overflowX === 'scroll')
+          return (a as HTMLElement).tabIndex >= 0 || el.matches(FOCUSABLE) || !!el.querySelector(FOCUSABLE)
       }
       return false
     }

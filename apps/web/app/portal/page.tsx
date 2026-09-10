@@ -9,6 +9,7 @@ import { formatCalendarDate, formatCents, formatRate } from '@/lib/format'
 import { GateCodePanel } from '@/components/portal/gate-code-panel'
 import { currentImpersonation } from '@/lib/impersonation/context'
 import { SITE } from '@/lib/site-config'
+import { ScrollRegion } from '@/components/ui/scroll-region'
 import { dictionaryFor, plural, translate, type Dictionary, type MessageKey } from '@/lib/i18n'
 import { getLocale } from '@/lib/i18n/server'
 import { chargePartsSentence } from '@/lib/pricing/charge-parts'
@@ -543,7 +544,7 @@ function AccountCard({ account, dict }: { account: PortalAccount; dict: Dictiona
           (1.3.1 A). `formatCents` rather than `formatRate` for the same reason
           the pay screen uses it — a column where one figure reads "$129" and
           the next "$20.00" is harder to check. */}
-      <div className="overflow-x-auto">
+      <ScrollRegion aria-label={t('acct.tableCaption', { account: account.name })}>
         <table className="w-full text-sm">
           <caption className="sr-only">{t('acct.tableCaption', { account: account.name })}</caption>
           <thead>
@@ -584,7 +585,7 @@ function AccountCard({ account, dict }: { account: PortalAccount; dict: Dictiona
             ))}
           </tbody>
         </table>
-      </div>
+      </ScrollRegion>
 
       {/* D-119. Stated because the opposite is the natural assumption, and
           because the consequence of assuming it is a bill nobody paid. Only for

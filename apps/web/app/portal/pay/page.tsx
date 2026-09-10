@@ -14,6 +14,7 @@ import { balanceBreakdownFor, reconciles } from '@/lib/portal/balance-breakdown'
 import { restoreShortfallCents } from '@storage/core/access'
 import { formatCents, formatRate } from '@/lib/format'
 import { SITE } from '@/lib/site-config'
+import { ScrollRegion } from '@/components/ui/scroll-region'
 import { PortalPayment } from '@/components/portal/portal-payment'
 import { PayAmountForm } from '@/components/portal/pay-amount-form'
 import { dictionaryFor, translate, type Dictionary, type MessageKey } from '@/lib/i18n'
@@ -188,7 +189,14 @@ export default async function PortalPayPage({
           `formatCents` here, not `formatRate`: this is a bill, and a column of
           figures in which one reads "$129" and the next "$20.00" is harder to
           check than one where every row carries its cents. */}
-      <div className="border-input overflow-x-auto rounded-lg border">
+      <ScrollRegion
+        aria-label={
+          lease.account
+            ? t('paypg.captionAccount', { account: lease.account.name })
+            : t('paypg.captionUnit', { unit: lease.unitNumber })
+        }
+        className="border-input rounded-lg border"
+      >
         <table className="w-full text-sm">
           <caption className="px-4 pt-4 text-left font-medium">
             {lease.account
@@ -281,7 +289,7 @@ export default async function PortalPayPage({
             </tr>
           </tfoot>
         </table>
-      </div>
+      </ScrollRegion>
 
       {/* B-232 / D-16. What paying this buys, on the screen where the amount is
           chosen. Not a live region: it is server-rendered and present at load,
