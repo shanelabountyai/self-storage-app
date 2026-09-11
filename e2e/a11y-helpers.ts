@@ -27,9 +27,9 @@ export async function expectPreexisting(region: Locator): Promise<void> {
 // B-184 (T4). `focused: true` asserts the region took focus once the
 // announcement landed — the outcome has to survive the control that reported
 // it, not just print words nobody's cursor is anywhere near (2.4.3). Optional
-// because most callers of this only care that the words are there; two now
-// care that focus followed them (`/portal/contact`'s address save, a
-// completed task).
+// because most callers of this only care that the words are there; three now
+// care that focus followed them (two on a completed task, one on a refused
+// phone unlock).
 export async function expectAnnounced(
   region: Locator,
   pattern: string | RegExp,

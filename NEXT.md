@@ -1,16 +1,14 @@
 # Next
 
-**B-284 is done** (`649c1ad`). On the portal and checkout, dates now follow the tenant's language. So do the move-out recapture reason and the stale-preview refusals. An untagged date in `app/portal` or `app/(public)` now fails lint (`apps/web/eslint.config.mjs`).
+**B-285 is done** (`SHA_PENDING`). The "Open the gate" button on `/portal/access` keeps focus while pending: `aria-busy` with a click guard, no `disabled`. No element on that page carries `role="alert"` at load. The e2e holds the unlock request open, and negative runs show the new assertions fail against the old button.
 
 ## Start here
 
-**B-285** (`/portal/access`: the unlock button blurs itself, and two static paragraphs shout). It is the next unbuilt row. **B-275** (the Neon dev branch's drift) is still open above it and needs a session with Neon access.
+**B-286** (the language toggle puts `lang` on an element whose `aria-label` is in the other language). It is the next unbuilt row. **B-275** (the Neon dev branch's drift) is still open above it and needs a session with Neon access.
 
-B-284 left gaps with no owning row yet (see its PROGRESS entry):
-- the protection change confirmation (`scheduledNotice` in `@storage/core/billing` is English prose)
-- the move-out and cancel success messages, which are English literals
+B-285 left one gap with no owning row (see its PROGRESS entry): seven server-drawn `role="alert"`s on other portal screens (`methods`, `pay`, `pay/done`, `transfer`, `protection`, and two on `move-out`). Nobody has sorted page content from real status messages. The move-out pair is B-164's deliberate choice, which B-245's ruling now contradicts.
 
-B-281's four gaps and B-280's three are unchanged.
+B-284's two gaps (the `/portal/protection` change confirmation, and the move-out and cancel success messages), B-281's four and B-280's three are unchanged.
 
 ## Owner actions
 
@@ -35,6 +33,8 @@ B-254 (D-115), B-290 (D-133), B-291 (D-134), B-129 / B-243 / B-085 / B-133 (cred
 
 ## What this session learned
 
-**Playwright's global setup logs only when it releases something.** A run with no `[e2e setup]` line is not proof that setup skipped. If the command went through `npm run test:e2e`, the env was loaded, and a clean database has nothing to release.
+**To see a pending state in e2e, hold the server action's POST open** with `page.route('**/<path>', async (route) => { if (route.request().method() === 'POST') await held; await route.continue() })`. Against a local server, pending lasts milliseconds, so a test that only checks the outcome cannot see a pending-state bug. The B-086 test passed with `disabled` in place for exactly that reason.
 
-**ESLint's `no-restricted-syntax` with `[arguments.length<N]` is a cheap guard against a missing argument.** Scope it with `files`, and pin it with `ESLint#lintText` in a unit test, so a selector that silently matches nothing fails.
+**Count submits on the form, not requests on the network.** `useActionState` queues a second press and sends it after the first returns, so a request count taken mid-flight reads 1 either way. A `submit` listener on the form sees the second press the moment it happens.
+
+**E2E_DEV=1 reuses a dev server across runs**, so negative checks (swap the fix out, run one test, swap back) take seconds each rather than a production build per variant.

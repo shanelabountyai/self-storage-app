@@ -9464,3 +9464,42 @@ A byte diff against `main` was not possible: on `main` a real link cannot reach 
 - **`requestMoveOutAction`'s success message** ("Move-out requested. We've emailed you a confirmation.") is an English literal, and so are the cancel-path successes beside it. They were not among the row's five. No row owns them yet.
 - **`/portal/pay/done`'s and `/portal/documents`' dates carry no `timeZone`**, so they render in the server's zone. That is B-228's class, not language, and was not changed.
 - **The guard covers `app/portal` and `app/(public)` only.** A date formatted inside `lib/` or `components/` and shown to a customer is not checked.
+
+## B-285 — `/portal/access`: the unlock button blurred itself, and static paragraphs shouted (2026-09-11, `SHA_PENDING`)
+
+**What it built.**
+
+1. **The "Open the gate" button keeps focus while it works** (`components/portal/unlock-button.tsx`). `disabled={pending}` is gone. In Chromium it blurred the pressed button to `<body>`, so the tenant's next Tab restarted from the portal nav. `aria-busy` stays, and the label still changes in text. A press while the first is in flight is refused in the click handler with `preventDefault`, so it never becomes a submit. `disabled:opacity-70` went with `disabled`: an enabled button gets no 1.4.3 inactive-component exemption. This follows `use-my-location.tsx` and `payment-element.tsx`. **The row's hedge stands: whether the blur is strictly a 2.4.3 failure is contested, and this entry does not upgrade it.**
+2. **No element on `/portal/access` carries `role="alert"` at page load** (`app/portal/access/page.tsx`). The row named two: the support-session notice and the per-gate suspended notice. A third, the per-unit suspended notice above the add-someone form, was the same static pattern, and the acceptance says "no element". All three keep their markup and styling and stay visible. The polite `AnnounceRegion` and the unlock form's own `role="status"` are untouched.
+3. **e2e** (`e2e/portal.spec.ts`, the existing phone-unlock refusal test). After enrolling, it asserts `<main>` holds no `role="alert"`. It then holds the server action's POST open with `page.route` and presses the button from the keyboard. While the request is held, it asserts `aria-busy="true"` and that the button is focused. It presses again and asserts the form dispatched one submit event, counted by a listener on the form. It then releases the request, and the refusal goes through `expectAnnounced(alert, /switched off/i, { focused: true })`, the helper's third caller with that option.
+4. The accessibility statement's comment log has a B-285 entry. No visible line changed.
+
+**What it decided.**
+
+- **The in-flight guard reads `useFormStatus`'s `pending`, not a ref.** `payment-element.tsx` uses a ref because it owns its submit handler. This button does not own its submit. A ref set on click would have to be cleared when the submit ends, and a click that never became a submit would leave it set and the button dead.
+- **`AdminForm`'s refusal box keeps `role="alert"`.** It reports the result of a press and takes focus, so it is a status message rather than page content. The "no `role="alert"`" assertion runs before the press for that reason.
+- **The pending state is held open in e2e rather than hoped for.** Against a local server it lasts milliseconds. Without the hold, the refusal test passed with `disabled` in place: `AdminForm` moves focus to the alert afterward, so the blur was never visible to it.
+
+**Verification.**
+
+- Typecheck clean. Lint: 0 errors, the same 6 existing warnings.
+- `e2e/portal.spec.ts` against a production build: 146 of 146 passed across both projects, 0 skipped, 0 flaky.
+- **Negative checks**, run with `E2E_DEV=1` on desktop-chrome, file restored afterward:
+  - With the pre-B-285 button (`disabled`, no guard), the test fails at `toBeFocused()`, reporting the button "inactive".
+  - With B-285's button minus the click guard, it fails at `data-submits`, which reads `"2"`. Without the guard, `useActionState` queues the second press.
+- Unit suite: 4,456 passed, 8 skipped, of 4,464 across 261 files. That is B-284's count unchanged: no unit test touches these files.
+- No migration and no seed change.
+
+**What it left behind.**
+
+- **What VoiceOver and NVDA actually said is still unmeasured.** That covers whether the old alerts pre-empted the unlock's status region, and whether the button now announces its busy state. B-254 owns it, and `LAST_REVIEWED` is not bumped.
+- **A same-tick double press is not proven blocked.** The guard assumes the pending state from the first submit has committed before the second click is handled. That was not measured. If one did slip through, `useActionState` would run the unlock twice in sequence, not concurrently.
+- **Other portal screens still render `role="alert"` on server-drawn markup:**
+  - `methods/page.tsx:188`
+  - `pay/page.tsx:305`
+  - `pay/done/page.tsx:93`
+  - `transfer/page.tsx:335`
+  - `protection/page.tsx:83`
+  - `move-out/page.tsx:157` and `:296`
+
+  The two on move-out are B-164's deliberate "present at page load" choice, which B-245's ruling now contradicts. This row did not assess which of them are page content and which are real status messages. No row owns that audit.

@@ -65,21 +65,61 @@ test.describe('signed in as the demo tenant', () => {
       await expect(page.getByRole('button', { name: 'Open the gate' }).first()).toBeVisible()
     }
 
+    // B-285 (b). The suspended notices are page content that is true when the
+    // page is drawn — B-245's ruling on the past-due banner — and an assertive
+    // alert could pre-empt the polite region reporting what the unlock did.
+    // Scoped to <main> for Next's route announcer (see the soft-navigation
+    // test below). Checked before the press: a refusal's own alert box is a
+    // real status message and is asserted further down.
+    await expect(page.getByRole('main').locator('[role="alert"]')).toHaveCount(0)
+
     const unlockForm = page.getByRole('form', { name: /^Open the gate at / }).first()
     // 4.1.3 AA: the region has to be in the accessibility tree BEFORE the press
     // that writes to it, which is the whole reason this control reuses
     // `AdminForm`'s own status paragraph rather than inserting a toast.
     await expectPreexisting(unlockForm.getByRole('status'))
 
-    await unlockForm.getByRole('button', { name: 'Open the gate' }).click()
+    // B-285 (a). Against a local server the pending state lasts milliseconds,
+    // so it is held open: the server action's POST waits until `release()`.
+    // Every submit event the form dispatches is counted on the form itself.
+    let release!: () => void
+    const held = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    await page.route('**/portal/access', async (route) => {
+      if (route.request().method() === 'POST') await held
+      await route.continue()
+    })
+    await unlockForm.evaluate((form: HTMLFormElement) => {
+      form.addEventListener('submit', () => {
+        form.dataset.submits = String(Number(form.dataset.submits ?? 0) + 1)
+      })
+    })
+
+    // By role within the form, not by name: the label reads "Opening…" while
+    // it works (1.4.1).
+    const unlock = unlockForm.getByRole('button')
+    await unlock.focus()
+    await page.keyboard.press('Enter')
+
+    // With `disabled` this is <body>, and the tenant's next Tab restarts from
+    // the portal nav.
+    await expect(unlock).toHaveAttribute('aria-busy', 'true')
+    await expect(unlock).toBeFocused()
+
+    // A second press in flight is refused before it becomes a submit.
+    // `useActionState` would otherwise queue it and send it once the first
+    // came back.
+    await page.keyboard.press('Enter')
+    await expect(unlockForm).toHaveAttribute('data-submits', '1')
+    release()
 
     // 1.4.1 A: the outcome is words, and they name what to do about it — the
     // failure state here is somebody standing outside a gate. A refusal lands
     // in `AdminForm`'s `role="alert"` box rather than the status paragraph
     // above it, which also takes focus — right for a control whose whole
     // subject is why the thing you pressed did not happen.
-    await expect(unlockForm.getByRole('alert')).toHaveText(/switched off/i)
-    await expect(unlockForm.getByRole('alert')).toBeFocused()
+    await expectAnnounced(unlockForm.getByRole('alert'), /switched off/i, { focused: true })
 
     // The refusal is a STATE, not a route, and B-184 owns the general gap —
     // but this one is scanned rather than promised, because the whole point of

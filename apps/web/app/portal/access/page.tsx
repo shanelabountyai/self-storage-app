@@ -91,7 +91,7 @@ export default async function AccessPage() {
             // Said before the form rather than after the submit. Anyone added
             // now starts suspended, and letting somebody hand out a code that
             // does not work is worse than telling them why.
-            <p role="alert" className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-pretty text-red-900">
+            <p className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-pretty text-red-900">
               {t('acc.unitSuspended')}
             </p>
           )}
@@ -280,7 +280,7 @@ function PhoneUnlockSection({
       </p>
 
       {impersonated && (
-        <p role="alert" className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-pretty text-amber-900">
+        <p className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-pretty text-amber-900">
           {t('acc.impersonatedNoUnlock')}
         </p>
       )}
@@ -294,7 +294,7 @@ function PhoneUnlockSection({
           ) : key.credentialId ? (
             <>
               {key.suspended && (
-                <p role="alert" className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-pretty text-red-900">
+                <p className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-pretty text-red-900">
                   {t('acc.suspendedHere')}
                 </p>
               )}

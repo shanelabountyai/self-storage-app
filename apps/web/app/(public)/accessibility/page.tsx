@@ -2465,6 +2465,22 @@ function reviewedOn(locale: Locale): string {
 // scan states are unchanged (`/portal` in Spanish was already scanned), and
 // this page makes no claim about dates or these routes' language, so no
 // visible line changes. `LAST_REVIEWED` is not bumped, per D-115.
+//
+// Re-verified 2026-09-11, at B-285 (`/portal/access`: the unlock button blurred
+// itself, and static paragraphs shouted). Customer-facing; markup only. The
+// "Open the gate" button set `disabled` while pending, which blurs a focused
+// control to <body> in Chromium; it is now `aria-busy` alone, with a second
+// press refused by the click handler — the pattern `use-my-location.tsx` and
+// the pay buttons already follow. Whether the blur is strictly a 2.4.3 failure
+// is contested and this entry does not upgrade it. Three suspended notices on
+// the page wore `role="alert"` on content that is true when the page is drawn
+// — B-245's ruling — and no longer do; they stay visible. Not a WCAG AA
+// failure either way. Whether the old alerts pre-empted the unlock's polite
+// status region is what B-254's screen-reader pass settles, not this one. The
+// e2e now holds the unlock request open and asserts focus stays on the button.
+// The B-086 part 2 entry above still holds as written, and this page makes no
+// visible claim about the control, so no visible line changes. `LAST_REVIEWED`
+// is not bumped, per D-115.
 
 export default async function AccessibilityPage() {
   const locale = await getLocale()
