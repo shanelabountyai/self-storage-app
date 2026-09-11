@@ -1,16 +1,15 @@
 # Next
 
-**B-286 is done** (`e1794be`). In the language toggle, `lang` now sits only on the current button, which has no `aria-label`. The other button's visible language name is wrapped in a `lang`-declared span. A new e2e test checks both locales, and a negative run shows it fails against the old markup. The row's hedge, that 3.1.2 arguably never required this, is carried unchanged.
+**B-287 is done** (`251be24`). Adding a member to a business account now emails them a set-password link. The email opens with one sentence naming the account, is written in the member's `preferredLocale` (else English, never the staffer's browser language), and is filed under the member. The send runs after the membership commits. If it fails, the staffer's confirmation says so and tells them to point the member at "Forgot your password?". `sendAuthEmail` now escapes its HTML.
 
 ## Start here
 
-**B-287** (somebody granted sight of a business account is never told, and may not be able to sign in). It is the next unbuilt row, and its dependencies B-258 and B-265 are done. **B-275** (the Neon dev branch's drift) is still open above it and needs a session with Neon access.
+**B-288** (Spanish uses two different words for the rented unit). It is the next unbuilt row, and its dependency B-260 is done. **B-289** (the counter's shared-address warning reads as a policy memo) follows. **B-275** (the Neon dev branch's drift) is still open and needs a session with Neon access.
 
 Gaps carried forward with no owning row:
+- B-287: the reset mail still ends "If you did not request this…", even though a member did not request it. The link still expires in 60 minutes; the lead sentence tells them to ask for a new one.
 - B-285's seven server-drawn `role="alert"`s on other portal screens (`methods`, `pay`, `pay/done`, `transfer`, `protection`, and two on `move-out`).
 - B-284's two, B-281's four and B-280's three, all unchanged.
-
-B-286 added nothing new beyond what B-254 already owns: what a screen reader actually says.
 
 ## Owner actions
 
@@ -21,6 +20,7 @@ B-286 added nothing new beyond what B-254 already owns: what a screen reader act
 | **After the next deploy, look at the first cron response's `ledgerExceptions` and the new `ledger_does_not_reconcile` tasks** | The first time production has been swept |
 | **Ask whether anyone tried to generate a lien notice and was refused** | Before B-292, `ledger_does_not_reconcile` refused every tenant who had paid an invoice |
 | **Decide whether a Spanish tenant's recapture invoice line should be Spanish.** It stays English (D-122) while the move-out screen they agreed on is Spanish. Recorded in B-284's entry, not settled. | It changes what the ledger stores |
+| **Tell existing business-account members they have access.** B-287 emails only members added from now on; anyone added between B-258 and this deploy was never told. | A judgement about contacting customers |
 
 ## Two questions are the owner's (unchanged)
 
@@ -32,9 +32,3 @@ B-286 added nothing new beyond what B-254 already owns: what a screen reader act
 ## The blocked list is unchanged
 
 B-254 (D-115), B-290 (D-133), B-291 (D-134), B-129 / B-243 / B-085 / B-133 (credentials or partner agreements), B-134 (trigger not fired).
-
-## What this session learned
-
-**A stale `apps/web/.next/dev/lock` makes `E2E_DEV=1` die at `webServer`'s 300s timeout** with no other output, because Playwright hides the server's refusal. If the lock's `pid` is dead, `rm` it. The production-build path is unaffected.
-
-**`--list` is the expected count for reconciling a sweep.** A grep of `test(` in the spec undercounts.

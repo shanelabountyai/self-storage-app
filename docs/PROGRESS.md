@@ -9530,7 +9530,7 @@ A byte diff against `main` was not possible: on `main` a real link cannot reach 
 - **What a screen reader does with either markup is still unmeasured.** That includes whether an AT applied the button's `lang` to its `aria-label`. B-254 owns it, and `LAST_REVIEWED` is not bumped.
 - **The first negative run never started.** A stale `apps/web/.next/dev/lock`, left at 10:17 by a `next dev` whose pid was dead, held `next dev` until Playwright's 300s `webServer` timeout. Deleting the lock fixed it. This is an environment trap, not a code bug.
 
-## B-287 — somebody given sight of a business account was never told, and may have had no password to sign in with (2026-09-11)
+## B-287 — somebody given sight of a business account was never told, and may have had no password to sign in with (2026-09-11, `251be24`)
 
 **What it built.**
 
