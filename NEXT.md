@@ -1,14 +1,16 @@
 # Next
 
-**B-285 is done** (`26a9971`). The "Open the gate" button on `/portal/access` keeps focus while pending: `aria-busy` with a click guard, no `disabled`. No element on that page carries `role="alert"` at load. The e2e holds the unlock request open, and negative runs show the new assertions fail against the old button.
+**B-286 is done** (`e1794be`). In the language toggle, `lang` now sits only on the current button, which has no `aria-label`. The other button's visible language name is wrapped in a `lang`-declared span. A new e2e test checks both locales, and a negative run shows it fails against the old markup. The row's hedge, that 3.1.2 arguably never required this, is carried unchanged.
 
 ## Start here
 
-**B-286** (the language toggle puts `lang` on an element whose `aria-label` is in the other language). It is the next unbuilt row. **B-275** (the Neon dev branch's drift) is still open above it and needs a session with Neon access.
+**B-287** (somebody granted sight of a business account is never told, and may not be able to sign in). It is the next unbuilt row, and its dependencies B-258 and B-265 are done. **B-275** (the Neon dev branch's drift) is still open above it and needs a session with Neon access.
 
-B-285 left one gap with no owning row (see its PROGRESS entry): seven server-drawn `role="alert"`s on other portal screens (`methods`, `pay`, `pay/done`, `transfer`, `protection`, and two on `move-out`). Nobody has sorted page content from real status messages. The move-out pair is B-164's deliberate choice, which B-245's ruling now contradicts.
+Gaps carried forward with no owning row:
+- B-285's seven server-drawn `role="alert"`s on other portal screens (`methods`, `pay`, `pay/done`, `transfer`, `protection`, and two on `move-out`).
+- B-284's two, B-281's four and B-280's three, all unchanged.
 
-B-284's two gaps (the `/portal/protection` change confirmation, and the move-out and cancel success messages), B-281's four and B-280's three are unchanged.
+B-286 added nothing new beyond what B-254 already owns: what a screen reader actually says.
 
 ## Owner actions
 
@@ -33,8 +35,6 @@ B-254 (D-115), B-290 (D-133), B-291 (D-134), B-129 / B-243 / B-085 / B-133 (cred
 
 ## What this session learned
 
-**To see a pending state in e2e, hold the server action's POST open** with `page.route('**/<path>', async (route) => { if (route.request().method() === 'POST') await held; await route.continue() })`. Against a local server, pending lasts milliseconds, so a test that only checks the outcome cannot see a pending-state bug. The B-086 test passed with `disabled` in place for exactly that reason.
+**A stale `apps/web/.next/dev/lock` makes `E2E_DEV=1` die at `webServer`'s 300s timeout** with no other output, because Playwright hides the server's refusal. If the lock's `pid` is dead, `rm` it. The production-build path is unaffected.
 
-**Count submits on the form, not requests on the network.** `useActionState` queues a second press and sends it after the first returns, so a request count taken mid-flight reads 1 either way. A `submit` listener on the form sees the second press the moment it happens.
-
-**E2E_DEV=1 reuses a dev server across runs**, so negative checks (swap the fix out, run one test, swap back) take seconds each rather than a production build per variant.
+**`--list` is the expected count for reconciling a sweep.** A grep of `test(` in the spec undercounts.

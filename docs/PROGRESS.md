@@ -9504,7 +9504,7 @@ A byte diff against `main` was not possible: on `main` a real link cannot reach 
 
   The two on move-out are B-164's deliberate "present at page load" choice, which B-245's ruling now contradicts. This row did not assess which of them are page content and which are real status messages. No row owns that audit.
 
-## B-286 — the language toggle put `lang` on a button named by an `aria-label` in the other language (2026-09-11)
+## B-286 — the language toggle put `lang` on a button named by an `aria-label` in the other language (2026-09-11, `e1794be`)
 
 **What it built.**
 
