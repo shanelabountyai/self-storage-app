@@ -9560,7 +9560,7 @@ A byte diff against `main` was not possible: on `main` a real link cannot reach 
 - **The reset mail's closing line still says "If you did not request this, you can ignore this email."** The lead sentence explains why the email came, so the line is odd but not wrong. Changing it would mean a separate expiry string for this one sender.
 - **A member added by mistake has already been emailed.** Removing them revokes the access; the email stays in their inbox, and its link still leads to a password, not to the account.
 
-## B-288 — Spanish called the rented thing both `unidad` and `bodega` (2026-09-11, `PENDING`)
+## B-288 — Spanish called the rented thing both `unidad` and `bodega` (2026-09-11, `abcdbb3`)
 
 **What it built.**
 
