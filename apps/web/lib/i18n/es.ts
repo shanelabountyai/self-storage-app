@@ -47,6 +47,9 @@ export const es: Dictionary = {
   // --- Language toggle ---------------------------------------------------
   'lang.label': 'Idioma',
   'lang.switchTo': 'Cambiar a {language}',
+  'lang.offer': '¿Prefiere ver este sitio en español?',
+  'lang.offerAccept': 'Ver en español',
+  'lang.offerDismiss': 'No, gracias',
 
   // --- Homepage ----------------------------------------------------------
   'home.h1': 'Bodegas que puede rentar hoy, sin hacer una llamada.',

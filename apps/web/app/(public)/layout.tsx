@@ -1,12 +1,13 @@
 import { SiteHeader } from '@/components/site/site-header'
 import { SiteFooter } from '@/components/site/site-footer'
+import { LanguageOffer } from '@/components/site/language-offer'
 import { ConsentBanner } from '@/components/marketing/consent-banner'
 import { LocaleProvider } from '@/components/i18n/locale-provider'
 import {
   dictionaryFor,
   translate,
 } from '@/lib/i18n'
-import { getLocale } from '@/lib/i18n/server'
+import { getLocale, shouldOfferSpanish } from '@/lib/i18n/server'
 
 // Public-site shell (PRD 01 §6.1). A route group rather than a path segment,
 // so these pages keep clean URLs (/faq, not /public/faq) while /admin, /login,
@@ -18,7 +19,7 @@ import { getLocale } from '@/lib/i18n/server'
 // request, so the header and the page it wraps cannot end up in different
 // languages.
 export default async function PublicLayout({ children }: { children: React.ReactNode }) {
-  const locale = await getLocale()
+  const [locale, offerSpanish] = await Promise.all([getLocale(), shouldOfferSpanish()])
   const dict = dictionaryFor(locale)
 
   return (
@@ -33,6 +34,7 @@ export default async function PublicLayout({ children }: { children: React.React
         {translate(dict, 'chrome.skipToMain')}
       </a>
 
+      {offerSpanish && <LanguageOffer />}
       <SiteHeader locale={locale} />
       <main id="main" tabIndex={-1} className="flex-1">
         {children}

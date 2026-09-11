@@ -96,6 +96,73 @@ test('the skip link is still the first tab stop in Spanish', async ({ page, cont
   await expect(page.getByRole('link', { name: 'Saltar al contenido principal' })).toBeFocused()
 })
 
+// B-290 (D-133). A browser that prefers Spanish is OFFERED it on a first visit,
+// once, and is never switched on the strength of a header. The context carries
+// no cookie, which is exactly the first visit these tests describe.
+//
+// `locale`, not `extraHTTPHeaders`: Playwright Test defaults `locale` to
+// `en-US`, and Chromium's locale emulation overwrites an `Accept-Language` set
+// through `extraHTTPHeaders`, so the header never reaches the server. Measured
+// against an echo server, not assumed.
+test.describe('the offer of Spanish', () => {
+  test.use({ locale: 'es-MX' })
+
+  test('offers without switching, and accepting sticks', async ({ page }) => {
+    await page.goto('/')
+    await expect(page.locator('html')).toHaveAttribute('lang', 'en')
+    const offer = page.getByRole('region', { name: 'Idioma' })
+    // SC 3.1.2. The whole offer is Spanish on an English page.
+    await expect(offer).toHaveAttribute('lang', 'es')
+
+    await offer.getByRole('button', { name: 'Ver en español' }).click()
+    await expect(page.locator('html')).toHaveAttribute('lang', 'es')
+    await expect(offer).toHaveCount(0)
+
+    await page.goto('/faq')
+    await expect(page.locator('html')).toHaveAttribute('lang', 'es')
+    await expect(offer).toHaveCount(0)
+  })
+
+  test('declining keeps English, and nobody is asked twice', async ({ page }) => {
+    await page.goto('/')
+    await page
+      .getByRole('region', { name: 'Idioma' })
+      .getByRole('button', { name: 'No, gracias' })
+      .click()
+    await expect(page.getByRole('region', { name: 'Idioma' })).toHaveCount(0)
+    await expect(page.locator('html')).toHaveAttribute('lang', 'en')
+
+    await page.goto('/faq')
+    await expect(page.locator('html')).toHaveAttribute('lang', 'en')
+    await expect(page.getByRole('region', { name: 'Idioma' })).toHaveCount(0)
+  })
+
+  test('keeps the skip link first and has no axe violations', async ({ page }) => {
+    await page.goto('/')
+    await expect(page.getByRole('region', { name: 'Idioma' })).toBeVisible()
+
+    // Scanned BEFORE the Tab. The focused skip link is absolutely positioned
+    // top-left, and at a phone's width it lies over the offer's sentence, so
+    // axe cannot determine that text's background and reports it undecided.
+    // That measures a transient focus state rather than the offer.
+    // a11y-state: / | Spanish offer
+    await assertNoAxeViolations(page)
+
+    // WCAG 2.4.1. The offer adds two focusable controls above the header.
+    await page.keyboard.press('Tab')
+    await expect(page.getByRole('link', { name: 'Skip to main content' })).toBeFocused()
+  })
+})
+
+// Playwright Test's default `locale` is `en-US`, which is what every other spec
+// in the suite browses as, so this is also the guard that none of them meets
+// the offer.
+test('a browser that prefers English is not offered Spanish', async ({ page }) => {
+  await page.goto('/')
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Idioma' })).toHaveCount(0)
+})
+
 test('the Spanish facility page has no axe violations', async ({ page, context }) => {
   await context.addCookies([SPANISH])
   await page.goto('/storage/tx/austin/demo-austin-south')

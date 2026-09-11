@@ -39,6 +39,12 @@ export const en = {
   // --- Language toggle ---------------------------------------------------
   'lang.label': 'Language',
   'lang.switchTo': 'Switch to {language}',
+  // B-290 (D-133). Only ever RENDERED from the Spanish dictionary: the offer is
+  // shown to a browser that prefers Spanish, on a page still in English. These
+  // keep the key set identical and say what each Spanish string means.
+  'lang.offer': 'Would you rather read this site in Spanish?',
+  'lang.offerAccept': 'View in Spanish',
+  'lang.offerDismiss': 'No, thanks',
 
   // --- Homepage ----------------------------------------------------------
   'home.h1': 'Storage that you can rent today, without a phone call.',

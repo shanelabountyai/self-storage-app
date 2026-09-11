@@ -1,5 +1,6 @@
-import { cookies } from 'next/headers'
+import { cookies, headers } from 'next/headers'
 import {
+  acceptLanguageLocale,
   DEFAULT_LOCALE,
   dictionaryFor,
   isLocale,
@@ -41,6 +42,23 @@ export async function getLocale(): Promise<Locale> {
     return isLocale(value) ? value : DEFAULT_LOCALE
   } catch {
     return DEFAULT_LOCALE
+  }
+}
+
+/// B-290 (D-133). Whether this request gets the offer of Spanish: nobody has
+/// chosen a language yet, and the browser would rather read Spanish than
+/// English.
+///
+/// ANY `st_locale` cookie ends it, a stale one included. The offer sets the
+/// cookie whichever way it is answered, so a cookie means the visitor was asked
+/// or chose. Outside a request there is no offer, for the reason `getLocale`
+/// gives.
+export async function shouldOfferSpanish(): Promise<boolean> {
+  try {
+    if ((await cookies()).has(LOCALE_COOKIE)) return false
+    return acceptLanguageLocale((await headers()).get('accept-language')) === 'es'
+  } catch {
+    return false
   }
 }
 

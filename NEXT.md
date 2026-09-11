@@ -1,17 +1,20 @@
 # Next
 
-**B-275 is done**: the Neon dev branch was reset once (D-132), carries all 118 migrations and is seeded. `db:status` is green on both halves and the drift check is clean. **B-090**'s umbrella row is ticked.
+**B-290 is done** (D-133 answered (A)). A browser that ranks Spanish above English, with no `st_locale` cookie, now sees a one-line Spanish offer above the public header. Either answer sets the cookie. **D-134 is answered too: (A), `<title>` follows the reader.**
 
 ## Start here
 
-**No unblocked build row remains.** Every open row is waiting on the owner (below). A new session needs an answer to D-133 or D-134, or a new review block.
+**B-291** (XS, now unblocked). Translate `<title>` on `/faq`, `/about`, `/contact` and `/accessibility`, via `metadataFor(...)` in `apps/web/components/site/prose-page.tsx`. `description`, `alternates` and Open Graph stay English (D-122, D-123). Its acceptance: the four routes agree with each other and with what `/accessibility` says is translated, and `tests/i18n.test.ts` covers the four title keys in both dictionaries. `generateMetadata` needs `getLocale()`. B-267 and B-268 already did this for `/…/reserve` and `/reservations`, so copy that shape.
 
-The cloud dev branch has roles, permissions and templates but no demo facilities or owner. Run `npm run db:seed:demo` and `npm run db:create-owner` if `npm run dev` needs them.
+After B-291, no unblocked build row remains.
 
 Gaps carried forward with no owning row:
-- B-287: the reset mail still ends "If you did not request this…", even though a member did not request it. The link still expires in 60 minutes; the lead sentence tells them to ask for a new one.
+- B-290: when an offer button is pressed, the region removes itself and focus is not moved deliberately (the consent banner moves it to `#main`). The server action re-renders, so moving focus would need a client wrapper.
+- B-287: the reset mail still ends "If you did not request this…", even though a member did not request it.
 - B-285's seven server-drawn `role="alert"`s on other portal screens (`methods`, `pay`, `pay/done`, `transfer`, `protection`, and two on `move-out`).
 - B-284's two, B-281's four and B-280's three, all unchanged.
+
+The cloud dev branch has roles, permissions and templates but no demo facilities or owner. Run `npm run db:seed:demo` and `npm run db:create-owner` if `npm run dev` needs them.
 
 ## Owner actions
 
@@ -24,13 +27,6 @@ Gaps carried forward with no owning row:
 | **Decide whether a Spanish tenant's recapture invoice line should be Spanish.** It stays English (D-122) while the move-out screen they agreed on is Spanish. Recorded in B-284's entry, not settled. | It changes what the ledger stores |
 | **Tell existing business-account members they have access.** B-287 emails only members added from now on; anyone added between B-258 and this deploy was never told. | A judgement about contacting customers |
 
-## Two questions are the owner's (unchanged)
+## The blocked list
 
-| Q | Blocks | The call |
-|---|---|---|
-| **D-133** | B-290 | Does the site OFFER Spanish to a browser that prefers it? |
-| **D-134** | B-291 | Does `<title>` follow the reader on `/faq`, `/about`, `/contact`, `/accessibility`? |
-
-## The blocked list is unchanged
-
-B-254 (D-115), B-290 (D-133), B-291 (D-134), B-129 / B-243 / B-085 / B-133 (credentials or partner agreements), B-134 (trigger not fired).
+B-254 (D-115), B-129 / B-243 / B-085 / B-133 (credentials or partner agreements), B-134 (trigger not fired).

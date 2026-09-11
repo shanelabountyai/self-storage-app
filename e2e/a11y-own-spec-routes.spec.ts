@@ -286,6 +286,24 @@ const STATE_REACH: Record<string, { audience: Audience; go: (page: Page) => Prom
       await expect(page.getByRole('heading', { name: 'Unidades disponibles' })).toBeVisible()
     },
   },
+  // B-290 (D-133). The Spanish offer bar above the header, which the public
+  // reflow loop never renders because its browser does not prefer Spanish.
+  //
+  // The header is rewritten per request, because this loop owns no context to
+  // set `locale` on, and Chromium's `en-US` locale emulation overwrites a
+  // header set through `setExtraHTTPHeaders` (measured against an echo server).
+  '/ | Spanish offer': {
+    audience: 'public',
+    async go(page) {
+      await page.route('**/*', (route) =>
+        route.continue({
+          headers: { ...route.request().headers(), 'accept-language': 'es-MX,es;q=0.9' },
+        }),
+      )
+      await page.goto('/')
+      await expect(page.getByRole('region', { name: 'Idioma' })).toBeVisible()
+    },
+  },
   // B-256. A business account's card is a three-column table of units, tenant
   // names and money, on the page a payer reads on a phone — the shape B-199
   // spent an item on. The portal route loop measures `/portal` as Dana, who

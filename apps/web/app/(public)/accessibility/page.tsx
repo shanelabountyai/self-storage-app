@@ -2513,6 +2513,19 @@ function reviewedOn(locale: Locale): string {
 // confirm step are unchanged. The B-271 entry's four-strings claim still holds,
 // and the state is still not axe-scanned (B-184). No visible line changes.
 // `LAST_REVIEWED` is not bumped, per D-115.
+// Re-verified 2026-09-11, at B-290 (Spanish is OFFERED to a browser that prefers
+// it — D-133). Customer-facing: a Spanish line above the public header, shown
+// only with no `st_locale` cookie. It is a region named in Spanish under
+// `lang="es"` (3.1.2), in normal flow so nothing is covered at 320px or 200%
+// zoom (1.4.10, 1.4.13), two plain submit buttons after the skip link (2.1.1,
+// 2.4.1), and no live role (4.1.3). It is a new scanned state, `/ | Spanish
+// offer`, scanned by axe in `e2e/i18n.spec.ts` and measured through
+// `STATE_REACH`. This page renders exceptions, not scanned states, and the
+// `/ | Spanish` exception is still true: the offer is scanned on the English
+// page, not the Spanish one. Not claimed: where focus lands after the offer
+// removes itself (it is not moved deliberately the way the consent banner's
+// dismissal is). No visible line changes. `LAST_REVIEWED` is not bumped, per
+// D-115.
 
 export default async function AccessibilityPage() {
   const locale = await getLocale()

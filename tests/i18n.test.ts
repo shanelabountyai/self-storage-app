@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  acceptLanguageLocale,
   DEFAULT_LOCALE,
   LOCALES,
   dictionaryFor,
@@ -230,6 +231,27 @@ describe('plural', () => {
     expect(plural(en, 3, 'search.countOne', 'search.countOther', { miles: 25 })).toBe(
       '3 facilities within 25 miles, nearest first',
     )
+  })
+})
+
+// B-290 (D-133). This decides who is OFFERED Spanish, so a wrong answer is an
+// offer in front of somebody who never wanted it, or none for the person it
+// exists for.
+describe('acceptLanguageLocale', () => {
+  it('ranks among the languages the site has, by weight, keeping header order on ties', () => {
+    expect(acceptLanguageLocale('es-MX,es;q=0.9,en;q=0.8')).toBe('es')
+    expect(acceptLanguageLocale('en-US,en;q=0.9,es;q=0.8')).toBe('en')
+    expect(acceptLanguageLocale('fr-FR, es;q=0.9, en;q=0.8')).toBe('es')
+    expect(acceptLanguageLocale('en;q=0.5, ES-us;q=0.7')).toBe('es')
+    expect(acceptLanguageLocale('es, en')).toBe('es')
+    expect(acceptLanguageLocale('en, es')).toBe('en')
+  })
+
+  it('answers null when the header names neither language, or refuses both', () => {
+    for (const header of [null, undefined, '', '*', 'fr-FR,de;q=0.9', 'es;q=0', 'es;q=abc']) {
+      expect(acceptLanguageLocale(header)).toBeNull()
+    }
+    expect(acceptLanguageLocale('es;q=0, en;q=0.1')).toBe('en')
   })
 })
 

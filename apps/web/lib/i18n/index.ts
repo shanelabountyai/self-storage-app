@@ -75,6 +75,29 @@ export function isLocale(value: unknown): value is Locale {
   return typeof value === 'string' && (LOCALES as readonly string[]).includes(value)
 }
 
+/// B-290 (D-133). The language a browser's `Accept-Language` ranks highest
+/// among the ones this site has, or `null` when it names neither.
+///
+/// Only ever used to decide whether to OFFER Spanish, never to choose the
+/// language: the cookie stays the one thing every surface reads.
+///
+/// Ranked among the languages we HAVE rather than taking the header's first
+/// entry: `fr, es;q=0.9, en;q=0.8` would rather read Spanish than English,
+/// which is the only choice this site can give them. `q=0` means "not this
+/// one", and a malformed weight is ignored rather than trusted. Ties keep header
+/// order, which is how a browser writes equal preference.
+export function acceptLanguageLocale(header: string | null | undefined): Locale | null {
+  let best: { locale: Locale; q: number } | null = null
+  for (const entry of (header ?? '').split(',')) {
+    const [range, ...params] = entry.trim().toLowerCase().split(';')
+    const primary = range.split('-')[0]
+    const weight = params.map((param) => param.trim()).find((param) => param.startsWith('q='))
+    const q = weight === undefined ? 1 : Number(weight.slice(2))
+    if (isLocale(primary) && q > 0 && (!best || q > best.q)) best = { locale: primary, q }
+  }
+  return best?.locale ?? null
+}
+
 export function dictionaryFor(locale: Locale): Dictionary {
   return DICTIONARIES[locale]
 }

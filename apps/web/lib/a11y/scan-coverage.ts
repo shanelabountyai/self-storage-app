@@ -478,6 +478,16 @@ export const SCANNED_STATES: readonly ScannedState[] = [
     spec: 'e2e/i18n.spec.ts',
     layout: 'reached',
   },
+  // B-290 (D-133). The offer of Spanish above the header, which only a browser
+  // preferring Spanish with no locale cookie ever sees, so no route loop can.
+  // `layout: 'reached'`: it is a new bar at the top of every public page, and
+  // the header below it already needed B-090 part 6's wrap fix at 320px.
+  {
+    route: '/',
+    state: 'Spanish offer',
+    spec: 'e2e/i18n.spec.ts',
+    layout: 'reached',
+  },
   // B-260. The portal dashboard in Spanish. Dana is seeded past-due with a
   // suspended access grant, so this scans the money and access branches rather
   // than an empty account — the states a Spanish reader is most likely to be

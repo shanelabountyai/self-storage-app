@@ -9630,3 +9630,31 @@ A byte diff against `main` was not possible: on `main` a real link cannot reach 
 ## B-090 — umbrella row closed (2026-09-11, `9c494af`)
 
 **What it did.** Ticked the umbrella row and noted why at the top of it. B-090a–f are all ✅. What they handed on is ✅ in its own row (B-135, B-256, B-260, B-262) or owned by an open row (B-290 on D-133, B-291 on D-134). Updated the row's stale "part 6 is PARTLY built" to point at B-260 and B-262. D-78's answered parts and the "do not build yet: live chat" line stay as written. **What it left behind.** Nothing.
+
+## B-290 — Spanish is offered to a browser that prefers it (2026-09-11, `PENDING`)
+
+**What it built.** The owner answered D-133 (A), an offer and never an auto-switch, and D-134 (A) in the same session. B-291 builds D-134.
+
+- **`acceptLanguageLocale(header)`** (`lib/i18n/index.ts`, pure). It ranks `Accept-Language` among the languages the site HAS, so `fr, es;q=0.9, en;q=0.8` answers `es`. It skips `q=0` and malformed weights, and on a tie keeps header order.
+- **`shouldOfferSpanish()`** (`lib/i18n/server.ts`). It answers yes only when there is no `st_locale` cookie at all and the header ranks Spanish first. A stale cookie also ends the offer, because the cookie means the visitor was asked or chose. Outside a request the answer is no, the same fallback `getLocale` uses.
+- **`LanguageOffer`** (`components/site/language-offer.tsx`), a server component in the public layout, placed after the skip link and before the header. It is one Spanish sentence plus "Ver en español" and "No, gracias", posting to the toggle's own `setLocaleAction`, so either answer sets the cookie and it works without JavaScript. The whole region is `lang="es"` with a Spanish `aria-label` ("Idioma"), which is B-286's rule the right way round. It sits in normal flow with no live role, and its buttons are 44px.
+- Three keys in each dictionary. The offer renders only from `es`; the `en` values keep the key set identical and document what each string means.
+- **Tests.** Unit: `acceptLanguageLocale` in `tests/i18n.test.ts`. e2e in `e2e/i18n.spec.ts`: offered without switching, and accepting sticks across a navigation; declining keeps English and nobody is asked twice; an axe scan with the offer showing (`a11y-state: / | Spanish offer`, new in `SCANNED_STATES`); the skip link is still the first tab stop; and an `en-US` browser is not offered. `STATE_REACH` measures the offer at 320px, 200% zoom and forced text spacing.
+
+**Verification.** Typecheck and lint are clean (six warnings, all already present). `npm test`: 4,461 passed and 8 skipped, of 4,469. e2e: `i18n.spec.ts` and `a11y-own-spec-routes.spec.ts` in full, both projects, came to 129 passed and 1 failed. The failure was the axe ordering below. After the fix, the 12 offer tests (including setup) passed.
+
+**Two bugs found in the tests, not the app.**
+
+- **Playwright Test defaults `locale` to `en-US`, and Chromium's locale emulation overwrites an `Accept-Language` set through `extraHTTPHeaders` or `setExtraHTTPHeaders`.** Every offer spec failed at first because no region rendered. `curl` against the built server with the same header rendered it on `/` and `/faq`. An echo-server probe then showed `{ locale: 'en-US', extraHTTPHeaders: es }` sends `en-US`, while `page.route` with `route.continue({ headers })` sends the override. So `i18n.spec.ts` uses `test.use({ locale: 'es-MX' })`, and `STATE_REACH`, which owns no context, rewrites the header per request.
+- **An axe scan taken after Tab is measuring the focused skip link.** The link is absolutely positioned top-left. At Pixel 7 width it overlaps the offer's sentence, so axe returned `color-contrast` as undecided on mobile only. The scan now runs before the Tab.
+
+**What it decided.**
+
+- **The offer lives in the public layout only.** The portal and `/login` are reached from the public site, so a first visit meets the offer there first. A pay link already speaks its reminder's language (B-283), and `/pay` is outside the public layout.
+- **Every other spec browses as `en-US`, so none meets the offer.** The "not offered" spec guards that. A spec that sets a Spanish `locale` without the cookie will see the offer above the header.
+- **It never switches on the header.** The cookie stays the only thing any surface reads (D-133).
+
+**What it left behind.**
+
+- Focus is not moved when an offer button removes the region, unlike the consent banner, which moves it to `#main`. The server action re-renders, so fixing this needs a client wrapper. No owning row; noted on `/accessibility`'s re-verified entry and in `NEXT.md`.
+- Nothing measures how many visitors see, accept or decline the offer. No funnel event was added, and there is no row for one.
