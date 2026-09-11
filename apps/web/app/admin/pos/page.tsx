@@ -3,7 +3,7 @@ import { prisma } from '@storage/db'
 import { getSwitcherData } from '@/lib/admin/context'
 import { resolveSelectedFacility } from '@/lib/admin/facility-selection-logic'
 import { searchTenants } from '@/lib/admin/tenants'
-import { counterPayableLeases } from '@/lib/admin/pos'
+import { counterPayableAccounts, counterPayableLeases } from '@/lib/admin/pos'
 import { currentRatesForFacility } from '@/lib/pricing/unit-type-rates'
 import { formatCents } from '@/lib/format'
 import { CounterPaymentForm } from '@/components/admin/counter-payment-form'
@@ -40,8 +40,15 @@ export default async function PosPage({
   }
   const facilityId = selected.facility.id
 
-  const results = q ? await searchTenants(actor, q) : []
-  const [selectedTenant, payableLeases, unitTypes, rates] = await Promise.all([
+  // B-280. Accounts are searched beside tenants because an account's payer
+  // usually holds no lease, and `searchTenants` cannot surface them.
+  const [results, accountResults] = q
+    ? await Promise.all([
+        searchTenants(actor, q),
+        counterPayableAccounts(actor, facilityId, { name: q }),
+      ])
+    : [[], []]
+  const [selectedTenant, payableLeases, payableAccounts, unitTypes, rates] = await Promise.all([
     tenantId
       ? prisma.tenant.findUnique({
           where: { id: tenantId },
@@ -49,6 +56,7 @@ export default async function PosPage({
         })
       : null,
     tenantId ? counterPayableLeases(actor, tenantId, facilityId) : [],
+    tenantId ? counterPayableAccounts(actor, facilityId, { tenantId }) : [],
     prisma.unitType.findMany({
       where: { facilityId },
       orderBy: { name: 'asc' },
@@ -107,12 +115,27 @@ export default async function PosPage({
           </button>
         </form>
 
-        {q && results.length === 0 && (
-          <p className="text-muted-foreground text-sm">No tenants match &ldquo;{q}&rdquo;.</p>
+        {q && results.length === 0 && accountResults.length === 0 && (
+          <p className="text-muted-foreground text-sm">
+            No tenants or business accounts match &ldquo;{q}&rdquo;.
+          </p>
         )}
 
-        {results.length > 0 && !selectedTenant && (
+        {results.length + accountResults.length > 0 && !selectedTenant && (
           <ul className="flex flex-col gap-1 text-sm">
+            {accountResults.map((account) => (
+              <li key={account.accountId}>
+                <Link
+                  href={`/admin/pos?q=${encodeURIComponent(q ?? '')}&tenant=${account.payerTenantId}`}
+                  className="underline underline-offset-2"
+                >
+                  {account.name}
+                </Link>{' '}
+                <span className="text-muted-foreground">
+                  business account, paid by {account.payerName} · {account.unitNumbers.join(', ')}
+                </span>
+              </li>
+            ))}
             {results.map((result) => (
               <li key={result.tenantId}>
                 <Link
@@ -134,7 +157,7 @@ export default async function PosPage({
             <p className="text-sm font-medium">
               {selectedTenant.firstName} {selectedTenant.lastName}
             </p>
-            {payableLeases.length === 0 ? (
+            {payableLeases.length === 0 && payableAccounts.length === 0 ? (
               <p className="text-muted-foreground mt-2 text-sm">
                 No unit at this facility with anything to pay — no open lease, and no ended
                 one still owing.
@@ -144,6 +167,7 @@ export default async function PosPage({
                 facilityId={facilityId}
                 tenantId={selectedTenant.id}
                 leases={payableLeases}
+                accounts={payableAccounts}
                 defaultLeaseId={preselectedLeaseId}
               />
             )}

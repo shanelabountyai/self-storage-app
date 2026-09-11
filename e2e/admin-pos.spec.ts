@@ -1,6 +1,9 @@
 import { expect, test } from '@playwright/test'
 import { signInAsDemoOwner } from './sign-in'
-import { DEMO_POS_TENANT_EMAIL } from '../apps/web/scripts/demo-credentials'
+import {
+  DEMO_BUSINESS_ACCOUNT_NAME,
+  DEMO_POS_TENANT_EMAIL,
+} from '../apps/web/scripts/demo-credentials'
 import { assertNoAxeViolations } from './a11y-helpers'
 
 // PRD 02 §4.8 US-32 (B-039). The counter: take a payment, or start a walk-in
@@ -50,6 +53,24 @@ test.describe('signed in as the demo owner', () => {
     const status = page.getByRole('main').getByRole('status').first()
     await expect(status).toContainText(/Receipt #\d+/)
     await expect(status).toContainText('Change due: $30.00')
+  })
+
+  // B-280. Read-only on purpose: the demo account's balance is asserted by the
+  // portal suites, so this finds the account and never takes money against it.
+  test('finds a business account by name and offers it as one payment, with no card', async ({
+    page,
+  }) => {
+    await page.goto(`/admin/pos?q=${encodeURIComponent(DEMO_BUSINESS_ACCOUNT_NAME)}`)
+    await page.getByRole('link', { name: DEMO_BUSINESS_ACCOUNT_NAME }).click()
+
+    const picker = page.getByLabel('Unit or account')
+    await expect(picker).toBeVisible()
+    await expect(
+      picker.getByRole('option', { name: new RegExp(`^${DEMO_BUSINESS_ACCOUNT_NAME} — `) }),
+    ).toHaveCount(1)
+    await expect(page.getByLabel('Method').locator('option[value="card"]')).toHaveCount(0)
+
+    await assertNoAxeViolations(page)
   })
 
   test('a check with no number is refused', async ({ page }) => {

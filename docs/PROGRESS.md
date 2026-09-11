@@ -9314,3 +9314,47 @@ Found while verifying B-282 and fixed in the same commit, by owner choice.
 - **The account LIST (`/admin/billing/accounts`) still shows balances only.** The row asked for the detail screen, and the list is unchanged.
 - **The overlock flag** the row's problem statement mentions is not on the account screen. The remedy named days past due and stage only.
 - **The wording addresses the payer as if the unit were theirs** ("The balance on unit C-7…", "Hi Pat"). It is accurate, and it names the unit, but it does not name the tenant. Changing it is a template edit, which is seeded state (B-206).
+
+## B-280 — a business account could not pay at the counter, and forcing it through mis-posted the money (2026-09-10)
+
+**What it built.**
+
+1. **An account as the counter's subject.** `CounterPaymentInput.accountId` (`lib/admin/pos.ts`). When it is set, `recordCounterPayment` ignores the form's tenant and lease and resolves both through `accountAnchor`:
+   - The `Payment` belongs to the account's **payer**, so `claimsFor(payer)` spreads it oldest-first across every unit on the account.
+   - The anchor is one of the account's own leases at this facility, open before ended, oldest first. It is where `postPaymentLedger` puts a remainder no invoice claimed.
+   - Access restore runs for the payer, and `tenantsPaidForBy` already reaches every tenant on the account.
+   - The audit entry carries `accountId`.
+2. **The D-137 refusal.** Take a unit whose account is paid by somebody other than its tenant. A payment keyed to it that exceeds what `claimsFor(tenant)` totals is refused as `account_remainder`, on the Amount field, before a receipt number is taken. Up to what the tenant owes still posts as the tenant.
+3. **`counterPayableAccounts(actor, facilityId, { tenantId } | { name })`**, gated on `tenants:view` exactly as `counterPayableLeases` is (D-110). It returns the accounts at this facility that a tenant pays or holds a unit on, or whose name matches, each with:
+   - its payer
+   - its unit numbers
+   - its ledger balance, via `balancesFor`, now exported from `accounts.ts`
+   - the worst unit's `daysPastDue`
+4. **`/admin/pos`.**
+   - The search lists matching accounts beside tenants, each linking to its payer.
+   - The picker becomes "Unit or account", with a "Business account — one payment for every unit" group. Its option value is `account:<id>`, which `takePaymentAction` parses.
+   - With an account selected, the balance, the aging and "Pay in full" follow the account total. Card is not offered, and the action refuses `card` for an account on the Method field, because the card screen charges one unit's tenant.
+5. **Tests.**
+   - `counter-account-payment-db.test.ts`, 5 tests:
+     - A $150 check taken with `payments:take` alone posts as the payer: $100 to the older invoice on one employee's unit, $50 to the newer one on another's.
+     - The account's $4,400 check keyed to an employee's unit is refused, with no `Payment` row and no balance change, while the employee's own $20 still posts as the employee.
+     - An account from another facility, and a bogus id, are refused.
+     - The listing finds the account from the payer, from an employee, and by name.
+     - The listing refuses `payments:take` alone.
+   - `admin-pos.spec.ts` gains a read-only test. It searches the demo account by name, finds its option in the picker with no Card option, and scans with axe. It takes no money, because the portal suites assert that account's balance.
+
+**What it decided.**
+
+- **D-137: a unit on another payer's account takes up to what its tenant owes, and refuses the rest.** The owner chose this over two alternatives. A picker-only change would meet the row's second acceptance only if staff chose correctly. Always posting as the payer would let an employee's own cash pay a coworker's invoice.
+- **`searchTenants` was not widened to reach payers.** Its contract is that every result holds a lease the actor can see, and the tenant profile's access check rests on that. The counter searches accounts by name itself.
+- **`payableLeaseWhere` and D-119's autopay rule are untouched**, as the row required. Authorized members are never a subject: `counterPayableAccounts` matches on the payer or on a lease's tenant, never on membership.
+
+**Verification.** Typecheck clean. Lint on the changed files clean. `counter-account-payment-db` passed 5 of 5. With `pos-db`, `payment-ledger-split-db`, `counter-payable-leases-db`, `pos-depth-db`, `counter-move-in-db`, `ledger-exceptions-db` and `billing-accounts-db` alongside it, 76 of 76 passed. `a11y-scan-coverage` and `accessibility-statement`: 17 passed, 0 failed. `admin-pos.spec.ts` against a production build: 26 passed, 0 failed, 0 skipped, 26 listed, across both projects. `/admin/pos` is staff-only, so the public accessibility statement makes no claim this item changes.
+
+**What it left behind.**
+
+- **A card for an account at the counter.** `chargeableLease` charges one unit's tenant, and an account card payment would need the payer as the Stripe customer. No row owns it.
+- **Account search matches the account's name only**, not the payer's name, email or phone. "Acme" finds the demo account and "Casey" does not.
+- **The `account_remainder` message does not name the account.** It is static copy.
+- **An employee on an account cannot prepay their own unit at the counter.** That is D-137's stated cost.
+- The B-278 receipt wording ("for unit C-7 and C-8") and the B-279 reminder wording are unchanged. Both are still template edits with no row.

@@ -20,6 +20,9 @@ const PROBLEM_COPY: Record<string, string> = {
   tender_below_amount: 'Cash tendered is less than the amount being paid.',
   check_number_required: 'Enter the check or money-order number.',
   lease_not_found: 'That unit is not on this tenant’s account at this facility.',
+  // B-280 / D-137.
+  account_remainder:
+    'That is more than this tenant owes, and their unit is on a business account. To take it for the whole account, choose the account under Unit or account.',
   needs_manager: 'Cash this large needs a manager. Ask one to take it, or split the payment.',
   // B-230. The counter takes cards now, on its own screen — this string is
   // only reachable if something posts `card` past the redirect below, and it
@@ -51,7 +54,11 @@ export async function takePaymentAction(_prev: FormState, formData: FormData): P
   }
 
   const method = String(formData.get('method') ?? '') as CounterMethod
-  const leaseId = String(formData.get('leaseId') ?? '')
+  // B-280. The picker's value is a lease id, or `account:<id>` for a whole
+  // business account (`CounterPaymentForm` writes the same prefix).
+  const subject = String(formData.get('leaseId') ?? '')
+  const accountId = subject.startsWith('account:') ? subject.slice('account:'.length) : null
+  const leaseId = accountId ? '' : subject
 
   // B-230. A card leaves this form for the card screen, which raises a real
   // PaymentIntent and presents Stripe's own Element.
@@ -62,6 +69,13 @@ export async function takePaymentAction(_prev: FormState, formData: FormData): P
   // old refusal read like a dead end. The amount is validated ABOVE this line,
   // so nothing unparseable reaches the query string.
   if (method === 'card') {
+    // The card screen charges one unit's tenant (`chargeableLease`), which for
+    // an account is not the payer — so it is never where an account's money goes.
+    if (accountId) {
+      return fieldError({
+        method: 'A business account pays by cash, check or money order at the counter.',
+      })
+    }
     redirect(
       `/admin/pos/card?lease=${encodeURIComponent(leaseId)}&amount=${(amountCents / 100).toFixed(2)}`,
     )
@@ -71,6 +85,7 @@ export async function takePaymentAction(_prev: FormState, formData: FormData): P
     facilityId: String(formData.get('facilityId') ?? ''),
     tenantId: String(formData.get('tenantId') ?? ''),
     leaseId,
+    accountId,
     method,
     amountCents,
     tenderedCents,

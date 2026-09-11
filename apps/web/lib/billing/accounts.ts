@@ -95,7 +95,7 @@ const NAME_MAX = 120
 /// The same aggregate the portal reads (`owingLeases`) rather than a second
 /// way of adding up money: a consolidated total that disagreed with the per-lease
 /// figures on the same screen would be worse than no total at all.
-async function balancesFor(
+export async function balancesFor(
   leaseIds: readonly string[],
   client: Prisma.TransactionClient | typeof prisma = prisma,
 ): Promise<Map<string, number>> {

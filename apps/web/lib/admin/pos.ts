@@ -16,7 +16,13 @@ import {
 import { toAuditActor } from "@/lib/rbac/audit-actor";
 import type { Actor } from "@/lib/rbac/actor";
 import { restoreAccessIfSettled } from "@/lib/access/delinquency-gate";
-import { applyPayment, postPaymentLedger, type AppliedPayment } from "@/lib/billing/allocation";
+import {
+  applyPayment,
+  claimsFor,
+  postPaymentLedger,
+  type AppliedPayment,
+} from "@/lib/billing/allocation";
+import { balancesFor } from "@/lib/billing/accounts";
 import { openSessionFor } from "@/lib/admin/drawer";
 import {
   createChargeIntent,
@@ -58,6 +64,10 @@ export type CounterPaymentInput = {
   facilityId: string;
   tenantId: string;
   leaseId: string;
+  /// B-280. A business account as the subject instead of a unit. When set,
+  /// `tenantId` and `leaseId` are ignored: the payment is the account's
+  /// PAYER's, anchored to one of the account's own leases.
+  accountId?: string | null;
   method: CounterMethod;
   amountCents: number;
   tenderedCents?: number | null;
@@ -77,7 +87,10 @@ export type CounterPaymentResult =
       /// than silently allocated — see the note in packages/core/billing.
       unappliedCents: number;
     }
-  | { ok: false; problem: CounterTenderProblem | "lease_not_found" };
+  | {
+      ok: false;
+      problem: CounterTenderProblem | "lease_not_found" | "account_remainder";
+    };
 
 /// Every refusal `counterTenderRefusal` can produce — deliberately WITHOUT
 /// `lease_not_found`, which needs a lease lookup and so belongs to
@@ -189,18 +202,45 @@ export async function recordCounterPayment(
   const settled = settleTender(input);
   if (!settled.ok) return { ok: false, problem: settled.problem };
 
-  const lease = await prisma.lease.findFirst({
-    where: {
-      id: input.leaseId,
-      tenantId: input.tenantId,
-      facilityId: input.facilityId,
-    },
-    select: { id: true },
-  });
   // Checked rather than trusted: the lease id comes from a form, and posting
   // to a lease that is not this tenant's at this facility is the same
   // mis-crediting bug B-035 fixed on the webhook side.
+  const lease = input.accountId
+    ? await accountAnchor(input.accountId, input.facilityId)
+    : await prisma.lease.findFirst({
+        where: {
+          id: input.leaseId,
+          tenantId: input.tenantId,
+          facilityId: input.facilityId,
+        },
+        select: {
+          id: true,
+          tenantId: true,
+          billingAccount: { select: { payerTenantId: true } },
+        },
+      });
   if (!lease) return { ok: false, problem: "lease_not_found" };
+  // Whose payment this is. For an account, the payer — which is what makes
+  // `claimsFor` spread it across every unit on the account rather than one.
+  const tenantId = lease.tenantId;
+
+  // B-280 / D-137. A unit on somebody ELSE's account takes what its tenant
+  // owes and no more. Past that, the money is almost certainly the account's
+  // check keyed against one employee's unit, and posting it would bank the
+  // rest as prepayment on that unit — so it is refused, and the picker's
+  // account option is where it goes instead.
+  if (
+    lease.billingAccount &&
+    lease.billingAccount.payerTenantId !== tenantId
+  ) {
+    const owedCents = (await claimsFor(tenantId, input.facilityId)).reduce(
+      (sum, target) => sum + target.outstandingCents,
+      0,
+    );
+    if (settled.amountCents > owedCents) {
+      return { ok: false, problem: "account_remainder" };
+    }
+  }
 
   // A one-element box rather than a `let`: TypeScript narrows a variable only
   // ever assigned inside a callback to `never` where it is read. Same shape as
@@ -223,7 +263,7 @@ export async function recordCounterPayment(
     const payment = await tx.payment.create({
       data: {
         facilityId: input.facilityId,
-        tenantId: input.tenantId,
+        tenantId,
         amountCents: settled.amountCents,
         method: input.method,
         // Cash in hand is settled the moment it is taken — unlike a card,
@@ -251,7 +291,7 @@ export async function recordCounterPayment(
     // hand), so the recompute counts it immediately.
     const applied = await applyPayment(tx, {
       id: payment.id,
-      tenantId: input.tenantId,
+      tenantId,
       facilityId: input.facilityId,
       amountCents: settled.amountCents,
     });
@@ -283,6 +323,7 @@ export async function recordCounterPayment(
           amountCents: settled.amountCents,
           receiptNumber,
           leaseId: lease.id,
+          accountId: input.accountId ?? null,
         },
       },
       tx,
@@ -297,7 +338,7 @@ export async function recordCounterPayment(
   // call. Best-effort and outside the transaction: a gate controller being
   // unreachable must never roll back money already in the drawer.
   try {
-    await restoreAccessIfSettled(input.tenantId, input.facilityId);
+    await restoreAccessIfSettled(tenantId, input.facilityId);
   } catch {
     // Swallowed deliberately; the nightly pass is the net.
   }
@@ -309,6 +350,43 @@ export async function recordCounterPayment(
     allocation: allocation[0]?.summary ?? [],
     unappliedCents: allocation[0]?.unappliedCents ?? 0,
   };
+}
+
+/// B-280. Where a payment taken for a whole business account lands.
+///
+/// The payer, and ONE of the account's leases at this facility as the anchor —
+/// the unit `postPaymentLedger` puts a remainder no invoice claimed on. An open
+/// lease before an ended one, so prepayment does not sit on a unit somebody
+/// has moved out of. Scoped to the facility because the id comes from a form.
+async function accountAnchor(
+  accountId: string,
+  facilityId: string,
+): Promise<{
+  id: string;
+  tenantId: string;
+  billingAccount: { payerTenantId: string };
+} | null> {
+  const account = await prisma.billingAccount.findFirst({
+    where: { id: accountId, facilityId },
+    select: {
+      payerTenantId: true,
+      leases: {
+        where: { facilityId },
+        orderBy: { startDate: "asc" },
+        select: { id: true, status: true },
+      },
+    },
+  });
+  const anchor =
+    account?.leases.find((lease) => lease.status !== "ended") ??
+    account?.leases[0];
+  return account && anchor
+    ? {
+        id: anchor.id,
+        tenantId: account.payerTenantId,
+        billingAccount: { payerTenantId: account.payerTenantId },
+      }
+    : null;
 }
 
 export type DailySummaryRow = {
@@ -788,4 +866,100 @@ export async function counterPayableLeases(
     .sort(
       (a, b) => b.daysPastDue - a.daysPastDue || b.balanceCents - a.balanceCents,
     );
+}
+
+export type CounterPayableAccount = {
+  accountId: string;
+  name: string;
+  payerTenantId: string;
+  payerName: string;
+  unitNumbers: string[];
+  balanceCents: number;
+  /// The worst unit's, by the same `daysPastDue` the unit picker shows.
+  daysPastDue: number;
+};
+
+/// B-280. The business accounts the counter can take ONE payment for, at this
+/// facility: those `match.tenantId` pays or holds a unit on, or those whose name
+/// contains `match.name`.
+///
+/// The name search exists because the payer is usually unfindable otherwise.
+/// `searchTenants` only surfaces a tenant holding a lease the actor can see —
+/// deliberately, since the tenant profile's access check rests on it — and a
+/// business account's payer ordinarily holds none.
+///
+/// Gated exactly as `counterPayableLeases` is, on `tenants:view` (D-110): an
+/// account's balance in front of the counter is the same per-account read.
+export async function counterPayableAccounts(
+  actor: Actor,
+  facilityId: string,
+  match: { tenantId: string } | { name: string },
+): Promise<CounterPayableAccount[]> {
+  if (actor.kind !== "staff") throw new ForbiddenError("Staff access required");
+  assertFacilityAccess(actor, facilityId);
+  if (!can(actor, "tenants:view", facilityId)) {
+    throw new ForbiddenError(
+      "Missing permission tenants:view",
+      "tenants:view",
+      facilityId,
+    );
+  }
+  if ("name" in match && !match.name.trim()) return [];
+
+  const accounts = await prisma.billingAccount.findMany({
+    where: {
+      facilityId,
+      ...("tenantId" in match
+        ? {
+            OR: [
+              { payerTenantId: match.tenantId },
+              { leases: { some: { tenantId: match.tenantId } } },
+            ],
+          }
+        : { name: { contains: match.name.trim(), mode: "insensitive" as const } }),
+    },
+    orderBy: { name: "asc" },
+    select: {
+      id: true,
+      name: true,
+      payerTenantId: true,
+      payer: { select: { firstName: true, lastName: true } },
+      leases: {
+        where: {
+          facilityId,
+          status: { in: [...OCCUPYING_LEASE_STATUSES, "ended"] },
+        },
+        select: {
+          id: true,
+          unit: { select: { number: true } },
+          invoices: {
+            where: { kind: "rent" },
+            select: { dueDate: true, totalCents: true, amountPaidCents: true },
+          },
+        },
+      },
+    },
+  });
+
+  const balances = await balancesFor(
+    accounts.flatMap((account) => account.leases.map((lease) => lease.id)),
+  );
+  const now = new Date();
+  return accounts
+    .filter((account) => account.leases.length > 0)
+    .map((account) => ({
+      accountId: account.id,
+      name: account.name,
+      payerTenantId: account.payerTenantId,
+      payerName: `${account.payer.firstName} ${account.payer.lastName}`,
+      unitNumbers: account.leases.map((lease) => lease.unit.number).sort(),
+      balanceCents: account.leases.reduce(
+        (sum, lease) => sum + (balances.get(lease.id) ?? 0),
+        0,
+      ),
+      daysPastDue: daysPastDue(
+        account.leases.flatMap((lease) => lease.invoices),
+        now,
+      ),
+    }));
 }

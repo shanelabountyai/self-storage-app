@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { AdminForm, Field } from '@/components/admin/form'
 import { takePaymentAction } from '@/app/admin/pos/actions'
 import { formatCents } from '@/lib/format'
-import type { CounterPayableLease } from '@/lib/admin/pos'
+import type { CounterPayableAccount, CounterPayableLease } from '@/lib/admin/pos'
 
 // B-231 / D-110(A). The counter screen finally shows what the tenant owes.
 //
@@ -23,10 +23,14 @@ import type { CounterPayableLease } from '@/lib/admin/pos'
 
 const FIELD_CLASS = 'flex flex-col gap-1 text-sm'
 
+/// B-280. The picker's value for a whole business account; `takePaymentAction`
+/// reads the same prefix.
+const ACCOUNT = 'account:'
+
 /// The aging in words, beside the money. "41 days past due" is what tells the
 /// person taking the cash whether to mention the overlock before the tenant
 /// walks back out — it is the same `daysPastDue` the access gate suspends on.
-function aging(lease: CounterPayableLease): string {
+function aging(lease: { balanceCents: number; daysPastDue: number }): string {
   if (lease.balanceCents <= 0) return 'nothing owed'
   if (lease.daysPastDue <= 0) return 'due now'
   return `${lease.daysPastDue} day${lease.daysPastDue === 1 ? '' : 's'} past due`
@@ -41,18 +45,34 @@ export function CounterPaymentForm({
   facilityId,
   tenantId,
   leases,
+  accounts,
   defaultLeaseId,
 }: {
   facilityId: string
   tenantId: string
   leases: CounterPayableLease[]
+  accounts: CounterPayableAccount[]
   defaultLeaseId?: string
 }) {
-  const initial = leases.find((lease) => lease.leaseId === defaultLeaseId) ?? leases[0]
-  const [leaseId, setLeaseId] = useState(initial.leaseId)
+  const [subject, setSubject] = useState(
+    (leases.find((lease) => lease.leaseId === defaultLeaseId) ?? leases[0])?.leaseId ??
+      `${ACCOUNT}${accounts[0].accountId}`,
+  )
   const [amount, setAmount] = useState('')
 
-  const selected = leases.find((lease) => lease.leaseId === leaseId) ?? initial
+  // B-280. Either a whole account or one unit; everything below the picker
+  // reads this one shape so the balance, the aging and "Pay in full" follow it.
+  const account = accounts.find((a) => `${ACCOUNT}${a.accountId}` === subject)
+  const lease = account ? null : (leases.find((l) => l.leaseId === subject) ?? leases[0])
+  const selected = account
+    ? { ...account, heading: account.name, isFormer: false }
+    : { ...lease!, heading: lease!.unitNumber }
+
+  const leaseOptions = leases.map((lease) => (
+    <option key={lease.leaseId} value={lease.leaseId}>
+      {label(lease)}
+    </option>
+  ))
 
   return (
     <AdminForm
@@ -64,18 +84,28 @@ export function CounterPaymentForm({
       <input type="hidden" name="tenantId" value={tenantId} />
       <Field
         name="leaseId"
-        label="Unit"
+        label={accounts.length > 0 ? 'Unit or account' : 'Unit'}
         as="select"
         required
         className={FIELD_CLASS}
-        value={leaseId}
-        onChange={(event) => setLeaseId(event.target.value)}
+        value={subject}
+        onChange={(event) => setSubject(event.target.value)}
       >
-        {leases.map((lease) => (
-          <option key={lease.leaseId} value={lease.leaseId}>
-            {label(lease)}
-          </option>
-        ))}
+        {accounts.length > 0 ? (
+          <>
+            <optgroup label="Business account — one payment for every unit">
+              {accounts.map((a) => (
+                <option key={a.accountId} value={`${ACCOUNT}${a.accountId}`}>
+                  {a.name} — {a.balanceCents > 0 ? `${formatCents(a.balanceCents)} due` : 'nothing due'}{' '}
+                  across {a.unitNumbers.join(', ')}
+                </option>
+              ))}
+            </optgroup>
+            {leases.length > 0 && <optgroup label="Unit">{leaseOptions}</optgroup>}
+          </>
+        ) : (
+          leaseOptions
+        )}
       </Field>
       <Field
         name="method"
@@ -91,17 +121,17 @@ export function CounterPaymentForm({
         // are what the row was raised for — someone standing at the desk with
         // $400 — and widening the card path to closed leases is a change to the
         // money path, which this row says twice it is not.
-        key={selected.isFormer ? 'former' : 'current'}
+        key={selected.isFormer ? 'former' : account ? 'account' : 'current'}
       >
         <option value="cash">Cash</option>
         <option value="check">Check</option>
         <option value="money_order">Money order</option>
-        {!selected.isFormer && <option value="card">Card</option>}
+        {!selected.isFormer && !account && <option value="card">Card</option>}
       </Field>
       <div className="col-span-2 flex flex-wrap items-center gap-3">
         <p className="text-sm text-pretty">
           <span className="font-medium">
-            {selected.unitNumber} — {formatCents(selected.balanceCents)}
+            {selected.heading} — {formatCents(selected.balanceCents)}
           </span>
           , {aging(selected)}
           {selected.isFormer ? ' · moved out, so this is former-tenant AR' : ''}
@@ -139,7 +169,9 @@ export function CounterPaymentForm({
         className={`${FIELD_CLASS} col-span-2`}
       />
       <p className="text-muted-foreground col-span-2 text-xs text-pretty">
-        {selected.isFormer
+        {account
+          ? `Settles ${account.name}’s oldest invoices first, across ${account.unitNumbers.join(', ')}, and is receipted to ${account.payerName}. Cash, check or money order only.`
+          : selected.isFormer
           ? 'This unit has been moved out of. Cash, check or money order only — a card at the counter needs an open lease.'
           : 'Card takes you to the card screen with this amount, where the tenant enters their own details — or you can charge the card they have on file.'}
       </p>
