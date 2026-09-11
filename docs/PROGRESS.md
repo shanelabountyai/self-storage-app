@@ -9433,7 +9433,7 @@ A byte diff against `main` was not possible: on `main` a real link cannot reach 
 - **No valid-token state of either pay route is scanned or measured at 320px and 200%.** Both stay stated exceptions in `scan-coverage.ts`. The markup is unchanged, and the Spanish strings are longer.
 - **Production's pay-link funnel from 2026-08-07 to this deploy reads zero for this reason, not tenant behaviour.** The same window's waitlist cancel links failed the same way. Recorded in `NEXT.md` for the owner.
 
-## B-284 — the portal's Spanish had holes on the money and irreversible screens (2026-09-11, `SHA-PENDING`)
+## B-284 — the portal's Spanish had holes on the money and irreversible screens (2026-09-11, `649c1ad`)
 
 **What it built.**
 
