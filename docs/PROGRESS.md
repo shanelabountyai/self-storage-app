@@ -9580,3 +9580,25 @@ A byte diff against `main` was not possible: on `main` a real link cannot reach 
 - e2e was not run. No spec asserts either Spanish string.
 
 **What it left behind.** Nothing new. English and admin copy are untouched (D-122).
+
+## B-289 — The counter's shared-address warning read as a policy memo (2026-09-11, `PENDING`)
+
+**What it built.**
+
+1. **`details.sharedEmail` (en)** → `Is {heldBy} the person renting? If so, correct the name below to use that account. If not, both keep leases and notices, but neither can sign in online.` (was 57 words with a name filled in, opening with the collision and shouting `NEITHER`).
+2. **`details.sharedEmail` (es)** → `¿Es {heldBy} quien renta? Si es así, corrija el nombre abajo para usar esa cuenta. Si no, ambas conservan contrato y avisos, pero ninguna podrá entrar en línea.` (D-122).
+3. **Guard** (`tests/i18n.test.ts`): in both dictionaries, with a two-word name filled in, the first sentence ends in `?`, the message is under 30 words, and there is no run of capitals. Checked against the old copy: it fails all three.
+
+**What it decided.**
+
+- **"below", not "go back" or "above".** `DetailsStep` passes the name fields to `AdminForm` as `children`, which render after the status paragraph and the confirm box. The old "go back and correct the name" named a step that does not exist.
+- **"mail" was dropped from the kept-things list to fit the 30-word cap.** Leases and notices stay because those are what a tenant would worry about losing. Postal mail keeps going the same as before.
+- **No code path changed.** `submitDetailsAction` still fires on the same condition, returns the same `confirm` echo and button, and `AdminForm` still announces it through its one pre-mounted `role="status"`.
+
+**Verification.**
+
+- `tests/i18n.test.ts` 22/22. Typecheck clean. Lint: 0 errors, the same 6 existing warnings.
+- No e2e or unit test asserts this string. B-271's `tests/checkout-details-db.test.ts` cases assert `otherTenantOnEmail` and `separateAccount`, and neither was touched. e2e was not run.
+- Accessibility statement re-read; a re-verification comment added, no visible line changes.
+
+**What it left behind.** Nothing new.

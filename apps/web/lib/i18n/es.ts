@@ -654,7 +654,7 @@ export const es: Dictionary = {
   // B-271 / D-111. Solo en el mostrador. Nombra la CONSECUENCIA — que ninguna
   // de las dos cuentas podrá entrar al portal — no solo la coincidencia.
   'details.sharedEmail':
-    'Este correo electrónico ya es de {heldBy}. Si es la persona que está rentando, regrese y corrija el nombre — esta unidad va en su cuenta actual. Si es otra persona de la misma dirección, ambas cuentas conservan su contrato, sus avisos y su correo postal, pero NINGUNA de las dos podrá entrar al portal en línea.',
+    '¿Es {heldBy} quien renta? Si es así, corrija el nombre abajo para usar esa cuenta. Si no, ambas conservan contrato y avisos, pero ninguna podrá entrar en línea.',
   'details.sharedEmailHeldBy': 'Ya lo usa',
   'details.sharedEmailRenting': 'Está rentando ahora',
   'details.sharedEmailConfirm': 'Sí, darle a {renting} su propia cuenta',

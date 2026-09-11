@@ -2504,6 +2504,15 @@ function reviewedOn(locale: Locale): string {
 // `aria-describedby`, and the result is still announced through `AdminForm`'s
 // status region. No visible line changes. `LAST_REVIEWED` is not bumped, per
 // D-115.
+// Re-verified 2026-09-11, at B-289 (the counter's shared-address warning read
+// as a policy memo). Walk-in checkout only; wording only. The warning now leads
+// with its question, is under 30 words in `en` and `es`, and no longer shouts
+// `NEITHER`. It still names the correction (3.3.3) and points at the name
+// fields where they actually are, below it. It is still announced through
+// `AdminForm`'s one pre-mounted status region (4.1.3), and the refusal and
+// confirm step are unchanged. The B-271 entry's four-strings claim still holds,
+// and the state is still not axe-scanned (B-184). No visible line changes.
+// `LAST_REVIEWED` is not bumped, per D-115.
 
 export default async function AccessibilityPage() {
   const locale = await getLocale()

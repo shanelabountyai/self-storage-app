@@ -175,6 +175,17 @@ describe('i18n dictionaries', () => {
     expect(countNoun).toEqual([])
   })
 
+  it('leads the counter shared-address warning with its question, in under 30 words (B-289)', () => {
+    // Read aloud to the person at the desk. A two-word name stands in for
+    // {heldBy}, since that is what the staffer actually says.
+    for (const dict of [en, es]) {
+      const message = dict['details.sharedEmail'].replace('{heldBy}', 'Ada Renter')
+      expect(message.match(/[.?!]/)?.[0]).toBe('?')
+      expect(message.split(/\s+/).length).toBeLessThan(30)
+      expect(message).not.toMatch(/\p{Lu}{2,}/u)
+    }
+  })
+
   it('leaves no empty translation', () => {
     // An empty string type-checks and renders a blank label.
     const blank = Object.keys(en).filter((key) => !es[key as keyof typeof en].trim())

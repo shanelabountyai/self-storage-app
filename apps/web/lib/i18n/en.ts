@@ -729,8 +729,11 @@ export const en = {
   // sign in" is the thing they have to tell the person standing there, and it
   // is what D-111 bought deliberately when it made a shared address resolve to
   // nobody.
+  //
+  // B-289: read aloud at the desk, so the question leads and each answer's
+  // consequence follows it. The name fields render BELOW this message.
   'details.sharedEmail':
-    'This email address already belongs to {heldBy}. If that is the person renting, go back and correct the name — this unit goes on their existing account. If it is someone else at the same address, both accounts keep their lease, notices and mail, but NEITHER will be able to sign in to the online portal.',
+    'Is {heldBy} the person renting? If so, correct the name below to use that account. If not, both keep leases and notices, but neither can sign in online.',
   'details.sharedEmailHeldBy': 'Already used by',
   'details.sharedEmailRenting': 'Renting now',
   'details.sharedEmailConfirm': 'Yes, give {renting} their own account',
