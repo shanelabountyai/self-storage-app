@@ -9359,7 +9359,7 @@ Found while verifying B-282 and fixed in the same commit, by owner choice.
 - **An employee on an account cannot prepay their own unit at the counter.** That is D-137's stated cost.
 - The B-278 receipt wording ("for unit C-7 and C-8") and the B-279 reminder wording are unchanged. Both are still template edits with no row.
 
-## B-281 — cash at the counter left with nothing to print, and a renter with no email had every notice recorded blank (2026-09-11, `PENDING`)
+## B-281 — cash at the counter left with nothing to print, and a renter with no email had every notice recorded blank (2026-09-11, `83fd713`)
 
 **What it built.**
 
