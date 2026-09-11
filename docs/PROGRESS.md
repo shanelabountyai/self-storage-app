@@ -9681,7 +9681,7 @@ A byte diff against `main` was not possible: on `main` a real link cannot reach 
 
 - Five portal screens still set a static English `<title>` under Spanish: `/portal/contact`, `/portal/documents`, `/portal/documents/[documentId]`, `/portal/protection` and `/portal/statements/account/[accountId]/[period]`. None is indexed, so D-134 and B-267/B-268's reasoning both say translate them. No owning row; noted on `/accessibility`'s re-verified entry and in `NEXT.md`.
 
-## B-294 — Portal page titles follow the reader (2026-09-11, `SHA_PENDING`)
+## B-294 — Portal page titles follow the reader (2026-09-11, `545b443`)
 
 **What it built.**
 
