@@ -8,7 +8,10 @@ import { CallLink, phoneFor } from "@/components/marketing/call-link";
 import { dictionaryFor, LOCALE_TAG, translate, type MessageKey } from '@/lib/i18n'
 import { getLocale } from '@/lib/i18n/server'
 
-export const metadata: Metadata = { title: "Documents and receipts" };
+// B-294 (D-134). `<title>` is the `<h1>`'s key, so it follows the reader.
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: translate(dictionaryFor(await getLocale()), 'docs.title') };
+}
 
 // PRD 01 §4.7 US-705.
 

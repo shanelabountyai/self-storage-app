@@ -12,7 +12,10 @@ import {
 import { dictionaryFor, LOCALE_TAG, translate, type MessageKey } from '@/lib/i18n'
 import { getLocale } from '@/lib/i18n/server'
 
-export const metadata: Metadata = { title: 'Contact details' }
+// B-294 (D-134). `<title>` is the `<h1>`'s key, so it follows the reader.
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: translate(dictionaryFor(await getLocale()), 'cont.title') }
+}
 
 // PRD 01 US-706 / PRD 02 US-13. Three separate forms on purpose: saving a
 // phone number should not require re-entering an address, and changing an

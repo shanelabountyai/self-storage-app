@@ -1036,6 +1036,7 @@ export const es: Dictionary = {
   'astmt.added': '{amount} agregado',
   'astmt.cleared': '{amount} liquidado',
   'astmt.heading': '{account} — {label}',
+  'astmt.title': 'Estado de cuenta de la empresa',
   'astmt.unitsOne': '{count} unidad · {facility}',
   'astmt.unitsOther': '{count} unidades · {facility}',
   'astmt.caption': 'Todas las unidades facturadas a {account} en {label}',

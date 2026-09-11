@@ -616,6 +616,8 @@ test.describe('the portal in Spanish', () => {
       // this is a genuinely separate mounting from the one B-090f asserted.
       await expect(page.locator('html')).toHaveAttribute('lang', 'es')
       await expect(page.getByRole('heading', { level: 1 }).first()).toContainText(heading)
+      // B-294 (D-134). Every portal nav route takes `<title>` from its `<h1>` key.
+      await expect(page).toHaveTitle(heading)
     })
   }
 

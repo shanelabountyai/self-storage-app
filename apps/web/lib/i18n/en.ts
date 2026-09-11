@@ -1116,6 +1116,8 @@ export const en = {
   'astmt.added': '{amount} added',
   'astmt.cleared': '{amount} cleared',
   'astmt.heading': '{account} — {label}',
+  // B-294 (D-134). The <title>: the <h1> above names the account, which is data.
+  'astmt.title': 'Account statement',
   'astmt.unitsOne': '{count} unit · {facility}',
   'astmt.unitsOther': '{count} units · {facility}',
   'astmt.caption': 'Every unit billed to {account} in {label}',

@@ -9680,3 +9680,26 @@ A byte diff against `main` was not possible: on `main` a real link cannot reach 
 **What it left behind.**
 
 - Five portal screens still set a static English `<title>` under Spanish: `/portal/contact`, `/portal/documents`, `/portal/documents/[documentId]`, `/portal/protection` and `/portal/statements/account/[accountId]/[period]`. None is indexed, so D-134 and B-267/B-268's reasoning both say translate them. No owning row; noted on `/accessibility`'s re-verified entry and in `NEXT.md`.
+
+## B-294 — Portal page titles follow the reader (2026-09-11, `SHA_PENDING`)
+
+**What it built.**
+
+- `/portal/contact`, `/portal/documents` and `/portal/protection` swap `export const metadata` for a `generateMetadata()` over their `<h1>` key (`cont.title`, `docs.title`, `prot.title`). That is the B-267/B-268 shape every other portal nav screen already had.
+- `/portal/documents/[documentId]` takes `doc.title`, which is the not-found `<h1>`'s key, and keeps `robots: noindex`. The found page's `<h1>` is the document's stored title. That is data rather than a message, so the tab keeps the generic "Document" / "Documento".
+- `/portal/statements/account/[accountId]/[period]` gets a **new key, `astmt.title`** ("Account statement" / "Estado de cuenta de la empresa"). Its `<h1>`, `astmt.heading`, interpolates the account name, and `generateMetadata` would need a query to read that.
+- **Tests.** `tests/i18n.test.ts` adds the five keys to `MUST_ALSO_DIFFER`. `e2e/i18n.spec.ts`'s "the portal in Spanish" loop now asserts `toHaveTitle` on all eleven portal nav routes, not just the three this item changed, since every one now takes its title from its heading key.
+- The row was opened this session (`83as`) from the gap B-291 left, with no new decision: D-134 already settles it, and none of these routes is indexed.
+- `/accessibility` gets a re-verified entry, and PRD 01 §12 gets a built line.
+
+**Verification.** Typecheck is clean. Lint shows 0 errors and the same six warnings. `tests/i18n.test.ts`: 24 passed. e2e: the "the portal in Spanish" and "the static pages in Spanish" blocks of `e2e/i18n.spec.ts` against the production build, on both projects: 46 passed. The full unit and e2e sweeps were not run locally; CI owns them.
+
+**What it decided.**
+
+- **A `<title>` gets its own key only when the `<h1>` is data.** The account statement's heading is an account name. A document's heading is its stored title. Everywhere else the `<h1>` key is reused, per B-291.
+- The English titles are unchanged, including "Account statement" and "Document".
+
+**What it left behind.**
+
+- One document's and the account statement's titles are covered only by the dictionary test, not by an e2e `toHaveTitle`. Neither route is in the portal nav loop, and the account statement needs the business-payer fixture.
+- Every portal screen's `<title>` now follows the reader. The other carried gaps in `NEXT.md` are unchanged.

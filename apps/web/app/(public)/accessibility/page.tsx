@@ -2541,6 +2541,19 @@ function reviewedOn(locale: Locale): string {
 // `protection` and a business-account statement) still carry an English
 // `<title>` under Spanish. They have no owning row. No visible line changes.
 // `LAST_REVIEWED` is not bumped, per D-115.
+// Re-verified 2026-09-11, at B-294 (the five portal screens B-291 left with an
+// English `<title>` under `<html lang="es">` — D-134). Customer-facing:
+// `/portal/contact`, `/portal/documents`, one document, `/portal/protection`
+// and a business-account statement now take `<title>` from a message key, so
+// every portal screen a tenant signs in to names itself in their language
+// (3.1.2, 2.4.2). The first three take their `<h1>`'s key; one document keeps
+// the generic "Document" rather than its stored title, and the account
+// statement has its own key because its `<h1>` names the account. The B-291
+// entry's "not claimed" is now closed. Nothing rendered here claimed titles
+// were English, so no claim changes. Asserted with `toHaveTitle` across the
+// portal nav routes in `e2e/i18n.spec.ts`; the one-document and account
+// statement titles are covered by `tests/i18n.test.ts` only. No visible line
+// changes. `LAST_REVIEWED` is not bumped, per D-115.
 
 export default async function AccessibilityPage() {
   const locale = await getLocale()

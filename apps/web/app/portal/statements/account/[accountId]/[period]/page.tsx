@@ -11,7 +11,11 @@ import { ScrollRegion } from '@/components/ui/scroll-region'
 import { dictionaryFor, plural, translate, type Dictionary, type MessageKey } from '@/lib/i18n'
 import { getLocale } from '@/lib/i18n/server'
 
-export const metadata: Metadata = { title: 'Account statement' }
+// B-294 (D-134). Its own key, not the `<h1>`'s: the heading names the account,
+// and reading that would cost a query for a tab name.
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: translate(dictionaryFor(await getLocale()), 'astmt.title') }
+}
 
 // B-256 / PRD 01 §12, US-705. One business account, one month, for the payer.
 //

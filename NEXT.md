@@ -1,13 +1,12 @@
 # Next
 
-**B-291 is done** (D-134 answered (A)). `<title>` now follows the reader on `/faq`, `/about`, `/contact`, `/accessibility` and, under the same rule, `/messaging-policy`. Each page reuses its `<h1>` key, so the English titles are unchanged. `description`, `alternates` and Open Graph stay English.
+**B-294 is done** (no new decision, D-134 covers it). The five portal screens B-291 left now take `<title>` from a message key, so every portal screen's `<title>` follows the reader.
 
 ## Start here
 
 **No unblocked build row remains.** The next move is the owner's: answer a blocked row (below), or start a new review block.
 
 Gaps carried forward with no owning row:
-- B-291: five portal screens still set an English `<title>` under Spanish: `/portal/contact`, `/portal/documents`, `/portal/documents/[documentId]`, `/portal/protection` and `/portal/statements/account/[accountId]/[period]`. None is indexed, so D-134 and the B-267/B-268 reasoning both say translate them, the same way: `generateMetadata` over the screen's `<h1>` key.
 - B-290: when an offer button is pressed, the region removes itself and focus is not moved deliberately (the consent banner moves it to `#main`). The server action re-renders, so moving focus would need a client wrapper.
 - B-287: the reset mail still ends "If you did not request this…", even though a member did not request it.
 - B-285's seven server-drawn `role="alert"`s on other portal screens (`methods`, `pay`, `pay/done`, `transfer`, `protection`, and two on `move-out`).

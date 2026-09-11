@@ -133,6 +133,12 @@ describe('i18n dictionaries', () => {
       'contact.title',
       'a11y.title',
       'msgpol.title',
+      // B-294 (D-134): the five portal screens that still had an English <title>.
+      'cont.title',
+      'docs.title',
+      'doc.title',
+      'prot.title',
+      'astmt.title',
       'mo.recaptureFullOne',
       'mo.recaptureFullOther',
       'mo.recaptureProratedOne',

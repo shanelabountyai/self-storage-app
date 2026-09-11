@@ -11,7 +11,10 @@ import {
 import { dictionaryFor, translate, type MessageKey } from '@/lib/i18n'
 import { getLocale } from '@/lib/i18n/server'
 
-export const metadata: Metadata = { title: 'Protection and insurance' }
+// B-294 (D-134). `<title>` is the `<h1>`'s key, so it follows the reader.
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: translate(dictionaryFor(await getLocale()), 'prot.title') }
+}
 
 // PRD 01 US-705 (B-104). "Insurance/protection selection visible with option to
 // change tier (takes effect next billing cycle) or submit proof of own

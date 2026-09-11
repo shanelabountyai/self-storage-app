@@ -5,9 +5,13 @@ import { portalDocument } from '@/lib/portal/documents'
 import { dictionaryFor, translate } from '@/lib/i18n'
 import { getLocale } from '@/lib/i18n/server'
 
-export const metadata: Metadata = {
-  title: 'Document',
-  robots: { index: false, follow: false },
+// B-294 (D-134). `<title>` is the not-found `<h1>`'s key: a document's own
+// title is stored data, not a message, so the tab keeps the generic name.
+export async function generateMetadata(): Promise<Metadata> {
+  return {
+    title: translate(dictionaryFor(await getLocale()), 'doc.title'),
+    robots: { index: false, follow: false },
+  }
 }
 
 // PRD 01 US-705. Generated documents are HTML (B-023's decision — the
