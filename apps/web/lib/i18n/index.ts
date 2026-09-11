@@ -30,6 +30,14 @@ export const DEFAULT_LOCALE: Locale = 'en'
 export const LOCALE_COOKIE = 'st_locale'
 export const LOCALE_COOKIE_DAYS = 365
 
+/// B-283. The one route whose language comes from a database row rather than
+/// the cookie: `/pay/<token>` speaks the language of the tenant the link was
+/// minted for. `proxy.ts` copies the token out of the path into this request
+/// header, because the root layout — the only thing that renders `<html lang>`
+/// — cannot see the path. Here rather than in `pay-links.ts` because the proxy
+/// runs on the Edge and cannot import Prisma.
+export const PAY_TOKEN_HEADER = 'x-st-pay-token'
+
 /// Display names are written in the language they name, never translated —
 /// "Spanish" is useless to somebody who cannot read the English page.
 export const LOCALE_NAMES: Record<Locale, string> = {

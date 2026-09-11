@@ -2432,6 +2432,23 @@ function reviewedOn(locale: Locale): string {
 // claim about either, so no visible line changes. `LAST_REVIEWED` is not
 // bumped, per D-115.
 
+// Re-verified 2026-09-11, at B-283 (the Spanish payment reminder opened an
+// English payment screen). Customer-facing: `/pay/[token]` and
+// `/pay/[token]/done` now render in the language of the tenant the link was
+// minted for, and `<html lang>` follows it (SC 3.1.1) — the proxy hands the
+// token to the root layout in a request header, because the visitor's cookie
+// does not describe this reader. The skip link, the Payment Element and its
+// button (a `LocaleProvider` now wraps the page) and the receipt's date
+// (`es-US`) move with it. Only text changed; the markup did not. The other half
+// is a bug on the same route: the proxy's FR-SEO-2 casing rule lower-cased every
+// real pay-link token into one that matched nothing, so from B-066 to here a
+// real link landed on the login instead of this page. Noindex paths are no
+// longer lower-cased. Both routes stay stated scan exceptions in
+// `scan-coverage.ts` (a live link against a real balance), and those reasons
+// are still true. This page makes no claim about either route or about
+// language, so no visible line changes. `LAST_REVIEWED` is not bumped, per
+// D-115.
+
 export default async function AccessibilityPage() {
   const locale = await getLocale()
   const dict = dictionaryFor(locale)

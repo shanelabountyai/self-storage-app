@@ -43,3 +43,16 @@ test('the login it lands on has no WCAG 2.1 AA violations', async ({ page }) => 
 
   await assertNoAxeViolations(page)
 })
+
+test('a mixed-case token reaches the pay route instead of being lower-cased away (B-283)', async ({
+  request,
+}) => {
+  // Every real token is mixed-case base64url. From B-066 until B-283 the
+  // proxy's casing rule 308'd each one to a lower-cased token that matched
+  // nothing — and the tests above kept passing, because every token they
+  // drive is one no real link could carry.
+  const token = 'Cd06dbYepmgJHQ_tvbynDLo6NzaiTRi3jUuwv28sLvY'
+  const response = await request.get(`/pay/${token}`, { maxRedirects: 0 })
+  expect(response.status()).not.toBe(308)
+  expect(response.headers()['location'] ?? '').not.toContain(token.toLowerCase())
+})

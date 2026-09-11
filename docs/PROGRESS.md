@@ -9392,3 +9392,43 @@ Found while verifying B-282 and fixed in the same commit, by owner choice.
 - **The walk-in move-in's cash** (B-230, through checkout) still ends on the checkout's own confirmation, not this receipt.
 - **The task links to the tenant profile, not to the message itself.** The message log is capped at 20 rows, and there is no print stylesheet for a single message.
 - **A tenant with no email who turned a category off** still gets a rendered, failed row and a task. The no-address check runs before the preference check, as it did before this item.
+
+## B-283 — the Spanish payment reminder opened an English payment screen, and no real pay link had reached that screen since B-066 (2026-09-11, `SHA_PENDING`)
+
+**What it built.**
+
+1. **`/pay/[token]` and `/pay/[token]/done` render in the tenant's language.** `payLinkLocale(token)` in `lib/portal/pay-links.ts` reads `Tenant.preferredLocale` through `writingLocale`, the rule the reminder's send used. It is wrapped in React `cache`, so the root layout, `generateMetadata` and the page share one query per request. It records no click, and it checks no expiry, because a token `checkPayLink` refuses is redirected before anything renders.
+   - About 25 strings come from the dictionaries. Keys are reused only where the portal's English is identical (`paypg.title`, `paypg.subheadUnit`, `paypg.payDifferent`, `paypg.cardDetails`, `paypg.callInstead*`, `paypg.balanceRestored`, `amtform.label`/`update`, `rcpt.title`/`received`/`amount`/`unit`/`balanceNow`/`creditsCaption`/`total`, `paypg.colWhen`, `chrome.skipToMain`, `chrome.questionsCall`). The 15 that differ by a word are new `plink.*` keys in `en.ts` and `es.ts`.
+   - `AMOUNT_PROBLEM_KEYS` moved from `app/portal/pay/page.tsx` to `lib/portal/payment.ts`, because a `page.tsx` may not export it. The pay link reads it verbatim. `below_minimum` is given `formatCents(MIN_PAYMENT_CENTS)`, so the English still says "$1.00".
+   - The page's `Shell` mounts a `LocaleProvider`. Without it, `PortalPayment` (a client component) and Stripe's Element fall back to English under a Spanish page.
+   - The receipt's date uses `LOCALE_TAG[locale]`, not `'en-US'`.
+2. **`<html lang>` follows the tenant.** `proxy.ts` copies the token out of `/pay/<token>` into the `x-st-pay-token` request header (`PAY_TOKEN_HEADER`, `lib/i18n/index.ts`). It deletes any copy the client sent, on every request. `app/layout.tsx` calls `payLinkLocale` when the header is present and `getLocale()` otherwise.
+3. **The casing bug (see below).** `canonicalPath` no longer lower-cases a noindex path. `/unsubscribe` and `/waitlist/cancel` joined `NOINDEX_PREFIXES`, so robots.txt disallows them and the proxy stamps `X-Robots-Tag` on them.
+4. **Tests.**
+   - `pay-links-db`: three new tests. An `es` tenant's link answers `es`. No preference, an unsupported value (`fr`) and an unknown token all answer `en`. The lookup leaves `clickCount` at 0.
+   - `seo-urls`: every token route keeps its case and is canonical, a trailing slash is still stripped, and `/unsubscribe` and `/waitlist/cancel` are noindex.
+   - `pay-link.spec.ts`: a mixed-case token is not answered with a 308 or a lower-cased location.
+   - `i18n.test.ts`'s parity checks cover the new keys without change.
+
+**The bug it found.** B-066 (2026-08-07) made the proxy lower-case every path for FR-SEO-2. A pay-link token is 32 random bytes of base64url, so it is mixed-case. Every real link was 308'd to a lower-cased token whose hash matched no row, and `checkPayLink` sent the tenant to the login. From 2026-08-07 until this commit, no real pay link reached `/pay/[token]`: no click was recorded, no payment was attributed to a link, and the CN-4 one-tap path did not exist in practice. The e2e spec drove only invalid tokens, and `pay-links-db` calls `checkPayLink` directly, so neither could see it. Found while trying to render the page for this item. The same rule broke **`/waitlist/cancel/[token]`** (plain base64url) from B-090 part 1 (2026-08-20). Three other routes were checked and were not affected. `/unsubscribe/[token]` and `/checkout/resume/[token]` tokens contain a `.`, which the proxy matcher skips as a file. `/r/[code]` upper-cases the code before looking it up.
+
+**What it decided.**
+
+- **The language comes from the record, with no toggle and no change to what the token reaches** (D-30), as the row required. A tenant with no stored preference falls to step 2 of `writingLocale`, the visitor's cookie. An `en` or null-preference tenant opened without a cookie renders exactly the English it did.
+- **The layout learns the token from a proxy-set request header, not a cookie.** Setting the locale cookie would change the site's language for whoever opened the link, and that may not be the tenant. The header is set from the path and never passed through, so a visitor cannot make the layout run a pay-link lookup on another page.
+- **Case canonicalisation applies only to indexable paths.** FR-SEO-2 is about duplicate *indexable* URLs, and the noindex list is where token routes live. The cost: `/Admin` or `/Portal/Pay` is now a 404 rather than a redirect.
+- **The pay link's unreachable `above_prepay_ceiling` copy now reads the portal's key.** The link passes no ceiling, so no reader can meet the changed English.
+
+**Verification.** Typecheck clean. Lint: 0 errors (6 existing warnings, in files this item did not touch). Full unit suite: 4,453 passed, 8 skipped, of 4,461, across 260 files. The pages were rendered on a `dev:test` server against disposable rows (an `es` tenant and an `en` tenant with a $129 balance, plus an `es` tenant who owes nothing), since deleted:
+- **`es` tenant:** `lang="es"`, a Spanish `<title>` and skip link, Spanish body and Stripe button ("Pagar $129"), the amount alert in Spanish, and a pending receipt dated "11 de septiembre de 2026 a las 8:52 a.m.".
+- **`en` tenant:** text identical to the old literals, including "$1.00" in the minimum-amount alert.
+- **Spoofed `x-st-pay-token` on `/faq`:** `lang="en"`.
+- **`/waitlist/cancel/…`:** 200 with `X-Robots-Tag: noindex, nofollow`.
+
+A byte diff against `main` was not possible: on `main` a real link cannot reach the page. e2e: `pay-link.spec.ts` and `i18n.spec.ts` against a production build: 82 listed, 82 passed, 0 failed, 0 skipped, 0 flaky, across both projects. The Neon schema is unchanged (no migration).
+
+**What it left behind.**
+
+- **The portal's own receipt, `/portal/pay/done`, still formats its date with `'en-US'`.** A Spanish tenant reads an English date there. **B-284** owns it, in its list of eight files.
+- **No valid-token state of either pay route is scanned or measured at 320px and 200%.** Both stay stated exceptions in `scan-coverage.ts`. The markup is unchanged, and the Spanish strings are longer.
+- **Production's pay-link funnel from 2026-08-07 to this deploy reads zero for this reason, not tenant behaviour.** The same window's waitlist cancel links failed the same way. Recorded in `NEXT.md` for the owner.

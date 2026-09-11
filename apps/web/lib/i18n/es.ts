@@ -936,6 +936,28 @@ export const es: Dictionary = {
   'rcpt.creditsCaption': 'Aplicado a unidades en {facility}',
   'rcpt.total': 'Total',
 
+  // --- Pay link (B-283): /pay/<token> and its receipt --------------------
+  'plink.nothingToPay': 'Nada que pagar',
+  'plink.paidUp':
+    'La unidad {unit} en {facility} está al corriente — este recordatorio ya se pagó. Gracias.',
+  'plink.balanceToday': 'Saldo de hoy',
+  'plink.payingNow': 'A pagar ahora',
+  'plink.onlyThisScreen':
+    'Este enlace solo abre esta pantalla de pago. Para ver su contrato, su código de la puerta o su historial de pagos,',
+  'plink.signIn': 'inicie sesión en su cuenta',
+  'plink.notFound': 'No encontramos ese pago.',
+  'plink.failed': 'Ese pago no se completó',
+  'plink.confirming': 'Pago recibido — todavía se está confirmando',
+  'plink.unitValue': '{unit} — {facility}',
+  'plink.pendingBody':
+    'Su banco ya tomó el pago y estamos esperando la confirmación final. No tiene que hacer nada más — le enviaremos un recibo por correo electrónico.',
+  'plink.declined':
+    'Su banco rechazó el pago. Normalmente es un bloqueo temporal o un límite, no un problema con su cuenta aquí.',
+  'plink.notCompleted': 'El pago no se completó.',
+  'plink.tryAgain': 'Puede intentarlo de nuevo en esta página o llamar al {phone}.',
+  'plink.fullHistory':
+    'Para ver su contrato, su código de la puerta o su historial completo de pagos,',
+
   // --- Statements list --------------------------------------------------
   'stmt.title': 'Estados de cuenta',
   'stmt.settled': 'Liquidado',

@@ -8,7 +8,7 @@ import {
   startPortalPayment,
   validatePaymentAmount,
   prepayCeilingFor,
-  type AmountProblem,
+  AMOUNT_PROBLEM_KEYS,
 } from '@/lib/portal/payment'
 import { balanceBreakdownFor, reconciles } from '@/lib/portal/balance-breakdown'
 import { restoreShortfallCents } from '@storage/core/access'
@@ -32,23 +32,6 @@ export async function generateMetadata(): Promise<Metadata> {
 // whole flow still works with JavaScript disabled (§6.2) up to the Element
 // itself, which is Stripe's and needs JS by nature — that case falls back to
 // the phone number, same as everywhere else money is involved.
-
-// B-260: keys, not sentences. `below_minimum` interpolates the minimum, which
-// is why this is resolved through `translate` at render rather than being a
-// map of finished strings built once at module load — the old template literal
-// baked `MIN_PAYMENT_CENTS` in at import time, which was fine for one language
-// and is not for two.
-//
-// B-225's note still applies to `above_prepay_ceiling`: it is a refusal about a
-// LIMIT rather than about the tenant having done something wrong, and it must
-// not read like "enter your balance or less", which would be false.
-const AMOUNT_PROBLEM_KEYS: Record<AmountProblem, MessageKey> = {
-  not_a_number: 'amt.notANumber',
-  below_minimum: 'amt.belowMinimum',
-  above_balance: 'amt.aboveBalance',
-  above_prepay_ceiling: 'amt.abovePrepayCeiling',
-  nothing_owed: 'amt.nothingOwed',
-}
 
 function CallInstead({ phone, dict }: { phone: string; dict: Dictionary }) {
   const href = `tel:${phone.replace(/[^0-9+]/g, '')}`

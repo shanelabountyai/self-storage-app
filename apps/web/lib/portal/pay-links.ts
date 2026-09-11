@@ -1,6 +1,9 @@
 import { createHash, randomBytes } from 'node:crypto'
+import { cache } from 'react'
 import { prisma, type Prisma } from '@storage/db'
 import { OCCUPYING_LEASE_STATUSES } from '@storage/core/inventory'
+import type { Locale } from '@/lib/i18n'
+import { writingLocale } from '@/lib/i18n/server'
 
 // PRD 05 CN-4 / FR-12, FR-13 (B-051). The one-tap way to pay from a reminder.
 //
@@ -145,6 +148,26 @@ export async function checkPayLink(token: string): Promise<PayLinkCheck> {
 
   return { ok: true, payLinkId: link.id, tenantId: link.tenantId, leaseId: link.leaseId }
 }
+
+/// B-283. The language the pay screen speaks: the tenant's, read the way the
+/// reminder carrying the link was written (`writingLocale`), so a Spanish
+/// reminder no longer opens an English page asking for money.
+///
+/// Separate from `checkPayLink` because the root layout (for `<html lang>`) and
+/// `generateMetadata` need it too, and a lookup that recorded a click would
+/// count one visit three times. `cache` makes those calls one query per request.
+///
+/// No expiry or revocation check, on purpose: a token `checkPayLink` refuses is
+/// redirected before anything renders, so this answer never reaches a page.
+export const payLinkLocale = cache(async (token: string): Promise<Locale> => {
+  const link = token
+    ? await prisma.payLink.findUnique({
+        where: { tokenHash: hashToken(token) },
+        select: { tenant: { select: { preferredLocale: true } } },
+      })
+    : null
+  return writingLocale(link?.tenant.preferredLocale)
+})
 
 /// Attributes a payment to the link that produced it (CN-4, PRD 05 §7).
 ///

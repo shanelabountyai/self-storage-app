@@ -6,6 +6,7 @@ import {
   attributePayment,
   checkPayLink,
   mintPayLink,
+  payLinkLocale,
   payLinkUrl,
   revokePayLinksForLease,
 } from '../apps/web/lib/portal/pay-links'
@@ -220,6 +221,33 @@ describeDb('pay links', () => {
       expect((await checkPayLink(a.token)).ok).toBe(true)
       expect((await checkPayLink(b.token)).ok).toBe(true)
       expect(a.token).not.toBe(b.token)
+    })
+  })
+
+  describe('the language the pay screen speaks (B-283)', () => {
+    afterEach(async () => {
+      await prisma.tenant.update({ where: { id: tenantId }, data: { preferredLocale: null } })
+    })
+
+    it("is the tenant's, so a Spanish reminder opens a Spanish page", async () => {
+      await prisma.tenant.update({ where: { id: tenantId }, data: { preferredLocale: 'es' } })
+      const { token } = await mint()
+      expect(await payLinkLocale(token)).toBe('es')
+    })
+
+    it('is English with no preference, one we do not support, or no such link', async () => {
+      const { token } = await mint()
+      expect(await payLinkLocale(token)).toBe('en')
+      await prisma.tenant.update({ where: { id: tenantId }, data: { preferredLocale: 'fr' } })
+      expect(await payLinkLocale(token)).toBe('en')
+      expect(await payLinkLocale('not-a-real-token')).toBe('en')
+    })
+
+    it('does not count as a click', async () => {
+      const { token } = await mint()
+      await payLinkLocale(token)
+      const row = await prisma.payLink.findFirstOrThrow({ where: { leaseId } })
+      expect(row.clickCount).toBe(0)
     })
   })
 })

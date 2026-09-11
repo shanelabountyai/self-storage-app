@@ -1,6 +1,9 @@
 import type { Metadata } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
+import { headers } from 'next/headers'
+import { PAY_TOKEN_HEADER } from '@/lib/i18n'
 import { getLocale } from '@/lib/i18n/server'
+import { payLinkLocale } from '@/lib/portal/pay-links'
 
 import './globals.css'
 
@@ -60,7 +63,11 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode
 }>) {
-  const locale = await getLocale()
+  // B-283. A pay link speaks the language its reminder was written in, whatever
+  // the visitor's cookie says — the page has no toggle, and the body text reads
+  // the same `payLinkLocale`, so the two cannot disagree.
+  const payToken = (await headers()).get(PAY_TOKEN_HEADER)
+  const locale = payToken ? await payLinkLocale(payToken) : await getLocale()
 
   return (
     <html

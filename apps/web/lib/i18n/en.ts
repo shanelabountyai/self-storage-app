@@ -1010,6 +1010,29 @@ export const en = {
   'rcpt.creditsCaption': 'Applied to units at {facility}',
   'rcpt.total': 'Total',
 
+  // --- Pay link (B-283): /pay/<token> and its receipt --------------------
+  // Its own keys where the English differs from the portal's by a word: the
+  // English on these two screens is unchanged, character for character.
+  'plink.nothingToPay': 'Nothing to pay',
+  'plink.paidUp':
+    'Unit {unit} at {facility} is paid up — this reminder has already been settled. Thank you.',
+  'plink.balanceToday': 'Balance today',
+  'plink.payingNow': 'Paying now',
+  'plink.onlyThisScreen':
+    'This link only opens this payment screen. To see your lease, gate code or payment history,',
+  'plink.signIn': 'sign in to your account',
+  'plink.notFound': "We couldn't find that payment.",
+  'plink.failed': 'That payment did not go through',
+  'plink.confirming': 'Payment received — still confirming',
+  'plink.unitValue': '{unit} — {facility}',
+  'plink.pendingBody':
+    'Your bank has taken the payment and we are waiting for final confirmation. Nothing further is needed from you — a receipt will follow by email.',
+  'plink.declined':
+    'Your bank declined the payment. That is usually a temporary block or a limit, not anything wrong with your account here.',
+  'plink.notCompleted': 'The payment was not completed.',
+  'plink.tryAgain': 'You can try again on this page, or call {phone}.',
+  'plink.fullHistory': 'To see your lease, gate code or full payment history,',
+
   // --- Statements list --------------------------------------------------
   'stmt.title': 'Statements',
   'stmt.settled': 'Settled',

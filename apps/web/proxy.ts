@@ -16,6 +16,7 @@ import {
   IMPERSONATION_COOKIE,
   isImpersonationWriteBlocked,
 } from '@/lib/impersonation/request'
+import { PAY_TOKEN_HEADER } from '@/lib/i18n'
 
 // Kept here rather than imported from lib/analytics/track: that module pulls in
 // Prisma, and the proxy runs on the Edge runtime where the Prisma client will
@@ -72,7 +73,15 @@ function seoResponse(request: NextRequest): NextResponse {
     return redirect
   }
 
-  const response = NextResponse.next()
+  // B-283. Set from the path and never passed through: a visitor who sends the
+  // header themselves must not be able to make the root layout run a pay-link
+  // lookup on any page they like.
+  const requestHeaders = new Headers(request.headers)
+  requestHeaders.delete(PAY_TOKEN_HEADER)
+  const payToken = /^\/pay\/([^/]+)/.exec(pathname)?.[1]
+  if (payToken) requestHeaders.set(PAY_TOKEN_HEADER, payToken)
+
+  const response = NextResponse.next({ request: { headers: requestHeaders } })
 
   // PRD 04 FR-LEAD-2 (B-068): "First-touch UTMs + landing page persisted 90
   // days; last-touch updated each session."

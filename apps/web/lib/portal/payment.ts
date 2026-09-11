@@ -8,6 +8,7 @@ import {
   type AccountLease,
 } from '@/lib/billing/accounts'
 import { paymentCredits } from '@/lib/billing/allocation'
+import type { MessageKey } from '@/lib/i18n'
 
 // PRD 01 §4.7 US-703 / §4.6. A tenant paying their own balance from the
 // portal. The amount is decided here, server-side, from the ledger — never
@@ -23,6 +24,26 @@ export type AmountProblem =
   | 'above_balance'
   | 'above_prepay_ceiling'
   | 'nothing_owed'
+
+// B-260: keys, not sentences. `below_minimum` interpolates the minimum, which
+// is why this is resolved through `translate` at render rather than being a
+// map of finished strings built once at module load — the old template literal
+// baked `MIN_PAYMENT_CENTS` in at import time, which was fine for one language
+// and is not for two.
+//
+// B-225's note still applies to `above_prepay_ceiling`: it is a refusal about a
+// LIMIT rather than about the tenant having done something wrong, and it must
+// not read like "enter your balance or less", which would be false.
+//
+// B-283 moved it here from the portal pay page so the pay link's screen reads
+// the same keys; a `page.tsx` may not export it.
+export const AMOUNT_PROBLEM_KEYS: Record<AmountProblem, MessageKey> = {
+  not_a_number: 'amt.notANumber',
+  below_minimum: 'amt.belowMinimum',
+  above_balance: 'amt.aboveBalance',
+  above_prepay_ceiling: 'amt.abovePrepayCeiling',
+  nothing_owed: 'amt.nothingOwed',
+}
 
 export type AmountCheck = { ok: true; amountCents: number } | { ok: false; problem: AmountProblem }
 

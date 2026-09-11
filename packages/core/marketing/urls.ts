@@ -60,6 +60,12 @@ export const NOINDEX_PREFIXES = [
   /// posting. The middleware stamps `X-Robots-Tag` from this same list, so a
   /// crawler that ignores robots.txt is covered too.
   '/r',
+  /// B-283. Both hold a bearer token in the path, like `/pay`, and were missing.
+  /// The waitlist's plain base64url token was lower-cased by `canonicalPath`
+  /// below; the unsubscribe token escaped only because its `.` makes the proxy
+  /// matcher treat it as a file.
+  '/unsubscribe',
+  '/waitlist/cancel',
 ] as const
 
 export function isNoindexPath(pathname: string): boolean {
@@ -79,7 +85,13 @@ export type CanonicalResult = {
 /// Rules, in order:
 ///   1. Lower-case the path. Slugs are lower-case by policy (FR-SEO-2) and
 ///      case-sensitive URLs are the easiest duplicate to create by accident —
-///      one capitalised link in one email.
+///      one capitalised link in one email. **Never a noindex path** (B-283):
+///      FR-SEO-2 is about duplicate INDEXABLE URLs, and the noindex routes are
+///      the ones carrying a bearer token in the path. base64url is
+///      case-sensitive, so from B-066 (2026-08-07) every real pay link (and
+///      waitlist cancel link) was 308'd to a lower-cased token that matched
+///      nothing. `/unsubscribe` and `/checkout/resume` escaped only because
+///      their tokens contain a `.`, which the proxy matcher skips as a file.
 ///   2. Strip a trailing slash, except at the root.
 ///   3. Collapse repeated slashes, which proxies and hand-built links produce.
 ///   4. Drop tracking parameters, and sort what remains so `?a=1&b=2` and
@@ -89,7 +101,7 @@ export type CanonicalResult = {
 /// person typed, and mangling it would change the results to canonicalise the
 /// address bar.
 export function canonicalPath(pathname: string, search = ''): CanonicalResult {
-  let path = pathname.toLowerCase().replace(/\/{2,}/g, '/')
+  let path = (isNoindexPath(pathname) ? pathname : pathname.toLowerCase()).replace(/\/{2,}/g, '/')
   if (path.length > 1 && path.endsWith('/')) path = path.replace(/\/+$/, '')
   if (path === '') path = '/'
 

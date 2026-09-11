@@ -64,6 +64,25 @@ describe('canonicalPath', () => {
     // results in order to tidy the address bar.
     expect(canonicalPath('/storage/search', '?q=Austin').target).toBe('/storage/search?q=Austin')
   })
+
+  it('never lower-cases a path that holds a token (B-283)', () => {
+    // base64url is case-sensitive. Lower-casing 308'd every real pay link and
+    // waitlist cancel link to a token that matched nothing, and the pay-link
+    // e2e only ever drove invalid tokens, so nothing noticed for a month. The
+    // dotted tokens are listed too: they escape only via the proxy matcher.
+    for (const path of [
+      '/pay/Cd06dbYepmgJHQ_tvbyn-9',
+      '/pay/Cd06dbYepmgJHQ_tvbyn-9/done',
+      '/unsubscribe/AbCdEf',
+      '/waitlist/cancel/AbCdEf',
+      '/checkout/resume/AbCdEf',
+      '/r/AbCdEf',
+    ]) {
+      expect(canonicalPath(path)).toEqual({ target: path, isCanonical: true })
+    }
+    // The rest of the policy still applies to them.
+    expect(canonicalPath('/pay/AbC/').target).toBe('/pay/AbC')
+  })
 })
 
 describe('isNoindexPath — US-3 AC2', () => {
@@ -74,6 +93,8 @@ describe('isNoindexPath — US-3 AC2', () => {
       '/portal/pay',
       '/checkout',
       '/pay/abc123',
+      '/unsubscribe/abc123',
+      '/waitlist/cancel/abc123',
       '/login',
       '/reset-password',
       '/api/cron',
