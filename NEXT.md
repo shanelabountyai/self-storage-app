@@ -1,10 +1,12 @@
 # Next
 
-**B-289 is done** (`2659115`). The counter's shared-address warning now opens with the question (`Is {heldBy} the person renting?`), is under 30 words in both languages, points at the name fields below it, and no longer shouts. `tests/i18n.test.ts` guards all three.
+**B-275 is done**: the Neon dev branch was reset once (D-132), carries all 118 migrations and is seeded. `db:status` is green on both halves and the drift check is clean. **B-090**'s umbrella row is ticked.
 
 ## Start here
 
-**No unblocked build row remains.** **B-275** (the Neon dev branch's drift) is the only open row that isn't waiting on the owner, and it needs a session with Neon access. **B-090**'s umbrella row is still unticked even though B-090a–f are all ✅. Confirm nothing in its text is left over, then tick it.
+**No unblocked build row remains.** Every open row is waiting on the owner (below). A new session needs an answer to D-133 or D-134, or a new review block.
+
+The cloud dev branch has roles, permissions and templates but no demo facilities or owner. Run `npm run db:seed:demo` and `npm run db:create-owner` if `npm run dev` needs them.
 
 Gaps carried forward with no owning row:
 - B-287: the reset mail still ends "If you did not request this…", even though a member did not request it. The link still expires in 60 minutes; the lead sentence tells them to ask for a new one.

@@ -9603,7 +9603,7 @@ A byte diff against `main` was not possible: on `main` a real link cannot reach 
 
 **What it left behind.** Nothing new.
 
-## B-275 — The Neon dev branch gets a real migration history (2026-09-11, `PENDING`)
+## B-275 — The Neon dev branch gets a real migration history (2026-09-11, `9c494af`)
 
 **What it built.** No code. One run against `.env.local` (`ep-holy-block-axpgn0o0`), as D-132 authorised:
 
@@ -9627,6 +9627,6 @@ A byte diff against `main` was not possible: on `main` a real link cannot reach 
 
 **What it left behind.** The demo seed (`db:seed:demo`) was not run, because the row names only `db:seed`. `npm run dev` against the branch has roles, permissions and templates, but no facilities or owner account. Run `db:seed:demo` and `db:create-owner` when a dev session needs them. Production was not touched.
 
-## B-090 — umbrella row closed (2026-09-11, `PENDING`)
+## B-090 — umbrella row closed (2026-09-11, `9c494af`)
 
 **What it did.** Ticked the umbrella row and noted why at the top of it. B-090a–f are all ✅. What they handed on is ✅ in its own row (B-135, B-256, B-260, B-262) or owned by an open row (B-290 on D-133, B-291 on D-134). Updated the row's stale "part 6 is PARTLY built" to point at B-260 and B-262. D-78's answered parts and the "do not build yet: live chat" line stay as written. **What it left behind.** Nothing.
