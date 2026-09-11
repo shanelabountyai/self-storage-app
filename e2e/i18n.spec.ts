@@ -43,6 +43,27 @@ test('the language toggle switches the site and says so in the markup', async ({
   await expect(page.locator('html')).toHaveAttribute('lang', 'en')
 })
 
+// B-286. An `aria-label` wins the accessible name, so `lang` on the same element
+// declares the wrong language for it. Only the visible language name is marked.
+test('the language toggle never puts lang and aria-label on one element', async ({
+  page,
+  context,
+}) => {
+  for (const [label, current, other] of [
+    ['Language', 'en', 'es'],
+    ['Idioma', 'es', 'en'],
+  ] as const) {
+    if (current === 'es') await context.addCookies([SPANISH])
+    await page.goto('/')
+    const group = page.getByRole('group', { name: label })
+    await expect(group.locator('[lang][aria-label]')).toHaveCount(0)
+    await expect(group.locator('button[aria-current="true"]')).toHaveAttribute('lang', current)
+    await expect(
+      group.locator('button[aria-label]').locator(`span[lang="${other}"]`),
+    ).toHaveCount(1)
+  }
+})
+
 test('the chosen language survives a navigation', async ({ page, context }) => {
   await context.addCookies([SPANISH])
 

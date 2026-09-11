@@ -9503,3 +9503,29 @@ A byte diff against `main` was not possible: on `main` a real link cannot reach 
   - `move-out/page.tsx:157` and `:296`
 
   The two on move-out are B-164's deliberate "present at page load" choice, which B-245's ruling now contradicts. This row did not assess which of them are page content and which are real status messages. No row owns that audit.
+
+## B-286 — the language toggle put `lang` on a button named by an `aria-label` in the other language (2026-09-11)
+
+**What it built.**
+
+1. **`lang` and `aria-label` never share an element in the toggle** (`components/site/language-toggle.tsx`). The current button, which has no `aria-label`, keeps `lang`. The other button loses it, and its visible language name is wrapped in `<span lang={candidate}>`. The comment that said the old markup met 3.1.2 now describes what the markup does.
+2. **e2e** (`e2e/i18n.spec.ts`, a new test beside the existing toggle test, which is unchanged). For both English and Spanish it asserts: no `[lang][aria-label]` inside the group, `lang` on the `aria-current` button, and one `lang`-declared span in the labelled button.
+3. The accessibility statement's comment log has a B-286 entry. It records that B-090 part 6's "3.1.2 is met on the toggle" was not true of that markup as written. No visible line changed.
+
+**What it decided.**
+
+- **The language name inside the `aria-label` stays unmarked.** Per the row, that is where 3.1.2's proper-name exception applies. **The row's hedge stands: whether 3.1.2 required any of this change is arguable, and this entry does not upgrade it.**
+- **What the toggle does is unchanged.** It still switches with a server action and no announcement. Whether to offer Spanish is B-290's question.
+
+**Verification.**
+
+- Typecheck clean. Lint: 0 errors, the same 6 existing warnings.
+- `e2e/i18n.spec.ts` against a production build: 74 of 74 passed across both projects plus setup (`--list` reports 74), 0 skipped, 0 flaky.
+- **Negative check**, run with `E2E_DEV=1` on desktop-chrome with the pre-B-286 component swapped in, then restored: the new test fails at `[lang][aria-label]`, expected 0 and received 1.
+- The unit suite was not re-run: no unit test imports the toggle, and no package code changed.
+- No migration and no seed change.
+
+**What it left behind.**
+
+- **What a screen reader does with either markup is still unmeasured.** That includes whether an AT applied the button's `lang` to its `aria-label`. B-254 owns it, and `LAST_REVIEWED` is not bumped.
+- **The first negative run never started.** A stale `apps/web/.next/dev/lock`, left at 10:17 by a `next dev` whose pid was dead, held `next dev` until Playwright's 300s `webServer` timeout. Deleting the lock fixed it. This is an environment trap, not a code bug.

@@ -2481,6 +2481,19 @@ function reviewedOn(locale: Locale): string {
 // The B-086 part 2 entry above still holds as written, and this page makes no
 // visible claim about the control, so no visible line changes. `LAST_REVIEWED`
 // is not bumped, per D-115.
+//
+// Re-verified 2026-09-11, at B-286 (the language toggle put `lang` on an element
+// whose accessible name is an `aria-label` in the other language). Customer-
+// facing; markup only. The B-090 part 6 entry above says 3.1.2 is met on the
+// toggle "whose buttons carry their own `lang`"; that markup put `lang="es"` on
+// a button named by English prose, so the claim was not true as written. Now
+// `lang` sits only on the current button, which has no label, and the other
+// button's visible name is wrapped in a `lang`-declared span. The row's hedge
+// stands: whether 3.1.2 required any of it is arguable, because language names
+// plausibly fall under the proper-name exception, and the name inside the label
+// stays unmarked for that reason. What a screen reader does with either markup
+// is B-254's to hear. This page makes no visible claim about the toggle, so no
+// visible line changes. `LAST_REVIEWED` is not bumped, per D-115.
 
 export default async function AccessibilityPage() {
   const locale = await getLocale()

@@ -18,9 +18,13 @@ import {
 //
 // The language name is written in its own language and never translated
 // (`LOCALE_NAMES`): "Spanish" is unreadable to the person who needs it.
-// Each button carries `lang` so a screen reader pronounces "Español" with
-// Spanish phonemes inside an English page — WCAG 3.1.2 Language of Parts (AA),
-// which is exactly the case this control creates.
+// B-286. `lang` never sits on an element that also has an `aria-label`: the
+// label wins the accessible name, so the other language's button would declare
+// `lang="es"` over English prose. The current button has no label, so its
+// visible name carries `lang`; the other wraps its visible name in a
+// `lang`-declared span. The language name embedded in the label stays
+// unmarked, which is where 3.1.2's proper-name exception applies. Whether
+// 3.1.2 required any of this is arguable either way (see the row).
 export function LanguageToggle({ locale }: { locale: Locale }) {
   const dict = dictionaryFor(locale)
 
@@ -39,7 +43,7 @@ export function LanguageToggle({ locale }: { locale: Locale }) {
               type="submit"
               name="locale"
               value={candidate}
-              lang={candidate}
+              lang={current ? candidate : undefined}
               aria-current={current ? 'true' : undefined}
               aria-label={
                 current
@@ -52,7 +56,11 @@ export function LanguageToggle({ locale }: { locale: Locale }) {
                 current ? 'underline underline-offset-4' : 'text-muted-foreground'
               }`}
             >
-              {LOCALE_NAMES[candidate]}
+              {current ? (
+                LOCALE_NAMES[candidate]
+              ) : (
+                <span lang={candidate}>{LOCALE_NAMES[candidate]}</span>
+              )}
             </button>
           )
         })}
