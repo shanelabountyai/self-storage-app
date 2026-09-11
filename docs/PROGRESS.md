@@ -9393,7 +9393,7 @@ Found while verifying B-282 and fixed in the same commit, by owner choice.
 - **The task links to the tenant profile, not to the message itself.** The message log is capped at 20 rows, and there is no print stylesheet for a single message.
 - **A tenant with no email who turned a category off** still gets a rendered, failed row and a task. The no-address check runs before the preference check, as it did before this item.
 
-## B-283 — the Spanish payment reminder opened an English payment screen, and no real pay link had reached that screen since B-066 (2026-09-11, `SHA_PENDING`)
+## B-283 — the Spanish payment reminder opened an English payment screen, and no real pay link had reached that screen since B-066 (2026-09-11, `cff6938`)
 
 **What it built.**
 

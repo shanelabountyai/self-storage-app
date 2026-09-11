@@ -1,6 +1,6 @@
 # Next
 
-**B-283 is done** (`SHA_PENDING`). `/pay/[token]` and its receipt render in the
+**B-283 is done** (`cff6938`). `/pay/[token]` and its receipt render in the
 tenant's language, with `<html lang>` to match. It also fixed a bug that had
 kept every real pay link from reaching that page since 2026-08-07: the proxy
 lower-cased the token (see the B-283 entry in PROGRESS).
