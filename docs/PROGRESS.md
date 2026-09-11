@@ -9659,7 +9659,7 @@ A byte diff against `main` was not possible: on `main` a real link cannot reach 
 - Focus is not moved when an offer button removes the region, unlike the consent banner, which moves it to `#main`. The server action re-renders, so fixing this needs a client wrapper. No owning row; noted on `/accessibility`'s re-verified entry and in `NEXT.md`.
 - Nothing measures how many visitors see, accept or decline the offer. No funnel event was added, and there is no row for one.
 
-## B-291 — Page titles follow the reader (2026-09-11, `PENDING`)
+## B-291 — Page titles follow the reader (2026-09-11, `0be3480`)
 
 **What it built.**
 
