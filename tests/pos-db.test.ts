@@ -1,7 +1,12 @@
 import { randomUUID } from 'node:crypto'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { prisma } from '../packages/db'
-import { dailyPaymentsSummary, facilityDayBounds, recordCounterPayment } from '../apps/web/lib/admin/pos'
+import {
+  counterReceipt,
+  dailyPaymentsSummary,
+  facilityDayBounds,
+  recordCounterPayment,
+} from '../apps/web/lib/admin/pos'
 import type { Actor } from '../apps/web/lib/rbac/actor'
 import { ForbiddenError } from '../apps/web/lib/rbac/authorize'
 import type { PermissionKey } from '@storage/db/rbac-catalog'
@@ -136,6 +141,51 @@ describeDb('counter payments', () => {
 
   const counterActor = () => staffActor(counterStaffId, 'counter', facilityId)
   const managerActor = () => staffActor(managerStaffId, 'manager', facilityId)
+
+  describe('the receipt (B-281)', () => {
+    it('reads back what the counter took, for the screen that prints it', async () => {
+      const result = await recordCounterPayment(counterActor(), {
+        facilityId,
+        tenantId,
+        leaseId,
+        method: 'cash',
+        amountCents: 2_000,
+        tenderedCents: 5_000,
+      })
+      if (!result.ok) throw new Error('unreachable')
+
+      const receipt = await counterReceipt(counterActor(), result.paymentId)
+      expect(receipt).toMatchObject({
+        receiptNumber: result.receiptNumber,
+        facilityName: `POS Test ${suffix}`,
+        timezone: 'America/Chicago',
+        tenantName: 'Ada Renter',
+        method: 'cash',
+        amountCents: 2_000,
+        tenderedCents: 5_000,
+        changeCents: 3_000,
+        takenBy: 'Cal Counter',
+      })
+      expect(receipt?.credits.map((credit) => credit.unitNumber)).toEqual(['A-1'])
+    })
+
+    it('finds nothing the counter did not receipt, and refuses another facility', async () => {
+      expect(await counterReceipt(counterActor(), 'no-such-payment')).toBeNull()
+
+      const result = await recordCounterPayment(counterActor(), {
+        facilityId,
+        tenantId,
+        leaseId,
+        method: 'check',
+        amountCents: 1_000,
+        checkNumber: '2001',
+      })
+      if (!result.ok) throw new Error('unreachable')
+      await expect(
+        counterReceipt(staffActor(counterStaffId, 'counter', otherFacilityId), result.paymentId),
+      ).rejects.toBeInstanceOf(ForbiddenError)
+    })
+  })
 
   describe('attribution', () => {
     it('names the staffer who took cash, from the session and not the form', async () => {

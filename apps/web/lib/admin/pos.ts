@@ -23,6 +23,7 @@ import {
   type AppliedPayment,
 } from "@/lib/billing/allocation";
 import { balancesFor } from "@/lib/billing/accounts";
+import { paymentCredits } from "@/lib/billing/allocation";
 import { openSessionFor } from "@/lib/admin/drawer";
 import {
   createChargeIntent,
@@ -962,4 +963,89 @@ export async function counterPayableAccounts(
         now,
       ),
     }));
+}
+
+export type CounterReceipt = {
+  receiptNumber: number;
+  facilityName: string;
+  timezone: string;
+  tenantId: string;
+  tenantName: string;
+  method: "cash" | "check" | "money_order";
+  status: string;
+  checkNumber: string | null;
+  amountCents: number;
+  tenderedCents: number | null;
+  changeCents: number;
+  receivedAt: Date;
+  takenBy: string | null;
+  /// B-278's per-lease credits, so the printed receipt names the same units the
+  /// emailed one does.
+  credits: { leaseId: string; unitNumber: string; amountCents: number }[];
+  balanceCents: number;
+};
+
+/// B-281. The printable receipt for a payment taken at the counter by cash,
+/// check or money order — the screen `takePaymentAction` lands on.
+///
+/// Null for any payment the counter did not receipt (a card, a portal payment),
+/// so an id in a URL cannot turn into a receipt this desk never issued.
+/// Authorised at the PAYMENT's facility rather than the switcher's, because the
+/// id comes from a URL.
+export async function counterReceipt(
+  actor: Actor,
+  paymentId: string,
+): Promise<CounterReceipt | null> {
+  if (actor.kind !== "staff") throw new ForbiddenError("Staff access required");
+  const payment = await prisma.payment.findFirst({
+    where: {
+      id: paymentId,
+      receiptNumber: { not: null },
+      method: { in: ["cash", "check", "money_order"] },
+    },
+    select: {
+      facilityId: true,
+      receiptNumber: true,
+      method: true,
+      status: true,
+      amountCents: true,
+      tenderedCents: true,
+      changeCents: true,
+      checkNumber: true,
+      receivedAt: true,
+      facility: { select: { name: true, timezone: true } },
+      tenant: { select: { id: true, firstName: true, lastName: true } },
+      receivedByStaff: { select: { firstName: true, lastName: true } },
+    },
+  });
+  if (!payment) return null;
+  assertFacilityAccess(actor, payment.facilityId);
+  if (!can(actor, "payments:take", payment.facilityId)) {
+    throw new ForbiddenError(
+      "Missing permission payments:take",
+      "payments:take",
+      payment.facilityId,
+    );
+  }
+
+  const credits = await paymentCredits(paymentId);
+  return {
+    receiptNumber: payment.receiptNumber!,
+    facilityName: payment.facility.name,
+    timezone: payment.facility.timezone,
+    tenantId: payment.tenant.id,
+    tenantName: `${payment.tenant.firstName} ${payment.tenant.lastName}`,
+    method: payment.method as CounterReceipt["method"],
+    status: payment.status,
+    checkNumber: payment.checkNumber,
+    amountCents: payment.amountCents,
+    tenderedCents: payment.tenderedCents,
+    changeCents: payment.changeCents ?? 0,
+    receivedAt: payment.receivedAt,
+    takenBy: payment.receivedByStaff
+      ? `${payment.receivedByStaff.firstName} ${payment.receivedByStaff.lastName}`
+      : null,
+    credits: credits.lines,
+    balanceCents: credits.balanceCents,
+  };
 }

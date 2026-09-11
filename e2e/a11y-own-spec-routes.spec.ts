@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { SCANNED_BY_OWN_SPEC, SCANNED_STATES } from '../apps/web/lib/a11y/scan-coverage'
-import { DEMO_BUSINESS_ACCOUNT_NAME } from '../apps/web/scripts/demo-credentials'
+import { DEMO_BUSINESS_ACCOUNT_NAME, DEMO_POS_TENANT_EMAIL } from '../apps/web/scripts/demo-credentials'
 import {
   signInAsBusinessMember,
   signInAsBusinessPayer,
@@ -249,6 +249,22 @@ for (const { route, spec } of SCANNED_BY_OWN_SPEC) {
 // belongs here is a state reachable by signing in as the right actor and going
 // to the page.
 const STATE_REACH: Record<string, { audience: Audience; go: (page: Page) => Promise<void> }> = {
+  // B-281. The counter's cash receipt — a table of money printed and handed
+  // over, on a screen counter staff also open on a phone (B-217). It exists only
+  // after a payment, so this takes $1 cash from the POS fixture: the tenant no
+  // other suite asserts a balance on (B-120's first rule).
+  '/admin/pos/done | cash receipt': {
+    audience: 'admin',
+    async go(page) {
+      await page.goto(`/admin/pos?q=${DEMO_POS_TENANT_EMAIL}`)
+      await page.getByRole('link', { name: 'Alex Active' }).first().click()
+      await page.getByLabel('Amount ($)').fill('1')
+      await page.getByLabel('Cash tendered ($)').fill('5')
+      await page.getByRole('button', { name: 'Record payment' }).click()
+      // The table, not the heading above it.
+      await expect(page.getByRole('rowheader', { name: 'Cash tendered' })).toBeVisible()
+    },
+  },
   // B-090 part 6. The facility page in Spanish, measured rather than assumed.
   //
   // Axe alone would not be enough here and the reason is specific: Spanish runs

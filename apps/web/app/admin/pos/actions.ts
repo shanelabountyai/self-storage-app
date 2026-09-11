@@ -8,7 +8,7 @@ import { can, ForbiddenError } from '@/lib/rbac/authorize'
 import { recordCounterPayment } from '@/lib/admin/pos'
 import { startCheckout } from '@/lib/checkout/session'
 import { currentRateForUnitType } from '@/lib/pricing/unit-type-rates'
-import { fieldError, success, type FormState } from '@/lib/admin/form-state'
+import { fieldError, type FormState } from '@/lib/admin/form-state'
 
 // PRD 02 §4.8 US-32. Thin session wrappers; the decisions live in
 // lib/admin/pos.ts and @storage/core/pos.
@@ -105,11 +105,10 @@ export async function takePaymentAction(_prev: FormState, formData: FormData): P
   }
 
   revalidatePath('/admin/pos')
-  const change =
-    result.changeCents && result.changeCents > 0
-      ? ` Change due: $${(result.changeCents / 100).toFixed(2)}.`
-      : ''
-  return success(`Payment recorded. Receipt #${result.receiptNumber}.${change}`)
+  // B-281. A receipt screen, not a flash message: cash with nothing to hand
+  // back is the most disputed transaction in this business, and the flash had
+  // nothing to print. The change due is on that screen too.
+  redirect(`/admin/pos/done?payment=${encodeURIComponent(result.paymentId)}`)
 }
 
 /// US-32's walk-in move-in: the *same* wizard the website uses, started from

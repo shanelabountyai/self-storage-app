@@ -2419,6 +2419,18 @@ function reviewedOn(locale: Locale): string {
 // say "Current" or a number, and a stage or "None", in words. It is staff-facing,
 // and this page makes no claims about that screen. No visible line changes.
 // `LAST_REVIEWED` is not bumped, per D-115.
+//
+// Re-verified 2026-09-11, at B-281 (cash at the counter ended on a flash
+// message with nothing to print, and a tenant with no email had every notice
+// recorded with an empty body). Staff-facing: `/admin/pos/done` is new — a
+// printable receipt as a real `<table>` with a caption and row headers, focus
+// moved to its heading on arrival, and the tender type in words. The admin
+// header and nav gain `print:hidden`. It is scanned and measured at 320px, 200%
+// zoom and forced text spacing (`SCANNED_STATES` 'cash receipt', and the route
+// loops for its not-found state). The comms change renders a body that was
+// previously blank; no template changed and nothing is sent. This page makes no
+// claim about either, so no visible line changes. `LAST_REVIEWED` is not
+// bumped, per D-115.
 
 export default async function AccessibilityPage() {
   const locale = await getLocale()

@@ -187,6 +187,10 @@ export const ADMIN_SCAN_ROUTES = [
   // outcome states (taken, still confirming, declined) are a STATE gap the
   // tenant-facing receipt shares.
   '/admin/pos/card/done',
+  // B-281. The counter's cash, check and money-order receipt. The route loops
+  // see its not-found state; the receipt itself is the `cash receipt` state
+  // below, which only exists once a payment has been taken.
+  '/admin/pos/done',
   '/admin/tasks',
   '/admin/access',
   '/admin/access/queue',
@@ -447,6 +451,13 @@ export type ScannedState = {
 }
 
 export const SCANNED_STATES: readonly ScannedState[] = [
+  // B-281. Staff-facing, but it is the paper a renter leaves with.
+  {
+    route: '/admin/pos/done',
+    state: 'cash receipt',
+    spec: 'e2e/admin-pos.spec.ts',
+    layout: 'reached',
+  },
   // B-090 part 6 (D-122). The site now ships a second language, and the route
   // loops scan it in exactly one: they carry no locale cookie, so every one of
   // them measures English. That is not a defect — English is what a crawler

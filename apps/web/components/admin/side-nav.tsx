@@ -32,7 +32,7 @@ export function SideNav({ groups }: { groups: readonly VisibleNavGroup[] }) {
   const activeInRest = rest.some((g) => g.items.some((item) => isActive(pathname, item.href)))
 
   return (
-    <nav aria-label="Admin" className="w-full shrink-0 border-b p-2 sm:w-48 sm:border-r sm:border-b-0">
+    <nav aria-label="Admin" className="print:hidden w-full shrink-0 border-b p-2 sm:w-48 sm:border-r sm:border-b-0">
       {/* Desktop: every group, stacked, each with its own heading. */}
       <div className="hidden flex-col gap-4 sm:flex">
         {groups.map((group) => (

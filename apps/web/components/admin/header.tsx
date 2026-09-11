@@ -16,7 +16,7 @@ export function Header({ userName, facilities, cookieValue, canSeeAll }: Props) 
   // and the user group could not fit, and the header was what pushed the whole
   // admin shell into horizontal scrolling (1.4.10, PRD 02 FR-16).
   return (
-    <header className="flex min-h-14 flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b px-4 py-2">
+    <header className="print:hidden flex min-h-14 flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b px-4 py-2">
       <FacilitySwitcher facilities={facilities} cookieValue={cookieValue} canSeeAll={canSeeAll} />
 
       {/* Universal search — deliberately a stub per the B-007 backlog line;

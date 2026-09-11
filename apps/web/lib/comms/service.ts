@@ -1813,16 +1813,36 @@ async function noReachableEmail(
     classification: MessageClassification
     recipient: Recipient
   },
+  context: MergeContext,
   error: string,
 ): Promise<DeliveryOutcome> {
+  // B-281. Rendered anyway, and BEFORE the failure is written: the message that
+  // could not be emailed is the letter staff print and mail instead, and a
+  // `failed` row with an empty body left the task naming a template key with
+  // nothing behind it. Same template lookup and same merge values a sent copy
+  // carries. A missing template or a merge field that cannot be filled still
+  // records the failure — with no body, and the render problem in `error`.
+  const { recipient } = base
+  const template = await effectiveTemplate(base.templateKey, 'email', recipient.facility?.id ?? null, recipient.locale)
+  let rendered: { subject: string; text: string } | null = null
+  let renderProblem: string | null = null
+  if (template) {
+    try {
+      rendered = renderEmail(template, context, recipient.locale)
+    } catch (renderError) {
+      if (!(renderError instanceof RenderError)) throw renderError
+      renderProblem = renderError.message
+    }
+  }
+
   await writeMessage(idempotencyKey, {
     ...base,
-    templateVersion: 0,
+    templateVersion: rendered && template ? template.version : 0,
     toAddress: '',
-    subject: null,
-    body: '',
+    subject: rendered?.subject ?? null,
+    body: rendered?.text ?? '',
     status: 'failed',
-    error,
+    error: renderProblem ? `${error}; ${renderProblem}` : error,
   })
 
   const { tenantId, facility } = base.recipient
@@ -1836,7 +1856,9 @@ async function noReachableEmail(
       // B-169's one sentence of context: the card otherwise says only that a
       // channel is unreachable, and "has no address on file" and "their
       // address bounced" want different things done about them.
-      detail: `No email address on file — ${base.templateKey} could not be sent.`,
+      detail: rendered
+        ? `No email address on file — ${base.templateKey} could not be sent. Its text is in the message log on their profile, to print and mail.`
+        : `No email address on file — ${base.templateKey} could not be sent.`,
     })
   }
 
@@ -1961,6 +1983,7 @@ async function sendEmailFallback(
     return await noReachableEmail(
       idempotencyKey,
       base,
+      context,
       'no reachable email address (sms fallback)',
     )
   }
@@ -2305,7 +2328,7 @@ async function deliverForRule(
   // No reachable email is a real dead-end. CN-19's staff task is now raised
   // rather than promised — see `noReachableEmail`.
   if (!recipient.email) {
-    return await noReachableEmail(idempotencyKey, base, 'no reachable email address')
+    return await noReachableEmail(idempotencyKey, base, context, 'no reachable email address')
   }
   const address = recipient.email.toLowerCase()
 

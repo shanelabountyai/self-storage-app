@@ -224,12 +224,16 @@ describeDb('comms pipeline', () => {
       const message = await prisma.message.findFirstOrThrow({ where: { facilityId } })
       expect(message.status).toBe('failed')
       expect(message.error).toBe('no reachable email address')
+      // B-281. The letter staff print instead: rendered with the same merge
+      // values a sent copy would have carried, not an empty body.
+      expect(message.bodySnapshot).toBe('Hi Ada')
 
       const task = await prisma.task.findFirstOrThrow({
         where: { facilityId, type: 'no_reachable_channel', entityId: tenantId },
       })
       expect(task.status).toBe('open')
       expect(task.priority).toBe('high')
+      expect(task.detail).toContain('message log')
     } finally {
       await prisma.tenant.update({
         where: { id: tenantId },

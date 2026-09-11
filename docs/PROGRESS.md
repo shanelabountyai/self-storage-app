@@ -9358,3 +9358,37 @@ Found while verifying B-282 and fixed in the same commit, by owner choice.
 - **The `account_remainder` message does not name the account.** It is static copy.
 - **An employee on an account cannot prepay their own unit at the counter.** That is D-137's stated cost.
 - The B-278 receipt wording ("for unit C-7 and C-8") and the B-279 reminder wording are unchanged. Both are still template edits with no row.
+
+## B-281 — cash at the counter left with nothing to print, and a renter with no email had every notice recorded blank (2026-09-11, `PENDING`)
+
+**What it built.**
+
+1. **A counter receipt screen, `/admin/pos/done?payment=<id>`.** `takePaymentAction` now redirects there after cash, check or money order, where it used to return a flash message.
+   - The receipt is a `<table>` with a caption and row headers. It shows the facility, the tenant, the date and time in the facility's timezone with its zone abbreviation, the tender type in words (with the check or money-order number), a row per unit credited (B-278's `paymentCredits`, so it names the same units as the emailed receipt), the amount, cash tendered and change, the balance (or "Credit on account" when it is negative), and who took it.
+   - Change due is shown above the table and hidden when printing.
+   - A **Print receipt** button (`components/admin/receipt-controls.tsx`). The admin `Header` and `SideNav` gain `print:hidden`, so the drawer and deposit-slip pages print without chrome too.
+   - Focus moves to the "Receipt #N" heading on arrival.
+   - If the payment was later returned or refunded, a reprint says so.
+   - With no payment, or one the counter did not receipt, it shows a not-found state that points to today's payments.
+2. **`counterReceipt(actor, paymentId)`** in `lib/admin/pos.ts`. It returns null unless the payment has a receipt number and a counter method (cash, check, money order), so a card or portal payment id cannot be turned into a counter receipt. It checks `payments:take` and facility access at the payment's own facility, not the switcher's, because the id comes from a URL.
+3. **`noReachableEmail` renders the message before writing the failure.** It uses the same `effectiveTemplate` lookup and the same `MergeContext` the send would have used, and stores `subjectSnapshot`, `bodySnapshot` and `templateVersion`. Both callers (`deliverForRule` and `sendEmailFallback`) pass their context. The row is still `failed` with the same `error`. A missing template leaves the body blank, as before. A `RenderError` does too, with its message appended to `error`. When there is a body, the task's `detail` says the text is in the message log on the tenant's profile, to print and mail.
+4. **Tests.**
+   - `pos-db`: two new tests. A cash payment reads back with its receipt number, facility, timezone, tender, change, unit and staff name. An unknown id returns null, and an actor at another facility is refused.
+   - `comms-db`: the no-address test now asserts the rendered body (`'Hi Ada'`) and the print hint in the task detail.
+   - `admin-pos.spec.ts`: the cash test lands on `/done`, asserts heading focus, change due, the tender and tendered rows, and scans with axe (`a11y-state: /admin/pos/done | cash receipt`). The deposit-slip test waits for `/done` instead of the flash.
+   - `/admin/pos/done` is in `ADMIN_SCAN_ROUTES` for its not-found state. Its receipt state is in `SCANNED_STATES` with `layout: 'reached'`, and `STATE_REACH` takes $1 cash from the POS fixture to measure it at 320px, 200% zoom and forced text spacing. That follows B-120's first rule: nothing else asserts that tenant's balance.
+
+**What it decided.**
+
+- **The cash receipt is its own route, not `card/done`.** The card screen is authorised through `chargeableLease`, which needs an open lease, and it exists to wait on a webhook. Cash for a former tenant or a business account has neither. The two screens show the same figures from the same `paymentCredits`.
+- **The printable body is the stored `bodySnapshot`**, rendered exactly as a sent copy's would be, without the postal footer. The task links to the tenant profile, whose message log already shows the body. Tasks are deduplicated per tenant per day, so one task can cover several messages, and the log is where all of them are.
+- **Lien notices are untouched**, as the row required: `letterRequest`, `sendCertifiedLetter` and the proof gate in `packages/core/notices/delivery.ts`.
+
+**Verification.** Typecheck clean. Lint: 0 errors (6 existing warnings, in files this item did not touch). `pos-db`, `comms-db` and `a11y-scan-coverage`: 44 of 44. Every `comms*` suite with `accessibility-statement`: 349 of 349, across 15 files. `admin-pos.spec.ts`, plus the `pos` tests in `admin.spec.ts` and `a11y-own-spec-routes.spec.ts`, against a production build: 88 listed, 88 passed, 0 failed, 0 skipped, 0 flaky, across both projects. `/admin/pos/done` is staff-facing and the public accessibility statement makes no claim about it; the statement's source log records the re-read.
+
+**What it left behind.**
+
+- **No reprint link from the deposit slip.** `/admin/pos/done?payment=` works for any past counter payment, but `/admin/pos/summary` does not link to it. No row owns it.
+- **The walk-in move-in's cash** (B-230, through checkout) still ends on the checkout's own confirmation, not this receipt.
+- **The task links to the tenant profile, not to the message itself.** The message log is capped at 20 rows, and there is no print stylesheet for a single message.
+- **A tenant with no email who turned a category off** still gets a rendered, failed row and a task. The no-address check runs before the preference check, as it did before this item.

@@ -50,9 +50,16 @@ test.describe('signed in as the demo owner', () => {
     await page.getByLabel('Cash tendered ($)').fill('50')
     await page.getByRole('button', { name: 'Record payment' }).click()
 
-    const status = page.getByRole('main').getByRole('status').first()
-    await expect(status).toContainText(/Receipt #\d+/)
-    await expect(status).toContainText('Change due: $30.00')
+    // B-281. Ends on a printable receipt, with focus moved to its heading
+    // rather than left on the button that is no longer there.
+    await page.waitForURL(/\/admin\/pos\/done\?payment=/)
+    await expect(page.getByRole('heading', { level: 1, name: /Receipt #\d+/ })).toBeFocused()
+    await expect(page.getByText('Change due: $30.00')).toBeVisible()
+    await expect(page.getByRole('row', { name: /Paid by/ })).toContainText('Cash')
+    await expect(page.getByRole('row', { name: /Cash tendered/ })).toContainText('$50.00')
+
+    // a11y-state: /admin/pos/done | cash receipt
+    await assertNoAxeViolations(page)
   })
 
   // B-280. Read-only on purpose: the demo account's balance is asserted by the
@@ -108,7 +115,7 @@ test.describe('signed in as the demo owner', () => {
     await page.getByLabel('Amount ($)').fill('5')
     await page.getByLabel('Cash tendered ($)').fill('5')
     await page.getByRole('button', { name: 'Record payment' }).click()
-    await expect(page.getByRole('main').getByRole('status').first()).toContainText(/Receipt #\d+/)
+    await page.waitForURL(/\/admin\/pos\/done\?payment=/)
 
     await page.goto('/admin/pos/summary')
     await expect(page.getByRole('heading', { level: 1, name: 'Daily payments' })).toBeVisible()
