@@ -9581,7 +9581,7 @@ A byte diff against `main` was not possible: on `main` a real link cannot reach 
 
 **What it left behind.** Nothing new. English and admin copy are untouched (D-122).
 
-## B-289 — The counter's shared-address warning read as a policy memo (2026-09-11, `PENDING`)
+## B-289 — The counter's shared-address warning read as a policy memo (2026-09-11, `2659115`)
 
 **What it built.**
 

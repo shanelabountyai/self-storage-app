@@ -1,10 +1,10 @@
 # Next
 
-**B-287 is done** (`251be24`). Adding a member to a business account now emails them a set-password link. The email opens with one sentence naming the account, is written in the member's `preferredLocale` (else English, never the staffer's browser language), and is filed under the member. The send runs after the membership commits. If it fails, the staffer's confirmation says so and tells them to point the member at "Forgot your password?". `sendAuthEmail` now escapes its HTML.
+**B-289 is done** (`2659115`). The counter's shared-address warning now opens with the question (`Is {heldBy} the person renting?`), is under 30 words in both languages, points at the name fields below it, and no longer shouts. `tests/i18n.test.ts` guards all three.
 
 ## Start here
 
-**B-288** (Spanish uses two different words for the rented unit). It is the next unbuilt row, and its dependency B-260 is done. **B-289** (the counter's shared-address warning reads as a policy memo) follows. **B-275** (the Neon dev branch's drift) is still open and needs a session with Neon access.
+**No unblocked build row remains.** **B-275** (the Neon dev branch's drift) is the only open row that isn't waiting on the owner, and it needs a session with Neon access. **B-090**'s umbrella row is still unticked even though B-090a–f are all ✅. Confirm nothing in its text is left over, then tick it.
 
 Gaps carried forward with no owning row:
 - B-287: the reset mail still ends "If you did not request this…", even though a member did not request it. The link still expires in 60 minutes; the lead sentence tells them to ask for a new one.
