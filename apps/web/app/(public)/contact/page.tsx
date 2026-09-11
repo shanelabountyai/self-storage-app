@@ -3,8 +3,11 @@ import { SITE } from '@/lib/site-config'
 import { dictionaryFor, translate, type MessageKey } from '@/lib/i18n'
 import { getLocale } from '@/lib/i18n/server'
 
-// B-262. Metadata stays English — see the note on `/about`.
-export const metadata = metadataFor('Contact', 'How to reach us.')
+// B-291. `<title>` follows the reader; the description stays English — see the
+// note on `/about`.
+export async function generateMetadata() {
+  return metadataFor(translate(dictionaryFor(await getLocale()), 'contact.title'), 'How to reach us.')
+}
 
 export default async function ContactPage() {
   const dict = dictionaryFor(await getLocale())

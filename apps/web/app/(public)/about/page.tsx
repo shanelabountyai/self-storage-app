@@ -2,10 +2,13 @@ import { ProsePage, Section, metadataFor } from '@/components/site/prose-page'
 import { dictionaryFor, translate, type MessageKey } from '@/lib/i18n'
 import { getLocale } from '@/lib/i18n/server'
 
-// B-262. The metadata stays an English literal: it is what a crawler reads,
-// and D-122 keeps the crawler on English. Only the rendered page follows the
-// locale cookie.
-export const metadata = metadataFor('About', 'What this project is.')
+// B-291 (D-134). `<title>` follows the locale cookie, because it is also the
+// page name a screen reader announces first. It reuses the `<h1>` key, whose
+// English is the title this page always had. The description stays an English
+// literal: it is what a crawler reads, and D-122 keeps the crawler on English.
+export async function generateMetadata() {
+  return metadataFor(translate(dictionaryFor(await getLocale()), 'about.title'), 'What this project is.')
+}
 
 export default async function AboutPage() {
   const dict = dictionaryFor(await getLocale())

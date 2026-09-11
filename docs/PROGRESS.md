@@ -9658,3 +9658,25 @@ A byte diff against `main` was not possible: on `main` a real link cannot reach 
 
 - Focus is not moved when an offer button removes the region, unlike the consent banner, which moves it to `#main`. The server action re-renders, so fixing this needs a client wrapper. No owning row; noted on `/accessibility`'s re-verified entry and in `NEXT.md`.
 - Nothing measures how many visitors see, accept or decline the offer. No funnel event was added, and there is no row for one.
+
+## B-291 — Page titles follow the reader (2026-09-11, `PENDING`)
+
+**What it built.**
+
+- `/faq`, `/about`, `/contact` and `/accessibility` swap `export const metadata = metadataFor(...)` for a `generateMetadata()` that passes `metadataFor` the page's own `<h1>` key (`faq.title`, `about.title`, `contact.title`, `a11y.title`). The shape is B-267/B-268's. `metadataFor` itself is unchanged.
+- **`/messaging-policy` gets the same change** (`msgpol.title`). The row named four routes, but this page is the fifth one B-262 translated and had the same English `<title>` under `<html lang="es">`. D-134 is a rule about `<title>`, not a list of four pages, so leaving it English would have broken the row's own acceptance: that the translated pages agree with each other.
+- **No new keys.** Each `<h1>` key's English was already exactly the page's old `<title>`, so the English titles, and what a crawler reads as the title, did not change.
+- **Tests.** `tests/i18n.test.ts` adds the five keys to `MUST_ALSO_DIFFER`, so a pasted English value fails. `e2e/i18n.spec.ts`'s "static pages in Spanish" loop now asserts `toHaveTitle` with the Spanish heading on each translated page.
+- The stale comments in `en.ts` ("the page TITLES here are the <h1>, not the <title>") and on each page are rewritten. `/accessibility` gets a re-verified entry.
+
+**Verification.** Typecheck is clean. Lint shows 0 errors and the same six warnings as before. `tests/i18n.test.ts`: 24 passed. e2e: the "static pages in Spanish" block of `e2e/i18n.spec.ts` against the production build, on both projects: 20 passed. The full unit and e2e sweeps were not run locally; CI owns them.
+
+**What it decided.**
+
+- **`<title>` reuses the `<h1>` key rather than getting its own.** One string per page means the announced page name and the visible heading cannot drift apart in either language. A page that ever needs a `<title>` different from its heading needs its own key.
+- **`description`, `alternates` and Open Graph stay English literals** (D-122, D-123). D-134 accepted the possible title/description mismatch. In practice a crawler carries no locale cookie, so it indexes both in English.
+- `/terms` and `/privacy` are untouched. Their `<h1>` is English too (D-122), so title and page still agree.
+
+**What it left behind.**
+
+- Five portal screens still set a static English `<title>` under Spanish: `/portal/contact`, `/portal/documents`, `/portal/documents/[documentId]`, `/portal/protection` and `/portal/statements/account/[accountId]/[period]`. None is indexed, so D-134 and B-267/B-268's reasoning both say translate them. No owning row; noted on `/accessibility`'s re-verified entry and in `NEXT.md`.

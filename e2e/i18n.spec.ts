@@ -670,6 +670,8 @@ test.describe('the static pages in Spanish', () => {
       await page.goto(route)
       await expect(page.locator('html')).toHaveAttribute('lang', 'es')
       await expect(page.getByRole('heading', { level: 1 })).toContainText(heading)
+      // B-291 (D-134). The `<title>` is the `<h1>`'s key, so it follows too.
+      await expect(page).toHaveTitle(heading)
     })
   }
 

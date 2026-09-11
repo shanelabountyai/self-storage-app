@@ -11,13 +11,16 @@ import { SITE } from '@/lib/site-config'
 import { dictionaryFor, translate, type Locale, type MessageKey } from '@/lib/i18n'
 import { getLocale } from '@/lib/i18n/server'
 
-// D-122 keeps `metadata` an English literal on every translated page: it is
-// what a crawler reads, and the crawler carries no locale cookie. The <h1>
-// below is the translated title.
-export const metadata: Metadata = {
-  title: 'Text message policy',
-  description:
-    'How we use text messages: what we send, how you agree to receive them, how to stop them, and what they cost.',
+// D-122 keeps the description an English literal: it is what a crawler reads,
+// and the crawler carries no locale cookie. `<title>` follows the reader
+// (B-291, D-134), because it is also the page name a screen reader announces
+// first; it reuses the `<h1>` key, whose English is the title this page had.
+export async function generateMetadata(): Promise<Metadata> {
+  return {
+    title: translate(dictionaryFor(await getLocale()), 'msgpol.title'),
+    description:
+      'How we use text messages: what we send, how you agree to receive them, how to stop them, and what they cost.',
+  }
 }
 
 // PRD 05 CN-14 / §6.4. The public disclosure page a carrier and an A2P 10DLC

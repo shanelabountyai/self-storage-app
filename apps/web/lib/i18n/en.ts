@@ -1502,9 +1502,11 @@ export const en = {
   // for the same reason until B-259 gave its disclosures a Spanish version to
   // explain — its keys are at the bottom of this file.
   //
-  // The page TITLES here are the <h1>, not the <title> — `metadataFor` stays an
-  // English literal on all three, because metadata is what a crawler reads and
-  // D-122 keeps the crawler on English.
+  // The page TITLES here are the <h1> AND, since B-291 (D-134), the <title>:
+  // the English is the <title> each page always had, so the crawler's English
+  // title did not change. The `description` passed to `metadataFor` stays an
+  // English literal, because it is what a crawler reads and D-122 keeps the
+  // crawler on English.
   'faq.title': 'Frequently asked questions',
   'faq.intro': "Short answers to what people ask most. Call us if yours isn't here.",
   'faq.reserve.q': 'Do I need to pay to reserve a unit?',

@@ -4,10 +4,14 @@ import { customerFacingExceptions, customerFacingStateExceptions } from '@/lib/a
 import { dictionaryFor, translate, type Locale, type MessageKey } from '@/lib/i18n'
 import { getLocale } from '@/lib/i18n/server'
 
-export const metadata = metadataFor(
-  'Accessibility',
-  'Our accessibility target, what we test, and how to tell us when we get it wrong.',
-)
+// B-291. `<title>` follows the reader; the description stays English — see the
+// note on `/about`.
+export async function generateMetadata() {
+  return metadataFor(
+    translate(dictionaryFor(await getLocale()), 'a11y.title'),
+    'Our accessibility target, what we test, and how to tell us when we get it wrong.',
+  )
+}
 
 /// The date the claims below were last checked against the build. A statement's
 /// credibility rests on the record, not the intention — an undated one is a
@@ -2526,6 +2530,17 @@ function reviewedOn(locale: Locale): string {
 // removes itself (it is not moved deliberately the way the consent banner's
 // dismissal is). No visible line changes. `LAST_REVIEWED` is not bumped, per
 // D-115.
+// Re-verified 2026-09-11, at B-291 (an English `<title>` under `<html
+// lang="es">` — D-134). Customer-facing: `/faq`, `/about`, `/contact`, this
+// page and `/messaging-policy` now take `<title>` from their `<h1>` key, so a
+// Spanish reader hears the page name in Spanish (3.1.2, 2.4.2). The English
+// titles are unchanged; `description`, `alternates` and Open Graph stay
+// English (D-122, D-123). Nothing rendered here claimed titles were English,
+// so no claim changes. Asserted with `toHaveTitle` in `e2e/i18n.spec.ts`. Not
+// claimed: five portal screens (`/portal/contact`, `documents`, one document,
+// `protection` and a business-account statement) still carry an English
+// `<title>` under Spanish. They have no owning row. No visible line changes.
+// `LAST_REVIEWED` is not bumped, per D-115.
 
 export default async function AccessibilityPage() {
   const locale = await getLocale()

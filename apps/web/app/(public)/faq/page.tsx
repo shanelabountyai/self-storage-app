@@ -3,11 +3,14 @@ import { SITE } from '@/lib/site-config'
 import { dictionaryFor, translate, type MessageKey } from '@/lib/i18n'
 import { getLocale } from '@/lib/i18n/server'
 
-// B-262. Metadata stays English — see the note on `/about`.
-export const metadata = metadataFor(
-  'Frequently asked questions',
-  'How reservations, move-ins, gate access, and billing work.',
-)
+// B-291. `<title>` follows the reader; the description stays English — see the
+// note on `/about`.
+export async function generateMetadata() {
+  return metadataFor(
+    translate(dictionaryFor(await getLocale()), 'faq.title'),
+    'How reservations, move-ins, gate access, and billing work.',
+  )
+}
 
 /// The rough size guide, as message keys. What stays here is the order and the
 /// fact that there are three of them; the copy is in the dictionaries. The

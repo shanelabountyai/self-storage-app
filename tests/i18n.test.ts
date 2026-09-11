@@ -123,7 +123,16 @@ describe('i18n dictionaries', () => {
     // B-284 adds the reason for a move-out recapture — printed as the
     // justification for a charge on the screen where the tenant agrees to it —
     // and the two refusals that stop a stale move-out or transfer committing.
+    //
+    // B-291 (D-134) adds the five static-page titles. Each is the `<h1>` AND the
+    // `<title>` — the page name a screen reader announces first — so a pasted
+    // English value is an English page name under `<html lang="es">`.
     const MUST_ALSO_DIFFER = [
+      'faq.title',
+      'about.title',
+      'contact.title',
+      'a11y.title',
+      'msgpol.title',
       'mo.recaptureFullOne',
       'mo.recaptureFullOther',
       'mo.recaptureProratedOne',
