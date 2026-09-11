@@ -9559,3 +9559,24 @@ A byte diff against `main` was not possible: on `main` a real link cannot reach 
 
 - **The reset mail's closing line still says "If you did not request this, you can ignore this email."** The lead sentence explains why the email came, so the line is odd but not wrong. Changing it would mean a separate expiry string for this one sender.
 - **A member added by mistake has already been emailed.** Removing them revokes the access; the email stays in their inbox, and its link still leads to a password, not to the account.
+
+## B-288 — Spanish called the rented thing both `unidad` and `bodega` (2026-09-11, `PENDING`)
+
+**What it built.**
+
+1. **`search.labelWhere` → `¿Dónde necesita una unidad?`** (was `una bodega`, which made `bodega` a countable rented thing).
+2. **`checkout.storageUnit` → `Unidad`** (was `Unidad de bodega`, both words in one phrase).
+3. **Lexicon guard** (`tests/i18n.test.ts`): fails if any Spanish value contains singular `bodega`.
+
+**What it decided.**
+
+- **`bodegas` stays as the category noun.** `chrome.findStorage`, `search.title`, `search.headingNear`, `facility.backToSearch`, `home.h1`, `site.tagline` and the two referral/about strings are untouched. Replacing them would be a worse translation (D-122).
+- **The guard refuses every singular `bodega`, not just `una bodega` / `la bodega` as the row named.** Every category use in the dictionary is plural, so a singular is always the count-noun drift. That includes `Unidad de bodega`, which a determiner-only guard would have missed. If a future string needs the singular as a category noun, relax the regex in that test, not the rule.
+
+**Verification.**
+
+- `tests/i18n.test.ts` 21/21. Typecheck clean. Lint: 0 errors, the same 6 existing warnings.
+- SC 2.5.3: the search label is a `<label htmlFor="q">` with no `aria-label` on the input, so the accessible name is the visible text by construction. The 320px fit was not measured: the label is a wrapping block, `Unidad` is shorter than the value it replaces, and `una unidad` is one character longer than `una bodega`.
+- e2e was not run. No spec asserts either Spanish string.
+
+**What it left behind.** Nothing new. English and admin copy are untouched (D-122).

@@ -77,7 +77,7 @@ export const es: Dictionary = {
   'nav.messagingPolicy': 'Mensajes de texto',
 
   // --- Search form + geolocation ----------------------------------------
-  'search.labelWhere': '¿Dónde necesita una bodega?',
+  'search.labelWhere': '¿Dónde necesita una unidad?',
   'search.labelZipOrCity': 'Código postal o ciudad',
   'search.placeholder': 'Código postal o ciudad',
   'search.hint': 'Por ejemplo: 78704, o Austin, TX',
@@ -350,7 +350,7 @@ export const es: Dictionary = {
     'Horario de la puerta: llame para confirmar antes de venir.',
   'checkout.gateClosedToday': 'Hoy la puerta está cerrada.',
   'checkout.gateHoursToday': 'Horario de la puerta hoy: {open}–{close}.',
-  'checkout.storageUnit': 'Unidad de bodega',
+  'checkout.storageUnit': 'Unidad',
   'checkout.unitLabel': '{name} de {width} pies por {length} pies',
   'checkout.lostHeading': 'No pudimos conservar esa unidad',
   'checkout.lostIntro':

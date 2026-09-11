@@ -165,6 +165,16 @@ describe('i18n dictionaries', () => {
     }
   })
 
+  it('never makes bodega the countable rented thing (B-288)', () => {
+    // D-122 binds D-15's one-word-per-concept rule to the Spanish: the thing a
+    // renter rents is `unidad`. `bodegas` stays as the category noun ("Buscar
+    // bodegas"), which is always plural here, so any singular `bodega` is the
+    // other word for a unit creeping back in — "¿Dónde necesita una bodega?",
+    // or both words at once in "Unidad de bodega".
+    const countNoun = Object.entries(es).filter(([, value]) => /\bbodega\b/i.test(value))
+    expect(countNoun).toEqual([])
+  })
+
   it('leaves no empty translation', () => {
     // An empty string type-checks and renders a blank label.
     const blank = Object.keys(en).filter((key) => !es[key as keyof typeof en].trim())
