@@ -1319,9 +1319,20 @@ export const es: Dictionary = {
   'mo.formLabel': 'Solicitar desocupar',
   'mo.date': 'Fecha para desocupar',
   'mo.update': 'Actualizar',
+  'mo.staleDate': 'Cambió la fecha. Pulse «Actualizar» para ver cómo queda la cuenta si desocupa el {date}.',
   'mo.currentBalance': 'Saldo actual',
   'mo.creditUnusedDays': 'Crédito por los días sin usar',
   'mo.promoRecovered': 'Descuento promocional recuperado',
+  'mo.recaptureFullOne':
+    'Descuento promocional recuperado en su totalidad: la oferta pedía una estancia mínima de {count} mes y este contrato duró {served}.',
+  'mo.recaptureFullOther':
+    'Descuento promocional recuperado en su totalidad: la oferta pedía una estancia mínima de {count} meses y este contrato duró {served}.',
+  'mo.recaptureProratedOne':
+    'Descuento promocional recuperado por {remaining} sin cumplir de la estancia mínima de {count} mes.',
+  'mo.recaptureProratedOther':
+    'Descuento promocional recuperado por {remaining} sin cumplir de la estancia mínima de {count} meses.',
+  'mo.monthsOne': '{count} mes',
+  'mo.monthsOther': '{count} meses',
   'mo.refundExpected': 'Reembolso que debe esperar',
   'mo.willStillOwe': 'Todavía deberá',
   'mo.settledInFull': 'Liquidado por completo',
@@ -1381,6 +1392,8 @@ export const es: Dictionary = {
   'tr.whenMove': '¿Cuándo le gustaría cambiarse?',
   'tr.showCost': 'Muéstrenme cuánto cuesta',
   'tr.previewFailed': 'No se pudo completar esa cotización.',
+  'tr.staleUnit': 'Cambió la unidad que quiere. Pulse «Muéstrenme cuánto cuesta» para cotizar esa.',
+  'tr.staleDate': 'Cambió la fecha. Pulse «Muéstrenme cuánto cuesta» para ver cuánto cuesta cambiarse el {date}.',
   'tr.newRentFor': 'Nueva renta mensual de la Unidad {unit}',
   'tr.creditForDays': 'Crédito por los días que quedan de la Unidad {unit}',
   'tr.unitForRange': 'Unidad {unit} por {range}',

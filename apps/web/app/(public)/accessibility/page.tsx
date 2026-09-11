@@ -2449,6 +2449,23 @@ function reviewedOn(locale: Locale): string {
 // language, so no visible line changes. `LAST_REVIEWED` is not bumped, per
 // D-115.
 
+// Re-verified 2026-09-11, at B-284 (the portal's Spanish had holes on the money
+// screens). Customer-facing, text only; no markup changed. Ten dates on
+// `/portal`, `/portal/payment-plan`, `/portal/methods`, `/portal/pay/done`,
+// `/portal/documents`, `/portal/contact` and the checkout were formatted
+// `en-US` under `<html lang="es">`. SC 3.1.1 was declared true of text that
+// was not in that language. They now take the reader's locale tag. The
+// move-out screen's reason for a promotional recapture — the justification for
+// a charge, on the screen where the tenant agrees to it — was an English
+// sentence from `@storage/core`, and it is now written from the dictionary.
+// The two stale-preview refusals on move-out and transfer, and two "Back to my
+// account" links, are translated too. An ESLint rule now refuses an untagged
+// date in `app/portal` and `app/(public)`. The 3.1.2 Language-of-Parts
+// question the row records stays unanswered, as the row asks. The Spanish
+// scan states are unchanged (`/portal` in Spanish was already scanned), and
+// this page makes no claim about dates or these routes' language, so no
+// visible line changes. `LAST_REVIEWED` is not bumped, per D-115.
+
 export default async function AccessibilityPage() {
   const locale = await getLocale()
   const dict = dictionaryFor(locale)

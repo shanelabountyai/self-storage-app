@@ -1388,9 +1388,23 @@ export const en = {
   'mo.formLabel': 'Request a move-out',
   'mo.date': 'Move-out date',
   'mo.update': 'Update',
+  'mo.staleDate': 'You changed the date. Press Update to see what a {date} move-out settles to.',
   'mo.currentBalance': 'Current balance',
   'mo.creditUnusedDays': 'Credit for unused days',
   'mo.promoRecovered': 'Promotional discount recovered',
+  // B-284. The reason printed under that label, and on the invoice line staff
+  // raise for it. Character-for-character the sentence `recaptureFor` used to
+  // return, because the ledger stores it. One/Other on the minimum stay.
+  'mo.recaptureFullOne':
+    'Promotional discount recovered in full — the offer asked for a {count}-month minimum stay and this lease ran {served}.',
+  'mo.recaptureFullOther':
+    'Promotional discount recovered in full — the offer asked for a {count}-month minimum stay and this lease ran {served}.',
+  'mo.recaptureProratedOne':
+    'Promotional discount recovered for the {remaining} of the {count}-month minimum stay not served.',
+  'mo.recaptureProratedOther':
+    'Promotional discount recovered for the {remaining} of the {count}-month minimum stay not served.',
+  'mo.monthsOne': '{count} month',
+  'mo.monthsOther': '{count} months',
   'mo.refundExpected': 'Refund you should expect',
   'mo.willStillOwe': 'You will still owe',
   'mo.settledInFull': 'Settled in full',
@@ -1445,6 +1459,8 @@ export const en = {
   'tr.whenMove': 'When would you like to move?',
   'tr.showCost': 'Show me what it costs',
   'tr.previewFailed': 'That preview could not be completed.',
+  'tr.staleUnit': 'You changed which unit you want. Press "Show me what it costs" to price that one.',
+  'tr.staleDate': 'You changed the date. Press "Show me what it costs" to see what a {date} move costs.',
   'tr.newRentFor': 'New monthly rent for Unit {unit}',
   'tr.creditForDays': 'Credit for the days left on Unit {unit}',
   'tr.unitForRange': 'Unit {unit} for {range}',

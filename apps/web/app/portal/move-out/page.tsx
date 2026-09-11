@@ -13,6 +13,7 @@ import { CallLink, phoneFor } from "@/components/marketing/call-link";
 import { cancelMoveOutAction, requestMoveOutAction } from "./actions";
 import { dictionaryFor, plural, translate, type MessageKey } from '@/lib/i18n'
 import { getLocale } from '@/lib/i18n/server'
+import { recaptureReasonText } from '@/lib/promotions/message'
 
 export async function generateMetadata() {
   return { title: translate(dictionaryFor(await getLocale()), "mo.title") };
@@ -327,7 +328,8 @@ export default async function PortalMoveOutPage({
                     on the invoice afterwards. A charge whose first appearance
                     is a final statement is a chargeback. */}
                 <span className="text-muted-foreground block text-pretty">
-                  {preview.recapture.reason}
+                  {preview.recapture.reason &&
+                    recaptureReasonText(dict, preview.recapture.reason)}
                 </span>
               </dt>
               <dd className="tabular-nums">

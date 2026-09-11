@@ -14,6 +14,7 @@ import {
   formerTenantDebts,
   markUnitReadyToRent,
   previewMoveOut,
+  recaptureDescription,
   NOTICE_PROBLEM_COPY,
   parseNoticeGivenAt,
   recordNoticeGiven,
@@ -724,7 +725,7 @@ describeDb("move-out", () => {
       );
       expect(preview.recapture.amountCents).toBe(6_450);
       expect(preview.settlement.recaptureCents).toBe(6_450);
-      expect(preview.recapture.reason).toContain("6-month minimum stay");
+      expect(recaptureDescription(preview)).toContain("6-month minimum stay");
     });
 
     it("prorates to the months not served", async () => {
@@ -805,7 +806,7 @@ describeDb("move-out", () => {
       // The ledger row must not be a different form of words from the screen
       // that got consent — one sentence, produced once. B-168 appended the
       // invoice number to it, and nothing else changed.
-      expect(charge.description).toContain(preview.recapture.reason);
+      expect(charge.description).toContain(recaptureDescription(preview));
       // The invariant worth having: what the preview said the lease settles to
       // is what the ledger actually holds once it is closed. This fixture is
       // paid through August, so the $310 proration credit outweighs the $129
@@ -849,7 +850,7 @@ describeDb("move-out", () => {
       // that ended on that day.
       expect(invoice.dueDate.toISOString().slice(0, 10)).toBe("2026-03-01");
       // The sentence the tenant agreed to, on the line they read.
-      expect(invoice.lineItems[0]?.description).toBe(preview.recapture.reason);
+      expect(invoice.lineItems[0]?.description).toBe(recaptureDescription(preview));
 
       // Reachable by the waiver path, which is the whole reason it is an
       // invoice: `waivableFees` lists fee invoices and `waiveFeeInvoice` voids

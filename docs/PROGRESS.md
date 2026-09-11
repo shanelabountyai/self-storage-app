@@ -9432,3 +9432,35 @@ A byte diff against `main` was not possible: on `main` a real link cannot reach 
 - **The portal's own receipt, `/portal/pay/done`, still formats its date with `'en-US'`.** A Spanish tenant reads an English date there. **B-284** owns it, in its list of eight files.
 - **No valid-token state of either pay route is scanned or measured at 320px and 200%.** Both stay stated exceptions in `scan-coverage.ts`. The markup is unchanged, and the Spanish strings are longer.
 - **Production's pay-link funnel from 2026-08-07 to this deploy reads zero for this reason, not tenant behaviour.** The same window's waitlist cancel links failed the same way. Recorded in `NEXT.md` for the owner.
+
+## B-284 — the portal's Spanish had holes on the money and irreversible screens (2026-09-11, `SHA-PENDING`)
+
+**What it built.**
+
+1. **Ten dates take the reader's locale tag.** `LOCALE_TAG[locale]` now reaches `/portal` (the due date and the transfer hold's expiry, via `formatDueDate`/`formatExpiry`, which `LeaseCard` receives a `locale` for), `/portal/payment-plan` (three installment dates, plus `formatAgreedOn` on the same page), `/portal/methods`, `/portal/pay/done`, `/portal/documents`, `/portal/contact`, and the checkout's signed-on date and next-charge date. `formatDay` gained the same optional `tag` parameter `formatCalendarDate` already had.
+2. **`recapture.reason` is facts, not a sentence.** `recaptureFor` returns `{ policy, minStayMonths, monthsServed, monthsRemaining }` (`RecaptureReason`) or null. `recaptureReasonText(dict, reason)` in `lib/promotions/message.ts` writes it, choosing `mo.recaptureFull*` / `mo.recaptureProrated*` by the minimum stay's count, with `mo.months*` phrases for the other counts. The portal move-out screen calls it with the tenant's dictionary.
+   - The admin side calls it with `dictionaryFor('en')` through a new `recaptureDescription(preview)` in `lib/admin/move-out.ts`. That now owns B-168's "— waived in full" / "— reduced by $X" suffix, derived from `ruledRecaptureCents − recapture.amountCents`. `applyRecaptureOverride` only moves the amount. The admin screen, the ledger description and the invoice line all read `recaptureDescription`.
+3. **The stale-preview literals are dictionary keys.** `tr.staleUnit`, `tr.staleDate`, `mo.staleDate` (the date formatted with the reader's tag). Both "Back to my account" links read the existing `paypg.backToAccount`, so there are three new keys and two reused ones.
+4. **The guard is an ESLint rule**, scoped to `app/portal/**` and `app/(public)/**` in `apps/web/eslint.config.mjs`. It refuses `formatCalendarDate` with fewer than 3 arguments, `formatDay` with fewer than 2, and `new Intl.DateTimeFormat('en-US', …)`. Run against the pre-change files, it flags 15 calls. Two stay English on purpose, each with an `eslint-disable-next-line` and its reason: the checkout's weekday, which is a lookup key into `gateHours`, and `/portal/protection`'s `formatDate` (see below).
+5. **Tests.**
+   - `tests/untagged-dates-lint.test.ts` lints an untagged snippet under `app/portal` and `app/(public)/checkout` and expects 3 refusals, lints the tagged form and expects 0, and lints the untagged snippet under `app/admin` and expects 0.
+   - `promo-recapture`: asserts the reason's shape, and asserts the English sentence character-for-character for both policies. It also asserts the Spanish.
+   - `move-out-db`: the ledger and invoice assertions read `recaptureDescription`.
+   - `i18n.test.ts`: the seven new sentence keys join `MUST_ALSO_DIFFER`. The three stale refusals must quote their control's own name in each language.
+
+**What it decided.**
+
+- **The English recapture sentence is unchanged, byte for byte**, because the ledger stores it and B-145 requires the invoice to say what the screen said. That includes "a 8-month" for an eight-month minimum. Fixing the article would change stored descriptions going forward, and it is not a language fix.
+- **The ledger and invoice stay English for a Spanish tenant (D-122).** Staff complete the move-out, and stored descriptions are English everywhere. B-145's same-words rule now holds between the admin screen and the ledger, and holds for the portal only in meaning. Recorded here, not settled silently: making a stored description follow the tenant's language is a separate call.
+- **The guard is lint, not a unit scan.** It runs in CI's `verify` lane, and the unit test pins the selectors so a rule that silently matches nothing fails.
+- **No figure moved.** `recaptureFor`'s arithmetic is untouched, and every amount assertion in `promo-recapture` and `move-out-db` passes unchanged.
+
+**Verification.** Typecheck clean. Lint: 0 errors, the same 6 existing warnings. Full unit suite: 4,456 passed, 8 skipped, of 4,464 (B-283's 4,461 plus the 3 guard tests), across 261 files. e2e against a production build (`portal`, `portal-move-out`, `portal-transfer`, `i18n`, `checkout-unit-lost`, `portal-billing-account`, `smoke`): 402 listed, 398 passed, 4 skipped (the smoke spec's viewport-specific tests), 0 failed, 0 flaky, across both projects. The English stale-date refusals those specs assert are unchanged. No migration, so the Neon schema is unchanged.
+
+**What it left behind.**
+
+- **The row's 3.1.2 Language-of-Parts question is still unanswered**, as the row asks.
+- **`/portal/protection`'s change confirmation is English.** `scheduledNotice` in `@storage/core/billing` builds the whole sentence, and that action's other refusals are English literals. It needs the same facts-not-prose move; no row owns it yet.
+- **`requestMoveOutAction`'s success message** ("Move-out requested. We've emailed you a confirmation.") is an English literal, and so are the cancel-path successes beside it. They were not among the row's five. No row owns them yet.
+- **`/portal/pay/done`'s and `/portal/documents`' dates carry no `timeZone`**, so they render in the server's zone. That is B-228's class, not language, and was not changed.
+- **The guard covers `app/portal` and `app/(public)` only.** A date formatted inside `lib/` or `components/` and shown to a customer is not checked.

@@ -402,7 +402,7 @@ export default async function PortalTransferPage({
       )}
 
       <Link href="/portal" className="text-sm underline underline-offset-4">
-        Back to my account
+        {t('paypg.backToAccount')}
       </Link>
     </Shell>
   )

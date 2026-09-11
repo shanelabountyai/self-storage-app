@@ -12,7 +12,11 @@ import { fieldError, parseDate, success, type FormState } from '@/lib/admin/form
 
 // PRD 01 US-705 (B-104). The tenant's own protection controls.
 
+// B-284 left this English on purpose: it feeds `scheduledNotice`, whose whole
+// sentence is English prose from `@storage/core/billing`. A Spanish date inside
+// an English sentence is not the fix; moving that sentence out of the package is.
 function formatDate(date: Date): string {
+  // eslint-disable-next-line no-restricted-syntax
   return new Intl.DateTimeFormat('en-US', { dateStyle: 'long', timeZone: 'UTC' }).format(date)
 }
 

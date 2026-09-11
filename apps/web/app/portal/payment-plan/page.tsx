@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { requireTenantActor } from '@/lib/rbac/session'
 import { paymentPlansForTenant } from '@/lib/portal/payment-plan'
 import { formatCalendarDate, formatRate } from '@/lib/format'
-import { dictionaryFor, translate, type MessageKey } from '@/lib/i18n'
+import { dictionaryFor, LOCALE_TAG, translate, type MessageKey } from '@/lib/i18n'
 import { getLocale } from '@/lib/i18n/server'
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -19,8 +19,8 @@ export async function generateMetadata(): Promise<Metadata> {
 // naming different days for the same installment. A facility timezone would be
 // the right thing to render this in; `paymentPlansForTenant` does not carry
 // one, so it stays as it was and is left to whoever needs it.
-function formatAgreedOn(date: Date): string {
-  return new Intl.DateTimeFormat('en-US', { month: 'long', day: 'numeric', year: 'numeric' }).format(date)
+function formatAgreedOn(date: Date, tag: string): string {
+  return new Intl.DateTimeFormat(tag, { month: 'long', day: 'numeric', year: 'numeric' }).format(date)
 }
 
 // B-193. Every plan is shown now, live or not, so each one has to say what
@@ -46,7 +46,9 @@ const INSTALLMENT_STATUS_KEYS: Record<string, MessageKey> = {
 export default async function PortalPaymentPlanPage() {
   const actor = await requireTenantActor()
   const plans = await paymentPlansForTenant(actor.tenantId)
-  const dict = dictionaryFor(await getLocale())
+  const locale = await getLocale()
+  const dict = dictionaryFor(locale)
+  const tag = LOCALE_TAG[locale]
   const t = (key: MessageKey, vars?: Record<string, string | number>) =>
     translate(dict, key, vars)
 
@@ -81,7 +83,7 @@ export default async function PortalPaymentPlanPage() {
                   {t('plan.heading', {
                     facility: plan.facilityName,
                     unit: plan.unitNumber,
-                    agreed: formatAgreedOn(plan.createdAt),
+                    agreed: formatAgreedOn(plan.createdAt, tag),
                   })}
                 </h2>
                 <p className="text-sm text-pretty">
@@ -119,7 +121,7 @@ export default async function PortalPaymentPlanPage() {
                 <caption className="sr-only">
                   {t('plan.caption', {
                     unit: plan.unitNumber,
-                    agreed: formatAgreedOn(plan.createdAt),
+                    agreed: formatAgreedOn(plan.createdAt, tag),
                   })}
                 </caption>
                 <thead>
@@ -145,7 +147,7 @@ export default async function PortalPaymentPlanPage() {
                 <tbody>
                   {plan.installments.map((installment, index) => (
                     <tr key={installment.position} className="border-b last:border-0">
-                      <td className="py-1">{formatCalendarDate(installment.dueDate)}</td>
+                      <td className="py-1">{formatCalendarDate(installment.dueDate, undefined, tag)}</td>
                       <td className="py-1 text-right tabular-nums">{formatRate(installment.amountCents)}</td>
                       <td className="py-1 text-right tabular-nums">
                         {formatRate(
@@ -167,7 +169,7 @@ export default async function PortalPaymentPlanPage() {
                         ) : installment.status === 'late' ? (
                           <span className="font-medium normal-case">
                             {t('plan.lateBy', {
-                              date: formatCalendarDate(installment.graceEndsOn),
+                              date: formatCalendarDate(installment.graceEndsOn, undefined, tag),
                             })}
                           </span>
                         ) : INSTALLMENT_STATUS_KEYS[installment.status] ? (
@@ -195,7 +197,7 @@ export default async function PortalPaymentPlanPage() {
                   >
                     {t('plan.payDue', {
                       amount: formatRate(due.amountCents),
-                      date: formatCalendarDate(due.dueDate),
+                      date: formatCalendarDate(due.dueDate, undefined, tag),
                     })}
                   </Link>
                   <Link

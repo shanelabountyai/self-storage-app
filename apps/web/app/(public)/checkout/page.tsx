@@ -54,6 +54,7 @@ import { advanceAction, applyPromoCodeAction, relockAction, relockAtSizeAction }
 import { PromoCodeStep } from '@/components/checkout/promo-code-step'
 import {
   dictionaryFor,
+  LOCALE_TAG,
   translate,
   type Dictionary,
   type MessageKey,
@@ -89,6 +90,8 @@ function minutesLeft(lockExpiresAt: Date): number {
 /// weekly table the facility page shows.
 function todaysGateHours(facility: PublicFacility, dict: Dictionary): string {
   if (!facility.gateHours) return translate(dict, 'checkout.gateHoursUnknown')
+  // B-284. English on purpose: the weekday is a key into `gateHours`, never shown.
+  // eslint-disable-next-line no-restricted-syntax
   const weekday = new Intl.DateTimeFormat('en-US', {
     weekday: 'long',
     timeZone: facility.timezone,
@@ -198,7 +201,7 @@ export default async function CheckoutPage({
       // set under D-53, so the first is the whole set's.
       const signature = existing[0].document.signature
       signedOn = signature
-        ? new Intl.DateTimeFormat('en-US', {
+        ? new Intl.DateTimeFormat(LOCALE_TAG[locale], {
             dateStyle: 'long',
             timeZone: facilityPolicy?.timezone ?? 'UTC',
           }).format(signature.signedAt)
@@ -796,7 +799,7 @@ export default async function CheckoutPage({
                   {t('checkout.nextPaymentBefore')}{' '}
                   <strong className="tabular-nums">{formatRate(nextCharge.totalCents)}</strong>{' '}
                   {t('checkout.nextPaymentOn')}{' '}
-                  {formatCalendarDate(nextCharge.dueDate, { month: 'long', day: 'numeric' })}.{' '}
+                  {formatCalendarDate(nextCharge.dueDate, { month: 'long', day: 'numeric' }, LOCALE_TAG[locale])}.{' '}
                   {nextCharge.autopayEnabled
                     ? t('checkout.autopayOn')
                     : t('checkout.autopayOff')}

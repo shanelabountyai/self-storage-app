@@ -118,7 +118,18 @@ describe('i18n dictionaries', () => {
     // B-270 adds `waitlist.joined`, on the `res.cancelled` argument again: it is
     // the `status: 'success'` a visitor reads to know a stranger's email address
     // was actually recorded, and the `err.` prefix would style that red.
+    //
+    // B-284 adds the reason for a move-out recapture — printed as the
+    // justification for a charge on the screen where the tenant agrees to it —
+    // and the two refusals that stop a stale move-out or transfer committing.
     const MUST_ALSO_DIFFER = [
+      'mo.recaptureFullOne',
+      'mo.recaptureFullOther',
+      'mo.recaptureProratedOne',
+      'mo.recaptureProratedOther',
+      'mo.staleDate',
+      'tr.staleUnit',
+      'tr.staleDate',
       'waitlist.joined',
       'reserve.holdUpdated',
       'promo.codeApplied',
@@ -147,6 +158,10 @@ describe('i18n dictionaries', () => {
     for (const locale of LOCALES) {
       const dict = dictionaryFor(locale)
       expect(dict['err.postalCodeUnknown'], locale).toContain(dict['details.enterMyself'])
+      // B-284. Same trap on the two stale-preview refusals.
+      expect(dict['tr.staleUnit'], locale).toContain(dict['tr.showCost'])
+      expect(dict['tr.staleDate'], locale).toContain(dict['tr.showCost'])
+      expect(dict['mo.staleDate'], locale).toContain(dict['mo.update'])
     }
   })
 

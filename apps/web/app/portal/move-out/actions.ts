@@ -11,7 +11,7 @@ import {
 } from '@/lib/portal/move-out'
 import { fieldError, stalePreview, success, type FormState } from '@/lib/admin/form-state'
 import { formatDay } from '@/lib/format'
-import { dictionaryFor, translate, type MessageKey } from '@/lib/i18n'
+import { dictionaryFor, LOCALE_TAG, translate, type MessageKey } from '@/lib/i18n'
 import { getLocale } from '@/lib/i18n/server'
 import { MAX_MOVE_OUT_DAYS_AHEAD } from '@/lib/portal/move-out'
 
@@ -56,10 +56,10 @@ export async function requestMoveOutAction(_prev: FormState, formData: FormData)
 
   // B-173. Checked before the re-auth redirect, so a tenant is not sent through
   // a password prompt only to be told the date had moved. See `stalePreview`.
-  const stale = stalePreview(
-    formData,
-    'date',
-    (typed) => `You changed the date. Press Update to see what a ${formatDay(typed)} move-out settles to.`,
+  const locale = await getLocale()
+  const dict = dictionaryFor(locale)
+  const stale = stalePreview(formData, 'date', (typed) =>
+    translate(dict, 'mo.staleDate', { date: formatDay(typed, LOCALE_TAG[locale]) }),
   )
   if (stale) return stale
 
@@ -67,7 +67,6 @@ export async function requestMoveOutAction(_prev: FormState, formData: FormData)
 
   const result = await requestMoveOut(actor.tenantId, leaseId, new Date(`${moveOutDate}T00:00:00.000Z`))
   if (!result.ok) {
-    const dict = dictionaryFor(await getLocale())
     return fieldError({
       date: translate(dict, REQUEST_PROBLEM_KEYS[result.reason] ?? 'mo.problem.generic', {
         days: MAX_MOVE_OUT_DAYS_AHEAD,

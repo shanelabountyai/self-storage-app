@@ -5,15 +5,15 @@ import { portalDocuments, portalPayments } from "@/lib/portal/documents";
 import { formatRate } from "@/lib/format";
 import { SITE } from "@/lib/site-config";
 import { CallLink, phoneFor } from "@/components/marketing/call-link";
-import { dictionaryFor, translate, type MessageKey } from '@/lib/i18n'
+import { dictionaryFor, LOCALE_TAG, translate, type MessageKey } from '@/lib/i18n'
 import { getLocale } from '@/lib/i18n/server'
 
 export const metadata: Metadata = { title: "Documents and receipts" };
 
 // PRD 01 §4.7 US-705.
 
-function formatWhen(date: Date): string {
-  return new Intl.DateTimeFormat("en-US", {
+function formatWhen(date: Date, tag: string): string {
+  return new Intl.DateTimeFormat(tag, {
     day: "numeric",
     month: "long",
     year: "numeric",
@@ -26,7 +26,9 @@ export default async function DocumentsPage() {
     portalDocuments(actor.tenantId),
     portalPayments(actor.tenantId),
   ]);
-  const dict = dictionaryFor(await getLocale());
+  const locale = await getLocale();
+  const dict = dictionaryFor(locale);
+  const tag = LOCALE_TAG[locale];
   const t = (key: MessageKey, vars?: Record<string, string | number>) =>
     translate(dict, key, vars);
 
@@ -59,7 +61,7 @@ export default async function DocumentsPage() {
                   )}
                   <span className="text-muted-foreground">
                     {" "}
-                    · {formatWhen(document.createdAt)}
+                    · {formatWhen(document.createdAt, tag)}
                   </span>
                 </span>
                 {/* An uploaded file is downloaded through the authenticated
@@ -120,7 +122,7 @@ export default async function DocumentsPage() {
               {payments.map((payment) => (
                 <tr key={payment.paymentId} className="border-b">
                   <td className="py-2">
-                    {formatWhen(payment.receivedAt)}
+                    {formatWhen(payment.receivedAt, tag)}
                     {/* B-146. In words, not a strikethrough or a colour (WCAG
                         1.4.1) — and it says what it means for the tenant,
                         because the next thing they get is a notice about a

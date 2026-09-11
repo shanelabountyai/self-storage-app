@@ -6,7 +6,7 @@ import { nextBillingDate } from '@/lib/portal/dashboard'
 
 import { formatCalendarDate, formatRate } from '@/lib/format'
 import { SITE } from '@/lib/site-config'
-import { dictionaryFor, translate, type MessageKey } from '@/lib/i18n'
+import { dictionaryFor, LOCALE_TAG, translate, type MessageKey } from '@/lib/i18n'
 import { getLocale } from '@/lib/i18n/server'
 import { chargePartsSentence } from '@/lib/pricing/charge-parts'
 import { AdminForm } from '@/components/admin/form'
@@ -33,7 +33,8 @@ export default async function PaymentMethodsPage() {
     autopayLeases(actor.tenantId),
   ])
   const hasMethod = Boolean(methods && methods.length > 0)
-  const dict = dictionaryFor(await getLocale())
+  const locale = await getLocale()
+  const dict = dictionaryFor(locale)
   const t = (key: MessageKey, vars?: Record<string, string | number>) =>
     translate(dict, key, vars)
 
@@ -169,7 +170,7 @@ export default async function PaymentMethodsPage() {
                       {t('meth.autopayOnAfter', {
                         parts: chargePartsSentence(dict, lease.chargeParts),
                         day: lease.billingDay,
-                        next: formatCalendarDate(next, { month: 'long', day: 'numeric' }),
+                        next: formatCalendarDate(next, { month: 'long', day: 'numeric' }, LOCALE_TAG[locale]),
                       })}
                     </>
                   ) : (

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { getAdminActor } from "@/lib/admin/context";
-import { previewMoveOut } from "@/lib/admin/move-out";
+import { previewMoveOut, recaptureDescription } from "@/lib/admin/move-out";
 import { formatCents, formatDay } from "@/lib/format";
 import { AdminForm, Field } from "@/components/admin/form";
 import { REASON_CODES, REASON_CODE_LABELS } from "@storage/core/audit";
@@ -277,7 +277,7 @@ export default async function MoveOutPage({
             <dt>
               Promotional discount recovered
               <span className="text-muted-foreground block text-pretty">
-                {preview.recapture.reason}
+                {recaptureDescription(preview)}
               </span>
               {/* B-168. Its own settleable line, not a share of a residual:
                   it posts as its own invoice, so it can be paid, chased,

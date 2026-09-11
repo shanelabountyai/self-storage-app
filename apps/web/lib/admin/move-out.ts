@@ -25,6 +25,8 @@ import { transitionGrant } from "@/lib/access/service";
 import { revokePayLinksForLease } from "@/lib/portal/pay-links";
 import { recaptureForLease } from "@/lib/promotions/billing";
 import type { Recapture } from "@storage/core/promotions";
+import { dictionaryFor } from "@/lib/i18n";
+import { recaptureReasonText } from "@/lib/promotions/message";
 
 // PRD 02 US-14 (move-out) / PRD 03 US-2 / PRD 05 CN-8.
 
@@ -44,8 +46,8 @@ export type MoveOutPreview = {
   noticeGivenAt: Date | null;
   prorateOnMoveOut: boolean;
   writeOffThresholdCents: number;
-  /// B-145. The promotional discount being charged back, and the sentence
-  /// saying why. `reason` is null — and the amount zero — for every lease with
+  /// B-145. The promotional discount being charged back, and the facts
+  /// saying why (`recaptureDescription` writes them). `reason` is null — and the amount zero — for every lease with
   /// no promotion, every facility on the default `none` policy, and every
   /// tenant who served the minimum. On the PREVIEW because a recapture a
   /// tenant first sees on a final invoice is a chargeback.
@@ -69,18 +71,12 @@ const NO_RECAPTURE: Recapture = {
   reason: null,
 };
 
-/// B-168. The recapture as reduced, and the sentence saying so.
+/// B-168. The recapture as reduced.
 ///
 /// Clamped into `[0, ruled.amountCents]`: an operator may forgive a recapture,
 /// they may not invent one. Charging MORE than the promotion gave away would
 /// bill money nobody saved — the same reasoning `recaptureFor` uses for never
 /// billing back a discount that was never delivered.
-///
-/// The reason line is rewritten rather than left alone, because the sentence
-/// the tenant reads has to match the figure beside it. B-145's rule — "the
-/// description on the ledger row must not be a different form of words from
-/// the one on the screen that got consent" — applies with more force once a
-/// human has moved the number.
 export function applyRecaptureOverride(
   ruled: Recapture,
   chargeCents: number | undefined,
@@ -91,16 +87,31 @@ export function applyRecaptureOverride(
     Math.min(Math.round(chargeCents), ruled.amountCents),
   );
   if (charged === ruled.amountCents) return ruled;
-  const forgiven = ruled.amountCents - charged;
-  const base = ruled.reason ?? "Promotional discount recovered";
-  return {
-    ...ruled,
-    amountCents: charged,
-    reason:
-      charged === 0
-        ? `${base} — waived in full`
-        : `${base} — reduced by ${formatDollars(forgiven)}`,
-  };
+  return { ...ruled, amountCents: charged };
+}
+
+/// B-168. The sentence staff read and the invoice line carries, saying what the
+/// figure beside it is. Rewritten once a counter reduction moves the number,
+/// because the words have to match the figure: B-145's rule — "the description
+/// on the ledger row must not be a different form of words from the one on the
+/// screen that got consent" — applies with more force once a human has moved it.
+///
+/// B-284. Written here from `recapture.reason`'s facts, in English, because this
+/// is the admin screen and the ledger (D-122). The portal writes the same facts
+/// with the same keys in the tenant's language.
+export function recaptureDescription(preview: {
+  recapture: Recapture;
+  ruledRecaptureCents: number;
+}): string {
+  const { recapture } = preview;
+  const base = recapture.reason
+    ? recaptureReasonText(dictionaryFor("en"), recapture.reason)
+    : "Promotional discount recovered";
+  const forgiven = preview.ruledRecaptureCents - recapture.amountCents;
+  if (forgiven <= 0) return base;
+  return recapture.amountCents === 0
+    ? `${base} — waived in full`
+    : `${base} — reduced by ${formatDollars(forgiven)}`;
 }
 
 function formatDollars(cents: number): string {
@@ -389,7 +400,7 @@ export async function completeMoveOut(
     // Dated to the move-out rather than to now, as it was before: the charge is
     // for a term that ended on that day, and its age is measured from it.
     //
-    // `preview.recapture.reason` is the same sentence the tenant read before
+    // `recaptureDescription(preview)` is the sentence the tenant read before
     // agreeing — the description on the invoice must not be a different form of
     // words from the one on the screen that got consent (B-145), and since
     // B-168 that sentence also says what was forgiven.
@@ -403,12 +414,10 @@ export async function completeMoveOut(
         // LEDGER row — which is what the tenant's own statement renders — must
         // not be a different form of words from the screen that got their
         // consent. `raiseFeeInvoice` appends the invoice number to it.
-        ledgerDescription:
-          preview.recapture.reason ?? "Promotional discount recovered",
+        ledgerDescription: recaptureDescription(preview),
         lines: [
           {
-            description:
-              preview.recapture.reason ?? "Promotional discount recovered",
+            description: recaptureDescription(preview),
             amountCents: settlement.recaptureCents,
           },
         ],

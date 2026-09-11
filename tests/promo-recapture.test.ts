@@ -5,6 +5,8 @@ import {
   monthsServed,
   recaptureFor,
 } from "../packages/core/promotions";
+import { dictionaryFor } from "../apps/web/lib/i18n";
+import { recaptureReasonText } from "../apps/web/lib/promotions/message";
 
 // B-145 / PRD 02 §4.3 US-10. Pure — no database, no clock.
 //
@@ -60,8 +62,9 @@ describe("recaptureFor", () => {
     const result = recaptureFor({ ...base, policy: "full" });
     expect(result.amountCents).toBe(12_900);
     expect(result.monthsRemaining).toBe(4);
-    expect(result.reason).toContain("6-month minimum stay");
-    expect(result.reason).toContain("ran 2 months");
+    expect(recaptureReasonText(dictionaryFor("en"), result.reason!)).toBe(
+      "Promotional discount recovered in full — the offer asked for a 6-month minimum stay and this lease ran 2 months.",
+    );
   });
 
   it("recovers the unserved share under `prorated`", () => {
@@ -136,8 +139,20 @@ describe("recaptureFor", () => {
       minStayMonths: 6,
       monthsServed: 5,
     });
-    expect(result.reason).toBe(
+    // B-284. Facts cross the package boundary, and the sentence is written
+    // where the language is known. The English is character-for-character what
+    // the package used to return, because the ledger stores it.
+    expect(result.reason).toEqual({
+      policy: "prorated",
+      minStayMonths: 6,
+      monthsServed: 5,
+      monthsRemaining: 1,
+    });
+    expect(recaptureReasonText(dictionaryFor("en"), result.reason!)).toBe(
       "Promotional discount recovered for the 1 month of the 6-month minimum stay not served.",
+    );
+    expect(recaptureReasonText(dictionaryFor("es"), result.reason!)).toBe(
+      "Descuento promocional recuperado por 1 mes sin cumplir de la estancia mínima de 6 meses.",
     );
   });
 });

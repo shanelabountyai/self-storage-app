@@ -10,7 +10,15 @@ import { GateCodePanel } from '@/components/portal/gate-code-panel'
 import { currentImpersonation } from '@/lib/impersonation/context'
 import { SITE } from '@/lib/site-config'
 import { ScrollRegion } from '@/components/ui/scroll-region'
-import { dictionaryFor, plural, translate, type Dictionary, type MessageKey } from '@/lib/i18n'
+import {
+  dictionaryFor,
+  LOCALE_TAG,
+  plural,
+  translate,
+  type Dictionary,
+  type Locale,
+  type MessageKey,
+} from '@/lib/i18n'
 import { getLocale } from '@/lib/i18n/server'
 import { chargePartsSentence } from '@/lib/pricing/charge-parts'
 
@@ -38,14 +46,14 @@ export async function generateMetadata(): Promise<Metadata> {
 // carries. There is no time in these values to convert — see
 // `formatCalendarDate`. The timezone belongs on `formatExpiry` below, which
 // formats a real instant.
-function formatDueDate(date: Date): string {
-  return formatCalendarDate(date, { month: 'long', day: 'numeric' })
+function formatDueDate(date: Date, tag: string): string {
+  return formatCalendarDate(date, { month: 'long', day: 'numeric' }, tag)
 }
 
 // B-142. Absolute facility-local date and time — the hold expiry is never a
 // countdown (PRD 01 §6.8.1).
-function formatExpiry(date: Date, timezone: string): string {
-  return new Intl.DateTimeFormat('en-US', {
+function formatExpiry(date: Date, timezone: string, tag: string): string {
+  return new Intl.DateTimeFormat(tag, {
     dateStyle: 'medium',
     timeStyle: 'short',
     timeZone: timezone,
@@ -67,13 +75,16 @@ function LeaseCard({
   lease,
   impersonated,
   dict,
+  locale,
 }: {
   lease: PortalLeaseSummary
   impersonated: boolean
   dict: Dictionary
+  locale: Locale
 }) {
   const t = (key: MessageKey, vars?: Record<string, string | number>) =>
     translate(dict, key, vars)
+  const tag = LOCALE_TAG[locale]
   // B-256. The viewer is this unit's tenant (the dashboard reads their own
   // leases) — so `youArePayer` means they hold the unit AND pay for it through
   // their own business account, and the account card below already carries this
@@ -85,7 +96,7 @@ function LeaseCard({
   // One shared reckoning now, the same one `/portal/methods` and the checkout
   // disclosure use.
   const nextPaymentCents = lease.recurring.totalCents
-  const dueDate = formatDueDate(lease.nextDueDate)
+  const dueDate = formatDueDate(lease.nextDueDate, tag)
   const telHref = `tel:${lease.facilityPhone.replace(/[^0-9+]/g, '')}`
 
   // B-244. The heading FIRST, and the section named by it.
@@ -224,9 +235,9 @@ function LeaseCard({
             <strong>
               {t('dash.unitNumber', { unit: lease.pendingTransfer.toUnitNumber })}
             </strong>{' '}
-            {t('dash.transferOn')} {formatDueDate(lease.pendingTransfer.transferDate)}.{' '}
+            {t('dash.transferOn')} {formatDueDate(lease.pendingTransfer.transferDate, tag)}.{' '}
             {t('dash.transferHolding')}{' '}
-            {formatExpiry(lease.pendingTransfer.expiresAt, lease.facilityTimezone)}.{' '}
+            {formatExpiry(lease.pendingTransfer.expiresAt, lease.facilityTimezone, tag)}.{' '}
             <Link href="/portal/transfer" className="underline underline-offset-4">
               {t('dash.manageRequest')}
             </Link>
@@ -287,10 +298,10 @@ function LeaseCard({
                   <strong>{t('dash.planLateStrong')}</strong>{' '}
                   {t('dash.planLateBody', {
                     amount: formatRate(lease.paymentPlan.late.amountCents),
-                    date: formatDueDate(lease.paymentPlan.late.dueDate),
+                    date: formatDueDate(lease.paymentPlan.late.dueDate, tag),
                   })}{' '}
                   <strong>
-                    {formatDueDate(lease.paymentPlan.late.payByDate)}
+                    {formatDueDate(lease.paymentPlan.late.payByDate, tag)}
                   </strong>
                   .{' '}
                   <Link
@@ -309,7 +320,7 @@ function LeaseCard({
                   <strong>{t('dash.planMissedStrong')}</strong>{' '}
                   {t('dash.planMissedBody', {
                     amount: formatRate(lease.paymentPlan.missed.amountCents),
-                    date: formatDueDate(lease.paymentPlan.missed.dueDate),
+                    date: formatDueDate(lease.paymentPlan.missed.dueDate, tag),
                   })}{' '}
                   <Link
                     href={`/portal/pay?lease=${lease.leaseId}&amount=${lease.paymentPlan.missed.amountCents / 100}`}
@@ -328,7 +339,7 @@ function LeaseCard({
                   <>
                     {t('dash.planNextBefore')}{' '}
                     <strong>{formatRate(lease.paymentPlan.next.amountCents)}</strong>{' '}
-                    {t('dash.planNextOn')} {formatDueDate(lease.paymentPlan.next.dueDate)}.{' '}
+                    {t('dash.planNextOn')} {formatDueDate(lease.paymentPlan.next.dueDate, tag)}.{' '}
                   </>
                 ) : (
                   <>{t('dash.planNoneLeft')} </>
@@ -346,7 +357,7 @@ function LeaseCard({
         <div className="border-input rounded-md border p-3 text-sm text-pretty">
           <p>
             {t('dash.moveOutBefore')}{' '}
-            <strong>{formatDueDate(lease.pendingMoveOutDate)}</strong>.{' '}
+            <strong>{formatDueDate(lease.pendingMoveOutDate, tag)}</strong>.{' '}
             <Link href="/portal/move-out" className="underline underline-offset-4">
               {t('dash.manageRequest')}
             </Link>
@@ -643,6 +654,7 @@ export default async function PortalHomePage() {
               lease={lease}
               impersonated={impersonated}
               dict={dict}
+              locale={locale}
             />
           ))}
           {accounts.map((account) => (

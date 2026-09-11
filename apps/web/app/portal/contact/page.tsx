@@ -9,7 +9,7 @@ import {
   saveAddressAction,
   saveContactDetailsAction,
 } from './actions'
-import { dictionaryFor, translate, type MessageKey } from '@/lib/i18n'
+import { dictionaryFor, LOCALE_TAG, translate, type MessageKey } from '@/lib/i18n'
 import { getLocale } from '@/lib/i18n/server'
 
 export const metadata: Metadata = { title: 'Contact details' }
@@ -20,10 +20,8 @@ export const metadata: Metadata = { title: 'Contact details' }
 
 const FIELD_CLASS = 'flex flex-col gap-1 text-sm'
 
-function formatWhen(date: Date): string {
-  return new Intl.DateTimeFormat('en-US', { day: 'numeric', month: 'long', year: 'numeric' }).format(
-    date,
-  )
+function formatWhen(date: Date, tag: string): string {
+  return new Intl.DateTimeFormat(tag, { day: 'numeric', month: 'long', year: 'numeric' }).format(date)
 }
 
 export default async function ContactPage() {
@@ -144,7 +142,7 @@ export default async function ContactPage() {
                 <li key={row.id} className="text-muted-foreground">
                   {row.addressLine1}
                   {row.addressLine2 ? `, ${row.addressLine2}` : ''}, {row.city} {row.state}{' '}
-                  {row.postalCode} — {t('cont.until', { date: formatWhen(row.createdAt) })}
+                  {row.postalCode} — {t('cont.until', { date: formatWhen(row.createdAt, LOCALE_TAG[locale]) })}
                 </li>
               ))}
             </ul>

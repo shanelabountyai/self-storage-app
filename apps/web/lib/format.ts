@@ -40,10 +40,10 @@ export function formatRate(cents: number): string {
 /// UTC on purpose: these are `@db.Date` days, and `new Date('2026-09-05')`
 /// rendered in a US timezone is Sep 4 — which, in a refusal whose whole job is
 /// to name the date about to post, would name the wrong one.
-export function formatDay(iso: string): string {
+export function formatDay(iso: string, tag: string = DEFAULT_TAG): string {
   const date = new Date(`${iso}T00:00:00.000Z`)
   if (Number.isNaN(date.getTime())) return iso
-  return formatCalendarDate(date, { month: 'short', day: 'numeric', year: 'numeric' })
+  return formatCalendarDate(date, { month: 'short', day: 'numeric', year: 'numeric' }, tag)
 }
 
 /// B-228. A date somebody typed into a `yyyy-mm-dd` field — a due date on an

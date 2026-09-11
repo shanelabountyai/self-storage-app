@@ -7,7 +7,7 @@ import { checkFreshAuth } from '@/lib/auth/reauth'
 import { cancelTransferRequest, requestTransfer, PORTAL_TRANSFER_PROBLEM_KEYS } from '@/lib/portal/transfer'
 import { fieldError, stalePreview, success, type FormState } from '@/lib/admin/form-state'
 import { formatDay } from '@/lib/format'
-import { dictionaryFor, translate } from '@/lib/i18n'
+import { dictionaryFor, LOCALE_TAG, translate } from '@/lib/i18n'
 import { getLocale } from '@/lib/i18n/server'
 import { MAX_MOVE_IN_DAYS_AHEAD } from '@/lib/reservations/reserve'
 
@@ -36,17 +36,12 @@ export async function requestTransferAction(_prev: FormState, formData: FormData
   // B-173. Both controls, and before the re-auth redirect — a tenant sent
   // through a password prompt only to be told the unit had moved has been made
   // to pay for the refusal twice. See `stalePreview`.
+  const locale = await getLocale()
+  const dict = dictionaryFor(locale)
   const stale =
-    stalePreview(
-      formData,
-      'unit',
-      () => 'You changed which unit you want. Press "Show me what it costs" to price that one.',
-    ) ??
-    stalePreview(
-      formData,
-      'date',
-      (typed) =>
-        `You changed the date. Press "Show me what it costs" to see what a ${formatDay(typed)} move costs.`,
+    stalePreview(formData, 'unit', () => translate(dict, 'tr.staleUnit')) ??
+    stalePreview(formData, 'date', (typed) =>
+      translate(dict, 'tr.staleDate', { date: formatDay(typed, LOCALE_TAG[locale]) }),
     )
   if (stale) return stale
 
@@ -61,7 +56,7 @@ export async function requestTransferAction(_prev: FormState, formData: FormData
   if (!result.ok) {
     return fieldError({
       unit: translate(
-        dictionaryFor(await getLocale()),
+        dict,
         PORTAL_TRANSFER_PROBLEM_KEYS[result.problem] ?? 'tr.previewFailed',
         { days: MAX_MOVE_IN_DAYS_AHEAD },
       ),

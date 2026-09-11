@@ -1,6 +1,6 @@
-import type { CodeOutcome, CodeRejection } from '@storage/core/promotions'
+import type { CodeOutcome, CodeRejection, RecaptureReason } from '@storage/core/promotions'
 import type { FieldMessage } from '@/lib/admin/form-state'
-import type { Dictionary, MessageKey } from '@/lib/i18n'
+import { plural, type Dictionary, type MessageKey } from '@/lib/i18n'
 import { offerTermsSegments } from './terms'
 
 // B-266. The renter-facing sentence for whatever became of a typed promo code.
@@ -62,4 +62,26 @@ export function codeOutcomeMessage(outcome: CodeOutcome, dict: Dictionary): Fiel
     case 'rejected':
       return { key: REJECTION_KEY[outcome.rejection] }
   }
+}
+
+/// B-284. Why a move-out recovers a promotional discount, in the reader's
+/// language — the `judgeStartDate` / `codeOutcomeMessage` move a third time.
+/// `recaptureFor` returned this as an English sentence, and the portal's
+/// move-out screen showed it to a Spanish tenant as the reason for a charge.
+///
+/// The admin screen and the invoice line call this with `dictionaryFor('en')`
+/// (D-122), so the English wording lives in one set of keys, not in a copy
+/// that can drift from what the tenant was shown.
+///
+/// Picked by the minimum stay's count because Spanish needs "1 mes" and
+/// "6 meses" where English writes "6-month" either way.
+export function recaptureReasonText(dict: Dictionary, reason: RecaptureReason): string {
+  const months = (count: number) => plural(dict, count, 'mo.monthsOne', 'mo.monthsOther')
+  return reason.policy === 'full'
+    ? plural(dict, reason.minStayMonths, 'mo.recaptureFullOne', 'mo.recaptureFullOther', {
+        served: months(reason.monthsServed),
+      })
+    : plural(dict, reason.minStayMonths, 'mo.recaptureProratedOne', 'mo.recaptureProratedOther', {
+        remaining: months(reason.monthsRemaining),
+      })
 }

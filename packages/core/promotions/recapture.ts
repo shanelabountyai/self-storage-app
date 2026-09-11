@@ -33,10 +33,23 @@ export type Recapture = {
   amountCents: number;
   /// Months of the minimum left unserved. Zero when the term was met.
   monthsRemaining: number;
-  /// Why this number — the sentence a tenant is owed BEFORE they agree to the
+  /// Why this number — what a tenant is owed BEFORE they agree to the
   /// move-out, not after it lands on a final statement. A recapture a tenant
   /// first meets on an invoice is a chargeback.
-  reason: string | null;
+  ///
+  /// B-284. The facts the sentence is written from, never the sentence. This
+  /// package has no request to read a language from, so the English string it
+  /// used to return reached a Spanish tenant as the reason for a charge, on the
+  /// screen where they agree to it. `recaptureReasonText`
+  /// (`apps/web/lib/promotions/message.ts`) writes it in the reader's language.
+  reason: RecaptureReason | null;
+};
+
+export type RecaptureReason = {
+  policy: "full" | "prorated";
+  minStayMonths: number;
+  monthsServed: number;
+  monthsRemaining: number;
 };
 
 const NONE: Recapture = { amountCents: 0, monthsRemaining: 0, reason: null };
@@ -142,14 +155,14 @@ export function recaptureFor(input: RecaptureInput): Recapture {
 
   if (amountCents <= 0) return NONE;
 
-  const months = (count: number) =>
-    `${count} ${count === 1 ? "month" : "months"}`;
   return {
     amountCents,
     monthsRemaining,
-    reason:
-      input.policy === "full"
-        ? `Promotional discount recovered in full — the offer asked for a ${minStay}-month minimum stay and this lease ran ${months(served)}.`
-        : `Promotional discount recovered for the ${months(monthsRemaining)} of the ${minStay}-month minimum stay not served.`,
+    reason: {
+      policy: input.policy,
+      minStayMonths: minStay,
+      monthsServed: served,
+      monthsRemaining,
+    },
   };
 }

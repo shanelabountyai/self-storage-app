@@ -5,7 +5,7 @@ import { paymentReceipt } from '@/lib/portal/payment'
 import { formatCents, formatRate } from '@/lib/format'
 import { ScrollRegion } from '@/components/ui/scroll-region'
 import { SITE } from '@/lib/site-config'
-import { dictionaryFor, translate, type MessageKey } from '@/lib/i18n'
+import { dictionaryFor, LOCALE_TAG, translate, type MessageKey } from '@/lib/i18n'
 import { getLocale } from '@/lib/i18n/server'
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -26,8 +26,8 @@ export async function generateMetadata(): Promise<Metadata> {
 // confirming. So there are three real states, and the pending one says exactly
 // that rather than claiming a payment that has not been recorded yet.
 
-function formatWhen(date: Date): string {
-  return new Intl.DateTimeFormat('en-US', {
+function formatWhen(date: Date, tag: string): string {
+  return new Intl.DateTimeFormat(tag, {
     day: 'numeric',
     month: 'long',
     year: 'numeric',
@@ -44,7 +44,8 @@ export default async function PaymentDonePage({
   const { payment: paymentId } = await searchParams
   const actor = await requireTenantActor()
   const receipt = paymentId ? await paymentReceipt(actor.tenantId, paymentId) : null
-  const dict = dictionaryFor(await getLocale())
+  const locale = await getLocale()
+  const dict = dictionaryFor(locale)
   const t = (key: MessageKey, vars?: Record<string, string | number>) =>
     translate(dict, key, vars)
 
@@ -54,7 +55,7 @@ export default async function PaymentDonePage({
         <h1 className="text-xl font-semibold">{t('rcpt.title')}</h1>
         <p className="text-sm text-pretty">{t('rcpt.notFound')}</p>
         <Link href="/portal" className="text-sm underline underline-offset-4">
-          Back to my account
+          {t('paypg.backToAccount')}
         </Link>
       </div>
     )
@@ -119,7 +120,7 @@ export default async function PaymentDonePage({
         )}
         <div className="flex justify-between gap-4">
           <dt className="text-muted-foreground">{t('rcpt.date')}</dt>
-          <dd>{formatWhen(receipt.receivedAt)}</dd>
+          <dd>{formatWhen(receipt.receivedAt, LOCALE_TAG[locale])}</dd>
         </div>
         {receipt.status === 'succeeded' && receipt.balanceCents !== null && (
           <div className="flex justify-between gap-4 border-t pt-2 font-medium">
