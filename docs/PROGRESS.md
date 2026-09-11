@@ -9529,3 +9529,33 @@ A byte diff against `main` was not possible: on `main` a real link cannot reach 
 
 - **What a screen reader does with either markup is still unmeasured.** That includes whether an AT applied the button's `lang` to its `aria-label`. B-254 owns it, and `LAST_REVIEWED` is not bumped.
 - **The first negative run never started.** A stale `apps/web/.next/dev/lock`, left at 10:17 by a `next dev` whose pid was dead, held `next dev` until Playwright's 300s `webServer` timeout. Deleting the lock fixed it. This is an environment trap, not a code bug.
+
+## B-287 — somebody given sight of a business account was never told, and may have had no password to sign in with (2026-09-11)
+
+**What it built.**
+
+1. **`addMember` emails the new member a set-password link** (`lib/billing/accounts.ts`, via the new `sendAccountAccessLink` in `lib/auth/flows.ts`). It mints the same `password_reset` token that `/forgot-password` mints and sends it through `sendAuthEmail`. The Message row now carries `recipientTenantId`, so it is filed under the member.
+2. **One sentence in front of the reset mail** (`authAccountAccess` in `lib/comms/prose.ts`, English and Spanish). It names the account the member can now see, says the link is needed only if they have no password, and says to ask for a new link from the sign-in page if this one has expired.
+3. **`sendAuthEmail` escapes its HTML.** The account name is typed by staff and now reaches that HTML; before this item, no user-supplied text did.
+4. **The staff screen tells the truth.** The hint says an email with a set-password link is sent. The confirmation reports whether the send went. If it did not, the confirmation tells the staffer to tell the member themselves and to send them to "Forgot your password?" first.
+5. **Unit test** (`tests/billing-account-members-db.test.ts`). A member whose `preferredLocale` is `es` gets exactly one `auth_password_reset` Message addressed to them, with the Spanish subject, the Spanish lead sentence naming the account, and a reset link. A refused duplicate add does not send a second email.
+
+**What it decided.**
+
+- **The member's `preferredLocale`, else English. Never the request's language.** `linkLocale` falls back to the request cookie, which is right on `/forgot-password` and wrong here, because the request belongs to the staffer.
+- **The send runs after the membership commits, and a failed send cannot undo it.** `addMember` returns `notified`, and the action words its confirmation from that. Letting the send throw would have shown a crashed form over a membership that had already been saved.
+- **One email for everyone, including members who already have a password.** The lead sentence tells them to sign in as usual. Branching on `passwordHash` would add a second message to keep in sync, for a link that is harmless to ignore.
+- **The token lifetime stays 60 minutes.** Someone who opens the email the next morning gets `/reset-password`'s "this link is no longer good" page. The lead sentence points them at a new link. Lengthening a reset token's life for this one sender is a security decision, and this row did not ask for it.
+- **Notification only.** `payableLeaseWhere` is untouched (D-120).
+
+**Verification.**
+
+- Typecheck clean (app and tests). Lint: 0 errors, the same 6 existing warnings.
+- Unit: `billing-account-members-db` 8/8, `login-flow-db` 7/7, `staff-mfa-db` 24/24, `bootstrap-owner` 9/9, `billing-accounts-db` 9/9. Together these are every suite that reaches `sendAuthEmail` or `lib/billing/accounts`.
+- e2e was not run. The only screen change is a hint string and a confirmation string. `e2e/admin-billing-accounts.spec.ts` asserts neither, and it stays read-only against the demo account (B-120), so it cannot add a member.
+- No migration, no seed change, no schema change.
+
+**What it left behind.**
+
+- **The reset mail's closing line still says "If you did not request this, you can ignore this email."** The lead sentence explains why the email came, so the line is odd but not wrong. Changing it would mean a separate expiry string for this one sender.
+- **A member added by mistake has already been emailed.** Removing them revokes the access; the email stays in their inbox, and its link still leads to a password, not to the account.

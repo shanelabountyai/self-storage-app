@@ -2,6 +2,7 @@ import { prisma, type Prisma } from '@storage/db'
 import { recordAudit } from '@storage/core/audit'
 import { OCCUPYING_LEASE_STATUSES } from '@storage/core/inventory'
 import { daysPastDue } from '@storage/core/metrics'
+import { sendAccountAccessLink } from '@/lib/auth/flows'
 import { allChainIds, leaseChainIds } from '@/lib/billing/transfer-chain'
 import { assertFacilityAccess, can, ForbiddenError } from '@/lib/rbac/authorize'
 import { toAuditActor } from '@/lib/rbac/audit-actor'
@@ -485,7 +486,7 @@ export async function detachLease(
 export async function addMember(
   actor: Actor,
   input: { accountId: string; email: string },
-): Promise<{ tenantId: string; name: string }> {
+): Promise<{ tenantId: string; name: string; notified: boolean }> {
   const account = await prisma.billingAccount.findUnique({
     where: { id: input.accountId },
     select: { id: true, name: true, facilityId: true, payerTenantId: true },
@@ -534,7 +535,18 @@ export async function addMember(
     )
   })
 
-  return { tenantId, name }
+  // B-287. Tell them, with a way to sign in. After the commit and never fatal:
+  // the access is granted whether or not the mail goes, and the caller says
+  // which so the staffer knows whether they still have to tell them.
+  let notified = true
+  try {
+    await sendAccountAccessLink({ id: tenantId, email }, account.name)
+  } catch (error) {
+    console.error(`[billing] could not email ${email} their account access`, error)
+    notified = false
+  }
+
+  return { tenantId, name, notified }
 }
 
 export async function removeMember(

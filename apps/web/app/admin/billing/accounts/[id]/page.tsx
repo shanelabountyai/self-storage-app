@@ -225,7 +225,7 @@ export default async function BillingAccountPage({
                 label="Email address"
                 type="email"
                 required
-                hint="Somebody who is already a tenant here. They see the account when they sign in to the portal; they cannot pay it."
+                hint="Somebody who is already a tenant here. We email them a link to set a password, so they can sign in to the portal and see the account. They cannot pay it."
               />
               <button
                 type="submit"

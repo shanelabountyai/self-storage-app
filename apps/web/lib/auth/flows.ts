@@ -98,6 +98,34 @@ export async function requestPasswordReset(
   })
 }
 
+/// B-287. The set-password link a new business-account member gets. Giving
+/// somebody sight of an account told them nothing, and a member who holds no
+/// lease has likely never set a password to sign in with.
+///
+/// The member's stated language, else English. Never the request's: here that
+/// is the STAFFER's browser, which says nothing about the person reading this.
+export async function sendAccountAccessLink(
+  tenant: { id: string; email: string },
+  accountName: string,
+): Promise<void> {
+  const { token, expiresAt } = await mintToken({
+    purpose: 'password_reset',
+    audience: 'tenant',
+    subjectId: tenant.id,
+    email: tenant.email,
+  })
+
+  await sendAuthEmail({
+    to: tenant.email,
+    purpose: 'password_reset',
+    url: `${baseUrl()}/reset-password?token=${token}`,
+    expiresAt,
+    locale: (await currentWritingLocale(tenant.id)) ?? DEFAULT_LOCALE,
+    accountName,
+    recipientTenantId: tenant.id,
+  })
+}
+
 /// Consumes the reset token and sets the new password. The token burn and the
 /// password write are separate steps by necessity — the burn is atomic and
 /// happens first, so a failure here cannot leave a reusable token behind.

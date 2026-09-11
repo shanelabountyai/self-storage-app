@@ -2494,6 +2494,16 @@ function reviewedOn(locale: Locale): string {
 // stays unmarked for that reason. What a screen reader does with either markup
 // is B-254's to hear. This page makes no visible claim about the toggle, so no
 // visible line changes. `LAST_REVIEWED` is not bumped, per D-115.
+// Re-verified 2026-09-11, at B-287 (a business-account member is emailed a
+// set-password link). This reaches the customer through their inbox, not a new
+// page. The link lands on `/reset-password`, which is in `PUBLIC_SCAN_ROUTES`.
+// The email is the existing reset mail with one sentence added in front, in the
+// member's stated language. `sendDirectEmail` wraps its HTML in a `lang`, as it
+// does for every direct send, and the account name is now escaped. On the staff
+// side, the changed hint is still tied to its field by `Field`'s
+// `aria-describedby`, and the result is still announced through `AdminForm`'s
+// status region. No visible line changes. `LAST_REVIEWED` is not bumped, per
+// D-115.
 
 export default async function AccessibilityPage() {
   const locale = await getLocale()

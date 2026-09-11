@@ -14,6 +14,8 @@ import { payableAccount, payableLease } from '../apps/web/lib/portal/payment'
 import { owingLeases } from '../apps/web/lib/portal/dashboard'
 import { statementsForTenant, tenantMayViewLease } from '../apps/web/lib/billing/statements'
 import { ForbiddenError } from '../apps/web/lib/rbac/authorize'
+import { proseFor } from '../apps/web/lib/comms/prose'
+import { SITE } from '../apps/web/lib/site-config'
 import type { Actor } from '../apps/web/lib/rbac/actor'
 import type { PermissionKey } from '@storage/db/rbac-catalog'
 
@@ -43,6 +45,7 @@ let foremanId = ''
 let foremanLeaseId = ''
 let strangerId = ''
 let memberId = ''
+let readerId = ''
 let accountId = ''
 
 function manager(permissions: PermissionKey[] = ['billing_accounts:manage', 'tenants:view']): Actor {
@@ -190,7 +193,7 @@ describeDb('authorized users on a business account', () => {
     await prisma.unit.deleteMany({ where: { facilityId } })
     await prisma.unitType.deleteMany({ where: { facilityId } })
     await prisma.tenant.deleteMany({
-      where: { id: { in: [payerId, foremanId, strangerId, memberId] } },
+      where: { id: { in: [payerId, foremanId, strangerId, memberId, readerId] } },
     })
     await prisma.$disconnect()
   })
@@ -285,5 +288,37 @@ describeDb('authorized users on a business account', () => {
 
     // Put it back, so this file can run twice against the same database.
     await addMember(manager(), { accountId, email: emailFor('bookkeeper') })
+  })
+
+  // B-287. Being given sight of an account used to tell the person nothing, and
+  // one holding no lease has no password to sign in with. Spanish, because the
+  // request here has no browser and a staffer's would be the wrong one anyway.
+  it('emails a new member one set-password link, in their own language', async () => {
+    readerId = await makeTenant('reader')
+    await prisma.tenant.update({ where: { id: readerId }, data: { preferredLocale: 'es' } })
+
+    const added = await addMember(manager(), { accountId, email: emailFor('reader') })
+    expect(added.notified).toBe(true)
+
+    const messages = await prisma.message.findMany({
+      where: { recipientTenantId: readerId },
+      select: { templateKey: true, toAddress: true, subjectSnapshot: true, bodySnapshot: true },
+    })
+    expect(messages).toHaveLength(1)
+    expect(messages[0].templateKey).toBe('auth_password_reset')
+    expect(messages[0].toAddress).toBe(emailFor('reader'))
+    expect(messages[0].subjectSnapshot).toBe(
+      proseFor('es').direct.authSubject.password_reset(SITE.name),
+    )
+    expect(messages[0].bodySnapshot).toContain(
+      proseFor('es').direct.authAccountAccess(`Acme Members ${suffix}`, SITE.name),
+    )
+    expect(messages[0].bodySnapshot).toContain('/reset-password?token=')
+
+    // A refused add sends nothing: the duplicate is still one message.
+    await expect(
+      addMember(manager(), { accountId, email: emailFor('reader') }),
+    ).rejects.toThrow(/already see/)
+    expect(await prisma.message.count({ where: { recipientTenantId: readerId } })).toBe(1)
   })
 })

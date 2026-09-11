@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import type { AuthTokenPurpose } from '@storage/db'
+import { escapeHtml } from '@storage/core/comms'
 import { SITE } from '@/lib/site-config'
 import { sendDirectEmail } from '@/lib/comms/service'
 import { proseFor } from '@/lib/comms/prose'
@@ -34,12 +35,25 @@ type SendArgs = {
   /// tenants, and D-122 keeps the staff side English regardless of what the
   /// browser asking for the link happens to be set to.
   locale: Locale
+  /// B-287. The business account a member was just given sight of. Leads the
+  /// email with why it came, because they did not ask for it.
+  accountName?: string
+  recipientTenantId?: string
 }
 
-export async function sendAuthEmail({ to, purpose, url, expiresAt, locale }: SendArgs): Promise<void> {
+export async function sendAuthEmail({
+  to,
+  purpose,
+  url,
+  expiresAt,
+  locale,
+  accountName,
+  recipientTenantId,
+}: SendArgs): Promise<void> {
   const minutes = Math.round((expiresAt.getTime() - Date.now()) / 60_000)
   const say = proseFor(locale).direct
-  const text = `${say.authIntro[purpose]}\n\n${url}\n\n${say.authExpiry(minutes)}`
+  const lead = accountName === undefined ? [] : [say.authAccountAccess(accountName, SITE.name)]
+  const text = [...lead, say.authIntro[purpose], url, say.authExpiry(minutes)].join('\n\n')
 
   // Auth tokens are minted once per request (no stable id to key an
   // idempotency column on), so a random key is correct here — unlike a
@@ -53,10 +67,12 @@ export async function sendAuthEmail({ to, purpose, url, expiresAt, locale }: Sen
     templateKey: `auth_${purpose}`,
     classification: 'transactional',
     locale,
+    recipientTenantId,
     to,
     fromName: SITE.name,
     subject: say.authSubject[purpose](SITE.name),
-    html: `<p>${text.replace(/\n/g, '<br>')}</p>`,
+    // Escaped since B-287 put a staff-typed account name in the text.
+    html: `<p>${escapeHtml(text).replace(/\n/g, '<br>')}</p>`,
     text,
   })
 

@@ -91,7 +91,11 @@ export async function addMemberAction(
       email: String(formData.get('email') ?? ''),
     })
     revalidatePath(`/admin/billing/accounts/${accountId}`)
-    return success(`${member.name} can now see this account in their portal. They cannot pay it.`)
+    return success(
+      member.notified
+        ? `${member.name} can now see this account in their portal. We emailed them a link to set a password and sign in. They cannot pay it.`
+        : `${member.name} can now see this account, but the email to them did not send. Tell them yourself, and if they have never signed in, send them to "Forgot your password?" on the sign-in page first.`,
+    )
   } catch (error) {
     return refusal(error)
   }
