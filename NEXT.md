@@ -1,38 +1,32 @@
 # Next
 
-**B-279 is done** (`2eeba53`). A business account's payer now receives the bill
-(`invoice.due_soon`, `invoice.due_today`) and the past-due ladder
-(`delinquency.day_reached`) beside the lease's tenant, in the payer's own
-language. The lien supplements stay tenant-only (D-118). The owner settled the
-scope as **D-136**: a list of event names, because entity type cannot separate
-the dunning email from the lien supplement. `/admin/billing/accounts/[id]` shows
-days past due and the ladder stage.
+**B-280 is done** (`f8e0414`). The counter can take a business account's check
+as the account's payer. `/admin/pos` search finds accounts by name, and the
+picker's "Unit or account" list offers the account as one payment spread
+oldest-first across its units. Per the owner's **D-137**, a payment keyed to a
+unit on somebody else's account is refused past what that tenant owes
+(`account_remainder`), so an account's check can no longer sit as prepayment on
+one employee's unit.
 
 ## Start here
 
-**B-280** (a business account cannot pay at the counter, and forcing it through
-mis-posts the money). It is the next unbuilt row in order. **B-275** (the Neon
-dev branch's drift) is still open ABOVE it: buildable, authorised by D-132, and
-it needs a session with Neon access.
+**B-281** (the counter and the dunning ladder have no paper lane). It is the
+next unbuilt row in order. **B-275** (the Neon dev branch's drift) is still open
+above it: buildable, authorised by D-132, and it needs a session with Neon access.
 
-**Two things B-278 and B-279 left to template edits** (seeded state, B-206's
-reseed trap, no row yet): the receipt reads "for unit C-7 and C-8", and a
-payer's reminder reads "the balance on unit C-7" without naming the tenant on it.
+**B-280 left three gaps with no row** (see its PROGRESS entry): a card payment
+for an account at the counter, account search by the payer's name, and an
+`account_remainder` message that names the account. The B-278 receipt wording
+and the B-279 reminder wording are still template edits (seeded state, B-206's
+reseed trap).
 
-## Owner actions
+## Owner actions (unchanged)
 
 | What | Why it is yours |
 |---|---|
 | **Fill in `.env.prod-ops`, then run `npx dotenv -e .env.prod-ops -- npm run db:backfill:move-in-payments`** (dry: it writes nothing without `--apply`) and paste the output into B-277's `PROGRESS.md` entry | `DATABASE_URL`, `DIRECT_URL` and `EXPECTED_DEV_DB_HOST` are all empty, so B-277's dry run could not happen. |
-| **After the next deploy, look at the first cron response's `ledgerExceptions` and the new `ledger_does_not_reconcile` tasks** | This is the first time production has been swept, and the fix means leases that used to look broken now reconcile. |
-| **Ask whether anyone tried to generate a lien notice and was refused** | Before B-292, `ledger_does_not_reconcile` refused every tenant who had paid an invoice. A refused notice is a delayed lien clock. |
-
-**The sweep does not find B-255's phantom balances.** A move-in charge with no
-invoice reconciles by design (`tests/ledger-db.test.ts`, "reconciles a move-in
-charge that never became an invoice"), so an unposted move-in payment is not a
-ledger/invoice skew. B-277's row assumed otherwise. Only the backfill script's
-`planMoveInBackfill` detects those leases. If they need an alarm, that is a new
-row, not a change to `reconcile()`.
+| **After the next deploy, look at the first cron response's `ledgerExceptions` and the new `ledger_does_not_reconcile` tasks** | This is the first time production has been swept. |
+| **Ask whether anyone tried to generate a lien notice and was refused** | Before B-292, `ledger_does_not_reconcile` refused every tenant who had paid an invoice. |
 
 ## Two questions are the owner's (unchanged)
 
@@ -43,18 +37,15 @@ row, not a change to `reconcile()`.
 
 ## The blocked list is unchanged
 
-B-254 (D-115, a real screen-reader pass), B-290 (D-133), B-291 (D-134), B-129 /
-B-243 / B-085 / B-133 (credentials or partner agreements), B-134 (trigger not
-fired). **B-275** is buildable and authorised by D-132.
+B-254 (D-115), B-290 (D-133), B-291 (D-134), B-129 / B-243 / B-085 / B-133
+(credentials or partner agreements), B-134 (trigger not fired).
 
 ## What this session learned
 
-**zsh does not word-split an unquoted variable.** `files="a b"; npm test -- $files`
-hands vitest ONE filter string, and it answers "No test files found" with exit
-1. Pass the paths literally, or use `${=files}`.
+**`searchTenants` cannot find a business account's payer, by design.** It only
+returns tenants holding a lease the actor can see, because the tenant profile's
+access check depends on that. Anything that needs the payer at the counter has
+to search accounts (`counterPayableAccounts({ name })`), not widen tenant search.
 
-**A second recipient on one event shares the pay-link revocation.**
-`mintPayLink` revoked any live link for the same event and lease, so adding the
-payer would have killed the tenant's link. It is now scoped by tenant too. Check
-every per-event side effect in a context extender before fanning an event out.
-
+**TypeScript's `"x" in obj` narrowing on a union of Prisma select shapes gives
+`{}`.** Make both branches return the same shape instead.

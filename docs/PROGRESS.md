@@ -9315,7 +9315,7 @@ Found while verifying B-282 and fixed in the same commit, by owner choice.
 - **The overlock flag** the row's problem statement mentions is not on the account screen. The remedy named days past due and stage only.
 - **The wording addresses the payer as if the unit were theirs** ("The balance on unit C-7…", "Hi Pat"). It is accurate, and it names the unit, but it does not name the tenant. Changing it is a template edit, which is seeded state (B-206).
 
-## B-280 — a business account could not pay at the counter, and forcing it through mis-posted the money (2026-09-10)
+## B-280 — a business account could not pay at the counter, and forcing it through mis-posted the money (2026-09-10, `f8e0414`)
 
 **What it built.**
 
