@@ -9602,3 +9602,31 @@ A byte diff against `main` was not possible: on `main` a real link cannot reach 
 - Accessibility statement re-read; a re-verification comment added, no visible line changes.
 
 **What it left behind.** Nothing new.
+
+## B-275 — The Neon dev branch gets a real migration history (2026-09-11, `PENDING`)
+
+**What it built.** No code. One run against `.env.local` (`ep-holy-block-axpgn0o0`), as D-132 authorised:
+
+1. **`prisma migrate reset --force --skip-seed --skip-generate`** applied all **118** migrations (the row said 117; `20260910163701_notice_sale_snapshot` landed after it was written).
+2. **`npm run db:migrate:cloud`** → `No pending migrations to apply.`
+3. **`npm run db:seed`** → 7 roles, 37 permissions, 105 grants, 96 org-default templates, 39 org-default rules.
+
+**Verification.** `npm run db:status` exits 0, and both halves (local `storage_test`, cloud `neondb`) report `118 migrations found … Database schema is up to date!`. `migrate diff --from-schema-datasource --to-schema-datamodel --exit-code` against `.env.local` exits 0 with `No difference detected.` Unit and e2e suites were not run because no code changed.
+
+**What the reset discarded.** Captured before the reset, because the reset destroys it:
+
+- **No data.** `count(*)` on all 94 tables returned 0. There was no `_prisma_migrations` table.
+- **31 drift statements, not 13.** Missing: `billing_account` and `billing_account_member` (with their indexes and foreign keys, and `lease.billingAccountId`), the `AuctionSaleManner` enum and its columns, `GateCommandType.revoke_credential`, the `locale`/`preferredLocale` columns, `delinquency_timeline.minDaysNoticeToSale`, the `clock_timestamp()` defaults on `document`/`message`/`notice`, and nullable `tenant.email`.
+- **The three "undeclared" indexes were not strays. This corrects D-132's reasoning, not its decision.** Migrations did create them, and later migrations replaced them. `tenant_email_key` came from `20260730161951_core_data_model`, and `20260909152814_tenant_email_optional` replaced it with `tenant_email_idx`. Both `message_template_key_channel_facilityId_*` indexes came from `20260803120000_comms_core`, and `20260906183000_b261_preferred_locale` replaced them with the `locale`-bearing pair.
+- **The branch was not a prefix of the history either, and that still rules out `resolve --applied`.** It had B-234's `facility.surplusNoticeLeadDays` (`20260902233236`) but not B-219's `clock_timestamp()` defaults (`20260901120000`, `20260901130000`) or B-224's `minDaysNoticeToSale` (`20260901230000`), which are older. No cut-off in the recorded history produces that schema. It was most likely built by `db push` (or an equivalent) from a working tree that had B-234 but not B-219 or B-224. That is inferred, not confirmed. Next time a `P3005` appears, compare the branch against the history's order first.
+
+**What it decided.**
+
+- **The reset ran once, with approval given in the session.** Prisma 6.19's agent guard needs `PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION`, and the auto-mode classifier blocked the first attempt. The owner approved it in the session, and it ran. B-253's rule stands unchanged. Any later `migrate reset` against `.env.local` needs a new D-number.
+- **`--skip-seed`** so that `db:seed` ran as its own step, as the row lists it.
+
+**What it left behind.** The demo seed (`db:seed:demo`) was not run, because the row names only `db:seed`. `npm run dev` against the branch has roles, permissions and templates, but no facilities or owner account. Run `db:seed:demo` and `db:create-owner` when a dev session needs them. Production was not touched.
+
+## B-090 — umbrella row closed (2026-09-11, `PENDING`)
+
+**What it did.** Ticked the umbrella row and noted why at the top of it. B-090a–f are all ✅. What they handed on is ✅ in its own row (B-135, B-256, B-260, B-262) or owned by an open row (B-290 on D-133, B-291 on D-134). Updated the row's stale "part 6 is PARTLY built" to point at B-260 and B-262. D-78's answered parts and the "do not build yet: live chat" line stay as written. **What it left behind.** Nothing.
