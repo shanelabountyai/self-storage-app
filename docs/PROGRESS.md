@@ -9465,7 +9465,7 @@ A byte diff against `main` was not possible: on `main` a real link cannot reach 
 - **`/portal/pay/done`'s and `/portal/documents`' dates carry no `timeZone`**, so they render in the server's zone. That is B-228's class, not language, and was not changed.
 - **The guard covers `app/portal` and `app/(public)` only.** A date formatted inside `lib/` or `components/` and shown to a customer is not checked.
 
-## B-285 — `/portal/access`: the unlock button blurred itself, and static paragraphs shouted (2026-09-11, `SHA_PENDING`)
+## B-285 — `/portal/access`: the unlock button blurred itself, and static paragraphs shouted (2026-09-11, `26a9971`)
 
 **What it built.**
 

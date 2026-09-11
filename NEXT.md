@@ -1,6 +1,6 @@
 # Next
 
-**B-285 is done** (`SHA_PENDING`). The "Open the gate" button on `/portal/access` keeps focus while pending: `aria-busy` with a click guard, no `disabled`. No element on that page carries `role="alert"` at load. The e2e holds the unlock request open, and negative runs show the new assertions fail against the old button.
+**B-285 is done** (`26a9971`). The "Open the gate" button on `/portal/access` keeps focus while pending: `aria-busy` with a click guard, no `disabled`. No element on that page carries `role="alert"` at load. The e2e holds the unlock request open, and negative runs show the new assertions fail against the old button.
 
 ## Start here
 
