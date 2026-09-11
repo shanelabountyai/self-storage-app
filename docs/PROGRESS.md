@@ -9631,7 +9631,7 @@ A byte diff against `main` was not possible: on `main` a real link cannot reach 
 
 **What it did.** Ticked the umbrella row and noted why at the top of it. B-090a–f are all ✅. What they handed on is ✅ in its own row (B-135, B-256, B-260, B-262) or owned by an open row (B-290 on D-133, B-291 on D-134). Updated the row's stale "part 6 is PARTLY built" to point at B-260 and B-262. D-78's answered parts and the "do not build yet: live chat" line stay as written. **What it left behind.** Nothing.
 
-## B-290 — Spanish is offered to a browser that prefers it (2026-09-11, `PENDING`)
+## B-290 — Spanish is offered to a browser that prefers it (2026-09-11, `dd64e77`)
 
 **What it built.** The owner answered D-133 (A), an offer and never an auto-switch, and D-134 (A) in the same session. B-291 builds D-134.
 
