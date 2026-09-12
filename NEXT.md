@@ -1,16 +1,20 @@
 # Next
 
-**B-294 is done** (no new decision, D-134 covers it). The five portal screens B-291 left now take `<title>` from a message key, so every portal screen's `<title>` follows the reader.
+**B-295 is done** (no new decision; it applies B-245's ruling and B-285's exception). The seven `role="alert"`s B-285 named on other portal screens were audited and all seven were page content: four record state at draw, three the result of a `formMethod="get"` submit, which is a full document load. An ESLint rule now refuses the attribute under `app/portal/**`.
 
 ## Start here
 
 **No unblocked build row remains.** The next move is the owner's: answer a blocked row (below), or start a new review block.
 
+**One new finding has no owning row, and it is a real failure on `main`:**
+
+- **`e2e/impersonation.spec.ts:63` fails on both projects, and it is NOT from B-295.** Verified by stashing B-295's portal files back to HEAD and re-running: still 2 failed / 4 passed. It fails at line 148 on `getByRole('cell', { name: reason })` on `/admin/impersonation` — the support session is started and the banner assertions pass, but the session's reason never appears as a cell in the admin table. No portal markup is involved. It wants its own row; nobody has diagnosed whether the row is missing, is rendered differently, or is being outlived by another test's session.
+
 Gaps carried forward with no owning row:
 - B-290: when an offer button is pressed, the region removes itself and focus is not moved deliberately (the consent banner moves it to `#main`). The server action re-renders, so moving focus would need a client wrapper.
 - B-287: the reset mail still ends "If you did not request this…", even though a member did not request it.
-- B-285's seven server-drawn `role="alert"`s on other portal screens (`methods`, `pay`, `pay/done`, `transfer`, `protection`, and two on `move-out`).
-- B-284's two, B-281's four and B-280's three, all unchanged.
+- **B-295 left one thing open:** the three GET-submit refusals (`/portal/pay`, `/portal/transfer`, `/portal/move-out`) now announce nothing at all. Removing the role was right — nothing focused them — but a tenant who presses "Update"/"Show cost" and is refused still gets no announcement. Fixing that needs focus moved to the refusal, which on a server-rendered page needs a client wrapper: the same unsolved shape as B-290's. No row owns it.
+- B-284's, B-281's and B-280's carried-forward gaps, all unchanged. (Note: an earlier NEXT.md rewrite folded these into the `role="alert"` paragraph and made them read as alert counts — "B-284's two, B-281's four and B-280's three". They are each item's own left-behind list, not alerts. B-295 checked.)
 
 The cloud dev branch has roles, permissions and templates but no demo facilities or owner. Run `npm run db:seed:demo` and `npm run db:create-owner` if `npm run dev` needs them.
 

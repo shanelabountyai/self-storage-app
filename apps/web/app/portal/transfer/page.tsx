@@ -332,7 +332,11 @@ export default async function PortalTransferPage({
             </button>
 
             {previewProblem && (
-              <p role="alert" className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-900">
+              /* B-295: no `role="alert"` — same GET-submit case as
+                 `/portal/pay`. "Show cost" is a `formMethod="get"` submit, so
+                 this refusal arrives with a new document rather than into the
+                 one being read, and nothing focuses it (B-245, B-285). */
+              <p className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-900">
                 {t(PORTAL_TRANSFER_PROBLEM_KEYS[previewProblem] ?? 'tr.previewFailed', {
                   days: MAX_MOVE_IN_DAYS_AHEAD,
                 })}

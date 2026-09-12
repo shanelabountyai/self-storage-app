@@ -291,9 +291,13 @@ test.describe('signed in as the demo tenant', () => {
     // A dollar more than is owed. Comfortably inside the twelve-months-of-rent
     // ceiling for any plausible rate, and refused outright before this row.
     await page.goto(`/portal/pay?lease=${leaseId}&amount=${(balance + 1).toFixed(2)}`)
-    await expect(
-      page.getByRole('main').getByRole('alert').filter({ hasText: 'more than you owe' }),
-    ).toHaveCount(0)
+    // B-295 note: this is a negative assertion, so it MUST NOT be anchored to
+    // anything this suite can delete. Anchored to `getByRole('alert')` it went
+    // on passing the moment that role came off the paragraph — counting zero
+    // because the locator could no longer match anything, not because the
+    // refusal was absent. Anchored to the words, it still fails if the copy
+    // comes back.
+    await expect(page.getByRole('main').getByText(/more than you owe/i)).toHaveCount(0)
 
     // The amount is a query param, so this is a crafted request rather than one
     // the form would produce — which is exactly the case that has to hold.
@@ -302,7 +306,7 @@ test.describe('signed in as the demo tenant', () => {
     // $1,610.00 typed for $16.10.
     await page.goto(`/portal/pay?lease=${leaseId}&amount=999999`)
     await expect(
-      page.getByRole('main').getByRole('alert').filter({ hasText: /year of rent/i }),
+      page.getByRole('main').getByText(/year of rent/i),
     ).toBeVisible()
     // And it did not quietly prepare a charge for the crafted amount.
     await expect(page.getByText('$999,999.00')).toHaveCount(0)

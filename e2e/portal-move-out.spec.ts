@@ -51,12 +51,15 @@ test.describe('signed in as the demo tenant', () => {
     url.searchParams.set('date', '2031-01-01')
     await page.goto(url.pathname + url.search)
 
-    // Scoped to <main>: Next renders an always-present `role="alert"` route
-    // announcer outside it, so a bare `getByRole('alert')` is a strict-mode
-    // violation on every page in the product and fails before the refusal it
-    // was looking for has rendered — which reads exactly like the refusal not
-    // firing.
-    await expect(page.getByRole('main').getByRole('alert')).toContainText('within the next 365 days')
+    // B-295 took `role="alert"` off this refusal: it arrives with a new
+    // document (the picker submits with `formMethod="get"`), so it is present
+    // when the page is drawn and nothing focuses it — page content, not a
+    // status message. So this locates it by its words instead of by the role.
+    // Still scoped to <main>, which is now about keeping the nav and footer out
+    // rather than Next's own route announcer.
+    await expect(
+      page.getByRole('main').getByText('within the next 365 days'),
+    ).toBeVisible()
     // The figures are gone, and so is the button that would have committed
     // them — hidden rather than disabled, so nothing focusable is left
     // announcing nothing.
@@ -76,7 +79,11 @@ test.describe('signed in as the demo tenant', () => {
     const url = new URL(page.url())
     url.searchParams.set('date', '2031-01-01')
     await page.goto(url.pathname + url.search)
-    await expect(page.getByRole('main').getByRole('alert')).toBeVisible()
+    // By its words, not its role (B-295) — this only has to wait for the
+    // refused state to be on screen before axe reads it.
+    await expect(
+      page.getByRole('main').getByText('within the next 365 days'),
+    ).toBeVisible()
 
     await assertNoAxeViolations(page)
   })

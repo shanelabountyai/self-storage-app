@@ -2554,6 +2554,25 @@ function reviewedOn(locale: Locale): string {
 // portal nav routes in `e2e/i18n.spec.ts`; the one-document and account
 // statement titles are covered by `tests/i18n.test.ts` only. No visible line
 // changes. `LAST_REVIEWED` is not bumped, per D-115.
+// Re-verified 2026-09-11, at B-295 (seven `role="alert"`s on the portal were
+// page content, not status messages — the audit B-285 named and left unowned).
+// Customer-facing; markup only. `/portal/methods`, `/portal/pay`,
+// `/portal/pay/done`, `/portal/transfer`, `/portal/protection` and
+// `/portal/move-out` (twice) wore an assertive live-region role on paragraphs
+// that are true when the page is drawn — B-245's ruling — and no longer do.
+// Four were record state at draw; three answer a `formMethod="get"` submit,
+// which is a full document load, so they too are present when the page is
+// drawn and nothing focuses them, meeting neither half of B-285's exception
+// (reports a press AND takes focus). All seven keep their words, their styling
+// and their position. B-164's comment defending `role="alert"` at page load on
+// the lien refusal is rewritten rather than left contradicting the markup. The
+// real status messages are untouched — `AdminForm`'s refusal box and the
+// Stripe decline mirror, both in `components/`, which is what lets an ESLint
+// rule refuse the attribute under `app/portal/**` alone
+// (`tests/portal-alert-lint.test.ts`). Not a WCAG AA failure either way, and
+// what a screen reader does with either markup is B-254's to hear, not this
+// row's. This page makes no visible claim about these regions, so no visible
+// line changes. `LAST_REVIEWED` is not bumped, per D-115.
 
 export default async function AccessibilityPage() {
   const locale = await getLocale()

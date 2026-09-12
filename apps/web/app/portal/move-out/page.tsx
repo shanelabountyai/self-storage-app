@@ -145,18 +145,17 @@ export default async function PortalMoveOutPage({
   // In the lien pipeline (B-164, D-85): no date picker, no preview, no
   // confirm. The office is the only route and saying so is the whole screen.
   //
-  // `role="alert"` and mounted WITH the page rather than inserted on submit
-  // (4.1.3 AA): a tenant who navigated here expecting a form is told at once,
-  // by a screen reader as well as by eye, instead of tabbing through a page
-  // whose only content is a refusal they have not been read yet.
+  // B-295: no `role="alert"`. B-164 mounted one WITH the page, reasoning that
+  // a tenant who arrived expecting a form should be told at once rather than
+  // tab through a page whose only content is a refusal. B-245's ruling is the
+  // other way: a region carrying content that is true when the page is drawn is
+  // not a status message. This refusal IS the screen — it is reached by the
+  // `<h1>` and by document position. It stays first and stays visible.
   if (!lease.schedulable) {
     return (
       <div className="flex flex-col gap-4">
         <h1 className="text-xl font-semibold">{t('mo.title')}</h1>
-        <p
-          role="alert"
-          className="border-input rounded-lg border p-4 text-sm text-pretty"
-        >
+        <p className="border-input rounded-lg border p-4 text-sm text-pretty">
           {lienMoveOutRefusal(lease.unitNumber, dict)}{" "}
           <CallLink
             phone={phoneFor(lease.facilityPhone || null)}
@@ -292,10 +291,9 @@ export default async function PortalMoveOutPage({
         </div>
 
       {previewProblem && (
-        <p
-          role="alert"
-          className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-pretty text-red-900"
-        >
+        /* B-295: no `role="alert"` — the GET-submit case, as on
+           `/portal/pay` and `/portal/transfer`. */
+        <p className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-pretty text-red-900">
           {t(PORTAL_MOVE_OUT_PROBLEM_KEYS[previewProblem], {
             days: MAX_MOVE_OUT_DAYS_AHEAD,
           })}
@@ -358,8 +356,8 @@ export default async function PortalMoveOutPage({
         {/* B-174. Hidden rather than disabled when there is nothing priced
             behind it. A disabled button is not focusable and announces nothing,
             so a keyboard or screen-reader user meets silence where a sighted
-            one at least sees something greyed out; the `role="alert"` above
-            already says why there are no figures. The sentence goes with it —
+            one at least sees something greyed out; the refusal above already
+            says why there are no figures. The sentence goes with it —
             it promises a date the server has just refused. */}
         {preview && (
           <>

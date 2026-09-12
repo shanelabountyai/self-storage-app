@@ -302,7 +302,12 @@ export default async function PortalPayPage({
       )}
 
       {!checked.ok && checked.problem !== 'nothing_owed' && (
-        <p role="alert" className="border-input rounded-md border p-3 text-sm text-pretty">
+        /* B-295: no `role="alert"`. This does answer the "Update amount"
+           press — but that press is a `formMethod="get"` submit, a full
+           document load, so the refusal is present when the page is drawn and
+           nothing focuses it. It meets neither half of B-285's exception
+           (reports a press AND takes focus), so B-245's rule governs. */
+        <p className="border-input rounded-md border p-3 text-sm text-pretty">
           {t(AMOUNT_PROBLEM_KEYS[checked.problem], {
             min: formatRate(MIN_PAYMENT_CENTS),
           })}{' '}

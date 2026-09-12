@@ -185,7 +185,11 @@ export default async function PaymentMethodsPage() {
                 </p>
 
                 {lease.autopayEnabled && !hasMethod && (
-                  <p role="alert" className="mt-2 text-sm text-pretty text-red-800">
+                  /* B-295: no `role="alert"`. Autopay switched on with no card
+                     on file is true when the page is drawn and unchanged while
+                     it is read — page content, not a status message (B-245). It
+                     keeps its words, its styling and this position. */
+                  <p className="mt-2 text-sm text-pretty text-red-800">
                     {t('meth.noCardWarning')}
                   </p>
                 )}

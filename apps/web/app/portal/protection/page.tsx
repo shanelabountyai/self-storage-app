@@ -79,11 +79,14 @@ export default async function ProtectionPage() {
           </div>
 
           {unit.waiver?.expired && (
-            // Said loudly and BEFORE the forms. D-17 auto-enrols into the
+            // First, and BEFORE the forms. D-17 auto-enrols into the
             // facility's default tier when cover lapses, which means a charge
             // the tenant did not choose — telling them after that has happened
             // is how a defensible policy becomes a complaint.
-            <p role="alert" className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-pretty text-red-900">
+            //
+            // B-295: document position is what does that work, not a live
+            // region. A lapsed waiver is true when the page is drawn (B-245).
+            <p className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-pretty text-red-900">
               {t('prot.expired', { date: formatDay(unit.waiver.expiresAt!, locale) })}
             </p>
           )}
