@@ -172,6 +172,15 @@ export async function startImpersonation(
         facilityScopeSnapshot: scopeSnapshot(actor),
         reason,
         ticketRef: input.ticketRef?.trim() || null,
+        // B-296. `startedAt` is written from the SAME clock as `expiresAt`
+        // rather than left to the column's `@default(now())`, which is the
+        // database's. The two are separated by the throttle count and the start
+        // of this transaction, so the row stored a TTL that was short by
+        // however long those took — 957ms under a loaded local run, and however
+        // far Neon's clock sits from Vercel's in production, which is not
+        // bounded by anything. FR-3 is a server-side 30 minutes; a session
+        // whose own two timestamps disagree cannot state one.
+        startedAt: now,
         expiresAt: new Date(now.getTime() + IMPERSONATION_TTL_MINUTES * 60_000),
         ipAddress: input.ipAddress ?? null,
       },

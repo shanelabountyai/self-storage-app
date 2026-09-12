@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { prisma } from '../packages/db'
 import { loadStaffActor, type Actor } from '../apps/web/lib/rbac/actor'
 import { activeSessions, sessionReport } from '../apps/web/lib/impersonation/oversight'
+import { reportRange } from '../apps/web/lib/admin/report-range'
 
 // PRD 09 FR-18/FR-19 (B-092). The parts only a database answers: which sessions
 // count as RUNNING, and what "filterable by facility" resolves to for a row
@@ -325,5 +326,40 @@ describe.skipIf(!hasDatabase)('sessionReport (FR-19)', () => {
     expect(rows.length).toBeGreaterThan(0)
     expect(rows.every((r) => r.facilityIds.includes(facilityAId))).toBe(true)
     expect(rows.some((r) => r.subjectId === tenantBId)).toBe(false)
+  })
+
+  // B-296, and it is asserted HERE rather than only on `reportRange` because
+  // the screen is the composition: the default window and the query were each
+  // correct on their own terms and wrong together. `reportRange` reckons in
+  // facility-local CALENDAR DATES carried at UTC midnight (B-223) while
+  // `startedAt` is a real instant, so between UTC midnight and Texas midnight
+  // the default's exclusive end sat behind the wall clock and the log did not
+  // list a session started minutes earlier.
+  //
+  // Nothing but `impersonation.spec.ts` covered the composition, and it only
+  // failed between 19:00 and midnight Central — which reads as flakiness, and
+  // is why this went a while without a diagnosis. A deterministic failure here
+  // is the point of the test.
+  it('lists a session started after UTC midnight but before local midnight (B-296)', async () => {
+    // 19:42 on the 11th in Texas — the instant the failing e2e run left behind
+    // in `storage_test`, which is how the hour was measured rather than guessed.
+    const startedAt = new Date('2026-09-12T00:42:00.000Z')
+    const session = await makeSession({
+      subjectType: 'tenant',
+      subjectId: tenantAId,
+      startedAt,
+      expiresAt: new Date(startedAt.getTime() + 30 * 60_000),
+    })
+
+    // The default the screen takes when the URL names no range, at that instant.
+    const range = reportRange(
+      {},
+      { now: startedAt, timeZones: ['America/Chicago'], window: 'rolling-30-days' },
+    )
+    const rows = await sessionReport(await actorFor(overseerId), {
+      from: range.start,
+      to: range.end,
+    })
+    expect(rows.map((r) => r.id)).toContain(session.id)
   })
 })

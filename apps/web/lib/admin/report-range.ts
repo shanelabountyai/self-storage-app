@@ -127,7 +127,27 @@ export function reportRange(
   // next day. Getting this backwards silently drops the last day of every
   // month-long range, which nobody notices until a year-end total is short.
   const toInclusive = parseDay(params.to) ?? new Date(monthEnd.getTime() - 86_400_000)
-  const end = new Date(toInclusive.getTime() + 86_400_000)
+  const dayAfter = new Date(toInclusive.getTime() + 86_400_000)
+
+  // B-296. `today` and `toInclusive` are facility-local CALENDAR DATES carried
+  // at UTC midnight; the rows they filter are real instants. Between UTC
+  // midnight and local midnight — 19:00 to 24:00 in Texas — the two clocks
+  // disagree by the zone's offset, and the exclusive end of a range that
+  // includes today therefore sits BEHIND the wall clock. `/admin/impersonation`
+  // offered an owner a "last 30 days" that stopped 42 minutes before the
+  // session they had just started; `impersonation.spec.ts` failed on exactly
+  // that, and only ever between 19:00 and midnight Central, which is why it
+  // read as flakiness. B-223 fixed the same disagreement at the START of the
+  // window and this is the other end of it.
+  //
+  // Clamped to `now` rather than converted to the zone's true midnight, because
+  // every screen with a window that includes today is a LOG of things that have
+  // already happened: nothing exists between now and the next local midnight,
+  // so the two answers hold the same rows and this one needs no offset
+  // arithmetic — and so cannot be an hour out on the two DST days a year.
+  // `toInclusive >= today` is what says "includes today": a range the operator
+  // deliberately ended in the past is never stretched forward.
+  const end = toInclusive >= today && dayAfter <= now ? new Date(now.getTime() + 1) : dayAfter
 
   if (end <= from) return reportRange({}, options)
 

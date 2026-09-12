@@ -100,6 +100,35 @@ describe('reportRange', () => {
     expect(range.end.getTime() - range.start.getTime()).toBe(30 * 86_400_000)
   })
 
+  // B-296. The other end of B-223's disagreement. `today` is a facility-local
+  // calendar date carried at UTC midnight and the rows are real instants, so
+  // for the five hours between UTC midnight and Texas midnight the exclusive
+  // end sat BEHIND the wall clock: /admin/impersonation's "last 30 days"
+  // stopped before a session started 42 minutes earlier, and the two arc tests
+  // in impersonation.spec.ts failed on it — measured on the rows the run left
+  // behind, started 2026-09-12T00:42Z, which is 19:42 on the 11th in Texas.
+  it('includes what happened after UTC midnight but before local midnight', () => {
+    const justAfterUtcMidnight = new Date('2026-09-12T00:42:00.000Z')
+    const range = reportRange(
+      {},
+      { now: justAfterUtcMidnight, timeZones: ['America/Chicago'], window: 'rolling-30-days' },
+    )
+    // The form still round-trips the LOCAL date — it is still the 11th there.
+    expect(range.toValue).toBe('2026-09-11')
+    expect(range.end.getTime()).toBeGreaterThan(justAfterUtcMidnight.getTime())
+  })
+
+  // ...and only then. A range the operator deliberately ended in the past is
+  // never stretched forward to now, which is what a bare `end <= now` clamp
+  // would have done to every historical query on the same screen.
+  it('does not stretch a range that ends in the past up to now', () => {
+    const range = reportRange(
+      { from: '2026-03-01', to: '2026-03-31' },
+      { now, window: 'rolling-30-days' },
+    )
+    expect(range.end.toISOString()).toBe('2026-04-01T00:00:00.000Z')
+  })
+
   it('includes the whole of the last day picked', () => {
     // Getting this backwards silently drops the last day of every month-long
     // range, which nobody notices until a year-end total is short.
