@@ -9763,7 +9763,7 @@ A byte diff against `main` was not possible: on `main` a real link cannot reach 
 - **Nothing pins the two `rolling-30-days` screens against each other.** `/admin/access` shares the defect and the fix and has no test of its own; `admin-tasks.spec.ts` visits it but asserts nothing about its window.
 - **The e2e can still only fail for this class of bug between 19:00 and midnight Central.** The unit tests are the deterministic cover; the spec is not, and a future session reading it green at midday should not conclude the window is right.
 
-## B-297 — a month report filed the last evening of the month in the next month, and the accounting close did the mirror of it (2026-09-12, `PENDING`)
+## B-297 — a month report filed the last evening of the month in the next month, and the accounting close did the mirror of it (2026-09-12, `98060ac`)
 
 **What it built.**
 
