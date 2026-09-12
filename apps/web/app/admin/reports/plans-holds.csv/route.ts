@@ -1,5 +1,6 @@
 import { requireStaffActor } from '@/lib/rbac/session'
 import { plansAndHoldsReport } from '@/lib/admin/plans-holds-report'
+import { reportRangeForMonth } from '@/lib/admin/reports'
 import { csvCents, toCsv } from '@/lib/admin/csv'
 
 // PRD 02 §8: "every report exportable to CSV", and US-39: "CSV export matching
@@ -16,10 +17,12 @@ export async function GET(): Promise<Response> {
   const actor = await requireStaffActor()
   // The period only governs the effectiveness figures, which this file does
   // not carry — so any month does, and "this month" is the honest one to pass.
+  // Through the screen's own parse all the same (B-298): a route that builds
+  // its own bounds is the copy that gets left behind next time the rule
+  // changes, and this one had already been left behind once.
   const now = new Date()
-  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
-  const monthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1))
-  const report = await plansAndHoldsReport(actor, monthStart, monthEnd, now)
+  const { start, end } = await reportRangeForMonth(actor, undefined, now)
+  const report = await plansAndHoldsReport(actor, start, end, now)
 
   const rows = report.facilities.flatMap((facility) =>
     facility.rows.map((row) => [

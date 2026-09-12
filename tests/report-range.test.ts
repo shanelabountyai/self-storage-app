@@ -253,11 +253,56 @@ describe('every report screen reckons its range against its facilities', () => {
 
   it('no page or route calls reportRange directly', () => {
     const offenders = walk(appDir).filter((file) =>
-      /(?<!ForActor\()\breportRange\s*\(/.test(readFileSync(file, 'utf8')),
+      /(?<!ForActor\()(?<!ForMonth\()\breportRange\s*\(/.test(readFileSync(file, 'utf8')),
     )
     expect(
       offenders.map((file) => file.slice(appDir.length + 1)),
       'call reportRangeForActor(actor, ...) instead — see B-223',
     ).toEqual([])
+  })
+
+  // B-298. The other half of the same failure, and the reason it went unnoticed
+  // for as long as it did: these four files never called `reportRange` at all,
+  // so the grep above was clean while they each carried their own
+  // `Date.UTC(year, month - 1, 1)`. Four copies of the arithmetic D-138
+  // forbids, on screens whose figures the accounting close is supposed to tie
+  // out against.
+  //
+  // Matched on a literal day-of-month `1` rather than on `Date.UTC` itself:
+  // `Date.UTC(year, month - 1, day)` is a perfectly good way to read a calendar
+  // date somebody submitted (`/portal/access` does exactly that), and a scan
+  // that flagged it would be turned off. A hardcoded first-of-the-month is the
+  // shape that is always a range bound.
+  it('no page or route builds its own month bounds', () => {
+    const offenders = walk(appDir).filter((file) =>
+      /Date\.UTC\([^)]*,\s*1\s*\)/.test(readFileSync(file, 'utf8')),
+    )
+    expect(
+      offenders.map((file) => file.slice(appDir.length + 1)),
+      'call reportRangeForMonth(actor, month) instead — a hand-built bound is ' +
+        'UTC midnight, and D-138 says these bounds are instants at facility-local midnight',
+    ).toEqual([])
+  })
+
+  // B-296 fixed the rolling window; B-297 removed its clamp; neither left a
+  // test that the two LOG screens still ask for that window rather than the
+  // report default. `/admin/impersonation` is covered end to end by
+  // `impersonation.spec.ts`, whose first test would fail if the window went
+  // back to a month that ended before the session started. `/admin/access` had
+  // nothing at all — `admin-tasks.spec.ts` visits it and asserts nothing about
+  // its range — and a gate log defaulting to last month is the same defect
+  // D-109 called worse than the one it fixed.
+  it('both activity logs and their CSV siblings ask for the rolling window', () => {
+    const logs = [
+      'admin/access/page.tsx',
+      'admin/impersonation/page.tsx',
+      'admin/impersonation.csv/route.ts',
+    ]
+    for (const relative of logs) {
+      const source = readFileSync(join(appDir, relative), 'utf8')
+      expect(source, `${relative} must pass window: 'rolling-30-days'`).toContain(
+        "'rolling-30-days'",
+      )
+    }
   })
 })

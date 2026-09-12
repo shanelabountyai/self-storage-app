@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { prisma } from '../packages/db'
+import { businessDateFor } from '../packages/core/jobs/index.ts'
 import { provisionMoveIn } from '../apps/web/lib/checkout/provision'
 import { amountDueToday } from '../apps/web/lib/checkout/payment'
 import { sessionById } from '../apps/web/lib/checkout/session'
@@ -278,15 +279,26 @@ describeDb('move-in provisioning', () => {
     // Null means "nobody asked", which is what every session before B-106
     // means — the column is nullable for exactly this reason, and provisioning
     // must not start treating those as some other date.
+    //
+    // D-139 (B-298): "today" is the facility's local calendar day at UTC
+    // midnight, not the instant the webhook landed. This used to assert an
+    // instant inside [before, now], which is precisely the divergence that
+    // made the column unreadable — a walk-in held a timestamp while a
+    // scheduled move-in held a date, so no report bound was right for both.
+    // A walk-in at 8pm in Texas is already tomorrow in UTC, and the
+    // anniversary derived beside it was the local day all along.
     const started = await paidSession()
-    const before = Date.now()
     const result = await provisionMoveIn(started.sessionId)
     expect(result.ok).toBe(true)
     if (!result.ok) throw new Error('unreachable')
 
     const lease = await prisma.lease.findUniqueOrThrow({ where: { id: result.leaseId } })
-    expect(lease.startDate.getTime()).toBeGreaterThanOrEqual(before)
-    expect(lease.startDate.getTime()).toBeLessThanOrEqual(Date.now())
+    const localToday = businessDateFor(new Date(), 'America/Chicago')
+    expect(lease.startDate.toISOString()).toBe(localToday.toISOString())
+    // The anniversary and the start date now come from ONE value, so they
+    // cannot disagree — which they could before, for the five hours a day the
+    // two were different days.
+    expect(lease.billingDay).toBe(localToday.getUTCDate())
   })
 
   it('qualifies a referral the checkout arrived on (B-100)', async () => {

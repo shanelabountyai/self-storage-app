@@ -116,6 +116,20 @@ export type ReportRangeOptions = {
 /// "split by report type" in D-109 does not reach them.
 export type DefaultWindow = 'last-complete-month' | 'rolling-30-days'
 
+/// The facility-local calendar date, as a UTC-midnight Date, that every zone in
+/// scope has reached — which is the EARLIEST of their local dates, i.e. the
+/// westernmost one. See B-223's note at the call site for why the minimum is
+/// the right reduction rather than an offset calculation.
+///
+/// Exported for `reportRangeForMonth`, which has to answer "which month is it"
+/// for a month picker and must not answer it with `new Date().getUTCMonth()` —
+/// that reads September at 8pm on 31 August in Texas (B-298).
+export function todayAcross(zones: readonly string[], now: Date): Date {
+  return (zones.length > 0 ? zones : ['UTC'])
+    .map((zone) => businessDateFor(now, zone))
+    .reduce((earliest, date) => (date < earliest ? date : earliest))
+}
+
 export function reportRange(
   params: { from?: string; to?: string },
   options: ReportRangeOptions = {},
@@ -132,9 +146,7 @@ export function reportRange(
   // everywhere the figures come from, and taking the minimum says exactly that
   // without computing a single UTC offset.
   const zones = timeZones && timeZones.length > 0 ? timeZones : ['UTC']
-  const today = zones
-    .map((zone) => businessDateFor(now, zone))
-    .reduce((earliest, date) => (date < earliest ? date : earliest))
+  const today = todayAcross(zones, now)
   const monthStart =
     window === 'rolling-30-days'
       ? new Date(today.getTime() - 29 * 86_400_000)

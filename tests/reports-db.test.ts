@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { prisma } from '../packages/db'
 import { attachRateReport, delinquencyReport, movesReport, occupancyReport, rentRoll } from '../apps/web/lib/admin/reports'
+import { reportRange } from '../apps/web/lib/admin/report-range'
 import type { Actor } from '../apps/web/lib/rbac/actor'
 import { ForbiddenError } from '../apps/web/lib/rbac/authorize'
 import type { PermissionKey } from '@storage/db/rbac-catalog'
@@ -109,6 +110,48 @@ describeDb('reports', () => {
         { facilityId, leaseId: lease.id, type: 'charge', amountCents: 15_000, description: 'Rent', occurredAt: d('2026-08-10') },
         { facilityId, leaseId: lease.id, type: 'payment', amountCents: -10_000, description: 'Payment', occurredAt: d('2026-08-12') },
       ],
+    })
+
+    // B-298. The boundary fixture, on facility B so it cannot move any figure
+    // the tests above pin. Two rows that a single pair of bounds has to get
+    // right in OPPOSITE directions, which is the whole of D-138:
+    //
+    //   - a lease starting 1 September, whose `startDate` is a facility-local
+    //     calendar day at UTC midnight (D-139), and
+    //   - a payment taken at 8pm on 31 August in Texas, which is a real
+    //     instant — `2026-09-01T01:00Z`.
+    //
+    // Read with a September range they must land on different sides: the
+    // move-in is September's, the payment is August's.
+    const otherType = await prisma.unitType.create({
+      data: { facilityId: otherFacilityId, name: `10x20 ${suffix}`, widthFt: 10, lengthFt: 20 },
+    })
+    await prisma.unitTypeRate.create({
+      data: { facilityId: otherFacilityId, unitTypeId: otherType.id, streetRateCents: 30_000, webRateCents: 28_000, effectiveFrom: d('2020-01-01') },
+    })
+    const otherUnit = await prisma.unit.create({
+      data: { facilityId: otherFacilityId, unitTypeId: otherType.id, number: 'B-1', status: 'occupied' },
+    })
+    const boundaryLease = await prisma.lease.create({
+      data: {
+        facilityId: otherFacilityId,
+        tenantId,
+        unitId: otherUnit.id,
+        status: 'active',
+        startDate: d('2026-09-01'),
+        monthlyRateCents: 25_000,
+        billingDay: 1,
+      },
+    })
+    await prisma.ledgerEntry.create({
+      data: {
+        facilityId: otherFacilityId,
+        leaseId: boundaryLease.id,
+        type: 'payment',
+        amountCents: -7_000,
+        description: 'Paid at 8pm on the 31st',
+        occurredAt: new Date('2026-09-01T01:00:00.000Z'),
+      },
     })
   })
 
@@ -263,6 +306,60 @@ describeDb('reports', () => {
       // Rolled to the portfolio total the same way `movesReport` is (D-25):
       // summed, not averaged.
       expect(report.total.overall.moveIns).toBeGreaterThanOrEqual(row.attach.overall.moveIns)
+    })
+  })
+
+  // B-298 / D-139. The gap B-297 recorded and left open, and the audit of the
+  // rest of `figuresFor` that came with it.
+  //
+  // The bounds come from `reportRange` rather than from `d()`, because that is
+  // what every caller now passes and the whole question is what a query does
+  // with them. `now` is fixed in October so the month is complete and the
+  // default never applies.
+  describe('D-138 at the month boundary', () => {
+    const at = { now: new Date('2026-10-15T12:00:00.000Z'), timeZones: ['America/Chicago'] }
+    const august = reportRange({ from: '2026-08-01', to: '2026-08-31' }, at)
+    const september = reportRange({ from: '2026-09-01', to: '2026-09-30' }, at)
+    const only = <T extends { facilityId: string }>(rows: T[]): T =>
+      rows.find((row) => row.facilityId === otherFacilityId)!
+
+    // Without the conversion the bound is `2026-09-01T05:00Z` and the lease's
+    // `startDate` is `2026-09-01T00:00Z`, so a move-in on the first of the
+    // month was counted in the month BEFORE it — for a portfolio that opens
+    // leases on the 1st, most of them.
+    it('counts a move-in on the 1st in that month, not the one before', async () => {
+      const sep = await movesReport(actorFor([otherFacilityId]), september.start, september.end)
+      expect(only(sep.rows).moves.moveIns).toBe(1)
+
+      const aug = await movesReport(actorFor([otherFacilityId]), august.start, august.end)
+      expect(only(aug.rows).moves.moveIns).toBe(0)
+    })
+
+    // The same lease through the other report that filters `startDate`. These
+    // two are read on one screen and the attach rate's denominator is supposed
+    // to BE the move-in count, so a conversion in one and not the other is two
+    // figures disagreeing in front of an operator.
+    it('agrees with the attach rate about which month that move-in is in', async () => {
+      const sep = await attachRateReport(actorFor([otherFacilityId]), september.start, september.end)
+      expect(only(sep.rows).attach.overall.moveIns).toBe(1)
+
+      const aug = await attachRateReport(actorFor([otherFacilityId]), august.start, august.end)
+      expect(only(aug.rows).attach.overall.moveIns).toBe(0)
+    })
+
+    // The audit half of B-298, pinned rather than described: every column
+    // `occupancyForFacility` filters is a real instant — `occurredAt` here,
+    // and `effectiveFrom` on `unit_type_rate` and `unit_status_history`, both
+    // written by `new Date()` or a trigger's `now()`. So it must NOT convert,
+    // and this fails if somebody makes it symmetric with the two above: an
+    // 8pm payment on 31 August is August's money whatever the calendar date in
+    // UTC says.
+    it('leaves an 8pm payment on the 31st in that month, unconverted', async () => {
+      const aug = await occupancyReport(actorFor([otherFacilityId]), august.start, august.end)
+      expect(only(aug.rows).economic.collectedCents).toBe(7_000)
+
+      const sep = await occupancyReport(actorFor([otherFacilityId]), september.start, september.end)
+      expect(only(sep.rows).economic.collectedCents).toBe(0)
     })
   })
 

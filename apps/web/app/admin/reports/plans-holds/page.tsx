@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { getAdminActor } from '@/lib/admin/context'
 import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
 import { plansAndHoldsReport, type HaltedLeaseRow } from '@/lib/admin/plans-holds-report'
+import { reportRangeForMonth } from '@/lib/admin/reports'
 import { formatCalendarDate, formatCents } from '@/lib/format'
 import { ScrollRegion } from '@/components/ui/scroll-region'
 
@@ -30,26 +31,6 @@ const LEASE_STATUS_LABELS: Record<string, string> = {
   delinquent: 'Delinquent',
   pending_auction: 'Pending auction',
   ended: 'Moved out',
-}
-
-function monthBounds(month: string): { start: Date; end: Date; label: string } {
-  const [year, monthIndex] = month.split('-').map(Number)
-  const start = new Date(Date.UTC(year, monthIndex - 1, 1))
-  const end = new Date(Date.UTC(year, monthIndex, 1))
-  return {
-    start,
-    end,
-    label: new Intl.DateTimeFormat('en-US', {
-      month: 'long',
-      year: 'numeric',
-      timeZone: 'UTC',
-    }).format(start),
-  }
-}
-
-function currentMonth(): string {
-  const now = new Date()
-  return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`
 }
 
 // B-228. This report already read installment dates in UTC — it is the surface
@@ -97,8 +78,16 @@ export default async function PlansHoldsPage({
     )
   }
 
-  const selectedMonth = month ?? currentMonth()
-  const { start, end, label } = monthBounds(selectedMonth)
+  // B-298 / D-138. `planEffectiveness` filters `createdAt`, `brokenAt` and
+  // `completedAt` — all instants — so the hand-rolled UTC-midnight bounds this
+  // used to build put a plan agreed at 8pm on the last of the month into the
+  // next one.
+  const {
+    start,
+    end,
+    label,
+    month: selectedMonth,
+  } = await reportRangeForMonth(actor, month)
   const report = await plansAndHoldsReport(actor, start, end)
 
   return (

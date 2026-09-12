@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { prisma } from '@storage/db'
-import { localDayBounds } from '@storage/core/jobs'
+import { businessDateFor, localDayBounds } from '@storage/core/jobs'
 import { assertFacilityAccess } from '@/lib/rbac/authorize'
 import { getSwitcherData } from '@/lib/admin/context'
 import { resolveSelectedFacility } from '@/lib/admin/facility-selection-logic'
@@ -110,6 +110,18 @@ export default async function AdminDashboardPage({
     where: { id: facilityId },
   })
   const { start, end } = localDayBounds(new Date(), facility.timezone)
+  // D-139 (B-298). `startDate` and `endDate` are facility-local calendar days
+  // carried at UTC midnight; `start`/`end` are real instants at local
+  // midnight, which every other query below correctly wants. The two move-in
+  // tiles have to convert, or "Moved in today" reads zero all day at any US
+  // facility — today's calendar day sits five hours BEFORE the instant the
+  // local day begins.
+  //
+  // It was already half-wrong before D-139 and that is why it was never
+  // reported: a walk-in wrote an instant and was counted, while a move-in
+  // scheduled for today wrote the calendar day and was not.
+  const today = businessDateFor(start, facility.timezone)
+  const tomorrow = businessDateFor(end, facility.timezone)
 
   const [
     totalUnits,
@@ -130,10 +142,10 @@ export default async function AdminDashboardPage({
     prisma.unit.count({ where: { facilityId, status: 'available' } }),
     prisma.unit.count({ where: { facilityId, status: 'reserved' } }),
     prisma.lease.count({
-      where: { facilityId, startDate: { gte: start, lt: end } },
+      where: { facilityId, startDate: { gte: today, lt: tomorrow } },
     }),
     prisma.lease.count({
-      where: { facilityId, status: 'ended', endDate: { gte: start, lt: end } },
+      where: { facilityId, status: 'ended', endDate: { gte: today, lt: tomorrow } },
     }),
     prisma.payment.aggregate({
       where: {

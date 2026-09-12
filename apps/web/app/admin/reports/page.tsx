@@ -6,6 +6,7 @@ import {
   delinquencyReport,
   movesReport,
   occupancyReport,
+  reportRangeForMonth,
   unitOccupancyNote,
 } from '@/lib/admin/reports'
 import { ArAgingSplitTable } from '@/components/admin/ar-aging-split-table'
@@ -180,22 +181,6 @@ function AttachSplit({
   )
 }
 
-function monthBounds(month: string): { start: Date; end: Date; label: string } {
-  const [year, monthIndex] = month.split('-').map(Number)
-  const start = new Date(Date.UTC(year, monthIndex - 1, 1))
-  const end = new Date(Date.UTC(year, monthIndex, 1))
-  return {
-    start,
-    end,
-    label: new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(start),
-  }
-}
-
-function currentMonth(): string {
-  const now = new Date()
-  return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`
-}
-
 // B-241. The reports index's three groups, each named for what is genuinely in
 // it. Sixteen links in one flat run under a single false label is what this
 // replaces; the grouping is the answer to "what is owed and what is empty"
@@ -281,9 +266,17 @@ export default async function ReportsPage({
   searchParams: Promise<{ month?: string }>
 }) {
   const { month } = await searchParams
-  const selectedMonth = month ?? currentMonth()
-  const { start, end, label } = monthBounds(selectedMonth)
   const actor = await getAdminActor()
+  // B-298 / D-138. Was a hand-built pair of UTC-midnight month boundaries,
+  // which is the one thing D-138 forbids: every column the three reports below filter
+  // is a real instant, so a payment taken at 8pm on the 31st in Texas landed
+  // in the following month and the move-out window was a day out on top.
+  const {
+    start,
+    end,
+    label,
+    month: selectedMonth,
+  } = await reportRangeForMonth(actor, month)
 
   const [occupancy, moves, attach, delinquency] = await Promise.all([
     occupancyReport(actor, start, end),

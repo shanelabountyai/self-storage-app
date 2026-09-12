@@ -2,7 +2,6 @@ import { prisma, type Prisma } from '@storage/db'
 import { recordAudit } from '@storage/core/audit'
 import { emitEvent } from '@storage/core/events'
 import { billingPeriodFor, describeDayRange, prorate, unusedRemainder } from '@storage/core/billing'
-import { businessDateFor } from '@storage/core/jobs'
 import { OCCUPYING_LEASE_STATUSES, TRANSFER_HOLD_SOURCE } from '@storage/core/inventory'
 import { effectiveAsOf } from '@storage/core/facility-settings'
 import {
@@ -512,7 +511,14 @@ export async function completeTransfer(
     }
   }
 
-  const localToday = businessDateFor(input.transferDate, lease.facility.timezone)
+  // B-298. NOT `businessDateFor(input.transferDate, ...)`, which is what stood
+  // here. `transferDate` arrives from an `<input type="date">` as
+  // `new Date('YYYY-MM-DDT00:00:00.000Z')` — already a facility-local calendar
+  // day at UTC midnight — and converting it again lands on the PREVIOUS day at
+  // any facility west of UTC. The audit row for a transfer on the 20th at a
+  // Chicago site therefore recorded the 19th, on the record a dispute is
+  // settled from. Same double conversion `provision.ts`'s comment warns about.
+  const localToday = input.transferDate
   const fromUnitId = lease.unitId
 
   const committed = await prisma.$transaction(async (tx) => {

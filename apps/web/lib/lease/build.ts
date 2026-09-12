@@ -80,14 +80,23 @@ export async function leaseValuesFor(
   // hardcoded today would state a start date and a first-payment period the
   // tenant is not agreeing to, on the one artefact whose whole purpose is to
   // record what they agreed to.
-  const moveInDate = session.requestedStartDate ?? new Date();
   // The facility-local calendar day the anniversary anchors to. A chosen date
   // is ALREADY such a day (UTC-midnight), so it is not converted again — the
   // same double-conversion that put a Chicago lease on the 19th when the
   // renter picked the 20th. See checkout/provision.ts.
   const localToday =
-    session.requestedStartDate ??
-    businessDateFor(moveInDate, facility.timezone);
+    session.requestedStartDate ?? businessDateFor(new Date(), facility.timezone);
+  // D-139 (B-298). The same value `provision.ts` now writes as the lease's
+  // `startDate`, so the document and the row cannot disagree.
+  //
+  // They did. `moveInDate` used to be the raw `requestedStartDate` rendered in
+  // the FACILITY's timezone, and a UTC-midnight calendar day rendered in
+  // Chicago is 7pm the day before: a renter who picked the 20th signed a lease
+  // whose "Move-in date" said the 19th while the first-payment sentence three
+  // fields above said the 20th, because that sentence had already been given
+  // the UTC exception and this field had not. One value, formatted one way,
+  // is what stops a third field going the same way.
+  const moveInDate = localToday;
 
   // B-044. What the first payment actually bought, per the facility's billing
   // policy. Under `anniversary` the period starts today and the tenant pays a
@@ -99,11 +108,11 @@ export async function leaseValuesFor(
           "en-US",
           {
             dateStyle: "long",
-            // UTC when the renter chose the date, because a chosen date is a
-            // CALENDAR day already stored at UTC-midnight — rendering it in a
-            // western timezone would print the day before, in a signed document.
-            // A same-day move-in is a real instant and is rendered locally.
-            timeZone: session.requestedStartDate ? "UTC" : facility.timezone,
+            // Always UTC: `moveInDate` is a facility-local CALENDAR day
+            // carried at UTC midnight (D-139), whichever way it was arrived
+            // at, and rendering such a day in a western timezone prints the
+            // day before — in a signed document.
+            timeZone: "UTC",
           },
         ).format(
           moveInDate,
@@ -162,7 +171,8 @@ export async function leaseValuesFor(
     protectionSummary,
     moveInDate: new Intl.DateTimeFormat("en-US", {
       dateStyle: "long",
-      timeZone: facility.timezone,
+      // UTC for the reason above, not the facility's zone.
+      timeZone: "UTC",
     }).format(moveInDate),
     billingDay: String(billingDayFor(facility.billingPolicy, localToday)),
     firstPaymentSummary,

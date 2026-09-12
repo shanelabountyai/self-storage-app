@@ -32,7 +32,12 @@ import { businessDateFor } from '@storage/core/jobs'
 import { effectsByLease } from '@/lib/admin/holds'
 import { facilityAccess, ForbiddenError, can } from '@/lib/rbac/authorize'
 import type { Actor } from '@/lib/rbac/actor'
-import { reportRange, type ReportRange, type ReportRangeOptions } from '@/lib/admin/report-range'
+import {
+  reportRange,
+  todayAcross,
+  type ReportRange,
+  type ReportRangeOptions,
+} from '@/lib/admin/report-range'
 
 // PRD 02 US-39 / US-2. The adapter between real rows and @storage/core/metrics.
 //
@@ -76,6 +81,61 @@ export async function reportRangeForActor(
 ): Promise<ReportRange> {
   const facilities = await reportableFacilities(actor)
   return reportRange(params, { ...options, timeZones: facilities.map((f) => f.timezone) })
+}
+
+/// B-298. The range for the two screens that pick a MONTH rather than a pair of
+/// dates — `/admin/reports` and `/admin/reports/plans-holds`.
+///
+/// Both used to build their own `new Date(Date.UTC(year, month - 1, 1))`
+/// bounds, which is precisely the mistake D-138 exists to name. They feed
+/// `occupancyForFacility`, `movesForFacility`, `attachRateForFacility` and
+/// `planEffectiveness`, and every column those four filter — `occurredAt`,
+/// `createdAt`, `brokenAt`, `completedAt`, `effectiveFrom` — is a real
+/// instant. So a payment taken at 8pm on 31 August in Texas is
+/// `2026-09-01T01:00Z` and was reported in September, exactly the defect B-297
+/// fixed for every `reportRangeForActor` screen while these two kept their own
+/// copy of the arithmetic. `movesForFacility` made it worse rather than
+/// better: it converts the bound with `businessDateFor`, and converting a
+/// UTC-midnight bound moves the move-out window a whole day EARLIER.
+///
+/// Going through `reportRange` rather than fixing the arithmetic in place is
+/// what stops a third copy appearing — it also gets B-223's westernmost-zone
+/// reckoning, which neither page had.
+///
+/// The month itself is reckoned the same way for the same reason: `currentMonth`
+/// read `now.getUTCMonth()`, so between 7pm and midnight on the last day of a
+/// month a Texas operator was shown the NEXT month, empty.
+export async function reportRangeForMonth(
+  actor: Actor,
+  month: string | undefined,
+  now: Date = new Date(),
+): Promise<ReportRange & { month: string }> {
+  const facilities = await reportableFacilities(actor)
+  const timeZones = facilities.map((facility) => facility.timezone)
+  const today = todayAcross(timeZones, now)
+  // `\d{2}` is not enough: `2026-13` passes it, and `parseDay` would then
+  // reject the `from` and silently fall back to a different month than the
+  // `to` — a range spanning the wrong thirteen months rather than an error.
+  const selected = /^\d{4}-(0[1-9]|1[0-2])$/.test(month ?? '')
+    ? (month as string)
+    : `${today.getUTCFullYear()}-${String(today.getUTCMonth() + 1).padStart(2, '0')}`
+  const [year, monthIndex] = selected.split('-').map(Number)
+  // Day 0 of the next month is the last day of this one, and it is also what
+  // the label is formatted from — one Date, so the two cannot disagree.
+  const lastDay = new Date(Date.UTC(year, monthIndex, 0))
+  const range = reportRange(
+    { from: `${selected}-01`, to: lastDay.toISOString().slice(0, 10) },
+    { timeZones },
+  )
+  return {
+    ...range,
+    month: selected,
+    label: new Intl.DateTimeFormat('en-US', {
+      month: 'long',
+      year: 'numeric',
+      timeZone: 'UTC',
+    }).format(lastDay),
+  }
 }
 
 /// Facilities this actor may see MONEY for.
@@ -538,30 +598,26 @@ export async function movesForFacility(
   // is dropped at any US facility — and the count is read beside a move-in
   // count that is not, so the net would be wrong rather than merely short.
   //
-  // `startDate` deliberately keeps the instants. It is a Timestamptz that
-  // `provision.ts` writes as `new Date()` for an immediate move-in and as the
-  // renter's chosen calendar date otherwise, so it is neither kind of column
-  // consistently and neither bound is right for all of its rows. Settling what
-  // that column means is its own row; converting here would only trade one set
-  // of misplaced move-ins for another.
+  // B-298 / D-139: `startDate` converts too, and for the same reason. B-297
+  // left it on the raw instants because the column held two different things —
+  // `new Date()` for a walk-in, a UTC-midnight calendar day for a scheduled
+  // move-in — so no bound was right for all of its rows. D-139 settled that it
+  // is a calendar day, the same kind of value as the `moveOutDate` it is
+  // counted beside, and the migration normalised the rows that were instants.
+  // The two halves of the net are now the same kind of question.
   const { timezone } = await prisma.facility.findUniqueOrThrow({
     where: { id: facilityId },
     select: { timezone: true },
   })
+  const from = businessDateFor(periodStart, timezone)
+  const to = businessDateFor(periodEnd, timezone)
   const [moveIns, moveOutCount, reservations] = await Promise.all([
     prisma.lease.findMany({
-      where: { facilityId, startDate: { gte: periodStart, lt: periodEnd } },
+      where: { facilityId, startDate: { gte: from, lt: to } },
       select: { id: true, acquisitionSource: true, acquisitionChannel: true },
     }),
     prisma.lease.count({
-      where: {
-        facilityId,
-        moveOutDate: {
-          gte: businessDateFor(periodStart, timezone),
-          lt: businessDateFor(periodEnd, timezone),
-        },
-        status: 'ended',
-      },
+      where: { facilityId, moveOutDate: { gte: from, lt: to }, status: 'ended' },
     }),
     // Serves every source (B-140): an aggregate count of holds created in the
     // period, not a per-tenant message — a transfer hold belongs in this
@@ -796,8 +852,23 @@ export async function attachRateForFacility(
   periodStart: Date,
   periodEnd: Date,
 ): Promise<FacilityAttachRate> {
+  // D-139 (B-298). `startDate` is a facility-local calendar day at UTC
+  // midnight and the bounds are instants, so they convert — the same round
+  // trip `movesForFacility` makes for the move-in count this ratio's
+  // denominator is supposed to agree with. Without it the two reports disagree
+  // about which month a late-evening walk-in belongs to, on one screen.
+  const { timezone } = await prisma.facility.findUniqueOrThrow({
+    where: { id: facilityId },
+    select: { timezone: true },
+  })
   const leases = await prisma.lease.findMany({
-    where: { facilityId, startDate: { gte: periodStart, lt: periodEnd } },
+    where: {
+      facilityId,
+      startDate: {
+        gte: businessDateFor(periodStart, timezone),
+        lt: businessDateFor(periodEnd, timezone),
+      },
+    },
     select: { id: true, protectionPlanName: true, acquisitionSource: true },
   })
 

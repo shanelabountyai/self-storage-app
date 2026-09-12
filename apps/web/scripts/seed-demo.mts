@@ -125,6 +125,10 @@ const dayFromNow = (n: number) => {
   const day = daysFromNow(n)
   return new Date(Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate()))
 }
+/// The same thing backwards, for the columns D-139 settled as calendar days —
+/// a lease's `startDate` and `endDate`. `daysAgo` gave whatever time of day the
+/// seed ran at, which is a shape production no longer holds.
+const dayAgo = (n: number) => dayFromNow(-n)
 
 async function teardown() {
   const facilities = await prisma.facility.findMany({
@@ -560,8 +564,9 @@ async function makeLease(
       tenantId,
       unitId,
       status,
-      startDate: daysAgo(startedDaysAgo),
-      endDate: status === 'ended' ? daysAgo(5) : null,
+      // D-139: calendar days, not instants — see `dayAgo`.
+      startDate: dayAgo(startedDaysAgo),
+      endDate: status === 'ended' ? dayAgo(5) : null,
       monthlyRateCents,
       billingDay: 1,
       protectionPlanName: 'Standard $2,000',

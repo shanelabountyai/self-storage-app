@@ -141,8 +141,7 @@ export async function provisionMoveIn(sessionId: string): Promise<ProvisionResul
   // day, so a future start just moves which day that is. The renter pays now
   // for a month beginning later, and `billingDayFor` anchors every invoice
   // after it to the same date.
-  const startDate = session.requestedStartDate ?? new Date()
-  // NOT `businessDateFor(startDate, ...)` when the renter chose a date.
+  // NOT `businessDateFor(...)` when the renter chose a date.
   //
   // `businessDateFor` converts an INSTANT to a facility-local calendar day.
   // `requestedStartDate` is already such a day — stored as UTC-midnight, the
@@ -152,7 +151,20 @@ export async function provisionMoveIn(sessionId: string): Promise<ProvisionResul
   // billing on the 19th, every month, for the life of the lease. Caught by the
   // test below asserting the anniversary, which is the only place the
   // off-by-one is visible.
-  const localToday = session.requestedStartDate ?? businessDateFor(startDate, facility.timezone)
+  const localToday =
+    session.requestedStartDate ?? businessDateFor(new Date(), facility.timezone)
+  // D-139 (B-298). ONE value, where there used to be two: `startDate` was
+  // `new Date()` for a same-day move-in while `billingDay` was derived from
+  // the business date beside it, so the column held an instant for a walk-in
+  // and a calendar day for a scheduled move-in. Nothing could read it: a
+  // report bucketing by month got some leases by instant and some by date, and
+  // no bound was right for both (the gap B-297 recorded and left open).
+  //
+  // A lease's start is a CALENDAR question — it anchors the billing
+  // anniversary, it is the date printed on the signed document, and its own
+  // sibling `moveOutDate` is a `@db.Date`. So the calendar day wins and the
+  // time of day goes where it belonged all along, `createdAt`.
+  const startDate = localToday
 
   // PRD 02 US-43's last AC: "source and channel carry through reservation →
   // move-in, so the move-in/move-out report can split walk-in vs phone vs web."

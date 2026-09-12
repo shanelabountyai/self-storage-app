@@ -9791,3 +9791,37 @@ A byte diff against `main` was not possible: on `main` a real link cannot reach 
 - **`Lease.startDate`'s meaning is unsettled and no row owns it.** Until it is one kind of column, `movesForFacility`'s move-in count buckets some leases by an instant and some by a calendar date, and no choice of bound is right for both.
 - **`/admin/access` still has no test of its own** — carried over unchanged from B-296. `admin-tasks.spec.ts` visits it and asserts nothing about its window.
 - **The other `figuresFor` figures were not audited.** `occupancyForFacility` and the reservation and lease-start queries in `movesForFacility` read timestamp columns and are correct under the new rule, but nothing was measured about `effectiveFrom` on the rate-plan reads.
+
+## B-298 — D-138's audit finished: four more surfaces reckoned a month in UTC, and `Lease.startDate` held two different kinds of value (2026-09-12, `SHA`)
+
+The three gaps B-297 carried forward with no owning row, closed together because they are one rule. No review raised any of it; all of it was measured against the schema and every writer of the columns involved.
+
+**What it built.**
+
+1. **The audit result, pinned rather than described.** `occupancyForFacility` — the one `figuresFor` figure B-297 never measured — is **correct and must not be converted**. Every column it filters is a real instant: `ledgerEntry.occurredAt`, `unitTypeRate.effectiveFrom` (written `new Date()` by `applySuggestedRateAction` or `unitType.createdAt` by `createUnitType`), and `unitStatusHistory.effectiveFrom` (written by the table's own trigger). D-138 therefore says it converts nothing, and `tests/reports-db.test.ts` now fails if somebody makes it symmetric with its neighbours.
+2. **One month-range parser, shared** (`reportRangeForMonth` in `apps/web/lib/admin/reports.ts`). `/admin/reports`, `/admin/reports/plans-holds`, `/admin/reports/occupancy.csv` and `/admin/reports/plans-holds.csv` each built their own `Date.UTC(year, month - 1, 1)` pair. They also pick up B-223's westernmost-zone reckoning, which none of them had, and a corrected default: `currentMonth()` read `now.getUTCMonth()`, so for the last five hours of every month a Texas operator was shown the next month, empty.
+3. **`Lease.startDate` settled as a facility-local calendar day at UTC midnight (D-139).** `provision.ts` now writes the value it was already computing beside it for the billing anniversary; the migration `20260912183000_b298_lease_start_date_business_date` normalises the existing rows that held instants, plus the `move_in` `LeaseRateChange` written from the same value in the same transaction.
+4. **Both `startDate` readers convert their bounds** — `movesForFacility` and `attachRateForFacility` — so the move-in count and the attach rate's denominator are the same question, which they are read as being on one screen.
+5. **Three source-level regression tests** (`tests/report-range.test.ts`): no page or route builds its own month bounds; both activity logs and the impersonation CSV still ask for `rolling-30-days`; and B-223's existing scan extended to allow `reportRangeForMonth`.
+
+**What it decided.** Recorded as **D-139**.
+
+- **`Lease.startDate` is a calendar day, not an instant.** The column already held both and nothing consumed it as an instant. The rest of the codebase had already voted: `completeTransfer` has always written a calendar day, `billingDay` was derived from a business date computed *beside* the column rather than from it, the signed lease carried the calendar day, and the `moveOutDate` the move-in count is read against is a `@db.Date`.
+- **The column stays `timestamptz`.** This codebase already carries business dates that way (`Invoice.issueDate`), the conversion rule is identical either way, and narrowing the type would rewrite every read for no correctness gain.
+- **The backfill discriminates on `startDate <> date_trunc('day', startDate)`.** A row already at UTC midnight is already a calendar day; putting it through `AT TIME ZONE` a second time is the exact double conversion that puts a Chicago lease on the 19th when the renter picked the 20th.
+- **The month-bounds scan matches a literal day-of-month `1`, not `Date.UTC` itself.** `Date.UTC(year, month - 1, day)` is a fine way to read a submitted date and `/portal/access` does exactly that; a scan that flagged it would have been switched off.
+
+**Four real bugs found along the way, all live, none of them the one the row was opened for.**
+
+- **The signed lease document stated a move-in date one day earlier than its own first-payment sentence**, at any facility west of UTC. `moveInDate` was the renter's chosen UTC-midnight day rendered in the *facility's* timezone — 7pm the day before — while the first-payment sentence three fields above had already been given a UTC exception and was right. Both now render one value, in UTC.
+- **`/admin`'s "Moved in today" and "Moved out today" tiles** filtered `startDate` and `endDate` with `localDayBounds` instants, five hours *after* the calendar day those columns hold. A move-in scheduled for today never appeared in the tile. Half-broken before D-139 — a walk-in wrote an instant and *was* counted — which is why nobody reported it, and fully broken the moment the column became consistent, so it is fixed here.
+- **`completeTransfer` converted an already-converted date.** `input.transferDate` arrives from an `<input type="date">` as UTC midnight; `businessDateFor` on top of that lands on the previous day at any US facility, and that is the date the transfer's audit row recorded — the record a dispute is settled from.
+- **The report screens' own bug**, item 2 above: a payment taken at 8pm on the 31st in Texas was reported in the following month, and `movesForFacility`'s move-out window was a whole day early on top, because it converted a bound that was already UTC midnight.
+
+**Verification.** Typecheck clean, including `tsconfig.tests.json`. Lint: 0 errors, the same 6 pre-existing warnings. `prisma migrate diff`: no difference detected. Full unit suite **4,477 passed, 8 skipped, of 4,485 across 262 files**, and repeated to confirm the new shared-database fixture is repeatable. E2E: `admin-reports` + `admin` (672 passed) and `smoke` + `admin-transfer` + `portal-transfer` + `admin-tasks` (175 passed), after `db:migrate:e2e`.
+
+**What it left behind.**
+
+- **`Lease.endDate` was not audited the way `startDate` was.** It is a `timestamptz` that `completeTransfer` and the move-out path write as a calendar day, and `/admin`'s tile now reads it as one — but no writer was traced end to end, and nothing else range-filters it. If a second reader appears it needs the same pass.
+- **The demo seed now writes calendar days for `startDate`/`endDate` (`dayAgo`), and no other seeded date column was reviewed.** B-228 built `dayFromNow` for this reason and the same question applies to every fixture standing in for a typed date.
+- **B-290's, B-287's, B-295's, B-284's, B-281's and B-280's carried-forward gaps are all unchanged** — this row touched none of them.

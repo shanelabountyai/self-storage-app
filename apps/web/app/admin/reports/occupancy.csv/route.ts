@@ -1,5 +1,5 @@
 import { requireStaffActor } from '@/lib/rbac/session'
-import { occupancyReport } from '@/lib/admin/reports'
+import { occupancyReport, reportRangeForMonth } from '@/lib/admin/reports'
 import { csvCents, csvPercent, toCsv } from '@/lib/admin/csv'
 
 // PRD 02 US-39: "CSV export matching on-screen data exactly."
@@ -11,11 +11,14 @@ import { csvCents, csvPercent, toCsv } from '@/lib/admin/csv'
 export async function GET(request: Request): Promise<Response> {
   const actor = await requireStaffActor()
   const url = new URL(request.url)
-  const month = url.searchParams.get('month') ?? new Date().toISOString().slice(0, 7)
-
-  const [year, monthIndex] = month.split('-').map(Number)
-  const start = new Date(Date.UTC(year, monthIndex - 1, 1))
-  const end = new Date(Date.UTC(year, monthIndex, 1))
+  // B-298. The screen's own parse, not a fourth copy of it — which is what
+  // "matching on-screen data exactly" requires once the bounds stop being
+  // UTC midnight. It also fixes the default: `toISOString().slice(0, 7)` read
+  // the next month for the last five hours of every month in Texas.
+  const { start, end, month } = await reportRangeForMonth(
+    actor,
+    url.searchParams.get('month') ?? undefined,
+  )
 
   const report = await occupancyReport(actor, start, end)
 
