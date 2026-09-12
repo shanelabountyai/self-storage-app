@@ -1,16 +1,14 @@
 # Next
 
-**B-295 is done** (no new decision; it applies B-245's ruling and B-285's exception). The seven `role="alert"`s B-285 named on other portal screens were audited and all seven were page content: four record state at draw, three the result of a `formMethod="get"` submit, which is a full document load. An ESLint rule now refuses the attribute under `app/portal/**`.
+**B-296 is done** (`39d1e1c`; no new decision — it applies B-223's rule at the other end of the same window). The `e2e/impersonation.spec.ts` failure B-295 left undiagnosed was a real bug in `reportRange`, not flakiness: for the five hours between UTC midnight and facility-local midnight, a rolling window that includes today had an exclusive end *earlier than now*, so the support-session log did not list a session started minutes earlier. It also fixed a second clock defect the verification run surfaced — `ImpersonationSession.startedAt` came from the database clock while `expiresAt` came from the app's.
 
 ## Start here
 
 **No unblocked build row remains.** The next move is the owner's: answer a blocked row (below), or start a new review block.
 
-**One new finding has no owning row, and it is a real failure on `main`:**
-
-- **`e2e/impersonation.spec.ts:63` fails on both projects, and it is NOT from B-295.** Verified by stashing B-295's portal files back to HEAD and re-running: still 2 failed / 4 passed. It fails at line 148 on `getByRole('cell', { name: reason })` on `/admin/impersonation` — the support session is started and the banner assertions pass, but the session's reason never appears as a cell in the admin table. No portal markup is involved. It wants its own row; nobody has diagnosed whether the row is missing, is rendered differently, or is being outlived by another test's session.
-
 Gaps carried forward with no owning row:
+- **B-296: `last-complete-month` has the same clock disagreement at both its ends.** A payment taken at 8pm on the 31st is `2026-09-01T01:00Z` and a month report whose exclusive end is `2026-09-01T00:00Z` files it in the wrong month. Not fixed with B-296 because those same ranges also filter DATE columns stored at UTC midnight, where the current boundaries are correct — one range cannot serve both, and sorting out which callers need which is a row, not a clause.
+- **B-296: `/admin/access` shares the rolling window and the fix but has no test of its own.** `admin-tasks.spec.ts` visits it and asserts nothing about its window.
 - B-290: when an offer button is pressed, the region removes itself and focus is not moved deliberately (the consent banner moves it to `#main`). The server action re-renders, so moving focus would need a client wrapper.
 - B-287: the reset mail still ends "If you did not request this…", even though a member did not request it.
 - **B-295 left one thing open:** the three GET-submit refusals (`/portal/pay`, `/portal/transfer`, `/portal/move-out`) now announce nothing at all. Removing the role was right — nothing focused them — but a tenant who presses "Update"/"Show cost" and is refused still gets no announcement. Fixing that needs focus moved to the refusal, which on a server-rendered page needs a client wrapper: the same unsolved shape as B-290's. No row owns it.
