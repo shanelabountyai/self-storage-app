@@ -9704,7 +9704,7 @@ A byte diff against `main` was not possible: on `main` a real link cannot reach 
 - One document's and the account statement's titles are covered only by the dictionary test, not by an e2e `toHaveTitle`. Neither route is in the portal nav loop, and the account statement needs the business-payer fixture.
 - Every portal screen's `<title>` now follows the reader. The other carried gaps in `NEXT.md` are unchanged.
 
-## B-295 — seven `role="alert"`s on the portal were page content, not status messages (2026-09-11, `pending`)
+## B-295 — seven `role="alert"`s on the portal were page content, not status messages (2026-09-11, `d5f26d6`)
 
 **What it built.**
 
