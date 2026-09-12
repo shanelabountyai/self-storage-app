@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { businessDateFor } from '../packages/core/jobs/index.ts'
 import { reportRange } from '../apps/web/lib/admin/report-range'
 
 // B-055 / PRD 02 US-39: "date-range selection", parsed once for the screen and
@@ -100,13 +101,14 @@ describe('reportRange', () => {
     expect(range.end.getTime() - range.start.getTime()).toBe(30 * 86_400_000)
   })
 
-  // B-296. The other end of B-223's disagreement. `today` is a facility-local
-  // calendar date carried at UTC midnight and the rows are real instants, so
-  // for the five hours between UTC midnight and Texas midnight the exclusive
-  // end sat BEHIND the wall clock: /admin/impersonation's "last 30 days"
-  // stopped before a session started 42 minutes earlier, and the two arc tests
-  // in impersonation.spec.ts failed on it — measured on the rows the run left
-  // behind, started 2026-09-12T00:42Z, which is 19:42 on the 11th in Texas.
+  // B-296, kept after B-297 replaced its `now` clamp with a local-midnight end.
+  // `today` is a facility-local calendar date carried at UTC midnight and the
+  // rows are real instants, so for the five hours between UTC midnight and
+  // Texas midnight the exclusive end sat BEHIND the wall clock:
+  // /admin/impersonation's "last 30 days" stopped before a session started 42
+  // minutes earlier, and the two arc tests in impersonation.spec.ts failed on
+  // it — measured on the rows the run left behind, started 2026-09-12T00:42Z,
+  // which is 19:42 on the 11th in Texas.
   it('includes what happened after UTC midnight but before local midnight', () => {
     const justAfterUtcMidnight = new Date('2026-09-12T00:42:00.000Z')
     const range = reportRange(
@@ -118,9 +120,9 @@ describe('reportRange', () => {
     expect(range.end.getTime()).toBeGreaterThan(justAfterUtcMidnight.getTime())
   })
 
-  // ...and only then. A range the operator deliberately ended in the past is
-  // never stretched forward to now, which is what a bare `end <= now` clamp
-  // would have done to every historical query on the same screen.
+  // ...and only then. A range the operator deliberately ended in the past ends
+  // where they said, which is what a bare `end <= now` clamp would have got
+  // wrong on every historical query on the same screen.
   it('does not stretch a range that ends in the past up to now', () => {
     const range = reportRange(
       { from: '2026-03-01', to: '2026-03-31' },
@@ -158,6 +160,68 @@ describe('reportRange', () => {
     ]) {
       expect(reportRange(params, { now }).fromValue).toBe('2026-03-01')
     }
+  })
+
+  // B-297. The bug this row exists for. A payment taken at 8pm on 31 August in
+  // Texas is `2026-09-01T01:00Z`, so a UTC-midnight September window filed
+  // August's money in September and August's own window ended before it.
+  it('bounds the range at facility-local midnight, not UTC midnight', () => {
+    const august = reportRange(
+      { from: '2026-08-01', to: '2026-08-31' },
+      { now, timeZones: ['America/Chicago'] },
+    )
+    expect(august.start.toISOString()).toBe('2026-08-01T05:00:00.000Z')
+    expect(august.end.toISOString()).toBe('2026-09-01T05:00:00.000Z')
+
+    const eightPmOnThe31st = new Date('2026-09-01T01:00:00.000Z')
+    expect(eightPmOnThe31st >= august.start && eightPmOnThe31st < august.end).toBe(true)
+
+    const september = reportRange(
+      { from: '2026-09-01', to: '2026-09-30' },
+      { now, timeZones: ['America/Chicago'] },
+    )
+    expect(eightPmOnThe31st < september.start).toBe(true)
+    // Still tiles: the payment is in exactly one of the two.
+    expect(september.start.getTime()).toBe(august.end.getTime())
+  })
+
+  // A DST month, because `zonedMidnight` measures the offset twice for exactly
+  // this: 8 March 2026 is the spring-forward day in the US.
+  it('is not an hour out across a DST boundary', () => {
+    const march = reportRange(
+      { from: '2026-03-01', to: '2026-03-31' },
+      { now, timeZones: ['America/Chicago'] },
+    )
+    expect(march.start.toISOString()).toBe('2026-03-01T06:00:00.000Z') // CST
+    expect(march.end.toISOString()).toBe('2026-04-01T05:00:00.000Z') // CDT
+  })
+
+  // The property that lets ONE range serve both a timestamp column and a
+  // business-date one: converting an instant bound back with the facility's own
+  // zone lands on the right calendar date at EVERY facility, not just at the
+  // westernmost site the bounds were reckoned in.
+  it('converts back to the same calendar date in every zone in scope', () => {
+    const zones = ['America/New_York', 'America/Chicago', 'America/Los_Angeles']
+    const range = reportRange({ from: '2026-08-01', to: '2026-08-31' }, { now, timeZones: zones })
+    for (const zone of zones) {
+      expect(businessDateFor(range.start, zone).toISOString()).toBe('2026-08-01T00:00:00.000Z')
+      expect(businessDateFor(range.end, zone).toISOString()).toBe('2026-09-01T00:00:00.000Z')
+    }
+  })
+
+  // One zone at BOTH ends, so a multi-zone portfolio still tiles. Taking the
+  // start in the easternmost zone and the end in the westernmost would count
+  // the boundary hours in two consecutive months.
+  it('tiles a multi-zone portfolio, and does not depend on the order given', () => {
+    const zones = ['America/New_York', 'Pacific/Honolulu', 'America/Chicago']
+    const august = reportRange({ from: '2026-08-01', to: '2026-08-31' }, { now, timeZones: zones })
+    const september = reportRange(
+      { from: '2026-09-01', to: '2026-09-30' },
+      { now, timeZones: [...zones].reverse() },
+    )
+    expect(august.end.getTime()).toBe(september.start.getTime())
+    // Honolulu is the westernmost of the three, and it is what both ends use.
+    expect(august.end.toISOString()).toBe('2026-09-01T10:00:00.000Z')
   })
 
   it('round-trips its own values', () => {

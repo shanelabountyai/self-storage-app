@@ -7,6 +7,7 @@ import {
   sumCategoryTotals,
   type CategoryTotals,
 } from "@storage/core/metrics";
+import { businessDateFor } from "@storage/core/jobs";
 import { orderFor } from "@/lib/billing/allocation";
 import { financialFacilities } from "@/lib/admin/reports";
 import type { Actor } from "@/lib/rbac/actor";
@@ -116,9 +117,25 @@ export async function facilityRevenue(
 
   const settings = await prisma.facility.findUniqueOrThrow({
     where: { id: facilityId },
-    select: { paymentAllocationOrder: true },
+    select: { paymentAllocationOrder: true, timezone: true },
   });
   const order = orderFor(settings.paymentAllocationOrder);
+
+  // B-297. `start` and `end` are INSTANTS at local midnight, and `issueDate` is
+  // not an instant — `createInvoice` writes the facility's `businessDate` into
+  // it, a calendar date carried at UTC midnight. Comparing the two directly is
+  // wrong by the zone's offset in whichever direction the caller happens to
+  // supply: the report screens used to pass UTC midnight and over-collect the
+  // 1st, while the management pack and the accounting close pass `monthBounds`
+  // and did the reverse — September's close silently excluded every invoice
+  // issued on 1 September and counted the ones issued on 1 October, which for a
+  // portfolio that bills on the 1st is a whole rent cycle in the wrong month.
+  //
+  // Converting back with `businessDateFor` is exact for this facility whatever
+  // zone the caller reckoned in, which is the property that lets one range
+  // serve both. See the note at the top of `report-range.ts`.
+  const issuedFrom = businessDateFor(start, settings.timezone);
+  const issuedTo = businessDateFor(end, settings.timezone);
 
   // ── Billed ──────────────────────────────────────────────────────────
   // Void invoices are excluded: an invoice that was voided was never a real
@@ -127,7 +144,7 @@ export async function facilityRevenue(
     where: {
       facilityId,
       status: { not: "void" },
-      issueDate: { gte: start, lt: end },
+      issueDate: { gte: issuedFrom, lt: issuedTo },
     },
     // `description` too (B-101): it is what tells a referral reward from a
     // promotional discount, since both are the same line TYPE.

@@ -9,12 +9,37 @@
 // the boundary day between two consecutive months or skip it, depending on
 // which way somebody rounded, and both are the kind of error that shows up as
 // "the quarter doesn't add up to the three months".
+//
+// Both ends are real INSTANTS at facility-local midnight (B-297), not UTC
+// midnight. They used to be UTC midnight, which is right for a column holding a
+// business DATE and wrong for one holding a timestamp: a payment taken at 8pm
+// on 31 August in Texas is `2026-09-01T01:00Z`, so a September window opening at
+// `2026-09-01T00:00Z` reported August's money in September. `zonedMidnight` is
+// the same conversion `monthBounds` has always used for a tenant statement, and
+// its own comment names this exact payment.
+//
+// The mirror of that bug was live at the other caller. The management pack and
+// the accounting close pass `monthBounds` — already instants — into the very
+// same `facilityRevenue`, whose `issueDate` filter reads a business date stored
+// at UTC midnight. September's close therefore excluded the invoices issued on
+// 1 September and counted the ones issued on 1 October, which for a portfolio
+// that bills on the 1st is a whole rent cycle in the wrong month. One kind of
+// bound cannot serve both kinds of column, so the rule is now explicit:
+//
+//   **These bounds are instants. A query filtering a DATE or a business-date
+//   column converts them with `businessDateFor(bound, facility.timezone)`.**
+//
+// That round trip is exact for every facility, not just the one the range was
+// reckoned in — an instant at some zone's local midnight is inside the same
+// local calendar day everywhere, because no two zones are 24 hours apart.
 
-import { businessDateFor } from '@storage/core/jobs'
+import { businessDateFor, zonedMidnight } from '@storage/core/jobs'
 
 export type ReportRange = {
+  /// A real INSTANT: facility-local midnight on the first day of the range.
+  /// See the note on the return value below for what that means for a query.
   start: Date
-  /// Exclusive. The day AFTER the last day the user picked.
+  /// Exclusive. Facility-local midnight on the day AFTER the last day picked.
   end: Date
   /// The `to` value as the user typed it, for round-tripping the form.
   fromValue: string
@@ -129,35 +154,49 @@ export function reportRange(
   const toInclusive = parseDay(params.to) ?? new Date(monthEnd.getTime() - 86_400_000)
   const dayAfter = new Date(toInclusive.getTime() + 86_400_000)
 
-  // B-296. `today` and `toInclusive` are facility-local CALENDAR DATES carried
-  // at UTC midnight; the rows they filter are real instants. Between UTC
-  // midnight and local midnight — 19:00 to 24:00 in Texas — the two clocks
-  // disagree by the zone's offset, and the exclusive end of a range that
-  // includes today therefore sits BEHIND the wall clock. `/admin/impersonation`
-  // offered an owner a "last 30 days" that stopped 42 minutes before the
-  // session they had just started; `impersonation.spec.ts` failed on exactly
-  // that, and only ever between 19:00 and midnight Central, which is why it
-  // read as flakiness. B-223 fixed the same disagreement at the START of the
-  // window and this is the other end of it.
-  //
-  // Clamped to `now` rather than converted to the zone's true midnight, because
-  // every screen with a window that includes today is a LOG of things that have
-  // already happened: nothing exists between now and the next local midnight,
-  // so the two answers hold the same rows and this one needs no offset
-  // arithmetic — and so cannot be an hour out on the two DST days a year.
-  // `toInclusive >= today` is what says "includes today": a range the operator
-  // deliberately ended in the past is never stretched forward.
-  const end = toInclusive >= today && dayAfter <= now ? new Date(now.getTime() + 1) : dayAfter
+  if (dayAfter <= from) return reportRange({}, options)
 
-  if (end <= from) return reportRange({}, options)
+  // ONE zone for both ends, so consecutive ranges tile exactly — a start taken
+  // in the easternmost zone and an end in the westernmost would count the
+  // boundary hours twice, which is the failure the note at the top of this file
+  // exists to prevent. The westernmost is the zone whose local midnight falls
+  // latest in UTC, which is the same site B-223 already reckons the month
+  // against and is deterministic, unlike "the zone with the earliest local
+  // date" — that is a tie for most of the day and would pick an arbitrary one.
+  //
+  // For a portfolio spanning zones the instant boundaries are therefore exact
+  // only at the westernmost site; elsewhere up to the offset difference of
+  // activity lands in the neighbouring month. A single range cannot do better
+  // than that, and widening to the union would double-count instead.
+  const zone = westernmost(zones, from)
+
+  // B-296's clamp of the exclusive end to `now` is gone with the cause. It
+  // existed because a UTC-midnight end sat BEHIND the wall clock for the five
+  // hours between UTC midnight and Texas midnight, so /admin/impersonation's
+  // "last 30 days" stopped before a session started 42 minutes earlier. A
+  // local-midnight end for a window that includes today is tomorrow at the
+  // westernmost site, which is always still ahead.
 
   return {
-    start: from,
-    end,
+    start: localMidnight(from, zone),
+    end: localMidnight(dayAfter, zone),
     fromValue: isoDay(from),
     toValue: isoDay(toInclusive),
     label: `${formatDay(from)} – ${formatDay(toInclusive)}`,
   }
+}
+
+/// `zonedMidnight` for the UTC-midnight calendar dates this file carries.
+function localMidnight(day: Date, zone: string): Date {
+  return zonedMidnight(day.getUTCFullYear(), day.getUTCMonth() + 1, day.getUTCDate(), zone)
+}
+
+/// The westernmost of the zones on a given date: the one whose local midnight
+/// falls latest in UTC. See the note at the call site for why it is one zone.
+function westernmost(zones: readonly string[], on: Date): string {
+  return zones.reduce((west, zone) =>
+    localMidnight(on, zone) > localMidnight(on, west) ? zone : west,
+  )
 }
 
 function formatDay(date: Date): string {

@@ -28,6 +28,7 @@ import {
   type RateVarianceRow,
 } from '@storage/core/metrics'
 import { OCCUPYING_LEASE_STATUSES } from '@storage/core/inventory'
+import { businessDateFor } from '@storage/core/jobs'
 import { effectsByLease } from '@/lib/admin/holds'
 import { facilityAccess, ForbiddenError, can } from '@/lib/rbac/authorize'
 import type { Actor } from '@/lib/rbac/actor'
@@ -532,13 +533,35 @@ export async function movesForFacility(
   periodStart: Date,
   periodEnd: Date,
 ): Promise<FacilityMoves> {
+  // B-297. `moveOutDate` is a `@db.Date`; the bounds are instants at local
+  // midnight. Compared directly, every move-out on the first day of the range
+  // is dropped at any US facility — and the count is read beside a move-in
+  // count that is not, so the net would be wrong rather than merely short.
+  //
+  // `startDate` deliberately keeps the instants. It is a Timestamptz that
+  // `provision.ts` writes as `new Date()` for an immediate move-in and as the
+  // renter's chosen calendar date otherwise, so it is neither kind of column
+  // consistently and neither bound is right for all of its rows. Settling what
+  // that column means is its own row; converting here would only trade one set
+  // of misplaced move-ins for another.
+  const { timezone } = await prisma.facility.findUniqueOrThrow({
+    where: { id: facilityId },
+    select: { timezone: true },
+  })
   const [moveIns, moveOutCount, reservations] = await Promise.all([
     prisma.lease.findMany({
       where: { facilityId, startDate: { gte: periodStart, lt: periodEnd } },
       select: { id: true, acquisitionSource: true, acquisitionChannel: true },
     }),
     prisma.lease.count({
-      where: { facilityId, moveOutDate: { gte: periodStart, lt: periodEnd }, status: 'ended' },
+      where: {
+        facilityId,
+        moveOutDate: {
+          gte: businessDateFor(periodStart, timezone),
+          lt: businessDateFor(periodEnd, timezone),
+        },
+        status: 'ended',
+      },
     }),
     // Serves every source (B-140): an aggregate count of holds created in the
     // period, not a per-tenant message — a transfer hold belongs in this

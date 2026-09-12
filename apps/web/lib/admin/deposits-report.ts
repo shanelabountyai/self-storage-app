@@ -65,17 +65,11 @@ export async function depositsReport(
   const facilityIds = facilities.map((f) => f.id);
   const nameById = new Map(facilities.map((f) => [f.id, f.name]));
 
-  // B-079. Fetched because a payment has to be bucketed by the facility-LOCAL
-  // day. See the note on `dayOf` below — this query is what makes that possible
-  // and it is the whole of the fix.
-  const timezones = new Map(
-    (
-      await prisma.facility.findMany({
-        where: { id: { in: facilityIds } },
-        select: { id: true, timezone: true },
-      })
-    ).map((facility) => [facility.id, facility.timezone]),
-  );
+  // B-079. A payment has to be bucketed by the facility-LOCAL day — see the
+  // note on `dayOf` below, which is the whole of that fix. B-297 dropped the
+  // second `facility` query this used to make for the zones: `financialFacilities`
+  // has already selected them.
+  const timezones = new Map(facilities.map((f) => [f.id, f.timezone]));
 
   const [payments, sessions] = await Promise.all([
     prisma.payment.findMany({
@@ -98,10 +92,20 @@ export async function depositsReport(
         refundOfPaymentId: true,
       },
     }),
+    // B-297. `businessDate` is a DATE, not an instant, so the instant bounds
+    // are converted per facility — comparing a `@db.Date` against local
+    // midnight would drop the first day of every range at any US site. The
+    // payment query above needs the instants untouched, which is the whole
+    // reason one report reads the range both ways.
     prisma.drawerSession.findMany({
       where: {
-        facilityId: { in: facilityIds },
-        businessDate: { gte: from, lt: to },
+        OR: facilities.map((facility) => ({
+          facilityId: facility.id,
+          businessDate: {
+            gte: businessDateFor(from, facility.timezone),
+            lt: businessDateFor(to, facility.timezone),
+          },
+        })),
       },
     }),
   ]);
