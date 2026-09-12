@@ -9734,7 +9734,7 @@ A byte diff against `main` was not possible: on `main` a real link cannot reach 
 - **The lint rule cannot see a `role="alert"` built from a variable** (`role={someRole}`) or one rendered by a component the portal imports. It matches the literal JSX attribute, which is every case in the tree today.
 - **`app/(public)/**`, `app/login` and `app/pay/[token]` have not had this audit.** They render alerts from page files and were deliberately left out of both the ruling and the rule.
 
-## B-296 — the support-session log's window ended before the session it was opened to check (2026-09-12, `PENDING-SHA`)
+## B-296 — the support-session log's window ended before the session it was opened to check (2026-09-12, `39d1e1c`)
 
 **What it built.**
 
