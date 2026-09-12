@@ -9792,7 +9792,7 @@ A byte diff against `main` was not possible: on `main` a real link cannot reach 
 - **`/admin/access` still has no test of its own** — carried over unchanged from B-296. `admin-tasks.spec.ts` visits it and asserts nothing about its window.
 - **The other `figuresFor` figures were not audited.** `occupancyForFacility` and the reservation and lease-start queries in `movesForFacility` read timestamp columns and are correct under the new rule, but nothing was measured about `effectiveFrom` on the rate-plan reads.
 
-## B-298 — D-138's audit finished: four more surfaces reckoned a month in UTC, and `Lease.startDate` held two different kinds of value (2026-09-12, `SHA`)
+## B-298 — D-138's audit finished: four more surfaces reckoned a month in UTC, and `Lease.startDate` held two different kinds of value (2026-09-12, `e605fcd`)
 
 The three gaps B-297 carried forward with no owning row, closed together because they are one rule. No review raised any of it; all of it was measured against the schema and every writer of the columns involved.
 
