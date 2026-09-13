@@ -117,6 +117,10 @@ test.describe('the offer of Spanish', () => {
     await offer.getByRole('button', { name: 'Ver en español' }).click()
     await expect(page.locator('html')).toHaveAttribute('lang', 'es')
     await expect(offer).toHaveCount(0)
+    // B-299 / SC 2.4.3. The button that was pressed has just left the DOM, so
+    // without this focus is on `<body>` and the next Tab starts from the site
+    // header. Same destination as the consent banner's, for the same reason.
+    await expect(page.locator('#main')).toBeFocused()
 
     await page.goto('/faq')
     await expect(page.locator('html')).toHaveAttribute('lang', 'es')
@@ -130,6 +134,8 @@ test.describe('the offer of Spanish', () => {
       .getByRole('button', { name: 'No, gracias' })
       .click()
     await expect(page.getByRole('region', { name: 'Idioma' })).toHaveCount(0)
+    // B-299 / SC 2.4.3, as above — declining removes the region too.
+    await expect(page.locator('#main')).toBeFocused()
     await expect(page.locator('html')).toHaveAttribute('lang', 'en')
 
     await page.goto('/faq')

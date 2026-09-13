@@ -312,6 +312,36 @@ test.describe('signed in as the demo tenant', () => {
     await expect(page.getByText('$999,999.00')).toHaveCount(0)
   })
 
+  // B-299 / SC 2.4.3. "Update amount" is a `formMethod="get"` submit — a full
+  // document load — which is why B-295 was right to take `role="alert"` off the
+  // refusal it produces, and why the refusal was then announced by nothing at
+  // all. The form submits to `#amount-problem`, so the BROWSER's own fragment
+  // navigation focuses the paragraph; no script is involved, which is what
+  // keeps it working on the JavaScript-off path §6.2 asks this form to have.
+  //
+  // This is the one of the three GET-submit refusals reachable by a real press:
+  // the amount field is `type="text"`, so nothing native blocks the submit,
+  // while `/portal/transfer` and `/portal/move-out` price a `type="date"` field
+  // whose `min`/`max` refuse an out-of-range value before it is ever sent.
+  //
+  // Mutates nothing (B-120): the amount is a query parameter and `checkAmount`
+  // refuses before any charge is prepared.
+  test('a refused amount takes focus, so pressing Update announces something', async ({
+    page,
+  }) => {
+    await page.goto('/portal')
+    await page.getByRole('link', { name: /pay \$.* now/i }).first().click()
+    await expect(page).toHaveURL(/\/portal\/pay\?lease=/)
+
+    await page.getByRole('group').filter({ hasText: 'Pay a different amount' }).click()
+    await page.getByLabel('Amount in dollars').fill('seventy five')
+    await page.getByRole('button', { name: 'Update amount' }).click()
+
+    const refusal = page.getByRole('main').getByText('Enter an amount like 75 or 75.50.')
+    await expect(refusal).toBeVisible()
+    await expect(refusal).toBeFocused()
+  })
+
   test('/portal/methods lists autopay per unit and has no WCAG 2.1 AA violations', async ({
     page,
   }) => {

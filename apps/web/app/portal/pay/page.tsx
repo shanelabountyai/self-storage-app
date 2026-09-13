@@ -306,8 +306,20 @@ export default async function PortalPayPage({
            press — but that press is a `formMethod="get"` submit, a full
            document load, so the refusal is present when the page is drawn and
            nothing focuses it. It meets neither half of B-285's exception
-           (reports a press AND takes focus), so B-245's rule governs. */
-        <p className="border-input rounded-md border p-3 text-sm text-pretty">
+           (reports a press AND takes focus), so B-245's rule governs.
+
+           B-299 gives it the missing half without a live role and without a
+           line of script: the form's `action` carries `#amount-problem`, so the
+           browser's own fragment navigation focuses this paragraph whenever it
+           exists (2.4.3). `tabIndex={-1}` is what makes it focusable — the same
+           mechanism `<main>` uses for the skip link — and focus landing here IS
+           the announcement. When the amount is accepted the id is absent and
+           the browser does nothing at all. */
+        <p
+          id="amount-problem"
+          tabIndex={-1}
+          className="border-input rounded-md border p-3 text-sm text-pretty"
+        >
           {t(AMOUNT_PROBLEM_KEYS[checked.problem], {
             min: formatRate(MIN_PAYMENT_CENTS),
           })}{' '}

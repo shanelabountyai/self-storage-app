@@ -2573,6 +2573,34 @@ function reviewedOn(locale: Locale): string {
 // what a screen reader does with either markup is B-254's to hear, not this
 // row's. This page makes no visible claim about these regions, so no visible
 // line changes. `LAST_REVIEWED` is not bumped, per D-115.
+// Re-verified 2026-09-13, at B-299 (the four presses that removed what the
+// reader was standing on and moved focus nowhere). Customer-facing, and it is
+// the half B-295 and B-290 each left open rather than a new finding. Three
+// portal refusals — `/portal/pay`'s amount, `/portal/transfer`'s and
+// `/portal/move-out`'s previews — correctly lost `role="alert"` at B-295
+// because a `formMethod="get"` submit is a full document load, and were then
+// announced by nothing at all; each form now submits to the refusal's own
+// fragment, so the BROWSER focuses it, with no script and no live role (2.4.3).
+// The fourth is the Spanish offer B-290 shipped: either answer removes the
+// region holding the button that was pressed, so focus fell to `<body>` and the
+// next Tab started from the site header; both answers now move it to `<main>`,
+// the same destination and the same reasoning as the consent banner's.
+//
+// Two things recorded rather than left implied. **The fragment is the whole
+// fix for three of the four**, which matters to this page because §6.2's
+// JavaScript-off commitment is a claim it makes: a hydrated handler would have
+// worked only once the bundle had run, and the pay form is precisely the one
+// that is meant to work without it. **And what a screen reader then SAYS is
+// still not asserted anywhere** — B-216's standard, and B-254's pass to hear.
+// What is asserted is that focus lands on the refusal rather than on `<body>`,
+// which is measurable and is measured (`e2e/portal.spec.ts`,
+// `portal-move-out.spec.ts`, `portal-transfer.spec.ts`, `i18n.spec.ts`).
+//
+// This page has never claimed anything about focus after a refusal, so there
+// was no false sentence while the four announced nothing and there is none to
+// strengthen now; the "where we fall short" list was read and had nothing to
+// add or remove. No visible line changes. `LAST_REVIEWED` is not bumped, per
+// D-115.
 
 export default async function AccessibilityPage() {
   const locale = await getLocale()

@@ -1,4 +1,5 @@
 import { setLocaleAction } from '@/lib/i18n/actions'
+import { OfferAnswer } from '@/components/site/offer-answer'
 import { dictionaryFor, translate } from '@/lib/i18n'
 
 // B-290 (D-133). Spanish, OFFERED to a browser that prefers it on a visit where
@@ -34,12 +35,14 @@ export function LanguageOffer() {
       >
         <p className="text-sm">{t('lang.offer')}</p>
         <div className="flex flex-wrap gap-2">
-          <button type="submit" name="locale" value="es" className={button}>
+          {/* B-299: both answers remove this region, so each moves focus to
+              `<main>` rather than dropping it on `<body>` (2.4.3). */}
+          <OfferAnswer locale="es" className={button}>
             {t('lang.offerAccept')}
-          </button>
-          <button type="submit" name="locale" value="en" className={button}>
+          </OfferAnswer>
+          <OfferAnswer locale="en" className={button}>
             {t('lang.offerDismiss')}
-          </button>
+          </OfferAnswer>
         </div>
       </form>
     </section>

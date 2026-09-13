@@ -325,7 +325,9 @@ export default async function PortalTransferPage({
             <button
               type="submit"
               formMethod="get"
-              formAction="/portal/transfer"
+              // B-299: the fragment is what focuses the refusal below when
+              // there is one. See its comment.
+              formAction="/portal/transfer#preview-problem"
               className="border-input hover:bg-accent inline-flex min-h-11 items-center self-start rounded-md border px-4 text-sm font-medium"
             >
               {t('tr.showCost')}
@@ -335,8 +337,18 @@ export default async function PortalTransferPage({
               /* B-295: no `role="alert"` — same GET-submit case as
                  `/portal/pay`. "Show cost" is a `formMethod="get"` submit, so
                  this refusal arrives with a new document rather than into the
-                 one being read, and nothing focuses it (B-245, B-285). */
-              <p className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-900">
+                 one being read, and nothing focuses it (B-245, B-285).
+
+                 B-299: "Show cost" now submits to `#preview-problem`, so the
+                 browser's own fragment navigation focuses this paragraph when
+                 it renders (2.4.3). `tabIndex={-1}` makes it focusable; no
+                 script, no live role, and nothing happens when the preview
+                 succeeds and the id is absent. */
+              <p
+                id="preview-problem"
+                tabIndex={-1}
+                className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-900"
+              >
                 {t(PORTAL_TRANSFER_PROBLEM_KEYS[previewProblem] ?? 'tr.previewFailed', {
                   days: MAX_MOVE_IN_DAYS_AHEAD,
                 })}

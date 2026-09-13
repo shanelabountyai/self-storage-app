@@ -88,6 +88,32 @@ test.describe('signed in as the demo tenant', () => {
     await assertNoAxeViolations(page)
   })
 
+  // B-299 / SC 2.4.3. B-295 took `role="alert"` off this refusal correctly — a
+  // GET submit is a full document load, so it is present at draw — and left it
+  // announced by nothing. "Update" now submits to `#preview-problem` and the
+  // browser's own fragment navigation focuses it.
+  //
+  // The press and the refusal cannot be had together here: the picker is a
+  // `type="date"` with `min`/`max`, so a ceiling-breaking date is refused by
+  // native constraint validation before it is ever submitted, and this refusal
+  // is reached by a crafted URL or by a race. So the FRAGMENT is exercised
+  // directly — which is what the button submits to — and that the button
+  // actually carries it is pinned in `tests/refusal-fragment.test.ts`, for all
+  // three of these screens including `/portal/transfer`, whose own refusals no
+  // browser test can produce at all. Mutates nothing, as above.
+  test('a refused preview takes focus', async ({ page }) => {
+    await page.goto('/portal/move-out')
+    await expect(page.getByLabel('Move-out date')).toBeVisible()
+
+    const url = new URL(page.url())
+    url.searchParams.set('date', '2031-01-01')
+    await page.goto(`${url.pathname + url.search}#preview-problem`)
+
+    const refusal = page.getByRole('main').getByText('within the next 365 days')
+    await expect(refusal).toBeVisible()
+    await expect(refusal).toBeFocused()
+  })
+
   // B-184 (T1). B-173's `stalePreview` guard, reachable the ordinary way — this
   // page has an explicit "Update" button beside the picker (a native GET
   // submit of the same form), so typing a new date and pressing "Request a

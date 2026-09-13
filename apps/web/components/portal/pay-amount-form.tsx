@@ -64,8 +64,15 @@ export function PayAmountForm({
     return () => clearTimeout(timer)
   }, [note])
 
+  // B-299. The `action` is a BARE FRAGMENT, which resolves to this page: a GET
+  // submit replaces the URL's query with the form data and keeps the fragment,
+  // so a refused amount lands on `#amount-problem` and the browser's own
+  // fragment navigation focuses the refusal (2.4.3). Relative, so this
+  // component does not hard-code the route it is mounted on, and it needs no
+  // JavaScript — which is the point, because this form is the one §6.2 wants
+  // working without any.
   return (
-    <form method="GET" className="mt-3 flex flex-col gap-3">
+    <form method="GET" action="#amount-problem" className="mt-3 flex flex-col gap-3">
       <input type="hidden" name={subject.field} value={subject.id} />
       <label className="flex flex-col gap-1 text-sm">
         {t('amtform.label')}

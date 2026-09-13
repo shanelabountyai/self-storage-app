@@ -283,7 +283,8 @@ export default async function PortalMoveOutPage({
           <button
             type="submit"
             formMethod="get"
-            formAction="/portal/move-out"
+            // B-299: the fragment focuses the refusal below. See its comment.
+            formAction="/portal/move-out#preview-problem"
             className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
           >
             {t('mo.update')}
@@ -292,8 +293,14 @@ export default async function PortalMoveOutPage({
 
       {previewProblem && (
         /* B-295: no `role="alert"` — the GET-submit case, as on
-           `/portal/pay` and `/portal/transfer`. */
-        <p className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-pretty text-red-900">
+           `/portal/pay` and `/portal/transfer`. B-299 gives all three the same
+           focus: "Update" submits to `#preview-problem` and the browser's own
+           fragment navigation lands on this paragraph (2.4.3). */
+        <p
+          id="preview-problem"
+          tabIndex={-1}
+          className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-pretty text-red-900"
+        >
           {t(PORTAL_MOVE_OUT_PROBLEM_KEYS[previewProblem], {
             days: MAX_MOVE_OUT_DAYS_AHEAD,
           })}
