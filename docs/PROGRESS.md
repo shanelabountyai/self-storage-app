@@ -9826,7 +9826,7 @@ The three gaps B-297 carried forward with no owning row, closed together because
 - **The demo seed now writes calendar days for `startDate`/`endDate` (`dayAgo`), and no other seeded date column was reviewed.** B-228 built `dayFromNow` for this reason and the same question applies to every fixture standing in for a typed date.
 - **B-290's, B-287's, B-295's, B-284's, B-281's and B-280's carried-forward gaps are all unchanged** — this row touched none of them.
 
-## B-299 — four presses removed what the reader was standing on and moved focus nowhere (2026-09-13, `PENDING`)
+## B-299 — four presses removed what the reader was standing on and moved focus nowhere (2026-09-13, `4da40c7`)
 
 The two gaps **B-295** and **B-290** each carried forward with no owning row. They are one shape, and both rows recorded it the same way — *"fixing this needs a client wrapper"* — which is why neither fixed it. **For three of the four it does not.**
 
