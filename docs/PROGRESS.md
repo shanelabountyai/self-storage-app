@@ -9857,7 +9857,7 @@ The two gaps **B-295** and **B-290** each carried forward with no owning row. Th
 - **Whether the transfer preview *should* refuse a date past the ceiling is an open question.** Today the picker's `min`/`max` is the only thing stopping it, and a crafted URL prices a transfer for 2031 without complaint — the request is still refused, so no money moves, but the screen quotes a date the product will not accept. No row owns it.
 - **The five other carried-forward gaps in `NEXT.md` are unchanged**, including B-287's reset-mail wording and B-284's, B-281's and B-280's.
 
-## B-300 — the one auth email the recipient did not ask for told them to ignore it (2026-09-14, `PENDING`)
+## B-300 — the one auth email the recipient did not ask for told them to ignore it (2026-09-14, `96dc622`)
 
 Not a build row from the backlog: the session was the owner working through the blocked-decision list in `NEXT.md`, and this was the prerequisite that fell out of one of the answers. Three decisions were settled, one of them needed a code change first, and one needed a query written before it could be settled at all.
 
