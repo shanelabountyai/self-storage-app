@@ -53,7 +53,11 @@ export async function sendAuthEmail({
   const minutes = Math.round((expiresAt.getTime() - Date.now()) / 60_000)
   const say = proseFor(locale).direct
   const lead = accountName === undefined ? [] : [say.authAccountAccess(accountName, SITE.name)]
-  const text = [...lead, say.authIntro[purpose], url, say.authExpiry(minutes)].join('\n\n')
+  // B-300. The ignore sentence is omitted exactly when `lead` is present: a
+  // business-account member did NOT request this mail, and telling them to
+  // ignore it tells them to discard the access it was sent to give them.
+  const tail = accountName === undefined ? [say.authIgnore] : []
+  const text = [...lead, say.authIntro[purpose], url, say.authExpiry(minutes), ...tail].join('\n\n')
 
   // Auth tokens are minted once per request (no stable id to key an
   // idempotency column on), so a random key is correct here — unlike a

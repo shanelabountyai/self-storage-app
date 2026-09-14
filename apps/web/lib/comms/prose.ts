@@ -77,6 +77,13 @@ export type DirectProse = {
   authSubject: Record<'magic_link' | 'password_reset', (site: string) => string>
   authIntro: Record<'magic_link' | 'password_reset', string>
   authExpiry: (minutes: number) => string
+  /// B-300. Its own line rather than the second half of `authExpiry`, because
+  /// it is FALSE for the one auth mail the recipient did not ask for: a
+  /// business-account member is told here that staff gave them sight of an
+  /// account, and "you can ignore this" instructs them to throw away the
+  /// access the mail exists to give them. `sendAuthEmail` appends it only when
+  /// there is no `accountName`.
+  authIgnore: string
   /// B-287. Leads the reset email when staff, not the recipient, caused it:
   /// they were just given sight of a business account. Says why the mail came
   /// and that the link is optional for somebody who already has a password.
@@ -325,8 +332,8 @@ const en: CommsProse = {
       magic_link: 'Use this link to sign in:',
       password_reset: 'Use this link to choose a new password:',
     },
-    authExpiry: (minutes) =>
-      `This link expires in ${minutes} minutes. If you did not request this, you can ignore this email.`,
+    authExpiry: (minutes) => `This link expires in ${minutes} minutes.`,
+    authIgnore: 'If you did not request this, you can ignore this email.',
     authAccountAccess: (account, site) =>
       `${site} gave you access to see the business account ${account} in your portal. If you already have a password, sign in as usual. If not, use the link below to choose one; if it has expired, ask for a new one from the sign-in page.`,
 
@@ -483,7 +490,8 @@ const es: CommsProse = {
       password_reset: 'Use este enlace para elegir una contraseña nueva:',
     },
     authExpiry: (minutes) =>
-      `Este enlace vence en ${minutes} ${minutes === 1 ? 'minuto' : 'minutos'}. Si usted no lo pidió, puede ignorar este correo.`,
+      `Este enlace vence en ${minutes} ${minutes === 1 ? 'minuto' : 'minutos'}.`,
+    authIgnore: 'Si usted no lo pidió, puede ignorar este correo.',
     authAccountAccess: (account, site) =>
       `${site} le dio acceso para ver la cuenta de empresa ${account} en su portal. Si ya tiene contraseña, inicie sesión como siempre. Si no, use el enlace de abajo para elegir una; si ya venció, pida uno nuevo desde la página de inicio de sesión.`,
 

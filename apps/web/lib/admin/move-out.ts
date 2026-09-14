@@ -99,6 +99,16 @@ export function applyRecaptureOverride(
 /// B-284. Written here from `recapture.reason`'s facts, in English, because this
 /// is the admin screen and the ledger (D-122). The portal writes the same facts
 /// with the same keys in the tenant's language.
+///
+/// D-140 settled the half D-122 left open, and the answer is that this stays
+/// English: a Spanish tenant agrees to a Spanish sentence on `/portal/move-out`
+/// and then reads an English one on their own statement, and B-145's
+/// consent-wording rule is deliberately English-only for that reason — the
+/// ledger is the OPERATOR's record, and the consent artefact that carries legal
+/// weight is the signed document and its hash, not this prose. Do NOT pass the
+/// tenant's locale in here. The upgrade path, if it is ever revisited, is to
+/// store `recapture.reason` on the invoice line and render per reader; D-140
+/// says why that was not worth a row.
 export function recaptureDescription(preview: {
   recapture: Recapture;
   ruledRecaptureCents: number;
