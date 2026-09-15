@@ -10013,7 +10013,7 @@ Built and committed with B-303, in the one commit `4e7b60e`: it depends on that 
 - **No e2e covers the directed allocation.** `admin-pos.spec.ts` asserts the receipt number, the change and the deposit slip against a single-unit demo tenant, and the demo seed has no business-account payer holding a unit of their own. Adding one is a shared-fixture change that would need B-120's discipline; it has no row.
 - **The statement is a paragraph, not a `Field` hint.** It is read in document order and is not announced when the picker changes — unchanged from B-280's account wording, and no longer load-bearing now that the allocation matches it. Recorded in the accessibility page's log.
 
-## B-306 — a refused lien notice left no record and no worklist (2026-09-15, `PENDING`)
+## B-306 — a refused lien notice left no record and no worklist (2026-09-15, `279bf74`)
 
 `generateNotice` returned the refusal **before anything was written**: the only `recordAudit` in it was on the success path, and nothing anywhere recorded a `ClaimProblem`. A manager tried the pre-lien on day 32, read *"The ledger and the invoices disagree…"*, and went back to the counter — nothing remembered the attempt happened.
 
