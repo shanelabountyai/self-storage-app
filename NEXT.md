@@ -1,20 +1,25 @@
 # Next
 
-**B-302 is done** (`efbad7d`). The eighth review block (`5933447`) is still open: 25 rows, **B-302–B-326**, at `83aza`–`83azx` plus **B-325 at `83aya`** (deliberately ahead of B-301 so that mail's wording settles before the backfill sends).
+**B-303 and B-304 are done** (`4e7b60e`, SHA recorded in `a7a6e47`). The eighth review block (`5933447`) has 23 rows left, **B-305–B-326** plus the new **B-327**, and **B-325 at `83aya`** (deliberately ahead of B-301 so mail's wording settles before the backfill sends).
 
-B-302 tied the amount refusal to the amount field on `/portal/pay`, `/pay/[token]` and `/admin/pos/card`, and stopped all three discarding what was typed. `a11y.true.errors` was made **true** rather than scoped — a survey of every form in `apps/web` found the rest of the product already tied and value-preserving through the shared `Field`/`AdminForm` primitive, so those three hand-rolled amount boxes were the whole exception. `LAST_REVIEWED` is unmoved and now pinned by a test; **B-254 still owns the date and still needs a person.**
+A ledger exception can now be repaired from the lease's ledger screen — a correction, a write-off of an open lease, or a void of a rent invoice, all behind `credits:manual` and B-197's limit — and one a person has judged unrepairable can be marked reviewed so the daily high-priority task stops naming it. **The owner action about `ledger_does_not_reconcile` is unblocked**: there is now something a person can do about one.
 
 ## Start here
 
-**B-303/B-304**, then in file order **B-305**, **B-306**, **B-307**.
+**B-305**, then in file order **B-306**, **B-307**.
 
-- **B-303/B-304** — a ledger exception cannot be repaired inside the product, so the lien gate is permanent and the task re-raises every morning forever. This is also what the owner-action row about `ledger_does_not_reconcile` is waiting on: until B-303 ships there is nothing a person can do about one.
-- **B-305** — the counter misdirects a business-account payer's money. `claimsFor` spreads it oldest-first across the account, and D-137's guard only fires when the payer is somebody else.
-- **B-307** is the block's own doing. B-297 and B-298 changed `facilityRevenue`, `reportRangeForMonth`, `movesForFacility` and `attachRateForFacility`, so **every already-filed month now disagrees with what the same query returns**. `periodDrift` already detects it and is pull-only: no cron, no task, no alarm. The row builds the alarm and a computation-version stamp. **The restatement decision is the owner's** and is in the table below.
+- **B-305** — the counter misdirects a business-account payer's money. `claimsFor` spreads it oldest-first across the account, and D-137's guard only fires when the payer is somebody else. The row says to build **either** remedy — `restrictToInvoiceIds` (the mechanism B-189 already built) or a before-submit statement naming the units — **and to say which in the entry**.
+- **B-306** — a refused lien notice leaves no record and no worklist. It is the visible half of B-304: an acknowledged exception still refuses a notice, deliberately, and nothing anywhere records that it did.
+- **B-307** — the block's own doing. B-297/B-298 changed `facilityRevenue`, `reportRangeForMonth`, `movesForFacility` and `attachRateForFacility`, so every already-filed month now disagrees with what the same query returns. `periodDrift` detects it and is pull-only. The row builds the alarm and a computation-version stamp; **the restatement decision is the owner's** and is in the table below.
+
+**B-327 is new**, raised out of building B-303, and it is the one gap B-303 left that has a row: a voided rent invoice's period can never be billed again, and the four-line index change that would release it is a money defect in disguise — the promotion and referral marks are consumed per period, so a bare re-raise drops a discount the tenant was promised. Read the row before reaching for the index.
 
 Nothing in the block is blocked on the tree. B-301 still is.
 
-**One thing B-302 leaves for B-314**, which is already written: `/pay/[token]` keeps its `role="alert"`, has no skip link, and is outside B-295's `app/portal/**` lint rule. B-302 deliberately did not pre-empt any of the three.
+## Two things worth knowing before the next sweep
+
+- **The unit suite's connection cap was never applied** (`aa179bc`). `scripts/test-db.mts` built the URL from `DIRECT_URL`, which carries no query parameters, so `.env.test`'s `connection_limit=10` was dropped and every worker took Prisma's default of 21. It surfaced as a `marketplace` spec timing out on the pool, which reads as flakiness. Fixed and pinned by `tests/test-db-url.test.ts`. If a sweep ever looks slow again, check `pg_stat_activity` before reading a stack trace.
+- **`db:migrate:e2e` reseeds the demo, and that stales `.next/cache/fetch-cache`.** `a11y-own-spec-routes.spec.ts`'s reserve test failed on mobile-chrome for exactly this — cached unit ids that no longer exist — and passed cleanly after `rm -rf apps/web/.next/cache/fetch-cache`. Do that after any reseed, before believing an e2e failure.
 
 ## Owner actions
 
@@ -28,7 +33,7 @@ Nothing in the block is blocked on the tree. B-301 still is.
 | **Fill in `.env.prod-ops`, then run `npx dotenv -e .env.prod-ops -- npm run db:backfill:move-in-payments`** (a dry run). Paste the output into B-277's `PROGRESS.md` entry. | `DATABASE_URL`, `DIRECT_URL` and `EXPECTED_DEV_DB_HOST` are all empty |
 | **Know that no real pay link worked from 2026-08-07 until B-283 deploys, and no waitlist cancel link worked from 2026-08-20.** | Production data, and a judgement about telling people |
 | **B-298's migration rewrites `lease.startDate` on production when it deploys.** First data backfill to reach production from a migration file. Worth watching the deploy. | Production data |
-| **After the next deploy, look at the first cron response's `ledgerExceptions` and the new `ledger_does_not_reconcile` tasks.** Note that until **B-303** ships there is nothing a person can do about one — no adjustment, no write-off on an open lease, no rent-invoice void. | The first time production has been swept |
+| **After the next deploy, look at the first cron response's `ledgerExceptions`.** It is now **two numbers**, `{ total, unacknowledged }` — they differ by the leases somebody has marked reviewed, and a rising `total` against a flat `unacknowledged` is worth noticing. **B-303 means there is now something a person can do about a `ledger_does_not_reconcile` task**, and B-304 means one they cannot fix stops re-raising once they say so. | The first time production has been swept |
 | **Ask whether anyone tried to generate a lien notice and was refused** — and note that **B-306** exists because nothing recorded those attempts, so there is no list to retry from. | Before B-292, `ledger_does_not_reconcile` refused every tenant who had paid an invoice |
 | **A portfolio-level business account needs an owner decision and a D-number before anyone builds toward it.** Recorded as a stated limit in PRD 01 §9, not as a row: a contractor with units at three sites is three accounts, three statements, three counter payments. | New scope, and a schema change with a large blast radius |
 | **B-254 needs a person, not a session:** nobody has run VoiceOver or NVDA against this product, and `LAST_REVIEWED` cannot move until somebody does (D-115). B-285's, B-286's and B-299's announcement questions all wait on that same pass. | Only a human can perform it |
@@ -39,7 +44,9 @@ Nothing in the block is blocked on the tree. B-301 still is.
 
 The block recorded **twelve refusals** and **two stated limits** in the numbering note at the top of `06-backlog.md`, so the ninth review pass does not re-find them — among them that the westernmost-zone reckoning in `reportRange` is **correct as built** (D-138 weighed the union-of-zones alternative and it double-counts), that `bodega` vs `unidad` and B-286's toggle markup are both settled, and that a `<p tabindex="-1">` with no focus ring is not a 2.4.7 failure. Read that note before starting the next review.
 
-Carried gaps with no owning row, unchanged: B-300's `authExpiry` "minutes" for 1; B-299's transfer-preview move-in ceiling and its untested preview refusals; B-298's `Lease.endDate` and the rest of the demo seed's date columns; B-290's missing funnel measurement; B-284's, B-281's and B-280's carried gaps.
+Carried gaps with no owning row, unchanged: B-300's `authExpiry` "minutes" for 1; B-299's transfer-preview move-in ceiling and its untested preview refusals; B-298's `Lease.endDate` and the rest of the demo seed's date columns; B-290's missing funnel measurement; B-284's, B-281's and B-280's carried gaps. **B-303 adds three**, all in its `PROGRESS.md` entry and none with a row: `/admin/reports/ledger-exceptions` has no e2e coverage (B-277's gap, not B-303's), no screen lists what has been acknowledged portfolio-wide, and an acknowledgement is never expired.
+
+**One thing B-302 left for B-314**, unchanged: `/pay/[token]` keeps its `role="alert"`, has no skip link, and is outside B-295's `app/portal/**` lint rule.
 
 ## The blocked list
 
