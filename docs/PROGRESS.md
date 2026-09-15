@@ -10099,7 +10099,7 @@ The second half of the defect is what the screen said when somebody *did* look. 
 
 ---
 
-## B-308 — the counter's shared-address button answered the question the other way (2026-09-15, `PENDING`)
+## B-308 — the counter's shared-address button answered the question the other way (2026-09-15, `e26f897`)
 
 B-289 was right to make the warning lead with a question. It left the only button underneath it still labelled as an answer — and as the **wrong** answer.
 
