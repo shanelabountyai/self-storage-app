@@ -64,7 +64,33 @@ function shouldRedirect(): boolean {
 export function testDatabaseUrl(): string | null {
   if (!shouldRedirect()) return null
   const base = process.env.DIRECT_URL ?? process.env.DATABASE_URL
-  return base ? toTestUrl(base) : null
+  return base ? withPoolLimitsFrom(toTestUrl(base), process.env.DATABASE_URL) : null
+}
+
+/// Carries `connection_limit` and `pool_timeout` across from `DATABASE_URL`.
+///
+/// **Without this the suite ignores the per-project connection cap entirely**,
+/// and the cap is a machine-wide resource the same way a port is (CLAUDE.md →
+/// *Cap the connection pool per project*). `.env.test` sets
+/// `?connection_limit=10&pool_timeout=20` on `DATABASE_URL`; `DIRECT_URL`
+/// carries no parameters, because the whole point of it is an unpooled
+/// endpoint — so rebuilding the suite's URL from it silently dropped both, and
+/// every worker fell back to Prisma's default of `cpus × 2 + 1`.
+///
+/// Found by the symptom the convention names: a `marketplace` spec failing with
+/// *"Timed out fetching a new connection from the connection pool … connection
+/// limit: 21"* — 21, not 10 — while `pg_stat_activity` showed 32 connections on
+/// `storage_test` from this suite alone. It reads exactly like a flaky test and
+/// is a configuration that was never applied.
+function withPoolLimitsFrom(url: string, source: string | undefined): string {
+  if (!source) return url
+  const from = new URL(source).searchParams
+  const parsed = new URL(url)
+  for (const key of ['connection_limit', 'pool_timeout']) {
+    const value = from.get(key)
+    if (value !== null) parsed.searchParams.set(key, value)
+  }
+  return parsed.toString()
 }
 
 /// Migrations need the same unpooled connection: `migrate deploy` takes an
