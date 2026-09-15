@@ -24,7 +24,9 @@ import { certifiedMailConfig, sendCertifiedLetter } from '@/lib/notices/certifie
 import { assertFacilityAccess, can, ForbiddenError, requirePermission } from '@/lib/rbac/authorize'
 import { toAuditActor } from '@/lib/rbac/audit-actor'
 import type { Actor } from '@/lib/rbac/actor'
+import type { TaskType } from '@storage/core/tasks'
 import { postIncurredNoticeCost } from '@/lib/billing/charges'
+import { cancelOpenTask, createTask } from '@/lib/admin/tasks'
 import { storeGeneratedDocument } from '@/lib/documents/store'
 import { renderDocument } from '@/lib/documents/render'
 import { formatCents } from '@/lib/format'
@@ -391,6 +393,103 @@ export async function previewNotice(
   return { ok: true, html: rendered.bodyHtml, context: result.context }
 }
 
+// ------------------------------------------------------- refusals (B-306) ----
+
+/// Which task type carries a refused notice. One per notice type, because
+/// "did the pre-lien go out" and "did the lien go out" are two questions.
+const REFUSAL_TASK_TYPE = {
+  pre_lien: 'pre_lien_notice_refused',
+  lien: 'lien_notice_refused',
+} as const satisfies Record<LienNoticeType, TaskType>
+
+/// The numbers behind a refusal, so the audit entry carries the arithmetic and
+/// not only the sentence. A later reader asking "how far out was it" should not
+/// have to re-derive a figure from a ledger that has since been repaired.
+///
+/// Exported only for its test. `claim_does_not_sum` is unreachable from real
+/// ledger rows by construction (see `buildClaim`), so this is the only place
+/// that branch can be checked at all — and an evidence figure with no check on
+/// it is the kind that is wrong the one time it is read.
+export function refusalFigures(problem: NoticeProblem): Record<string, unknown> {
+  switch (problem.kind) {
+    case 'claim_does_not_sum':
+      return { expectedCents: problem.expectedCents, actualCents: problem.actualCents }
+    case 'ledger_does_not_reconcile':
+      return { differenceCents: problem.reconciliation.differenceCents }
+    default:
+      return {}
+  }
+}
+
+/// B-306. Records that a notice was attempted and refused.
+///
+/// Called only from `generateNotice`, never from `previewNotice`: looking at
+/// what a notice would say is not an attempt to serve one, and a task per
+/// preview would bury the attempts that matter.
+///
+/// Two artefacts, deliberately, because they answer different questions. The
+/// audit entry is permanent and survives the repair — once B-292's arithmetic
+/// fix lands the lease reconciles and drops off the exception report, and this
+/// becomes the only evidence that a notice was owed and never served. The task
+/// is the worklist, and it is transient: generating the notice cancels it.
+///
+/// Best-effort in neither direction — a failure here throws, the same as the
+/// success path's audit does. A refusal that was itself not recorded is the
+/// exact gap this row exists to close.
+async function recordNoticeRefusal(
+  actor: Actor,
+  leaseId: string,
+  type: LienNoticeType,
+  problem: NoticeProblem,
+): Promise<void> {
+  // `lease_not_found` is the one refusal with nothing to hang a record on: no
+  // facility to scope the audit entry to, no lease for a task to be about, and
+  // no notice that was ever owed. It is a bad id, not a missed step.
+  if (problem.kind === 'lease_not_found') return
+
+  const lease = await prisma.lease.findUnique({
+    where: { id: leaseId },
+    select: { facilityId: true },
+  })
+  if (!lease) return
+
+  await recordAudit({
+    actor: toAuditActor(actor),
+    facilityId: lease.facilityId,
+    action: 'notice.refused',
+    entityType: 'Lease',
+    entityId: leaseId,
+    context: {
+      type,
+      noticeType: noticeTypeLabel(type),
+      problem: problem.kind,
+      message: problem.message,
+      ...refusalFigures(problem),
+    },
+  })
+
+  const taskType = REFUSAL_TASK_TYPE[type]
+  // Across days, not just within one. `createTask`'s own idempotency key is
+  // (type, entityId, businessDate), which would raise a second card when the
+  // same manager tries again tomorrow — and a second card for one unserved
+  // notice is how the queue learns to be ignored (B-304's lesson).
+  const open = await prisma.task.findFirst({
+    where: { type: taskType, entityId: leaseId, status: 'open' },
+    select: { id: true },
+  })
+  if (open) return
+
+  await createTask({
+    facilityId: lease.facilityId,
+    type: taskType,
+    entityType: 'Lease',
+    entityId: leaseId,
+    // D-15: the reason in words, on the card. `problem.message` is already a
+    // sentence for a reader — nothing here renders a `snake_case` kind.
+    detail: problem.message,
+  })
+}
+
 export type GenerateResult =
   | { ok: true; noticeId: string; documentId: string; documentHash: string }
   | { ok: false; problem: NoticeProblem }
@@ -405,7 +504,14 @@ export async function generateNotice(
   options: { deadlineDays?: number; now?: Date; correctsNoticeId?: string } = {},
 ): Promise<GenerateResult> {
   const result = await noticeContext(actor, leaseId, type, options)
-  if (!result.ok) return result
+  if (!result.ok) {
+    // B-306. Before this, the refusal returned here and nothing anywhere
+    // recorded that the attempt had happened. Outside the transaction below
+    // because there is no transaction on this path — and the record has to
+    // survive whatever the caller does with the refusal.
+    await recordNoticeRefusal(actor, leaseId, type, result.problem)
+    return result
+  }
   const context = result.context
 
   const noticeId = await prisma.$transaction(async (tx) => {
@@ -530,6 +636,13 @@ export async function generateNotice(
         tx,
       )
     }
+
+    // B-306. The refusal task is `resolvedByAction` — no note closes it — so
+    // this is the only thing that can, and it has to run here or the card
+    // survives the very action it was asking for. Inside the transaction: a
+    // notice that exists beside an open card saying it does not is the state
+    // the queue must never be able to reach.
+    await cancelOpenTask(REFUSAL_TASK_TYPE[type], leaseId, tx)
 
     return { id: notice.id, documentId, documentHash: rendered.contentHash }
   })

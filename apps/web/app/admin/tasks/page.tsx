@@ -245,15 +245,24 @@ export default async function TasksPage({
                   `completeTask` would refuse. */}
               {task.resolvedByAction ? (
                 <p className="text-muted-foreground mt-3 text-sm text-pretty">
-                  {task.resolvedByAction.sentence}{' '}
-                  <Link
-                    href={task.resolvedByAction.href}
-                    className="underline underline-offset-2"
-                    aria-label={`${task.resolvedByAction.linkLabel} for ${task.subject.label}`}
-                  >
-                    {task.resolvedByAction.linkLabel}
-                  </Link>
-                  .
+                  {task.resolvedByAction.sentence}
+                  {/* B-306. A type whose destination is scoped to one row —
+                      the notices screen is per tenant AND per lease — names no
+                      href the catalog could hold, and the subject link above
+                      already goes there. The sentence stands on its own. */}
+                  {task.resolvedByAction.href && task.resolvedByAction.linkLabel ? (
+                    <>
+                      {' '}
+                      <Link
+                        href={task.resolvedByAction.href}
+                        className="underline underline-offset-2"
+                        aria-label={`${task.resolvedByAction.linkLabel} for ${task.subject.label}`}
+                      >
+                        {task.resolvedByAction.linkLabel}
+                      </Link>
+                      .
+                    </>
+                  ) : null}
                 </p>
               ) : (
                 <TaskCompleteForm

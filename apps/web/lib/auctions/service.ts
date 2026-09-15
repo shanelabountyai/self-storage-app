@@ -166,6 +166,16 @@ export type AuctionCaseView = {
   timelineLabel: string | null
   timelineVersion: number | null
   steps: (StepEvidence & { blocked: boolean })[]
+  /// B-306. Notices that were attempted for this case's leases and refused —
+  /// read from the audit log, which is the only place they exist.
+  ///
+  /// Beside the step history rather than inside it, because a refusal is not a
+  /// timeline step: it is a step that did NOT happen, and folding it into the
+  /// list of steps that did is how a lien file acquires a row nobody can tell
+  /// apart from a served notice. Newest first, and it survives the repair —
+  /// once the ledger reconciles again this is the only record that a notice
+  /// was owed and never served.
+  refusedNotices: { at: Date; noticeTypeLabel: string; reason: string; actor: string }[]
   advertisements: { id: string; publication: string; runDate: Date; reference: string | null }[]
   lockCutAt: Date | null
   inventoryDocumentId: string | null
@@ -227,7 +237,7 @@ export async function auctionCase(actor: Actor, caseId: string): Promise<Auction
       })
     : null
 
-  const [ledger, stepRuns, servedLienNotice, approver, blockedByHold] = await Promise.all([
+  const [ledger, stepRuns, servedLienNotice, approver, blockedByHold, refusals] = await Promise.all([
     prisma.ledgerEntry.aggregate({
       where: { leaseId: { in: claimIds } },
       _sum: { amountCents: true },
@@ -269,6 +279,24 @@ export async function auctionCase(actor: Actor, caseId: string): Promise<Auction
     // SCRA, bankruptcy, deceased or litigation hold fail open — the one
     // blocker on this list where proceeding is a federal matter.
     effectsByLease(claimIds, 'block_auction').then((leases) => leases.size > 0),
+    // B-306. Across the whole chain, like the balance and the holds: an
+    // attempt made before a D-85 transfer is still part of this case's history,
+    // and dropping it would reintroduce the gap on exactly the cases that have
+    // moved. Capped — a lease that refused forty times has told the reader
+    // everything by the twentieth, and this is a summary beside a timeline.
+    prisma.auditLog.findMany({
+      where: { action: 'notice.refused', entityType: 'Lease', entityId: { in: claimIds } },
+      orderBy: { occurredAt: 'desc' },
+      take: 20,
+      select: {
+        occurredAt: true,
+        actorLabel: true,
+        after: true,
+        // `toAuditActor` leaves `actorLabel` null for staff, so the name comes
+        // off the relation rather than out of the entry.
+        actorStaff: { select: { firstName: true, lastName: true } },
+      },
+    }),
   ])
 
   const taskIds = stepRuns.map((run) => run.taskId).filter((id): id is string => !!id)
@@ -356,6 +384,25 @@ export async function auctionCase(actor: Actor, caseId: string): Promise<Auction
     timelineLabel: row.timeline?.label ?? null,
     timelineVersion: row.timeline?.version ?? null,
     steps: steps.map((step) => ({ ...step, blocked: blockedDays.has(step.dayOffset) })),
+    refusedNotices: refusals.map((entry) => {
+      const after = (entry.after ?? {}) as Record<string, unknown>
+      return {
+        at: entry.occurredAt,
+        // D-15. Both of these were written as words by `recordNoticeRefusal`;
+        // the `snake_case` kind is in the entry too and is deliberately not
+        // read here. A fallback rather than a throw, because an entry written
+        // by an older shape of this record still belongs on the timeline.
+        noticeTypeLabel:
+          typeof after.noticeType === 'string' ? after.noticeType : 'Lien notice',
+        reason:
+          typeof after.message === 'string'
+            ? after.message
+            : 'The reason was not recorded.',
+        actor: entry.actorStaff
+          ? `${entry.actorStaff.firstName} ${entry.actorStaff.lastName}`
+          : (entry.actorLabel ?? 'Staff'),
+      }
+    }),
     advertisements: row.advertisements.map((one) => ({
       id: one.id,
       publication: one.publication,

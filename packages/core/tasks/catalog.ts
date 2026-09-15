@@ -37,7 +37,11 @@ export type TaskTypeSpec = {
   /// The href lives in the catalog rather than in the queue's JSX so the view
   /// never has to switch on a `Task.type` string to know where to send
   /// somebody — the same reason `label` is here.
-  resolvedByAction?: { sentence: string; href: string; linkLabel: string };
+  /// B-306: `href` and `linkLabel` are optional. A type whose destination is
+  /// scoped to one row — the notices screen is per tenant AND per lease — has
+  /// no URL the catalog can name, and the card's own subject link already goes
+  /// there. The sentence still has to say what closes the task.
+  resolvedByAction?: { sentence: string; href?: string; linkLabel?: string };
 };
 
 export const TASK_TYPES = [
@@ -418,6 +422,47 @@ export const TASK_TYPES = [
         "Record the disposition on the auctions screen — a note cannot close this, because the surplus stays held either way.",
       href: "/admin/auctions",
       linkLabel: "Open auctions",
+    },
+  },
+  {
+    // B-306. `generateNotice` refused, and until this row nothing anywhere
+    // remembered the attempt. A manager tries the pre-lien on day 32, reads
+    // "the ledger and the invoices disagree", and goes back to the counter;
+    // the lien timeline then has a gap at exactly the place a wrongful-sale
+    // complaint reads. The audit entry is the evidence half, this is the
+    // worklist half — "any notice staff were refused should be retried" is
+    // B-292's own conclusion, and there was no list to retry from.
+    //
+    // One type per notice type, because "did the pre-lien go out" and "did the
+    // lien go out" are two questions and closing one must not close the other.
+    //
+    // No note can close it: the notice stays unserved whatever anybody types,
+    // and a completed card would mean the queue had forgotten a statutory step
+    // rather than that anyone had taken it. Generating the notice cancels it.
+    // No `href` — the notices screen is scoped to a tenant and a lease, which
+    // the catalog cannot name, and the card's subject link already lands on the
+    // tenant profile the Notices link hangs off.
+    //
+    // Sensitive: whether a notice was owed, attempted and never served is the
+    // first thing a lien file is read for.
+    type: "pre_lien_notice_refused",
+    label: "Pre-lien notice was refused — nothing has been served",
+    requiredProofFields: ["note"],
+    sensitive: true,
+    resolvedByAction: {
+      sentence:
+        "Fix the reason above and generate the notice from the tenant’s Notices screen — a note cannot close this, because the notice stays unserved either way.",
+    },
+  },
+  {
+    // B-306, and see `pre_lien_notice_refused` above for why there are two.
+    type: "lien_notice_refused",
+    label: "Lien notice was refused — nothing has been served",
+    requiredProofFields: ["note"],
+    sensitive: true,
+    resolvedByAction: {
+      sentence:
+        "Fix the reason above and generate the notice from the tenant’s Notices screen — a note cannot close this, because the notice stays unserved either way.",
     },
   },
 ] as const satisfies readonly TaskTypeSpec[];

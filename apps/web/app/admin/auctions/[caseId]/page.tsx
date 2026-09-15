@@ -160,6 +160,51 @@ export default async function AuctionCasePage({
         )}
       </section>
 
+      {/* B-306. Notices that were attempted and refused. Its own section, not a
+          row in the step history above: a refusal is a step that did NOT
+          happen, and a reader scanning a lien file must not have to work out
+          which rows are served notices. Rendered only when there are any —
+          "no notice was ever refused" is the ordinary case and needs no line.
+
+          The reason is the sentence the refusal itself carried (D-15); nothing
+          here prints a problem kind. */}
+      {view.refusedNotices.length > 0 && (
+        <section aria-labelledby="refusals-heading" className="flex flex-col gap-3">
+          <h2 id="refusals-heading" className="text-sm font-medium">
+            Notices attempted and refused
+          </h2>
+          <p className="text-muted-foreground max-w-prose text-xs text-pretty">
+            A notice staff tried to generate that the system would not produce. Each one is a
+            notice that was owed and never served, and it stays on this list after the reason is
+            fixed.
+          </p>
+          <ScrollRegion aria-label="Notices attempted and refused">
+            <table className="w-full min-w-max text-left text-sm">
+              <thead>
+                <tr className="text-muted-foreground">
+                  <th scope="col" className="pb-2 font-normal">Date</th>
+                  <th scope="col" className="pb-2 font-normal">Notice</th>
+                  <th scope="col" className="pb-2 font-normal">Tried by</th>
+                  <th scope="col" className="pb-2 font-normal">Why it was refused</th>
+                </tr>
+              </thead>
+              <tbody>
+                {view.refusedNotices.map((refusal, index) => (
+                  <tr key={`${refusal.at.toISOString()}-${index}`} className="border-t">
+                    <th scope="row" className="py-2 text-left font-medium whitespace-nowrap">
+                      {formatDate(refusal.at)}
+                    </th>
+                    <td className="py-2">{refusal.noticeTypeLabel}</td>
+                    <td className="py-2">{refusal.actor}</td>
+                    <td className="max-w-prose py-2 text-pretty">{refusal.reason}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </ScrollRegion>
+        </section>
+      )}
+
       {!closed && (
         <>
           <section aria-labelledby="vehicle-heading" className="flex flex-col gap-2">

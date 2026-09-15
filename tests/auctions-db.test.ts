@@ -1209,6 +1209,52 @@ describeDb('the auction pipeline', () => {
     })
   })
 
+  // B-306. A notice that was attempted and refused is a gap in the lien
+  // timeline at exactly the place a wrongful-sale complaint reads, and until
+  // this block nothing recorded that the attempt had happened at all. The
+  // entries are written by `generateNotice` (see `notices-db.test.ts`); what
+  // this asserts is that the case screen surfaces them.
+  describe('notices that were attempted and refused', () => {
+    // One test for both states, deliberately. `audit_log` is append-only and
+    // cannot be cleaned between tests (B-185), so a separate "nothing was ever
+    // refused" case would pass or fail on the order it happened to run in.
+    it('shows the refused attempt with its date and its reason in words', async () => {
+      const caseId = await makeReadyCase()
+      // Nothing refused yet — the section this feeds renders nothing at all.
+      expect((await auctionCase(regional(), caseId))!.refusedNotices).toEqual([])
+
+      await prisma.auditLog.create({
+        data: {
+          actorType: 'staff',
+          actorStaffId: managerId,
+          facilityId,
+          action: 'notice.refused',
+          entityType: 'Lease',
+          entityId: leaseId,
+          occurredAt: new Date('2026-07-12T15:00:00Z'),
+          after: {
+            type: 'pre_lien',
+            noticeType: 'Pre-lien notice',
+            problem: 'ledger_does_not_reconcile',
+            message: 'The ledger and the invoices disagree about what this lease owes.',
+            differenceCents: 12_900,
+          },
+        },
+      })
+
+      const view = (await auctionCase(regional(), caseId))!
+      expect(view.refusedNotices).toHaveLength(1)
+      const [refusal] = view.refusedNotices
+      expect(refusal.at.toISOString()).toBe('2026-07-12T15:00:00.000Z')
+      expect(refusal.noticeTypeLabel).toBe('Pre-lien notice')
+      expect(refusal.reason).toContain('disagree')
+      // D-15: nothing rendered carries the problem kind.
+      expect(refusal.reason).not.toContain('_')
+      expect(refusal.noticeTypeLabel).not.toContain('_')
+    })
+
+  })
+
   // B-160 / D-91. D-85 lets staff move a `pending_auction` tenant's goods to
   // another unit. B-157 made the BALANCE and the holds follow them; every other
   // reader of the case still named the unit the notice was served on, so the

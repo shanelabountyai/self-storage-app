@@ -314,6 +314,17 @@ export const AUDIT_ACTIONS = [
     label: "Notice delivery recorded",
     requiresReason: false,
   },
+  /// B-306. The refusal, which until this entry existed was the one step in a
+  /// lien timeline that left no trace at all: `generateNotice` returned before
+  /// anything was written, so a notice that was owed, attempted and never
+  /// served looked exactly like one nobody had ever tried to send. No reason
+  /// code — the reason is the refusal itself, and demanding one would mean
+  /// refusing to record the attempt when nobody supplied it.
+  {
+    action: "notice.refused",
+    label: "Notice refused — not generated",
+    requiresReason: false,
+  },
   {
     action: "auction.approved",
     label: "Auction eligibility approved",

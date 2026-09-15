@@ -8,6 +8,7 @@ import {
   recordNoticeDelivery,
 } from '../apps/web/lib/notices/service'
 import { saveNoticeTemplate, exampleNoticeTemplate } from '../apps/web/lib/admin/notice-templates'
+import { completeTask } from '../apps/web/lib/admin/tasks'
 import { verifyDocument } from '../apps/web/lib/documents/store'
 import { recordConsent } from '../packages/core/consent'
 import { claimForLease } from '../apps/web/lib/notices/service'
@@ -129,6 +130,10 @@ describeDb('lien notices', () => {
   })
 
   beforeEach(async () => {
+    // B-306. Every refusal now raises one. Without this, an open card left by
+    // an earlier test in this file dedupes the next test's refusal away and
+    // the suite disagrees with itself depending on order.
+    await prisma.task.deleteMany({ where: { facilityId } })
     await prisma.notice.deleteMany({ where: { facilityId } })
     await prisma.document.deleteMany({ where: { facilityId } })
     await prisma.noticeTemplate.deleteMany({ where: { facilityId } })
@@ -153,6 +158,7 @@ describeDb('lien notices', () => {
 
   afterAll(async () => {
     if (!hasDatabase) return
+    await prisma.task.deleteMany({ where: { facilityId } })
     await prisma.notice.deleteMany({ where: { facilityId } })
     await prisma.document.deleteMany({ where: { facilityId } })
     await prisma.noticeTemplate.deleteMany({ where: { facilityId } })
@@ -354,6 +360,215 @@ describeDb('lien notices', () => {
     it('refuses a staffer without the delinquency permission', async () => {
       await oweOneMonth()
       await expect(generateNotice(actor(['tenants:view']), leaseId, 'lien')).rejects.toThrow()
+    })
+  })
+
+  // B-306. Until this block, `generateNotice` returned the refusal before
+  // anything was written: the only `recordAudit` in it was on the success path.
+  // A manager who tried the pre-lien on day 32 and was refused left no trace at
+  // all, so "any notice staff were refused should be retried" (B-292's own
+  // conclusion) named a list that did not exist.
+  describe('a refused notice leaves a record and a worklist — B-306', () => {
+    /// Audit rows accumulate across this file and `audit_log` cannot be
+    /// cleaned (B-185), so every assertion here is scoped to what happened
+    /// since the test started rather than to a count over the lease.
+    async function refusalsSince(since: Date) {
+      return prisma.auditLog.findMany({
+        where: {
+          action: 'notice.refused',
+          entityType: 'Lease',
+          entityId: leaseId,
+          occurredAt: { gte: since },
+        },
+        orderBy: { occurredAt: 'asc' },
+      })
+    }
+
+    function openRefusalTasks(type = 'lien_notice_refused') {
+      return prisma.task.findMany({ where: { type, entityId: leaseId, status: 'open' } })
+    }
+
+    /// The ledger says $129 is owed and the invoices say nothing is — the
+    /// shape production has been refusing on since B-061.
+    async function breakReconciliation(): Promise<void> {
+      await oweOneMonth()
+      await prisma.invoice.update({
+        where: { id: invoiceId },
+        data: { amountPaidCents: 12_900, status: 'paid' },
+      })
+    }
+
+    it('records the refusal and raises a task when the ledger does not reconcile', async () => {
+      const since = new Date()
+      await breakReconciliation()
+
+      const result = await generateNotice(actor(), leaseId, 'lien')
+      expect(result.ok).toBe(false)
+
+      const entries = await refusalsSince(since)
+      expect(entries).toHaveLength(1)
+      const context = entries[0].after as Record<string, unknown>
+      expect(context.problem).toBe('ledger_does_not_reconcile')
+      expect(context.type).toBe('lien')
+      // The figures, not only the sentence — the ledger gets repaired and the
+      // difference is then underivable from anything else.
+      expect(context.differenceCents).toBe(12_900)
+      expect(entries[0].actorStaffId).toBe(staffId)
+
+      const tasks = await openRefusalTasks()
+      expect(tasks).toHaveLength(1)
+      // D-15: the card says why in words. Nothing renders the problem kind.
+      expect(tasks[0].detail).toContain('disagree')
+      expect(tasks[0].detail).not.toContain('_')
+    })
+
+    it('records the refusal when nothing is owed', async () => {
+      const since = new Date()
+      const result = await generateNotice(actor(), leaseId, 'lien')
+      expect(result.ok).toBe(false)
+
+      const entries = await refusalsSince(since)
+      expect(entries).toHaveLength(1)
+      expect((entries[0].after as Record<string, unknown>).problem).toBe('nothing_owed')
+      expect(await openRefusalTasks()).toHaveLength(1)
+    })
+
+    it('records the refusal when there is no address and when there is no template', async () => {
+      // Not `ClaimProblem`s, and refusals all the same: a notice was owed, an
+      // attempt was made, and nothing went out. The third `ClaimProblem` kind,
+      // `claim_does_not_sum`, is unreachable from real rows by construction —
+      // see the comment on it in `buildClaim` — so `refusalFigures` covers it
+      // in `tests/notice-refusal-figures.test.ts` instead.
+      const noAddressSince = new Date()
+      await oweOneMonth()
+      await prisma.tenantAddress.deleteMany({ where: { tenantId } })
+      await generateNotice(actor(), leaseId, 'lien')
+
+      const noAddress = await refusalsSince(noAddressSince)
+      expect(noAddress).toHaveLength(1)
+      expect((noAddress[0].after as Record<string, unknown>).problem).toBe('no_address')
+      expect(await openRefusalTasks()).toHaveLength(1)
+
+      // A second refusal on the same lease and type, for a different reason,
+      // still does not raise a second card.
+      await prisma.tenantAddress.create({
+        data: {
+          tenantId,
+          addressLine1: '400 Elm Street',
+          city: 'Austin',
+          state: 'TX',
+          postalCode: '78704',
+          source: 'counter',
+        },
+      })
+      const noTemplateSince = new Date()
+      await prisma.noticeTemplate.deleteMany({ where: { facilityId } })
+      await generateNotice(actor(), leaseId, 'lien')
+
+      const noTemplate = await refusalsSince(noTemplateSince)
+      expect(noTemplate).toHaveLength(1)
+      expect((noTemplate[0].after as Record<string, unknown>).problem).toBe('no_template')
+      expect(await openRefusalTasks()).toHaveLength(1)
+    })
+
+    it('does not raise a duplicate card for a second refusal, on any day', async () => {
+      await breakReconciliation()
+      const since = new Date()
+
+      await generateNotice(actor(), leaseId, 'lien')
+      const first = await openRefusalTasks()
+      expect(first).toHaveLength(1)
+
+      // The same manager tries again tomorrow. `createTask`'s own idempotency
+      // key is (type, entityId, businessDate), so without the open-task check
+      // this is a second card for one unserved notice — B-304's lesson.
+      await prisma.task.update({
+        where: { id: first[0].id },
+        data: { businessDate: new Date('2026-01-01T00:00:00Z') },
+      })
+      await generateNotice(actor(), leaseId, 'lien')
+
+      expect(await openRefusalTasks()).toHaveLength(1)
+      // Both attempts are in the record, though. The task is the worklist; the
+      // audit entries are the evidence, and there is one per attempt.
+      expect(await refusalsSince(since)).toHaveLength(2)
+    })
+
+    it('keeps the pre-lien and the lien apart', async () => {
+      await saveNoticeTemplate(actor(), facilityId, {
+        type: 'pre_lien',
+        ...exampleNoticeTemplate('pre_lien'),
+      })
+      await breakReconciliation()
+
+      await generateNotice(actor(), leaseId, 'pre_lien')
+      await generateNotice(actor(), leaseId, 'lien')
+
+      expect(await openRefusalTasks('pre_lien_notice_refused')).toHaveLength(1)
+      expect(await openRefusalTasks('lien_notice_refused')).toHaveLength(1)
+    })
+
+    it('closes the card when the notice is actually generated', async () => {
+      await breakReconciliation()
+      await generateNotice(actor(), leaseId, 'lien')
+      expect(await openRefusalTasks()).toHaveLength(1)
+
+      // Somebody repairs the ledger the way B-303 does, and the notice goes.
+      await prisma.invoice.update({
+        where: { id: invoiceId },
+        data: { amountPaidCents: 0, status: 'open' },
+      })
+      const result = await generateNotice(actor(), leaseId, 'lien')
+      expect(result.ok).toBe(true)
+
+      expect(await openRefusalTasks()).toHaveLength(0)
+      // Cancelled, not completed: nobody did the task, the reason for it
+      // stopped being true.
+      const cards = await prisma.task.findMany({
+        where: { type: 'lien_notice_refused', entityId: leaseId },
+      })
+      expect(cards.map((card) => card.status)).toEqual(['cancelled'])
+    })
+
+    it('refuses to let a note close the card', async () => {
+      await breakReconciliation()
+      await generateNotice(actor(), leaseId, 'lien')
+      const [card] = await openRefusalTasks()
+
+      const result = await completeTask(
+        actor(['delinquency:execute_step', 'tenants:view', 'tenants:edit']),
+        card.id,
+        { note: 'Called the tenant.' },
+      )
+      expect(result.ok).toBe(false)
+      if (result.ok) throw new Error('unreachable')
+      expect(result.reason).toContain('a note cannot close this')
+      expect(await openRefusalTasks()).toHaveLength(1)
+    })
+
+    it('records nothing for a preview — looking is not attempting', async () => {
+      const since = new Date()
+      await breakReconciliation()
+
+      const preview = await previewNotice(actor(), leaseId, 'lien')
+      expect(preview.ok).toBe(false)
+
+      expect(await refusalsSince(since)).toHaveLength(0)
+      expect(await openRefusalTasks()).toHaveLength(0)
+    })
+
+    it('records nothing for a lease id that does not exist', async () => {
+      // A bad id is not a missed step, and there is no facility to scope an
+      // entry to or lease for a card to be about.
+      const result = await generateNotice(actor(), 'no-such-lease', 'lien')
+      expect(result.ok).toBe(false)
+      if (result.ok) throw new Error('unreachable')
+      expect(result.problem.kind).toBe('lease_not_found')
+      expect(
+        await prisma.auditLog.count({
+          where: { action: 'notice.refused', entityId: 'no-such-lease' },
+        }),
+      ).toBe(0)
     })
   })
 

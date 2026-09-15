@@ -10012,3 +10012,46 @@ Built and committed with B-303, in the one commit `4e7b60e`: it depends on that 
 - **A tenant with two personal units who hands over one sum for both now gets it on the unit the staffer picked, with the remainder as credit there.** That is the trade the restriction makes, and it is the safe direction: the surplus is `unappliedCents` on the result and a credit line on the receipt naming that unit, so it is visible at the desk and a second payment settles the other unit. The unsafe direction was silent. If operators ask for it, the answer is a multi-unit subject in the picker (the shape B-280 built for accounts), not a return to the spread.
 - **No e2e covers the directed allocation.** `admin-pos.spec.ts` asserts the receipt number, the change and the deposit slip against a single-unit demo tenant, and the demo seed has no business-account payer holding a unit of their own. Adding one is a shared-fixture change that would need B-120's discipline; it has no row.
 - **The statement is a paragraph, not a `Field` hint.** It is read in document order and is not announced when the picker changes — unchanged from B-280's account wording, and no longer load-bearing now that the allocation matches it. Recorded in the accessibility page's log.
+
+## B-306 — a refused lien notice left no record and no worklist (2026-09-15, `PENDING`)
+
+`generateNotice` returned the refusal **before anything was written**: the only `recordAudit` in it was on the success path, and nothing anywhere recorded a `ClaimProblem`. A manager tried the pre-lien on day 32, read *"The ledger and the invoices disagree…"*, and went back to the counter — nothing remembered the attempt happened.
+
+Two consequences, and the second is the one that made this urgent. B-292's own entry says production had been refusing on this ground since B-061 and that *"any notice staff were refused should be retried"* — **there was no list to retry from.** And once B-292's arithmetic fix lands the lease reconciles and drops off the exception report, so **the only evidence that a notice was owed and never served disappeared with the bug**. A lien timeline is a chain of dated steps; a step that was attempted, refused and forgotten is a gap at exactly the place a wrongful-sale complaint reads.
+
+**What it built.**
+
+1. **`recordNoticeRefusal`** in `apps/web/lib/notices/service.ts` — called from `generateNotice` on every non-ok `noticeContext`, before the refusal is returned. Writes an `audit_log` entry (`notice.refused`, entity `Lease`) naming the notice type **in words**, the problem kind, the message and the figures, and raises a task on the lease.
+2. **`notice.refused`** in the audit catalog, `requiresReason: false` — the reason *is* the refusal, and demanding a reason code would mean refusing to record the attempt when nobody supplied one.
+3. **`pre_lien_notice_refused` and `lien_notice_refused`** in the task catalog, both `sensitive` and both `resolvedByAction`, so no note can close them.
+4. **The successful generation cancels the card**, inside the same transaction the notice is created in.
+5. **`refusalFigures`** — `expectedCents`/`actualCents` for `claim_does_not_sum`, `differenceCents` for `ledger_does_not_reconcile`, nothing for the rest.
+6. **`/admin/auctions/[caseId]` renders "Notices attempted and refused"** — date, notice type, who tried, and why in words — as its own section beside the step history, fed by a new `refusedNotices` on `AuctionCaseView` read from the audit log across the whole claim chain.
+7. **13 tests**: 9 in `tests/notices-db.test.ts`, 3 in the new `tests/notice-refusal-figures.test.ts`, 1 in `tests/auctions-db.test.ts`.
+
+**No migration.** The evidence is an `audit_log` row and the worklist is a `Task` whose `type` is a catalog entry, not a column — both tables already existed, which is why this row is an S.
+
+**What it decided.**
+
+- **Two artefacts, because they answer different questions.** The audit entry is permanent and survives the repair; the task is transient and is cancelled by the generation. Recording only the task would have lost the evidence the moment somebody fixed the ledger, which is the failure mode the row was opened for.
+- **Two task types, one per notice type.** "Did the pre-lien go out" and "did the lien go out" are two questions, and generating one must not close the other.
+- **Deduped on the OPEN task, not on `createTask`'s own key.** `createTask` is idempotent per (type, entityId, **businessDate**), so the same manager trying again tomorrow would have got a second card for one unserved notice. One open card per lease per notice type, across days — B-304's lesson applied before it could repeat. **Every attempt still writes its own audit entry**; the cap is on the worklist, not on the record.
+- **`normal` priority, not `high`.** The row does not specify one, and a refused notice does not re-raise daily the way B-304's did — the card *is* the list, and B-304's finding was precisely that a standing high-priority card teaches a team to ignore the colour.
+- **Nothing is recorded for a preview.** Reading what a notice *would* say is not an attempt to serve one, and a task per preview would bury the attempts that matter. `previewNotice` shares `noticeContext` and is deliberately not wired to this.
+- **`lease_not_found` is the one refusal with no record.** There is no facility to scope an entry to, no lease for a card to be about, and no notice that was ever owed — a bad id is not a missed step.
+- **The refusal record is not best-effort.** A failure writing it throws, exactly as the success path's audit does. A refusal that was itself not recorded is the gap this row exists to close.
+- **`resolvedByAction.href` and `linkLabel` are now optional** (`packages/core/tasks/catalog.ts`). The notices screen is scoped to a tenant **and** a lease, so there is no URL the catalog can name; the card's own subject link already lands on the tenant profile the Notices link hangs off, and a second link to a tenant *list* would have been worse than none. The sentence still has to say what closes the task. `/admin/tasks` renders the link only when both are present.
+- **The case screen reads across the whole claim chain**, like the balance and the holds — an attempt made before a D-85 transfer is still part of that case's history. Capped at the newest 20: this is a summary beside a timeline, not the audit log.
+- **Its own section, not a row in the step history.** A refusal is a step that did **not** happen, and folding it in is how a lien file acquires a row nobody can tell apart from a served notice.
+- **D-15 holds end to end.** `problem.message` is already a sentence for a reader and is what the card's `detail` and the case screen both render; the `snake_case` kind is in the audit entry and is deliberately never read back for display. Asserted in both suites.
+- **`claimForNotice`'s gate is untouched.** Still fatal, still not advisory, and an acknowledged exception (B-304) still refuses a notice — this row makes that refusal visible, as B-304's entry said it would, and does not weaken it. It depends on neither B-303 nor B-304: the record is worth having while the repair does not exist.
+
+**Verification.** Typecheck clean, including `tsconfig.tests.json`. Lint: 0 errors, the same 6 pre-existing warnings. `prisma migrate diff --exit-code` against the local database: no difference. `npm run build` succeeds. Full unit suite run **twice**, identical both times: **4,522 passed, 8 skipped, of 4,530 across 267 files** — B-305's 4,517 across 266 files plus exactly the 13 new tests and the one new file, reconciling exactly.
+
+**What it left behind.**
+
+- **`claim_does_not_sum` cannot be forced through the database.** `buildClaim` derives the total and the lines from the same array, so the branch is unreachable from real ledger rows by its own construction — its own comment has always said so. `refusalFigures` is exported solely so `tests/notice-refusal-figures.test.ts` can cover that branch; an evidence figure with no check on it is the kind that is wrong the one time it is read.
+- **Nothing surfaces a refused notice on the tenant's own Notices screen.** The card is in the task queue and the history is on the auction case, and a lease with no case open has only the queue. No row.
+- **"Or the case is closed" is not implemented as a second closing path.** A generated notice cancels the card; a lease that ends, or an auction case that is cancelled, leaves it open. That is the safe direction — an unserved notice stays on somebody's list — but it means a cured tenant's card has to be cancelled by hand. No row; worth one if the queue accumulates them.
+- **No e2e covers any of it.** The task card renders for a type the demo seed never produces, and the case screen's new section needs a refused attempt on a demo lease. Adding one is a shared-fixture change needing B-120's discipline.
+- **The dates on the case screen render in UTC**, like every other date on that page. Facility-local would be right for all of them; it is not this row's change to make.
