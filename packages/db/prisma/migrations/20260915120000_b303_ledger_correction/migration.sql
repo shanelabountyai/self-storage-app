@@ -1,0 +1,13 @@
+-- B-303. A correcting ledger entry.
+--
+-- The reconciliation identity is
+--   ledgerBalance = invoiceOutstanding + uninvoicedCharges
+-- where "uninvoiced" means every ledger entry with no invoice behind it. A
+-- correction posted without this flag therefore lands on BOTH sides of that
+-- equation and moves the difference by nothing at all — which is why the
+-- exception report has never had a button that works.
+--
+-- Existing rows are all false: every adjustment written before this point came
+-- from a transfer (which carries its invoice id) or a payment reversal (which
+-- carries its payment id), and neither is a correction of a wrong ledger.
+ALTER TABLE "ledger_entry" ADD COLUMN "isCorrection" BOOLEAN NOT NULL DEFAULT false;

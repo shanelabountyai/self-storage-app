@@ -152,6 +152,13 @@ export async function GET(request: Request) {
   // business day: a phantom balance keeps a paid-up tenant on the delinquency
   // ladder, and the task it raises is deduplicated per day anyway. After the
   // jobs, so a lease tonight's billing has just put right is not counted.
+  //
+  // B-304 made this two numbers rather than one. `total` is every lease that
+  // disagrees; `unacknowledged` is the ones nobody has looked at, and is what
+  // actually raised a task. They differ by the leases a person has judged known
+  // and unrepairable, which is deliberately visible here rather than folded
+  // away — a rising `total` against a flat `unacknowledged` is a real thing to
+  // notice.
   const ledgerExceptions = await raiseLedgerExceptionTasks(
     now,
     facilities.map((facility) => facility.id),

@@ -38,6 +38,38 @@ export const AUDIT_ACTIONS = [
     label: "Balance written off",
     requiresReason: true,
   },
+  /// B-303. A correcting entry posted by hand onto a lease's ledger, because
+  /// the ledger and the invoices disagreed and a person decided which was
+  /// wrong. Its own action rather than `credit.issued`: a credit is money given
+  /// to a tenant, and this is a restatement of what they owed all along. Filed
+  /// together, the only question this log can answer — "who has been correcting
+  /// balances, and how often" — becomes unanswerable, and an unrepairable
+  /// ledger is the thing that used to require a database client.
+  {
+    action: "ledger.adjusted",
+    label: "Ledger corrected by hand",
+    requiresReason: true,
+  },
+  /// B-303. A rent invoice withdrawn because it should never have been raised.
+  /// Separate from `fee.waived` for the reason the functions are separate: a
+  /// waiver forgives a charge that was correct, and this says a charge was not.
+  {
+    action: "invoice.voided",
+    label: "Rent invoice voided",
+    requiresReason: true,
+  },
+  /// B-304. A person deciding that a lease's ledger discrepancy is known and
+  /// will not be repaired, so the daily sweep stops re-raising it. It forgives
+  /// no money and moves none, and it is here anyway: the judgement suppresses
+  /// an alarm, and an alarm somebody silenced with nothing recording who is
+  /// the shape every other entry in this catalog exists to prevent. The reason
+  /// IS the note the form requires — what makes this one unrepairable is a
+  /// sentence, not a category.
+  {
+    action: "ledger.exception_acknowledged",
+    label: "Ledger exception acknowledged",
+    requiresReason: true,
+  },
   { action: "refund.issued", label: "Refund issued", requiresReason: true },
   // B-146. FR-8's append-only correction: the entry stands and a reversing one
   // is posted beside it. `requiresReason` because the bank's own reason — NSF,

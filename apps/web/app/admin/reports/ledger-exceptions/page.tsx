@@ -4,6 +4,8 @@ import { ledgerExceptionsFor } from '@/lib/admin/ledger'
 import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
 import { formatCents } from '@/lib/format'
 import { ScrollRegion } from '@/components/ui/scroll-region'
+import { AcknowledgeExceptionForm } from '@/components/admin/acknowledge-exception-form'
+import { can } from '@/lib/rbac/authorize'
 
 export const metadata = { title: 'Ledger exceptions' }
 
@@ -13,12 +15,22 @@ export const metadata = { title: 'Ledger exceptions' }
 // can be a tenant who has paid and is still overlocked and still on the
 // ladder — and the lien-notice gate refuses it until the two agree, which is
 // correct and is not changed here. The repair is a person's: an adjustment on
-// that lease's ledger, or a corrected invoice. This screen only finds them.
+// that lease's ledger, or a corrected invoice.
+//
+// **B-303 built both.** From B-277 until then this sentence was a promise the
+// product could not keep — every writer of `ledgerEntry.create` was an
+// automated path and there was no staff form, so the only way to clear a row on
+// this screen was a database client. The tenant's name links to the ledger, and
+// the correction is posted from there.
 
 export const dynamic = 'force-dynamic'
 
 function signedCents(cents: number): string {
   return cents > 0 ? `+${formatCents(cents)}` : formatCents(cents)
+}
+
+function formatWhen(date: Date): string {
+  return new Intl.DateTimeFormat('en-US', { dateStyle: 'medium' }).format(date)
 }
 
 export default async function LedgerExceptionsPage() {
@@ -33,6 +45,7 @@ export default async function LedgerExceptionsPage() {
   }
 
   const exceptions = await ledgerExceptionsFor(actor)
+  const reviewed = exceptions.filter((row) => row.acknowledgement !== null).length
 
   return (
     <div className="flex flex-col gap-6">
@@ -43,6 +56,12 @@ export default async function LedgerExceptionsPage() {
           ladder reads the ledger, so a balance here that the invoices do not back keeps chasing a
           tenant, and no lien notice can be generated for the lease until the two agree. Checked as
           this page loaded; the hourly job raises a task at any facility with one.
+        </p>
+        <p className="text-muted-foreground mt-2 max-w-prose text-sm text-pretty">
+          Open a tenant&apos;s ledger to post the correction. It needs manual-credit authority and
+          the amount counts against your limit, and every correction is recorded with your name and
+          a reason. Where a lease genuinely cannot be repaired, mark it reviewed: it stays on this
+          list, and the daily task stops naming it until the difference changes.
         </p>
       </div>
 
@@ -71,6 +90,7 @@ export default async function LedgerExceptionsPage() {
             <caption className="sr-only">
               Leases whose ledger balance disagrees with their invoices, largest difference first
               within each facility
+              {reviewed > 0 ? `; ${reviewed} of ${exceptions.length} already reviewed` : ''}
             </caption>
             <thead>
               <tr className="border-input border-b text-left">
@@ -94,6 +114,9 @@ export default async function LedgerExceptionsPage() {
                 </th>
                 <th scope="col" className="py-2 pr-4">
                   Likely cause
+                </th>
+                <th scope="col" className="py-2 pr-4">
+                  Reviewed
                 </th>
               </tr>
             </thead>
@@ -120,6 +143,29 @@ export default async function LedgerExceptionsPage() {
                     {signedCents(row.reconciliation.differenceCents)}
                   </td>
                   <td className="py-2 pr-4 text-pretty">{row.reconciliation.explanation}</td>
+                  {/* B-304. Never hidden, and never colour alone (1.4.1): the
+                      word "Reviewed" and the name carry it. The row stays
+                      because the ledger still disagrees — this only stops the
+                      daily task naming it. */}
+                  <td className="py-2 pr-4 text-pretty">
+                    {row.acknowledgement ? (
+                      <>
+                        <span className="font-medium">Reviewed</span> by{' '}
+                        {row.acknowledgement.by} on {formatWhen(row.acknowledgement.at)}
+                        <span className="text-muted-foreground block text-xs">
+                          {row.acknowledgement.note}
+                        </span>
+                      </>
+                    ) : can(actor, 'credits:manual', row.facilityId) ? (
+                      <AcknowledgeExceptionForm
+                        leaseId={row.leaseId}
+                        tenantName={row.tenantName}
+                        unitNumber={row.unitNumber}
+                      />
+                    ) : (
+                      <span className="text-muted-foreground">Not reviewed</span>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>

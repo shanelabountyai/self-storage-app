@@ -898,6 +898,7 @@ model Facility {
   receiptCounter         ReceiptCounter?
   invoiceCounter         InvoiceCounter?
   tasks                  Task[]
+  ledgerExceptionAcks    LedgerExceptionAcknowledgement[]
   gateCommands           GateCommand[]
   accessEvents           AccessEvent[]
   marketingFaqs          FacilityFaq[]
@@ -1486,6 +1487,7 @@ model Lease {
   protectionChanges      ProtectionChange[]
   invoices               Invoice[]
   ledgerEntries          LedgerEntry[]
+  ledgerExceptionAck     LedgerExceptionAcknowledgement?
   accessCredentials      AccessCredential[]
   notices                Notice[]
   rateChanges            LeaseRateChange[]
@@ -3290,6 +3292,18 @@ model LedgerEntry {
   invoiceId    String?
   paymentId    String?
   reversalOfId String?         @unique
+  /// B-303. This entry corrects a ledger that was already wrong, so it is NOT
+  /// an uninvoiced charge and `reconciliationInputs` leaves it out of that
+  /// term.
+  ///
+  /// Without the flag a correcting entry cannot move the reconciliation at
+  /// all: the identity is `ledgerBalance = invoiceOutstanding + uninvoiced`,
+  /// and an entry with no invoice behind it lands on BOTH sides and cancels
+  /// itself. `transfer.ts` gets the same effect by attaching its pair to the
+  /// invoice they move (the comment there explains it), but B-292's second
+  /// shape leaves a gap on a lease whose invoice has gone elsewhere, so there
+  /// is nothing local to attach to.
+  isCorrection Boolean         @default(false)
   createdAt    DateTime        @default(now()) @db.Timestamptz(6)
 
   facility   Facility     @relation(fields: [facilityId], references: [id], onDelete: Restrict)
@@ -4529,6 +4543,7 @@ model StaffUser {
   paymentPlansCancelled      PaymentPlan[]             @relation("PaymentPlanCancelledBy")
   tasksAssigned              Task[]                    @relation("TaskAssignee")
   tasksCompleted             Task[]                    @relation("TaskCompletedBy")
+  ledgerExceptionAcks        LedgerExceptionAcknowledgement[]
   maintenanceTicketsAssigned MaintenanceTicket[]       @relation("MaintenanceTicketAssignee")
   leadsCreated               Lead[]
   delinquencyTimelines       DelinquencyTimeline[]
@@ -4674,6 +4689,48 @@ model Task {
   @@index([facilityId, status, businessDate])
   @@index([assigneeStaffId, status])
   @@map("task")
+}
+
+/// B-304. A person has looked at a lease on the ledger-exception report and
+/// judged the discrepancy known and unrepairable, so the daily sweep stops
+/// re-raising it.
+///
+/// It exists because the sweep B-277 built raises a HIGH-priority task per
+/// facility per business day while anything there fails, and B-292 named two
+/// shapes that used to fail for ever. A task that cannot be closed and returns
+/// tomorrow is how a team learns to ignore high-priority tasks — which is worse
+/// than not having the sweep at all, and it degrades every other alarm B-229
+/// built.
+///
+/// **Per lease AND per figure.** `differenceCents` is the discrepancy as it
+/// stood when somebody accepted it; if the figure moves, the lease is new again
+/// and the task comes back, because an acknowledgement is a judgement about a
+/// known difference and not a permanent mute. One row per lease, replaced when
+/// it is acknowledged again.
+///
+/// It does NOT clear the exception (B-303 is what repairs the ledger) and it
+/// does not touch `claimForNotice` — an acknowledged lease still cannot have a
+/// lien notice generated, which is correct and is what B-306 makes visible.
+model LedgerExceptionAcknowledgement {
+  id               String   @id @default(cuid())
+  facilityId       String
+  leaseId          String   @unique
+  /// The reconciliation difference this judgement was made about, in signed
+  /// cents. The sweep compares it to the live figure and ignores a stale one.
+  differenceCents  Int
+  /// Why this one is being left alone. Short, and required by the action that
+  /// writes it — "reviewed, known" with nothing after it is the acknowledgement
+  /// that makes the next reader start from nothing.
+  note             String
+  acknowledgedById String
+  acknowledgedAt   DateTime @default(now()) @db.Timestamptz(6)
+
+  facility       Facility  @relation(fields: [facilityId], references: [id], onDelete: Restrict)
+  lease          Lease     @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+  acknowledgedBy StaffUser @relation(fields: [acknowledgedById], references: [id], onDelete: Restrict)
+
+  @@index([facilityId])
+  @@map("ledger_exception_acknowledgement")
 }
 
 /// Append-only. Every privileged action lands here with before/after values

@@ -13,6 +13,8 @@ import { assertFacilityAccess, can, ForbiddenError } from '@/lib/rbac/authorize'
 import { SETTLING_STATUSES } from '@/lib/billing/allocation'
 import { financialFacilities } from '@/lib/admin/reports'
 import { createTask } from '@/lib/admin/tasks'
+import { recordAudit } from '@storage/core/audit'
+import { toAuditActor } from '@/lib/rbac/audit-actor'
 import type { Actor } from '@/lib/rbac/actor'
 
 // PRD 02 US-24 (B-049). The tenant ledger, read.
@@ -32,6 +34,14 @@ export type LeaseLedger = {
   lines: LedgerLine[]
   totals: LedgerTotals
   reconciliation: Reconciliation
+  /// B-303. The rent invoices on this lease that `voidRentInvoice` would
+  /// accept, so the screen offers the control only where it would work rather
+  /// than rendering a button that refuses.
+  voidableInvoices: { id: string; number: string; outstandingCents: number; periodStart: Date }[]
+  /// Whether this actor may post a correction at this facility at all
+  /// (`credits:manual`). The amount limit is still `postLedgerAdjustment`'s —
+  /// this only decides whether the section is drawn.
+  canCorrect: boolean
 }
 
 /// The ledger for one lease.
@@ -57,7 +67,7 @@ export async function leaseLedger(actor: Actor, leaseId: string): Promise<LeaseL
     throw new ForbiddenError('Missing permission to read a ledger', 'tenants:view', lease.facilityId)
   }
 
-  const [entries, inputs] = await Promise.all([
+  const [entries, inputs, invoices] = await Promise.all([
     prisma.ledgerEntry.findMany({
       where: { leaseId },
       orderBy: { occurredAt: 'asc' },
@@ -71,6 +81,11 @@ export async function leaseLedger(actor: Actor, leaseId: string): Promise<LeaseL
       },
     }),
     reconciliationInputs({ leaseIds: [leaseId] }),
+    prisma.invoice.findMany({
+      where: { leaseId, kind: 'rent', status: { in: ['open', 'partially_paid'] } },
+      orderBy: { periodStart: 'asc' },
+      select: { id: true, number: true, periodStart: true, totalCents: true, amountPaidCents: true },
+    }),
   ])
 
   const rows = entries.map((entry) => ({
@@ -95,6 +110,15 @@ export async function leaseLedger(actor: Actor, leaseId: string): Promise<LeaseL
     lines,
     totals,
     reconciliation: reconcile(inputs.get(leaseId) ?? NO_MONEY),
+    voidableInvoices: invoices
+      .map((invoice) => ({
+        id: invoice.id,
+        number: invoice.number,
+        periodStart: invoice.periodStart,
+        outstandingCents: invoice.totalCents - invoice.amountPaidCents,
+      }))
+      .filter((invoice) => invoice.outstandingCents > 0),
+    canCorrect: can(actor, 'credits:manual', lease.facilityId),
   }
 }
 
@@ -134,7 +158,11 @@ export async function reconciliationInputs(
     prisma.ledgerEntry.groupBy({ by: ['leaseId'], where, _sum: { amountCents: true } }),
     prisma.ledgerEntry.groupBy({
       by: ['leaseId'],
-      where: { ...where, invoiceId: null },
+      // B-303. A correction is not an uninvoiced charge. Counted here it would
+      // land on both sides of the identity below and move the difference by
+      // nothing, which is precisely why the exception report could state a
+      // remedy nobody could carry out.
+      where: { ...where, invoiceId: null, isCorrection: false },
       _sum: { amountCents: true },
     }),
     prisma.invoice.findMany({
@@ -177,6 +205,17 @@ export async function reconciliationInputs(
   return inputs
 }
 
+/// B-304. Somebody has looked at this lease and judged the difference known.
+///
+/// Live only while it names the SAME figure: an acknowledgement is a judgement
+/// about a known difference, not a permanent mute, so a discrepancy that
+/// changes size makes the lease new again.
+export type ExceptionAcknowledgement = {
+  at: Date
+  by: string
+  note: string
+}
+
 export type LedgerException = {
   leaseId: string
   facilityId: string
@@ -187,6 +226,7 @@ export type LedgerException = {
   ledgerBalanceCents: number
   invoiceOutstandingCents: number
   reconciliation: Reconciliation
+  acknowledgement: ExceptionAcknowledgement | null
 }
 
 /// B-277. Every lease at these facilities whose ledger and invoices disagree.
@@ -205,17 +245,31 @@ export async function ledgerExceptions(facilityIds: readonly string[]): Promise<
     .filter((row) => !row.reconciliation.reconciles)
   if (failing.length === 0) return []
 
-  const leases = await prisma.lease.findMany({
-    where: { id: { in: failing.map((row) => row.leaseId) } },
-    select: {
-      id: true,
-      facilityId: true,
-      facility: { select: { name: true } },
-      unit: { select: { number: true } },
-      tenant: { select: { id: true, firstName: true, lastName: true } },
-    },
-  })
+  const leaseIds = failing.map((row) => row.leaseId)
+  const [leases, acks] = await Promise.all([
+    prisma.lease.findMany({
+      where: { id: { in: leaseIds } },
+      select: {
+        id: true,
+        facilityId: true,
+        facility: { select: { name: true } },
+        unit: { select: { number: true } },
+        tenant: { select: { id: true, firstName: true, lastName: true } },
+      },
+    }),
+    prisma.ledgerExceptionAcknowledgement.findMany({
+      where: { leaseId: { in: leaseIds } },
+      select: {
+        leaseId: true,
+        differenceCents: true,
+        note: true,
+        acknowledgedAt: true,
+        acknowledgedBy: { select: { firstName: true, lastName: true } },
+      },
+    }),
+  ])
   const byId = new Map(leases.map((lease) => [lease.id, lease]))
+  const ackById = new Map(acks.map((ack) => [ack.leaseId, ack]))
 
   return failing
     .flatMap(({ leaseId, input, reconciliation }) => {
@@ -232,6 +286,7 @@ export async function ledgerExceptions(facilityIds: readonly string[]): Promise<
           ledgerBalanceCents: input.ledgerBalanceCents,
           invoiceOutstandingCents: input.invoiceOutstandingCents,
           reconciliation,
+          acknowledgement: acknowledgementFor(ackById.get(leaseId), reconciliation),
         },
       ]
     })
@@ -248,18 +303,47 @@ export async function ledgerExceptionsFor(actor: Actor): Promise<LedgerException
   return ledgerExceptions((await financialFacilities(actor)).map((facility) => facility.id))
 }
 
+/// The acknowledgement on a lease, but only while it still names this figure.
+function acknowledgementFor(
+  ack:
+    | {
+        differenceCents: number
+        note: string
+        acknowledgedAt: Date
+        acknowledgedBy: { firstName: string; lastName: string }
+      }
+    | undefined,
+  reconciliation: Reconciliation,
+): ExceptionAcknowledgement | null {
+  if (!ack || ack.differenceCents !== reconciliation.differenceCents) return null
+  return {
+    at: ack.acknowledgedAt,
+    by: `${ack.acknowledgedBy.firstName} ${ack.acknowledgedBy.lastName}`,
+    note: ack.note,
+  }
+}
+
 /// B-277. The sweep's alarm, through B-229's channel: one high-priority task
 /// per facility per business day while anything there fails to reconcile, so
-/// the list reaches somebody rather than waiting to be visited. Returns how
-/// many leases failed, for the cron response.
+/// the list reaches somebody rather than waiting to be visited.
+///
+/// **B-304: only leases nobody has acknowledged raise it.** A task that cannot
+/// be closed and returns tomorrow is how a team learns to ignore high-priority
+/// tasks, and B-292's two permanently-unrepairable shapes guaranteed one
+/// existed. With the acknowledged ones left out, the daily task means
+/// *something new* — which is the only thing a daily alarm can usefully mean.
+///
+/// It does not clear anything. The acknowledged leases stay on the report, stay
+/// in `total`, and are still refused a lien notice by `claimForNotice`.
 export async function raiseLedgerExceptionTasks(
   now: Date,
   facilityIds: readonly string[],
-): Promise<number> {
+): Promise<{ total: number; unacknowledged: number }> {
   const exceptions = await ledgerExceptions(facilityIds)
+  const unacknowledged = exceptions.filter((row) => row.acknowledgement === null)
 
   const counts = new Map<string, number>()
-  for (const exception of exceptions) {
+  for (const exception of unacknowledged) {
     counts.set(exception.facilityId, (counts.get(exception.facilityId) ?? 0) + 1)
   }
   for (const [facilityId, count] of counts) {
@@ -272,8 +356,90 @@ export async function raiseLedgerExceptionTasks(
       priority: 'high',
       // The count as of the first sweep today — later ticks find today's task
       // and leave it alone, so the sentence says when it was true.
-      detail: `When this was raised, ${count} ${count === 1 ? 'lease’s ledger' : 'leases’ ledgers'} disagreed with the invoices. Reports → Ledger exceptions lists them.`,
+      detail: `When this was raised, ${count} ${count === 1 ? 'lease’s ledger' : 'leases’ ledgers'} disagreed with the invoices and had not been reviewed. Reports → Ledger exceptions lists them.`,
     })
   }
-  return exceptions.length
+  return { total: exceptions.length, unacknowledged: unacknowledged.length }
+}
+
+export type AcknowledgeResult =
+  | { ok: true; differenceCents: number }
+  | { ok: false; reason: 'not_found' | 'reconciles' | 'missing_note' | 'forbidden' }
+
+/// B-304. Record that a person has looked at this lease and accepts the
+/// difference, so the daily sweep stops re-raising it.
+///
+/// Gated on `credits:manual` — the same authority B-303's repairs need, and
+/// deliberately not on `reports:financial`, which the bookkeeper role holds and
+/// which is documented as read-only. Only somebody who COULD repair a lease may
+/// declare that they are not going to.
+///
+/// Dated, attributed and reasoned, because the row is a judgement and the next
+/// person to open the report needs to know whose it was. Re-acknowledging
+/// replaces the row rather than adding a second: there is one live judgement
+/// per lease, and the audit log is where the history of them lives.
+export async function acknowledgeLedgerException(
+  actor: Actor,
+  leaseId: string,
+  input: { note: string },
+): Promise<AcknowledgeResult> {
+  if (!input.note?.trim()) return { ok: false, reason: 'missing_note' }
+
+  const lease = await prisma.lease.findUnique({
+    where: { id: leaseId },
+    select: { id: true, facilityId: true },
+  })
+  if (!lease) return { ok: false, reason: 'not_found' }
+  assertFacilityAccess(actor, lease.facilityId)
+  if (!can(actor, 'credits:manual', lease.facilityId)) return { ok: false, reason: 'forbidden' }
+
+  const reconciliation = reconcile(
+    (await reconciliationInputs({ leaseIds: [leaseId] })).get(leaseId) ?? NO_MONEY,
+  )
+  // Nothing to acknowledge. Writing a row here would mute a lease that is fine
+  // today and silently keep muting it the day it stops being.
+  if (reconciliation.reconciles) return { ok: false, reason: 'reconciles' }
+
+  const note = input.note.trim()
+  await prisma.$transaction(async (tx) => {
+    await tx.ledgerExceptionAcknowledgement.upsert({
+      where: { leaseId },
+      create: {
+        leaseId,
+        facilityId: lease.facilityId,
+        differenceCents: reconciliation.differenceCents,
+        note,
+        acknowledgedById: actorStaffId(actor),
+      },
+      update: {
+        differenceCents: reconciliation.differenceCents,
+        note,
+        acknowledgedById: actorStaffId(actor),
+        acknowledgedAt: new Date(),
+      },
+    })
+
+    await recordAudit(
+      {
+        actor: toAuditActor(actor),
+        action: 'ledger.exception_acknowledged',
+        entityType: 'Lease',
+        entityId: leaseId,
+        facilityId: lease.facilityId,
+        reasonCode: note,
+        context: { differenceCents: reconciliation.differenceCents },
+      },
+      tx,
+    )
+  })
+
+  return { ok: true, differenceCents: reconciliation.differenceCents }
+}
+
+/// Acknowledging is a staff judgement and is attributed to a staff user. Any
+/// other actor kind has no business making one, and `credits:manual` above has
+/// already refused every one of them.
+function actorStaffId(actor: Actor): string {
+  if (actor.kind !== 'staff') throw new ForbiddenError('Only staff acknowledge a ledger exception')
+  return actor.staffUserId
 }

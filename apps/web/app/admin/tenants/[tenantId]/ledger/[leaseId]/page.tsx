@@ -4,6 +4,7 @@ import { getAdminActor } from '@/lib/admin/context'
 import { leaseLedger } from '@/lib/admin/ledger'
 import { formatCents } from '@/lib/format'
 import { ScrollRegion } from '@/components/ui/scroll-region'
+import { LedgerCorrections } from '@/components/admin/ledger-corrections'
 
 export const metadata = { title: 'Tenant ledger' }
 
@@ -86,7 +87,41 @@ export default async function LedgerPage({
             Difference: {formatCents(ledger.reconciliation.differenceCents)}
           </p>
         )}
+        {/* B-303. Until this, the answer to "so what do I do about it" was a
+            database client: the exception report named the remedy and nothing
+            in the product could carry it out. */}
+        {!ledger.reconciliation.reconciles && !ledger.canCorrect && (
+          <p className="mt-1 text-sm text-pretty">
+            Correcting this needs manual-credit authority. Ask a manager.
+          </p>
+        )}
       </section>
+
+      {ledger.canCorrect && (
+        <section
+          aria-labelledby="corrections-heading"
+          className="border-input flex flex-col gap-3 rounded-lg border p-4"
+        >
+          <h2 id="corrections-heading" className="text-sm font-medium">
+            Corrections
+          </h2>
+          <LedgerCorrections
+            tenantId={tenantId}
+            leaseId={leaseId}
+            unitLabel={`unit ${ledger.unitNumber}`}
+            differenceCents={ledger.reconciliation.differenceCents}
+            balanceCents={ledger.totals.balanceCents}
+            balance={formatCents(ledger.totals.balanceCents)}
+            difference={formatCents(ledger.reconciliation.differenceCents)}
+            voidableInvoices={ledger.voidableInvoices.map((invoice) => ({
+              id: invoice.id,
+              number: invoice.number,
+              outstanding: formatCents(invoice.outstandingCents),
+              period: formatWhen(invoice.periodStart),
+            }))}
+          />
+        </section>
+      )}
 
       <section aria-labelledby="totals-heading">
         <h2 id="totals-heading" className="sr-only">

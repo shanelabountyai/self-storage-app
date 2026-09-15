@@ -2637,6 +2637,28 @@ function reviewedOn(locale: Locale): string {
 // the sentence and the three screens to each other in both directions, so
 // softening the claim is allowed and quietly regressing the code is not.
 
+// Re-verified 2026-09-15, at B-303/B-304 (a ledger exception can be repaired,
+// and one a person has judged unrepairable stops re-raising a daily task).
+// Nothing customer-facing: both surfaces are under `/admin` — the lease ledger
+// screen and Reports → Ledger exceptions — which this page makes no claims
+// about, and no route was added (the two new files are server actions, not
+// pages), so the generated coverage claim is untouched. Recorded rather than
+// skipped, per the B-150/B-151 precedent: "staff-facing only" is a claim worth
+// checking rather than assuming.
+//
+// The controls themselves go through the shared `AdminForm`/`Field` primitive,
+// so they inherit what B-302's survey confirmed of every other form here — the
+// refusal tied to the field, the error summary focused, and what was typed kept
+// on a failure. The one judgement call was the acknowledgement input, which
+// sits in a dense table cell where a placeholder-as-label is the obvious
+// temptation: it has a visible label instead (3.3.2), with the tenant and unit
+// carried `sr-only` so a rotor listing one per row can tell them apart (2.4.6).
+// The new "Reviewed" state is never colour alone — the word and the reviewer's
+// name carry it (1.4.1).
+//
+// `LAST_REVIEWED` is NOT bumped: D-115, and a staff-facing item is not a
+// review. B-254 still owns the date and still needs a person.
+
 export default async function AccessibilityPage() {
   const locale = await getLocale()
   const dict = dictionaryFor(locale)

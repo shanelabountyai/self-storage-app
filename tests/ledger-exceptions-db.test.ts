@@ -285,7 +285,11 @@ describeDb('ledger reconciliation against the real payment path (B-292, B-277)',
 
     const listed = await ledgerExceptions([facilityId])
     expect(listed.some((row) => row.leaseId === paid.leaseId)).toBe(false)
-    expect(await raiseLedgerExceptionTasks(now, [facilityId])).toBe(listed.length)
+    // B-304 split the count in two. Nothing here is acknowledged, so they agree.
+    expect(await raiseLedgerExceptionTasks(now, [facilityId])).toEqual({
+      total: listed.length,
+      unacknowledged: listed.length,
+    })
     await raiseLedgerExceptionTasks(now, [facilityId])
 
     const tasks = await prisma.task.findMany({
