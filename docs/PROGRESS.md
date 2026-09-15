@@ -10055,3 +10055,44 @@ Two consequences, and the second is the one that made this urgent. B-292's own e
 - **"Or the case is closed" is not implemented as a second closing path.** A generated notice cancels the card; a lease that ends, or an auction case that is cancelled, leaves it open. That is the safe direction — an unserved notice stays on somebody's list — but it means a cured tenant's card has to be cancelled by hand. No row; worth one if the queue accumulates them.
 - **No e2e covers any of it.** The task card renders for a type the demo seed never produces, and the case screen's new section needs a refused attempt on a demo lease. Adding one is a shared-fixture change needing B-120's discipline.
 - **The dates on the case screen render in UTC**, like every other date on that page. Facility-local would be right for all of them; it is not this row's change to make.
+
+---
+
+## B-307 — every already-filed month disagreed with the code, and nothing said so (2026-09-15, `PENDING`)
+
+**This block's own doing.** B-297 changed `facilityRevenue`'s `issueDate` handling and B-298 changed `reportRangeForMonth`, `movesForFacility` and `attachRateForFacility`. `periodDrift` has compared a filed snapshot against a recompute since B-084 — and both of its readers are pull-only: the close screen and the management pack. So every month already filed began disagreeing with what the same query returns, systematically, and nothing anywhere said so. The owner had filed August, exported the journal and sent it to the CPA. **The next person to notice would have been the CPA reconciling against the bank, or nobody.**
+
+The second half of the defect is what the screen said when somebody *did* look. `driftSummary` named *"a voided invoice, a backdated adjustment or a corrected move-out"* as the causes, and after this block all three are wrong — it sent the reader looking for an edit in a month nobody had touched.
+
+**What it built.**
+
+1. **`PERIOD_COMPUTATION_VERSION`** (`packages/core/accounting/close.ts`) — what the numbers MEAN, beside `CLOSE_SNAPSHOT_VERSION`'s what-shape-they-are. Stamped into every snapshot as `computationVersion` by `closePeriod`.
+2. **`driftSummary(rows, filedComputationVersion?)`** — offers the three data causes only when the data is the only thing that *could* have moved. Otherwise it says the calculation changed, and that re-closing would restate a month somebody has already sent out.
+3. **`largestDrift(rows)`** — the one row worth naming in a sentence with room for one. Money first whatever its size, largest absolute delta within that.
+4. **`raiseClosedPeriodDriftTasks`** (`apps/web/lib/admin/close-drift.ts`) — recomputes a facility's filed months against their **stored** windows and raises **one** high-priority `closed_period_drifted` task naming the months and the largest difference.
+5. **`accounting.closed-period-drift`**, a `per_facility` scheduled job at 8am facility-local (`apps/web/lib/jobs/registry.ts`), beside `auctions.surplus-alarms` and for the same reason: it raises work for a person.
+6. **`closed_period_drifted`** in the task catalog, `sensitive`, and **`AccountingPeriod`** in `resolveTaskSubjects` — labelled "Filed months", linked to `/admin/reports/close`.
+7. **10 tests**: 5 in `tests/accounting-close.test.ts` (the two summaries, `largestDrift`), 5 in `tests/accounting-close-db.test.ts` (the sweep, its silence, its idempotency, its re-raise, and the two pull-only readers unchanged).
+
+**No migration.** The stamp is a field inside an existing `Json` column and the worklist is a catalog `Task` type.
+
+**What it decided.**
+
+- **One card per facility, never one per period.** A portfolio with a year of filed months would otherwise get twelve high-priority cards in a night — B-304's lesson arriving all at once. The periods are in the sentence; the screen has the table.
+- **The idempotency key is a fingerprint of the drift itself**, not the business date and not the facility: `sha256` over each drifted month's figure keys and deltas, checked against tasks in **any** status and on any date. So a month somebody has read and decided to leave as filed never comes back, and a month that drifts **further** raises a new card because that is genuinely new. This is what makes it safe to let a note close the card — unlike B-306's refusal types, *deciding not to restate* is a real answer here, and the note is the record of it.
+- **Once a day, not on the hourly tick.** A year of filed months is a year of report recomputes per facility, and nothing about a closed month changes between 9am and 10am that could not wait until tomorrow.
+- **It recomputes against the window as FILED**, never as `monthBounds` resolves it today — the same rule `driftFor` and the management pack follow, so a timezone correction cannot read as revenue having moved.
+- **An absent `computationVersion` reads as 0**, which is "filed before the stamp existed" — before B-297 and B-298. That is the right answer for every month already in the table, and it is why no backfill was needed.
+- **Optional, and deliberately NOT a `CLOSE_SNAPSHOT_VERSION` bump** — the same reasoning B-207's `arHalted` recorded. That version exists so the journal export can refuse a snapshot it cannot categorise, and the journal does not read this one; bumping would have refused the journal export of every already-filed month over a field the journal does not use.
+- **Nothing re-files or restates a closed period.** The row is explicit and so is the code: a filed month is an artefact somebody sent to an accountant, and moving it without a person is the failure this exists to make visible. **Re-closing or restating the filed periods after the B-297/B-298 deploy is an owner action in `NEXT.md`**, with the discipline B-300 used: get the count and the largest delta from a query first.
+- **Drift raises a card; a stale version alone does not.** If the figures still match, nothing was misreported and there is nothing for a person to decide.
+- **`periodDrift`'s two existing callers are unchanged in behaviour** and asserted so. The sweep is a third reader, not a replacement — the close screen still answers for one month on demand, and the pack still leads with its provenance sentence.
+
+**Verification.** Typecheck clean, including `tsconfig.tests.json`. Lint: 0 errors, the same 6 pre-existing warnings. `npm run build` succeeds. Full unit suite run **twice**, identical both times: **4,532 passed, 8 skipped, of 4,540 across 267 files** — B-306's 4,522 of 4,530 plus exactly the 10 new tests, reconciling exactly. No migration, so no schema-drift check was owed. No customer-facing surface changed, so `accessibility/page.tsx` was not affected.
+
+**What it left behind.**
+
+- **A 12-month recompute window** (`DRIFT_WINDOW_MONTHS`), marked `ponytail:`. A month filed more than a year ago is not checked. The upgrade, if one ever matters, is to skip the recompute for a snapshot whose computation version already says it must have moved — the version alone proves drift, it just cannot say how large. No row.
+- **Nothing cancels the card when the drift clears.** A month that is reopened and re-closed correctly leaves its old card open for somebody to close with a note. Deliberate — the note is the record of what was decided — but it means the queue does not self-tidy. No row.
+- **No e2e covers the card or the 8am job.** The demo seed files no accounting period, so there is nothing for a spec to drift. Adding one is a shared-fixture change needing B-120's discipline. No row.
+- **The drift sweep does not roll up.** A regional manager with eight sites gets eight cards, one per facility, and no portfolio view of which months moved — the same gap B-303's entry recorded for ledger exceptions. No row.

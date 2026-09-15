@@ -15,6 +15,8 @@ import {
   PERIOD_WINDOW_MONTHS,
 } from '../apps/web/lib/admin/accounting-close'
 import { managementPack } from '../apps/web/lib/admin/management-pack'
+import { PERIOD_COMPUTATION_VERSION } from '../packages/core/accounting'
+import { raiseClosedPeriodDriftTasks } from '../apps/web/lib/admin/close-drift'
 
 // PRD 02 §8, US-40 (B-084 part 1). The close, against real rows.
 
@@ -179,6 +181,7 @@ describeDb('the monthly close', () => {
   })
 
   beforeEach(async () => {
+    await prisma.task.deleteMany({ where: { facilityId } })
     await prisma.accountingPeriod.deleteMany({ where: { facilityId } })
     await prisma.ledgerEntry.deleteMany({ where: { leaseId } })
     await prisma.paymentAllocation.deleteMany({ where: { payment: { facilityId } } })
@@ -189,6 +192,7 @@ describeDb('the monthly close', () => {
 
   afterAll(async () => {
     if (!hasDatabase) return
+    await prisma.task.deleteMany({ where: { facilityId } })
     await prisma.accountingPeriod.deleteMany({ where: { facilityId } })
     await prisma.ledgerEntry.deleteMany({ where: { leaseId } })
     await prisma.paymentAllocation.deleteMany({ where: { payment: { facilityId } } })
@@ -267,6 +271,122 @@ describeDb('the monthly close', () => {
     expect(billed).toBeDefined()
     expect(billed!.filedValue).toBe(100_000)
     expect(billed!.deltaValue).toBeLessThan(0)
+  })
+
+
+  // ────────────────────────────────── B-307: the sweep over filed months ──
+
+  /// Re-files the stored snapshot with a figure the recompute will not produce,
+  /// stamped with the computation that produced it — which is the shape B-297
+  /// and B-298 left behind on every already-filed month.
+  async function refileBilledAs(billedCents: number, computationVersion = 0): Promise<void> {
+    const period = await prisma.accountingPeriod.findUniqueOrThrow({
+      where: { facilityId_year_month: { facilityId, year: YEAR, month: MONTH } },
+      select: { snapshot: true },
+    })
+    const snapshot = structuredClone(period.snapshot) as Record<string, any>
+    snapshot.computationVersion = computationVersion
+    snapshot.periodDerived.billedCents = billedCents
+    await prisma.accountingPeriod.update({
+      where: { facilityId_year_month: { facilityId, year: YEAR, month: MONTH } },
+      data: { snapshot },
+    })
+  }
+
+  async function driftTasks() {
+    return prisma.task.findMany({
+      where: { facilityId, type: 'closed_period_drifted' },
+      orderBy: { createdAt: 'asc' },
+      select: { detail: true, entityId: true, priority: true, status: true },
+    })
+  }
+
+  it('says nothing about a filed month that still matches', async () => {
+    await postMayActivity(100_000, 90_000)
+    await closePeriod(actor(), facilityId, YEAR, MONTH)
+
+    expect(await raiseClosedPeriodDriftTasks(facilityId)).toMatchObject({
+      checked: 1,
+      drifted: 0,
+      raised: 0,
+    })
+    expect(await driftTasks()).toEqual([])
+  })
+
+  it('raises one card naming the month and the largest delta, and none the next night', async () => {
+    await postMayActivity(100_000, 90_000)
+    await closePeriod(actor(), facilityId, YEAR, MONTH)
+    // Filed at 60,000; the same query returns 100,000 today. B-297's shape.
+    await refileBilledAs(60_000)
+
+    const first = new Date('2026-07-02T13:00:00Z')
+    expect(await raiseClosedPeriodDriftTasks(facilityId, first)).toMatchObject({
+      drifted: 1,
+      raised: 1,
+    })
+
+    const raised = await driftTasks()
+    expect(raised).toHaveLength(1)
+    expect(raised[0].priority).toBe('high')
+    expect(raised[0].detail).toContain('May 2026')
+    expect(raised[0].detail).toContain('+$400.00')
+    // The cause, not the three data causes — nothing in the data moved.
+    expect(raised[0].detail).toContain('The way these figures are calculated changed')
+
+    // The next night, and the night after. Nothing has changed, so nothing is
+    // new to say — a card that returns daily is one a team learns to ignore.
+    const second = new Date('2026-07-03T13:00:00Z')
+    expect(await raiseClosedPeriodDriftTasks(facilityId, second)).toMatchObject({ raised: 0 })
+    expect(await driftTasks()).toHaveLength(1)
+  })
+
+  it('raises a fresh card when the month drifts further, even after the first was closed', async () => {
+    await postMayActivity(100_000, 90_000)
+    await closePeriod(actor(), facilityId, YEAR, MONTH)
+    await refileBilledAs(60_000)
+    await raiseClosedPeriodDriftTasks(facilityId, new Date('2026-07-02T13:00:00Z'))
+
+    // Somebody read the first card and accepted it. The queue is clear.
+    await prisma.task.updateMany({ where: { facilityId }, data: { status: 'completed' } })
+
+    // And then the month moves again — which is genuinely new information and
+    // is why the idempotency key is the drift rather than the facility.
+    await refileBilledAs(50_000)
+    expect(
+      await raiseClosedPeriodDriftTasks(facilityId, new Date('2026-07-04T13:00:00Z')),
+    ).toMatchObject({ raised: 1 })
+
+    const tasks = await driftTasks()
+    expect(tasks).toHaveLength(2)
+    expect(tasks[0].entityId).not.toBe(tasks[1].entityId)
+    expect(tasks[1].detail).toContain('+$500.00')
+  })
+
+  it('describes a data-caused drift as data when the calculation has not moved', async () => {
+    await postMayActivity(100_000, 90_000)
+    await closePeriod(actor(), facilityId, YEAR, MONTH)
+    // Stamped with the CURRENT computation, so the code is not what moved.
+    await refileBilledAs(60_000, PERIOD_COMPUTATION_VERSION)
+
+    await raiseClosedPeriodDriftTasks(facilityId, new Date('2026-07-02T13:00:00Z'))
+    const [task] = await driftTasks()
+    expect(task.detail).toContain('Something dated inside them has changed')
+    expect(task.detail).not.toContain('calculated changed')
+  })
+
+  it('leaves the two pull-only readers alone — one card, not one per reader', async () => {
+    // `periodDrift`'s existing callers still answer the same question they did
+    // before the sweep existed: the screen for one month, the pack for one
+    // month. The sweep is a third reader, not a replacement.
+    await postMayActivity(100_000, 90_000)
+    await closePeriod(actor(), facilityId, YEAR, MONTH)
+    await refileBilledAs(60_000)
+
+    const drift = await driftFor(actor(), facilityId, YEAR, MONTH)
+    expect(drift!.find((row) => row.key === 'billedCents')!.deltaValue).toBe(40_000)
+    const pack = await managementPack(actor(), facilityId, YEAR, MONTH)
+    expect(pack).toBeTruthy()
+    expect(await driftTasks()).toEqual([])
   })
 
   it('returns no drift for a month that was never closed, rather than an empty list', async () => {

@@ -276,6 +276,19 @@ export async function resolveTaskSubjects(
     }
   }
 
+  // B-307. A filed month that moved. The id carries a fingerprint of the drift
+  // rather than a row id — nothing is looked up, and the destination is the one
+  // screen that shows the figures side by side.
+  const periodIds = byType.get("AccountingPeriod");
+  if (periodIds) {
+    for (const entityId of periodIds) {
+      result.set(key("AccountingPeriod", entityId), {
+        label: "Filed months",
+        href: "/admin/reports/close",
+      });
+    }
+  }
+
   const facilityIds = byType.get("Facility");
   if (facilityIds) {
     // `gate_drift_review` and `daily_walkthrough` are the whole facility's
@@ -409,6 +422,7 @@ const MISSING_SUBJECT_LABEL: Record<string, string> = {
   JobRun: "This job run no longer exists.",
   ScheduledJob: "This job is no longer registered.",
   AuctionCase: "This auction case no longer exists.",
+  AccountingPeriod: "These filed figures no longer exist.",
 };
 
 

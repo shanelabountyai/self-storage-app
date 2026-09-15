@@ -465,6 +465,30 @@ export const TASK_TYPES = [
         "Fix the reason above and generate the notice from the tenant’s Notices screen — a note cannot close this, because the notice stays unserved either way.",
     },
   },
+  {
+    // B-307. A month that has been FILED no longer matches what the same query
+    // returns — and after B-297 and B-298 the usual cause is a code change,
+    // systematically, on every closed month rather than on one.
+    //
+    // One card per facility, never one per period: a portfolio with a year of
+    // filed months would otherwise get twelve high-priority cards in a night,
+    // which is B-304's lesson arriving all at once.
+    //
+    // A note DOES close it, unlike the refusal types above, and the
+    // idempotency is what makes that safe: the key carries a fingerprint of
+    // the drift itself, so a month somebody has looked at and decided to leave
+    // alone never comes back, and a month that drifts FURTHER raises a new
+    // card because that is genuinely new. Deciding not to restate is a real
+    // answer here — the note is the record of it.
+    //
+    // Sensitive: what somebody did about a filed month that moved — restated
+    // it, re-closed it, told the accountant, decided it did not matter — is
+    // the question asked when the books are next reconciled.
+    type: "closed_period_drifted",
+    label: "A filed month no longer matches its figures",
+    requiredProofFields: ["note"],
+    sensitive: true,
+  },
 ] as const satisfies readonly TaskTypeSpec[];
 
 export type TaskType = (typeof TASK_TYPES)[number]["type"];

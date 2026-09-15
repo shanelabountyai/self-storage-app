@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 import {
   canClosePeriod,
   driftSummary,
+  largestDrift,
   periodDrift,
+  PERIOD_COMPUTATION_VERSION,
   type PeriodDerivedFigures,
 } from '../packages/core/accounting'
 import { monthBounds } from '../packages/core/billing'
@@ -146,13 +148,63 @@ describe('the drift summary sentence', () => {
   })
 
   it('names the usual causes, so the reader knows what to go and look for', () => {
-    const summary = driftSummary(periodDrift(derived(), derived({ billedCents: 1 })))
+    const summary = driftSummary(
+      periodDrift(derived(), derived({ billedCents: 1 })),
+      // B-307: filed by the code running now, so the data is the only thing
+      // that can have moved and the three data causes are the right answer.
+      PERIOD_COMPUTATION_VERSION,
+    )
     expect(summary).toContain('1 figure no longer matches')
     expect(summary).toContain('voided invoice')
   })
 
   it('pluralises', () => {
-    const summary = driftSummary(periodDrift(derived(), derived({ billedCents: 1, moveIns: 0 })))
+    const summary = driftSummary(
+      periodDrift(derived(), derived({ billedCents: 1, moveIns: 0 })),
+      PERIOD_COMPUTATION_VERSION,
+    )
     expect(summary).toContain('2 figures no longer match')
+  })
+
+  // B-307. B-297 and B-298 moved every already-filed month at once, and the
+  // sentence sent the reader looking for a voided invoice in a month nobody
+  // had touched.
+  it('stops offering the data causes when the calculation itself changed', () => {
+    const rows = periodDrift(derived(), derived({ billedCents: 1 }))
+    const summary = driftSummary(rows, PERIOD_COMPUTATION_VERSION - 1)
+    expect(summary).toContain('1 figure no longer matches')
+    expect(summary).toContain('The way these figures are calculated changed')
+    expect(summary).not.toContain('voided invoice')
+    expect(summary).not.toContain('backdated adjustment')
+  })
+
+  it('treats a snapshot with no stamp as one the calculation has moved under', () => {
+    // Every month filed before B-307 shipped, which is every month filed
+    // before B-297 and B-298 changed the boundary.
+    const summary = driftSummary(periodDrift(derived(), derived({ billedCents: 1 })))
+    expect(summary).not.toContain('voided invoice')
+  })
+})
+
+describe('the one drifted figure worth naming', () => {
+  it('prefers money to a moved count, whatever the sizes', () => {
+    const rows = periodDrift(derived(), derived({ billedCents: 100_001, moveIns: 400 }))
+    // The count moved by 396 and the money by 1 cent. The money is still the
+    // thing somebody reported to an accountant.
+    expect(largestDrift(rows)?.key).toBe('billedCents')
+  })
+
+  it('takes the largest money difference when several moved', () => {
+    const rows = periodDrift(
+      derived(),
+      derived({ billedCents: 90_000, collectedCents: 89_999 }),
+    )
+    expect(largestDrift(rows)?.key).toBe('billedCents')
+    expect(largestDrift(rows)?.deltaValue).toBe(-10_000)
+  })
+
+  it('falls back to any figure when no money moved', () => {
+    expect(largestDrift(periodDrift(derived(), derived({ moveIns: 9 })))?.key).toBe('moveIns')
+    expect(largestDrift([])).toBeNull()
   })
 })

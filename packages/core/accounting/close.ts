@@ -30,6 +30,24 @@
 /// reopen and re-close, rather than exported with guessed categories.
 export const CLOSE_SNAPSHOT_VERSION = 2
 
+/// B-307. The version of the CODE that computes the period-derived figures.
+///
+/// Separate from `CLOSE_SNAPSHOT_VERSION` above, which says what SHAPE the
+/// stored object has. This says what the numbers inside it MEAN. B-297 changed
+/// `facilityRevenue`'s `issueDate` handling and B-298 changed
+/// `reportRangeForMonth`, `movesForFacility` and `attachRateForFacility` — so
+/// every month filed before them now disagrees with what the same query
+/// returns today, systematically, with nothing in the data having changed.
+/// `driftSummary` offered a voided invoice, a backdated adjustment or a
+/// corrected move-out as the causes, and for that difference all three are
+/// wrong.
+///
+/// Bump this whenever a change to the report layer moves a period-derived
+/// figure for a window that has already passed. An absent stamp reads as 0 —
+/// filed before the stamp existed, which is before B-297 and B-298 — and that
+/// is the right answer for every month already in the table.
+export const PERIOD_COMPUTATION_VERSION = 1
+
 /// Figures that can only be taken at the time. Frozen because there is no
 /// second chance to observe them.
 export type PointInTimeFigures = {
@@ -113,6 +131,17 @@ export type PeriodDerivedFigures = {
 
 export type PeriodSnapshot = {
   version: number
+  /// B-307. Which computation produced the period-derived half
+  /// (`PERIOD_COMPUTATION_VERSION`), so a difference the report layer caused
+  /// can be told from one the data caused.
+  ///
+  /// **Optional, and deliberately NOT a snapshot version bump**, for the same
+  /// reason `arHalted` is not: the version exists so the journal export can
+  /// refuse a snapshot it cannot categorise, and the journal does not read
+  /// this. Bumping would have refused the journal export of every
+  /// already-filed month over a field the journal does not use. Absent means
+  /// filed before the stamp existed.
+  computationVersion?: number
   /// When the figures were computed — which is the close instant, and is what
   /// makes the point-in-time half meaningful.
   takenAt: string
@@ -235,13 +264,51 @@ export function periodDrift(
 
 /// One sentence for a person, because "3 figures differ" is a number and this
 /// is a judgement they have to make.
-export function driftSummary(rows: readonly DriftRow[]): string {
+///
+/// B-307: the three data causes are only offered when the data is the only
+/// thing that COULD have caused it. Pass the filed snapshot's
+/// `computationVersion`; when it is not the current one, the report layer has
+/// changed under the filed figures and naming a voided invoice would send
+/// somebody looking through a month nobody touched.
+export function driftSummary(
+  rows: readonly DriftRow[],
+  filedComputationVersion?: number,
+): string {
   if (rows.length === 0) {
     return 'Every figure still matches what was filed. Nothing dated inside this month has changed since it was closed.'
   }
+  const lead = `${rows.length} ${rows.length === 1 ? 'figure no longer matches' : 'figures no longer match'} what was filed. `
+  const tail = 'The filed figures are what was reported; this is what the same query returns today.'
+  if (!computedOnCurrentVersion(filedComputationVersion)) {
+    return (
+      lead +
+      'The way these figures are calculated changed after this month was filed, so the difference is explained by that rather than by anything in the data. ' +
+      'Re-closing the month would file it on the current calculation — which restates a month that has already been reported, so it is a decision for whoever sent the last copy out. ' +
+      tail
+    )
+  }
   return (
-    `${rows.length} ${rows.length === 1 ? 'figure no longer matches' : 'figures no longer match'} what was filed. ` +
+    lead +
     'Something dated inside this closed month has changed since — a voided invoice, a backdated adjustment or a corrected move-out are the usual causes. ' +
-    'The filed figures are what was reported; this is what the same query returns today.'
+    tail
+  )
+}
+
+/// Whether a filed snapshot was computed by the code running now.
+export function computedOnCurrentVersion(filedComputationVersion?: number): boolean {
+  return (filedComputationVersion ?? 0) === PERIOD_COMPUTATION_VERSION
+}
+
+/// The one row worth naming in a sentence that has room for one.
+///
+/// Money first, whatever its size, because a moved count is a curiosity and
+/// moved revenue is the thing somebody reported to an accountant. Largest by
+/// absolute delta within that — the direction is in the row, not in the choice.
+export function largestDrift(rows: readonly DriftRow[]): DriftRow | null {
+  if (rows.length === 0) return null
+  const money = rows.filter((row) => row.kind === 'cents')
+  const pool = money.length > 0 ? money : rows
+  return pool.reduce((best, row) =>
+    Math.abs(row.deltaValue) > Math.abs(best.deltaValue) ? row : best,
   )
 }

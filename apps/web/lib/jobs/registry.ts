@@ -17,6 +17,7 @@ import { runDunning } from '@/lib/billing/dunning'
 import { createTask } from '@/lib/admin/tasks'
 import { raiseLeadFollowUps } from '@/lib/admin/lead-follow-up'
 import { raiseSurplusAlarms } from '@/lib/auctions/surplus-alarms'
+import { raiseClosedPeriodDriftTasks } from '@/lib/admin/close-drift'
 import { runDelinquencyTimeline } from '@/lib/delinquency/engine'
 import { emitInstallmentReminders, evaluatePaymentPlanBreaches } from '@/lib/delinquency/payment-plan-breach'
 import { releaseStuckOverlocks } from '@/lib/delinquency/overlock'
@@ -621,6 +622,24 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
     scope: 'per_facility',
     handler: async ({ facilityId, recordItem }) => {
       await raiseSurplusAlarms(facilityId!, new Date(), recordItem)
+    },
+  },
+  {
+    // B-307 / PRD 02 US-39.5, US-44. A month that was already filed and no
+    // longer matches what the same query returns.
+    //
+    // 8am local and once a day, the same reasoning as the two above: it raises
+    // work for a person, and the work is a conversation with whoever received
+    // the last copy. Once a day rather than on the hourly tick for a second
+    // reason — a year of filed months is a year of report recomputes, and
+    // nothing about a closed month changes between 9am and 10am that could not
+    // wait until tomorrow.
+    name: 'accounting.closed-period-drift',
+    label: 'Check filed months still match their figures',
+    localHour: 8,
+    scope: 'per_facility',
+    handler: async ({ facilityId, recordItem }) => {
+      await raiseClosedPeriodDriftTasks(facilityId!, new Date(), recordItem)
     },
   },
   {

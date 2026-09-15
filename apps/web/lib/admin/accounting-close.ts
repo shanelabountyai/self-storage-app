@@ -7,6 +7,7 @@ import {
   chartOrDefault,
   CHART_OF_ACCOUNTS_FIELDS,
   CLOSE_SNAPSHOT_VERSION,
+  PERIOD_COMPUTATION_VERSION,
   periodDrift,
   type ChartOfAccounts,
   type Journal,
@@ -165,6 +166,9 @@ export async function closePeriod(
   const figures = await figuresFor(facilityId, facility.name, bounds.start, bounds.end)
   const snapshot: PeriodSnapshot = {
     version: CLOSE_SNAPSHOT_VERSION,
+    // B-307. What computed these, so a later disagreement can say whether the
+    // code moved or the data did.
+    computationVersion: PERIOD_COMPUTATION_VERSION,
     takenAt: now.toISOString(),
     ...figures,
   }

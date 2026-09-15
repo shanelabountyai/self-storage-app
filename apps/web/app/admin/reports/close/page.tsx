@@ -213,7 +213,10 @@ export default async function MonthlyClosePage() {
                     }
                     {...(drift.length > 0 ? { role: 'alert' as const } : {})}
                   >
-                    {driftSummary(drift)}
+                    {/* B-307: the filed snapshot's own computation version,
+                        so a difference the report layer caused is not
+                        described as a voided invoice. */}
+                    {driftSummary(drift, period.snapshot?.computationVersion)}
                   </p>
 
                   {drift.length > 0 && (
