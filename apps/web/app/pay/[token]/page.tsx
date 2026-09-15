@@ -91,6 +91,10 @@ export default async function PayLinkPage({
   const requested = amount ?? String(lease.balanceCents / 100)
   const checked = validatePaymentAmount(requested, lease.balanceCents)
   const amountCents = checked.ok ? checked.amountCents : lease.balanceCents
+  // B-302, same as `/portal/pay`: the id the refusal renders under, and how the
+  // input below knows it is the thing that was refused.
+  const amountProblemId =
+    !checked.ok && checked.problem !== 'nothing_owed' ? 'amount-problem' : undefined
   const setup = await startPortalPayment(link.tenantId, lease, amountCents)
 
   // CN-4's attribution, recorded when the attempt is raised rather than when it
@@ -119,8 +123,15 @@ export default async function PayLinkPage({
         </div>
       </dl>
 
-      {!checked.ok && checked.problem !== 'nothing_owed' && (
-        <p role="alert" className="border-input rounded-md border p-3 text-sm text-pretty">
+      {/* `!checked.ok` again, and only so TypeScript narrows the union. The
+          `role="alert"` stays for now — this route is outside B-295's lint
+          scope and B-314 owns bringing it in line. */}
+      {!checked.ok && amountProblemId && (
+        <p
+          id={amountProblemId}
+          role="alert"
+          className="border-input rounded-md border p-3 text-sm text-pretty"
+        >
           {t(AMOUNT_PROBLEM_KEYS[checked.problem], { min: formatCents(MIN_PAYMENT_CENTS) })}{' '}
           {t('paypg.balanceRestored')}
         </p>
@@ -136,7 +147,11 @@ export default async function PayLinkPage({
               name="amount"
               type="text"
               inputMode="decimal"
-              defaultValue={(amountCents / 100).toFixed(2)}
+              // B-302. A refused amount is echoed back as it was typed rather
+              // than replaced by the balance `amountCents` fell back to.
+              defaultValue={amountProblemId ? requested : (amountCents / 100).toFixed(2)}
+              aria-invalid={amountProblemId ? true : undefined}
+              aria-describedby={amountProblemId}
               className="border-input bg-background h-9 rounded-md border px-2"
             />
           </label>

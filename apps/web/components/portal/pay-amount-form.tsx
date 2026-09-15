@@ -21,7 +21,8 @@ import { useT } from '@/components/i18n/locale-provider'
 
 export function PayAmountForm({
   subject,
-  amountCents,
+  amountValue,
+  problemId,
   facilityBalanceCents,
   restoreAtOrBelowCents,
   accessSuspended,
@@ -31,13 +32,23 @@ export function PayAmountForm({
   /// re-submitted an account payment as a payment for its anchor unit — a
   /// different and much smaller bill than the one on the screen.
   subject: { field: 'lease' | 'account'; id: string }
-  amountCents: number
+  /// B-302. The dollars string the field starts on, decided by the page: the
+  /// accepted amount, or — when the amount was refused — what was typed,
+  /// unchanged. It used to be the cents figure the page had already fallen back
+  /// to, so a refusal replaced the tenant's number with the whole balance.
+  amountValue: string
+  /// B-302. The id of the paragraph refusing this amount, or `undefined` when
+  /// nothing was refused. Present means the field is invalid and is described
+  /// by that paragraph — the refusal renders outside this form, so a reader
+  /// arriving at the control by form navigation was told nothing (SC 3.3.1,
+  /// PRD 01 §6.8: "a summary block alone is not enough").
+  problemId?: string
   facilityBalanceCents: number
   restoreAtOrBelowCents: number
   accessSuspended: boolean
 }) {
   const t = useT()
-  const [typed, setTyped] = useState((amountCents / 100).toFixed(2))
+  const [typed, setTyped] = useState(amountValue)
 
   const shortfallCents = restoreShortfallCents({ facilityBalanceCents, restoreAtOrBelowCents })
   // Lenient, like `PaymentPlanBuilder`'s: a half-typed "43." contributes
@@ -46,7 +57,16 @@ export function PayAmountForm({
   const parsed = Number.parseFloat(typed)
   const payingCents = Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed * 100) : 0
 
-  const note = !accessSuspended
+  // B-302. While the box still holds the figure the SERVER refused, nothing is
+  // going to be charged — so the note must not price it. Echoing the refused
+  // amount back (3.3.3) without this made `?amount=999999` render "paying
+  // $999,999.00 reopens your gate" beside a paragraph refusing that very
+  // amount, which `e2e/portal.spec.ts`'s fat-finger test caught. It returns the
+  // moment the tenant edits the field, which is the moment there is a new
+  // number to price.
+  const refusedAsTyped = problemId !== undefined && typed === amountValue
+
+  const note = !accessSuspended || refusedAsTyped
     ? ''
     : payingCents >= shortfallCents
       ? t('amtform.reopens', { amount: formatCents(payingCents) })
@@ -82,6 +102,8 @@ export function PayAmountForm({
           inputMode="decimal"
           value={typed}
           onChange={(event) => setTyped(event.target.value)}
+          aria-invalid={problemId ? true : undefined}
+          aria-describedby={problemId}
           className="border-input bg-background h-9 rounded-md border px-2"
         />
       </label>

@@ -53,6 +53,62 @@ describe('a GET-submit refusal is submitted to and focusable (B-299)', () => {
     // `tabIndex={-1}` is not decoration: a fragment whose target is not
     // focusable leaves focus on the document and only moves the sequential
     // starting point, which announces nothing.
-    expect(page).toMatch(new RegExp(`id="${fragment}"\\s*\\n\\s*tabIndex=\\{-1\\}`))
+    //
+    // B-302 made `/portal/pay`'s id an expression rather than a literal — the
+    // same id now also feeds the field's `aria-describedby`, so it is derived
+    // once — hence the two shapes. The literal still has to be in the file
+    // either way, which is what keeps this anchored to the fragment above.
+    expect(page).toMatch(new RegExp(`id=(?:"${fragment}"|\\{\\w+\\})\\s*\\n\\s*tabIndex=\\{-1\\}`))
+    expect(page).toMatch(new RegExp(`["']${fragment}["']`))
+  })
+})
+
+// B-302. The other half of the same refusal, and the half a fragment cannot
+// give: a reader who walks the form by CONTROL rather than by focus lands on
+// "Amount in dollars, edit text" and is told nothing, because the paragraph
+// refusing the amount renders outside the `<details>` the field lives in. PRD
+// 01 §6.8 states the case in these words — "a summary block alone is not
+// enough" — and `a11y.true.errors` claims it on the public statement page.
+//
+// Asserted against the source for the same reason the block above is, plus one
+// of its own: `/pay/[token]` is reachable only with a live pay-link token, so
+// no unit test can render it and only `e2e/pay-link.spec.ts` sees it at all.
+// `e2e/portal.spec.ts` proves the wiring really reaches the rendered DOM on the
+// route a press can reach.
+const DESCRIBED = [
+  {
+    what: '/portal/pay',
+    // The page decides the id; the form component receives it and is the thing
+    // that carries the ARIA, so both halves have to line up.
+    files: ['apps/web/app/portal/pay/page.tsx', 'apps/web/components/portal/pay-amount-form.tsx'],
+    prop: 'problemId',
+  },
+  {
+    what: '/pay/[token]',
+    files: ['apps/web/app/pay/[token]/page.tsx'],
+    prop: 'amountProblemId',
+  },
+]
+
+describe('a refused amount is tied to the field that was refused (B-302)', () => {
+  it.each(DESCRIBED)('$what marks the amount input invalid and describes it', ({ files, prop }) => {
+    const source = files.map((f) => readFileSync(root(f), 'utf8')).join('\n')
+
+    // The id is derived once, from the refusal, and is `undefined` when there
+    // is nothing to point at — an `aria-describedby` naming an element that is
+    // not on the page is worse than none.
+    expect(source).toContain("? 'amount-problem' : undefined")
+    expect(source).toMatch(/id=\{amountProblemId\}/)
+
+    expect(source).toContain(`aria-invalid={${prop} ? true : undefined}`)
+    expect(source).toContain(`aria-describedby={${prop}}`)
+  })
+
+  it.each(DESCRIBED)('$what echoes the refused amount back rather than the balance', ({ files }) => {
+    // `amountCents` has fallen back to the whole balance so the Payment Element
+    // still has a chargeable figure. Seeding the field from it is what rewrote
+    // a Spanish reader's "12,50" as "1284.00" (SC 3.3.3).
+    const page = readFileSync(root(files[0]), 'utf8')
+    expect(page).toMatch(/amountProblemId \? requested : \(amountCents \/ 100\)\.toFixed\(2\)/)
   })
 })

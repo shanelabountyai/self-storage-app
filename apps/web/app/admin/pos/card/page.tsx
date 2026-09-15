@@ -113,9 +113,13 @@ export default async function CounterCardPage({
       </dl>
 
       {amount && requested === null && (
-        <p role="alert" className="border-input rounded-md border p-3 text-sm text-pretty">
-          We couldn&apos;t read &ldquo;{amount}&rdquo; as an amount, so this is set to the whole
-          balance. Change it below if that is wrong.
+        <p
+          id="amount-problem"
+          role="alert"
+          className="border-input rounded-md border p-3 text-sm text-pretty"
+        >
+          We couldn&apos;t read &ldquo;{amount}&rdquo; as an amount, so the charge above is set
+          to the whole balance. Correct the amount below if that is wrong.
         </p>
       )}
 
@@ -132,7 +136,16 @@ export default async function CounterCardPage({
               name="amount"
               type="text"
               inputMode="decimal"
-              defaultValue={(amountCents / 100).toFixed(2)}
+              // B-302. What was typed, not the balance it fell back to — the
+              // sentence on the public accessibility statement says a rejected
+              // value is still there, and it makes no exception for a staff
+              // screen.
+              defaultValue={amount && requested === null ? amount : (amountCents / 100).toFixed(2)}
+              // B-302, found beside the two customer screens that row owns.
+              // The refusal renders outside this `<details>`, so a staffer
+              // walking the form by control was told nothing (SC 3.3.1).
+              aria-invalid={amount && requested === null ? true : undefined}
+              aria-describedby={amount && requested === null ? 'amount-problem' : undefined}
               className="border-input bg-background h-9 max-w-full min-w-0 rounded-md border px-2"
             />
           </label>

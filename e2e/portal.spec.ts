@@ -340,6 +340,23 @@ test.describe('signed in as the demo tenant', () => {
     const refusal = page.getByRole('main').getByText('Enter an amount like 75 or 75.50.')
     await expect(refusal).toBeVisible()
     await expect(refusal).toBeFocused()
+
+    // B-302, on the same press. Focus is one way in; a reader who walks the
+    // form by control is the other, and that path was told nothing at all
+    // because the refusal renders outside the `<details>` the field lives in.
+    const field = page.getByLabel('Amount in dollars')
+    // What was typed is still there. It used to be replaced by the whole
+    // balance, so a tenant refused for a comma got a different number back
+    // (SC 3.3.3).
+    await expect(field).toHaveValue('seventy five')
+    await expect(field).toHaveAttribute('aria-invalid', 'true')
+    // Resolving, not merely present: the id has to name the paragraph that
+    // says why, and a typo in either half is otherwise silent.
+    const describedBy = await field.getAttribute('aria-describedby')
+    expect(describedBy).toBeTruthy()
+    await expect(page.locator(`#${describedBy}`)).toHaveText(
+      /Enter an amount like 75 or 75\.50\./,
+    )
   })
 
   test('/portal/methods lists autopay per unit and has no WCAG 2.1 AA violations', async ({

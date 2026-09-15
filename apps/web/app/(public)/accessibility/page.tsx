@@ -2602,6 +2602,41 @@ function reviewedOn(locale: Locale): string {
 // add or remove. No visible line changes. `LAST_REVIEWED` is not bumped, per
 // D-115.
 
+// Re-verified 2026-09-15, at B-302 (the refusal on the money screens reaches
+// the summary and not the control). Customer-facing, and the OVERSTATING case
+// shipped rather than caught — B-299 re-read this page in the same review block
+// without finding it. "When a form rejects something you typed, the message is
+// tied to the field itself… and what you already entered is still there" is the
+// only sentence in the list below that scopes itself to nothing, so it reads
+// against the whole product; both halves were false on the three screens where
+// somebody types an amount. `/portal/pay` and `/pay/[token]` rendered the
+// refusal as a standalone paragraph OUTSIDE the `<details>` the field lives in,
+// with no `aria-invalid` and no `aria-describedby`, so a reader who walks a form
+// by control landed on "Amount in dollars, edit text" and was told nothing was
+// wrong with it (SC 3.3.1; §6.8's "a summary block alone is not enough"). And
+// the refused figure was thrown away: both screens fall `amountCents` back to
+// the whole balance so the Payment Element still has something chargeable, and
+// the field was seeded from that — so a tenant typing "12,50" on a screen B-283
+// had just translated into Spanish was refused AND handed "1284.00" (SC 3.3.3).
+//
+// The sentence is made TRUE rather than scoped, which took in a third screen:
+// `/admin/pos/card` is the same hand-rolled widget with the same two defects.
+// It is staff-facing, and "where we fall short" already says our staff screens
+// have known problems — so this one was not making the sentence false in the
+// way the other two were, and it was the milder case anyway, because its
+// message said out loud that the figure had been replaced. It was fixed
+// regardless: leaving one of three copies of a defect standing is how the next
+// review finds it again. Every other form in the product was already tied and
+// already value-preserving, through the one shared `Field`/`AdminForm`
+// primitive that a survey of every form here confirmed; these three were the
+// amount boxes outside it.
+//
+// No visible line changes on this page. `LAST_REVIEWED` is NOT bumped — D-115,
+// and correcting an overstatement is not a review. B-254 still owns the date
+// and still needs a person. `tests/accessibility-statement.test.ts` now holds
+// the sentence and the three screens to each other in both directions, so
+// softening the claim is allowed and quietly regressing the code is not.
+
 export default async function AccessibilityPage() {
   const locale = await getLocale()
   const dict = dictionaryFor(locale)

@@ -77,4 +77,72 @@ describe('the public accessibility statement', () => {
     const esClaims = es['a11y.check.ci'].includes('solicitud de cambios que está abierta a revisión')
     expect(esClaims, 'the Spanish accessibility statement disagrees with the English about PR-time scanning').toBe(enClaims)
   })
+
+  // B-302. `a11y.true.errors` is the one sentence in the "what is true today"
+  // list that is NOT scoped — `a11y.true.keyboard` directly above it says "this
+  // public site", and `a11y.intro` says "every page and every flow" — so it
+  // reads as a claim about the product. It was false on the three screens where
+  // an amount is typed: the refusal rendered as a standalone paragraph outside
+  // the `<details>` holding the field, with no `aria-invalid` and no
+  // `aria-describedby`, and the refused figure was overwritten with the whole
+  // balance. Both halves of the sentence, on the money path, in the
+  // OVERSTATING direction.
+  //
+  // Same shape as the CI test above and guarded the same way: the sentence's
+  // truth lives in files nobody re-reads when editing this page.
+  it('ties its error-message claim to the three screens where an amount is typed', () => {
+    const claimsTied = en['a11y.true.errors'].includes('tied to the field itself')
+    const claimsKept = en['a11y.true.errors'].includes('what you already entered is still there')
+
+    const source = [
+      // One screen per entry. `/portal/pay` is two files because the page
+      // decides the id and the client form carries the ARIA, so neither half
+      // is the whole answer.
+      ['apps/web/app/portal/pay/page.tsx', 'apps/web/components/portal/pay-amount-form.tsx'],
+      ['apps/web/app/pay/[token]/page.tsx'],
+      // Staff-facing, and in scope because the sentence excludes nothing.
+      ['apps/web/app/admin/pos/card/page.tsx'],
+    ].map((files) => files.map((file) => read(`../${file}`)).join('\n'))
+
+    const tied = source.every((f) => f.includes('aria-invalid=') && f.includes('aria-describedby='))
+    // The bare fallback, which is what replaced the tenant's number. Anchored
+    // to the seeding position rather than to `amountCents` itself, which every
+    // one of these files legitimately still uses for the figure it charges.
+    const kept = source.every(
+      (f) => !/(?:defaultValue=|useState\()\{?\(amountCents \/ 100\)/.test(f),
+    )
+
+    expect(
+      tied,
+      claimsTied
+        ? 'the statement says a rejection is tied to its field, but an amount form has no aria-invalid/aria-describedby'
+        : 'the statement no longer makes the tied claim; scope this assertion to match rather than leaving it inverted',
+    ).toBe(claimsTied)
+    expect(
+      kept,
+      claimsKept
+        ? 'the statement says a rejected value is still there, but an amount field is seeded from the fallback balance'
+        : 'the statement no longer makes the kept claim; scope this assertion to match',
+    ).toBe(claimsKept)
+  })
+
+  it('carries the error-message claim in both languages or in neither', () => {
+    // The same bilingual failure the CI claim has, on a sentence B-283 and
+    // B-284 had only just translated.
+    const enClaims = en['a11y.true.errors'].includes('what you already entered is still there')
+    const esClaims = es['a11y.true.errors'].includes('lo que ya había escrito sigue ahí')
+    expect(
+      esClaims,
+      'the Spanish accessibility statement disagrees with the English about rejected values being kept',
+    ).toBe(enClaims)
+  })
+
+  it('does not move the review date for a correction (D-115, B-254)', () => {
+    // `LAST_REVIEWED` is a claim that a PERSON re-read the page, including the
+    // "where we fall short" list. Correcting an overstatement does not make
+    // that true, and B-254 — a VoiceOver/NVDA pass nobody has run — is the only
+    // row allowed to move it. Pinned so a bump has to be a deliberate edit to
+    // this line rather than a side effect of an accessibility fix.
+    expect(page).toContain("const LAST_REVIEWED = '2026-08-19'")
+  })
 })

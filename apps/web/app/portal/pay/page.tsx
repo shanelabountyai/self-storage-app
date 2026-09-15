@@ -124,6 +124,13 @@ export default async function PortalPayPage({
     lease.account ? 0 : prepayCeilingFor(lease),
   )
   const amountCents = checked.ok ? checked.amountCents : lease.balanceCents
+  // B-302. The id the refusal renders under, and `undefined` when there is no
+  // refusal to point at — which is also how the input below knows to mark
+  // itself invalid. `nothing_owed` is excluded because it refuses the SCREEN,
+  // not the number: no message renders for it, so there is nothing to describe
+  // the field by.
+  const amountProblemId =
+    !checked.ok && checked.problem !== 'nothing_owed' ? 'amount-problem' : undefined
   const [setup, breakdown] = await Promise.all([
     startPortalPayment(actor.tenantId, lease, amountCents),
     // An account's bill is its units, not one lease's ledger — itemising the
@@ -301,7 +308,8 @@ export default async function PortalPayPage({
         </p>
       )}
 
-      {!checked.ok && checked.problem !== 'nothing_owed' && (
+      {/* `!checked.ok` again, and only so TypeScript narrows the union. */}
+      {!checked.ok && amountProblemId && (
         /* B-295: no `role="alert"`. This does answer the "Update amount"
            press — but that press is a `formMethod="get"` submit, a full
            document load, so the refusal is present when the page is drawn and
@@ -316,7 +324,7 @@ export default async function PortalPayPage({
            the announcement. When the amount is accepted the id is absent and
            the browser does nothing at all. */
         <p
-          id="amount-problem"
+          id={amountProblemId}
           tabIndex={-1}
           className="border-input rounded-md border p-3 text-sm text-pretty"
         >
@@ -335,7 +343,13 @@ export default async function PortalPayPage({
               ? { field: 'account', id: lease.account.id }
               : { field: 'lease', id: lease.leaseId }
           }
-          amountCents={amountCents}
+          // B-302. What the field shows. A refused amount is echoed back as it
+          // was typed — `amountCents` has fallen back to the whole balance so
+          // that the Payment Element still has a chargeable figure, and seeding
+          // the field from it overwrote a Spanish reader's "12,50" with
+          // "1284.00" (SC 3.3.3).
+          amountValue={amountProblemId ? requested : (amountCents / 100).toFixed(2)}
+          problemId={amountProblemId}
           facilityBalanceCents={lease.facilityBalanceCents}
           restoreAtOrBelowCents={lease.restoreAtOrBelowCents}
           accessSuspended={lease.accessSuspended}
