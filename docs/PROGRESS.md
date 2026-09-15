@@ -10058,7 +10058,7 @@ Two consequences, and the second is the one that made this urgent. B-292's own e
 
 ---
 
-## B-307 — every already-filed month disagreed with the code, and nothing said so (2026-09-15, `PENDING`)
+## B-307 — every already-filed month disagreed with the code, and nothing said so (2026-09-15, `4d35dce`)
 
 **This block's own doing.** B-297 changed `facilityRevenue`'s `issueDate` handling and B-298 changed `reportRangeForMonth`, `movesForFacility` and `attachRateForFacility`. `periodDrift` has compared a filed snapshot against a recompute since B-084 — and both of its readers are pull-only: the close screen and the management pack. So every month already filed began disagreeing with what the same query returns, systematically, and nothing anywhere said so. The owner had filed August, exported the journal and sent it to the CPA. **The next person to notice would have been the CPA reconciling against the bank, or nobody.**
 
