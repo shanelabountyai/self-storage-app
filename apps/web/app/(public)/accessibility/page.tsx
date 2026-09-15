@@ -2659,6 +2659,30 @@ function reviewedOn(locale: Locale): string {
 // `LAST_REVIEWED` is NOT bumped: D-115, and a staff-facing item is not a
 // review. B-254 still owns the date and still needs a person.
 
+// Re-verified 2026-09-15, at B-305 (a payment the counter directs at one unit
+// settles that unit, instead of being spread oldest-first across the business
+// account the payer holds). Nothing customer-facing: the one surface is
+// `/admin/pos`, no route was added, and the generated coverage claim is
+// untouched. The customer-visible artefact it changes is the RECEIPT, which now
+// names the unit the staffer picked — that is B-278's table, unchanged in
+// markup.
+//
+// One judgement call worth recording. The remedy is the allocation, not the
+// wording: the form's standing paragraph under the fields now says the payment
+// settles the named unit only, and that paragraph is still read in document
+// order rather than announced with the picker it describes (it is a `<p>`, not
+// a `Field` hint, and changing the select does not announce it). That was
+// acceptable for B-280's account wording and is more clearly acceptable here,
+// because the sentence is now DESCRIPTIVE of what the code does rather than the
+// only thing standing between a payer and money landing on somebody else's
+// unit. The alternative remedy the row offered — a before-submit statement and
+// no allocation change — would have made that paragraph load-bearing for a
+// money decision, which is exactly the kind of text a screen-reader user can
+// tab past.
+//
+// `LAST_REVIEWED` is NOT bumped: D-115, and a staff-facing item is not a
+// review. B-254 still owns the date and still needs a person.
+
 export default async function AccessibilityPage() {
   const locale = await getLocale()
   const dict = dictionaryFor(locale)

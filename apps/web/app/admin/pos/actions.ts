@@ -86,6 +86,8 @@ export async function takePaymentAction(_prev: FormState, formData: FormData): P
     tenantId: String(formData.get('tenantId') ?? ''),
     leaseId,
     accountId,
+    // B-305. The picker named a unit, so the money settles that unit.
+    restrictToLease: !accountId,
     method,
     amountCents,
     tenderedCents,

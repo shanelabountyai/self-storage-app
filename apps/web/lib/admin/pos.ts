@@ -69,6 +69,11 @@ export type CounterPaymentInput = {
   /// `tenantId` and `leaseId` are ignored: the payment is the account's
   /// PAYER's, anchored to one of the account's own leases.
   accountId?: string | null;
+  /// B-305. The subject is ONE unit the person at the desk picked, so the money
+  /// settles that lease's invoices and nothing else. Off by default because the
+  /// other caller — B-230's walk-in move-in — passes the first lease of a
+  /// basket that can hold two units, and one payment has to settle both.
+  restrictToLease?: boolean;
   method: CounterMethod;
   amountCents: number;
   tenderedCents?: number | null;
@@ -290,12 +295,39 @@ export async function recordCounterPayment(
     //
     // `status: 'succeeded'` is already set on a counter payment (money is in
     // hand), so the recompute counts it immediately.
-    const applied = await applyPayment(tx, {
-      id: payment.id,
-      tenantId,
-      facilityId: input.facilityId,
-      amountCents: settled.amountCents,
-    });
+    // B-305. A unit the counter NAMED takes the money, and the account's older
+    // invoices do not. `claimsFor` is `{ tenantId } OR { account this tenant
+    // pays for }`, so for an account's payer an undirected payment spread
+    // oldest-first across every unit on the account — the staffer picked "C-7
+    // — $161 due", the screen offered "Pay in full" from that unit's own
+    // balance, and B-278's receipt came back naming C-3. Absolute, so a unit
+    // that owes nothing takes the cash as credit rather than handing it to the
+    // employer's arrears. The account option is unrestricted, deliberately:
+    // spreading across the account is the whole point of it (B-280).
+    const directed = Boolean(input.restrictToLease) && !input.accountId;
+    const applied = await applyPayment(
+      tx,
+      {
+        id: payment.id,
+        tenantId,
+        facilityId: input.facilityId,
+        amountCents: settled.amountCents,
+      },
+      directed
+        ? {
+            restrictToInvoiceIds: (
+              await tx.invoice.findMany({
+                where: {
+                  leaseId: lease.id,
+                  status: { in: ["open", "partially_paid"] },
+                },
+                select: { id: true },
+              })
+            ).map((invoice) => invoice.id),
+            restrictIsAbsolute: true,
+          }
+        : {},
+    );
     allocation.push(applied);
 
     // B-257. AFTER the allocation, not before, and split by it: this payment

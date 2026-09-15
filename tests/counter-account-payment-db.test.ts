@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { prisma } from '../packages/db'
 import { counterPayableAccounts, recordCounterPayment } from '../apps/web/lib/admin/pos'
+import { paymentCredits } from '../apps/web/lib/billing/allocation'
 import type { Actor } from '../apps/web/lib/rbac/actor'
 import { ForbiddenError } from '../apps/web/lib/rbac/authorize'
 import type { PermissionKey } from '@storage/db/rbac-catalog'
@@ -26,6 +27,7 @@ let edId = ''
 let fayId = ''
 let leaseE = ''
 let leaseF = ''
+let unitTypeId = ''
 let accountId = ''
 let otherAccountId = ''
 let counter = 0
@@ -88,6 +90,26 @@ async function openRent(leaseId: string, cents: number): Promise<string> {
   return invoice.id
 }
 
+async function makeLease(tenantId: string, number: string, billingAccountId: string | null = null) {
+  const unit = await prisma.unit.create({
+    data: { facilityId, unitTypeId, number: `${number}-${suffix}` },
+  })
+  return (
+    await prisma.lease.create({
+      data: {
+        facilityId,
+        tenantId,
+        unitId: unit.id,
+        billingAccountId,
+        status: 'active',
+        startDate: new Date('2026-01-01T00:00:00Z'),
+        billingDay: 1,
+        monthlyRateCents: 10_000,
+      },
+    })
+  ).id
+}
+
 async function makeFacility(slug: string) {
   return prisma.facility.create({
     data: {
@@ -111,9 +133,11 @@ describeDb('a business account paying at the counter', () => {
         data: { email: `ca-staff-${suffix}@example.com`, firstName: 'Cam', lastName: 'Counter' },
       })
     ).id
-    const unitType = await prisma.unitType.create({
-      data: { facilityId, name: `10x10 ${suffix}`, widthFt: 10, lengthFt: 10 },
-    })
+    unitTypeId = (
+      await prisma.unitType.create({
+        data: { facilityId, name: `10x10 ${suffix}`, widthFt: 10, lengthFt: 10 },
+      })
+    ).id
 
     async function tenant(name: string) {
       return (
@@ -126,26 +150,8 @@ describeDb('a business account paying at the counter', () => {
     edId = await tenant('ed')
     fayId = await tenant('fay')
 
-    async function lease(tenantId: string, number: string) {
-      const unit = await prisma.unit.create({
-        data: { facilityId, unitTypeId: unitType.id, number: `${number}-${suffix}` },
-      })
-      return (
-        await prisma.lease.create({
-          data: {
-            facilityId,
-            tenantId,
-            unitId: unit.id,
-            status: 'active',
-            startDate: new Date('2026-01-01T00:00:00Z'),
-            billingDay: 1,
-            monthlyRateCents: 10_000,
-          },
-        })
-      ).id
-    }
-    leaseE = await lease(edId, 'CA-E')
-    leaseF = await lease(fayId, 'CA-F')
+    leaseE = await makeLease(edId, 'CA-E')
+    leaseF = await makeLease(fayId, 'CA-F')
 
     // The payer holds NO lease — the shape the counter used to refuse.
     accountId = (
@@ -277,6 +283,97 @@ describeDb('a business account paying at the counter', () => {
       expect(accounts[0].daysPastDue).toBeGreaterThan(0)
     }
     expect(await counterPayableAccounts(staff(), facilityId, { name: '  ' })).toEqual([])
+  })
+
+  // B-305. The direction D-137 did not cover. Its guard fires when the lease's
+  // account payer is SOMEBODY ELSE, and protects an employee's cash from the
+  // employer's arrears. Nothing protected a payment DIRECTED at one unit from
+  // the account's oldest invoice: the staffer picks "C-7 — $161 due", the
+  // screen offers "Pay in full" from that unit's own balance, and the money
+  // lands on C-3. The foreman's unit stays open and keeps walking toward an
+  // overlock on a tenant who paid.
+
+  it('settles the unit the counter named, not the account’s oldest invoice', async () => {
+    // A payer who holds a unit ON the account — so D-137's guard, which is
+    // about somebody else's account, is silent.
+    const leaseP = await makeLease(payerId, 'CA-P', accountId)
+    const own = await openRent(leaseP, 10_000)
+
+    const result = await recordCounterPayment(staff(), {
+      facilityId,
+      tenantId: payerId,
+      leaseId: leaseP,
+      restrictToLease: true,
+      method: 'cash',
+      amountCents: 10_000,
+      tenderedCents: 10_000,
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+
+    const payment = await prisma.payment.findUniqueOrThrow({
+      where: { id: result.paymentId },
+      select: { allocations: { select: { invoiceId: true, amountCents: true } } },
+    })
+    expect(new Map(payment.allocations.map((a) => [a.invoiceId, a.amountCents]))).toEqual(
+      new Map([[own, 10_000]]),
+    )
+    expect(await balance(leaseP)).toBe(0)
+    // Ed's $30 is older and would have taken the first $30 of it.
+    expect(await balance(leaseE)).toBe(3_000)
+
+    // The receipt names the same unit the screen did (B-278).
+    const credits = await paymentCredits(result.paymentId)
+    expect(credits.lines).toEqual([
+      { leaseId: leaseP, unitNumber: `CA-P-${suffix}`, amountCents: 10_000 },
+    ])
+  })
+
+  it('keeps a payer’s own 5×5 — on no account at all — out of the employer’s arrears', async () => {
+    const leaseX = await makeLease(payerId, 'CA-X')
+    const mine = await openRent(leaseX, 5_000)
+
+    const result = await recordCounterPayment(staff(), {
+      facilityId,
+      tenantId: payerId,
+      leaseId: leaseX,
+      restrictToLease: true,
+      method: 'cash',
+      amountCents: 8_000,
+      tenderedCents: 8_000,
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+
+    const payment = await prisma.payment.findUniqueOrThrow({
+      where: { id: result.paymentId },
+      select: { allocations: { select: { invoiceId: true, amountCents: true } } },
+    })
+    expect(new Map(payment.allocations.map((a) => [a.invoiceId, a.amountCents]))).toEqual(
+      new Map([[mine, 5_000]]),
+    )
+    // The $30 over is credit on their own unit, surfaced rather than quietly
+    // posted to Acme.
+    expect(result.unappliedCents).toBe(3_000)
+    expect(await balance(leaseX)).toBe(-3_000)
+    expect(await balance(leaseE)).toBe(3_000)
+
+    // And a unit with nothing left to claim still keeps the cash: an empty
+    // narrowing is absolute here, where a plan installment's would fall back.
+    const again = await recordCounterPayment(staff(), {
+      facilityId,
+      tenantId: payerId,
+      leaseId: leaseX,
+      restrictToLease: true,
+      method: 'cash',
+      amountCents: 2_000,
+      tenderedCents: 2_000,
+    })
+    expect(again.ok).toBe(true)
+    if (!again.ok) return
+    expect(again.unappliedCents).toBe(2_000)
+    expect(await balance(leaseX)).toBe(-5_000)
+    expect(await balance(leaseE)).toBe(3_000)
   })
 
   it('keeps the balance behind tenants:view, as D-110 settled for the unit picker', async () => {

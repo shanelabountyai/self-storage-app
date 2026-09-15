@@ -172,8 +172,8 @@ export function CounterPaymentForm({
         {account
           ? `Settles ${account.name}’s oldest invoices first, across ${account.unitNumbers.join(', ')}, and is receipted to ${account.payerName}. Cash, check or money order only.`
           : selected.isFormer
-          ? 'This unit has been moved out of. Cash, check or money order only — a card at the counter needs an open lease.'
-          : 'Card takes you to the card screen with this amount, where the tenant enters their own details — or you can charge the card they have on file.'}
+          ? `Settles unit ${selected.heading} only; anything over its balance stays as credit on it. This unit has been moved out of — cash, check or money order only, because a card at the counter needs an open lease.`
+          : `Settles unit ${selected.heading} only; anything over its balance stays as credit on it. Card takes you to the card screen with this amount, where the tenant enters their own details — or you can charge the card they have on file.`}
       </p>
       <button
         type="submit"

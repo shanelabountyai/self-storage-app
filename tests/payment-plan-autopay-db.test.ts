@@ -580,6 +580,47 @@ describeDb('payment plans and autopay', () => {
     expect(rent.amountPaidCents).toBe(0)
   })
 
+  it('keeps the plan first when the counter directs the payment at that unit (B-305)', async () => {
+    // B-305 narrows a counter payment to the unit the staffer picked, which is
+    // a restriction — and a restriction used to switch B-203's deferral off.
+    // The defect it guards is INSIDE one lease, so it has to survive: tax on
+    // this month's rent outranks every arrears rent share either way.
+    const { leaseId, tenantId: payer } = await newLeaseUnderOwnTenant()
+    const arrears = await invoice(leaseId, 60_000, d('2026-07-01'), [
+      { type: 'rent', amountCents: 60_000 },
+    ])
+    const septemberRent = await invoice(leaseId, 12_900, d('2026-09-01'), [
+      { type: 'rent', amountCents: 11_500 },
+      { type: 'tax', amountCents: 1_400 },
+    ])
+    await plan({
+      leaseId,
+      invoiceIds: [arrears],
+      totalCents: 60_000,
+      autoCollect: false,
+      installments: [{ dueDate: d('2026-09-15'), amountCents: 30_000 }],
+    })
+
+    const payment = await prisma.payment.create({
+      data: { facilityId, tenantId: payer, amountCents: 30_000, method: 'cash', status: 'succeeded' },
+    })
+    await prisma.$transaction(async (tx) => {
+      await applyPayment(
+        tx,
+        { id: payment.id, tenantId: payer, facilityId, amountCents: 30_000 },
+        // What `recordCounterPayment` now passes for a unit the picker named.
+        { restrictToInvoiceIds: [arrears, septemberRent], restrictIsAbsolute: true },
+      )
+    })
+
+    const [covered, rent] = await Promise.all([
+      prisma.invoice.findUniqueOrThrow({ where: { id: arrears }, select: { amountPaidCents: true } }),
+      prisma.invoice.findUniqueOrThrow({ where: { id: septemberRent }, select: { amountPaidCents: true } }),
+    ])
+    expect(covered.amountPaidCents).toBe(30_000)
+    expect(rent.amountPaidCents).toBe(0)
+  })
+
   it('spills what the plan does not need onto the current month (B-203)', async () => {
     // Deferred, not restricted. The amount is whatever the tenant chose to
     // hand over rather than a figure we raised, so a payment bigger than the

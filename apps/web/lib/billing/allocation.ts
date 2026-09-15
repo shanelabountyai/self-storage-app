@@ -160,7 +160,16 @@ export type AppliedPayment = {
 export async function applyPayment(
   tx: Prisma.TransactionClient,
   payment: { id: string; tenantId: string; facilityId: string; amountCents: number },
-  options: { explicitInvoiceId?: string | null; restrictToInvoiceIds?: readonly string[] | null } = {},
+  options: {
+    explicitInvoiceId?: string | null
+    restrictToInvoiceIds?: readonly string[] | null
+    /// B-305. Which way an EMPTY narrowing falls. A plan installment prefers the
+    /// plan's invoices but must still land somewhere if another payment settled
+    /// them first; a payment a person DIRECTED at one unit at the counter must
+    /// never wander off that unit, so nothing left to claim there means credit
+    /// on it rather than a fallback onto everything this payer owes.
+    restrictIsAbsolute?: boolean
+  } = {},
 ): Promise<AppliedPayment> {
   const facility = await tx.facility.findUniqueOrThrow({
     where: { id: payment.facilityId },
@@ -185,10 +194,10 @@ export async function applyPayment(
   // invoices can all be settled by the time a redelivered webhook arrives, and
   // an empty target list would strand real money as unapplied rather than
   // crediting the tenant. That case falls back to the ordinary order.
-  if (options.restrictToInvoiceIds && options.restrictToInvoiceIds.length > 0) {
+  if (options.restrictToInvoiceIds) {
     const covered = new Set(options.restrictToInvoiceIds)
     const narrowed = targets.filter((target) => covered.has(target.invoiceId))
-    if (narrowed.length > 0) targets = narrowed
+    if (narrowed.length > 0 || options.restrictIsAbsolute) targets = narrowed
   }
 
   // B-203. A payment nobody narrowed — the counter, the portal, a pay link —
@@ -212,7 +221,13 @@ export async function applyPayment(
   // Scoped to the plan's OWN lease. A tenant with two leases here, one on a
   // plan and one not, has the second untouched — its invoices are not deferred
   // and keep their ordinary rank.
-  if (!options.explicitInvoiceId && !options.restrictToInvoiceIds) {
+  //
+  // Runs UNDER an absolute restriction too (B-305): a counter payment directed
+  // at one unit is narrowed to that unit's invoices, and B-203's defect is
+  // inside a single lease — tax on this month's rent outranking the arrears the
+  // plan froze. Autopay's own restriction is already the covered set, so the
+  // deferral would be a no-op there and is skipped rather than paid for.
+  if (!options.explicitInvoiceId && (!options.restrictToInvoiceIds || options.restrictIsAbsolute)) {
     const byLease = await coveredByPlan(payment.tenantId, payment.facilityId, tx)
     if (byLease.size > 0) {
       const covered = new Set([...byLease.values()].flatMap((ids) => [...ids]))
