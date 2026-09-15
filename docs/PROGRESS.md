@@ -9888,7 +9888,7 @@ Not a build row from the backlog: the session was the owner working through the 
 - **Nothing else in the owner-action table moved.** The B-298 deploy, the first cron sweep's `ledgerExceptions`, the lien-notice question and B-254's manual pass are all unchanged, and none of them is a session's to close.
 - **`authExpiry`'s English string still says "minutes" for a value of 1** while the Spanish pluralises. Left alone: no auth token in this codebase has a one-minute life, so it is unreachable, and fixing it would have been scope taken on the way past.
 
-## B-302 — the refusal on the money screens reached the summary and not the control (2026-09-15, `SHA-PENDING`)
+## B-302 — the refusal on the money screens reached the summary and not the control (2026-09-15, `efbad7d`)
 
 The first row of the eighth review block, taken first for the reason B-186 was taken first: it is an **overstated** claim on a public page, and the overstating direction converts a fixable bug into an alleged misrepresentation. `a11y.true.errors` is the one sentence in "what is true today" that scopes itself to nothing — `a11y.true.keyboard` directly above it says *"this public site"*, and `a11y.intro` says *"every page and every flow"* — so it reads as a claim about the product. **Both of its halves were false on every screen where somebody types an amount**, and **B-299 re-read this page in the same review block without catching it**.
 
