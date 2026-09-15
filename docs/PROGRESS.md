@@ -10096,3 +10096,39 @@ The second half of the defect is what the screen said when somebody *did* look. 
 - **Nothing cancels the card when the drift clears.** A month that is reopened and re-closed correctly leaves its old card open for somebody to close with a note. Deliberate — the note is the record of what was decided — but it means the queue does not self-tidy. No row.
 - **No e2e covers the card or the 8am job.** The demo seed files no accounting period, so there is nothing for a spec to drift. Adding one is a shared-fixture change needing B-120's discipline. No row.
 - **The drift sweep does not roll up.** A regional manager with eight sites gets eight cards, one per facility, and no portfolio view of which months moved — the same gap B-303's entry recorded for ledger exceptions. No row.
+
+---
+
+## B-308 — the counter's shared-address button answered the question the other way (2026-09-15, `PENDING`)
+
+B-289 was right to make the warning lead with a question. It left the only button underneath it still labelled as an answer — and as the **wrong** answer.
+
+What a staffer read at the desk was *"**Is Pat Rivera the person renting?** If so, correct the name below to use that account. If not, both keep leases and notices, but neither can sign in online."*, above a single button saying **"Yes, give Casey Diaz their own account"**. That button is the **no** branch: `confirmed=yes` sets `separateAccount`, which rents to the second person on the shared address. A staffer with a customer waiting who answers the on-screen question truthfully with *yes* presses the only thing labelled "Yes" and **manufactures the duplicate tenant D-111 exists to make deliberate**.
+
+The second defect is in the same six words. The button promised "their own **account**" while the paragraph two lines above said *"neither can sign in online"* — and everywhere else in this product "account" means the portal sign-in (`portal.yourAccountFallback`, `paypg.backToAccount`). The button offered a thing the sentence above it said would not exist.
+
+**What it built.** Copy only, both dictionaries, plus one guard.
+
+1. **`details.sharedEmailConfirm`** is now `No — different person, rent to {renting}` (es `No — es otra persona, rente a {renting}`). It states the branch it takes, opens with the answer that branch corresponds to, and drops "account".
+2. **`tests/i18n.test.ts`** gains *"never labels the shared-address button with the answer it does not take (B-308)"*: when `details.sharedEmail` poses a question, `details.sharedEmailConfirm` must not begin with that language's affirmative, and must not contain `account`/`cuenta`. Both dictionaries.
+
+**No code change.** `checkout/actions.ts` and `components/admin/form.tsx` are untouched — the branch was always correct, only its label was not. **No migration.**
+
+**What it decided.**
+
+- **The label names the BRANCH, not the answer.** "Yes"/"No" on a button under a question is read as the answer to that question, so a button whose text begins with either word is committing to one reading whatever the rest of the sentence says. `No — different person, rent to {renting}` opens with the branch's own answer and then names what it does, so the two readings agree instead of contradicting.
+- **The yes-path stays a form field, not a second button.** "Correct the name below to use that account" is the yes-answer and it is an edit, not a submit. Adding a second button would have made the confirm state a two-way choice the action has no branch for — `separateAccount` is the only thing `confirmed=yes` sets, and B-173's note explains why there is deliberately no linking branch here.
+- **The guard is anchored on the affirmative WORD, not on today's string.** Asserting the label equals the new text would pass for exactly as long as nobody rewrites it. The regex catches any future label that opens with `yes`/`ok`/`sí`/`claro`, which is the class of mistake rather than the instance.
+- **`(?!\p{L})` rather than `\b` in that regex, and this was a real bug in the guard's first draft.** JavaScript's `\b` is ASCII-only, so `\b` after the `í` of "Sí," never matches — the Spanish half would have passed on precisely the string it exists to catch. Both polarities were checked against the old and new values before the guard was trusted.
+- **D-111 is not re-opened.** A nullable, non-unique `Tenant.email` is what makes *both* branches legitimate; this row only stops the staffer taking the one that contradicts their own answer.
+- **"Account" is banned from this label in both languages.** Not from the dictionary at large — the word is correct where it means the portal. It is wrong here because the sentence directly above says neither party gets one.
+
+**Verification.** Typecheck clean, including `tsconfig.tests.json`. Lint: 0 errors, the same 6 pre-existing warnings. Full unit suite run **twice**, identical both times: **4,533 passed, 8 skipped, of 4,541 across 267 files** — B-307's 4,532 of 4,540 plus exactly the 1 new test, reconciling exactly. `npm run build` succeeds. No migration, so no schema-drift check was owed. `apps/web/app/(public)/accessibility/page.tsx` was re-read: B-271's note asserts the four `sharedEmail*` keys exist in both languages and that this data-dependent state is deliberately **not** axe-scanned. Both still true — no markup, no new state, no coverage claim changed — so no claim there went stale and nothing was edited.
+
+**What it left behind.**
+
+- **The em dash is a reading-aloud choice, not a tested one.** `No — different person` reads as two beats at a desk; a screen reader announces it as a pause. Nothing asserts the punctuation, and a later rewrite to `No, different person` would be equally correct and would still pass the guard.
+- **No e2e covers the confirm state.** It renders only for a session carrying `acquisitionSource: 'walk_in'` **and** an address already held by a differently-named tenant — the same post-interaction, data-dependent state B-271 recorded as unreachable by URL. B-184 owns route-versus-state; this adds no new exception. No row.
+- **The guard covers this one key.** Every other confirm label in the product (`'Yes, add it'` is `AdminForm`'s fallback, and the tax and facility-publish flows have their own) is still free to open with an affirmative under a question. Those flows' messages are statements, not questions, so the trap does not currently exist there — but nothing stops one being introduced. No row; worth one if a third question-led confirm appears.
+
+---

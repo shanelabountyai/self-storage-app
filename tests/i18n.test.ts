@@ -202,6 +202,31 @@ describe('i18n dictionaries', () => {
     }
   })
 
+  it('never labels the shared-address button with the answer it does not take (B-308)', () => {
+    // The button is the NO branch: `confirmed=yes` sets `separateAccount`, which
+    // rents to the second person rather than reusing the held account. When the
+    // message leads with a question (B-289), a label opening with that
+    // language's affirmative reads as the answer to it, and the staffer who
+    // hears "yes" presses the only button and creates the duplicate tenant
+    // D-111 exists to make deliberate. Anchored on the affirmative WORD, not on
+    // today's string, so a future rewrite that reintroduces it fails here.
+    // `(?!\p{L})` rather than `\b`: JS's `\b` is ASCII-only, so `\b` after the
+    // `í` of "Sí," never matches and the Spanish half of this guard would pass
+    // on exactly the string it exists to catch.
+    const affirmatives = [
+      { dict: en, locale: 'en', words: /^(yes|yeah|ok|okay|sure)(?!\p{L})/iu },
+      { dict: es, locale: 'es', words: /^(s[ií]|claro|vale)(?!\p{L})/iu },
+    ]
+    for (const { dict, locale, words } of affirmatives) {
+      if (!dict['details.sharedEmail'].includes('?')) continue
+      const label = dict['details.sharedEmailConfirm']
+      expect(label, locale).not.toMatch(words)
+      // "Account" here means the portal sign-in the message says neither party
+      // will get. What the branch creates is a second renter on one address.
+      expect(label, locale).not.toMatch(/\b(account|cuenta)s?\b/i)
+    }
+  })
+
   it('leaves no empty translation', () => {
     // An empty string type-checks and renders a blank label.
     const blank = Object.keys(en).filter((key) => !es[key as keyof typeof en].trim())

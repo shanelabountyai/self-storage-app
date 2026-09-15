@@ -660,7 +660,9 @@ export const es: Dictionary = {
     '¿Es {heldBy} quien renta? Si es así, corrija el nombre abajo para usar esa cuenta. Si no, ambas conservan contrato y avisos, pero ninguna podrá entrar en línea.',
   'details.sharedEmailHeldBy': 'Ya lo usa',
   'details.sharedEmailRenting': 'Está rentando ahora',
-  'details.sharedEmailConfirm': 'Sí, darle a {renting} su propia cuenta',
+  // B-308. Ver la nota en `en.ts`: la etiqueta nombra la RAMA que toma y no
+  // empieza con «Sí», que responde la pregunta al revés. Sin «cuenta».
+  'details.sharedEmailConfirm': 'No — es otra persona, rente a {renting}',
   'details.phone': 'Número de celular',
   'details.address1': 'Dirección',
   'details.address2': 'Departamento, suite o unidad (opcional)',

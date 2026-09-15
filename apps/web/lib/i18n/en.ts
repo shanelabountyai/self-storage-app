@@ -742,7 +742,14 @@ export const en = {
     'Is {heldBy} the person renting? If so, correct the name below to use that account. If not, both keep leases and notices, but neither can sign in online.',
   'details.sharedEmailHeldBy': 'Already used by',
   'details.sharedEmailRenting': 'Renting now',
-  'details.sharedEmailConfirm': 'Yes, give {renting} their own account',
+  // B-308. The label states the BRANCH IT TAKES, and must not begin with the
+  // word that answers `details.sharedEmail`'s question the other way: a
+  // staffer who reads the question aloud, hears "yes", and presses the only
+  // button was manufacturing the duplicate tenant D-111 exists to make
+  // deliberate. "Account" is gone too — everywhere else here that means the
+  // portal sign-in, which the paragraph two lines above says neither will
+  // have. The yes-path is "correct the name below", not a button.
+  'details.sharedEmailConfirm': 'No — different person, rent to {renting}',
   'details.phone': 'Mobile number',
   'details.address1': 'Street address',
   'details.address2': 'Flat, suite or unit (optional)',
