@@ -1,18 +1,17 @@
 # Next
 
-**B-303 and B-304 are done** (`4e7b60e`, SHA recorded in `a7a6e47`). The eighth review block (`5933447`) has 23 rows left, **B-305–B-326** plus the new **B-327**, and **B-325 at `83aya`** (deliberately ahead of B-301 so mail's wording settles before the backfill sends).
+**B-305 is done** (`d51e772`, SHA recorded in the follow-up commit). The eighth review block (`5933447`) has 22 rows left, **B-306–B-326** plus **B-327**, and **B-325 at `83aya`** (deliberately ahead of B-301 so mail's wording settles before the backfill sends).
 
-A ledger exception can now be repaired from the lease's ledger screen — a correction, a write-off of an open lease, or a void of a rent invoice, all behind `credits:manual` and B-197's limit — and one a person has judged unrepairable can be marked reviewed so the daily high-priority task stops naming it. **The owner action about `ledger_does_not_reconcile` is unblocked**: there is now something a person can do about one.
+A payment the counter directs at one unit now settles that unit — `restrictToInvoiceIds`, chosen over the before-submit statement, with the statement written anyway as a description of what the code does. A unit that owes nothing keeps the cash as credit on itself rather than handing it to the employer's arrears. **The two remedies the row offered are now closed; do not re-open the choice** — the reasoning is in the `PROGRESS.md` entry.
 
 ## Start here
 
-**B-305**, then in file order **B-306**, **B-307**.
+**B-306**, then in file order **B-307**.
 
-- **B-305** — the counter misdirects a business-account payer's money. `claimsFor` spreads it oldest-first across the account, and D-137's guard only fires when the payer is somebody else. The row says to build **either** remedy — `restrictToInvoiceIds` (the mechanism B-189 already built) or a before-submit statement naming the units — **and to say which in the entry**.
-- **B-306** — a refused lien notice leaves no record and no worklist. It is the visible half of B-304: an acknowledged exception still refuses a notice, deliberately, and nothing anywhere records that it did.
+- **B-306** — a refused lien notice leaves no record and no worklist. It is the visible half of B-304: an acknowledged exception still refuses a notice, deliberately, and nothing anywhere records that it did. B-304's entry says that refusal is the thing an acknowledgement most plausibly looks like it should suppress and must not.
 - **B-307** — the block's own doing. B-297/B-298 changed `facilityRevenue`, `reportRangeForMonth`, `movesForFacility` and `attachRateForFacility`, so every already-filed month now disagrees with what the same query returns. `periodDrift` detects it and is pull-only. The row builds the alarm and a computation-version stamp; **the restatement decision is the owner's** and is in the table below.
 
-**B-327 is new**, raised out of building B-303, and it is the one gap B-303 left that has a row: a voided rent invoice's period can never be billed again, and the four-line index change that would release it is a money defect in disguise — the promotion and referral marks are consumed per period, so a bare re-raise drops a discount the tenant was promised. Read the row before reaching for the index.
+**B-327 is still open and still worth reading before touching the rent-invoice index**: a voided rent invoice's period can never be billed again, and the four-line index change that would release it is a money defect in disguise — the promotion and referral marks are consumed per period, so a bare re-raise drops a discount the tenant was promised.
 
 Nothing in the block is blocked on the tree. B-301 still is.
 
@@ -22,6 +21,8 @@ Nothing in the block is blocked on the tree. B-301 still is.
 - **`db:migrate:e2e` reseeds the demo, and that stales `.next/cache/fetch-cache`.** `a11y-own-spec-routes.spec.ts`'s reserve test failed on mobile-chrome for exactly this — cached unit ids that no longer exist — and passed cleanly after `rm -rf apps/web/.next/cache/fetch-cache`. Do that after any reseed, before believing an e2e failure.
 
 ## Owner actions
+
+**The Neon dev branch is two migrations behind.** `npm run db:status` exits non-zero: local is current, but `20260915120000_b303_ledger_correction` and `20260915130000_b304_ledger_exception_ack` have never been applied to the cloud dev branch. `npm run db:migrate:cloud` is the script for it (`migrate deploy`, which cannot drop anything) — left unrun deliberately, because it touches shared infrastructure and was not this item's work.
 
 **One empty file still blocks three of these.** `.env.prod-ops`'s `DATABASE_URL`, `DIRECT_URL` and `EXPECTED_DEV_DB_HOST` are all empty; B-277's backfill, B-301's dry run and the signed-lease scoping query all need them. Filling it once unblocks all three.
 
@@ -44,7 +45,7 @@ Nothing in the block is blocked on the tree. B-301 still is.
 
 The block recorded **twelve refusals** and **two stated limits** in the numbering note at the top of `06-backlog.md`, so the ninth review pass does not re-find them — among them that the westernmost-zone reckoning in `reportRange` is **correct as built** (D-138 weighed the union-of-zones alternative and it double-counts), that `bodega` vs `unidad` and B-286's toggle markup are both settled, and that a `<p tabindex="-1">` with no focus ring is not a 2.4.7 failure. Read that note before starting the next review.
 
-Carried gaps with no owning row, unchanged: B-300's `authExpiry` "minutes" for 1; B-299's transfer-preview move-in ceiling and its untested preview refusals; B-298's `Lease.endDate` and the rest of the demo seed's date columns; B-290's missing funnel measurement; B-284's, B-281's and B-280's carried gaps. **B-303 adds three**, all in its `PROGRESS.md` entry and none with a row: `/admin/reports/ledger-exceptions` has no e2e coverage (B-277's gap, not B-303's), no screen lists what has been acknowledged portfolio-wide, and an acknowledgement is never expired.
+Carried gaps with no owning row, unchanged: B-300's `authExpiry` "minutes" for 1; B-299's transfer-preview move-in ceiling and its untested preview refusals; B-298's `Lease.endDate` and the rest of the demo seed's date columns; B-290's missing funnel measurement; B-284's, B-281's and B-280's carried gaps. **B-305 adds two**, both in its `PROGRESS.md` entry and neither with a row: no e2e covers the directed allocation (the demo seed has no account payer holding a unit of their own), and a plain tenant with two personal units who hands over one sum for both now gets the surplus as visible credit on the unit the staffer picked rather than a silent spread — the deliberate trade, and the answer if operators object is a multi-unit subject in the picker, not a return to the spread. **B-303 adds three**, all in its `PROGRESS.md` entry and none with a row: `/admin/reports/ledger-exceptions` has no e2e coverage (B-277's gap, not B-303's), no screen lists what has been acknowledged portfolio-wide, and an acknowledgement is never expired.
 
 **One thing B-302 left for B-314**, unchanged: `/pay/[token]` keeps its `role="alert"`, has no skip link, and is outside B-295's `app/portal/**` lint rule.
 

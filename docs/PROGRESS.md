@@ -9984,7 +9984,7 @@ Built and committed with B-303, in the one commit `4e7b60e`: it depends on that 
 - **An acknowledgement is never expired.** A lease acknowledged a year ago whose figure has not moved stays quiet for ever. That is the point of the per-figure rule, but a facility that stops looking at its exception report entirely is not detected by anything here.
 - **`/admin/reports/ledger-exceptions` still has no e2e coverage**, so the acknowledge control is proven against the database and not against a rendered DOM. The demo seed has no failing lease for it to render on, which is why.
 
-## B-305 — at the counter, picking a unit for a business-account payer did not pay that unit (2026-09-15, `PENDING`)
+## B-305 — at the counter, picking a unit for a business-account payer did not pay that unit (2026-09-15, `d51e772`)
 
 `recordCounterPayment` passed no narrowing to `applyPayment`, so a counter payment went through `claimsFor(tenantId, facilityId)` — `{ tenantId } OR { the account this tenant pays for }`. When the subject was a lease whose tenant **is** an account's payer, the cash spread oldest-first across every unit on the account regardless of which unit the staffer selected, while the form showed that lease's own balance and a "Pay in full" button derived from it. Acme's foreman hands over $161 cash for C-7, the manager picks "C-7 — $161 due", and B-278's receipt comes back honestly naming C-3. The foreman's unit is still open, still ageing, still walking toward an overlock on a tenant who paid.
 
