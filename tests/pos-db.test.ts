@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { prisma } from '../packages/db'
 import {
   counterReceipt,
@@ -7,6 +7,8 @@ import {
   facilityDayBounds,
   recordCounterPayment,
 } from '../apps/web/lib/admin/pos'
+import { processCommsEvent } from '../apps/web/lib/comms/service'
+import * as provider from '../apps/web/lib/comms/provider'
 import type { Actor } from '../apps/web/lib/rbac/actor'
 import { ForbiddenError } from '../apps/web/lib/rbac/authorize'
 import type { PermissionKey } from '@storage/db/rbac-catalog'
@@ -54,6 +56,7 @@ describeDb('counter payments', () => {
           postalCode: '78704',
           timezone: 'America/Chicago',
           cashApprovalThresholdCents: 50_000,
+          phone: '512-555-0100',
         },
       }),
       prisma.facility.create({
@@ -464,6 +467,133 @@ describeDb('counter payments', () => {
       await expect(
         dailyPaymentsSummary(managerActor(), otherFacilityId, '2026-01-01'),
       ).rejects.toThrow(ForbiddenError)
+    })
+  })
+
+  // B-313. A counter payment previously posted to the ledger and nothing
+  // else — no `payment.succeeded`, so the existing receipt rule and template
+  // (CN-6 / B-278) never fired for cash or check.
+  describe('receipt email (B-313)', () => {
+    const sends: { to: string; subject: string; body: string }[] = []
+
+    beforeAll(() => {
+      vi.spyOn(provider, 'selectProvider').mockImplementation(() => ({
+        name: 'test',
+        async sendEmail(email) {
+          sends.push({ to: email.to, subject: email.subject ?? '', body: email.text ?? '' })
+          return { ok: true, providerMessageId: `test_${sends.length}` }
+        },
+      }))
+      vi.spyOn(provider, 'commsEnabled').mockReturnValue(true)
+      vi.spyOn(provider, 'effectiveRecipient').mockImplementation((address: string) => address)
+    })
+
+    afterAll(async () => {
+      vi.restoreAllMocks()
+      await prisma.task.deleteMany({ where: { facilityId } })
+      await prisma.message.deleteMany({ where: { facilityId } })
+      await prisma.domainEvent.deleteMany({ where: { facilityId } })
+    })
+
+    async function eventFor(paymentId: string) {
+      return prisma.domainEvent.findFirstOrThrow({
+        where: { name: 'payment.succeeded', entityType: 'Payment', entityId: paymentId },
+      })
+    }
+
+    it('emits exactly one payment.succeeded and mails one receipt naming what the printed one does', async () => {
+      const result = await recordCounterPayment(counterActor(), {
+        facilityId,
+        tenantId,
+        leaseId,
+        method: 'cash',
+        amountCents: 3_000,
+        tenderedCents: 5_000,
+      })
+      if (!result.ok) throw new Error('unreachable')
+
+      const events = await prisma.domainEvent.findMany({
+        where: { name: 'payment.succeeded', entityType: 'Payment', entityId: result.paymentId },
+      })
+      expect(events).toHaveLength(1)
+
+      const outcome = await processCommsEvent(events[0])
+      expect(outcome.sent).toBe(1)
+
+      const messages = await prisma.message.findMany({ where: { eventId: events[0].id } })
+      expect(messages).toHaveLength(1)
+
+      const receipt = await counterReceipt(counterActor(), result.paymentId)
+      for (const credit of receipt!.credits) {
+        expect(messages[0].bodySnapshot).toContain(credit.unitNumber)
+      }
+    })
+
+    it('fails the send and raises a task rather than throwing, for a tenant with no email', async () => {
+      const noEmailTenant = await prisma.tenant.create({
+        data: { firstName: 'No', lastName: 'Email' },
+      })
+      const unitType = await prisma.unitType.findFirstOrThrow({ where: { facilityId } })
+      const unit = await prisma.unit.create({
+        data: { facilityId, unitTypeId: unitType.id, number: `NE-${suffix}` },
+      })
+      const lease = await prisma.lease.create({
+        data: {
+          facilityId,
+          tenantId: noEmailTenant.id,
+          unitId: unit.id,
+          status: 'active',
+          startDate: new Date(),
+          monthlyRateCents: 12_900,
+          billingDay: 1,
+        },
+      })
+
+      const result = await recordCounterPayment(counterActor(), {
+        facilityId,
+        tenantId: noEmailTenant.id,
+        leaseId: lease.id,
+        method: 'cash',
+        amountCents: 1_000,
+        tenderedCents: 1_000,
+      })
+      if (!result.ok) throw new Error('unreachable')
+
+      const event = await eventFor(result.paymentId)
+      await expect(processCommsEvent(event)).resolves.toMatchObject({ failed: 1 })
+
+      const message = await prisma.message.findFirstOrThrow({ where: { eventId: event.id } })
+      expect(message.status).toBe('failed')
+
+      const task = await prisma.task.findFirstOrThrow({
+        where: { facilityId, type: 'no_reachable_channel', entityId: noEmailTenant.id },
+      })
+      expect(task.status).toBe('open')
+
+      await prisma.ledgerEntry.deleteMany({ where: { leaseId: lease.id } })
+      await prisma.payment.deleteMany({ where: { tenantId: noEmailTenant.id } })
+      await prisma.lease.delete({ where: { id: lease.id } })
+      await prisma.unit.delete({ where: { id: unit.id } })
+      await prisma.tenant.delete({ where: { id: noEmailTenant.id } })
+    })
+
+    it('does not duplicate the message when the same event is processed twice (retry)', async () => {
+      const result = await recordCounterPayment(counterActor(), {
+        facilityId,
+        tenantId,
+        leaseId,
+        method: 'check',
+        amountCents: 1_500,
+        checkNumber: '3001',
+      })
+      if (!result.ok) throw new Error('unreachable')
+      const event = await eventFor(result.paymentId)
+
+      await processCommsEvent(event)
+      await processCommsEvent(event)
+
+      const messages = await prisma.message.findMany({ where: { eventId: event.id } })
+      expect(messages).toHaveLength(1)
     })
   })
 })

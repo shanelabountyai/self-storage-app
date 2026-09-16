@@ -11,8 +11,8 @@ It complements rather than duplicates:
 - `git log` — the change-by-change record
 - `README.md` — how the built thing works today
 
-**Status:** 311 of 333 backlog items complete. Latest entry: B-312 (`c97e8c5`).
-**Entries:** 339 across 23 part files.
+**Status:** 312 of 333 backlog items complete. Latest entry: B-313 (`c4c487d`).
+**Entries:** 340 across 24 part files.
 
 ## Reading one entry
 
@@ -388,3 +388,4 @@ Append the entry as a `### ` heading at the end of the **highest-numbered** file
 | B-328 — English contract prose renders under `<html lang="es">`, and no scan can see it (2026-09-16) | `c1e88a8` | [23-from-b-300](progress/23-from-b-300.md#b-328-english-contract-prose-renders-under-html-langes-and-no-scan-can-see-it-2026-09-16) |
 | B-329 — the staff mirror: English under `lang="es"`, and Spanish under `lang="en"` (2026-09-16) | `c1e88a8` | [23-from-b-300](progress/23-from-b-300.md#b-329-the-staff-mirror-english-under-langes-and-spanish-under-langen-2026-09-16) |
 | B-312 — nothing in the product could create a tenant with no lease (2026-09-16, `c97e8c5`) | `c97e8c5` | [23-from-b-300](progress/23-from-b-300.md#b-312-nothing-in-the-product-could-create-a-tenant-with-no-lease-2026-09-16-c97e8c5) |
+| B-313 — a counter cash or check payment now emails a receipt (2026-09-16, `c4c487d`) | `c4c487d` | [24-from-b-313](progress/24-from-b-313.md#b-313-a-counter-cash-or-check-payment-now-emails-a-receipt-2026-09-16-c4c487d) |

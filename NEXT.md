@@ -1,6 +1,8 @@
 # Next
 
-**B-312 is done** (`c97e8c5`, SHA recorded in the follow-up commit `5d28a69`). The eighth review block (`5933447`) has 14 rows left, **B-313–B-326** plus **B-327**, and **B-325 at `83aya`** (deliberately ahead of B-301 so mail's wording settles before the backfill sends).
+**B-313 is done** (`c4c487d`). A counter cash or check payment now emits `payment.succeeded` from inside `recordCounterPayment`'s existing transaction, so the existing CN-6 receipt rule and `payment_receipt` template (already proven for card payments) send an emailed receipt for cash and check too — no new template, no new rule. A tenant with no email falls to the existing B-281 `noReachableEmail` path (a `failed` Message plus an open `no_reachable_channel` task) rather than erroring. Three new tests in `tests/pos-db.test.ts` pin the row's full acceptance line. Full unit suite: 4,573 passed, 8 skipped, of 4,581 — clean.
+
+**B-312 is also done** (`c97e8c5`, SHA recorded in the follow-up commit `5d28a69`). The eighth review block (`5933447`) now has 13 rows left, **B-314–B-326** plus **B-327**, and **B-325 at `83aya`** (deliberately ahead of B-301 so mail's wording settles before the backfill sends).
 
 Staff with `tenants:edit` can now create a `Tenant` with no lease at `/admin/tenants/new`, for a business account's payer or member who rents nothing — `createLeaselessTenant` in `apps/web/lib/admin/tenants.ts`. `Tenant.facilityId` (new, nullable) is set only on that path and is the sole reason a leaseless tenant is reachable by `searchTenants` or the profile page — both were lease-derived by deliberate design and had to be widened to OR in this new scope. **Carried gaps, no owning row**: `listTenants` (the plain paginated `/admin/tenants` list) was not widened, only search — a leaseless tenant stays off that list until they hold a lease; no e2e covers the new route's success or refusal paths, though it is now in `ADMIN_SCAN_ROUTES` for the heavy lane's axe scan; nothing corrects a leaseless tenant's `facilityId` if staff pick the wrong one.
 
@@ -8,9 +10,9 @@ Staff with `tenants:edit` can now create a `Tenant` with no lease at `/admin/ten
 
 ## Start here
 
-**B-313**, in file order.
+**B-314**, in file order.
 
-- **B-313** — a counter cash or check payment emits no event, so no receipt is ever emailed (operator review 2026-09-14, finding 4). `recordCounterPayment`'s transaction contains no `emitEvent`; `payment.succeeded` is emitted only from the Stripe webhook path, and `comms.dispatch` subscribes to it. Read the full row in `docs/prds/06-backlog.md` before starting — B-320's card-receipt row (now unblocked, B-312 ✅) says its own `payment.succeeded` emit must not duplicate B-313's.
+- **B-314** — `/pay/[token]` never got B-295's and B-299's fixes, and no lint rule reaches it (accessibility review 2026-09-14, findings 2/3/4 as one row). Two attributes fix the skip-link focus target; drop `role="alert"` on the amount refusal and carry the fragment on the form's `action` instead, matching `/portal/pay`; extend B-284's date rules and B-295's alert rule to cover `app/pay/**` in one block (flat-config is last-block-wins per file). Read the full row in `docs/prds/06-backlog.md` before starting — it names exact line numbers in `app/pay/[token]/page.tsx` and `done/page.tsx`.
 
 **Two rows now sit close to what B-309 touched, and both are worth reading before editing comms:**
 
