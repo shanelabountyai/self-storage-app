@@ -10177,7 +10177,7 @@ A fifteen-unit account raises fifteen `invoice.due_soon` events. `resolveRecipie
 
 ---
 
-## B-310 — every confirmation message in the Spanish portal was English (2026-09-16, `PENDING`)
+## B-310 — every confirmation message in the Spanish portal was English (2026-09-16, `5a6016b`)
 
 B-284 translated the ten untagged dates and the move-out recapture sentence and said, in its own `PROGRESS.md`/accessibility-page entry, that the 3.1.2 Language-of-Parts question it left unanswered was **the result of a press**. This is that row: the sentence a tenant reads at the exact moment removing a phone, cancelling a move-out, or turning off autopay actually succeeded or failed.
 
