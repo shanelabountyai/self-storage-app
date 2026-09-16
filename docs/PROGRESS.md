@@ -10133,7 +10133,7 @@ The second defect is in the same six words. The button promised "their own **acc
 
 ---
 
-## B-309 — the business-account payer got N bills, N pay links, and none opened the account (2026-09-16, `PENDING`)
+## B-309 — the business-account payer got N bills, N pay links, and none opened the account (2026-09-16, `bcb2a5f`)
 
 B-279 added the payer as a second recipient and said which events reach them (D-136). Nothing said the fifteen copies should be **fifteen messages**, and they were.
 
