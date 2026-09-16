@@ -10205,7 +10205,7 @@ B-284 translated the ten untagged dates and the move-out recapture sentence and 
 
 ---
 
-## B-311 — the sign-in door was English under `<html lang="es">` (2026-09-16)
+## B-311 — the sign-in door was English under `<html lang="es">` (2026-09-16, `d7b71e5`)
 
 B-290 offers Spanish site-wide with an unqualified promise ("¿Prefiere ver este sitio en español?"). `/login`, `/forgot-password`, `/reset-password`, `/mfa`, `/reauth` and `/confirm-email` sat outside `(public)` and outside `/portal`, so none of the six ever imported a dictionary — a Spanish-cookied visitor met `<html lang="es">` over entirely English content on the page in front of every money screen this app has (SC 3.1.1, A).
 
