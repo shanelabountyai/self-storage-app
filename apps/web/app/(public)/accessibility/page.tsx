@@ -2704,6 +2704,34 @@ function reviewedOn(locale: Locale): string {
 // unchanged (`/portal` in Spanish was already scanned), and this page makes
 // no claim about these actions' language, so no visible line changes.
 // `LAST_REVIEWED` is not bumped, per D-115.
+//
+// Re-verified 2026-09-16, at B-311 (the sign-in door was English under
+// `<html lang="es">`). Customer-facing, text and markup. `/login`,
+// `/forgot-password`, `/reset-password`, `/mfa`, `/reauth` and
+// `/confirm-email` sat outside `(public)` and outside `/portal`, so none of
+// the six ever imported a dictionary: a visitor who had accepted Spanish
+// anywhere on the site reached `<html lang="es">` rendered over entirely
+// English content on the exact page that sits in front of every money
+// screen — the "3.1.1 is met" bullet two entries above this one was declared
+// of a document that, on these six routes, was not. All six now translate,
+// each keeps a skip link to `<main id="main" tabIndex={-1}>`, and each
+// mounts `LanguageToggle` (B-286's shape, unmodified). `/reset-password`
+// prefers the token's tenant `preferredLocale` over the cookie —
+// `resetLinkLocale`, the same mechanism B-283 built for `/pay/[token]` —
+// because the person opening a reset link is not necessarily the person
+// whose browser has the cookie; `proxy.ts` carries the token to the root
+// layout in a request header for the same reason it does for a pay link. A
+// new `app/(auth)/layout.tsx` route group holds the shared shell rather than
+// six copies of it. Two things are carried forward rather than fixed here:
+// the toggle still renders on `/reset-password` even though a valid token
+// overrides whatever pressing it would write, which is a dead control in
+// that one state and not a redesign this row asked for; and `/login`'s
+// static `role="alert"` banner (present at first paint, not inserted after)
+// was left as `B-314` already owns that same question on `/pay/[token]`. The
+// Spanish scan state adds `/login`, spot-checked the way `/portal` was at
+// B-260 rather than all six exhaustively. This page makes no claim naming
+// these six routes, so no visible line changes. `LAST_REVIEWED` is not
+// bumped, per D-115.
 
 export default async function AccessibilityPage() {
   const locale = await getLocale()

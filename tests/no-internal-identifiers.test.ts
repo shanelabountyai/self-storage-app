@@ -33,14 +33,16 @@ const appDir = fileURLToPath(new URL('../apps/web/app', import.meta.url))
 const CUSTOMER_REACHABLE = [
   '(public)',
   'admin',
-  'login',
-  'forgot-password',
-  'reset-password',
-  'reauth',
+  // B-311 moved these five into a shared route group for their translated
+  // shell — the URLs are unchanged, only the folder is.
+  '(auth)/login',
+  '(auth)/forgot-password',
+  '(auth)/reset-password',
+  '(auth)/reauth',
   'portal',
   // B-037. Reached from a link in an email, by someone who may not be signed
   // in at all — as customer-facing as anything else here.
-  'confirm-email',
+  '(auth)/confirm-email',
 ]
 
 function filesUnder(dir: string): string[] {

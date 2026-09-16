@@ -3,20 +3,21 @@ import Link from 'next/link'
 import { AdminForm, Field } from '@/components/admin/form'
 import { SITE } from '@/lib/site-config'
 import { audienceFor, audienceHint } from '@/lib/auth/login-audience'
+import { dictionaryFor, translate } from '@/lib/i18n'
+import { getLocale } from '@/lib/i18n/server'
 import { signInWithPasswordAction } from './actions'
 import { requestMagicLinkAction } from './magic-link-actions'
 
-export const metadata: Metadata = { title: 'Sign in' }
+// B-294 (D-134). `<title>` is the `<h1>`'s key, so it follows the reader.
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: translate(dictionaryFor(await getLocale()), 'login.title') }
+}
 
 // PRD 01 US-701. One page, two audiences: proxy.ts redirects a signed-out
 // staff visit to `/admin/*` here with `?from=/admin/...`, and the portal
 // layout (B-033) does the same for `/portal/*`; a direct visit with no `from`
 // defaults to the tenant it is built for (SITE header's "Pay bill" links
 // straight here). lib/auth/login-audience.ts owns the inference.
-
-const ERROR_COPY: Record<string, string> = {
-  magic_link_invalid: 'That sign-in link is no longer good. It may have expired or already been used.',
-}
 
 export default async function LoginPage({
   searchParams,
@@ -30,10 +31,15 @@ export default async function LoginPage({
   // that default is wrong for deciding what to render. `audienceHint` is the
   // honest reading and returns null when nobody told us.
   const hint = audienceHint(from)
+  const dict = dictionaryFor(await getLocale())
+  const t = (key: Parameters<typeof translate>[1]) => translate(dict, key)
+  const ERROR_COPY: Record<string, string> = {
+    magic_link_invalid: t('login.error.magicLinkInvalid'),
+  }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center gap-6 px-6 py-12">
-      <h1 className="text-xl font-semibold">Sign in</h1>
+    <div className="mx-auto flex min-h-screen max-w-sm flex-col justify-center gap-6 px-6 py-12">
+      <h1 className="text-xl font-semibold">{t('login.title')}</h1>
 
       {error && ERROR_COPY[error] && (
         <p role="alert" className="border-input rounded-md border p-3 text-sm text-pretty">
@@ -41,11 +47,11 @@ export default async function LoginPage({
         </p>
       )}
 
-      <AdminForm action={signInWithPasswordAction} label="Sign in with email and password" className="flex flex-col gap-3">
+      <AdminForm action={signInWithPasswordAction} label={t('login.title')} className="flex flex-col gap-3">
         {from && <input type="hidden" name="from" value={from} />}
         <Field
           name="email"
-          label="Email"
+          label={t('auth.email')}
           type="email"
           inputMode="email"
           autoComplete="email"
@@ -54,7 +60,7 @@ export default async function LoginPage({
         />
         <Field
           name="password"
-          label="Password"
+          label={t('auth.password')}
           type="password"
           autoComplete="current-password"
           required
@@ -85,11 +91,11 @@ export default async function LoginPage({
         {hint !== 'tenant' && (
           <Field
             name="code"
-            label="Authentication code"
+            label={t('login.code')}
             type="text"
             inputMode="numeric"
             autoComplete="one-time-code"
-            hint="Staff only: the 6-digit code from your authenticator app, or a recovery code. Leave it blank if you are a customer, or if you have not set up two-factor authentication yet."
+            hint={t('login.staffCodeHint')}
             className="flex flex-col gap-1 text-sm"
           />
         )}
@@ -97,13 +103,13 @@ export default async function LoginPage({
           type="submit"
           className="bg-primary text-primary-foreground mt-1 inline-flex min-h-11 items-center justify-center rounded-md px-4 text-sm font-medium"
         >
-          Sign in
+          {t('login.submit')}
         </button>
       </AdminForm>
 
       <p className="text-sm">
         <Link href={`/forgot-password${from ? `?from=${encodeURIComponent(from)}` : ''}`} className="underline underline-offset-4">
-          Forgot your password?
+          {t('login.forgotPassword')}
         </Link>
       </p>
 
@@ -127,23 +133,18 @@ export default async function LoginPage({
           one. */}
       {hint !== 'staff' && (
       <details className="border-input rounded-lg border p-4">
-        <summary className="cursor-pointer text-sm font-medium">Email me a sign-in link instead</summary>
-        <p className="text-muted-foreground mt-2 text-sm text-pretty">
-          No password needed — we will email you a one-tap link that works for 15 minutes.
-        </p>
-        <p className="text-muted-foreground mt-2 text-sm text-pretty">
-          Sign-in links are for customer accounts. Staff accounts always sign in with a password and
-          an authentication code, so a link cannot be sent to one.
-        </p>
+        <summary className="cursor-pointer text-sm font-medium">{t('login.magicLinkSummary')}</summary>
+        <p className="text-muted-foreground mt-2 text-sm text-pretty">{t('login.magicLinkBody1')}</p>
+        <p className="text-muted-foreground mt-2 text-sm text-pretty">{t('login.magicLinkBody2')}</p>
         <AdminForm
           action={requestMagicLinkAction}
-          label="Email me a sign-in link"
+          label={t('login.magicLinkFormLabel')}
           className="mt-3 flex flex-col gap-3"
         >
           {from && <input type="hidden" name="from" value={from} />}
           <Field
             name="email"
-            label="Email"
+            label={t('auth.email')}
             type="email"
             inputMode="email"
             autoComplete="email"
@@ -154,7 +155,7 @@ export default async function LoginPage({
             type="submit"
             className="border-input hover:bg-accent inline-flex min-h-11 items-center justify-center rounded-md border px-4 text-sm font-medium"
           >
-            Email me a link
+            {t('login.magicLinkButton')}
           </button>
         </AdminForm>
       </details>
@@ -162,29 +163,29 @@ export default async function LoginPage({
 
       {audience === 'tenant' ? (
         <p className="text-muted-foreground text-sm">
-          Staff?{' '}
+          {t('login.staffPrompt')}{' '}
           <Link href="/login?from=%2Fadmin" className="underline underline-offset-4">
-            Sign in here
+            {t('login.signInHere')}
           </Link>
           .
         </p>
       ) : (
         <p className="text-muted-foreground text-sm">
-          Renting with us?{' '}
+          {t('login.renterPrompt')}{' '}
           <Link href="/login" className="underline underline-offset-4">
-            Sign in here
+            {t('login.signInHere')}
           </Link>
           .
         </p>
       )}
 
       <p className="text-muted-foreground text-sm text-pretty">
-        Need help another way? Call{' '}
+        {t('login.needHelpLead')}{' '}
         <a href={`tel:${SITE.phone.href}`} className="font-medium underline underline-offset-4">
           {SITE.phone.display}
         </a>{' '}
-        during office hours.
+        {t('login.duringOfficeHours')}
       </p>
-    </main>
+    </div>
   )
 }

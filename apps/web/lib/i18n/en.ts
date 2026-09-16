@@ -1783,4 +1783,127 @@ export const en = {
   'msgpol.privacy.privacyTail': 'covers what else we hold and why.',
   'msgpol.privacy.termsLink': 'Our terms',
   'msgpol.privacy.termsTail': 'cover your rental agreement.',
+
+  // --- The sign-in door: /login, /forgot-password, /reset-password, /mfa, --
+  // --- /reauth, /confirm-email (B-311) -------------------------------------
+  'auth.email': 'Email',
+  'auth.password': 'Password',
+  'auth.confirm': 'Confirm',
+  'auth.backToSignIn': 'Back to sign in',
+  'auth.problem.email': 'Enter your email address.',
+  'auth.problem.password': 'Enter your password.',
+  'auth.problem.throttleOne': 'Too many attempts. Try again in about {count} minute.',
+  'auth.problem.throttleOther': 'Too many attempts. Try again in about {count} minutes.',
+
+  'login.title': 'Sign in',
+  'login.error.magicLinkInvalid':
+    'That sign-in link is no longer good. It may have expired or already been used.',
+  'login.staffCodeHint':
+    'Staff only: the 6-digit code from your authenticator app, or a recovery code. Leave it blank if you are a customer, or if you have not set up two-factor authentication yet.',
+  'login.code': 'Authentication code',
+  'login.submit': 'Sign in',
+  'login.forgotPassword': 'Forgot your password?',
+  'login.magicLinkSummary': 'Email me a sign-in link instead',
+  'login.magicLinkBody1':
+    'No password needed — we will email you a one-tap link that works for 15 minutes.',
+  'login.magicLinkBody2':
+    'Sign-in links are for customer accounts. Staff accounts always sign in with a password and an authentication code, so a link cannot be sent to one.',
+  'login.magicLinkFormLabel': 'Email me a sign-in link',
+  'login.magicLinkButton': 'Email me a link',
+  'login.staffPrompt': 'Staff?',
+  'login.renterPrompt': 'Renting with us?',
+  'login.signInHere': 'Sign in here',
+  'login.needHelpLead': 'Need help another way? Call',
+  'login.duringOfficeHours': 'during office hours.',
+  'login.problem.staffCreds': 'Incorrect email, password, or authentication code.',
+  'login.problem.tenantCreds': 'Incorrect email or password.',
+  'login.signedIn': 'Signed in.',
+  'login.magicLinkSent':
+    'If that email has an account, a sign-in link is on its way. It works for 15 minutes.',
+
+  'fpwd.title': 'Forgot your password?',
+  'fpwd.body': 'Enter the email on your account and we will send you a link to set a new one.',
+  'fpwd.formLabel': 'Request a password reset',
+  'fpwd.submit': 'Send reset link',
+  'fpwd.linkSent':
+    'If that email has an account, a password reset link is on its way. It works for 60 minutes.',
+
+  'rpwd.badLink.title': "This link isn't good any more",
+  'rpwd.badLink.body':
+    'Password reset links stop working once they expire or are used. Nothing has changed on your account.',
+  'rpwd.badLink.cta': 'Send a new link',
+  'rpwd.title': 'Set a new password',
+  'rpwd.newPassword': 'New password',
+  'rpwd.hint.minLength': 'At least 8 characters.',
+  'rpwd.confirmPassword': 'Confirm new password',
+  'rpwd.submit': 'Set new password',
+  'rpwd.problem.weak': 'Password must be at least 8 characters.',
+  'rpwd.problem.mismatch': 'Passwords do not match.',
+  'rpwd.problem.badToken':
+    'This link is no longer good. It may have expired or already been used.',
+  'rpwd.updated': 'Password updated. You can sign in with it now.',
+
+  'mfa.title': 'Two-factor authentication',
+  'mfa.start.body':
+    'Every staff account needs a second factor before it can reach the admin. You will need an authenticator app — Google Authenticator, 1Password, Authy or any other — on a phone you keep with you.',
+  'mfa.start.formLabel': 'Start two-factor setup',
+  'mfa.start.submit': 'Start setup',
+  'mfa.confirm.step1':
+    'Open your authenticator app and add an account — by scanning the code below, or by entering the key by hand.',
+  'mfa.confirm.orEnterKey': 'Or enter this key:',
+  'mfa.confirm.phoneLead': 'Setting this up on the phone itself? You can',
+  'mfa.confirm.phoneLink': 'open it in your authenticator app',
+  'mfa.confirm.phoneTail': 'instead.',
+  'mfa.confirm.step3': 'Enter the 6-digit code it shows, to prove the setup worked.',
+  'mfa.confirm.formLabel': 'Finish two-factor setup',
+  'mfa.confirm.codeLabel': 'Code from your app',
+  'mfa.confirm.submit': 'Finish setup',
+  'mfa.confirm.reassurance':
+    'Nothing is switched on until a code checks out — if you cannot get one, nobody is locked out of anything.',
+  'mfa.enrolled.body':
+    'Two-factor authentication is on for this account. Your authenticator app will ask for a code each time you sign in.',
+  'mfa.enrolled.noneLeft':
+    'You have no recovery codes left. If you lose your phone now, an administrator will have to reset your second factor for you.',
+  'mfa.enrolled.remainingOne': 'You have {count} unused recovery code.',
+  'mfa.enrolled.remainingOther': 'You have {count} unused recovery codes.',
+  'mfa.enrolled.formLabel': 'Issue new recovery codes',
+  'mfa.enrolled.submit': 'Issue new recovery codes',
+  'mfa.enrolled.warning': 'Issuing new codes stops every existing one working, used or not.',
+  'mfa.enrolled.backToAdmin': 'Back to the admin',
+  'mfa.problem.alreadyOn':
+    'Two-factor authentication is already switched on for this account. Ask an administrator to reset it if you have lost your authenticator.',
+  'mfa.setupStarted':
+    'Setup started. Add the key below to your authenticator app, then enter a code to finish.',
+  'mfa.problem.codeRequired': 'Enter the 6-digit code from your authenticator app.',
+  'mfa.problem.badCode':
+    'That code was not right. Codes change every 30 seconds — wait for the next one and try again.',
+  'mfa.problem.noEnrollment': 'Start the setup again — this account has no half-finished enrolment to confirm.',
+  'mfa.enrolled.confirmed':
+    'Two-factor authentication is on. Save these recovery codes somewhere safe — each works once, and this is the only time they are shown.',
+  'mfa.enrolled.regenerated':
+    'New recovery codes issued. Every previous code has stopped working, including any you have not used.',
+
+  'reauth.title': "Confirm it's you",
+  'reauth.body':
+    "This is a sensitive action, so we need to check it's really you before continuing. Enter your password, or we can email you a link instead.",
+  'reauth.formLabel': 'Confirm with your password',
+  'reauth.magicLinkSummary': 'Email me a link instead',
+  'reauth.magicLinkFormLabel': 'Email me a confirmation link',
+  'reauth.problem.expired': 'Your session has expired. Sign in again.',
+  'reauth.problem.incorrect': 'Incorrect password.',
+  'reauth.confirmed': 'Confirmed.',
+  'reauth.magicLinkSent':
+    'Check your email for a link. Opening it confirms it is you and signs you back in.',
+
+  'confemail.title': 'Confirm your email address',
+  'confemail.success.title': 'Email address confirmed',
+  'confemail.success.bodyAfter': 'is now the address on your account, and the one you sign in with.',
+  'confemail.success.link': 'Go to my account',
+  'confemail.error.title': "That link didn't work",
+  'confemail.error.taken':
+    "That email address has since been used on another account, so we can't move it over.",
+  'confemail.error.expired':
+    'It may have expired, already been used, or been replaced by a newer request. Nothing has changed.',
+  'confemail.error.callLead': 'You can start again from your account, or call',
+  'confemail.error.backLink': 'Back to contact details',
 } as const

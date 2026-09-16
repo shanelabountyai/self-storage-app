@@ -7,6 +7,8 @@ import { resolveAudience } from '@/lib/auth/accounts'
 import { audienceHint, audienceFor, safeRedirectTarget } from '@/lib/auth/login-audience'
 import { requestMetadata } from '@/lib/http/request-metadata'
 import { fieldError, success, type FormState } from '@/lib/admin/form-state'
+import { plural } from '@/lib/i18n'
+import { messages } from '@/lib/i18n/server'
 
 // PRD 01 US-701. One shared page, two audiences (lib/auth/login-audience.ts),
 // on top of the auth endpoints B-003 already built.
@@ -23,6 +25,7 @@ export async function signInWithPasswordAction(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
+  const { dict, t } = await messages()
   const email = String(formData.get('email') ?? '').trim()
   const password = String(formData.get('password') ?? '')
   const code = String(formData.get('code') ?? '').trim()
@@ -30,8 +33,8 @@ export async function signInWithPasswordAction(
 
   if (!email || !password) {
     return fieldError({
-      ...(email ? {} : { email: 'Enter your email address.' }),
-      ...(password ? {} : { password: 'Enter your password.' }),
+      ...(email ? {} : { email: t('auth.problem.email') }),
+      ...(password ? {} : { password: t('auth.problem.password') }),
     })
   }
 
@@ -57,7 +60,7 @@ export async function signInWithPasswordAction(
   if (!throttle.allowed) {
     const minutes = Math.ceil(throttle.retryAfterMs / 60_000)
     return fieldError({
-      password: `Too many attempts. Try again in about ${minutes} minute${minutes === 1 ? '' : 's'}.`,
+      password: plural(dict, minutes, 'auth.problem.throttleOne', 'auth.problem.throttleOther'),
     })
   }
 
@@ -71,14 +74,11 @@ export async function signInWithPasswordAction(
       // that now covers the code as well — naming which of the three was wrong
       // would tell an attacker holding a correct password that they had one.
       return fieldError({
-        password:
-          audience === 'staff'
-            ? 'Incorrect email, password, or authentication code.'
-            : 'Incorrect email or password.',
+        password: audience === 'staff' ? t('login.problem.staffCreds') : t('login.problem.tenantCreds'),
       })
     }
     throw error // includes Next's own redirect signal on success — must propagate
   }
 
-  return success('Signed in.')
+  return success(t('login.signedIn'))
 }

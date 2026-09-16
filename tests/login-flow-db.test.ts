@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto'
 import { afterAll, describe, expect, it } from 'vitest'
 import { prisma } from '../packages/db'
-import { requestMagicLinkAction } from '../apps/web/app/login/magic-link-actions'
-import { requestPasswordResetAction } from '../apps/web/app/forgot-password/actions'
-import { resetPasswordAction } from '../apps/web/app/reset-password/actions'
+import { requestMagicLinkAction } from '../apps/web/app/(auth)/login/magic-link-actions'
+import { requestPasswordResetAction } from '../apps/web/app/(auth)/forgot-password/actions'
+import { resetPasswordAction } from '../apps/web/app/(auth)/reset-password/actions'
 import { authenticateWithPassword } from '../apps/web/lib/auth/accounts'
 import { mintToken } from '../apps/web/lib/auth/tokens'
 

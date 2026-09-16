@@ -16,7 +16,7 @@ import {
   IMPERSONATION_COOKIE,
   isImpersonationWriteBlocked,
 } from '@/lib/impersonation/request'
-import { PAY_TOKEN_HEADER } from '@/lib/i18n'
+import { PAY_TOKEN_HEADER, RESET_TOKEN_HEADER } from '@/lib/i18n'
 
 // Kept here rather than imported from lib/analytics/track: that module pulls in
 // Prisma, and the proxy runs on the Edge runtime where the Prisma client will
@@ -80,6 +80,14 @@ function seoResponse(request: NextRequest): NextResponse {
   requestHeaders.delete(PAY_TOKEN_HEADER)
   const payToken = /^\/pay\/([^/]+)/.exec(pathname)?.[1]
   if (payToken) requestHeaders.set(PAY_TOKEN_HEADER, payToken)
+
+  // B-311. Same idea for `/reset-password?token=` — a query param rather than
+  // a path segment, so it comes off `searchParams` instead of the regex above.
+  requestHeaders.delete(RESET_TOKEN_HEADER)
+  if (pathname === '/reset-password') {
+    const resetToken = request.nextUrl.searchParams.get('token')
+    if (resetToken) requestHeaders.set(RESET_TOKEN_HEADER, resetToken)
+  }
 
   const response = NextResponse.next({ request: { headers: requestHeaders } })
 

@@ -1,7 +1,10 @@
+import { randomUUID } from 'node:crypto'
 import { expect, test } from '@playwright/test'
+import { prisma } from '../packages/db'
 import { assertNoAxeViolations } from './a11y-helpers'
-import { signInAsDemoTenant } from './sign-in'
+import { signInAsDemoOwner, signInAsDemoTenant } from './sign-in'
 import { DEMO_PROMO_CODE } from '../apps/web/scripts/demo-credentials'
+import { mintToken } from '../apps/web/lib/auth/tokens'
 
 // B-090 part 6 (D-122). Spanish on the move-in path.
 //
@@ -575,6 +578,110 @@ test('the Spanish promo box refuses AND confirms in Spanish (B-266)', async ({
   await expect(
     page.locator('span[lang="en"]').filter({ hasText: 'Half off your first month' }).first(),
   ).toBeVisible()
+})
+
+// --- B-311: the sign-in door -------------------------------------------------
+//
+// `/login`, `/forgot-password`, `/reset-password`, `/mfa`, `/reauth` and
+// `/confirm-email` sat outside `(public)` and outside `/portal`, so a visitor
+// who had already chosen Spanish anywhere on the site met `<html lang="es">`
+// over entirely English content the moment they reached any of these six —
+// the door in front of every money screen this app has (SC 3.1.1).
+
+test.describe('the sign-in door in Spanish (B-311)', () => {
+  test.beforeEach(async ({ context }) => {
+    await context.addCookies([SPANISH])
+  })
+
+  const PUBLIC_ROUTES: [string, RegExp][] = [
+    ['/login', /Iniciar sesión/],
+    ['/forgot-password', /¿Olvidó su contraseña\?/],
+    ['/reset-password', /Este enlace ya no es válido/],
+    ['/confirm-email', /Ese enlace no funcionó/],
+  ]
+
+  for (const [route, heading] of PUBLIC_ROUTES) {
+    test(`${route} renders in Spanish`, async ({ page }) => {
+      await page.goto(route)
+      await expect(page.locator('html')).toHaveAttribute('lang', 'es')
+      await expect(page.getByRole('heading', { level: 1 })).toContainText(heading)
+      await expect(page).toHaveTitle(heading)
+    })
+  }
+
+  test('/mfa renders in Spanish', async ({ page }) => {
+    await signInAsDemoOwner(page)
+    await page.goto('/mfa')
+    await expect(page.locator('html')).toHaveAttribute('lang', 'es')
+    await expect(page.getByRole('heading', { level: 1 })).toContainText('Autenticación de dos factores')
+  })
+
+  test('/reauth renders in Spanish', async ({ page }) => {
+    await signInAsDemoTenant(page)
+    await page.goto('/reauth')
+    await expect(page.locator('html')).toHaveAttribute('lang', 'es')
+    await expect(page.getByRole('heading', { level: 1 })).toContainText('Confirme que es usted')
+  })
+
+  test('the toggle sits on the sign-in door too', async ({ page }) => {
+    await page.goto('/login')
+    await expect(page.getByRole('button', { name: 'Cambiar a English' })).toBeVisible()
+  })
+
+  test('the skip link is first on the sign-in door', async ({ page }) => {
+    await page.goto('/login')
+    await page.keyboard.press('Tab')
+    await expect(page.getByText('Saltar al contenido principal')).toBeFocused()
+  })
+
+  test('the Spanish login page has no axe violations', async ({ page }) => {
+    await page.goto('/login')
+    // a11y-state: /login | Spanish
+    await assertNoAxeViolations(page)
+  })
+})
+
+// A throwaway tenant rather than the shared demo one (B-120's shared-state
+// discipline does not even apply — nothing here is a fixture another spec
+// reads), created and torn down in the test itself.
+test.describe('a reset link speaks the tenant\'s language, not the cookie\'s (B-311)', () => {
+  test('a link minted for a Spanish tenant renders Spanish against an English cookie', async ({
+    page,
+    context,
+  }) => {
+    const suffix = randomUUID().slice(0, 8)
+    const tenant = await prisma.tenant.create({
+      data: {
+        email: `reset-i18n-${suffix}@example.com`,
+        firstName: 'Reset',
+        lastName: 'I18n',
+        preferredLocale: 'es',
+      },
+    })
+
+    try {
+      const { token } = await mintToken({
+        purpose: 'password_reset',
+        audience: 'tenant',
+        subjectId: tenant.id,
+        email: tenant.email,
+      })
+
+      // The visitor's own browser prefers English — the link must win anyway.
+      await context.addCookies([{ name: 'st_locale', value: 'en', url: 'http://localhost:3000' }])
+      await page.goto(`/reset-password?token=${token}`)
+
+      await expect(page.locator('html')).toHaveAttribute('lang', 'es')
+      await expect(page.getByRole('heading', { level: 1 })).toContainText('Establecer una nueva contraseña')
+      // The toggle still renders (B-311 mounts it on all six), even though a
+      // valid reset token overrides whatever it would write — a carried gap,
+      // not a bug: see PROGRESS.md.
+      await expect(page.getByRole('button', { name: 'Cambiar a English' })).toBeVisible()
+    } finally {
+      await prisma.authToken.deleteMany({ where: { subjectId: tenant.id } })
+      await prisma.tenant.delete({ where: { id: tenant.id } })
+    }
+  })
 })
 
 // --- B-260: the portal ------------------------------------------------------

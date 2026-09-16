@@ -1713,4 +1713,131 @@ export const es: Dictionary = {
   'msgpol.privacy.termsLink': 'Nuestros términos',
   'msgpol.privacy.termsTail':
     'cubren su contrato de renta. Están únicamente en inglés.',
+
+  // --- La puerta de acceso: /login, /forgot-password, /reset-password, ----
+  // --- /mfa, /reauth, /confirm-email (B-311) -------------------------------
+  'auth.email': 'Correo electrónico',
+  'auth.password': 'Contraseña',
+  'auth.confirm': 'Confirmar',
+  'auth.backToSignIn': 'Volver a iniciar sesión',
+  'auth.problem.email': 'Escriba su correo electrónico.',
+  'auth.problem.password': 'Escriba su contraseña.',
+  'auth.problem.throttleOne': 'Demasiados intentos. Intente de nuevo en {count} minuto.',
+  'auth.problem.throttleOther': 'Demasiados intentos. Intente de nuevo en {count} minutos.',
+
+  'login.title': 'Iniciar sesión',
+  'login.error.magicLinkInvalid':
+    'Ese enlace para iniciar sesión ya no es válido. Puede haber vencido o haberse usado ya.',
+  'login.staffCodeHint':
+    'Solo para el personal: el código de 6 dígitos de su aplicación de autenticación, o un código de recuperación. Déjelo en blanco si es cliente, o si aún no ha configurado la autenticación de dos factores.',
+  'login.code': 'Código de autenticación',
+  'login.submit': 'Iniciar sesión',
+  'login.forgotPassword': '¿Olvidó su contraseña?',
+  'login.magicLinkSummary': 'Enviarme un enlace para iniciar sesión',
+  'login.magicLinkBody1':
+    'No necesita contraseña — le enviaremos un enlace de un solo toque que funciona durante 15 minutos.',
+  'login.magicLinkBody2':
+    'Los enlaces para iniciar sesión son para cuentas de clientes. El personal siempre inicia sesión con una contraseña y un código de autenticación, así que no se puede enviar un enlace a esa cuenta.',
+  'login.magicLinkFormLabel': 'Enviarme un enlace para iniciar sesión',
+  'login.magicLinkButton': 'Enviarme un enlace',
+  'login.staffPrompt': '¿Es del personal?',
+  'login.renterPrompt': '¿Renta con nosotros?',
+  'login.signInHere': 'Inicie sesión aquí',
+  'login.needHelpLead': '¿Necesita ayuda de otra forma? Llame al',
+  'login.duringOfficeHours': 'en horario de oficina.',
+  'login.problem.staffCreds': 'Correo, contraseña o código de autenticación incorrectos.',
+  'login.problem.tenantCreds': 'Correo o contraseña incorrectos.',
+  'login.signedIn': 'Sesión iniciada.',
+  'login.magicLinkSent':
+    'Si ese correo tiene una cuenta, un enlace para iniciar sesión está en camino. Funciona durante 15 minutos.',
+
+  'fpwd.title': '¿Olvidó su contraseña?',
+  'fpwd.body':
+    'Escriba el correo de su cuenta y le enviaremos un enlace para establecer una nueva contraseña.',
+  'fpwd.formLabel': 'Solicitar restablecer la contraseña',
+  'fpwd.submit': 'Enviar enlace',
+  'fpwd.linkSent':
+    'Si ese correo tiene una cuenta, un enlace para restablecer la contraseña está en camino. Funciona durante 60 minutos.',
+
+  'rpwd.badLink.title': 'Este enlace ya no es válido',
+  'rpwd.badLink.body':
+    'Los enlaces para restablecer la contraseña dejan de funcionar una vez que vencen o se usan. Nada ha cambiado en su cuenta.',
+  'rpwd.badLink.cta': 'Enviar un nuevo enlace',
+  'rpwd.title': 'Establecer una nueva contraseña',
+  'rpwd.newPassword': 'Nueva contraseña',
+  'rpwd.hint.minLength': 'Al menos 8 caracteres.',
+  'rpwd.confirmPassword': 'Confirmar la nueva contraseña',
+  'rpwd.submit': 'Establecer la contraseña',
+  'rpwd.problem.weak': 'La contraseña debe tener al menos 8 caracteres.',
+  'rpwd.problem.mismatch': 'Las contraseñas no coinciden.',
+  'rpwd.problem.badToken':
+    'Este enlace ya no es válido. Puede haber vencido o haberse usado ya.',
+  'rpwd.updated': 'Contraseña actualizada. Ya puede iniciar sesión con ella.',
+
+  'mfa.title': 'Autenticación de dos factores',
+  'mfa.start.body':
+    'Toda cuenta del personal necesita un segundo factor antes de poder entrar al panel. Necesitará una aplicación de autenticación — Google Authenticator, 1Password, Authy o cualquier otra — en un teléfono que lleve consigo.',
+  'mfa.start.formLabel': 'Iniciar configuración de dos factores',
+  'mfa.start.submit': 'Iniciar configuración',
+  'mfa.confirm.step1':
+    'Abra su aplicación de autenticación y agregue una cuenta — escaneando el código de abajo, o escribiendo la clave a mano.',
+  'mfa.confirm.orEnterKey': 'O escriba esta clave:',
+  'mfa.confirm.phoneLead': '¿Está configurando esto desde el teléfono mismo? Puede',
+  'mfa.confirm.phoneLink': 'abrirlo en su aplicación de autenticación',
+  'mfa.confirm.phoneTail': 'en su lugar.',
+  'mfa.confirm.step3': 'Escriba el código de 6 dígitos que muestra, para comprobar que la configuración funcionó.',
+  'mfa.confirm.formLabel': 'Terminar configuración de dos factores',
+  'mfa.confirm.codeLabel': 'Código de su aplicación',
+  'mfa.confirm.submit': 'Terminar configuración',
+  'mfa.confirm.reassurance':
+    'Nada se activa hasta que un código sea correcto — si no puede obtener uno, nadie queda bloqueado de nada.',
+  'mfa.enrolled.body':
+    'La autenticación de dos factores está activada para esta cuenta. Su aplicación de autenticación pedirá un código cada vez que inicie sesión.',
+  'mfa.enrolled.noneLeft':
+    'No le quedan códigos de recuperación. Si pierde su teléfono ahora, un administrador tendrá que restablecerle el segundo factor.',
+  'mfa.enrolled.remainingOne': 'Le queda {count} código de recuperación sin usar.',
+  'mfa.enrolled.remainingOther': 'Le quedan {count} códigos de recuperación sin usar.',
+  'mfa.enrolled.formLabel': 'Emitir nuevos códigos de recuperación',
+  'mfa.enrolled.submit': 'Emitir nuevos códigos de recuperación',
+  'mfa.enrolled.warning':
+    'Emitir nuevos códigos hace que todos los anteriores dejen de funcionar, usados o no.',
+  'mfa.enrolled.backToAdmin': 'Volver al panel',
+  'mfa.problem.alreadyOn':
+    'La autenticación de dos factores ya está activada para esta cuenta. Pida a un administrador que se la restablezca si perdió su autenticador.',
+  'mfa.setupStarted':
+    'Configuración iniciada. Agregue la clave de abajo a su aplicación de autenticación y luego escriba un código para terminar.',
+  'mfa.problem.codeRequired': 'Escriba el código de 6 dígitos de su aplicación de autenticación.',
+  'mfa.problem.badCode':
+    'Ese código no era correcto. Los códigos cambian cada 30 segundos — espere el siguiente e intente de nuevo.',
+  'mfa.problem.noEnrollment':
+    'Comience la configuración de nuevo — esta cuenta no tiene ninguna configuración a medio terminar que confirmar.',
+  'mfa.enrolled.confirmed':
+    'La autenticación de dos factores está activada. Guarde estos códigos de recuperación en un lugar seguro — cada uno funciona una sola vez, y esta es la única vez que se muestran.',
+  'mfa.enrolled.regenerated':
+    'Se emitieron nuevos códigos de recuperación. Todos los códigos anteriores dejaron de funcionar, incluso los que no había usado.',
+
+  'reauth.title': 'Confirme que es usted',
+  'reauth.body':
+    'Esta es una acción sensible, así que necesitamos comprobar que es realmente usted antes de continuar. Escriba su contraseña, o podemos enviarle un enlace por correo.',
+  'reauth.formLabel': 'Confirmar con su contraseña',
+  'reauth.magicLinkSummary': 'Enviarme un enlace en su lugar',
+  'reauth.magicLinkFormLabel': 'Enviarme un enlace de confirmación',
+  'reauth.problem.expired': 'Su sesión venció. Inicie sesión de nuevo.',
+  'reauth.problem.incorrect': 'Contraseña incorrecta.',
+  'reauth.confirmed': 'Confirmado.',
+  'reauth.magicLinkSent':
+    'Revise su correo para ver el enlace. Al abrirlo confirma que es usted y lo regresa a su sesión.',
+
+  'confemail.title': 'Confirme su correo electrónico',
+  'confemail.success.title': 'Correo electrónico confirmado',
+  'confemail.success.bodyAfter':
+    'ahora es el correo de su cuenta, y el que usa para iniciar sesión.',
+  'confemail.success.link': 'Ir a mi cuenta',
+  'confemail.error.title': 'Ese enlace no funcionó',
+  'confemail.error.taken':
+    'Ese correo electrónico ya se usó en otra cuenta, así que no podemos transferirlo.',
+  'confemail.error.expired':
+    'Puede haber vencido, haberse usado ya, o haber sido reemplazado por una solicitud más reciente. Nada ha cambiado.',
+  'confemail.error.callLead': 'Puede comenzar de nuevo desde su cuenta, o llamar al',
+  'confemail.error.backLink': 'Volver a los datos de contacto',
 }

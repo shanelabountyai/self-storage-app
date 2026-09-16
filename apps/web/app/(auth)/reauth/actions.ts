@@ -7,6 +7,8 @@ import { requestMagicLink } from '@/lib/auth/flows'
 import { safeRedirectTarget } from '@/lib/auth/login-audience'
 import { requestMetadata } from '@/lib/http/request-metadata'
 import { fieldError, success, type FormState } from '@/lib/admin/form-state'
+import { plural } from '@/lib/i18n'
+import { messages } from '@/lib/i18n/server'
 
 // PRD 01 US-701's "sensitive actions... re-verify by fresh login or emailed
 // code" — confirming a live sensitive-action page rather than the ordinary
@@ -18,14 +20,15 @@ export async function reauthWithPasswordAction(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
+  const { dict, t } = await messages()
   const session = await auth()
   if (!session?.user?.email) {
-    return fieldError({ password: 'Your session has expired. Sign in again.' })
+    return fieldError({ password: t('reauth.problem.expired') })
   }
 
   const password = String(formData.get('password') ?? '')
   const redirectTo = safeRedirectTarget(String(formData.get('redirect') ?? '') || undefined, session.user.audience)
-  if (!password) return fieldError({ password: 'Enter your password.' })
+  if (!password) return fieldError({ password: t('auth.problem.password') })
 
   const throttle = await checkLoginThrottle(
     session.user.email,
@@ -35,7 +38,7 @@ export async function reauthWithPasswordAction(
   if (!throttle.allowed) {
     const minutes = Math.ceil(throttle.retryAfterMs / 60_000)
     return fieldError({
-      password: `Too many attempts. Try again in about ${minutes} minute${minutes === 1 ? '' : 's'}.`,
+      password: plural(dict, minutes, 'auth.problem.throttleOne', 'auth.problem.throttleOther'),
     })
   }
 
@@ -50,11 +53,11 @@ export async function reauthWithPasswordAction(
       redirectTo,
     })
   } catch (error) {
-    if (error instanceof AuthError) return fieldError({ password: 'Incorrect password.' })
+    if (error instanceof AuthError) return fieldError({ password: t('reauth.problem.incorrect') })
     throw error
   }
 
-  return success('Confirmed.')
+  return success(t('reauth.confirmed'))
 }
 
 // The redirect target that survives the password path (below, same page, no
@@ -63,12 +66,13 @@ export async function reauthWithPasswordAction(
 // consuming it lands on the audience's default page, not back on the
 // specific sensitive action that asked for re-auth (left behind, PROGRESS.md).
 export async function reauthWithMagicLinkAction(): Promise<FormState> {
+  const { t } = await messages()
   const session = await auth()
   if (!session?.user?.email) {
-    return fieldError({ password: 'Your session has expired. Sign in again.' })
+    return fieldError({ password: t('reauth.problem.expired') })
   }
 
   await requestMagicLink(session.user.email, session.user.audience, (await requestMetadata()).ipAddress)
 
-  return success('Check your email for a link. Opening it confirms it is you and signs you back in.')
+  return success(t('reauth.magicLinkSent'))
 }

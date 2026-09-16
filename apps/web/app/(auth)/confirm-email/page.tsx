@@ -2,10 +2,14 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { confirmEmailChange } from '@/lib/auth/email-change'
 import { SITE } from '@/lib/site-config'
+import { dictionaryFor, translate } from '@/lib/i18n'
+import { getLocale } from '@/lib/i18n/server'
 
-export const metadata: Metadata = {
-  title: 'Confirm your email address',
-  robots: { index: false, follow: false },
+export async function generateMetadata(): Promise<Metadata> {
+  return {
+    title: translate(dictionaryFor(await getLocale()), 'confemail.title'),
+    robots: { index: false, follow: false },
+  }
 }
 
 // PRD 01 US-706. The link from the new address lands here.
@@ -27,40 +31,39 @@ export default async function ConfirmEmailPage({
 }) {
   const { token } = await searchParams
   const result = token ? await confirmEmailChange(token) : { ok: false as const, reason: 'invalid_token' as const }
+  const dict = dictionaryFor(await getLocale())
+  const t = (key: Parameters<typeof translate>[1]) => translate(dict, key)
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center gap-4 px-6 py-12">
+    <div className="mx-auto flex min-h-screen max-w-sm flex-col justify-center gap-4 px-6 py-12">
       {result.ok ? (
         <>
-          <h1 className="text-xl font-semibold">Email address confirmed</h1>
+          <h1 className="text-xl font-semibold">{t('confemail.success.title')}</h1>
           <p className="text-sm text-pretty">
-            <strong>{result.email}</strong> is now the address on your account, and the one you sign
-            in with.
+            <strong>{result.email}</strong> {t('confemail.success.bodyAfter')}
           </p>
           <Link href="/portal" className="text-sm underline underline-offset-4">
-            Go to my account
+            {t('confemail.success.link')}
           </Link>
         </>
       ) : (
         <>
-          <h1 className="text-xl font-semibold">That link didn&rsquo;t work</h1>
+          <h1 className="text-xl font-semibold">{t('confemail.error.title')}</h1>
           <p className="text-sm text-pretty">
-            {result.reason === 'taken'
-              ? 'That email address has since been used on another account, so we can’t move it over.'
-              : 'It may have expired, already been used, or been replaced by a newer request. Nothing has changed.'}
+            {result.reason === 'taken' ? t('confemail.error.taken') : t('confemail.error.expired')}
           </p>
           <p className="text-muted-foreground text-sm text-pretty">
-            You can start again from your account, or call{' '}
+            {t('confemail.error.callLead')}{' '}
             <a href={`tel:${SITE.phone.href}`} className="underline underline-offset-4">
               {SITE.phone.display}
             </a>
             .
           </p>
           <Link href="/portal/contact" className="text-sm underline underline-offset-4">
-            Back to contact details
+            {t('confemail.error.backLink')}
           </Link>
         </>
       )}
-    </main>
+    </div>
   )
 }

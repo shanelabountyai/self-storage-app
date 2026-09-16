@@ -38,6 +38,12 @@ export const LOCALE_COOKIE_DAYS = 365
 /// runs on the Edge and cannot import Prisma.
 export const PAY_TOKEN_HEADER = 'x-st-pay-token'
 
+/// B-311. The same trick, for `/reset-password?token=`: the query string is
+/// invisible to the root layout too, so the token travels here instead. The
+/// path regex `PAY_TOKEN_HEADER` uses does not apply — this token is a query
+/// param, not a path segment — so `proxy.ts` extracts it separately.
+export const RESET_TOKEN_HEADER = 'x-st-reset-token'
+
 /// Display names are written in the language they name, never translated —
 /// "Spanish" is useless to somebody who cannot read the English page.
 export const LOCALE_NAMES: Record<Locale, string> = {

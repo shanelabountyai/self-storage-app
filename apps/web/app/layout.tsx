@@ -1,9 +1,10 @@
 import type { Metadata } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import { headers } from 'next/headers'
-import { PAY_TOKEN_HEADER } from '@/lib/i18n'
+import { PAY_TOKEN_HEADER, RESET_TOKEN_HEADER } from '@/lib/i18n'
 import { getLocale } from '@/lib/i18n/server'
 import { payLinkLocale } from '@/lib/portal/pay-links'
+import { resetLinkLocale } from '@/lib/auth/flows'
 
 import './globals.css'
 
@@ -66,8 +67,18 @@ export default async function RootLayout({
   // B-283. A pay link speaks the language its reminder was written in, whatever
   // the visitor's cookie says — the page has no toggle, and the body text reads
   // the same `payLinkLocale`, so the two cannot disagree.
-  const payToken = (await headers()).get(PAY_TOKEN_HEADER)
-  const locale = payToken ? await payLinkLocale(payToken) : await getLocale()
+  //
+  // B-311. Same rule for `/reset-password?token=`: `resetLinkLocale` reads the
+  // same header the shared `(auth)` layout does, so `<html lang>` and the page
+  // body never disagree either.
+  const requestHeaders = await headers()
+  const payToken = requestHeaders.get(PAY_TOKEN_HEADER)
+  const resetToken = requestHeaders.get(RESET_TOKEN_HEADER)
+  const locale = payToken
+    ? await payLinkLocale(payToken)
+    : resetToken
+      ? await resetLinkLocale(resetToken)
+      : await getLocale()
 
   return (
     <html

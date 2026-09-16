@@ -504,6 +504,20 @@ export const SCANNED_STATES: readonly ScannedState[] = [
     layoutException:
       'the portal reflow loops measure /portal as the same tenant at every width; Spanish changes string length inside the same single-column cards, and the tightest translated layout — the facility page — is measured above',
   },
+  // B-311. The sign-in door: none of the six routes it translated (`/login`,
+  // `/forgot-password`, `/reset-password`, `/mfa`, `/reauth`,
+  // `/confirm-email`) had ever imported a dictionary, so a Spanish visitor met
+  // `<html lang="es">` over English content — SC 3.1.1 on the page in front of
+  // every money screen. One representative scan rather than all six, the same
+  // choice B-260 made for the eleven portal routes.
+  {
+    route: '/login',
+    state: 'Spanish',
+    spec: 'e2e/i18n.spec.ts',
+    layout: 'excepted',
+    layoutException:
+      'the sign-in door shares the same short single-column form as every other short form on the site; the facility page in Spanish above is the densest translated layout and already measures reflow, zoom and text spacing',
+  },
   // B-256. The portal route loop scans `/portal` and `/portal/pay` as Dana,
   // who holds units of her own and pays for no account — so a business
   // account's card, its units table and the consolidated bill on the pay

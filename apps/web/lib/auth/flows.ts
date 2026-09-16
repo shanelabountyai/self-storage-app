@@ -1,11 +1,12 @@
-import type { AuthAudience } from '@storage/db'
+import { cache } from 'react'
+import { prisma, type AuthAudience } from '@storage/db'
 import { recordAudit } from '@storage/core/audit'
 import { findSubjectByEmail, resolveAudience, setPassword } from './accounts'
 import { currentWritingLocale } from '@/lib/portal/notifications'
 import { DEFAULT_LOCALE, type Locale } from '@/lib/i18n'
 import { writingLocale } from '@/lib/i18n/server'
 import { sendAuthEmail } from './send-auth-email'
-import { consumeToken, mintToken } from './tokens'
+import { consumeToken, mintToken, tokenSubject } from './tokens'
 
 function baseUrl(): string {
   return process.env.AUTH_URL ?? 'http://localhost:3000'
@@ -125,6 +126,26 @@ export async function sendAccountAccessLink(
     recipientTenantId: tenant.id,
   })
 }
+
+/// B-311. The language `/reset-password?token=` speaks: the tenant's, the way
+/// `payLinkLocale` (lib/portal/pay-links.ts) reads it for `/pay/<token>` —
+/// whatever the visitor's cookie says. Staff reset links stay English (D-122),
+/// same as `linkLocale` above, and a token that names neither a tenant nor any
+/// token at all falls through to the ordinary cookie/English rule.
+///
+/// `cache`d for the same reason `payLinkLocale` is: the root layout (for
+/// `<html lang>`) and the page body both need it, and this makes the two one
+/// query rather than two.
+export const resetLinkLocale = cache(async (token: string): Promise<Locale> => {
+  const subject = await tokenSubject(token, 'password_reset')
+  if (!subject || subject.audience !== 'tenant') return writingLocale(undefined)
+
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: subject.subjectId },
+    select: { preferredLocale: true },
+  })
+  return writingLocale(tenant?.preferredLocale)
+})
 
 /// Consumes the reset token and sets the new password. The token burn and the
 /// password write are separate steps by necessity — the burn is atomic and

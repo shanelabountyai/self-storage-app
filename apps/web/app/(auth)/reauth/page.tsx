@@ -3,9 +3,13 @@ import { redirect } from 'next/navigation'
 import { auth } from '@/auth'
 import { AdminForm, Field } from '@/components/admin/form'
 import { safeRedirectTarget } from '@/lib/auth/login-audience'
+import { dictionaryFor, translate } from '@/lib/i18n'
+import { getLocale } from '@/lib/i18n/server'
 import { reauthWithMagicLinkAction, reauthWithPasswordAction } from './actions'
 
-export const metadata: Metadata = { title: 'Confirm it’s you' }
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: translate(dictionaryFor(await getLocale()), 'reauth.title') }
+}
 
 // PRD 01 US-701. Not linked from anywhere yet — B-036 (payment methods) and
 // B-041 (move-out request) are the first sensitive actions that will redirect
@@ -21,20 +25,19 @@ export default async function ReauthPage({
 
   const { redirect: redirectParam } = await searchParams
   const redirectTo = safeRedirectTarget(redirectParam, session.user.audience)
+  const dict = dictionaryFor(await getLocale())
+  const t = (key: Parameters<typeof translate>[1]) => translate(dict, key)
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center gap-4 px-6 py-12">
-      <h1 className="text-xl font-semibold">Confirm it&rsquo;s you</h1>
-      <p className="text-muted-foreground text-sm text-pretty">
-        This is a sensitive action, so we need to check it&rsquo;s really you before continuing.
-        Enter your password, or we can email you a link instead.
-      </p>
+    <div className="mx-auto flex min-h-screen max-w-sm flex-col justify-center gap-4 px-6 py-12">
+      <h1 className="text-xl font-semibold">{t('reauth.title')}</h1>
+      <p className="text-muted-foreground text-sm text-pretty">{t('reauth.body')}</p>
 
-      <AdminForm action={reauthWithPasswordAction} label="Confirm with your password" className="flex flex-col gap-3">
+      <AdminForm action={reauthWithPasswordAction} label={t('reauth.formLabel')} className="flex flex-col gap-3">
         <input type="hidden" name="redirect" value={redirectTo} />
         <Field
           name="password"
-          label="Password"
+          label={t('auth.password')}
           type="password"
           autoComplete="current-password"
           required
@@ -44,25 +47,25 @@ export default async function ReauthPage({
           type="submit"
           className="bg-primary text-primary-foreground mt-1 inline-flex min-h-11 items-center justify-center rounded-md px-4 text-sm font-medium"
         >
-          Confirm
+          {t('auth.confirm')}
         </button>
       </AdminForm>
 
       <details className="border-input rounded-lg border p-4">
-        <summary className="cursor-pointer text-sm font-medium">Email me a link instead</summary>
+        <summary className="cursor-pointer text-sm font-medium">{t('reauth.magicLinkSummary')}</summary>
         <AdminForm
           action={reauthWithMagicLinkAction}
-          label="Email me a confirmation link"
+          label={t('reauth.magicLinkFormLabel')}
           className="mt-3"
         >
           <button
             type="submit"
             className="border-input hover:bg-accent inline-flex min-h-11 items-center justify-center rounded-md border px-4 text-sm font-medium"
           >
-            Email me a link
+            {t('login.magicLinkButton')}
           </button>
         </AdminForm>
       </details>
-    </main>
+    </div>
   )
 }

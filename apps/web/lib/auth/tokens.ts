@@ -100,6 +100,24 @@ export async function consumeToken(
   }
 }
 
+/// B-311. Who a token belongs to, without burning it or checking expiry —
+/// `resetLinkLocale` (lib/auth/flows.ts) needs the tenant a reset link was
+/// minted for so the page can speak their language, and that has to work for
+/// a token that is stale or already used: the page renders "this link isn't
+/// good any more" in the SAME language the link was sent in, not English.
+export async function tokenSubject(
+  token: string,
+  purpose: AuthTokenPurpose,
+): Promise<{ audience: AuthAudience; subjectId: string } | null> {
+  if (!token) return null
+  const record = await prisma.authToken.findUnique({
+    where: { tokenHash: hashToken(token) },
+    select: { purpose: true, audience: true, subjectId: true },
+  })
+  if (!record || record.purpose !== purpose) return null
+  return { audience: record.audience, subjectId: record.subjectId }
+}
+
 /// Constant-time compare for callers that hold two tokens directly.
 export function tokensMatch(a: string, b: string): boolean {
   const bufA = Buffer.from(hashToken(a), 'hex')
