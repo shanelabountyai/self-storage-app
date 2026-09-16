@@ -28,7 +28,7 @@ Nothing in the block is blocked on the tree. B-301 still is.
 
 ## Owner actions
 
-**The Neon dev branch is two migrations behind.** `npm run db:status` exits non-zero: local is current, but `20260915120000_b303_ledger_correction` and `20260915130000_b304_ledger_exception_ack` have never been applied to the cloud dev branch. `npm run db:migrate:cloud` is the script for it (`migrate deploy`, which cannot drop anything) — left unrun deliberately, because it touches shared infrastructure and was not this item's work. **B-309 added no migration**, so the gap is unchanged.
+**The Neon dev branch is now three migrations behind.** `npm run db:status` exits non-zero: local is current, but `20260915120000_b303_ledger_correction`, `20260915130000_b304_ledger_exception_ack`, and B-312's `20260916185310_b312_tenant_home_facility` have never been applied to the cloud dev branch. `npm run db:migrate:cloud` is the script for it (`migrate deploy`, which cannot drop anything) — left unrun deliberately, because it touches shared infrastructure and was not this item's work. B-310/B-311 added no migration, so the gap only grew with B-312's.
 
 **One empty file still blocks three of these.** `.env.prod-ops`'s `DATABASE_URL`, `DIRECT_URL` and `EXPECTED_DEV_DB_HOST` are all empty; B-277's backfill, B-301's dry run and the signed-lease scoping query all need them. Filling it once unblocks all three.
 
