@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
@@ -131,7 +131,37 @@ describe('the SHA of every recorded entry', () => {
     const rows = rowsOf('../docs/PROGRESS.md', /^\|\s*B-[0-9]/)
     expect(rows.length, 'no entry rows parsed — did the index table change shape?').toBeGreaterThan(250)
 
-    const missing = rows.filter((line) => cellsOf(line)[1] === '—').map((line) => cellsOf(line)[0])
+    // Only entries that RECORD a SHA are this guard's business, and the
+    // difference is the repo's own two-commit workflow rather than a
+    // technicality. CLAUDE.md says to write the entry, commit, and then record
+    // the SHA in a small follow-up commit — because amending would change the
+    // SHA just written down. So between those two commits an entry legitimately
+    // carries none, and an earlier draft of this guard failed the FIRST of the
+    // two every time, which made its own instructions un-greenable. Found by
+    // following them.
+    //
+    // The original defect is still caught, because it was never the absence of
+    // a SHA: those thirteen entries each recorded one, spelled `**Commit:**
+    // `sha``, and the reader returned nothing for it. That is what this asserts
+    // — a SHA present in the source has to survive into the index.
+    const SHA = /`[0-9a-f]{7,40}`/
+    const recorded = new Set<string>()
+    const partsDir = fileURLToPath(new URL('../docs/progress/', import.meta.url))
+    for (const file of readdirSync(partsDir).filter((f) => /^\d+-.*\.md$/.test(f))) {
+      const lines = readFileSync(partsDir + file, 'utf8').split('\n')
+      for (let i = 0; i < lines.length; i++) {
+        if (!lines[i].startsWith('### ')) continue
+        const title = lines[i].slice(4).trim()
+        let j = i + 1
+        while (j < lines.length && lines[j].trim() === '') j++
+        const firstBodyLine = j < lines.length && !lines[j].startsWith('#') ? lines[j] : ''
+        if (SHA.test(title) || SHA.test(firstBodyLine)) recorded.add(title)
+      }
+    }
+
+    const missing = rows
+      .filter((line) => cellsOf(line)[1] === '—' && recorded.has(cellsOf(line)[0]))
+      .map((line) => cellsOf(line)[0])
     expect(
       missing,
       'these entries record a SHA that `shasFrom` in scripts/docs-index.mjs cannot read, so `npm run docs:audit` silently skips them',

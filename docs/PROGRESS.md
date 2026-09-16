@@ -11,8 +11,8 @@ It complements rather than duplicates:
 - `git log` — the change-by-change record
 - `README.md` — how the built thing works today
 
-**Status:** 308 of 331 backlog items complete. Latest entry: Chore.
-**Entries:** 336 across 23 part files.
+**Status:** 310 of 333 backlog items complete. Latest entry: B-329.
+**Entries:** 338 across 23 part files.
 
 ## Reading one entry
 
@@ -385,3 +385,5 @@ Append the entry as a `### ` heading at the end of the **highest-numbered** file
 | B-310 — every confirmation message in the Spanish portal was English (2026-09-16, `5a6016b`) | `5a6016b` | [23-from-b-300](progress/23-from-b-300.md#b-310-every-confirmation-message-in-the-spanish-portal-was-english-2026-09-16-5a6016b) |
 | B-311 — the sign-in door was English under `<html lang="es">` (2026-09-16, `d7b71e5`) | `d7b71e5` | [23-from-b-300](progress/23-from-b-300.md#b-311-the-sign-in-door-was-english-under-html-langes-2026-09-16-d7b71e5) |
 | Chore — the build record was too large to read, so no session read it (2026-09-16) | — | [23-from-b-300](progress/23-from-b-300.md#chore-the-build-record-was-too-large-to-read-so-no-session-read-it-2026-09-16) |
+| B-328 — English contract prose renders under `<html lang="es">`, and no scan can see it (2026-09-16) | — | [23-from-b-300](progress/23-from-b-300.md#b-328-english-contract-prose-renders-under-html-langes-and-no-scan-can-see-it-2026-09-16) |
+| B-329 — the staff mirror: English under `lang="es"`, and Spanish under `lang="en"` (2026-09-16) | — | [23-from-b-300](progress/23-from-b-300.md#b-329-the-staff-mirror-english-under-langes-and-spanish-under-langen-2026-09-16) |

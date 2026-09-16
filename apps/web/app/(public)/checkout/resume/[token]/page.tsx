@@ -24,7 +24,7 @@ export default async function CheckoutResumePage({
 
   if (!verdict.valid) {
     return (
-      <div className="mx-auto flex max-w-md flex-col gap-3 px-4 py-16 text-center">
+      <div lang="en" className="mx-auto flex max-w-md flex-col gap-3 px-4 py-16 text-center">
         <h1 className="text-lg font-semibold">This link isn&apos;t valid</h1>
         <p className="text-muted-foreground text-sm text-pretty">
           It may be out of date. Start a new booking from the facility page, or call for help.
@@ -37,7 +37,7 @@ export default async function CheckoutResumePage({
 
   if (!sessionToken) {
     return (
-      <div className="mx-auto flex max-w-md flex-col gap-3 px-4 py-16 text-center">
+      <div lang="en" className="mx-auto flex max-w-md flex-col gap-3 px-4 py-16 text-center">
         <h1 className="text-lg font-semibold">This booking is already complete</h1>
         <p className="text-muted-foreground text-sm text-pretty">
           There is nothing left to finish — check your email for your move-in confirmation.

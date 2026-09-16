@@ -6,7 +6,7 @@
 
 **Then read the row itself before building the item** — `npm run docs:row -- B-262` prints that one row whole and verbatim, about 2 KB against the file's 490. The columns dropped here are the ones that say what to build.
 
-**331 items — 308 complete, 23 open.**
+**333 items — 310 complete, 23 open.**
 
 ## Open, in build order
 
@@ -280,6 +280,8 @@
 | 83azw | B-324 |  | The two customer amount inputs are 36px tall | XS | Phase 2 |
 | 83azx | B-326 |  | Three `ScrollRegion` names repeat their table's caption verbatim | XS | Phase 2 |
 | 83azy | B-327 |  | A voided rent invoice's period can never be billed again | M | Phase 2 |
+| 83azz | B-328 | ✅ | English contract prose renders under `<html lang="es">`, and no scan can see it | S | Phase 2 |
+| 83bz | B-329 | ✅ | The admin screens are English inside `<html lang="es">`, and the template editor is Spanish inside… | S | Phase 2 |
 | 83bwr | B-202 | ✅ | A payment plan does not stop a scheduled auction, and today's lot sheet will advertise the unit… | S | Phase 2 |
 | 83bws | B-203 | ✅ | A tenant who pays exactly the installment they were told to pay still breaks their plan | M | Phase 2 |
 | 83bwt | B-204 | ✅ | An installment charge ignores `halt_autopay`, so we take money from a bankrupt, a servicemember… | S | Phase 2 |

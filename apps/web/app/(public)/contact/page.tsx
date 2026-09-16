@@ -10,11 +10,12 @@ export async function generateMetadata() {
 }
 
 export default async function ContactPage() {
-  const dict = dictionaryFor(await getLocale())
+  const locale = await getLocale()
+  const dict = dictionaryFor(locale)
   const t = (key: MessageKey) => translate(dict, key)
 
   return (
-    <ProsePage title={t('contact.title')} intro={t('contact.intro')}>
+    <ProsePage lang={locale} title={t('contact.title')} intro={t('contact.intro')}>
       <Section heading={t('contact.phone')}>
         <p>
           <a href={`tel:${SITE.phone.href}`} className="text-lg underline underline-offset-4">
