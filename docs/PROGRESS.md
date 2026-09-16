@@ -10236,7 +10236,7 @@ B-290 offers Spanish site-wide with an unqualified promise ("¿Prefiere ver este
 
 ---
 
-## B-312 — nothing in the product could create a tenant with no lease (2026-09-16)
+## B-312 — nothing in the product could create a tenant with no lease (2026-09-16, `c97e8c5`)
 
 Every business account's payer or member had to already be a `Tenant`, and the only place that ever created one was checkout — a real move-in. The ordinary commercial account is a company whose accounts-payable contact rents nothing, so making her a payer meant a fake lease on a unit she would never occupy.
 
