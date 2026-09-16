@@ -18,6 +18,7 @@ import {
 } from '@/lib/access/mobile-key'
 import { currentImpersonation } from '@/lib/impersonation/context'
 import { fieldError, success, type FormState } from '@/lib/admin/form-state'
+import { messages } from '@/lib/i18n/server'
 
 // PRD 03 US-9 AC4 (B-105). Tenant self-service for the authorized-access list.
 //
@@ -26,6 +27,7 @@ import { fieldError, success, type FormState } from '@/lib/admin/form-state'
 
 export async function addPersonAction(_prev: FormState, formData: FormData): Promise<FormState> {
   const actor = await requireTenantActor()
+  const { t } = await messages()
   const leaseId = String(formData.get('leaseId') ?? '')
   const name = String(formData.get('name') ?? '').trim()
   const phone = String(formData.get('phone') ?? '').trim()
@@ -37,12 +39,10 @@ export async function addPersonAction(_prev: FormState, formData: FormData): Pro
   const expiresOn = String(formData.get('expiresOn') ?? '').trim() || null
 
   const errors: Record<string, string> = {}
-  if (!name) errors.name = 'Enter their full name, as it appears on their ID.'
-  if (!phone) errors.phone = 'Enter a phone number we can reach them on.'
-  if (!relationship) {
-    errors.relationship = 'Say who they are to you — for example "spouse" or "employee".'
-  }
-  if (!isSharedAccessPreset(preset)) errors.accessHours = 'Choose when they can get in.'
+  if (!name) errors.name = t('acc.problem.name')
+  if (!phone) errors.phone = t('acc.problem.phone')
+  if (!relationship) errors.relationship = t('acc.problem.relationship')
+  if (!isSharedAccessPreset(preset)) errors.accessHours = t('acc.problem.hours')
   if (Object.keys(errors).length > 0) return fieldError(errors)
 
   try {
@@ -58,20 +58,16 @@ export async function addPersonAction(_prev: FormState, formData: FormData): Pro
       },
     )
     revalidatePath('/portal/access')
-    return success(
-      `${name} can now get in with their own code: ${created.code}. It is theirs alone — you can withdraw it at any time without changing yours.`,
-    )
+    return success(t('acc.added', { name, code: created.code }))
   } catch (error) {
     if (error instanceof ExpiryInThePastError) {
       return fieldError({ expiresOn: error.message })
     }
     if (error instanceof AuthorizedAccessCapError) {
-      return fieldError({
-        name: `You can have ${error.cap} named people on this unit. Withdraw somebody first, or call the office if you need more.`,
-      })
+      return fieldError({ name: t('acc.problem.cap', { cap: error.cap }) })
     }
     if (error instanceof NotYourLeaseError) {
-      return fieldError({ name: 'We could not find that unit on your account.' })
+      return fieldError({ name: t('acc.problem.notYourLeaseUnit') })
     }
     throw error
   }
@@ -79,6 +75,7 @@ export async function addPersonAction(_prev: FormState, formData: FormData): Pro
 
 export async function revokePersonAction(_prev: FormState, formData: FormData): Promise<FormState> {
   const actor = await requireTenantActor()
+  const { t } = await messages()
   const personId = String(formData.get('personId') ?? '')
   const name = String(formData.get('name') ?? 'That person')
 
@@ -92,17 +89,17 @@ export async function revokePersonAction(_prev: FormState, formData: FormData): 
       'tenant_request',
     )
     if (!result.ok) {
-      return fieldError({ personId: 'That person has already been taken off the list.' })
+      return fieldError({ personId: t('acc.problem.personGone') })
     }
   } catch (error) {
     if (error instanceof NotYourLeaseError) {
-      return fieldError({ personId: 'We could not find that person on your account.' })
+      return fieldError({ personId: t('acc.problem.notYourLeasePerson') })
     }
     throw error
   }
 
   revalidatePath('/portal/access')
-  return success(`${name}'s code has stopped working. Your own code is unchanged.`)
+  return success(t('acc.withdrawn', { name }))
 }
 
 // PRD 03 US-8 AC1/AC4 (B-086 part 2). Phone unlock.
@@ -116,9 +113,11 @@ export async function revokePersonAction(_prev: FormState, formData: FormData): 
 /// control is still a reachable server action.
 async function refuseDuringImpersonation(): Promise<FormState | null> {
   if (!(await currentImpersonation())) return null
-  return refusal(
-    'The gate cannot be opened from a support session. The tenant can do it here themselves.',
-  )
+  const { t } = await messages()
+  // Same sentence the page itself renders (`acc.impersonatedNoUnlock`) —
+  // one key rather than a second, near-identical one for the action that
+  // reaches this refusal when the control was posted anyway.
+  return refusal(t('acc.impersonatedNoUnlock'))
 }
 
 /// A refusal with no field to hang it on — the B-233 shape. Every field on
@@ -161,9 +160,8 @@ export async function enrollMobileKeyAction(_prev: FormState, formData: FormData
   }
 
   revalidatePath('/portal/access')
-  return success(
-    'Phone unlock is on for this gate. Your gate code still works at the keypad — you have not lost it, and you will want it if your phone has no signal.',
-  )
+  const { t } = await messages()
+  return success(t('acc.mobileKeyOn'))
 }
 
 export async function revokeMobileKeyAction(_prev: FormState, formData: FormData): Promise<FormState> {
@@ -172,14 +170,15 @@ export async function revokeMobileKeyAction(_prev: FormState, formData: FormData
   if (blocked) return blocked
 
   const facilityId = String(formData.get('facilityId') ?? '')
+  const { t } = await messages()
   try {
     const result = await revokeMobileKey(actor, facilityId)
-    if (!result.ok) return refusal('Phone unlock is already switched off for this gate.')
+    if (!result.ok) return refusal(t('acc.problem.alreadyOff'))
   } catch (error) {
     if (error instanceof NoGrantError) return refusal(error.message)
     throw error
   }
 
   revalidatePath('/portal/access')
-  return success('This phone can no longer open the gate. Your gate code is unchanged and still works at the keypad.')
+  return success(t('acc.mobileKeyOff'))
 }

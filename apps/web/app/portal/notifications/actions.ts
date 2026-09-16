@@ -14,6 +14,7 @@ import { isLocale, LOCALE_COOKIE, LOCALE_COOKIE_DAYS, dictionaryFor, translate }
 import { getLocale } from '@/lib/i18n/server'
 import { cookies } from 'next/headers'
 import { success, type FormState } from '@/lib/admin/form-state'
+import { messages } from '@/lib/i18n/server'
 
 // PRD 05 CN-13 (B-074). Thin session wrapper, same shape as
 // `portal/contact/actions.ts` — every decision lives in
@@ -33,7 +34,8 @@ export async function setPreferencesAction(_prev: FormState, formData: FormData)
   }
 
   revalidatePath('/portal/notifications')
-  return success('Saved.')
+  const { t } = await messages()
+  return success(t('notif.saved'))
 }
 
 export async function revokeSmsAction(_prev: FormState, _formData: FormData): Promise<FormState> {
@@ -41,11 +43,8 @@ export async function revokeSmsAction(_prev: FormState, _formData: FormData): Pr
   const result = await revokeSmsFromPortal(actor.tenantId)
 
   revalidatePath('/portal/notifications')
-  return success(
-    result.revoked
-      ? 'Texts are off. This has the same effect as replying STOP — you will not get any more SMS from us at this number.'
-      : 'There is no phone number on file to turn texts off for.',
-  )
+  const { t } = await messages()
+  return success(result.revoked ? t('notif.smsRevoked') : t('notif.noPhoneForSms'))
 }
 
 /// D-51 (B-123). The tenant's own switch for MARKETING texts.
@@ -78,12 +77,8 @@ export async function setMarketingSmsAction(
   )
 
   revalidatePath('/portal/notifications')
-  return {
-    status: 'success',
-    message: granted
-      ? 'Marketing texts are on. Account and payment texts are unaffected either way.'
-      : 'Marketing texts are off. You will still get account and payment texts.',
-  }
+  const { t } = await messages()
+  return success(granted ? t('notif.marketingOn') : t('notif.marketingOff'))
 }
 
 /// B-261 (D-122). The tenant's control over the language we WRITE to them in.
@@ -114,7 +109,10 @@ export async function setWritingLocaleAction(
   // column holding something `isLocale` refuses would silently fall back to
   // English on every send, which is the bug this item is fixing.
   const requested = formData.get('writingLocale')
-  if (!isLocale(requested)) return { status: 'error', message: 'Unrecognised language.', fieldErrors: {} }
+  if (!isLocale(requested)) {
+    const { t } = await messages()
+    return { status: 'error', message: t('notif.problem.unrecognisedLanguage'), fieldErrors: {} }
+  }
 
   await setWritingLocale(actor.tenantId, requested)
   ;(await cookies()).set(LOCALE_COOKIE, requested, {

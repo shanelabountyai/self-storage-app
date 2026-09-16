@@ -11,6 +11,8 @@ import {
   type MethodChange,
 } from '@/lib/portal/payment-methods'
 import { fieldError, success, type FormState } from '@/lib/admin/form-state'
+import { messages } from '@/lib/i18n/server'
+import type { MessageKey } from '@/lib/i18n'
 
 // PRD 01 US-704, gated by US-701's re-auth rule.
 //
@@ -20,12 +22,12 @@ import { fieldError, success, type FormState } from '@/lib/admin/form-state'
 // at all. Keeping every decision that can be tested in the lib file and only
 // the session-shaped wrapper here is what leaves the logic covered.
 
-const PROBLEM_COPY: Record<Exclude<MethodChange, { ok: true }>['reason'], string> = {
-  unavailable: 'We can’t change cards just now. Please try again shortly.',
-  not_yours: 'We couldn’t find that on your account.',
-  no_method: 'Add a card first — automatic payments need one to charge.',
-  last_method_on_autopay:
-    'That’s the only card on file and at least one unit pays automatically. Add another card first, or turn automatic payments off.',
+// B-310 (D-122): keys, resolved per request against the tenant's dictionary.
+const PROBLEM_KEYS: Record<Exclude<MethodChange, { ok: true }>['reason'], MessageKey> = {
+  unavailable: 'meth.problem.unavailable',
+  not_yours: 'meth.problem.notYours',
+  no_method: 'meth.problem.noMethod',
+  last_method_on_autopay: 'meth.problem.lastMethodOnAutopay',
 }
 
 /// US-701: "sensitive actions re-verify by fresh login or emailed code."
@@ -41,13 +43,14 @@ async function requireFresh(returnTo: string): Promise<void> {
   redirect(`/reauth?redirect=${encodeURIComponent(returnTo)}`)
 }
 
-function toFormState(result: MethodChange, message: string): FormState {
+async function toFormState(result: MethodChange, successKey: MessageKey): Promise<FormState> {
+  const { t } = await messages()
   if (result.ok) {
     revalidatePath('/portal/methods')
     revalidatePath('/portal')
-    return success(message)
+    return success(t(successKey))
   }
-  return fieldError({ method: PROBLEM_COPY[result.reason] })
+  return fieldError({ method: t(PROBLEM_KEYS[result.reason]) })
 }
 
 export async function setDefaultMethodAction(
@@ -58,12 +61,12 @@ export async function setDefaultMethodAction(
   await requireFresh('/portal/methods')
 
   const methodId = String(formData.get('methodId') ?? '')
-  if (!methodId) return fieldError({ method: 'Choose a card first.' })
+  if (!methodId) {
+    const { t } = await messages()
+    return fieldError({ method: t('meth.problem.chooseCard') })
+  }
 
-  return toFormState(
-    await setDefaultMethod(actor.tenantId, methodId),
-    'That card is now the one we charge.',
-  )
+  return toFormState(await setDefaultMethod(actor.tenantId, methodId), 'meth.setDefault')
 }
 
 export async function removeMethodAction(
@@ -74,9 +77,12 @@ export async function removeMethodAction(
   await requireFresh('/portal/methods')
 
   const methodId = String(formData.get('methodId') ?? '')
-  if (!methodId) return fieldError({ method: 'Choose a card first.' })
+  if (!methodId) {
+    const { t } = await messages()
+    return fieldError({ method: t('meth.problem.chooseCard') })
+  }
 
-  return toFormState(await removeMethod(actor.tenantId, methodId), 'That card has been removed.')
+  return toFormState(await removeMethod(actor.tenantId, methodId), 'meth.removed')
 }
 
 export async function setAutopayAction(_prev: FormState, formData: FormData): Promise<FormState> {
@@ -89,8 +95,6 @@ export async function setAutopayAction(_prev: FormState, formData: FormData): Pr
 
   return toFormState(
     await setLeaseAutopay(actor.tenantId, leaseId, enabled),
-    enabled
-      ? 'Automatic payments are on. We’ll email you two days before every charge.'
-      : 'Automatic payments are off. You’ll get a reminder when each payment is due.',
+    enabled ? 'meth.autopayOnConfirm' : 'meth.autopayOffConfirm',
   )
 }

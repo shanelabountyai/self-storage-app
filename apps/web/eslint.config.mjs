@@ -40,6 +40,30 @@ const PORTAL_ALERT_RULE = {
     'A portal page\'s role="alert" is page content, not a status message: it is true when the page is drawn and nothing focuses it (B-295, B-245). A real status message reports a press and takes focus — put it in `components/`, the way AdminForm does.',
 };
 
+// B-310. `success(...)` and `fieldError(...)` are what a tenant reads at the
+// moment their press succeeded or failed — the highest-stakes sentence on the
+// screen — so a string literal there is untranslatable by construction. Every
+// message under `app/portal/**/actions.ts` now resolves through `messages()`
+// and a dictionary key instead. `tests/portal-message-lint.test.ts` pins it.
+const PORTAL_MESSAGE_RULE = [
+  {
+    selector: "CallExpression[callee.name='success'][arguments.0.type='Literal']",
+    message: "A portal action's success() message is read in the tenant's language — resolve it through messages() and a dictionary key, not a string literal (B-310).",
+  },
+  {
+    selector: "CallExpression[callee.name='success'][arguments.0.type='TemplateLiteral']",
+    message: "A portal action's success() message is read in the tenant's language — resolve it through messages() and a dictionary key, not a template literal (B-310).",
+  },
+  {
+    selector: "CallExpression[callee.name='fieldError'][arguments.0.type='Literal']",
+    message: "A portal action's fieldError() message is read in the tenant's language — resolve it through messages() and a dictionary key, not a string literal (B-310).",
+  },
+  {
+    selector: "CallExpression[callee.name='fieldError'][arguments.0.type='TemplateLiteral']",
+    message: "A portal action's fieldError() message is read in the tenant's language — resolve it through messages() and a dictionary key, not a template literal (B-310).",
+  },
+];
+
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
@@ -66,7 +90,12 @@ const eslintConfig = defineConfig([
   {
     files: ["app/portal/**/*.{ts,tsx}"],
     rules: {
-      "no-restricted-syntax": ["error", ...CUSTOMER_DATE_RULES, PORTAL_ALERT_RULE],
+      "no-restricted-syntax": [
+        "error",
+        ...CUSTOMER_DATE_RULES,
+        PORTAL_ALERT_RULE,
+        ...PORTAL_MESSAGE_RULE,
+      ],
     },
   },
 ]);

@@ -65,12 +65,13 @@ export async function requestTransferAction(_prev: FormState, formData: FormData
 
   revalidatePath('/portal/transfer')
   revalidatePath('/portal')
-  return success('Transfer requested. We’ve held that unit and the team will call you to arrange it.')
+  return success(translate(dict, 'tr.requested'))
 }
 
 export async function cancelTransferAction(_prev: FormState, formData: FormData): Promise<FormState> {
   const actor = await requireTenantActor()
   const leaseId = String(formData.get('leaseId') ?? '')
+  const dict = dictionaryFor(await getLocale())
 
   await requireFresh(`/portal/transfer?lease=${leaseId}`)
 
@@ -79,12 +80,12 @@ export async function cancelTransferAction(_prev: FormState, formData: FormData)
     return fieldError({
       leaseId:
         result.reason === 'nothing_to_cancel'
-          ? 'There’s no transfer request to cancel.'
-          : 'We couldn’t find that unit on your account.',
+          ? translate(dict, 'tr.problem.nothingToCancel')
+          : translate(dict, 'tr.problem.not_found'),
     })
   }
 
   revalidatePath('/portal/transfer')
   revalidatePath('/portal')
-  return success('Transfer request cancelled. That unit is back on the board.')
+  return success(translate(dict, 'tr.cancelled'))
 }

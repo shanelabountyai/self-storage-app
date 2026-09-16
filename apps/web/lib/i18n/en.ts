@@ -1005,6 +1005,18 @@ export const en = {
   'meth.turnOff': 'Turn off automatic payments',
   'meth.turnOn': 'Turn on automatic payments',
 
+  // --- Payment methods: action results (B-310) ---------------------------
+  'meth.problem.unavailable': "We can't change cards just now. Please try again shortly.",
+  'meth.problem.notYours': "We couldn't find that on your account.",
+  'meth.problem.noMethod': 'Add a card first — automatic payments need one to charge.',
+  'meth.problem.lastMethodOnAutopay':
+    "That's the only card on file and at least one unit pays automatically. Add another card first, or turn automatic payments off.",
+  'meth.problem.chooseCard': 'Choose a card first.',
+  'meth.setDefault': 'That card is now the one we charge.',
+  'meth.removed': 'That card has been removed.',
+  'meth.autopayOnConfirm': "Automatic payments are on. We'll email you two days before every charge.",
+  'meth.autopayOffConfirm': "Automatic payments are off. You'll get a reminder when each payment is due.",
+
   // --- Payment receipt (/portal/pay/done) -------------------------------
   'rcpt.title': 'Payment receipt',
   'rcpt.notFound': "We couldn't find that payment on your account.",
@@ -1201,6 +1213,22 @@ export const en = {
     'A PDF or a photo of the page, up to 10 MB. You can send the details without it and bring the document in later.',
   'prot.sendDetails': 'Send these details',
 
+  // --- Protection and insurance: action results (B-310) ------------------
+  'prot.problem.chooseUnit': 'Choose which unit this is for.',
+  'prot.problem.chooseLevel': 'Choose a level of cover.',
+  'prot.problem.notYourLease': 'We could not find that unit on your account.',
+  'prot.problem.alreadyCancelled': 'That change has already taken effect or was already cancelled.',
+  'prot.cancelled': 'That change has been called off. Your cover stays as it is.',
+  'prot.problem.insurer': 'Enter the name of your insurer, for example State Farm.',
+  'prot.problem.policyNumber': 'Enter your policy number — it is on your declaration page.',
+  'prot.problem.policyExpired': 'That policy has already run out. Enter cover that is still current.',
+  'prot.proofSavedNoFile':
+    'We have your policy details. We could not keep the file, though — {reason}',
+  'prot.proofSavedWithFile':
+    'Thanks — we have your policy details and your declaration page. Someone here will check them over.',
+  'prot.proofSavedNoDoc':
+    'Thanks — we have your policy details. Someone will check them against your declaration page, and we will email you if anything is missing.',
+
   // --- Contact details (US-706) -----------------------------------------
   'cont.title': 'Contact details',
   'cont.phoneSection': 'Phone and alternate contact',
@@ -1228,6 +1256,16 @@ export const en = {
   'cont.changeEmailFormLabel': 'Change email address',
   'cont.newEmail': 'New email address',
   'cont.sendConfirmation': 'Send confirmation link',
+
+  // --- Contact details: action results (B-310) ----------------------------
+  'cont.savedDetails': 'Your contact details are saved.',
+  'cont.addressUpdated': "Your address is updated. We'll use it for anything we post to you.",
+  'cont.addressUnchanged': "That's already your address on file.",
+  'cont.problem.emailInvalid': 'Enter an email address.',
+  'cont.problem.emailUnchanged': "That's already your email address.",
+  'cont.problem.emailInUse': 'That email address is already in use on another account.',
+  'cont.emailChangeSent':
+    "Check your new inbox — we've sent a link to confirm it. Nothing changes until you open it. We've also let your current address know.",
 
   // --- Notification preferences (CN-13, D-51) ---------------------------
   'notif.title': 'Notification preferences',
@@ -1285,6 +1323,15 @@ export const en = {
   'notif.turnOffMarketing': 'Turn off marketing texts',
   'notif.turnOnMarketing': 'Turn on marketing texts',
 
+  // --- Notification preferences: action results (B-310) ------------------
+  'notif.saved': 'Saved.',
+  'notif.smsRevoked':
+    'Texts are off. This has the same effect as replying STOP — you will not get any more SMS from us at this number.',
+  'notif.noPhoneForSms': 'There is no phone number on file to turn texts off for.',
+  'notif.marketingOn': 'Marketing texts are on. Account and payment texts are unaffected either way.',
+  'notif.marketingOff': 'Marketing texts are off. You will still get account and payment texts.',
+  'notif.problem.unrecognisedLanguage': 'Unrecognised language.',
+
   // --- Refer a friend (PRD 10 §5.1/§5.6) --------------------------------
   'refer.title': 'Refer a friend',
   'refer.offer':
@@ -1327,6 +1374,12 @@ export const en = {
     'Neither credit is cash and neither is refundable. If you move out with an unused credit, it does not carry over.',
   'refer.term6': 'An unused invite expires after {days} days.',
   'refer.term7': 'You can hold {cap} unused invites at a time.',
+
+  // --- Refer a friend: action results (B-310) -----------------------------
+  'refer.inviteReady': 'New invite ready: {code}. Share it with one friend.',
+  'refer.problem.programDisabled': 'The referral program is not running at your location at the moment.',
+  'refer.problem.openInviteCap':
+    'You have reached the number of unused invites you can hold at once. One of them being used, or expiring, frees up another.',
 
   // --- Who can get in (US-9, US-8) --------------------------------------
   'acc.title': 'Who can get in',
@@ -1383,6 +1436,25 @@ export const en = {
   'acc.introAfter':
     'gate code rather than a copy of yours. The gate log records who actually came in, and you can withdraw any one of them at any time without changing your own code.',
 
+  // --- Who can get in: action results (B-310) ----------------------------
+  'acc.problem.name': 'Enter their full name, as it appears on their ID.',
+  'acc.problem.phone': 'Enter a phone number we can reach them on.',
+  'acc.problem.relationship': 'Say who they are to you — for example "spouse" or "employee".',
+  'acc.problem.hours': 'Choose when they can get in.',
+  'acc.added':
+    '{name} can now get in with their own code: {code}. It is theirs alone — you can withdraw it at any time without changing yours.',
+  'acc.problem.cap':
+    'You can have {cap} named people on this unit. Withdraw somebody first, or call the office if you need more.',
+  'acc.problem.notYourLeaseUnit': 'We could not find that unit on your account.',
+  'acc.problem.personGone': 'That person has already been taken off the list.',
+  'acc.problem.notYourLeasePerson': 'We could not find that person on your account.',
+  'acc.withdrawn': "{name}'s code has stopped working. Your own code is unchanged.",
+  'acc.mobileKeyOn':
+    'Phone unlock is on for this gate. Your gate code still works at the keypad — you have not lost it, and you will want it if your phone has no signal.',
+  'acc.problem.alreadyOff': 'Phone unlock is already switched off for this gate.',
+  'acc.mobileKeyOff':
+    'This phone can no longer open the gate. Your gate code is unchanged and still works at the keypad.',
+
   // --- Move-out (US-707, B-164/B-173/B-174, D-85) -----------------------
   'mo.title': 'Request a move-out',
   'mo.noUnits': "We don't see an active unit on this account.",
@@ -1438,6 +1510,9 @@ export const en = {
   'mo.problem.nothing_to_cancel': "There's no move-out scheduled to cancel.",
   'mo.problem.too_late': 'That move-out date has already arrived — call us to change anything now.',
   'mo.problem.generic': 'That request could not be completed. Reload the page and try again.',
+  // --- Move-out: action results (B-310) -----------------------------------
+  'mo.requested': "Move-out requested. We've emailed you a confirmation.",
+  'mo.cancelled': 'Move-out cancelled.',
 
   // --- Transfer (US-709, B-090b, B-137/B-142/B-173, D-85) ---------------
   'tr.title': 'Move to another unit',
@@ -1503,6 +1578,10 @@ export const en = {
     'A transfer moves you within one facility. That unit is at another site.',
   'tr.problem.same_unit': 'That is the unit you are already in.',
   'tr.problem.no_rate_for_unit_type': 'That unit has no published rate, so we cannot quote it.',
+  // --- Transfer: action results (B-310) -----------------------------------
+  'tr.requested': "Transfer requested. We've held that unit and the team will call you to arrange it.",
+  'tr.problem.nothingToCancel': "There's no transfer request to cancel.",
+  'tr.cancelled': 'Transfer request cancelled. That unit is back on the board.',
 
   // --- Static pages: FAQ, About, Contact (B-262) -------------------------
   // The prose a renter READS rather than operates. `/terms` and `/privacy` are

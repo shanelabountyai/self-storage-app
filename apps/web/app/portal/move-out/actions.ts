@@ -76,7 +76,7 @@ export async function requestMoveOutAction(_prev: FormState, formData: FormData)
 
   revalidatePath('/portal/move-out')
   revalidatePath('/portal')
-  return success('Move-out requested. We’ve emailed you a confirmation.')
+  return success(translate(dict, 'mo.requested'))
 }
 
 export async function cancelMoveOutAction(_prev: FormState, formData: FormData): Promise<FormState> {
@@ -86,8 +86,8 @@ export async function cancelMoveOutAction(_prev: FormState, formData: FormData):
   await requireFresh(`/portal/move-out?lease=${leaseId}`)
 
   const result = await cancelMoveOutRequest(actor.tenantId, leaseId)
+  const dict = dictionaryFor(await getLocale())
   if (!result.ok) {
-    const dict = dictionaryFor(await getLocale())
     return fieldError({
       leaseId: translate(dict, CANCEL_PROBLEM_KEYS[result.reason] ?? 'mo.problem.generic'),
     })
@@ -95,5 +95,5 @@ export async function cancelMoveOutAction(_prev: FormState, formData: FormData):
 
   revalidatePath('/portal/move-out')
   revalidatePath('/portal')
-  return success('Move-out cancelled.')
+  return success(translate(dict, 'mo.cancelled'))
 }

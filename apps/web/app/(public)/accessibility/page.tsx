@@ -2682,6 +2682,28 @@ function reviewedOn(locale: Locale): string {
 //
 // `LAST_REVIEWED` is NOT bumped: D-115, and a staff-facing item is not a
 // review. B-254 still owns the date and still needs a person.
+//
+// Re-verified 2026-09-16, at B-310 (every confirmation message in the Spanish
+// portal was English). Customer-facing, text only; no markup changed. Roughly
+// 30 `success()`/`fieldError()` literals across the eight
+// `app/portal/**/actions.ts` files — access, payment methods, protection,
+// move-out, transfer, contact, notifications, refer — were English regardless
+// of `<html lang>`: the sentence a tenant reads at the exact moment a press
+// succeeded or failed, the highest-stakes moment on each screen, and exactly
+// the question B-284's entry above says it left unanswered. They now resolve
+// through `messages()` and a dictionary key, joined to `MUST_ALSO_DIFFER` in
+// `tests/i18n.test.ts`. An ESLint rule (`app/portal/**`) now refuses a
+// literal or template-literal argument to `success(`/`fieldError(`, pinned by
+// `tests/portal-message-lint.test.ts`. Two things stayed out of scope on
+// purpose, the same D-140 boundary B-284 drew: `CHANGE_PROBLEM_MESSAGES` and
+// `scheduledNotice()` in `protection/actions.ts` come from
+// `@storage/core/billing` and stay English — the ledger and the invoice, not
+// the interface — and the upload validator's own rejection reason
+// (`result.documentProblem`) is embedded English inside an otherwise Spanish
+// sentence, the same boundary one level down. The Spanish scan states are
+// unchanged (`/portal` in Spanish was already scanned), and this page makes
+// no claim about these actions' language, so no visible line changes.
+// `LAST_REVIEWED` is not bumped, per D-115.
 
 export default async function AccessibilityPage() {
   const locale = await getLocale()

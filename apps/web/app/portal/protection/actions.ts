@@ -9,6 +9,7 @@ import {
 } from '@/lib/protection/changes'
 import { CHANGE_PROBLEM_MESSAGES, scheduledNotice } from '@storage/core/billing'
 import { fieldError, parseDate, success, type FormState } from '@/lib/admin/form-state'
+import { messages } from '@/lib/i18n/server'
 
 // PRD 01 US-705 (B-104). The tenant's own protection controls.
 
@@ -25,14 +26,15 @@ export async function changeProtectionAction(
   formData: FormData,
 ): Promise<FormState> {
   const actor = await requireTenantActor()
+  const { t } = await messages()
   const leaseId = String(formData.get('leaseId') ?? '')
   const raw = String(formData.get('tier') ?? '')
   // The empty string is the "my own cover" option, which is a real choice
   // rather than a missing one — hence a sentinel rather than an absent field.
   const tier = raw === 'waiver' ? null : raw
 
-  if (!leaseId) return fieldError({ tier: 'Choose which unit this is for.' })
-  if (raw === '') return fieldError({ tier: 'Choose a level of cover.' })
+  if (!leaseId) return fieldError({ tier: t('prot.problem.chooseUnit') })
+  if (raw === '') return fieldError({ tier: t('prot.problem.chooseLevel') })
 
   const result = await scheduleProtectionChange({ tenantId: actor.tenantId, leaseId, tier })
 
@@ -40,7 +42,7 @@ export async function changeProtectionAction(
     return fieldError({
       tier:
         result.reason === 'not_your_lease'
-          ? 'We could not find that unit on your account.'
+          ? t('prot.problem.notYourLease')
           : CHANGE_PROBLEM_MESSAGES[result.reason],
     })
   }
@@ -60,28 +62,28 @@ export async function cancelProtectionChangeAction(
   formData: FormData,
 ): Promise<FormState> {
   const actor = await requireTenantActor()
+  const { t } = await messages()
   const changeId = String(formData.get('changeId') ?? '')
 
   const result = await cancelProtectionChange({ tenantId: actor.tenantId, changeId })
   if (!result.ok) {
-    return fieldError({ changeId: 'That change has already taken effect or was already cancelled.' })
+    return fieldError({ changeId: t('prot.problem.alreadyCancelled') })
   }
 
   revalidatePath('/portal/protection')
-  return success('That change has been called off. Your cover stays as it is.')
+  return success(t('prot.cancelled'))
 }
 
 export async function submitProofAction(_prev: FormState, formData: FormData): Promise<FormState> {
   const actor = await requireTenantActor()
+  const { t } = await messages()
   const leaseId = String(formData.get('leaseId') ?? '')
   const carrier = String(formData.get('carrier') ?? '').trim()
   const policyNumber = String(formData.get('policyNumber') ?? '').trim()
 
   const errors: Record<string, string> = {}
-  if (!carrier) errors.carrier = 'Enter the name of your insurer, for example State Farm.'
-  if (!policyNumber) {
-    errors.policyNumber = 'Enter your policy number — it is on your declaration page.'
-  }
+  if (!carrier) errors.carrier = t('prot.problem.insurer')
+  if (!policyNumber) errors.policyNumber = t('prot.problem.policyNumber')
 
   const expires = parseDate(formData.get('expiresAt'))
   if ('error' in expires) errors.expiresAt = expires.error
@@ -89,7 +91,7 @@ export async function submitProofAction(_prev: FormState, formData: FormData): P
     // A policy that has already run out is not cover. Accepting it would put a
     // lapsed waiver on the lease and hand D-17's scan something to auto-enrol
     // against the same night.
-    errors.expiresAt = 'That policy has already run out. Enter cover that is still current.'
+    errors.expiresAt = t('prot.problem.policyExpired')
   }
 
   if (Object.keys(errors).length > 0) return fieldError(errors)
@@ -115,7 +117,7 @@ export async function submitProofAction(_prev: FormState, formData: FormData): P
     expiresAt: expires.value,
     document,
   })
-  if (!result.ok) return fieldError({ carrier: 'We could not find that unit on your account.' })
+  if (!result.ok) return fieldError({ carrier: t('prot.problem.notYourLease') })
 
   revalidatePath('/portal/protection')
 
@@ -123,15 +125,14 @@ export async function submitProofAction(_prev: FormState, formData: FormData): P
   // is what stops D-17 auto-enrolling them into a paid plan, and throwing that
   // away because a photo was in the wrong format would be the worse failure by
   // a distance.
+  //
+  // `result.documentProblem` is the upload validator's own English reason
+  // (`lib/protection/changes.ts`'s `upload.message`) and stays untranslated —
+  // the same D-140 boundary as `CHANGE_PROBLEM_MESSAGES` above: this row is
+  // the interface, not every message a lower module composes.
   if (result.documentProblem) {
-    return success(
-      `We have your policy details. We could not keep the file, though — ${result.documentProblem}`,
-    )
+    return success(t('prot.proofSavedNoFile', { reason: result.documentProblem }))
   }
 
-  return success(
-    document
-      ? 'Thanks — we have your policy details and your declaration page. Someone here will check them over.'
-      : 'Thanks — we have your policy details. Someone will check them against your declaration page, and we will email you if anything is missing.',
-  )
+  return success(document ? t('prot.proofSavedWithFile') : t('prot.proofSavedNoDoc'))
 }

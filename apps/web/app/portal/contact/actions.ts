@@ -5,6 +5,7 @@ import { requireTenantActor } from '@/lib/rbac/session'
 import { requestEmailChange } from '@/lib/auth/email-change'
 import { recordAddressChange, updateContactDetails, validateAddress } from '@/lib/portal/contact'
 import { fieldError, success, type FormState } from '@/lib/admin/form-state'
+import { messages } from '@/lib/i18n/server'
 
 // PRD 01 US-706. Thin session wrapper; every decision lives in
 // lib/portal/contact.ts and lib/auth/email-change.ts, which import nothing
@@ -25,7 +26,8 @@ export async function saveContactDetailsAction(
   // Without this the form reports success while the page around it still
   // renders what was there before the save.
   revalidatePath('/portal/contact')
-  return success('Your contact details are saved.')
+  const { t } = await messages()
+  return success(t('cont.savedDetails'))
 }
 
 export async function saveAddressAction(_prev: FormState, formData: FormData): Promise<FormState> {
@@ -48,11 +50,8 @@ export async function saveAddressAction(_prev: FormState, formData: FormData): P
   // The previous-addresses list is rendered from the server, so it has to be
   // re-read or the history the tenant just added does not appear.
   revalidatePath('/portal/contact')
-  return success(
-    changed
-      ? 'Your address is updated. We’ll use it for anything we post to you.'
-      : 'That’s already your address on file.',
-  )
+  const { t } = await messages()
+  return success(changed ? t('cont.addressUpdated') : t('cont.addressUnchanged'))
 }
 
 export async function requestEmailChangeAction(
@@ -61,19 +60,18 @@ export async function requestEmailChangeAction(
 ): Promise<FormState> {
   const actor = await requireTenantActor()
   const result = await requestEmailChange(actor.tenantId, String(formData.get('email') ?? ''))
+  const { t } = await messages()
 
   if (!result.ok) {
     return fieldError({
       email:
         result.reason === 'invalid'
-          ? 'Enter an email address.'
+          ? t('cont.problem.emailInvalid')
           : result.reason === 'unchanged'
-            ? 'That’s already your email address.'
-            : 'That email address is already in use on another account.',
+            ? t('cont.problem.emailUnchanged')
+            : t('cont.problem.emailInUse'),
     })
   }
 
-  return success(
-    'Check your new inbox — we’ve sent a link to confirm it. Nothing changes until you open it. We’ve also let your current address know.',
-  )
+  return success(t('cont.emailChangeSent'))
 }

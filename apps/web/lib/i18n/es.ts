@@ -920,6 +920,18 @@ export const es: Dictionary = {
   'meth.turnOff': 'Desactivar los pagos automáticos',
   'meth.turnOn': 'Activar los pagos automáticos',
 
+  // --- Payment methods: action results (B-310) ---------------------------
+  'meth.problem.unavailable': 'Ahora mismo no podemos cambiar tarjetas. Intente de nuevo en un momento.',
+  'meth.problem.notYours': 'No encontramos eso en su cuenta.',
+  'meth.problem.noMethod': 'Agregue una tarjeta primero — los pagos automáticos necesitan una para cobrar.',
+  'meth.problem.lastMethodOnAutopay':
+    'Esa es la única tarjeta registrada y al menos una unidad paga automáticamente. Agregue otra tarjeta primero, o desactive los pagos automáticos.',
+  'meth.problem.chooseCard': 'Elija una tarjeta primero.',
+  'meth.setDefault': 'Esa tarjeta es ahora la que cobramos.',
+  'meth.removed': 'Esa tarjeta fue eliminada.',
+  'meth.autopayOnConfirm': 'Los pagos automáticos están activados. Le avisaremos por correo dos días antes de cada cargo.',
+  'meth.autopayOffConfirm': 'Los pagos automáticos están desactivados. Recibirá un recordatorio cuando venza cada pago.',
+
   // --- Payment receipt (/portal/pay/done) -------------------------------
   'rcpt.title': 'Comprobante de pago',
   'rcpt.notFound': 'No encontramos ese pago en su cuenta.',
@@ -1115,6 +1127,22 @@ export const es: Dictionary = {
     'Un PDF o una foto de la carátula, hasta 10 MB. Puede mandarnos los datos sin ella y traer el documento después.',
   'prot.sendDetails': 'Enviar estos datos',
 
+  // --- Protección y seguro: resultados de la acción (B-310) ---------------
+  'prot.problem.chooseUnit': 'Elija para cuál unidad es esto.',
+  'prot.problem.chooseLevel': 'Elija un nivel de cobertura.',
+  'prot.problem.notYourLease': 'No encontramos esa unidad en su cuenta.',
+  'prot.problem.alreadyCancelled': 'Ese cambio ya entró en vigor o ya fue cancelado.',
+  'prot.cancelled': 'Este cambio fue cancelado. Su cobertura sigue igual.',
+  'prot.problem.insurer': 'Ingrese el nombre de su aseguradora, por ejemplo State Farm.',
+  'prot.problem.policyNumber': 'Ingrese su número de póliza — está en la carátula de su póliza.',
+  'prot.problem.policyExpired': 'Esa póliza ya venció. Ingrese una cobertura que siga vigente.',
+  'prot.proofSavedNoFile':
+    'Ya tenemos los datos de su póliza. No pudimos guardar el archivo, sin embargo — {reason}',
+  'prot.proofSavedWithFile':
+    'Gracias — ya tenemos los datos de su póliza y la carátula. Alguien aquí los revisará.',
+  'prot.proofSavedNoDoc':
+    'Gracias — ya tenemos los datos de su póliza. Alguien los revisará contra su carátula, y le enviaremos un correo si falta algo.',
+
   // --- Contact details (US-706) -----------------------------------------
   'cont.title': 'Datos de contacto',
   'cont.phoneSection': 'Teléfono y contacto alterno',
@@ -1142,6 +1170,16 @@ export const es: Dictionary = {
   'cont.changeEmailFormLabel': 'Cambiar el correo electrónico',
   'cont.newEmail': 'Nuevo correo electrónico',
   'cont.sendConfirmation': 'Enviar el enlace de confirmación',
+
+  // --- Datos de contacto: resultados de la acción (B-310) ------------------
+  'cont.savedDetails': 'Sus datos de contacto están guardados.',
+  'cont.addressUpdated': 'Su dirección está actualizada. La usaremos para todo lo que le enviemos por correo.',
+  'cont.addressUnchanged': 'Esa ya es su dirección registrada.',
+  'cont.problem.emailInvalid': 'Ingrese un correo electrónico.',
+  'cont.problem.emailUnchanged': 'Ese ya es su correo electrónico.',
+  'cont.problem.emailInUse': 'Ese correo electrónico ya está en uso en otra cuenta.',
+  'cont.emailChangeSent':
+    'Revise su bandeja nueva — le enviamos un enlace para confirmarlo. Nada cambia hasta que lo abra. También avisamos a su dirección actual.',
 
   // --- Notification preferences (CN-13, D-51) ---------------------------
   'notif.title': 'Preferencias de avisos',
@@ -1198,6 +1236,17 @@ export const es: Dictionary = {
   'notif.turnOffMarketing': 'Desactivar los mensajes promocionales',
   'notif.turnOnMarketing': 'Activar los mensajes promocionales',
 
+  // --- Preferencias de avisos: resultados de la acción (B-310) ------------
+  'notif.saved': 'Guardado.',
+  'notif.smsRevoked':
+    'Los mensajes de texto están desactivados. Esto tiene el mismo efecto que responder STOP — no recibirá más mensajes SMS nuestros a este número.',
+  'notif.noPhoneForSms': 'No hay un número de teléfono registrado para desactivar los mensajes de texto.',
+  'notif.marketingOn':
+    'Los mensajes promocionales están activados. Los mensajes de cuenta y de pagos no se ven afectados de ninguna forma.',
+  'notif.marketingOff':
+    'Los mensajes promocionales están desactivados. Seguirá recibiendo los mensajes de cuenta y de pagos.',
+  'notif.problem.unrecognisedLanguage': 'Idioma no reconocido.',
+
   // --- Refer a friend (PRD 10 §5.1/§5.6) --------------------------------
   'refer.title': 'Recomiende a un amigo',
   'refer.offer':
@@ -1243,6 +1292,13 @@ export const es: Dictionary = {
     'Ninguno de los dos créditos es efectivo ni es reembolsable. Si desocupa con un crédito sin usar, no se conserva.',
   'refer.term6': 'Una invitación sin usar vence a los {days} días.',
   'refer.term7': 'Puede tener {cap} invitaciones sin usar a la vez.',
+
+  // --- Recomiende a un amigo: resultados de la acción (B-310) --------------
+  'refer.inviteReady': 'Invitación lista: {code}. Compártala con un amigo.',
+  'refer.problem.programDisabled':
+    'En este momento el programa de recomendaciones no está activo en su sucursal.',
+  'refer.problem.openInviteCap':
+    'Alcanzó el número de invitaciones sin usar que puede tener a la vez. Que se use una, o que venza, libera otra.',
 
   // --- Who can get in (US-9, US-8) --------------------------------------
   'acc.title': 'Quién puede entrar',
@@ -1298,6 +1354,25 @@ export const es: Dictionary = {
   'acc.introBefore': 'Abra la puerta desde su teléfono, y dé a las personas de su confianza su',
   'acc.introAfter':
     'código de la puerta en vez de una copia del suyo. El registro de la puerta guarda quién entró de verdad, y usted puede retirarle el acceso a cualquiera en cualquier momento sin cambiar su propio código.',
+
+  // --- Who can get in: action results (B-310) ----------------------------
+  'acc.problem.name': 'Ingrese su nombre completo, tal como aparece en su identificación.',
+  'acc.problem.phone': 'Ingrese un número de teléfono donde podamos contactarlo.',
+  'acc.problem.relationship': 'Diga qué es de usted — por ejemplo, "esposo" o "empleado".',
+  'acc.problem.hours': 'Elija cuándo puede entrar.',
+  'acc.added':
+    '{name} ya puede entrar con su propio código: {code}. Es solo suyo — puede retirarlo en cualquier momento sin cambiar el suyo.',
+  'acc.problem.cap':
+    'Puede tener {cap} personas registradas en esta unidad. Retire a alguien primero, o llame a la oficina si necesita más.',
+  'acc.problem.notYourLeaseUnit': 'No encontramos esa unidad en su cuenta.',
+  'acc.problem.personGone': 'Esa persona ya fue retirada de la lista.',
+  'acc.problem.notYourLeasePerson': 'No encontramos a esa persona en su cuenta.',
+  'acc.withdrawn': 'El código de {name} dejó de funcionar. Su propio código no cambió.',
+  'acc.mobileKeyOn':
+    'El desbloqueo por teléfono está activado para esta puerta. Su código de la puerta sigue funcionando en el teclado — no lo ha perdido, y lo necesitará si su teléfono se queda sin señal.',
+  'acc.problem.alreadyOff': 'El desbloqueo por teléfono ya está desactivado para esta puerta.',
+  'acc.mobileKeyOff':
+    'Este teléfono ya no puede abrir la puerta. Su código de la puerta no cambió y sigue funcionando en el teclado.',
 
   // --- Move-out (US-707, B-164/B-173/B-174, D-85) -----------------------
   'mo.title': 'Solicitar desocupar',
@@ -1357,6 +1432,9 @@ export const es: Dictionary = {
     'Esa fecha de desocupación ya llegó — llámenos para cambiar cualquier cosa ahora.',
   'mo.problem.generic':
     'No se pudo completar esa solicitud. Recargue la página e inténtelo de nuevo.',
+  // --- Desocupar: resultados de la acción (B-310) --------------------------
+  'mo.requested': 'Desocupación solicitada. Le enviamos un correo de confirmación.',
+  'mo.cancelled': 'Desocupación cancelada.',
 
   // --- Transfer (US-709, B-090b, B-137/B-142/B-173, D-85) ---------------
   'tr.title': 'Cambiar de unidad',
@@ -1425,6 +1503,10 @@ export const es: Dictionary = {
   'tr.problem.same_unit': 'Esa es la unidad en la que ya está.',
   'tr.problem.no_rate_for_unit_type':
     'Esa unidad no tiene tarifa publicada, así que no podemos cotizarla.',
+  // --- Cambio de unidad: resultados de la acción (B-310) -------------------
+  'tr.requested': 'Cambio solicitado. Reservamos esa unidad y el equipo lo llamará para coordinarlo.',
+  'tr.problem.nothingToCancel': 'No hay ninguna solicitud de cambio que cancelar.',
+  'tr.cancelled': 'Solicitud de cambio cancelada. Esa unidad volvió a estar disponible.',
 
   // --- Páginas informativas: FAQ, Acerca de, Contacto (B-262) ------------
   // Lo que un inquilino LEE, no lo que opera. `/terms` y `/privacy` no están
