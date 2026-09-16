@@ -119,7 +119,7 @@ export default async function BillingAccountsPage() {
               label="Payer’s email"
               type="email"
               required
-              hint="An existing tenant here. They pay the account’s units and can see their balances, so they have to be someone you have already taken on."
+              hint="An existing tenant here — a lease works, or add one with no lease at /admin/tenants/new for a payer who rents nothing themselves."
             />
             <button
               type="submit"

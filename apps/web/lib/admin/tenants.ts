@@ -48,17 +48,23 @@ import { returnablePayments } from "@/lib/billing/reversals";
 // duplicating validation or the append-only write here would be the exact gap
 // D-21 exists to prevent.
 
-/// The facilities this tenant actually has a lease at. The authorization
-/// boundary for everything below: `Tenant` itself carries no facilityId (a
-/// person can hold leases anywhere), so "can this staffer see this tenant" is
-/// answered by intersecting these with what the staffer is assigned to.
+/// The facilities this tenant actually has a lease at, plus — since B-312 —
+/// the one facility recorded on `Tenant.facilityId` for a tenant staff added
+/// with no lease at all. The authorization boundary for everything below:
+/// "can this staffer see this tenant" is answered by intersecting these with
+/// what the staffer is assigned to.
 async function tenantFacilityIds(tenantId: string): Promise<string[]> {
-  const rows = await prisma.lease.findMany({
-    where: { tenantId },
-    select: { facilityId: true },
-    distinct: ["facilityId"],
-  });
-  return rows.map((row) => row.facilityId);
+  const [rows, tenant] = await Promise.all([
+    prisma.lease.findMany({
+      where: { tenantId },
+      select: { facilityId: true },
+      distinct: ["facilityId"],
+    }),
+    prisma.tenant.findUnique({ where: { id: tenantId }, select: { facilityId: true } }),
+  ]);
+  const ids = new Set(rows.map((row) => row.facilityId));
+  if (tenant?.facilityId) ids.add(tenant.facilityId);
+  return [...ids];
 }
 
 /// Throws unless the actor holds `permission` at some facility this tenant
@@ -98,11 +104,13 @@ export type TenantSearchResult = {
   units: { facilityName: string; unitNumber: string }[];
 };
 
-/// Name, phone, email, or unit number, partial match. Always scoped to a
-/// lease the actor can see — a tenant with no lease in scope cannot surface
-/// here even for an otherwise-matching name, which is also what keeps the
-/// profile page's own access check from ever rejecting a tenant this screen
-/// just linked to.
+/// Name, phone, email, or unit number, partial match. Scoped to a lease the
+/// actor can see, OR — since B-312 — a `Tenant.facilityId` the actor can see:
+/// a leaseless tenant is scoped by the facility staff added them at rather
+/// than by a lease, the same boundary `tenantFacilityIds` uses. Nothing here
+/// surfaces a tenant outside both, which is also what keeps the profile
+/// page's own access check from ever rejecting a tenant this screen just
+/// linked to.
 export async function searchTenants(
   actor: Actor,
   query: string,
@@ -114,6 +122,13 @@ export async function searchTenants(
   if (!q) return [];
 
   const scope = facilityScope(actor);
+  // `facilityScope` returns `{}` for all-facilities access — for a leaseless
+  // tenant that means "any facility", not "no facility", so the fallback
+  // filter is `facilityId: { not: null }` rather than the empty scope object
+  // (which would match every tenant, leaseless or not).
+  const leaselessScope = scope.facilityId
+    ? { facilityId: scope.facilityId }
+    : { facilityId: { not: null } };
 
   // Split on whitespace so a natural "Ada Renter" full-name search works: a
   // single `contains` on the combined string matches nothing, because first
@@ -126,25 +141,27 @@ export async function searchTenants(
   const tenants = await prisma.tenant.findMany({
     where: {
       deletedAt: null,
-      leases: { some: scope },
-      AND: words.map((word) => ({
-        OR: [
-          { firstName: { contains: word, mode: "insensitive" as const } },
-          { lastName: { contains: word, mode: "insensitive" as const } },
-          { email: { contains: word, mode: "insensitive" as const } },
-          { phone: { contains: word, mode: "insensitive" as const } },
-          {
-            leases: {
-              some: {
-                ...scope,
-                unit: {
-                  number: { contains: word, mode: "insensitive" as const },
+      AND: [
+        { OR: [{ leases: { some: scope } }, leaselessScope] },
+        ...words.map((word) => ({
+          OR: [
+            { firstName: { contains: word, mode: "insensitive" as const } },
+            { lastName: { contains: word, mode: "insensitive" as const } },
+            { email: { contains: word, mode: "insensitive" as const } },
+            { phone: { contains: word, mode: "insensitive" as const } },
+            {
+              leases: {
+                some: {
+                  ...scope,
+                  unit: {
+                    number: { contains: word, mode: "insensitive" as const },
+                  },
                 },
               },
             },
-          },
-        ],
-      })),
+          ],
+        })),
+      ],
     },
     take: TENANT_SEARCH_LIMIT,
     orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
@@ -174,6 +191,70 @@ export async function searchTenants(
       unitNumber: lease.unit.number,
     })),
   }));
+}
+
+export type CreateLeaselessTenantInput = {
+  facilityId: string;
+  firstName: string;
+  lastName: string;
+  email?: string;
+  phone?: string;
+  address: AddressInput;
+};
+
+export type CreateLeaselessTenantResult =
+  | { ok: true; tenantId: string }
+  | { ok: false; problems: FieldProblems };
+
+/// B-312. Staff who need a payer or a member for a business account — a
+/// company's accounts-payable contact, most often — and who has never rented
+/// a unit here. Creates a bare `Tenant` with no lease at all, so it carries
+/// none of the consequences of one: `Tenant.facilityId` (read by
+/// `tenantFacilityIds` above) is the sole reason this tenant is reachable by
+/// search or by the profile page, `payableLeaseWhere` never lists a unit for
+/// them, and this does NOT mint a portal identity or send anything — B-287
+/// owns the member mail and B-301 the backfill.
+export async function createLeaselessTenant(
+  actor: Actor,
+  input: CreateLeaselessTenantInput,
+): Promise<CreateLeaselessTenantResult> {
+  if (actor.kind !== "staff") throw new ForbiddenError("Staff access required");
+  if (!can(actor, "tenants:edit", input.facilityId)) {
+    throw new ForbiddenError(
+      "Missing permission tenants:edit",
+      "tenants:edit",
+      input.facilityId,
+    );
+  }
+
+  const firstName = input.firstName.trim();
+  const lastName = input.lastName.trim();
+  const email = input.email?.trim().toLowerCase() || null;
+  const phone = input.phone?.trim() || null;
+
+  const problems: FieldProblems = { ...validateAddress(input.address) };
+  if (!firstName) problems.firstName = "Enter a first name.";
+  if (!lastName) problems.lastName = "Enter a last name.";
+  if (Object.keys(problems).length > 0) return { ok: false, problems };
+
+  const tenant = await prisma.tenant.create({
+    data: { facilityId: input.facilityId, firstName, lastName, email, phone },
+  });
+  await recordAddressChange(tenant.id, input.address, "counter", {
+    kind: "staff",
+    staffUserId: actor.staffUserId,
+  });
+
+  await recordAudit({
+    actor: toAuditActor(actor),
+    action: "tenant.created_leaseless",
+    entityType: "Tenant",
+    entityId: tenant.id,
+    facilityId: input.facilityId,
+    context: { firstName, lastName, email },
+  });
+
+  return { ok: true, tenantId: tenant.id };
 }
 
 export type TenantLeaseSummary = {
