@@ -10266,7 +10266,7 @@ Every business account's payer or member had to already be a `Tenant`, and the o
 
 ---
 
-## B-313 — a counter cash or check payment now emails a receipt (2026-09-16)
+## B-313 — a counter cash or check payment now emails a receipt (2026-09-16, `c4c487d`)
 
 A counter payment posted to the ledger and printed a paper receipt, and nothing else. `recordCounterPayment` never emitted `payment.succeeded`, so `comms.dispatch`'s existing CN-6 receipt rule — already proven for card payments through the Stripe webhook path — never fired for cash or a check. An account payer's $4,400 check generated a printed sheet at the counter and no record in the inbox where a company's AP filing actually lives.
 
