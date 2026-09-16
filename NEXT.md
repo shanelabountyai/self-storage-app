@@ -1,16 +1,16 @@
 # Next
 
-**B-311 is done** (`d7b71e5`, SHA recorded in the follow-up commit `ca6c388`). The eighth review block (`5933447`) has 16 rows left, **B-312–B-326** plus **B-327**, and **B-325 at `83aya`** (deliberately ahead of B-301 so mail's wording settles before the backfill sends).
+**B-312 is done** (`c97e8c5`, SHA recorded in the follow-up commit `5d28a69`). The eighth review block (`5933447`) has 14 rows left, **B-313–B-326** plus **B-327**, and **B-325 at `83aya`** (deliberately ahead of B-301 so mail's wording settles before the backfill sends).
 
-`/login`, `/forgot-password`, `/reset-password`, `/mfa`, `/reauth` and `/confirm-email` moved under a new `app/(auth)/` route group (URLs unchanged) and all six now translate, joined to `MUST_ALSO_DIFFER`. `/reset-password?token=` prefers the token's tenant `preferredLocale` over the cookie via a new `resetLinkLocale` (mirrors B-283's `payLinkLocale`) and a new `RESET_TOKEN_HEADER`. **Carried gaps, no owning row**: the `LanguageToggle` on `/reset-password` is a dead control whenever a valid token is present (token always wins over the cookie); `/login`'s static `role="alert"` banner is untouched (B-314 already owns that exact question, on `/pay/[token]`); the ESLint rule that refuses a literal `success()`/`fieldError()` argument (`app/portal/**`) does not reach these six routes — a second, unnamed instance of the same gap B-314 already named for `app/pay/**`; no e2e beyond a heading check covers `/forgot-password`, `/reset-password`'s bad-token state, or `/confirm-email`.
+Staff with `tenants:edit` can now create a `Tenant` with no lease at `/admin/tenants/new`, for a business account's payer or member who rents nothing — `createLeaselessTenant` in `apps/web/lib/admin/tenants.ts`. `Tenant.facilityId` (new, nullable) is set only on that path and is the sole reason a leaseless tenant is reachable by `searchTenants` or the profile page — both were lease-derived by deliberate design and had to be widened to OR in this new scope. **Carried gaps, no owning row**: `listTenants` (the plain paginated `/admin/tenants` list) was not widened, only search — a leaseless tenant stays off that list until they hold a lease; no e2e covers the new route's success or refusal paths, though it is now in `ADMIN_SCAN_ROUTES` for the heavy lane's axe scan; nothing corrects a leaseless tenant's `facilityId` if staff pick the wrong one.
 
-**A full unit sweep briefly showed 64 unrelated timeouts** (auctions, marketplace, payment plans, transfers, referrals — nothing this item touched) while two other projects' sweeps were running concurrently against the same Postgres instance; all 64 passed clean on a re-run once `pg_stat_activity` showed those connections clear. Worth remembering before trusting a "regression" from a sweep run alongside other active sessions.
+**A full unit sweep briefly showed 5 unrelated `marketplace-db.test.ts` failures** (timeouts plus two assertion mismatches — nothing this item touched) while `rental_test` held 9 connections mid-sweep; both the isolated file and a full re-run passed clean once `pg_stat_activity` showed that clear. Worth remembering before trusting a "regression" from a sweep run alongside other active sessions. The one real failure that sweep caught — `tests/a11y-scan-coverage.test.ts` refusing the new unregistered route — is the actual gate working as intended; register a new route in `apps/web/lib/a11y/scan-coverage.ts` the moment it exists, not as an afterthought.
 
 ## Start here
 
-**B-312**, in file order.
+**B-313**, in file order.
 
-- **B-312** — a business account's payer and members must already be tenants, and nothing in the product can create one (operator review 2026-09-14, finding 3). `existingTenantByEmail` refuses with "Add them as a tenant first," and the only `Tenant` row created anywhere in the product is checkout. Read the full row in `docs/prds/06-backlog.md` before starting.
+- **B-313** — a counter cash or check payment emits no event, so no receipt is ever emailed (operator review 2026-09-14, finding 4). `recordCounterPayment`'s transaction contains no `emitEvent`; `payment.succeeded` is emitted only from the Stripe webhook path, and `comms.dispatch` subscribes to it. Read the full row in `docs/prds/06-backlog.md` before starting — B-320's card-receipt row (now unblocked, B-312 ✅) says its own `payment.succeeded` emit must not duplicate B-313's.
 
 **Two rows now sit close to what B-309 touched, and both are worth reading before editing comms:**
 
@@ -28,7 +28,7 @@ Nothing in the block is blocked on the tree. B-301 still is.
 
 ## Owner actions
 
-**The Neon dev branch is two migrations behind.** `npm run db:status` exits non-zero: local is current, but `20260915120000_b303_ledger_correction` and `20260915130000_b304_ledger_exception_ack` have never been applied to the cloud dev branch. `npm run db:migrate:cloud` is the script for it (`migrate deploy`, which cannot drop anything) — left unrun deliberately, because it touches shared infrastructure and was not this item's work. **B-309 added no migration**, so the gap is unchanged.
+**The Neon dev branch is now three migrations behind.** `npm run db:status` exits non-zero: local is current, but `20260915120000_b303_ledger_correction`, `20260915130000_b304_ledger_exception_ack`, and B-312's `20260916185310_b312_tenant_home_facility` have never been applied to the cloud dev branch. `npm run db:migrate:cloud` is the script for it (`migrate deploy`, which cannot drop anything) — left unrun deliberately, because it touches shared infrastructure and was not this item's work. B-310/B-311 added no migration, so the gap only grew with B-312's.
 
 **One empty file still blocks three of these.** `.env.prod-ops`'s `DATABASE_URL`, `DIRECT_URL` and `EXPECTED_DEV_DB_HOST` are all empty; B-277's backfill, B-301's dry run and the signed-lease scoping query all need them. Filling it once unblocks all three.
 

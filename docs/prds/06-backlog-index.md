@@ -6,7 +6,7 @@
 
 **Then read the row itself before building the item** — `npm run docs:row -- B-262` prints that one row whole and verbatim, about 2 KB against the file's 490. The columns dropped here are the ones that say what to build.
 
-**333 items — 310 complete, 23 open.**
+**333 items — 311 complete, 22 open.**
 
 ## Open, in build order
 
@@ -15,7 +15,6 @@
 | 83a | B-129 | Online auction platform listing from the auction pipeline | M | B-062, B-083 |
 | 83aya | B-325 | `authAccountAccess` is one 62-word sentence doing three jobs | XS | B-300 ✅ |
 | 83az | B-301 | Existing business-account members were never told they have portal access | S | B-300 ✅ |
-| 83azk | B-312 | A business account's payer and members must already be tenants, and nothing in the product can… | M | B-238 ✅, B-258 ✅ |
 | 83azl | B-313 | A counter cash or check payment emits no event, so no receipt is ever emailed | S | B-278 ✅, B-281 ✅ |
 | 83azm | B-314 | `/pay/[token]` never got B-295's and B-299's fixes, and no lint rule reaches it | S | B-299 ✅, B-295 ✅, B-284 ✅ |
 | 83azn | B-315 | The payer is quoted one total in the nav and a different one on the card one tap away | M | B-278 ✅, B-279 ✅ |
@@ -23,7 +22,7 @@
 | 83azp | B-317 | An overpayment reads "$0.00" on both customer receipts while the staff receipt says "Credit on… | S | B-316, B-281 ✅ |
 | 83azq | B-318 | B-281 renders the letter for a tenant with no email and gives nobody a way to print it | M | B-281 ✅, B-238 ✅ |
 | 83azr | B-319 | The counter's Method select silently resets to Cash when the payer changes, and books a cash… | S | B-280 ✅ |
-| 83azs | B-320 | A card taken at the counter has no printable receipt, and a business account cannot pay by card at… | M | B-281 ✅, B-280 ✅, B-312 |
+| 83azs | B-320 | A card taken at the counter has no printable receipt, and a business account cannot pay by card at… | M | B-281 ✅, B-280 ✅, B-312 ✅ |
 | 83azt | B-321 | The token landing pages reached from translated emails are English, and two of them dead-end | S | B-283 ✅, B-311 |
 | 83azu | B-322 | A business-account payer is refused a prepayment with no reason and no way out | XS | B-302, B-256 ✅ |
 | 83azv | B-323 | Two staff-facing strings print internal identifiers at the customer counter | XS | B-281 ✅, B-280 ✅ |
@@ -265,7 +264,7 @@
 | 83azh | B-309 | ✅ | The business-account payer gets N bills, N pay links, and none of them opens the account | M | Phase 3 |
 | 83azi | B-310 | ✅ | Every confirmation message in the Spanish portal is English | PRD 01 §6.2, §9; SC 3.1.2 (AA); D-122, D-140; B-284, B-295, B-285, B-299, B-261 | B-284 ✅, B-295 ✅ |
 | 83azj | B-311 | ✅ | Spanish is offered site-wide, and then the sign-in door is English with no toggle | M | Phase 2 |
-| 83azk | B-312 |  | A business account's payer and members must already be tenants, and nothing in the product can… | M | Phase 2 |
+| 83azk | B-312 | ✅ | A business account's payer and members must already be tenants, and nothing in the product can… | M | Phase 2 |
 | 83azl | B-313 |  | A counter cash or check payment emits no event, so no receipt is ever emailed | S | Phase 2 |
 | 83azm | B-314 |  | `/pay/[token]` never got B-295's and B-299's fixes, and no lint rule reaches it | S | Phase 2 |
 | 83azn | B-315 |  | The payer is quoted one total in the nav and a different one on the card one tap away | M | Phase 3 |

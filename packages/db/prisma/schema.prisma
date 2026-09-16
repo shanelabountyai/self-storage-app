@@ -943,6 +943,8 @@ model Facility {
   accountingPeriods      AccountingPeriod[]
   reportSubscriptions    ReportSubscription[]
   unitStatusHistory      UnitStatusHistory[]
+  /// B-312. Leaseless tenants staff added here — see `Tenant.facilityId`.
+  leaselessTenants       Tenant[]                  @relation("TenantHomeFacility")
 
   @@index([state])
   @@map("facility")
@@ -1254,7 +1256,15 @@ model Tenant {
   deletedAt                    DateTime? @db.Timestamptz(6)
   /// Optimistic locking (PRD 02 FR-11).
   version                      Int       @default(0)
+  /// B-312. Set only for a tenant created with no lease — the facility staff
+  /// added them at. `Tenant` otherwise carries no facility (a person can hold
+  /// leases anywhere), so this is the sole authorization boundary for a
+  /// leaseless tenant until they hold a real lease of their own, at which
+  /// point `tenantFacilityIds` sees that lease too and this field stops
+  /// mattering. Never cleared.
+  facilityId                   String?
 
+  homeFacility              Facility?                @relation("TenantHomeFacility", fields: [facilityId], references: [id])
   leases                    Lease[]
   payLinks                  PayLink[]
   addresses                 TenantAddress[]
@@ -1288,6 +1298,7 @@ model Tenant {
   /// address. A plain index, because the lookup stayed and only the constraint
   /// went.
   @@index([email])
+  @@index([facilityId])
   @@map("tenant")
 }
 

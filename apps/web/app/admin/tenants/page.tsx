@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { getSwitcherData } from '@/lib/admin/context'
 import { resolveSelectedFacility } from '@/lib/admin/facility-selection-logic'
+import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
 import { searchTenants, TENANT_SEARCH_LIMIT } from '@/lib/admin/tenants'
 import {
   isTenantFilter,
@@ -60,9 +61,19 @@ export default async function TenantsPage({
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-lg font-semibold">
-        Tenants{selected.mode === 'single' ? ` — ${selected.facility.name}` : ''}
-      </h1>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h1 className="text-lg font-semibold">
+          Tenants{selected.mode === 'single' ? ` — ${selected.facility.name}` : ''}
+        </h1>
+        {hasPermissionAnywhere(actor, ['tenants:edit']) && (
+          <Link
+            href="/admin/tenants/new"
+            className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
+          >
+            Add a tenant
+          </Link>
+        )}
+      </div>
 
       <form method="GET" role="search" className="flex flex-wrap items-end gap-2">
         <label htmlFor="q" className="flex flex-col gap-1 text-sm">

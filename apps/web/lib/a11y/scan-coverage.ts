@@ -167,6 +167,7 @@ export const ADMIN_SCAN_ROUTES = [
   // surface nobody has checked.
   '/admin/units/rates',
   '/admin/tenants',
+  '/admin/tenants/new',
   '/admin/tenants/former',
   '/admin/leads',
   '/admin/billing',
