@@ -1,16 +1,18 @@
 # Next
 
-**B-310 is done** (`5a6016b`, SHA recorded in the follow-up commit). The eighth review block (`5933447`) has 17 rows left, **B-311–B-326** plus **B-327**, and **B-325 at `83aya`** (deliberately ahead of B-301 so mail's wording settles before the backfill sends).
+**B-311 is done** (`d7b71e5`, SHA recorded in the follow-up commit `ca6c388`). The eighth review block (`5933447`) has 16 rows left, **B-312–B-326** plus **B-327**, and **B-325 at `83aya`** (deliberately ahead of B-301 so mail's wording settles before the backfill sends).
 
-Every `success()`/`fieldError()` literal across the eight `app/portal/**/actions.ts` files — the sentence a tenant reads at the moment a press succeeded or failed — is now a dictionary key, joined to `MUST_ALSO_DIFFER`. A new ESLint rule in the existing `app/portal/**` block refuses a literal argument to either call, pinned by `tests/portal-message-lint.test.ts`. Two things stayed English on purpose, the same D-140 boundary B-284 drew: `protection/actions.ts`'s `CHANGE_PROBLEM_MESSAGES`/`scheduledNotice()` (from `@storage/core/billing`), and the upload validator's own rejection reason embedded in an otherwise-Spanish sentence. **No e2e added** — `e2e/portal-move-out.spec.ts`'s own comments show the team deliberately never submits a real move-out request against the shared demo tenant, and the same caution applies to any of these eight actions; the acceptance line asking for a rendered Spanish assertion is met by `tests/i18n.test.ts` + the lint pin instead, not by a browser test.
+`/login`, `/forgot-password`, `/reset-password`, `/mfa`, `/reauth` and `/confirm-email` moved under a new `app/(auth)/` route group (URLs unchanged) and all six now translate, joined to `MUST_ALSO_DIFFER`. `/reset-password?token=` prefers the token's tenant `preferredLocale` over the cookie via a new `resetLinkLocale` (mirrors B-283's `payLinkLocale`) and a new `RESET_TOKEN_HEADER`. **Carried gaps, no owning row**: the `LanguageToggle` on `/reset-password` is a dead control whenever a valid token is present (token always wins over the cookie); `/login`'s static `role="alert"` banner is untouched (B-314 already owns that exact question, on `/pay/[token]`); the ESLint rule that refuses a literal `success()`/`fieldError()` argument (`app/portal/**`) does not reach these six routes — a second, unnamed instance of the same gap B-314 already named for `app/pay/**`; no e2e beyond a heading check covers `/forgot-password`, `/reset-password`'s bad-token state, or `/confirm-email`.
+
+**A full unit sweep briefly showed 64 unrelated timeouts** (auctions, marketplace, payment plans, transfers, referrals — nothing this item touched) while two other projects' sweeps were running concurrently against the same Postgres instance; all 64 passed clean on a re-run once `pg_stat_activity` showed those connections clear. Worth remembering before trusting a "regression" from a sweep run alongside other active sessions.
 
 ## Start here
 
-**B-311**, in file order.
+**B-312**, in file order.
 
-- **B-311** — Spanish is offered site-wide, and then the sign-in door (`/login`, `/forgot-password`, `/reset-password`, `/mfa`, `/reauth`, `/confirm-email`) is English with no toggle (digital-experience review 2026-09-14). B-287 compounds it: the business-account access mail is sent in Spanish and its link opens an English password screen.
+- **B-312** — a business account's payer and members must already be tenants, and nothing in the product can create one (operator review 2026-09-14, finding 3). `existingTenantByEmail` refuses with "Add them as a tenant first," and the only `Tenant` row created anywhere in the product is checkout. Read the full row in `docs/prds/06-backlog.md` before starting.
 
-**Two rows now sit close to what B-309 just touched, and both are worth reading before editing comms:**
+**Two rows now sit close to what B-309 touched, and both are worth reading before editing comms:**
 
 - **B-315** owns the definition of an account's net balance. B-309 *consumes* it (`balancesFor`) and deliberately did not settle it — if B-315 changes the definition, the payer's email figure moves with it, which is the intent.
 - **B-316** is the emailed receipt's subject line listing every unit a payment settled. Same family of problem, different message; `ACCOUNT_EVENT` and the `_account` template convention are now there to reuse.
