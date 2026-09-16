@@ -10265,3 +10265,27 @@ Every business account's payer or member had to already be a `Tenant`, and the o
 - **A leaseless tenant's `facilityId` is never reconsidered.** If staff add one at the wrong facility, nothing corrects it short of a database client — same posture as every other one-way default in this codebase, not a new gap, but nothing today surfaces the mistake either.
 
 ---
+
+## B-313 — a counter cash or check payment now emails a receipt (2026-09-16)
+
+A counter payment posted to the ledger and printed a paper receipt, and nothing else. `recordCounterPayment` never emitted `payment.succeeded`, so `comms.dispatch`'s existing CN-6 receipt rule — already proven for card payments through the Stripe webhook path — never fired for cash or a check. An account payer's $4,400 check generated a printed sheet at the counter and no record in the inbox where a company's AP filing actually lives.
+
+**What it built.**
+
+1. **One `emitEvent` call added to `recordCounterPayment`'s existing transaction** (`apps/web/lib/admin/pos.ts`), immediately after the ledger post and audit entry — `payment.succeeded`, `entityType: 'Payment'`, payload `{ amountCents }`. No new template, no new rule, no new code path: the same CN-6 rule and `payment_receipt` template the webhook path already uses picks it up, because both derive the receipt's content from `paymentCredits(payment.id)` rather than from anything in the event payload.
+2. **No branch for the no-email case** — the existing `noReachableEmail` path (B-281) already renders the receipt, records a `failed` Message with the rendered body attached, and raises a `no_reachable_channel` task rather than throwing. Counter payments fall into it for free.
+3. **Three new tests in `tests/pos-db.test.ts`** (`describe('receipt email (B-313)', ...)`), matching the row's acceptance line exactly: a cash payment emits exactly one `payment.succeeded` and the resulting message's body names the same units the printed receipt does; a tenant with no email on file gets a `failed` Message and an open `no_reachable_channel` task, with no throw; the same event processed twice through `processCommsEvent` (a job retry) writes exactly one Message. The retry and no-email guarantees are existing `comms/service.ts` infrastructure (the idempotency key and `noReachableEmail`) — the tests pin that this new emit site inherits both rather than building either.
+
+**What it decided.**
+
+- **The payload carries only `amountCents`, no `paymentIntentId`.** The webhook path's payload also carries a Stripe intent id that a counter payment has none of; the receipt rule never reads either field off the payload (it re-derives amount and credits from the `Payment` row and `paymentCredits` at send time), so the payload shape only needed to match where it mattered.
+- **Fixed a fixture gap, not a code bug, to get the first new test green.** `pos-db.test.ts`'s facility fixture had no `phone`, which the `payment_receipt` template requires (`RenderError: facility.phone`) — added `phone: '512-555-0100'` to the fixture, matching `comms-billing-db.test.ts`'s existing facility. The emit code was correct on the first try; the fixture was incomplete because nothing in this file had exercised a real template render before.
+
+**Verification.** Typecheck: the one pre-existing `e2e/i18n.spec.ts` error, confirmed present on `main` before this change via `git stash` + re-run — unrelated, untouched by this item. Lint: 0 errors, the same 6 pre-existing unused-arg warnings. Schema-drift check against the Neon dev branch shows the three migrations NEXT.md already named as owner-pending (`b303`, `b304`, `b312`) — this item added no migration and touched no schema. Full unit suite: **4,573 passed, 8 skipped, of 4,581 across 269 files**, no failures.
+
+**What it left behind.**
+
+- **No e2e covers this path.** The acceptance line asked only for the three unit-level guarantees above; nothing exercises `/admin/pos` end to end with a mocked mail provider. Same posture the rest of this block has taken toward comms send paths — `tests/comms-*-db.test.ts` covers rendering and delivery logic directly rather than through the UI.
+- **B-320's card-receipt row (now unblocked by B-312) must not duplicate this emit** — noted in its own backlog row already, not a new gap, just the reason this item's emit stays scoped to `recordCounterPayment` and does not touch the card path.
+
+---

@@ -1,5 +1,6 @@
 import { prisma, type Prisma } from "@storage/db";
 import { recordAudit } from "@storage/core/audit";
+import { emitEvent } from "@storage/core/events";
 import {
   cashNeedsApproval,
   MANAGER_RANK,
@@ -358,6 +359,22 @@ export async function recordCounterPayment(
           leaseId: lease.id,
           accountId: input.accountId ?? null,
         },
+      },
+      tx,
+    );
+
+    // B-313. Same payload shape as the Stripe webhook path
+    // (lib/payments/reconcile.ts) so `comms.dispatch`'s existing
+    // `payment.succeeded` rule and receipt template need no counter-specific
+    // branch — a cash or check payment now gets the same emailed receipt a
+    // card payment already does. No `paymentIntentId`; there is none here.
+    await emitEvent(
+      {
+        name: "payment.succeeded",
+        facilityId: input.facilityId,
+        entityType: "Payment",
+        entityId: payment.id,
+        payload: { amountCents: settled.amountCents },
       },
       tx,
     );
