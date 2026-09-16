@@ -52,6 +52,30 @@ export function isBroadcastTemplateKey(key: string): boolean {
   return key.startsWith(BROADCAST_KEY_PREFIX)
 }
 
+/// B-309. The consolidated message a business account's PAYER gets: one per
+/// account per business day per event class, in place of the per-lease copies.
+///
+/// A pseudo-event for the same reason `BROADCAST_EVENT` is one, and the
+/// opposite of the reason: a broadcast has no rule, and an account template has
+/// the wrong one. It is sent by `invoice_due_soon`'s rule, `invoice_due_today`'s
+/// and `dunning_step`'s, but it renders against a context none of those three
+/// events supply — the account's total, not this invoice's; the account's pay
+/// screen, not this lease's pay link.
+///
+/// Keeping it out of the three real events' schemas is what stops the CN-16
+/// picker offering `{{account.balance}}` on the TENANT's own reminder, where
+/// nothing supplies it and every send would fail at render.
+export const ACCOUNT_EVENT = 'billing_account'
+
+/// The suffix IS the wiring, the same way `BROADCAST_KEY_PREFIX` is: an account
+/// template is chosen by the send path from the rule's own key (`dunning_step`
+/// → `dunning_step_account`), so the key is what says which schema applies.
+export const ACCOUNT_KEY_SUFFIX = '_account'
+
+export function isAccountTemplateKey(key: string): boolean {
+  return key.endsWith(ACCOUNT_KEY_SUFFIX)
+}
+
 /// Available only on templates whose event supplies them. Keyed by event name,
 /// mirroring `CONTEXT_EXTENDERS` in the comms service — if a field is added
 /// there it belongs here too, and the test below is what enforces that.
@@ -85,6 +109,38 @@ export const EVENT_MERGE_FIELDS: Record<string, readonly MergeFieldSpec[]> = {
       description: 'What you type when sending',
       sample: 'The gate motor is being replaced on Thursday 11 September. The gate will stay open from 8am until about noon and the office will be staffed throughout.',
     },
+  ],
+  // B-309. The payer's consolidated bill and ladder step. `account.summary_line`
+  // and `account.oldest_due_line` are built in code rather than assembled from
+  // raw fields because both move in translation: Spanish pluralises `unidad`
+  // and reorders the sentence, and the second one has an honest empty case (an
+  // account owing money with no open invoice to date it) that a template
+  // language with no conditional cannot express.
+  //
+  // The `dunning.*` three are here as well as on `delinquency.day_reached`
+  // because `dunning_step_account` renders against THIS schema — the ladder
+  // step's wording is the same whoever is reading it; only the figures change.
+  [ACCOUNT_EVENT]: [
+    { field: 'account.name', description: 'What the operator calls the account', sample: 'Acme Contracting' },
+    { field: 'account.balance', description: 'What the whole account owes right now', sample: '$4,382.10' },
+    {
+      field: 'account.summary_line',
+      description: 'Who owes how much across how many units, in one sentence',
+      sample: 'Acme Contracting owes $4,382.10 across 15 units at Austin — South Congress.',
+    },
+    {
+      field: 'account.oldest_due_line',
+      description: 'When the oldest unpaid amount was due, or that the balance is simply outstanding',
+      sample: 'The oldest amount was due Tuesday, September 1.',
+    },
+    {
+      field: 'links.pay_account',
+      description: 'One-tap link that pays the WHOLE account — never a single unit',
+      sample: 'https://example.com/portal/pay?account=acct_123',
+    },
+    { field: 'dunning.subject_line', description: 'Subject wording for this step', sample: 'Your balance is still outstanding' },
+    { field: 'dunning.tone_line', description: 'Opening line, firmer at each step', sample: 'Your balance is still outstanding, and a late fee may now have been added.' },
+    { field: 'dunning.consequence_line', description: 'What happens next, at this step', sample: 'Please settle it when you can, or call us and we will work something out.' },
   ],
   'lease.move_out_requested': [
     { field: 'unit.number', description: 'Unit number', sample: 'A-12' },

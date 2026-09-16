@@ -12,6 +12,8 @@ import { mintPayLink, payLinkUrl } from '@/lib/portal/pay-links'
 import { leaseHasEffect } from '@/lib/admin/holds'
 import { type ReferralRefusal } from '@storage/core/referrals'
 import { daysPastDue } from '@storage/core/metrics'
+import { businessDateFor } from '@storage/core/jobs'
+import { balancesFor } from '@/lib/billing/accounts'
 import { restoreShortfallCents } from '@storage/core/access'
 import { OCCUPYING_LEASE_STATUSES } from '@storage/core/inventory'
 import { isAutoCollecting } from '@storage/core/payment-plans'
@@ -24,7 +26,7 @@ import { absoluteUrl } from '@storage/core/marketing'
 import { currentRateForUnitType } from '@/lib/pricing/unit-type-rates'
 import { offerFor } from '@/lib/promotions/service'
 import { offerTermsText } from '@/lib/promotions/terms'
-import { defaultNotificationPreference, isMarketingQuietHours, isSmsQuietHours, normalizePhoneE164, tableHtml } from '@storage/core/comms'
+import { ACCOUNT_KEY_SUFFIX, defaultNotificationPreference, isMarketingQuietHours, isSmsQuietHours, normalizePhoneE164, tableHtml } from '@storage/core/comms'
 import { currentConsent } from '@storage/core/consent'
 import { createTask } from '@/lib/admin/tasks'
 import { mintUnsubscribeToken, unsubscribeUrl } from './unsubscribe-token'
@@ -121,6 +123,12 @@ type Recipient = {
   lease: RecipientLease | null
   reservation: RecipientReservation | null
   lead: RecipientLead | null
+  /// B-309. Set only on the ADDED payer copy of a `PAYER_EVENTS` event, never
+  /// on the lease's own tenant. It is what makes this recipient's message about
+  /// the ACCOUNT rather than about the unit the event happened to fire for:
+  /// one message per account per business day per event class, rendered from
+  /// the `_account` template, linked to the account pay screen.
+  payerAccount: { id: string; name: string } | null
 }
 
 /// B-261. The tenant fields every recipient resolver reads. One constant
@@ -208,6 +216,7 @@ async function resolveRecipient(event: DomainEvent): Promise<Recipient | null> {
       },
       reservation: null,
       lead: null,
+      payerAccount: null,
     }
   }
 
@@ -232,6 +241,7 @@ async function resolveRecipient(event: DomainEvent): Promise<Recipient | null> {
       lease: null,
       reservation: null,
       lead: null,
+      payerAccount: null,
     }
   }
 
@@ -301,6 +311,7 @@ async function resolveRecipient(event: DomainEvent): Promise<Recipient | null> {
         : null,
       reservation: null,
       lead: null,
+      payerAccount: null,
     }
   }
 
@@ -358,6 +369,7 @@ async function resolveRecipient(event: DomainEvent): Promise<Recipient | null> {
       lease: null,
       reservation: { id: reservation.id, expiresAt: reservation.expiresAt, unitType: reservation.unitType },
       lead: null,
+      payerAccount: null,
     }
   }
 
@@ -401,6 +413,7 @@ async function resolveRecipient(event: DomainEvent): Promise<Recipient | null> {
         unitTypeId: lead.unitTypeId,
         unitType: lead.unitType,
       },
+      payerAccount: null,
     }
   }
 
@@ -438,11 +451,14 @@ async function resolveRecipients(event: DomainEvent): Promise<Recipient[]> {
 
   const lease = await prisma.lease.findUnique({
     where: { id: recipient.lease.id },
-    select: { billingAccount: { select: { payer: { select: TENANT_SELECT } } } },
+    select: {
+      billingAccount: { select: { id: true, name: true, payer: { select: TENANT_SELECT } } },
+    },
   })
-  const payer = lease?.billingAccount?.payer
+  const account = lease?.billingAccount
+  const payer = account?.payer
   // A payer who is also this lease's tenant is already the recipient.
-  if (!payer || payer.id === recipient.tenantId) return [recipient]
+  if (!account || !payer || payer.id === recipient.tenantId) return [recipient]
 
   return [
     recipient,
@@ -455,8 +471,119 @@ async function resolveRecipients(event: DomainEvent): Promise<Recipient[]> {
       phone: payer.phone,
       firstName: payer.firstName,
       lastName: payer.lastName,
+      payerAccount: { id: account.id, name: account.name },
     },
   ]
+}
+
+/// B-309. What the whole account owes, over how many units, and when the
+/// oldest unpaid amount was due.
+///
+/// `balancesFor` rather than a second aggregate: it is what the account card,
+/// the consolidated statement and the account pay screen all add up, and a
+/// figure in the email that disagreed with the one on the screen the email
+/// links to would be worse than no figure at all. Occupying leases only, for
+/// the same reason the pay screen uses them — a unit somebody moved out of is
+/// not something to bill for.
+async function accountBill(
+  accountId: string,
+): Promise<{ balanceCents: number; unitCount: number; oldestDueDate: Date | null }> {
+  const leases = await prisma.lease.findMany({
+    where: { billingAccountId: accountId, status: { in: [...OCCUPYING_LEASE_STATUSES] } },
+    select: { id: true },
+  })
+  if (leases.length === 0) return { balanceCents: 0, unitCount: 0, oldestDueDate: null }
+
+  const leaseIds = leases.map((lease) => lease.id)
+  const [balances, oldest] = await Promise.all([
+    balancesFor(leaseIds),
+    prisma.invoice.findFirst({
+      where: { leaseId: { in: leaseIds }, status: { in: ['open', 'partially_paid'] } },
+      orderBy: { dueDate: 'asc' },
+      select: { dueDate: true },
+    }),
+  ])
+  return {
+    balanceCents: [...balances.values()].reduce((sum, cents) => sum + cents, 0),
+    unitCount: leases.length,
+    oldestDueDate: oldest?.dueDate ?? null,
+  }
+}
+
+/// B-309. The account fields, overlaid on whatever the event's own extender
+/// built. Overlaid rather than replacing it, because `dunning_step_account`
+/// still wants the ladder step's `dunning.*` wording — only the figures and
+/// the link are the account's.
+async function accountContext(recipient: Recipient): Promise<MergeContext> {
+  const account = recipient.payerAccount
+  if (!account) return {}
+  const tag = LOCALE_TAG[recipient.locale]
+  const say = proseFor(recipient.locale)
+  const bill = await accountBill(account.id)
+  const timezone = recipient.facility?.timezone ?? 'America/Chicago'
+  return {
+    'account.name': account.name,
+    'account.balance': formatCents(bill.balanceCents, tag),
+    'account.summary_line': say.accountSummary(
+      account.name,
+      formatCents(bill.balanceCents, tag),
+      bill.unitCount,
+      recipient.facility?.name ?? '',
+    ),
+    'account.oldest_due_line': say.accountOldestDue(
+      bill.oldestDueDate
+        ? new Intl.DateTimeFormat(tag, {
+            timeZone: timezone,
+            weekday: 'long',
+            month: 'long',
+            day: 'numeric',
+          }).format(bill.oldestDueDate)
+        : null,
+    ),
+    'links.pay_account': accountPayUrl(account.id),
+  }
+}
+
+function accountPayUrl(accountId: string): string {
+  return `${baseUrl()}/portal/pay?account=${accountId}`
+}
+
+/// B-309. One payer message per `(billingAccountId, businessDate, event class)`,
+/// in place of the per-lease copies — a fifteen-unit account raises fifteen
+/// `invoice.due_soon` events and the payer gets ONE of them.
+///
+/// The rule id supplies the event class (there is one rule per event+template)
+/// and the recipient key is already the payer, so replacing only the EVENT id
+/// in the idempotency key is the whole of it: events two through fifteen hash
+/// to the row event one already settled and are skipped.
+///
+/// Keyed off `event.occurredAt`, never the wall clock — a redelivery the next
+/// morning must land on the same row rather than send a second bill.
+function consolidationKey(event: DomainEvent, recipient: Recipient): string {
+  if (!recipient.payerAccount) return event.id
+  const timezone = recipient.facility?.timezone ?? 'America/Chicago'
+  const day = businessDateFor(event.occurredAt, timezone).toISOString().slice(0, 10)
+  return `account:${recipient.payerAccount.id}:${day}`
+}
+
+/// B-309. The `_account` variant for a payer, the rule's own key for everyone
+/// else. A `PAYER_EVENTS` event with no account template seeded records a
+/// `failed` Message naming the missing key, which is the loud direction.
+function templateKeyFor(rule: ResolvedRule, recipient: Recipient): string {
+  return recipient.payerAccount ? `${rule.templateKey}${ACCOUNT_KEY_SUFFIX}` : rule.templateKey
+}
+
+/// B-309. The payer's message is about the ACCOUNT, so the rules' own
+/// lease-level skip conditions are the wrong question and are not asked:
+/// `invoice_paid` on one unit of fifteen is not a reason to say nothing about
+/// the other fourteen, and `autopay_covers_it` reads the TENANT's card (D-119),
+/// which is not the card that would settle this. What replaces them is the one
+/// account-level version of the same question — is there anything to ask for.
+async function accountSkip(recipient: Recipient): Promise<string | null> {
+  const account = recipient.payerAccount
+  if (!account) return null
+  const { balanceCents } = await accountBill(account.id)
+  return balanceCents > 0 ? null : 'account_settled'
 }
 
 /// Shared shape for the two resolvers that reach a tenant through a lease.
@@ -495,6 +622,7 @@ function recipientFromLease(
     },
     reservation: null,
     lead: null,
+    payerAccount: null,
   }
 }
 
@@ -612,6 +740,12 @@ type ContextExtender = (event: DomainEvent, recipient: Recipient) => Promise<Mer
 /// omitting the line and leaving a reminder with no way to act on it.
 async function payNowLink(recipient: Recipient, event: DomainEvent): Promise<string> {
   const fallback = `${baseUrl()}/portal/pay`
+  // B-309. A per-lease pay link is right only when the payer is also that
+  // unit's tenant — and then they are the recipient, not an added payer. Here
+  // it would open a single-unit screen for someone who owes fifteen, so the
+  // account's own screen answers both fields. Short-circuited before the mint,
+  // so the fifteen throwaway PayLink rows are not created either.
+  if (recipient.payerAccount) return accountPayUrl(recipient.payerAccount.id)
   if (!recipient.tenantId || !recipient.lease) return fallback
 
   const link = await mintPayLink({
@@ -2006,11 +2140,14 @@ async function sendEmailFallback(
     return 'suppressed'
   }
 
-  const template = await effectiveTemplate(rule.templateKey, 'email', recipient.facility?.id ?? null, recipient.locale)
+  // B-309. `base.templateKey`, not `rule.templateKey` — a payer falling back to
+  // email must land on the same `_account` template the SMS attempt would have
+  // rendered, not on the per-unit one the rule names.
+  const template = await effectiveTemplate(base.templateKey, 'email', recipient.facility?.id ?? null, recipient.locale)
   if (!template) {
     await writeMessage(idempotencyKey, {
       ...base, templateVersion: 0, toAddress: address, subject: null, body: '',
-      status: 'failed', error: `no active email template for "${rule.templateKey}" (sms fallback)`,
+      status: 'failed', error: `no active email template for "${base.templateKey}" (sms fallback)`,
     })
     return 'failed'
   }
@@ -2087,8 +2224,9 @@ async function deliverSmsForRule(
   // fallback-eligible rule shares ONE key between its SMS attempt and its
   // email fallback — exactly one of the two channels ever actually sends for
   // a given (event, rule, recipient), so there is only ever one row to settle.
+  const templateKey = templateKeyFor(rule, recipient)
   const idempotencyKey = messageIdempotencyKey(
-    event.id,
+    consolidationKey(event, recipient),
     rule.id,
     recipient.recipientKey,
     fallbackEligible ? 'pair' : 'sms',
@@ -2106,12 +2244,14 @@ async function deliverSmsForRule(
   const base = {
     event,
     ruleId: rule.id,
-    templateKey: rule.templateKey,
+    templateKey,
     classification: rule.classification,
     recipient,
   }
 
-  const skip = await firstFiringSkip(rule, recipient, event)
+  const skip = recipient.payerAccount
+    ? await accountSkip(recipient)
+    : await firstFiringSkip(rule, recipient, event)
   if (skip) {
     await writeMessage(idempotencyKey, {
       ...base, templateVersion: 0, toAddress: recipient.phone ?? '', subject: null, body: '',
@@ -2217,12 +2357,12 @@ async function deliverSmsForRule(
     }
   }
 
-  const template = await effectiveTemplate(rule.templateKey, 'sms', recipient.facility?.id ?? null, recipient.locale)
+  const template = await effectiveTemplate(templateKey, 'sms', recipient.facility?.id ?? null, recipient.locale)
   if (!template) {
     if (fallbackEligible) return sendEmailFallback(idempotencyKey, rule, recipient, context, base)
     await writeMessage(idempotencyKey, {
       ...base, templateVersion: 0, toAddress: phone!, subject: null, body: '',
-      status: 'failed', error: `no active sms template for "${rule.templateKey}"`, channel: 'sms',
+      status: 'failed', error: `no active sms template for "${templateKey}"`, channel: 'sms',
     })
     return 'failed'
   }
@@ -2293,7 +2433,13 @@ async function deliverForRule(
   recipient: Recipient,
   context: MergeContext,
 ): Promise<DeliveryOutcome> {
-  const idempotencyKey = messageIdempotencyKey(event.id, rule.id, recipient.recipientKey, CHANNEL)
+  const templateKey = templateKeyFor(rule, recipient)
+  const idempotencyKey = messageIdempotencyKey(
+    consolidationKey(event, recipient),
+    rule.id,
+    recipient.recipientKey,
+    CHANNEL,
+  )
 
   // Idempotent hit: a redelivery of an already-settled send does nothing. Only
   // queued/failed rows are re-attempted below.
@@ -2305,13 +2451,15 @@ async function deliverForRule(
   const base = {
     event,
     ruleId: rule.id,
-    templateKey: rule.templateKey,
+    templateKey,
     classification: rule.classification,
     recipient,
   }
 
   // FR-18: premise still valid?
-  const skip = await firstFiringSkip(rule, recipient, event)
+  const skip = recipient.payerAccount
+    ? await accountSkip(recipient)
+    : await firstFiringSkip(rule, recipient, event)
   if (skip) {
     await writeMessage(idempotencyKey, {
       ...base,
@@ -2413,7 +2561,7 @@ async function deliverForRule(
     }
   }
 
-  const template = await effectiveTemplate(rule.templateKey, CHANNEL, recipient.facility?.id ?? null, recipient.locale)
+  const template = await effectiveTemplate(templateKey, CHANNEL, recipient.facility?.id ?? null, recipient.locale)
   if (!template) {
     await writeMessage(idempotencyKey, {
       ...base,
@@ -2422,7 +2570,7 @@ async function deliverForRule(
       subject: null,
       body: '',
       status: 'failed',
-      error: `no active template for "${rule.templateKey}"`,
+      error: `no active template for "${templateKey}"`,
     })
     return 'failed'
   }
@@ -2578,7 +2726,15 @@ export async function processCommsEvent(event: DomainEvent, now: Date = new Date
     // Computed once per recipient, not per rule — several rules on the same
     // event would otherwise re-run the same extender query redundantly. Not
     // once per event: the language and the pay link are the recipient's.
-    const context = { ...mergeContextFor(recipient), ...(extender ? await extender(event, recipient) : {}) }
+    // B-309. The account fields go on LAST, so a payer's `links.pay_now` and
+    // figures are the account's wherever a template reaches for them, while the
+    // extender's event-specific wording (the dunning ladder's three lines) still
+    // comes through. Empty for every recipient who is not an added payer.
+    const context = {
+      ...mergeContextFor(recipient),
+      ...(extender ? await extender(event, recipient) : {}),
+      ...(await accountContext(recipient)),
+    }
 
     for (const rule of rules) {
       const outcome =
@@ -2642,7 +2798,14 @@ export async function retryDeferredSmsMessages(now: Date = new Date()): Promise<
     ])
     if (event && rule) {
       const recipient = await resolveRecipient(event)
-      if (recipient) {
+      // B-309. `resolveRecipient` returns the LEASE's tenant. A payer's
+      // consolidated copy is a different row about a different question — "is
+      // this account still owing", not "is this invoice still unpaid" — and the
+      // account is not recoverable from the Message. Left to the same
+      // best-effort tolerance this function already documents for a pruned
+      // event: the snapshot is sent as-is rather than cancelled on a fact that
+      // was never about it. A deferred SMS waits hours, not days.
+      if (recipient && recipient.tenantId === message.recipientTenantId) {
         const skip = await firstFiringSkip(
           {
             id: rule.id,

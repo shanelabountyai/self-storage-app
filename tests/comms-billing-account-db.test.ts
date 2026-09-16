@@ -11,6 +11,11 @@ import type { PermissionKey } from '@storage/db/rbac-catalog'
 // ladder beside the lease's own tenant, and never the lien-notice supplement
 // (D-118). Against the real seeded catalog, because the line is drawn by event
 // name and a test rule on a made-up event would not cross it.
+//
+// B-309. And ONCE, whatever the unit count: the payer's copy consolidates on
+// (account, business date, event class) and renders the `_account` template
+// against the account's own total and pay screen, where the lease's own tenant
+// still gets the per-unit message unchanged.
 
 const hasDatabase = Boolean(process.env.DATABASE_URL)
 const describeDb = hasDatabase ? describe : describe.skip
@@ -29,6 +34,12 @@ let accountId = ''
 let accountLeaseId = ''
 let accountInvoiceId = ''
 let plainInvoiceId = ''
+/// B-309. A three-unit account of its own, so the consolidation is measured
+/// without depending on which test ran first — the payer's copy is keyed on the
+/// account and the business date, so two tests sharing an account would be
+/// asserting each other's leftovers.
+let manyAccountId = ''
+const manyInvoiceIds: string[] = []
 
 const sent: string[] = []
 
@@ -77,6 +88,10 @@ async function makeLease(tenant: string, unitTypeId: string, unitNumber: string,
   return lease.id
 }
 
+/// An open rent invoice AND the charge it puts on the ledger. `accountBill`
+/// reads the ledger, not the invoice table — the same aggregate the account
+/// card and the account pay screen add up — so an invoice with no charge
+/// behind it is an account that owes nothing and is correctly told nothing.
 async function openRent(leaseId: string, number: string, dueDate: Date) {
   const invoice = await prisma.invoice.create({
     data: {
@@ -91,6 +106,17 @@ async function openRent(leaseId: string, number: string, dueDate: Date) {
       periodEnd: new Date(dueDate.getTime() + 30 * DAY),
       subtotalCents: 12_900,
       totalCents: 12_900,
+    },
+  })
+  await prisma.ledgerEntry.create({
+    data: {
+      facilityId,
+      leaseId,
+      type: 'charge',
+      amountCents: 12_900,
+      description: `Rent ${number}`,
+      invoiceId: invoice.id,
+      occurredAt: dueDate,
     },
   })
   return invoice.id
@@ -162,12 +188,24 @@ describeDb('business account payer comms', () => {
     const midnight = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate())
     accountInvoiceId = await openRent(accountLeaseId, 'PC1', new Date(midnight - 20 * DAY))
     plainInvoiceId = await openRent(plainLeaseId, 'PC2', new Date(midnight + 3 * DAY))
+
+    const manyAccount = await prisma.billingAccount.create({
+      data: { facilityId, name: `Bulk Haulage ${suffix}`, payerTenantId: payerId },
+    })
+    manyAccountId = manyAccount.id
+    for (const index of [1, 2, 3]) {
+      const leaseId = await makeLease(tenantId, unitType.id, `PC-M${index}-${suffix}`, manyAccountId)
+      manyInvoiceIds.push(
+        await openRent(leaseId, `PCM${index}`, new Date(midnight + (index + 2) * DAY)),
+      )
+    }
   })
 
   afterAll(async () => {
     if (!hasDatabase) return
     vi.restoreAllMocks()
     await prisma.message.deleteMany({ where: { facilityId } })
+    await prisma.ledgerEntry.deleteMany({ where: { facilityId } })
     await prisma.payLink.deleteMany({ where: { lease: { facilityId } } })
     await prisma.domainEvent.deleteMany({ where: { facilityId } })
     await prisma.delinquencyStepRun.deleteMany({ where: { facilityId } })
@@ -181,19 +219,55 @@ describeDb('business account payer comms', () => {
 
     expect(recipientsOf(messages)).toEqual([tenantId, payerId].sort())
     const byRecipient = new Map(messages.map((message) => [message.recipientTenantId, message]))
-    expect(byRecipient.get(tenantId)).toMatchObject({ status: 'sent' })
+    expect(byRecipient.get(tenantId)).toMatchObject({
+      status: 'sent',
+      templateKey: 'invoice_due_soon',
+    })
     expect(byRecipient.get(tenantId)?.subjectSnapshot).toContain('Rent for unit')
-    expect(byRecipient.get(payerId)).toMatchObject({ status: 'sent' })
-    expect(byRecipient.get(payerId)?.subjectSnapshot).toContain('La renta de la unidad')
 
-    // Minting the payer's link must not revoke the tenant's: both are live.
+    // B-309. The payer's copy is the account's, in the payer's own language:
+    // the account template, the account's name in the subject rather than a
+    // unit number, and a link that opens the account pay screen.
+    const payerMessage = byRecipient.get(payerId)
+    expect(payerMessage).toMatchObject({ status: 'sent', templateKey: 'invoice_due_soon_account' })
+    expect(payerMessage?.subjectSnapshot).toContain(`Acme Contracting ${suffix}`)
+    expect(payerMessage?.subjectSnapshot).not.toContain('unidad')
+    expect(payerMessage?.bodySnapshot).toContain(`/portal/pay?account=${accountId}`)
+    expect(payerMessage?.bodySnapshot).toContain('$129.00')
+    // Spanish throughout, not a Spanish greeting around English sentences.
+    expect(payerMessage?.bodySnapshot).toContain('debe')
+    expect(payerMessage?.bodySnapshot).toContain('unidad')
+
+    // The tenant's own one-tap link is still minted; the payer's is the
+    // account URL, which needs no PayLink row at all.
     const links = await prisma.payLink.findMany({
       where: { eventId: messages[0].eventId, revokedAt: null },
       select: { tenantId: true },
     })
-    expect(recipientsOf(links.map((link) => ({ recipientTenantId: link.tenantId })))).toEqual(
-      [tenantId, payerId].sort(),
+    expect(links.map((link) => link.tenantId)).toEqual([tenantId])
+  })
+
+  it('sends the payer ONE message for a three-unit account, and each tenant their own', async () => {
+    // B-309. The defect: fifteen units raised fifteen payer messages, each
+    // with a pay link opening a single-unit screen.
+    const perEvent = await Promise.all(
+      manyInvoiceIds.map((invoiceId) => dispatch('invoice.due_soon', 'Invoice', invoiceId)),
     )
+    const all = perEvent.flat()
+
+    expect(all.filter((message) => message.recipientTenantId === tenantId)).toHaveLength(3)
+
+    const payerMessages = await prisma.message.findMany({
+      where: { recipientTenantId: payerId, templateKey: 'invoice_due_soon_account' },
+    })
+    const forThisAccount = payerMessages.filter((message) =>
+      message.bodySnapshot.includes(`/portal/pay?account=${manyAccountId}`),
+    )
+    expect(forThisAccount).toHaveLength(1)
+    expect(forThisAccount[0].status).toBe('sent')
+    // One figure, and it is the whole account's — not one unit's.
+    expect(forThisAccount[0].bodySnapshot).toContain('$387.00')
+    expect(forThisAccount[0].bodySnapshot).toContain('3 unidades')
   })
 
   it('sends a bill on a lease nobody else pays for to its tenant alone, as before', async () => {

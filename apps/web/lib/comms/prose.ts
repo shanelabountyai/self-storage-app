@@ -124,6 +124,16 @@ export type CommsProse = {
   gateCodePending: string
   firstCharge: (today: string, monthly: string, billingDay: number) => string
 
+  // ── B-309: the business account's payer ───────────────────────────────────
+  /// Built here rather than in the template because Spanish pluralises
+  /// `unidad` and reorders the clause — the argument list is what the two
+  /// languages share, not the word order.
+  accountSummary: (account: string, total: string, units: number, facility: string) => string
+  /// `null` when the account owes money with no open invoice to date it, which
+  /// the ledger makes very unlikely and not impossible. Stating a date we do
+  /// not have would be worse than the plainer sentence.
+  accountOldestDue: (dueDate: string | null) => string
+
   // ── referral (PRD 10 §6.3) ────────────────────────────────────────────────
   referralRewardReferee: (amount: string) => string
   referralRewardReferrer: (amount: string) => string
@@ -219,6 +229,11 @@ const en: CommsProse = {
   gateCodePending: 'Your gate code will be texted to you within 15 minutes.',
   firstCharge: (today, monthly, billingDay) =>
     `You were charged ${today} today. After that, rent is ${monthly}/mo, billed on day ${billingDay} of each month.`,
+
+  accountSummary: (account, total, units, facility) =>
+    `${account} owes ${total} across ${units} ${units === 1 ? 'unit' : 'units'} at ${facility}.`,
+  accountOldestDue: (dueDate) =>
+    dueDate ? `The oldest amount was due ${dueDate}.` : 'The balance is outstanding now.',
 
   referralRewardReferee: (amount) => `${amount} comes off your first invoice.`,
   referralRewardReferrer: (amount) => `${amount} comes off your next invoice.`,
@@ -369,6 +384,11 @@ const es: CommsProse = {
   gateCodePending: 'Le enviaremos su código de la puerta por mensaje de texto dentro de 15 minutos.',
   firstCharge: (today, monthly, billingDay) =>
     `Hoy se le cobró ${today}. Después, la renta es de ${monthly} al mes, con cargo el día ${billingDay} de cada mes.`,
+
+  accountSummary: (account, total, units, facility) =>
+    `${account} debe ${total} en ${units} ${units === 1 ? 'unidad' : 'unidades'} en ${facility}.`,
+  accountOldestDue: (dueDate) =>
+    dueDate ? `El monto más antiguo venció el ${dueDate}.` : 'El saldo está pendiente ahora.',
 
   referralRewardReferee: (amount) => `Se le descontarán ${amount} de su primera factura.`,
   referralRewardReferrer: (amount) => `Se le descontarán ${amount} de su próxima factura.`,

@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
+  ACCOUNT_EVENT,
+  ACCOUNT_KEY_SUFFIX,
   availableFieldsFor,
   BROADCAST_EVENT,
   checkPublishable,
   EVENT_MERGE_FIELDS,
+  isAccountTemplateKey,
   isBroadcastTemplateKey,
   fieldsUsedIn,
   sampleContextFor,
@@ -56,13 +59,19 @@ describe('every seeded template is publishable by its own gate', () => {
       // (CN-21, B-090 part 4). The assertion stays, narrowed rather than
       // dropped: a new eventless template that is not a broadcast is still the
       // mistake this was written to catch.
-      const rule = COMMS_RULES.find((r) => r.templateKey === template.key)
+      // B-309. An account template is sent by its BASE key's rule — the send
+      // path appends the suffix for a business account's payer — so that is
+      // what proves it is reachable. It renders against `ACCOUNT_EVENT`
+      // though, not the rule's own event: the figures are the account's.
+      const account = isAccountTemplateKey(template.key)
+      const ruleKey = account ? template.key.slice(0, -ACCOUNT_KEY_SUFFIX.length) : template.key
+      const rule = COMMS_RULES.find((r) => r.templateKey === ruleKey)
       if (!isBroadcastTemplateKey(template.key)) {
         expect(rule, `${template.key} has no rule, so it can never be sent`).toBeTruthy()
       }
 
       const check = checkPublishable({
-        event: rule?.event ?? BROADCAST_EVENT,
+        event: account ? ACCOUNT_EVENT : (rule?.event ?? BROADCAST_EVENT),
         subject: template.subject,
         bodyText: template.bodyText,
         requiredMergeFields: template.requiredMergeFields,

@@ -708,6 +708,175 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
     },
     requiredMergeFields: ['invoice.amount', 'unit.number', 'facility.name', 'links.pay_now'],
   },
+  // ── B-309: the same three messages, said once to a business account's payer ─
+  //
+  // Not a translation of the three above — a different message to a different
+  // person about a different thing. The payer is accounts payable, not the
+  // person whose goods are in the unit: they are owed ONE figure, ONE date and
+  // ONE link that settles the whole account, where the tenant is owed the facts
+  // about their own unit. Fifteen texts on the same morning, each opening a
+  // single-unit pay screen, is how a facility teaches the person who actually
+  // pays them to filter their mail.
+  //
+  // Chosen by the send path from the rule's own key (`{key}_account`), so these
+  // carry no rule of their own — see `ACCOUNT_EVENT` for the field schema they
+  // render against, and note that `unit.number` is deliberately absent from
+  // every one of them: naming one unit out of fifteen is the confusion.
+  {
+    key: 'invoice_due_soon_account',
+    classification: 'transactional',
+    subject: '{{account.name}}: {{account.balance}} due at {{facility.name}}',
+    bodyText: [
+      'Hi {{tenant.first_name}},',
+      '',
+      '{{account.summary_line}} {{account.oldest_due_line}}',
+      '',
+      'Pay it all at once: {{links.pay_account}}',
+      '',
+      'One payment settles every unit on the account. Already paid, or paying at the office? Then nothing is needed — this crossed in the post.',
+      '',
+      'Questions? Call {{facility.phone}}.',
+    ].join('\n'),
+    es: {
+      subject: '{{account.name}}: {{account.balance}} por pagar en {{facility.name}}',
+      bodyText: [
+        'Hola {{tenant.first_name}}:',
+        '',
+        '{{account.summary_line}} {{account.oldest_due_line}}',
+        '',
+        'Pague todo de una vez: {{links.pay_account}}',
+        '',
+        'Un solo pago cubre todas las unidades de la cuenta. ¿Ya pagó, o va a pagar en la oficina? Entonces no hace falta nada: este mensaje se cruzó con su pago.',
+        '',
+        '¿Preguntas? Llame al {{facility.phone}}.',
+      ].join('\n'),
+    },
+    requiredMergeFields: [
+      'tenant.first_name',
+      'account.name',
+      'account.balance',
+      'account.summary_line',
+      'account.oldest_due_line',
+      'links.pay_account',
+      'facility.name',
+      'facility.phone',
+    ],
+  },
+  {
+    // The total and the link, and nothing else. A per-unit list in a text
+    // message is fifteen segments of something nobody can act on from a phone.
+    key: 'invoice_due_soon_account',
+    classification: 'transactional',
+    channel: 'sms',
+    bodyText:
+      '{{facility.name}}: {{account.name}} owes {{account.balance}}. Pay it all at once: {{links.pay_account}}',
+    es: {
+      bodyText:
+        '{{facility.name}}: {{account.name}} debe {{account.balance}}. Pague todo de una vez: {{links.pay_account}}',
+    },
+    requiredMergeFields: ['facility.name', 'account.name', 'account.balance', 'links.pay_account'],
+  },
+  {
+    key: 'invoice_due_today_account',
+    classification: 'transactional',
+    subject: '{{account.name}}: {{account.balance}} due today at {{facility.name}}',
+    bodyText: [
+      'Hi {{tenant.first_name}},',
+      '',
+      '{{account.summary_line}} {{account.oldest_due_line}}',
+      '',
+      'Pay it all at once: {{links.pay_account}}',
+      '',
+      'One payment settles every unit on the account. If you have already paid today, thank you — you can ignore this.',
+      '',
+      'Questions? Call {{facility.phone}}.',
+    ].join('\n'),
+    es: {
+      subject: '{{account.name}}: {{account.balance}} vencen hoy en {{facility.name}}',
+      bodyText: [
+        'Hola {{tenant.first_name}}:',
+        '',
+        '{{account.summary_line}} {{account.oldest_due_line}}',
+        '',
+        'Pague todo de una vez: {{links.pay_account}}',
+        '',
+        'Un solo pago cubre todas las unidades de la cuenta. Si ya pagó hoy, gracias — puede ignorar este mensaje.',
+        '',
+        '¿Preguntas? Llame al {{facility.phone}}.',
+      ].join('\n'),
+    },
+    requiredMergeFields: [
+      'tenant.first_name',
+      'account.name',
+      'account.balance',
+      'account.summary_line',
+      'account.oldest_due_line',
+      'links.pay_account',
+      'facility.name',
+      'facility.phone',
+    ],
+  },
+  {
+    key: 'invoice_due_today_account',
+    classification: 'transactional',
+    channel: 'sms',
+    bodyText:
+      '{{facility.name}}: {{account.name}} owes {{account.balance}}, due TODAY. Pay it all at once: {{links.pay_account}}',
+    es: {
+      bodyText:
+        '{{facility.name}}: {{account.name}} debe {{account.balance}}, vencen HOY. Pague todo de una vez: {{links.pay_account}}',
+    },
+    requiredMergeFields: ['facility.name', 'account.name', 'account.balance', 'links.pay_account'],
+  },
+  {
+    // The ladder step, said to the payer once. `dunning_step`'s rule is
+    // email-only, so this key has no SMS sibling — deliberately, not as an
+    // oversight: nothing seeds an SMS `dunning_step` either.
+    key: 'dunning_step_account',
+    classification: 'transactional',
+    subject: '{{dunning.subject_line}} — {{account.name}}',
+    bodyText: [
+      'Hi {{tenant.first_name}},',
+      '',
+      '{{dunning.tone_line}}',
+      '',
+      '{{account.summary_line}} {{account.oldest_due_line}}',
+      '',
+      'Pay it all at once: {{links.pay_account}}',
+      '',
+      '{{dunning.consequence_line}}',
+      '',
+      'If you have already paid, or something is wrong, call {{facility.phone}} — we would rather sort it out than chase you.',
+    ].join('\n'),
+    es: {
+      subject: '{{dunning.subject_line}} — {{account.name}}',
+      bodyText: [
+        'Hola {{tenant.first_name}}:',
+        '',
+        '{{dunning.tone_line}}',
+        '',
+        '{{account.summary_line}} {{account.oldest_due_line}}',
+        '',
+        'Pague todo de una vez: {{links.pay_account}}',
+        '',
+        '{{dunning.consequence_line}}',
+        '',
+        'Si ya pagó, o si algo no está bien, llame al {{facility.phone}} — preferimos resolverlo con usted que andar detrás de usted.',
+      ].join('\n'),
+    },
+    requiredMergeFields: [
+      'tenant.first_name',
+      'account.name',
+      'account.summary_line',
+      'account.oldest_due_line',
+      'dunning.subject_line',
+      'dunning.tone_line',
+      'dunning.consequence_line',
+      'links.pay_account',
+      'facility.phone',
+    ],
+  },
+
   {
     // CN-6. A receipt is a document people keep and forward to an accountant,
     // so it leads with the figure and the date and carries the balance — not a

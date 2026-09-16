@@ -2,8 +2,10 @@ import { prisma } from '@storage/db'
 import { recordAudit } from '@storage/core/audit'
 import {
   availableFieldsFor,
+  ACCOUNT_EVENT,
   BROADCAST_EVENT,
   checkPublishable,
+  isAccountTemplateKey,
   isBroadcastTemplateKey,
   sampleContextFor,
   type MergeFieldSpec,
@@ -38,6 +40,11 @@ export function eventForTemplateKey(key: string): string | null {
   // callers below, which is what makes the whole CN-16 editor work on these
   // templates unchanged.
   if (isBroadcastTemplateKey(key)) return BROADCAST_EVENT
+  // B-309. An account template has the opposite problem to a broadcast: it has
+  // a rule, and the rule's event is not the schema it renders against. The
+  // payer's copy is built from the ACCOUNT's figures, so the editor offers
+  // those rather than this invoice's.
+  if (isAccountTemplateKey(key)) return ACCOUNT_EVENT
   return COMMS_RULES.find((rule: CommsRuleSeed) => rule.templateKey === key)?.event ?? null
 }
 
