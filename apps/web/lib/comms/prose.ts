@@ -134,6 +134,14 @@ export type CommsProse = {
   /// not have would be worse than the plainer sentence.
   accountOldestDue: (dueDate: string | null) => string
 
+  // ── B-316: the receipt ────────────────────────────────────────────────────
+  /// What follows the amount in the subject. Never more than one unit number:
+  /// an inbox truncates a list, and a receipt nobody can find gets asked for
+  /// again. The account's name wins when every credited unit is on one.
+  receiptSubjectFor: (units: string[], account: string | null, facility: string) => string
+  /// One line per credited unit, as a list rather than a sentence.
+  receiptUnitLine: (unit: string, amount: string) => string
+
   // ── referral (PRD 10 §6.3) ────────────────────────────────────────────────
   referralRewardReferee: (amount: string) => string
   referralRewardReferrer: (amount: string) => string
@@ -234,6 +242,13 @@ const en: CommsProse = {
     `${account} owes ${total} across ${units} ${units === 1 ? 'unit' : 'units'} at ${facility}.`,
   accountOldestDue: (dueDate) =>
     dueDate ? `The oldest amount was due ${dueDate}.` : 'The balance is outstanding now.',
+  receiptSubjectFor: (units, account, facility) =>
+    account
+      ? `— ${account}`
+      : units.length === 1
+        ? `for unit ${units[0]}`
+        : `— ${units.length} units at ${facility}`,
+  receiptUnitLine: (unit, amount) => `- Unit ${unit}: ${amount}`,
 
   referralRewardReferee: (amount) => `${amount} comes off your first invoice.`,
   referralRewardReferrer: (amount) => `${amount} comes off your next invoice.`,
@@ -389,6 +404,14 @@ const es: CommsProse = {
     `${account} debe ${total} en ${units} ${units === 1 ? 'unidad' : 'unidades'} en ${facility}.`,
   accountOldestDue: (dueDate) =>
     dueDate ? `El monto más antiguo venció el ${dueDate}.` : 'El saldo está pendiente ahora.',
+  // `unidades`, not `bodegas` (B-288's lexicon).
+  receiptSubjectFor: (units, account, facility) =>
+    account
+      ? `— ${account}`
+      : units.length === 1
+        ? `por la unidad ${units[0]}`
+        : `— ${units.length} unidades en ${facility}`,
+  receiptUnitLine: (unit, amount) => `- Unidad ${unit}: ${amount}`,
 
   referralRewardReferee: (amount) => `Se le descontarán ${amount} de su primera factura.`,
   referralRewardReferrer: (amount) => `Se le descontarán ${amount} de su próxima factura.`,

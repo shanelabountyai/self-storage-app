@@ -740,6 +740,7 @@ export const es: Dictionary = {
   'portal.signOut': 'Cerrar sesión',
   'portal.nav': 'Su cuenta',
   'portal.pay': 'Pagar {amount}',
+  'portal.payUnquoted': 'Pagar',
   'portal.overview': 'Resumen',
   'portal.paymentMethods': 'Formas de pago',
   'portal.statements': 'Estados de cuenta',
@@ -824,6 +825,9 @@ export const es: Dictionary = {
   'acct.nothingOwed': 'Esta cuenta no debe nada en este momento.',
   'acct.memberNote':
     'Usted puede ver esta cuenta. {payer} es quien paga y la liquida, así que aquí no hay nada que usted deba pagar. Para pagarla de otra forma, llame al',
+  'acct.oldestDue': 'El monto más antiguo vence el {date}.',
+  'acct.pastDueOne': 'El monto más antiguo venció el {date}, hace {count} día.',
+  'acct.pastDueOther': 'El monto más antiguo venció el {date}, hace {count} días.',
   'acct.payNow': 'Pagar {amount} ahora',
   'acct.allocationNote':
     'Un solo pago cubre toda la cuenta. Se aplica primero a los montos más antiguos, entre todas las unidades de abajo, y no a una unidad en particular.',

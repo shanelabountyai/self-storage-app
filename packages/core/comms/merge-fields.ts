@@ -203,6 +203,9 @@ export const EVENT_MERGE_FIELDS: Record<string, readonly MergeFieldSpec[]> = {
     { field: 'payment.amount', description: 'Amount received', sample: '$129.00' },
     { field: 'payment.date', description: 'When it was received', sample: 'September 1, 2026' },
     { field: 'payment.method', description: 'How they paid', sample: 'card' },
+    // B-316. Built in code: one unit, a count, or the account's name.
+    { field: 'payment.subject_for', description: 'Which unit, how many, or which account — for the subject', sample: 'for unit A-12' },
+    { field: 'payment.unit_lines', description: 'Every unit the payment credited, one per line', sample: '- Unit A-12: $129.00' },
     { field: 'balance.total', description: 'Balance after this payment', sample: '$0.00' },
   ],
   'payment.failed': [

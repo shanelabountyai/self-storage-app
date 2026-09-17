@@ -6,7 +6,7 @@
 
 **Then read the row itself before building the item** — `npm run docs:row -- B-262` prints that one row whole and verbatim, about 2 KB against the file's 490. The columns dropped here are the ones that say what to build.
 
-**333 items — 313 complete, 20 open.**
+**333 items — 315 complete, 18 open.**
 
 ## Open, in build order
 
@@ -15,8 +15,6 @@
 | 83a | B-129 | Online auction platform listing from the auction pipeline | M | B-062, B-083 |
 | 83aya | B-325 | `authAccountAccess` is one 62-word sentence doing three jobs | XS | B-300 ✅ |
 | 83az | B-301 | Existing business-account members were never told they have portal access | S | B-300 ✅ |
-| 83azn | B-315 | The payer is quoted one total in the nav and a different one on the card one tap away | M | B-278 ✅, B-279 ✅ |
-| 83azo | B-316 | The emailed receipt's subject line lists every unit a payment settled | S | B-278 ✅ |
 | 83azp | B-317 | An overpayment reads "$0.00" on both customer receipts while the staff receipt says "Credit on… | S | B-316, B-281 ✅ |
 | 83azq | B-318 | B-281 renders the letter for a tenant with no email and gives nobody a way to print it | M | B-281 ✅, B-238 ✅ |
 | 83azr | B-319 | The counter's Method select silently resets to Cash when the payer changes, and books a cash… | S | B-280 ✅ |
@@ -265,8 +263,8 @@
 | 83azk | B-312 | ✅ | A business account's payer and members must already be tenants, and nothing in the product can… | M | Phase 2 |
 | 83azl | B-313 | ✅ | A counter cash or check payment emits no event, so no receipt is ever emailed | S | Phase 2 |
 | 83azm | B-314 | ✅ | `/pay/[token]` never got B-295's and B-299's fixes, and no lint rule reaches it | S | Phase 2 |
-| 83azn | B-315 |  | The payer is quoted one total in the nav and a different one on the card one tap away | M | Phase 3 |
-| 83azo | B-316 |  | The emailed receipt's subject line lists every unit a payment settled | S | Phase 2 |
+| 83azn | B-315 | ✅ | The payer is quoted one total in the nav and a different one on the card one tap away | M | Phase 3 |
+| 83azo | B-316 | ✅ | The emailed receipt's subject line lists every unit a payment settled | S | Phase 2 |
 | 83azp | B-317 |  | An overpayment reads "$0.00" on both customer receipts while the staff receipt says "Credit on… | S | Phase 2 |
 | 83azq | B-318 |  | B-281 renders the letter for a tenant with no email and gives nobody a way to print it | M | Phase 2 |
 | 83azr | B-319 |  | The counter's Method select silently resets to Cash when the payer changes, and books a cash… | S | Phase 2 |

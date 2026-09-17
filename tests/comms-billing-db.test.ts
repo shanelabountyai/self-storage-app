@@ -285,7 +285,7 @@ describeDb('billing notices', () => {
       await emit('payment.succeeded', 'Payment', payment.id)
 
       expect(sends).toHaveLength(1)
-      expect(sends[0].subject).toContain('$129.00')
+      expect(sends[0].subject).toBe('Receipt: $129.00 for unit C-7')
       // The balance is read from the ledger at send time, not the event.
       expect(sends[0].body).toContain('$0.00')
     })
@@ -344,9 +344,44 @@ describeDb('billing notices', () => {
       await emit('payment.succeeded', 'Payment', payment.id)
 
       expect(sends).toHaveLength(1)
-      expect(sends[0].subject).toContain('C-7 and C-8')
+      // B-316: the subject counts, the body lists.
+      expect(sends[0].subject).toBe('Receipt: $228.00 — 2 units at Comms Billing Test')
+      expect(sends[0].body).toContain('- Unit C-7: $129.00\n- Unit C-8: $99.00')
       // $0.00 left on C-7 and $51.00 on C-8.
       expect(sends[0].body).toContain('$51.00')
+
+      // B-316: same payment, in Spanish.
+      sends.length = 0
+      await prisma.message.deleteMany({ where: { facilityId } })
+      await prisma.tenant.update({ where: { id: tenantId }, data: { preferredLocale: 'es' } })
+      try {
+        await emit('payment.succeeded', 'Payment', payment.id)
+        expect(sends[0].subject).toBe('Recibo: $228.00 — 2 unidades en Comms Billing Test')
+        expect(sends[0].body).toContain('- Unidad C-7: $129.00\n- Unidad C-8: $99.00')
+      } finally {
+        await prisma.tenant.update({ where: { id: tenantId }, data: { preferredLocale: null } })
+      }
+
+      // B-316: both units on one business account → the subject names it.
+      const account = await prisma.billingAccount.create({
+        data: { facilityId, name: `Acme ${suffix}`, payerTenantId: tenantId },
+      })
+      await prisma.lease.updateMany({
+        where: { id: { in: [leaseId, second.id] } },
+        data: { billingAccountId: account.id },
+      })
+      sends.length = 0
+      await prisma.message.deleteMany({ where: { facilityId } })
+      try {
+        await emit('payment.succeeded', 'Payment', payment.id)
+        expect(sends[0].subject).toBe(`Receipt: $228.00 — Acme ${suffix}`)
+      } finally {
+        await prisma.lease.updateMany({
+          where: { id: { in: [leaseId, second.id] } },
+          data: { billingAccountId: null },
+        })
+        await prisma.billingAccount.delete({ where: { id: account.id } })
+      }
 
       await prisma.ledgerEntry.deleteMany({ where: { leaseId: second.id } })
       await prisma.lease.delete({ where: { id: second.id } })

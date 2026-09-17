@@ -1,7 +1,7 @@
 import { prisma, type Prisma } from '@storage/db'
 import { recordAudit } from '@storage/core/audit'
 import { OCCUPYING_LEASE_STATUSES } from '@storage/core/inventory'
-import { daysPastDue } from '@storage/core/metrics'
+import { daysPastDue, outstandingCents } from '@storage/core/metrics'
 import { sendAccountAccessLink } from '@/lib/auth/flows'
 import { allChainIds, leaseChainIds } from '@/lib/billing/transfer-chain'
 import { assertFacilityAccess, can, ForbiddenError } from '@/lib/rbac/authorize'
@@ -87,6 +87,49 @@ export type AccountSummary = {
   leaseCount: number
   monthlyRateCents: number
   balanceCents: number
+  /// B-279. The worst unit's days past due, 0 when every unit is current. Rent
+  /// invoices only, as the delinquency ladder counts them, so this figure and
+  /// `stage` beside it cannot disagree about whether the account is late.
+  daysPastDue: number
+  /// B-279. The furthest ladder step any unit on the account has reached in
+  /// its open episode ("Pre-lien notice"), or null when none has.
+  stage: string | null
+}
+
+type RentInvoice = { dueDate: Date; totalCents: number; amountPaidCents: number }
+
+const RENT_INVOICES = {
+  where: { kind: 'rent' },
+  select: { dueDate: true, totalCents: true, amountPaidCents: true },
+} as const
+
+/// B-315. How late an account is, from its units' rent invoices — the ONE
+/// reckoning the staff detail, the staff list and the payer's card all read, so
+/// no two screens can disagree about the same account.
+export function accountLateness(
+  leases: readonly { invoices: readonly RentInvoice[] }[],
+  asOf: Date,
+): { daysPastDue: number; oldestDueDate: Date | null } {
+  const unpaid = leases.flatMap((lease) => lease.invoices).filter((i) => outstandingCents(i) > 0)
+  return {
+    daysPastDue: daysPastDue(unpaid, asOf),
+    oldestDueDate: unpaid.reduce<Date | null>(
+      (oldest, invoice) => (oldest && oldest <= invoice.dueDate ? oldest : invoice.dueDate),
+      null,
+    ),
+  }
+}
+
+/// B-279. Read along the transfer chain, as the ladder itself does (B-138): a
+/// unit transferred while behind keeps its position on the lease it left.
+async function furthestStage(leaseIds: readonly string[]): Promise<string | null> {
+  if (leaseIds.length === 0) return null
+  const furthest = await prisma.delinquencyStepRun.findFirst({
+    where: { leaseId: { in: allChainIds(await leaseChainIds(leaseIds)) }, supersededAt: null },
+    orderBy: { dayOffset: 'desc' },
+    select: { label: true },
+  })
+  return furthest?.label ?? null
 }
 
 const NAME_MAX = 120
@@ -141,7 +184,7 @@ export async function accountsFor(
       payer: { select: { firstName: true, lastName: true, email: true } },
       leases: {
         where: { status: { in: [...OCCUPYING_LEASE_STATUSES] } },
-        select: { id: true, monthlyRateCents: true },
+        select: { id: true, monthlyRateCents: true, invoices: RENT_INVOICES },
       },
     },
     orderBy: { name: 'asc' },
@@ -150,8 +193,13 @@ export async function accountsFor(
   const balances = await balancesFor(
     accounts.flatMap((account) => account.leases.map((lease) => lease.id)),
   )
+  // ponytail: one stage query per account; batch it if a facility ever carries hundreds.
+  const stages = await Promise.all(
+    accounts.map((account) => furthestStage(account.leases.map((lease) => lease.id))),
+  )
+  const asOf = new Date()
 
-  return accounts.map((account) => ({
+  return accounts.map((account, index) => ({
     id: account.id,
     name: account.name,
     payerTenantId: account.payerTenantId,
@@ -163,6 +211,8 @@ export async function accountsFor(
       (sum, lease) => sum + (balances.get(lease.id) ?? 0),
       0,
     ),
+    daysPastDue: accountLateness(account.leases, asOf).daysPastDue,
+    stage: stages[index],
   }))
 }
 
@@ -172,13 +222,6 @@ export type AccountDetail = AccountSummary & {
   leases: AccountLease[]
   /// B-258. The people who may see this account without paying for it.
   members: AccountMember[]
-  /// B-279. The worst unit's days past due, 0 when every unit is current. Rent
-  /// invoices only, as the delinquency ladder counts them, so this figure and
-  /// `stage` beside it cannot disagree about whether the account is late.
-  daysPastDue: number
-  /// B-279. The furthest ladder step any unit on the account has reached in
-  /// its open episode ("Pre-lien notice"), or null when none has.
-  stage: string | null
 }
 
 export async function accountDetail(
@@ -201,10 +244,7 @@ export async function accountDetail(
           monthlyRateCents: true,
           unit: { select: { number: true } },
           tenant: { select: { firstName: true, lastName: true } },
-          invoices: {
-            where: { kind: 'rent' },
-            select: { dueDate: true, totalCents: true, amountPaidCents: true },
-          },
+          invoices: RENT_INVOICES,
         },
       },
       members: {
@@ -222,14 +262,7 @@ export async function accountDetail(
 
   const leaseIds = account.leases.map((lease) => lease.id)
   const balances = await balancesFor(leaseIds)
-  // Read along the transfer chain, as the ladder itself does (B-138): a unit
-  // transferred while behind keeps its position on the lease it left.
-  const furthest = await prisma.delinquencyStepRun.findFirst({
-    where: { leaseId: { in: allChainIds(await leaseChainIds(leaseIds)) }, supersededAt: null },
-    orderBy: { dayOffset: 'desc' },
-    select: { label: true },
-  })
-  const asOf = new Date()
+  const stage = await furthestStage(leaseIds)
   const leases: AccountLease[] = account.leases
     .map((lease) => ({
       leaseId: lease.id,
@@ -258,8 +291,8 @@ export async function accountDetail(
       email: member.tenant.email,
       since: member.createdAt,
     })),
-    daysPastDue: Math.max(0, ...account.leases.map((lease) => daysPastDue(lease.invoices, asOf))),
-    stage: furthest?.label ?? null,
+    daysPastDue: accountLateness(account.leases, new Date()).daysPastDue,
+    stage,
   }
 }
 
@@ -631,6 +664,11 @@ export type PortalAccount = {
   /// B-258. True for the payer, false for a member. The Pay button, the
   /// statement link and the renters' names all hang off it.
   payable: boolean
+  /// B-315. The earliest due date of any unpaid rent invoice across the units,
+  /// and how many days past it the account is — `accountLateness`, the same
+  /// reckoning the staff screens show.
+  oldestDueDate: Date | null
+  daysPastDue: number
   /// B-258. Who settles this account, so a member who cannot pay it is not left
   /// wondering who does. Always the account's payer, including on the payer's
   /// own card, where it is simply not rendered.
@@ -659,11 +697,13 @@ export async function portalAccountsFor(
           monthlyRateCents: true,
           unit: { select: { number: true } },
           tenant: { select: { firstName: true, lastName: true } },
+          invoices: RENT_INVOICES,
         },
       },
     },
     orderBy: { name: 'asc' },
   })
+  const asOf = new Date()
 
   const balances = await balancesFor(
     accounts.flatMap((account) => account.leases.map((lease) => lease.id)),
@@ -702,6 +742,7 @@ export async function portalAccountsFor(
         monthlyRateCents: units.reduce((sum, unit) => sum + unit.monthlyRateCents, 0),
         balanceCents: units.reduce((sum, unit) => sum + unit.balanceCents, 0),
         payable,
+        ...accountLateness(account.leases, asOf),
         payerName: `${account.payer.firstName} ${account.payer.lastName}`,
       }
     })

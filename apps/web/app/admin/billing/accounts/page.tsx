@@ -60,8 +60,8 @@ export default async function BillingAccountsPage() {
           <ScrollRegion aria-label="Business accounts" className="overflow-x-auto">
             <table className="w-full text-sm">
               <caption className="sr-only">
-                Business accounts at {selected.facility.name}, with the units each pays for and what
-                it owes now.
+                Business accounts at {selected.facility.name}, with the units each pays for, what it
+                owes now, and how far behind it is.
               </caption>
               <thead>
                 <tr className="text-muted-foreground border-b text-left">
@@ -69,7 +69,9 @@ export default async function BillingAccountsPage() {
                   <th scope="col" className="py-2 pr-4 font-medium">Payer</th>
                   <th scope="col" className="py-2 pr-4 font-medium">Units</th>
                   <th scope="col" className="py-2 pr-4 font-medium">Monthly</th>
-                  <th scope="col" className="py-2 font-medium">Balance</th>
+                  <th scope="col" className="py-2 pr-4 font-medium">Balance</th>
+                  <th scope="col" className="py-2 pr-4 font-medium">Days past due</th>
+                  <th scope="col" className="py-2 font-medium">Delinquency stage</th>
                 </tr>
               </thead>
               <tbody>
@@ -91,7 +93,12 @@ export default async function BillingAccountsPage() {
                     </td>
                     <td className="py-2 pr-4">{account.leaseCount}</td>
                     <td className="py-2 pr-4">{formatCents(account.monthlyRateCents)}</td>
-                    <td className="py-2">{formatCents(account.balanceCents)}</td>
+                    <td className="py-2 pr-4">{formatCents(account.balanceCents)}</td>
+                    {/* B-315. The detail screen's own words and figures (B-279). */}
+                    <td className="py-2 pr-4">
+                      {account.daysPastDue > 0 ? account.daysPastDue : 'Current'}
+                    </td>
+                    <td className="py-2">{account.stage ?? 'None'}</td>
                   </tr>
                 ))}
               </tbody>

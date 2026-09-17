@@ -1,25 +1,12 @@
 # Next
 
-**B-314 is done** (`8e04c3d`). `/pay/[token]` and its `/done` receipt screen now match `/portal/pay`'s skip-link focus and alert-free refusal pattern (both shells' `<main>` gained `tabIndex={-1}`; the amount refusal dropped `role="alert"` and gained the same `action="#amount-problem"` fragment trick B-299 built), and `app/pay/**` is now covered by B-284's date rules and B-295's alert rule in one ESLint block. `app/login/page.tsx`'s page-load `role="alert"` was left alone — the row's "fold it in if cheap" hedge turned out not to be cheap, since that banner has no controlling form to carry a fragment; it's a named, undone gap, not silently dropped. Full unit suite: 4,576 passed, 8 skipped, of 4,584 — clean. `e2e/pay-link.spec.ts`: 14 passed including a new disposable-fixture test proving the skip link actually moves focus on the receipt screen.
-
-**Two full-sweep attempts that day hit spurious timeouts** (`tests/login-flow-db.test.ts`, `tests/duplicate-content.test.ts` — both unrelated to this item) while another session's own test sweep pushed this machine's load average past 270 against 10 cores. Both files passed clean in isolation; the clean full sweep above is the run that landed once that contention cleared. Worth remembering before trusting a "regression" from a sweep run alongside other active sessions on the same machine — this is the same class of false alarm B-312's PROGRESS.md entry recorded for cross-project DB connections, just from CPU contention instead.
-
-**B-312 is also done** (`c97e8c5`, SHA recorded in the follow-up commit `5d28a69`). The eighth review block (`5933447`) now has 12 rows left, **B-315–B-326** plus **B-327**, and **B-325 at `83aya`** (deliberately ahead of B-301 so mail's wording settles before the backfill sends).
-
-Staff with `tenants:edit` can now create a `Tenant` with no lease at `/admin/tenants/new`, for a business account's payer or member who rents nothing — `createLeaselessTenant` in `apps/web/lib/admin/tenants.ts`. `Tenant.facilityId` (new, nullable) is set only on that path and is the sole reason a leaseless tenant is reachable by `searchTenants` or the profile page — both were lease-derived by deliberate design and had to be widened to OR in this new scope. **Carried gaps, no owning row**: `listTenants` (the plain paginated `/admin/tenants` list) was not widened, only search — a leaseless tenant stays off that list until they hold a lease; no e2e covers the new route's success or refusal paths, though it is now in `ADMIN_SCAN_ROUTES` for the heavy lane's axe scan; nothing corrects a leaseless tenant's `facilityId` if staff pick the wrong one.
+**B-316 is done** (`6b14e2f`). The `payment_receipt` subject is now `Receipt: {{payment.amount}} {{payment.subject_for}}` — `for unit A-1`, `— 3 units at {facility}`, or `— {account}` when every credited lease is on one business account — and the body lists each unit with its amount under `Paid toward:` (`payment.unit_lines`). Both built in `apps/web/lib/comms/prose.ts`. Unit suite: 4,582 passed, 8 skipped, of 4,590.
 
 ## Start here
 
-**B-315**, in file order.
+**B-317**, in file order: an overpayment reads "$0.00" on the portal receipt, `/pay/[token]/done` and the emailed receipt while the counter receipt says "Credit on account". Same template B-316 just edited — **run `npm run db:migrate:test` after the edit (B-206)**. The clamp is `Math.max(0, credits.balanceCents)` in the `payment.succeeded` extender in `apps/web/lib/comms/service.ts`, and in `app/portal/pay/done/page.tsx`. Reuse `dash.inCredit`'s wording.
 
-- **B-315** — the payer is quoted one total in the nav and a different one on the card one tap away (digital-experience + operator review, two findings folded into one row). Part 1: when every owing lease sits on one account the viewer pays, the nav's Pay link opens `/portal/pay?account=` with the account's NET balance (not the sum of positive lease balances B-278 currently quotes); when leases span more than one payable subject, the nav shows no figure at all (`Pay` / `Pagar`, no amount). The account card gains the earliest due date across its units. Part 2: `/admin/billing/accounts` (the LIST, not the detail B-279 already fixed) gains days-past-due and ladder stage, reusing `accountDetail`'s own definitions rather than a second calculation. Read the full row in `docs/prds/06-backlog.md` before starting — it names exact line numbers in `app/portal/layout.tsx`, `lib/billing/accounts.ts`, `app/portal/page.tsx`, and `app/admin/billing/accounts/page.tsx`.
-
-**Two rows sit close to what B-309 touched, and both are worth reading before editing comms:**
-
-- **B-315** owns the definition of an account's net balance. B-309 *consumes* it (`balancesFor`) and deliberately did not settle it — if B-315 changes the definition, the payer's email figure moves with it, which is the intent.
-- **B-316** is the emailed receipt's subject line listing every unit a payment settled. Same family of problem, different message; `ACCOUNT_EVENT` and the `_account` template convention are now there to reuse.
-
-**B-327 is still open and still worth reading before touching the rent-invoice index**: a voided rent invoice's period can never be billed again, and the four-line index change that would release it is a money defect in disguise — the promotion and referral marks are consumed per period, so a bare re-raise drops a discount the tenant was promised.
+**B-327 is still open and still worth reading before touching the rent-invoice index**: a voided rent invoice's period can never be billed again, and the bare index change that would release it drops promised discounts.
 
 Nothing in the block is blocked on the tree. B-301 still is.
 

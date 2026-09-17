@@ -3,7 +3,7 @@ import { monthlyRecurring, type RecurringCharge } from '@storage/core/pricing'
 import { OCCUPYING_LEASE_STATUSES, TRANSFER_HOLD_SOURCE } from '@storage/core/inventory'
 import { codeForLease } from '@/lib/access/provision'
 import { paymentPlanForLease } from '@/lib/admin/payment-plans'
-import { payableLeaseWhere } from '@/lib/billing/accounts'
+import { payableLeaseWhere, portalAccountsFor } from '@/lib/billing/accounts'
 import { SITE } from '@/lib/site-config'
 
 // PRD 01 §4.7 US-702 / §6.5. "What do I owe, when is it due, what's my gate
@@ -324,6 +324,45 @@ export async function owingLeases(
   return totals
     .map((row) => ({ leaseId: row.leaseId, balanceCents: row._sum.amountCents ?? 0 }))
     .filter((row) => row.balanceCents > 0)
+}
+
+/// B-239 / B-278 / B-315. What the portal nav's Pay link opens, and the figure
+/// it quotes — null when nothing is owed.
+///
+/// Owing leases are grouped by what the viewer would pay them THROUGH: an
+/// account they pay is one subject, quoted at its NET balance (the figure its
+/// card and its pay screen ask for, credits counted), and any other lease is its
+/// own subject. One subject is quoted and opened directly. Several open Overview
+/// with no figure at all (`amountCents: null`), because no screen repeats a sum
+/// across subjects, and a nav that says one number while the card one tap away
+/// says another is what makes a payer stop and phone.
+export async function navPayFor(
+  tenantId: string,
+): Promise<{ href: string; amountCents: number | null } | null> {
+  const owing = await owingLeases(tenantId)
+  if (owing.length === 0) return null
+  const accounts = (await portalAccountsFor(tenantId)).filter((account) => account.payable)
+
+  const subjects = new Map<string, { href: string; amountCents: number }>()
+  for (const lease of owing) {
+    const account = accounts.find((row) => row.units.some((unit) => unit.leaseId === lease.leaseId))
+    if (account) {
+      subjects.set(account.id, {
+        href: `/portal/pay?account=${account.id}`,
+        amountCents: account.balanceCents,
+      })
+    } else {
+      subjects.set(lease.leaseId, {
+        href: `/portal/pay?lease=${lease.leaseId}`,
+        amountCents: lease.balanceCents,
+      })
+    }
+  }
+  // An account a credit on another of its units covers offers no Pay, as its card offers none.
+  const due = [...subjects.values()].filter((subject) => subject.amountCents > 0)
+  if (due.length === 0) return null
+  if (due.length === 1) return due[0]
+  return { href: '/portal', amountCents: null }
 }
 
 /// B-239 / US-601. The next charge, for the move-in confirmation screen.
