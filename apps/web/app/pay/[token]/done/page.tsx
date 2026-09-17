@@ -68,7 +68,7 @@ export default async function PayLinkDonePage({
       >
         {t('chrome.skipToMain')}
       </a>
-      <main id="main" className="mx-auto flex w-full max-w-lg flex-col gap-6 px-4 py-8">
+      <main id="main" tabIndex={-1} className="mx-auto flex w-full max-w-lg flex-col gap-6 px-4 py-8">
         {!receipt ? (
           <>
             <h1 className="text-xl font-semibold">{t('rcpt.title')}</h1>

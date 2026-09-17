@@ -30,7 +30,7 @@ export const c = new Intl.DateTimeFormat(LOCALE_TAG.es, { month: 'long' }).forma
 `
 
 describe('untagged dates on customer screens (B-284)', () => {
-  it.each(['app/portal/guard.tsx', 'app/(public)/checkout/guard.tsx'])(
+  it.each(['app/portal/guard.tsx', 'app/(public)/checkout/guard.tsx', 'app/pay/guard.tsx'])(
     'refuses each untagged shape and accepts the tagged ones in %s',
     async (file) => {
       expect(await refusals(UNTAGGED, file)).toBe(3)

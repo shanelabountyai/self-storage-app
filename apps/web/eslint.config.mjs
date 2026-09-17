@@ -98,6 +98,18 @@ const eslintConfig = defineConfig([
       ],
     },
   },
+  // B-314. `app/pay/**` (the pay-link route) sat outside every rule above and
+  // shipped the exact patterns B-284 and B-295 removed from its twin,
+  // `/portal/pay`. Same reason the portal block repeats the date rules rather
+  // than relying on the public block: flat config is last-block-wins per file,
+  // so an alert-only block here would silently switch B-284's date guards off
+  // for this route. No PORTAL_MESSAGE_RULE — this route has no actions.ts.
+  {
+    files: ["app/pay/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-syntax": ["error", ...CUSTOMER_DATE_RULES, PORTAL_ALERT_RULE],
+    },
+  },
 ]);
 
 export default eslintConfig;

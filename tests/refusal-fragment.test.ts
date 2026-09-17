@@ -41,6 +41,14 @@ const WIRED = [
     submits: 'apps/web/app/portal/move-out/page.tsx',
     refuses: 'apps/web/app/portal/move-out/page.tsx',
   },
+  {
+    // B-314. One file: unlike `/portal/pay`, the form here is inline rather
+    // than a separate component.
+    what: '/pay/[token] refuses an amount',
+    fragment: 'amount-problem',
+    submits: 'apps/web/app/pay/[token]/page.tsx',
+    refuses: 'apps/web/app/pay/[token]/page.tsx',
+  },
 ]
 
 describe('a GET-submit refusal is submitted to and focusable (B-299)', () => {
