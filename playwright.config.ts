@@ -11,7 +11,15 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  reporter: process.env.CI ? 'github' : 'list',
+  // `github` annotates the failing lines in the PR diff, which is what you
+  // want while reading the run — but it writes no files, so the CI job had
+  // nothing to upload and every e2e failure in this repo was unreproducible
+  // the moment the runner went away. `html` alongside it writes
+  // `playwright-report/`, which the workflow keeps together with the
+  // `test-results/` tree Playwright always writes (error-context.md and the
+  // `trace: 'on-first-retry'` traces below). `open: 'never'` because CI has
+  // no browser to open it in and the step would hang waiting.
+  reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : 'list',
   use: { baseURL, trace: 'on-first-retry' },
   // Mobile-first is a cross-cutting requirement (master PRD §7.3), so the
   // default project is a phone viewport, not a desktop one.
