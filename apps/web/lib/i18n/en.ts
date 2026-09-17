@@ -1039,6 +1039,8 @@ export const en = {
   'rcpt.unitValue': '{facility} — {unit}',
   'rcpt.date': 'Date',
   'rcpt.balanceNow': 'Balance now',
+  'rcpt.creditOnAccount': 'Credit on your account',
+  'rcpt.creditNextBill': 'It comes off your next bill.',
   'rcpt.creditsCaption': 'Applied to units at {facility}',
   'rcpt.total': 'Total',
 

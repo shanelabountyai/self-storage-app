@@ -106,8 +106,16 @@ export default async function PayLinkDonePage({
               )}
               {receipt.balanceCents !== null && receipt.status === 'succeeded' && (
                 <div className="mt-2 flex justify-between gap-4 border-t pt-2 font-medium">
-                  <dt>{t('rcpt.balanceNow')}</dt>
-                  <dd className="tabular-nums">{formatRate(receipt.balanceCents)}</dd>
+                  {/* B-317. Same credit wording as the portal receipt. */}
+                  <dt>{t(receipt.balanceCents < 0 ? 'rcpt.creditOnAccount' : 'rcpt.balanceNow')}</dt>
+                  <dd className="text-right">
+                    <span className="tabular-nums">{formatRate(Math.abs(receipt.balanceCents))}</span>
+                    {receipt.balanceCents < 0 && (
+                      <span className="text-muted-foreground block text-xs font-normal">
+                        {t('rcpt.creditNextBill')}
+                      </span>
+                    )}
+                  </dd>
                 </div>
               )}
             </dl>
