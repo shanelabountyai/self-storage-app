@@ -5,6 +5,7 @@ export const metadata = metadataFor('Terms of service', 'Draft terms — not leg
 export default function TermsPage() {
   return (
     <ProsePage
+      lang="en"
       title="Terms of service"
       intro="The rules for using this website. Your storage rental is governed by the lease you sign, not by this page."
       draftNotice

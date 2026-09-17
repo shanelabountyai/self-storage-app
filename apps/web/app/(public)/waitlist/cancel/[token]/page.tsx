@@ -28,6 +28,7 @@ export default async function WaitlistCancelPage({
 
   return (
     <ProsePage
+      lang="en"
       title="Waitlist"
       intro={
         result.ok

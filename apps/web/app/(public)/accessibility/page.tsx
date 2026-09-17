@@ -2733,6 +2733,37 @@ function reviewedOn(locale: Locale): string {
 // these six routes, so no visible line changes. `LAST_REVIEWED` is not
 // bumped, per D-115.
 
+// Re-verified 2026-09-16, at B-328 and B-329 (the language of the PARTS, not
+// of the document). Customer-facing on the B-328 half — markup only, no copy
+// and no route. B-311 above closed 3.1.1 on the last six untranslated routes;
+// what was left is the mirror of it, and it is 3.1.2 rather than 3.1.1. D-122
+// serves `<html lang="es">` to a visitor who has switched, on EVERY route, and
+// D-123/D-124 deliberately keep `/terms` and `/privacy` English — so English
+// contract prose was being read aloud with Spanish phonemes, and nine public
+// pages were in that state. `ProsePage` now takes `lang` as a required prop and
+// each of the nine declares its own; `/storage/[state]/[city]` is the one mixed
+// page, so its wrapper says `en` and the translated search form inside it
+// declares the shell language back. B-329 does the staff mirror: one `lang` on
+// the admin shell, and the template editor declares the locale back on the four
+// surfaces that render Spanish inside it.
+//
+// **No rendered sentence changes, in either direction, and all four candidates
+// were re-read rather than assumed.** "Form fields have real labels" and the
+// errors bullet are about MECHANISM — declaring a part's language neither
+// strengthens nor weakens either, the same reading B-263, B-264 and B-267 each
+// recorded. The staff-shortfall paragraph names unpaginated lists, which B-329
+// does not touch. And the no-manual-pass line stays true: this item performed
+// none, so `LAST_REVIEWED` is not bumped, per D-115.
+//
+// **No new claim about scan coverage, and that is the point of the guard
+// rather than an omission.** Axe cannot see this defect at all — no rule reads
+// prose and decides what language it is in, so `html-has-lang` and `valid-lang`
+// both pass on the broken page — and the route loops carry no locale cookie, so
+// every scan visits as an English visitor where the markup is trivially
+// correct. The contract is enforced by `tests/a11y-scan-coverage.test.ts`
+// walking the pages on disk in both directions, not by anything this page could
+// truthfully claim a scanner checks.
+
 export default async function AccessibilityPage() {
   const locale = await getLocale()
   const dict = dictionaryFor(locale)
@@ -2748,7 +2779,7 @@ export default async function AccessibilityPage() {
     locale === 'es' ? (row.reasonEs ?? row.reason) : row.reason
 
   return (
-    <ProsePage title={t('a11y.title')} intro={t('a11y.intro')}>
+    <ProsePage lang={locale} title={t('a11y.title')} intro={t('a11y.intro')}>
       <Section heading={t('a11y.target.heading')}>
         <p>{t('a11y.target.body')}</p>
       </Section>

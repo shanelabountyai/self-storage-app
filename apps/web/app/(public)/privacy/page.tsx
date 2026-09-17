@@ -6,6 +6,7 @@ export const metadata = metadataFor('Privacy', 'Draft privacy notice — not leg
 export default function PrivacyPage() {
   return (
     <ProsePage
+      lang="en"
       title="Privacy"
       intro="What we collect, why, and what we deliberately don't do."
       draftNotice
