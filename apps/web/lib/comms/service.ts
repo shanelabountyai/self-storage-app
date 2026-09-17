@@ -1269,6 +1269,8 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
         ? (accounts[0].billingAccount?.name ?? null)
         : null
     const say = proseFor(recipient.locale)
+    const balanceCents =
+      units.length > 0 ? credits.balanceCents : await leaseBalanceCents(recipient.lease?.id ?? null)
     return {
       ...(lines.length > 0
         ? {
@@ -1295,12 +1297,8 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
       // reads "money order" and there is no punctuation trick that makes it
       // read "giro postal".
       'payment.method': proseFor(recipient.locale).paymentMethods[payment.method],
-      'balance.total': formatCents(
-        units.length > 0
-          ? Math.max(0, credits.balanceCents)
-          : await leaseBalanceCents(recipient.lease?.id ?? null),
-        tag,
-      ),
+      // B-317. Negative is credit, said in words — not clamped to "$0.00".
+      'payment.balance_line': say.receiptBalanceLine(formatCents(Math.abs(balanceCents), tag), balanceCents < 0),
     }
   },
 

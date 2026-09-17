@@ -287,7 +287,42 @@ describeDb('billing notices', () => {
       expect(sends).toHaveLength(1)
       expect(sends[0].subject).toBe('Receipt: $129.00 for unit C-7')
       // The balance is read from the ledger at send time, not the event.
-      expect(sends[0].body).toContain('$0.00')
+      expect(sends[0].body).toContain('Balance on the account after this payment: $0.00.')
+      expect(sends[0].body).not.toContain('Credit on your account')
+    })
+
+    // B-317. An overpayment is credit, said in words — not clamped to "$0.00".
+    it('names the credit when the payment overpays the balance', async () => {
+      const payment = await prisma.payment.create({
+        data: { facilityId, tenantId, amountCents: 62_900, method: 'card', status: 'succeeded' },
+      })
+      await prisma.ledgerEntry.create({
+        data: { facilityId, leaseId, type: 'charge', amountCents: 12_900, description: 'Rent' },
+      })
+      await prisma.ledgerEntry.create({
+        data: {
+          facilityId,
+          leaseId,
+          type: 'payment',
+          amountCents: -62_900,
+          description: 'Card payment',
+          paymentId: payment.id,
+        },
+      })
+
+      await emit('payment.succeeded', 'Payment', payment.id)
+      expect(sends[0].body).toContain('Credit on your account: $500.00. It comes off your next bill.')
+      expect(sends[0].body).not.toContain('Balance on the account')
+
+      sends.length = 0
+      await prisma.message.deleteMany({ where: { facilityId } })
+      await prisma.tenant.update({ where: { id: tenantId }, data: { preferredLocale: 'es' } })
+      try {
+        await emit('payment.succeeded', 'Payment', payment.id)
+        expect(sends[0].body).toContain('Saldo a favor: $500.00. Se aplicará a su próxima factura.')
+      } finally {
+        await prisma.tenant.update({ where: { id: tenantId }, data: { preferredLocale: null } })
+      }
     })
 
     it('sends a receipt to an autopay tenant — the skip is for reminders only', async () => {

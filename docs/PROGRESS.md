@@ -11,8 +11,8 @@ It complements rather than duplicates:
 - `git log` — the change-by-change record
 - `README.md` — how the built thing works today
 
-**Status:** 315 of 333 backlog items complete. Latest entry: B-316 (`6b14e2f`).
-**Entries:** 343 across 24 part files.
+**Status:** 316 of 333 backlog items complete. Latest entry: B-317 (`503430f`).
+**Entries:** 344 across 24 part files.
 
 ## Reading one entry
 
@@ -392,3 +392,4 @@ Append the entry as a `### ` heading at the end of the **highest-numbered** file
 | B-314 — `/pay/[token]` brought in line with `/portal/pay`'s skip link, alert and lint coverage (2026-09-17, `8e04c3d`) | `8e04c3d` | [24-from-b-313](progress/24-from-b-313.md#b-314-paytoken-brought-in-line-with-portalpays-skip-link-alert-and-lint-coverage-2026-09-17-8e04c3d) |
 | B-315 — the payer's nav and the account card now quote the same figure, and the staff list says how far behind each account is (2026-09-17, `52edf38`) | `52edf38` | [24-from-b-313](progress/24-from-b-313.md#b-315-the-payers-nav-and-the-account-card-now-quote-the-same-figure-and-the-staff-list-says-how-far-behind-each-account-is-2026-09-17-52edf38) |
 | B-316 — the emailed receipt's subject names one unit, a count, or the account; the body lists them (2026-09-17, `6b14e2f`) | `6b14e2f` | [24-from-b-313](progress/24-from-b-313.md#b-316-the-emailed-receipts-subject-names-one-unit-a-count-or-the-account-the-body-lists-them-2026-09-17-6b14e2f) |
+| B-317 — an overpayment says it is credit, in the same words, on every customer receipt (2026-09-17, `503430f`) | `503430f` | [24-from-b-313](progress/24-from-b-313.md#b-317-an-overpayment-says-it-is-credit-in-the-same-words-on-every-customer-receipt-2026-09-17-503430f) |
