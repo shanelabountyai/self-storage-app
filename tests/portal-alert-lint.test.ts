@@ -10,6 +10,9 @@ import { describe, expect, it } from 'vitest'
 // (`AdminForm`'s refusal box, the Stripe decline mirror — each reports a press
 // and takes focus, which is B-285's exception), and does not reach the public
 // or staff screens this row did not audit.
+//
+// B-314 extends the same rule to `app/pay/**`, which carried the identical
+// pattern and sat outside every lint block until this row.
 
 const WEB = fileURLToPath(new URL('../apps/web/', import.meta.url))
 const eslint = new ESLint({ cwd: WEB })
@@ -30,10 +33,14 @@ const NOT_AN_ALERT = `export function Refusal() {
 `
 
 describe('role="alert" on a portal page (B-295)', () => {
-  it('refuses it on a portal page, and leaves role="status" alone', async () => {
-    expect(await refusals(ALERT, 'app/portal/guard.tsx')).toBe(1)
-    expect(await refusals(NOT_AN_ALERT, 'app/portal/guard.tsx')).toBe(0)
-  }, 30_000)
+  it.each(['app/portal/guard.tsx', 'app/pay/guard.tsx'])(
+    'refuses it on %s, and leaves role="status" alone',
+    async (file) => {
+      expect(await refusals(ALERT, file)).toBe(1)
+      expect(await refusals(NOT_AN_ALERT, file)).toBe(0)
+    },
+    30_000,
+  )
 
   it.each([
     'components/admin/guard.tsx',

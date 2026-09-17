@@ -1,4 +1,6 @@
 import { expect, test } from '@playwright/test'
+import { prisma } from '../packages/db'
+import { mintPayLink } from '../apps/web/lib/portal/pay-links'
 import { assertNoAxeViolations } from './a11y-helpers'
 
 // PRD 05 CN-4 (B-051). The pay link's boundaries, from the outside.
@@ -55,4 +57,88 @@ test('a mixed-case token reaches the pay route instead of being lower-cased away
   const response = await request.get(`/pay/${token}`, { maxRedirects: 0 })
   expect(response.status()).not.toBe(308)
   expect(response.headers()['location'] ?? '').not.toContain(token.toLowerCase())
+})
+
+// B-314. `/pay/[token]/done` needs a real payLink and a real Payment — the
+// balance-owed pay screen at `/pay/[token]` itself needs a live Stripe
+// PaymentIntent too, which is out of reach here, but the done screen only
+// needs a payment row to read back. A disposable fixture per B-120: its own
+// facility and tenant, created here and deleted in `afterAll`, never the
+// shared demo lease the other tests in this file deliberately avoid touching.
+test.describe('the receipt screen', () => {
+  let facilityId = ''
+  let tenantId = ''
+  let leaseId = ''
+  let token = ''
+  let paymentId = ''
+
+  test.beforeAll(async ({}, testInfo) => {
+    const slug = `e2e-pay-link-${testInfo.project.name}`
+    const facility = await prisma.facility.create({
+      data: {
+        name: 'E2E — Pay Link',
+        slug,
+        addressLine1: '1 Test Way',
+        city: 'Austin',
+        state: 'TX',
+        postalCode: '78704',
+        timezone: 'America/Chicago',
+      },
+    })
+    facilityId = facility.id
+
+    const tenant = await prisma.tenant.create({
+      data: { email: `${slug}@example.com`, firstName: 'Ada', lastName: 'Renter' },
+    })
+    tenantId = tenant.id
+
+    const unitType = await prisma.unitType.create({
+      data: { facilityId, name: `10x10 ${slug}`, widthFt: 10, lengthFt: 10 },
+    })
+    const unit = await prisma.unit.create({ data: { facilityId, unitTypeId: unitType.id, number: 'P-1' } })
+    const lease = await prisma.lease.create({
+      data: {
+        facilityId,
+        tenantId,
+        unitId: unit.id,
+        status: 'active',
+        startDate: new Date(),
+        billingDay: 1,
+        monthlyRateCents: 12_900,
+      },
+    })
+    leaseId = lease.id
+
+    const link = await mintPayLink({ tenantId, leaseId })
+    if (!link) throw new Error('mint failed')
+    token = link.token
+
+    const payment = await prisma.payment.create({
+      data: { facilityId, tenantId, amountCents: 12_900, method: 'card', status: 'succeeded' },
+    })
+    paymentId = payment.id
+  })
+
+  test.afterAll(async () => {
+    if (!facilityId) return
+    await prisma.payment.deleteMany({ where: { facilityId } })
+    await prisma.payLink.deleteMany({ where: { leaseId } })
+    await prisma.lease.deleteMany({ where: { facilityId } })
+    await prisma.unit.deleteMany({ where: { facilityId } })
+    await prisma.unitType.deleteMany({ where: { facilityId } })
+    await prisma.tenant.deleteMany({ where: { id: tenantId } })
+    await prisma.facility.delete({ where: { id: facilityId } })
+  })
+
+  // B-314 finding 1 / SC 2.4.1: `<main>` on this route had no `tabIndex`, so
+  // the skip link's fragment navigation moved the sequential focus position
+  // without moving actual focus — the exact failure
+  // `tests/refusal-fragment.test.ts` describes for an unfocusable target.
+  test('the skip link actually moves focus to the receipt', async ({ page }) => {
+    await page.goto(`/pay/${token}/done?payment=${paymentId}`)
+    await page.keyboard.press('Tab')
+    await expect(page.getByRole('link', { name: 'Skip to main content' })).toBeFocused()
+    await page.keyboard.press('Enter')
+    await expect(page.locator('#main')).toBeFocused()
+  })
 })

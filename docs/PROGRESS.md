@@ -11,8 +11,8 @@ It complements rather than duplicates:
 - `git log` — the change-by-change record
 - `README.md` — how the built thing works today
 
-**Status:** 312 of 333 backlog items complete. Latest entry: B-313 (`c4c487d`).
-**Entries:** 340 across 24 part files.
+**Status:** 313 of 333 backlog items complete. Latest entry: B-314 (`8e04c3d`).
+**Entries:** 341 across 24 part files.
 
 ## Reading one entry
 
@@ -389,3 +389,4 @@ Append the entry as a `### ` heading at the end of the **highest-numbered** file
 | B-329 — the staff mirror: English under `lang="es"`, and Spanish under `lang="en"` (2026-09-16) | `c1e88a8` | [23-from-b-300](progress/23-from-b-300.md#b-329-the-staff-mirror-english-under-langes-and-spanish-under-langen-2026-09-16) |
 | B-312 — nothing in the product could create a tenant with no lease (2026-09-16, `c97e8c5`) | `c97e8c5` | [23-from-b-300](progress/23-from-b-300.md#b-312-nothing-in-the-product-could-create-a-tenant-with-no-lease-2026-09-16-c97e8c5) |
 | B-313 — a counter cash or check payment now emails a receipt (2026-09-16, `c4c487d`) | `c4c487d` | [24-from-b-313](progress/24-from-b-313.md#b-313-a-counter-cash-or-check-payment-now-emails-a-receipt-2026-09-16-c4c487d) |
+| B-314 — `/pay/[token]` brought in line with `/portal/pay`'s skip link, alert and lint coverage (2026-09-17, `8e04c3d`) | `8e04c3d` | [24-from-b-313](progress/24-from-b-313.md#b-314-paytoken-brought-in-line-with-portalpays-skip-link-alert-and-lint-coverage-2026-09-17-8e04c3d) |

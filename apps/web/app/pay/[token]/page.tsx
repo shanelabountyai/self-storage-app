@@ -123,13 +123,15 @@ export default async function PayLinkPage({
         </div>
       </dl>
 
-      {/* `!checked.ok` again, and only so TypeScript narrows the union. The
-          `role="alert"` stays for now — this route is outside B-295's lint
-          scope and B-314 owns bringing it in line. */}
+      {/* `!checked.ok` again, and only so TypeScript narrows the union.
+          B-314: matches `/portal/pay` (B-299) exactly — no `role="alert"`, and
+          the form's `action` carries the fragment so the browser's own
+          navigation focuses this paragraph (2.4.3). `tabIndex={-1}` is what
+          makes it focusable. */}
       {!checked.ok && amountProblemId && (
         <p
           id={amountProblemId}
-          role="alert"
+          tabIndex={-1}
           className="border-input rounded-md border p-3 text-sm text-pretty"
         >
           {t(AMOUNT_PROBLEM_KEYS[checked.problem], { min: formatCents(MIN_PAYMENT_CENTS) })}{' '}
@@ -140,7 +142,7 @@ export default async function PayLinkPage({
       <details className="border-input rounded-lg border p-4" open={Boolean(amount) && !checked.ok}>
         <summary className="cursor-pointer text-sm font-medium">{t('paypg.payDifferent')}</summary>
         {/* GET, so this still works with JavaScript off (§6.2). */}
-        <form method="GET" className="mt-3 flex flex-col gap-3">
+        <form method="GET" action="#amount-problem" className="mt-3 flex flex-col gap-3">
           <label className="flex flex-col gap-1 text-sm">
             {t('amtform.label')}
             <input
@@ -212,7 +214,7 @@ function Shell({ locale, children }: { locale: Locale; children: React.ReactNode
       >
         {translate(dict, 'chrome.skipToMain')}
       </a>
-      <main id="main" className="mx-auto flex w-full max-w-lg flex-col gap-6 px-4 py-8">
+      <main id="main" tabIndex={-1} className="mx-auto flex w-full max-w-lg flex-col gap-6 px-4 py-8">
         {children}
       </main>
     </div>
