@@ -10397,3 +10397,32 @@ Both customer-facing receipts clamped a negative balance to zero, so a tenant wh
 
 **Verification.** `npm run db:migrate:test` reseeded the catalog first (B-206) — without it the suite renders the old template. Full unit suite: **4,583 passed, 8 skipped, of 4,591** — one more than B-316's, this item's new test. Typecheck and lint clean.
 
+
+## B-318 — the letter for a tenant with no email is printable, and printing it is what closes the task (2026-09-17, `PENDING`)
+
+B-281 renders the message for a renter with no email address and stores it on the `Message` row. Until this item those bytes appeared in **exactly one place**: inside a collapsed `<details>`, in a `<pre class="max-h-64 overflow-auto">` on the tenant profile, with the log capped at 20 rows and no print route, no download and no address block. The task B-281 raises says *"Its text is in the message log on their profile, to print and mail"* — which meant expanding a disclosure, scrolling a 256px box, selecting text with a mouse, pasting it into Word and typing the address from another screen. That does not happen on a Saturday, so the tenant is not told, which is the failure the item was opened to fix. For a cash-renter cohort paper is the only channel there is.
+
+**What it built.**
+
+1. **`apps/web/lib/admin/message-print.ts`** — `messageForPrint(actor, messageId)` returns the stored subject and body, the **tenant's address of record** (D-21's newest `TenantAddress` row, not the `Tenant.*` cache) and the **facility's return address**, both through `mailingAddress()` from `packages/core/notices` so a missing part is named rather than printed as a hole. Scoped by the message's own `facilityId`: `assertFacilityAccess` plus `tenants:view`.
+2. **`/admin/messages/[messageId]/print`** — return address, a window-envelope block for the recipient, the date, the subject and the stored `bodySnapshot` **verbatim** (the artefact, never a re-render — CN-18). Everything that is not the letter sits outside the `<article>` and carries `print:hidden`, which is `display: none` in the PRINT media only, so nothing is hidden from a screen reader. The admin layout already supplies `<main id="main">` and hides its header and side nav in print.
+3. **`no_reachable_channel` gains `resolvedByAction`** (`packages/core/tasks/catalog.ts`) — B-166's standard, the same one B-306 applies to a refused notice. `completeTask` now refuses a note for this type from every queue. No `href`: the letter is per message, a URL the catalog cannot name, and the card's subject link already goes to the tenant whose log holds it.
+4. **`recordLetterPrinted`** completes the open task directly, inside a transaction, with a proof note naming the message and its date, and writes the `task.completed` audit entry the catalog's `sensitive: true` calls for. `updateMany ... status: 'open'` is the concurrency guard, so two staff printing the same letter within a second close it once.
+5. **`PrintLetterButton`** — one control, because printing and recording are one act: `window.print()` on the click, the server action behind it. A second "mark it mailed" button would be the typed note the catalog now refuses wearing different clothes. Labelled "Print it, and close the task" only when a task is actually open.
+6. **The message log reaches past 20.** `tenantProfile` takes a limit (`TENANT_MESSAGE_PAGE` 20, `TENANT_MESSAGE_MAX` 200, clamped in `tenantMessageLimit` because `?messages=` is a URL anybody can type), and the profile renders a "Load 20 older sent messages" link — and at the ceiling says in words that older ones are not reachable, rather than offering a link that loads nothing. Every message with a body also gets a "Print this for mailing" link.
+
+**What it decided.**
+
+- **The print action is the only closer, for BOTH flavours of this task** — the no-address one B-281 raises and the bounce one `applyDeliveryEvent` raises. Both always have a stored message, so neither is stranded, and for a bounce the remedy is the same: email is dead, the tenant still has not been told. A new address on file is not evidence the missed letter arrived.
+- **Task lookup is scoped to the message's facility**, not just the tenant. A tenant with units at two sites can have an open task at each, and closing the wrong site's — possibly one this actor cannot see — would record the printed letter against somebody else's queue.
+- **The print link is offered on every message with a body**, not only failed ones: "send me a paper copy of that receipt" is the same ask and the same page.
+- **A capped log says it is capping.** The same rule `TENANT_SEARCH_LIMIT` is exported for — a list that drops the twenty-first row silently is a list that lies.
+
+**What it left behind.**
+
+- **No axe scan of the print route.** It needs a real `Message` row and the demo seed writes none — every message in this product is produced by the comms pipeline reacting to an event, so no fixed URL can name one across a reseed. Recorded in `SCAN_EXCEPTIONS` as `audience: 'admin'`, the same posture as the four other per-entity admin routes (`/admin/auctions/[caseId]`, `/admin/leads/[leadId]`, both statement routes). No owning row.
+- **A `no_reachable_channel` task whose tenant's only message failed to RENDER cannot be closed.** `recordLetterPrinted` refuses an empty `bodySnapshot` — there is nothing to mail — and a note no longer closes the type. It needs a template lookup or a merge to have failed, which is a defect in its own right; the message log carries the reason. No owning row.
+- **Cancelling the browser's print dialog still records the letter.** Nothing reports whether paper came out. That is the same standard as every other manual task in this queue and strictly better than the note it replaces, which did not require the reader to have opened the letter.
+- **Inbound SMS is still capped at 20** with no way past it. Only the outbound log pages.
+- The accessibility statement was re-read: it makes no claims about `/admin`, and this item's every surface is under it. Nothing moved.
+

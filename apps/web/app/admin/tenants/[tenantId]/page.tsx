@@ -4,6 +4,9 @@ import { ApplyCreditForm } from "@/components/admin/apply-credit-form";
 import Link from "next/link";
 import { getAdminActor } from "@/lib/admin/context";
 import {
+  tenantMessageLimit,
+  TENANT_MESSAGE_MAX,
+  TENANT_MESSAGE_PAGE,
   tenantProfile,
   type TenantInboundSmsRow,
   type TenantLeaseSummary,
@@ -134,12 +137,17 @@ function formatWhen(date: Date): string {
 
 export default async function TenantProfilePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ tenantId: string }>;
+  searchParams: Promise<{ messages?: string }>;
 }) {
   const { tenantId } = await params;
+  // B-318. How far back the message log goes on this request. Clamped in
+  // `tenantMessageLimit` — this is a URL anybody can type.
+  const messageLimit = tenantMessageLimit((await searchParams).messages);
   const actor = await getAdminActor();
-  const profile = await tenantProfile(actor, tenantId);
+  const profile = await tenantProfile(actor, tenantId, messageLimit);
 
   // B-167. The charge control, one per lease this tenant has — ended leases
   // included, because the walk that finds the damage happens after they have
@@ -296,6 +304,23 @@ export default async function TenantProfilePage({
           <pre className="bg-muted mt-2 max-h-64 overflow-auto rounded-md p-3 text-xs whitespace-pre-wrap">
             {entry.message.bodySnapshot}
           </pre>
+          {/* B-318. The way out of the 256px box. A message that could not be
+              emailed (B-281 renders it anyway) is a letter somebody has to
+              print and mail, and until this link the only route to the text
+              was a mouse selection inside this <pre>. Offered on every message
+              with a body, because "send me a paper copy of that receipt" is
+              the same ask. */}
+          {entry.message.bodySnapshot.trim() !== "" && (
+            <p className="mt-2 text-xs">
+              <Link
+                href={`/admin/messages/${entry.message.id}/print`}
+                className="underline underline-offset-2"
+                aria-label={`Print ${entry.message.subjectSnapshot ?? entry.message.templateKey} for mailing`}
+              >
+                Print this for mailing
+              </Link>
+            </p>
+          )}
         </details>
       </li>
     );
@@ -1453,7 +1478,11 @@ export default async function TenantProfilePage({
       </section>
 
       <section aria-labelledby="comms-heading" className="flex flex-col gap-3">
-        <h2 id="comms-heading" className="font-medium">
+        <h2
+          id="comms-heading"
+          tabIndex={-1}
+          className="scroll-mt-48 font-medium"
+        >
           Communication history
         </h2>
         <ul className="flex flex-col gap-2">
@@ -1472,6 +1501,33 @@ export default async function TenantProfilePage({
                   {comms.slice(RECENT).map(commsItem)}
                 </ul>
               </details>
+            </li>
+          )}
+          {/* B-318. The log is capped per request, and it says so rather than
+              stopping silently — a tenant on their second year has more than
+              twenty, and since B-281 the row past the cap can be the letter
+              somebody has to print. A link, not a disclosure: the rows past
+              this one have not been loaded. */}
+          {profile.messages.length === messageLimit && (
+            <li className="text-sm">
+              {messageLimit < TENANT_MESSAGE_MAX ? (
+                <>
+                  <Link
+                    href={`?messages=${messageLimit + TENANT_MESSAGE_PAGE}#comms-heading`}
+                    className="underline underline-offset-2"
+                  >
+                    Load {TENANT_MESSAGE_PAGE} older sent messages
+                  </Link>{" "}
+                  <span className="text-muted-foreground">
+                    — showing the newest {messageLimit}.
+                  </span>
+                </>
+              ) : (
+                <span className="text-muted-foreground">
+                  Showing the newest {messageLimit} sent messages. Older ones
+                  are not reachable from this screen.
+                </span>
+              )}
             </li>
           )}
           {profile.messages.length === 0 && profile.inboundSms.length === 0 && (

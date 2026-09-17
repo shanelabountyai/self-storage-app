@@ -164,10 +164,25 @@ export const TASK_TYPES = [
     //
     // Sensitive: whether a tenant was reachable bears directly on whether a
     // notice was properly served, which is a question a lien dispute turns on.
+    //
+    // B-318: `resolvedByAction`, on the same standard as
+    // `rate_increase_notice_undelivered` above. What this task says is that a
+    // tenant has NOT BEEN TOLD something — and "called them" typed into a note
+    // is the same sentence the task already contains, with the letter still
+    // unsent. B-281 renders that letter and stores it on the `Message` row;
+    // printing it from `/admin/messages/[id]/print` is what closes this, so a
+    // completed row means paper came off a printer and went in an envelope.
+    // No `href`: the letter is per message, which is a URL the catalog cannot
+    // name — B-306's case, and the card's subject link already goes to the
+    // tenant whose log holds it.
     type: "no_reachable_channel",
     label: "Email is bouncing — no way to reach this tenant",
     requiredProofFields: ["note"],
     sensitive: true,
+    resolvedByAction: {
+      sentence:
+        "Print the letter and mail it — open this tenant and print the message that could not be sent. A note cannot close this, because the tenant has still not been told either way.",
+    },
   },
   {
     // PRD 02 US-11 / D-88 (B-152). A scheduled rate increase whose notice

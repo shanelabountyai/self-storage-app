@@ -389,6 +389,18 @@ export const SCAN_EXCEPTIONS: readonly ScanException[] = [
     reason: 'a staff-only lead record, which needs a live lead',
   },
   {
+    // B-318. The stored letter, laid out for an envelope. It needs a real
+    // `Message` row, and the demo seed writes none — every message in this
+    // product is produced by the comms pipeline reacting to an event, so there
+    // is no fixture a fixed URL could name across a reseed. The page's own
+    // structure (a heading, the layout's `<main>`, and `print:hidden` chrome
+    // that is `display: none` in PRINT media only, so nothing is hidden from a
+    // screen reader) is asserted by review rather than by axe.
+    route: '/admin/messages/[messageId]/print',
+    audience: 'admin',
+    reason: 'a staff-only printable letter, which needs a real stored message',
+  },
+  {
     route: '/admin/tenants/[tenantId]/ledger/[leaseId]/statements',
     audience: 'admin',
     reason: 'a staff-only statement list, which needs a live lease',

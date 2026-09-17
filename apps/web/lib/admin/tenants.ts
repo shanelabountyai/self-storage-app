@@ -463,9 +463,32 @@ export type WaivableFee = {
   description: string;
 };
 
+/// B-318. The message log's page size, and the default the profile uses.
+///
+/// The log used to be a flat `take: 20` with no way past it, which for a tenant
+/// on their second year is a log that silently stops — and since B-281 the row
+/// past the cap can be the letter somebody has to print and mail. The screen
+/// raises this and says it is capping, for the same reason
+/// `TENANT_SEARCH_LIMIT` is exported: a list that drops the twenty-first row
+/// without saying so is a list that lies.
+export const TENANT_MESSAGE_PAGE = 20;
+/// A ceiling on what one request will load, because `?messages=` is a URL
+/// anybody can type and this page already runs eight queries. Exported for the
+/// same reason as the page size: at the ceiling the screen has to say that
+/// there are older messages it will not show, rather than offering a "load
+/// more" link that loads nothing.
+export const TENANT_MESSAGE_MAX = 200;
+
+export function tenantMessageLimit(raw: string | undefined): number {
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed)) return TENANT_MESSAGE_PAGE;
+  return Math.min(Math.max(Math.trunc(parsed), TENANT_MESSAGE_PAGE), TENANT_MESSAGE_MAX);
+}
+
 export async function tenantProfile(
   actor: Actor,
   tenantId: string,
+  messageLimit: number = TENANT_MESSAGE_PAGE,
 ): Promise<TenantProfile> {
   const editableFacilityIds = await assertTenantAccess(
     actor,
@@ -531,7 +554,7 @@ export async function tenantProfile(
       prisma.message.findMany({
         where: { recipientTenantId: tenantId },
         orderBy: { createdAt: "desc" },
-        take: 20,
+        take: messageLimit,
         select: {
           id: true,
           channel: true,
