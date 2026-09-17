@@ -883,11 +883,16 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
     // thank-you paragraph they have to read past.
     key: 'payment_receipt',
     classification: 'transactional',
-    subject: 'Receipt: {{payment.amount}} for unit {{unit.number}}',
+    // B-316. `payment.subject_for` names one unit, or the count, or the
+    // account — never the list. The list is in the body, below the amount.
+    subject: 'Receipt: {{payment.amount}} {{payment.subject_for}}',
     bodyText: [
       'Hi {{tenant.first_name}},',
       '',
-      "We received {{payment.amount}} on {{payment.date}} by {{payment.method}}, for unit {{unit.number}} at {{facility.name}}.",
+      'We received {{payment.amount}} on {{payment.date}} by {{payment.method}} at {{facility.name}}.',
+      '',
+      'Paid toward:',
+      '{{payment.unit_lines}}',
       '',
       'Balance on the account after this payment: {{balance.total}}.',
       '',
@@ -896,11 +901,14 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
       'Questions? Call {{facility.phone}}.',
     ].join('\n'),
     es: {
-      subject: 'Recibo: {{payment.amount}} por la unidad {{unit.number}}',
+      subject: 'Recibo: {{payment.amount}} {{payment.subject_for}}',
       bodyText: [
         'Hola {{tenant.first_name}}:',
         '',
-        'Recibimos {{payment.amount}} el {{payment.date}} en {{payment.method}}, por la unidad {{unit.number}} en {{facility.name}}.',
+        'Recibimos {{payment.amount}} en {{payment.method}} el {{payment.date}}, en {{facility.name}}.',
+        '',
+        'Aplicado a:',
+        '{{payment.unit_lines}}',
         '',
         'Saldo de la cuenta después de este pago: {{balance.total}}.',
         '',
@@ -914,7 +922,8 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
       'payment.amount',
       'payment.date',
       'payment.method',
-      'unit.number',
+      'payment.subject_for',
+      'payment.unit_lines',
       'facility.name',
       'balance.total',
       'links.portal',

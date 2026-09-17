@@ -1248,12 +1248,41 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
     // was an employee's. It stays the fallback only while nothing has posted (a
     // checkout payment posts after provisioning).
     const units = credits.lines.map((line) => line.unitNumber)
+    // B-316. Nothing posted yet → the recipient's own unit for the whole sum.
+    const lines =
+      credits.lines.length > 0
+        ? credits.lines
+        : recipient.lease?.unit
+          ? [{ unitNumber: recipient.lease.unit.number, amountCents: payment.amountCents }]
+          : []
+    // Named for the account only when every credited unit is on the same one.
+    const accounts =
+      units.length > 0
+        ? await prisma.lease.findMany({
+            where: { id: { in: credits.lines.map((line) => line.leaseId) } },
+            select: { billingAccountId: true, billingAccount: { select: { name: true } } },
+          })
+        : []
+    const accountName =
+      accounts[0]?.billingAccountId &&
+      accounts.every((lease) => lease.billingAccountId === accounts[0].billingAccountId)
+        ? (accounts[0].billingAccount?.name ?? null)
+        : null
+    const say = proseFor(recipient.locale)
     return {
-      ...(units.length > 0
+      ...(lines.length > 0
         ? {
             'unit.number': new Intl.ListFormat(tag, { style: 'long', type: 'conjunction' }).format(
-              units,
+              lines.map((line) => line.unitNumber),
             ),
+            'payment.subject_for': say.receiptSubjectFor(
+              lines.map((line) => line.unitNumber),
+              accountName,
+              recipient.facility?.name ?? '',
+            ),
+            'payment.unit_lines': lines
+              .map((line) => say.receiptUnitLine(line.unitNumber, formatCents(line.amountCents, tag)))
+              .join('\n'),
           }
         : {}),
       'payment.amount': formatCents(payment.amountCents, tag),

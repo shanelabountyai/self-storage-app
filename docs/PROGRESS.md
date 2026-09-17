@@ -10341,3 +10341,30 @@ A payer with several owing units on one business account was quoted the **sum of
 - **The member's nav** is unchanged: a member owes nothing through the account, so still sees no Pay link.
 
 **Verification.** Full unit suite: **4,582 passed, 8 skipped, of 4,590** — the previous 4,584 plus this item's six. Typecheck and lint clean. `portal-billing-account.spec.ts`, `admin-billing-accounts.spec.ts` and `portal.spec.ts` against a production build: **166 of 166 passed**, none flaky.
+
+## B-316 — the emailed receipt's subject names one unit, a count, or the account; the body lists them (2026-09-17, `SHA_PENDING`)
+
+B-278 made the receipt name every unit a payment credited by overriding `{{unit.number}}` with an `Intl.ListFormat` list, and the subject still said *"for unit {{unit.number}}"* — so a fifteen-unit account payment's subject was fifteen unit numbers long.
+
+**What it built.**
+
+1. **`payment_receipt`** (`packages/db/comms-catalog.ts`, en and es) now reads `Receipt: {{payment.amount}} {{payment.subject_for}}` and its body carries a **`Paid toward:` / `Aplicado a:` block** of `{{payment.unit_lines}}`, one `- Unit A-1: $100.00` line per credited unit, below the amount. `unit.number` is no longer a required field of the template.
+2. **`receiptSubjectFor` and `receiptUnitLine`** (`apps/web/lib/comms/prose.ts`): one unit → `for unit A-1` / `por la unidad A-1`; several → `— 3 units at {facility}` / `— 3 unidades en {facility}` (`unidades` per B-288); every credited lease on the **same** business account → `— {account name}`.
+3. **The `payment.succeeded` extender** (`apps/web/lib/comms/service.ts`) builds both from `paymentCredits` — so the email, the screen and the print still list the same units (B-278). Before anything has posted it falls back to the recipient's own unit for the whole amount, as `unit.number` did.
+4. **`EVENT_MERGE_FIELDS`** registers the two new fields, so the template editor offers them and previews render.
+5. **`tests/comms-billing-db.test.ts`**: the one-unit receipt's exact subject; the split payment's exact subject and unit lines in English, then Spanish, then with both leases on one business account.
+
+**What it decided.**
+
+- **Built in code, not branched in the template**: the template language has no conditionals, the same reason `account.summary_line` and `unit.number_list` are code-built.
+- **The account wins only when every credited lease is on one account.** A payment spanning an account's unit and a personal one gets the unit count.
+- **No `unit.count` field** — the row suggested one, but `payment.subject_for` already carries the count and nothing else would read it.
+- **Per-unit amounts are in the list**, since `paymentCredits` already has them and they are what a bookkeeper reconciles against.
+
+**What it left behind.**
+
+- **The HTML fallback renders the list as one `<p>` with line breaks, not a `<ul>`** — the same limit the payment-plan schedule has (a seeded `bodyHtml` is erased by CN-16's editor). No owning row.
+- **No e2e** — receipts are emails, and no spec reads the outbox. Covered at the unit level.
+- The accessibility statement was re-read and says nothing about email; no change.
+
+**Verification.** `npm run db:migrate:test` reseeded the catalog first (B-206). Full unit suite: **4,582 passed, 8 skipped, of 4,590** — unchanged count, since the new cases extend existing tests. Typecheck and lint clean (six pre-existing warnings, none in touched files).
