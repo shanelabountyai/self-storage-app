@@ -10342,7 +10342,7 @@ A payer with several owing units on one business account was quoted the **sum of
 
 **Verification.** Full unit suite: **4,582 passed, 8 skipped, of 4,590** — the previous 4,584 plus this item's six. Typecheck and lint clean. `portal-billing-account.spec.ts`, `admin-billing-accounts.spec.ts` and `portal.spec.ts` against a production build: **166 of 166 passed**, none flaky.
 
-## B-316 — the emailed receipt's subject names one unit, a count, or the account; the body lists them (2026-09-17, `SHA_PENDING`)
+## B-316 — the emailed receipt's subject names one unit, a count, or the account; the body lists them (2026-09-17, `6b14e2f`)
 
 B-278 made the receipt name every unit a payment credited by overriding `{{unit.number}}` with an `Intl.ListFormat` list, and the subject still said *"for unit {{unit.number}}"* — so a fifteen-unit account payment's subject was fifteen unit numbers long.
 

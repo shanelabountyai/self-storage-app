@@ -1,12 +1,10 @@
 # Next
 
-**B-315 is done** (`52edf38`). The portal nav's Pay link now comes from `navPayFor` (`apps/web/lib/portal/dashboard.ts`). It quotes an account the viewer pays at its NET balance, which is the same figure as the card and the account pay screen, and when several things are owed it shows plain `Pay` / `Pagar` with no figure. `accountLateness` in `apps/web/lib/billing/accounts.ts` is now the one reckoning of days past due and the oldest due date, read by the staff detail screen, the staff list (which gained Days past due and Delinquency stage columns) and the payer's account card (which gained a due-date sentence). Unit suite: 4,582 passed, 8 skipped, of 4,590. e2e for the three account/portal specs: 166 of 166.
-
-**`main`'s CI was red from B-311 to B-314**, all on one type error in `e2e/i18n.spec.ts:667` (a nullable `tenant.email`). B-315 fixed it. If `verify` is still red after this push, the cause is something else.
+**B-316 is done** (`6b14e2f`). The `payment_receipt` subject is now `Receipt: {{payment.amount}} {{payment.subject_for}}` — `for unit A-1`, `— 3 units at {facility}`, or `— {account}` when every credited lease is on one business account — and the body lists each unit with its amount under `Paid toward:` (`payment.unit_lines`). Both built in `apps/web/lib/comms/prose.ts`. Unit suite: 4,582 passed, 8 skipped, of 4,590.
 
 ## Start here
 
-**B-316**, in file order: the emailed receipt's subject line lists every unit a payment settled (`Receipt: $32,000.00 for unit A-1, A-2, … and A-15`). Read the full row in `docs/prds/06-backlog.md`. It is a **seeded-state** template edit in `packages/db/comms-catalog.ts`, so **run `npm run db:migrate:test` after the edit (B-206)**, or the suite will disagree with the branch. `ACCOUNT_EVENT` and the `_account` template convention from B-309 are there to reuse.
+**B-317**, in file order: an overpayment reads "$0.00" on the portal receipt, `/pay/[token]/done` and the emailed receipt while the counter receipt says "Credit on account". Same template B-316 just edited — **run `npm run db:migrate:test` after the edit (B-206)**. The clamp is `Math.max(0, credits.balanceCents)` in the `payment.succeeded` extender in `apps/web/lib/comms/service.ts`, and in `app/portal/pay/done/page.tsx`. Reuse `dash.inCredit`'s wording.
 
 **B-327 is still open and still worth reading before touching the rent-invoice index**: a voided rent invoice's period can never be billed again, and the bare index change that would release it drops promised discounts.
 
