@@ -10398,7 +10398,7 @@ Both customer-facing receipts clamped a negative balance to zero, so a tenant wh
 **Verification.** `npm run db:migrate:test` reseeded the catalog first (B-206) — without it the suite renders the old template. Full unit suite: **4,583 passed, 8 skipped, of 4,591** — one more than B-316's, this item's new test. Typecheck and lint clean.
 
 
-## B-318 — the letter for a tenant with no email is printable, and printing it is what closes the task (2026-09-17, `PENDING`)
+## B-318 — the letter for a tenant with no email is printable, and printing it is what closes the task (2026-09-17, `e1c24cf`)
 
 B-281 renders the message for a renter with no email address and stores it on the `Message` row. Until this item those bytes appeared in **exactly one place**: inside a collapsed `<details>`, in a `<pre class="max-h-64 overflow-auto">` on the tenant profile, with the log capped at 20 rows and no print route, no download and no address block. The task B-281 raises says *"Its text is in the message log on their profile, to print and mail"* — which meant expanding a disclosure, scrolling a 256px box, selecting text with a mouse, pasting it into Word and typing the address from another screen. That does not happen on a Saturday, so the tenant is not told, which is the failure the item was opened to fix. For a cash-renter cohort paper is the only channel there is.
 
@@ -10426,3 +10426,4 @@ B-281 renders the message for a renter with no email address and stores it on th
 - **Inbound SMS is still capped at 20** with no way past it. Only the outbound log pages.
 - The accessibility statement was re-read: it makes no claims about `/admin`, and this item's every surface is under it. Nothing moved.
 
+**Verification.** Full unit suite: **4,590 passed, 8 skipped, of 4,598** — B-317's 4,591 plus this item's five new tests and the two the D-15 lint adds per new `.tsx` under `app/admin`. Typecheck and lint clean. One earlier sweep died `EXIT=137` with zero failures and no JetsamEvent for that minute: another project's session runs an unscoped `pkill -9 -f 'node \(vitest'`, which takes this repo's workers with it. The re-run was gated on that reaching zero.
