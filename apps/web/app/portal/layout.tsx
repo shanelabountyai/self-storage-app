@@ -3,8 +3,7 @@ import { redirect } from 'next/navigation'
 import { auth, signOut } from '@/auth'
 import { requireTenantActor } from '@/lib/rbac/session'
 import { hasAnyPaymentPlan } from '@/lib/portal/payment-plan'
-import { owingLeases } from '@/lib/portal/dashboard'
-import { portalAccountsFor } from '@/lib/billing/accounts'
+import { navPayFor } from '@/lib/portal/dashboard'
 import { formatRate } from '@/lib/format'
 import { PortalNav } from '@/components/portal/portal-nav'
 import { ForbiddenError } from '@/lib/rbac/authorize'
@@ -62,44 +61,16 @@ export default async function PortalLayout({ children }: { children: React.React
   const userName =
     impersonation?.subjectName ?? session?.user?.name ?? t('portal.yourAccountFallback')
 
-  // B-239. Paying was reachable only from the lease card on Overview, so the
-  // one thing collections depends on had no permanent route while Move out —
-  // the only irreversible destination in the product — held a top-level slot.
-  //
-  // The amount is on the control, not merely implied by it: "Pay $487.50" is
-  // the whole of what a past-due tenant came here to find out. Several owing
-  // leases go to Overview rather than to `/portal/pay`, which takes exactly one
-  // lease — Overview already renders a "Pay $X now" per unit, so it is the
-  // chooser, and the total is still the honest figure to put on the link.
-  //
-  // B-278. One owing lease on an account this viewer PAYS opens the account,
-  // not the lease: the lease's screen is titled with its renter's unit, and a
-  // payer holding no unit was sent to a bill headed with an employee's. The
-  // account screen asks for the account's net balance, so the label carries
-  // that figure too — a credit on another of its units is already counted, and
-  // an account the credit covers offers no Pay link here, as its card offers
-  // none.
-  const owing = await owingLeases(tenantId)
-  const account =
-    owing.length === 1
-      ? (await portalAccountsFor(tenantId)).find(
-          (row) => row.payable && row.units.some((unit) => unit.leaseId === owing[0].leaseId),
-        )
-      : undefined
-  const owedCents = account
-    ? account.balanceCents
-    : owing.reduce((sum, lease) => sum + lease.balanceCents, 0)
-  const pay =
-    owedCents <= 0
-      ? null
-      : {
-          href: account
-            ? `/portal/pay?account=${account.id}`
-            : owing.length === 1
-              ? `/portal/pay?lease=${owing[0].leaseId}`
-              : '/portal',
-          label: t('portal.pay', { amount: formatRate(owedCents) }),
-        }
+  // B-239 / B-315. The amount is on the control, not merely implied by it — and
+  // only when the screen it opens asks for that same amount (`navPayFor`).
+  const navPay = await navPayFor(tenantId)
+  const pay = navPay && {
+    href: navPay.href,
+    label:
+      navPay.amountCents === null
+        ? t('portal.payUnquoted')
+        : t('portal.pay', { amount: formatRate(navPay.amountCents) }),
+  }
 
   return (
     <LocaleProvider locale={locale} dict={dict}>

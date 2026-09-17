@@ -664,7 +664,7 @@ test.describe('a reset link speaks the tenant\'s language, not the cookie\'s (B-
         purpose: 'password_reset',
         audience: 'tenant',
         subjectId: tenant.id,
-        email: tenant.email,
+        email: `reset-i18n-${suffix}@example.com`,
       })
 
       // The visitor's own browser prefers English — the link must win anyway.

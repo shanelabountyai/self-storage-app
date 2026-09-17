@@ -475,9 +475,28 @@ function LeaseCard({
 // `portalDashboardForTenant` still reads `{ tenantId }` alone, so a lease the
 // viewer merely pays for never reaches that component. Widening that query is
 // what would break it.
-function AccountCard({ account, dict }: { account: PortalAccount; dict: Dictionary }) {
+function AccountCard({
+  account,
+  dict,
+  locale,
+}: {
+  account: PortalAccount
+  dict: Dictionary
+  locale: Locale
+}) {
   const t = (key: MessageKey, vars?: Record<string, string | number>) =>
     translate(dict, key, vars)
+  // B-315. The fact a payer decides on: how old the oldest unpaid amount is.
+  // Static page content, never a live region (B-245).
+  const oldestDue = account.oldestDueDate && (
+    <p className="mt-2">
+      {account.daysPastDue > 0
+        ? plural(dict, account.daysPastDue, 'acct.pastDueOne', 'acct.pastDueOther', {
+            date: formatDueDate(account.oldestDueDate, LOCALE_TAG[locale]),
+          })
+        : t('acct.oldestDue', { date: formatDueDate(account.oldestDueDate, LOCALE_TAG[locale]) })}
+    </p>
+  )
   const headingId = `account-${account.id}-heading`
   const owesMoney = account.balanceCents > 0
   // The same fallback `portalDashboardForTenant` gives a lease card: a facility
@@ -516,6 +535,7 @@ function AccountCard({ account, dict }: { account: PortalAccount; dict: Dictiona
                 })
               : t('acct.nothingOwed')}
           </p>
+          {owesMoney && oldestDue}
           <p className="mt-2">
             {t('acct.memberNote', { payer: account.payerName })}{' '}
             <a href={telHref} className="underline underline-offset-4">
@@ -531,6 +551,7 @@ function AccountCard({ account, dict }: { account: PortalAccount; dict: Dictiona
               amount: formatRate(account.balanceCents),
             })}
           </p>
+          {oldestDue}
           <Link
             href={`/portal/pay?account=${account.id}`}
             className="bg-primary text-primary-foreground mt-2 inline-flex min-h-11 items-center justify-center rounded-md px-4 text-sm font-medium"
@@ -658,7 +679,7 @@ export default async function PortalHomePage() {
             />
           ))}
           {accounts.map((account) => (
-            <AccountCard key={account.id} account={account} dict={dict} />
+            <AccountCard key={account.id} account={account} dict={dict} locale={locale} />
           ))}
         </>
       )}

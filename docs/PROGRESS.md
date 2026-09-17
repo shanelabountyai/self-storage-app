@@ -10314,3 +10314,30 @@ A counter payment posted to the ledger and printed a paper receipt, and nothing 
 - **The balance-owed `/pay/[token]` screen's skip link is proven by code inspection, not by its own e2e assertion** — the acceptance line only asked for "at least one of the two routes," and minting a live Stripe PaymentIntent for a disposable e2e fixture is a materially bigger lift than the row's stakes justify. The two routes do NOT share a component — `page.tsx` has its own `Shell` function and `done/page.tsx` duplicates the same skip-link/`<main>` markup inline rather than importing it — so this is two independent fixes proven identical by inspection, not one fix proven twice. If they ever drift, this gap is the one that would miss it.
 
 ---
+
+## B-315 — the payer's nav and the account card now quote the same figure, and the staff list says how far behind each account is (2026-09-17, `SHA_PENDING`)
+
+A payer with several owing units on one business account was quoted the **sum of positive lease balances** on the nav's Pay link, while the account card one tap away (and the account pay screen behind it) asked for the account's **net** balance, credits counted. B-278's fix reached only a payer with exactly one owing lease, which a real multi-unit account almost never has.
+
+**What it built.**
+
+1. **`navPayFor(tenantId)`** (`apps/web/lib/portal/dashboard.ts`) replaces the inline logic in `app/portal/layout.tsx`. It groups owing leases by *what the viewer would pay them through*: an account they pay is one subject, quoted at `PortalAccount.balanceCents`; any other lease is its own subject. One subject with something owed → its pay screen and its figure. More than one → `/portal` with **no figure** (`portal.payUnquoted`: `Pay` / `Pagar`). Nothing owed after credits → no link, as before.
+2. **`accountLateness(leases, asOf)`** (`apps/web/lib/billing/accounts.ts`) — the single reckoning of days past due and the oldest unpaid rent due date, read by `accountDetail`, `accountsFor` and `portalAccountsFor`. `furthestStage(leaseIds)` is the detail screen's ladder-stage query, extracted unchanged. `daysPastDue`/`stage` moved from `AccountDetail` up into `AccountSummary`.
+3. **The account card** (`app/portal/page.tsx`) gains one static sentence under the owed figure, for payer and member alike: *"The oldest amount was due 20 August — 28 days ago."* when past due, *"The oldest amount is due {date}."* otherwise. Plain `<p>`, no live role (B-245).
+4. **`/admin/billing/accounts`** gains **Days past due** and **Delinquency stage** columns, with the detail screen's own words (`Current`, `None`).
+5. **`tests/account-figures-db.test.ts`**: a credit on one unit and arrears on two others (positive sum $55, net $37.50) asserts nav, card and `payableAccount` all say $37.50; the card's oldest due date and days past due match `accountDetail`; the list row's stage and days match `accountDetail`; adding the payer's own owing unit makes the nav `{ href: '/portal', amountCents: null }`. Two pure tests pin `accountLateness`.
+6. **Unrelated, found on the way:** `e2e/i18n.spec.ts:667` passed a nullable `tenant.email` where a string is required. It has failed `verify` on every push to `main` since B-311; fixed by passing the literal address the fixture was created with.
+
+**What it decided.**
+
+- **Several payable subjects quote nothing**, including a tenant with two personal units and no account — a change from B-239's summed figure. Overview shows one "Pay $X now" per subject, so no screen ever repeated the sum.
+- **The customer card shows the due date and days past due, not the ladder stage.** The row cites `stage` as a shared definition; a stage label ("Pre-lien notice") on a customer's card is a disclosure decision the row did not ask for, so only the staff list carries it.
+- **Rent invoices only**, as `accountDetail` and the delinquency ladder already count them. An account owing only a fee shows its owed figure with no date sentence.
+
+**What it left behind.**
+
+- **No e2e asserts the date sentence or the unquoted `Pay`** — the demo seed's business account has one unit, and the payer holds no unit of their own, so neither state exists in shared demo data. Covered at the unit level; no owning row.
+- **`accountsFor` runs one stage query per account** (`ponytail:` comment) — fine for a facility's handful of accounts.
+- **The member's nav** is unchanged: a member owes nothing through the account, so still sees no Pay link.
+
+**Verification.** Full unit suite: **4,582 passed, 8 skipped, of 4,590** — the previous 4,584 plus this item's six. Typecheck and lint clean. `portal-billing-account.spec.ts`, `admin-billing-accounts.spec.ts` and `portal.spec.ts` against a production build: **166 of 166 passed**, none flaky.

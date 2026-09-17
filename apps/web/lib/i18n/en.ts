@@ -828,6 +828,7 @@ export const en = {
   'portal.signOut': 'Sign out',
   'portal.nav': 'Your account',
   'portal.pay': 'Pay {amount}',
+  'portal.payUnquoted': 'Pay',
   'portal.overview': 'Overview',
   'portal.paymentMethods': 'Payment methods',
   'portal.statements': 'Statements',
@@ -911,6 +912,9 @@ export const en = {
   'acct.nothingOwed': 'Nothing is owed on this account right now.',
   'acct.memberNote':
     'You can see this account. {payer} is the payer and settles it, so there is nothing here for you to pay. To pay it another way, call',
+  'acct.oldestDue': 'The oldest amount is due {date}.',
+  'acct.pastDueOne': 'The oldest amount was due {date} — {count} day ago.',
+  'acct.pastDueOther': 'The oldest amount was due {date} — {count} days ago.',
   'acct.payNow': 'Pay {amount} now',
   'acct.allocationNote':
     'One payment covers the whole account. It goes to the oldest amounts owed first, across every unit below, rather than to one unit in particular.',
