@@ -1,10 +1,10 @@
 # Next
 
-**B-317 is done** (`503430f`). An overpayment now reads *"Credit on your account: $500.00. It comes off your next bill."* on `/portal/pay/done`, `/pay/[token]/done` and the emailed receipt — `receiptBalanceLine` in `apps/web/lib/comms/prose.ts`, `{{payment.balance_line}}` in the template, `rcpt.creditOnAccount` / `rcpt.creditNextBill` on the two pages. The counter receipt was already right and is unchanged. Unit suite: 4,583 passed, 8 skipped, of 4,591.
+**B-318 is done** (`e1c24cf`, SHA follow-up `199c51c`, both pushed). The letter B-281 renders for a renter with no email now prints: `/admin/messages/[messageId]/print` lays out the stored `bodySnapshot` verbatim with the address of record in a window-envelope block and the facility return address. `no_reachable_channel` gained `resolvedByAction`, so **a note can no longer close it** — `recordLetterPrinted` (`apps/web/lib/admin/message-print.ts`) is the only closer, and it is scoped to the message's own facility. The tenant profile's message log pages past 20 (`?messages=`, clamped at 200) and says so at the ceiling. Unit suite: 4,590 passed, 8 skipped, of 4,598.
 
 ## Start here
 
-**B-318**, next in file order: B-281's rendered letter for a tenant with no email has no print path — the `bodySnapshot` renders only inside a collapsed `<details>`. Read the row; the reviewer's argument that B-281's deferral was wrong *is* the row.
+**B-319**, next in file order: the counter's Method select silently resets to Cash when the payer changes, so a check payment can book as cash **with the check number still on it**. Money path, verified in code, and the `key=` that causes it is named in the row (`counter-payment-form.tsx:124`). Read the row's SC 3.2.2 paragraph — the row deliberately leaves that argument open rather than settling it.
 
 **B-327 is still open and still worth reading before touching the rent-invoice index**: a voided rent invoice's period can never be billed again, and the bare index change that would release it drops promised discounts.
 
@@ -12,19 +12,22 @@ Nothing in the block is blocked on the tree. B-301 still is.
 
 ## Two things worth knowing before the next sweep
 
-- **`npm run db:migrate:test` after any template edit (B-206)** — the catalog is seeded state, and the suite renders whatever the database holds, not your branch. B-317 needed it.
-- **A bare `npx vitest run` skips every `describeDb` suite silently** — 9 files "skipped", exit 0, and it looks like a pass. Use `npm test -- <paths>`, which wraps the run in `dotenv -e .env.test -e .env.local`.
+- **Another project kills this repo's vitest.** The `Restaurant ordering` session's pre-sweep cleanup runs `pkill -9 -f 'node \(vitest'` **unscoped** — its playwright line is correctly `$PWD`-scoped, its vitest line is not. It SIGKILLed a full sweep here on 2026-09-17: `EXIT=137`, 405 lines of ✓, **zero failures**, no `JetsamEvent-*.ips` for that minute and 61% memory available. A dead runner on a healthy machine is not your branch. Gate the re-run on `pgrep -f 'node \(vitest'` reaching zero. The real fix is one word of scoping in the countertop repo.
+- **`npm run db:migrate:test` after any template edit (B-206)**, and **a bare `npx vitest run` skips every `describeDb` suite silently** — use `npm test -- <paths>`.
 - **`db:migrate:e2e` reseeds the demo, and that stales `.next/cache/fetch-cache`.** `rm -rf apps/web/.next/cache/fetch-cache` after any reseed, before believing an e2e failure.
 
 ## Owner actions
 
-Unchanged from the B-316 handoff — the Neon dev branch is still three migrations behind (`npm run db:status` exits non-zero; `npm run db:migrate:cloud` is the script), `.env.prod-ops` is still empty and still blocks B-277's backfill, B-301's dry run and the signed-lease scoping query, and the rest of that table stands as written. See the `B-316` section of `docs/PROGRESS.md` and the previous `NEXT.md` in git history (`git show 9b0cf73:NEXT.md`) for the full list — nothing in it was answered or actioned by B-317.
+Unchanged from the B-317 handoff — the Neon dev branch is still three migrations behind (`npm run db:status` exits non-zero; `npm run db:migrate:cloud` is the script), `.env.prod-ops` is still empty and still blocks B-277's backfill, B-301's dry run and the signed-lease scoping query. See the `B-316` section of `docs/PROGRESS.md` and `git show 9b0cf73:NEXT.md` for the full list — nothing in it was answered or actioned by B-317 or B-318.
 
 **Answered 2026-09-14, do not re-ask:** the Spanish recapture line (D-140, stays English); the signed-lease disclosure (scope first, query written); the business-account members (B-300 ✅, B-301 open).
 
 ## Do not re-raise
 
-Read the numbering note at the top of `06-backlog.md` first — twelve refusals and two stated limits, so the next review pass does not re-find them. The carried-gap list is unchanged from the B-316 handoff (`git show 9b0cf73:NEXT.md`), plus **B-317 adds one**, in its `PROGRESS.md` entry and with no row: no e2e covers the credit sentence, because no demo tenant has overpaid.
+Read the numbering note at the top of `06-backlog.md` first — twelve refusals and two stated limits. The carried-gap list is unchanged from the B-316 handoff (`git show 9b0cf73:NEXT.md`), plus:
+
+- **B-317**: no e2e covers the credit sentence, because no demo tenant has overpaid. No row.
+- **B-318** adds three, all in its `PROGRESS.md` entry and none with a row: no axe scan of the print route (it needs a real `Message` row and the demo seed writes none — it is in `SCAN_EXCEPTIONS` as `audience: 'admin'`, same posture as the four other per-entity admin routes); a `no_reachable_channel` task whose tenant's only message failed to RENDER cannot be closed at all (nothing to mail, and a note no longer closes the type); and cancelling the browser's print dialog still records the letter.
 
 ## The blocked list
 
