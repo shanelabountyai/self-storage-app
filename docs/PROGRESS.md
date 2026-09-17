@@ -10369,7 +10369,7 @@ B-278 made the receipt name every unit a payment credited by overriding `{{unit.
 
 **Verification.** `npm run db:migrate:test` reseeded the catalog first (B-206). Full unit suite: **4,582 passed, 8 skipped, of 4,590** — unchanged count, since the new cases extend existing tests. Typecheck and lint clean (six pre-existing warnings, none in touched files).
 
-## B-317 — an overpayment says it is credit, in the same words, on every customer receipt (2026-09-17, `PENDING`)
+## B-317 — an overpayment says it is credit, in the same words, on every customer receipt (2026-09-17, `503430f`)
 
 Both customer-facing receipts clamped a negative balance to zero, so a tenant who overpaid by $500 read *"Balance on the account after this payment: $0.00"* and was told nowhere that the money was still theirs. B-281's counter receipt — the one staff keep — already printed *"Credit on account $500.00"*. The two receipts for the same payment disagreed, and the favourable one was the one the customer did not get.
 
