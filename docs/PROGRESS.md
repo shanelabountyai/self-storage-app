@@ -10315,7 +10315,7 @@ A counter payment posted to the ledger and printed a paper receipt, and nothing 
 
 ---
 
-## B-315 — the payer's nav and the account card now quote the same figure, and the staff list says how far behind each account is (2026-09-17, `SHA_PENDING`)
+## B-315 — the payer's nav and the account card now quote the same figure, and the staff list says how far behind each account is (2026-09-17, `52edf38`)
 
 A payer with several owing units on one business account was quoted the **sum of positive lease balances** on the nav's Pay link, while the account card one tap away (and the account pay screen behind it) asked for the account's **net** balance, credits counted. B-278's fix reached only a payer with exactly one owing lease, which a real multi-unit account almost never has.
 
