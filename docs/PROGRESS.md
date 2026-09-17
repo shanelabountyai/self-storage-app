@@ -10290,7 +10290,7 @@ A counter payment posted to the ledger and printed a paper receipt, and nothing 
 
 ---
 
-## B-314 — `/pay/[token]` brought in line with `/portal/pay`'s skip link, alert and lint coverage (2026-09-17, SHA recorded in follow-up commit)
+## B-314 — `/pay/[token]` brought in line with `/portal/pay`'s skip link, alert and lint coverage (2026-09-17, `8e04c3d`)
 
 `/pay/[token]` and `/pay/[token]/done` sat outside every accessibility fix this block had already made to their twin, `/portal/pay` — B-283 brought the route back from five weeks of being unreachable in production, so this was effectively unshipped code about to go live, not tolerated breakage.
 
