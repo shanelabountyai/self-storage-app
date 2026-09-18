@@ -1912,4 +1912,37 @@ export const en = {
     'It may have expired, already been used, or been replaced by a newer request. Nothing has changed.',
   'confemail.error.callLead': 'You can start again from your account, or call',
   'confemail.error.backLink': 'Back to contact details',
+  // --- Pages a message links to (B-321) ---------------------------------
+  // `/checkout/resume/<token>`, `/waitlist/cancel/<token>`, `/unsubscribe/<token>`.
+  // They speak the language of the email carrying the link, not the cookie's
+  // (`messageLinkLocale`). The English is unchanged except where the resume
+  // page's refusals now name a real next action.
+  'resume.title': 'Resume checkout',
+  'resume.invalidHeading': "This link isn't valid",
+  'resume.invalidBody': 'It may be out of date. Nothing has been charged.',
+  'resume.completeHeading': 'This booking is already complete',
+  'resume.completeBody':
+    'There is nothing left to finish — check your email for your move-in confirmation.',
+  'resume.signIn': 'Sign in to your account',
+  'wlcancel.title': 'Waitlist',
+  'wlcancel.removed': 'You are off the list.',
+  'wlcancel.notFound': 'We could not find that waitlist link.',
+  'wlcancel.alreadyOff':
+    'You were already off this list — nothing more to do. We will not email you about this size again.',
+  'wlcancel.offBody':
+    'We will not email you about this size again. Nothing else changes, and you can join again any time from the facility page.',
+  'wlcancel.notFoundBody':
+    'The link may have been used already, or it may have been cut in half by an email client. Nothing has changed either way — if you are still getting emails you do not want, reply to one and we will sort it out.',
+  'wlcancel.findStorage': 'Find storage near you',
+  'unsub.title': 'Unsubscribe',
+  'unsub.invalidHeading': "This link isn't valid",
+  'unsub.invalidBody':
+    "It may be out of date. If you are still receiving emails you don't want, call the facility and ask them to remove you.",
+  'unsub.doneHeading': "You're unsubscribed",
+  'unsub.doneBody':
+    '{address} will not receive marketing emails from us again. This takes effect immediately.',
+  'unsub.confirmHeading': 'Unsubscribe {address}?',
+  'unsub.confirmBody':
+    'You will stop receiving marketing emails from us at this address. You will still get emails about anything you have an active account or reservation for.',
+  'unsub.confirmButton': 'Unsubscribe me',
 } as const

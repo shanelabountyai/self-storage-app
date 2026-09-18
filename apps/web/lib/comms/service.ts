@@ -2654,7 +2654,7 @@ async function deliverForRule(
   // `suppressionFor`'s unsubscribe check reachable at all, since nothing else
   // in the system links to `/unsubscribe`.
   const isMarketing = rule.classification === 'marketing'
-  const unsubscribeLink = isMarketing ? unsubscribeUrl(mintUnsubscribeToken(address), baseUrl()) : null
+  const unsubscribeLink = isMarketing ? unsubscribeUrl(mintUnsubscribeToken(address, recipient.locale), baseUrl()) : null
   // B-261. The word, in the recipient's language — the LINK is unchanged, and
   // the page it lands on is `/unsubscribe`, which B-260 translated.
   const unsubscribeLabel = proseFor(recipient.locale).unsubscribe
@@ -3038,7 +3038,7 @@ export async function sendDirectEmail(input: DirectEmailInput): Promise<DirectSe
     if (marketingFooter) {
       html = `${html}<hr><p>${marketingFooter.name}<br>${marketingFooter.address}</p>`
     }
-    const link = unsubscribeUrl(mintUnsubscribeToken(address), baseUrl())
+    const link = unsubscribeUrl(mintUnsubscribeToken(address, input.locale), baseUrl())
     // B-265. In the message's own language, like `deliverForRule`'s copy of
     // this line — the word was hardcoded English here while the rule path had
     // been reading `proseFor(recipient.locale)` since B-261, so a Spanish

@@ -2732,6 +2732,17 @@ function reviewedOn(locale: Locale): string {
 // B-260 rather than all six exhaustively. This page makes no claim naming
 // these six routes, so no visible line changes. `LAST_REVIEWED` is not
 // bumped, per D-115.
+//
+// Re-verified 2026-09-18, at B-321. `/checkout/resume/[token]`,
+// `/waitlist/cancel/[token]` and `/unsubscribe/[token]` now translate, and
+// their `<html lang>` follows the record the token names (`messageLinkLocale`)
+// rather than the cookie. Before this, a Spanish-cookied visitor on
+// `/unsubscribe` met `<html lang="es">` over English text — the same SC 3.1.1
+// shape B-311 closed on the sign-in door. `/checkout/resume`'s two refusals
+// now end in a link and a `tel:` link instead of naming a page and a phone
+// nobody could click. Asserted in `e2e/message-link-locale.spec.ts`, with an
+// axe scan of the Spanish refusal. This page makes no claim naming these three
+// routes, so no visible line changes; `LAST_REVIEWED` is not bumped (D-115).
 
 export default async function AccessibilityPage() {
   const locale = await getLocale()

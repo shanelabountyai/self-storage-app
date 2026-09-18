@@ -44,6 +44,18 @@ export const PAY_TOKEN_HEADER = 'x-st-pay-token'
 /// param, not a path segment — so `proxy.ts` extracts it separately.
 export const RESET_TOKEN_HEADER = 'x-st-reset-token'
 
+/// B-321. The same trick for the three other pages a message links to —
+/// `/checkout/resume/<token>`, `/waitlist/cancel/<token>` and
+/// `/unsubscribe/<token>`. One header for all three, carrying the PATH rather
+/// than the token, because each token names a different record and
+/// `messageLinkLocale` (lib/i18n/link-locale.ts) is what tells them apart.
+export const MESSAGE_LINK_HEADER = 'x-st-message-link'
+
+/// B-321. The paths `MESSAGE_LINK_HEADER` is set for. Shared by the proxy that
+/// sets it and the resolver that reads it, so the two cannot match different
+/// routes.
+export const MESSAGE_LINK_PATH = /^\/(checkout\/resume|waitlist\/cancel|unsubscribe)\/([^/]+)/
+
 /// Display names are written in the language they name, never translated —
 /// "Spanish" is useless to somebody who cannot read the English page.
 export const LOCALE_NAMES: Record<Locale, string> = {

@@ -1,4 +1,5 @@
 import { createHmac, hkdfSync, timingSafeEqual } from 'node:crypto'
+import { isLocale, type Locale } from '@/lib/i18n'
 
 // PRD 05 US-13 AC2 / FR-MSG-3 (B-072). "A working one-click unsubscribe...
 // unsubscribe takes effect immediately... resolves without login."
@@ -30,10 +31,14 @@ function sign(encodedPayload: string): string {
   return createHmac('sha256', signingKey()).update(encodedPayload).digest('base64url')
 }
 
-type Payload = { v: number; a: string }
+/// B-321. `l` is the language the email carrying the link was written in, so
+/// the page it opens speaks it too. Signed with the rest, so a visitor cannot
+/// pick it; optional because every token minted before B-321 lacks it, and
+/// those must keep working (they never expire) — they read as `null`.
+type Payload = { v: number; a: string; l?: string }
 
-export function mintUnsubscribeToken(address: string): string {
-  const payload: Payload = { v: VERSION, a: address.toLowerCase() }
+export function mintUnsubscribeToken(address: string, locale: Locale): string {
+  const payload: Payload = { v: VERSION, a: address.toLowerCase(), l: locale }
   const encoded = Buffer.from(JSON.stringify(payload)).toString('base64url')
   return `${encoded}.${sign(encoded)}`
 }
@@ -42,7 +47,9 @@ export function unsubscribeUrl(token: string, origin: string): string {
   return `${origin.replace(/\/$/, '')}/unsubscribe/${token}`
 }
 
-export type UnsubscribeVerdict = { valid: true; address: string } | { valid: false }
+export type UnsubscribeVerdict =
+  | { valid: true; address: string; locale: Locale | null }
+  | { valid: false }
 
 export function verifyUnsubscribeToken(token: string): UnsubscribeVerdict {
   const parts = token.split('.')
@@ -65,5 +72,5 @@ export function verifyUnsubscribeToken(token: string): UnsubscribeVerdict {
     return { valid: false }
   }
 
-  return { valid: true, address: payload.a }
+  return { valid: true, address: payload.a, locale: isLocale(payload.l) ? payload.l : null }
 }

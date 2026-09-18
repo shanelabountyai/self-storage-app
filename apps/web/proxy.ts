@@ -16,7 +16,7 @@ import {
   IMPERSONATION_COOKIE,
   isImpersonationWriteBlocked,
 } from '@/lib/impersonation/request'
-import { PAY_TOKEN_HEADER, RESET_TOKEN_HEADER } from '@/lib/i18n'
+import { MESSAGE_LINK_HEADER, MESSAGE_LINK_PATH, PAY_TOKEN_HEADER, RESET_TOKEN_HEADER } from '@/lib/i18n'
 
 // Kept here rather than imported from lib/analytics/track: that module pulls in
 // Prisma, and the proxy runs on the Edge runtime where the Prisma client will
@@ -88,6 +88,11 @@ function seoResponse(request: NextRequest): NextResponse {
     const resetToken = request.nextUrl.searchParams.get('token')
     if (resetToken) requestHeaders.set(RESET_TOKEN_HEADER, resetToken)
   }
+
+  // B-321. The three other pages a message links to. The path, not the token —
+  // `messageLinkLocale` works out which record it names.
+  requestHeaders.delete(MESSAGE_LINK_HEADER)
+  if (MESSAGE_LINK_PATH.test(pathname)) requestHeaders.set(MESSAGE_LINK_HEADER, pathname)
 
   const response = NextResponse.next({ request: { headers: requestHeaders } })
 
@@ -254,5 +259,14 @@ export const config = {
   // extension test is what keeps `/favicon.ico`, `/robots.txt` and
   // `/sitemap.xml` out — all three are served as-is, and none wants a
   // canonicalising redirect applied to it.
-  matcher: ['/((?!_next/static|_next/image|.*\\.[^/]*$).*)'],
+  //
+  // B-321. Plus the two token routes whose signed tokens contain a `.`, which
+  // the extension test mistakes for a file — without these the proxy never
+  // sees them, so `MESSAGE_LINK_HEADER` is never set and their `<html lang>`
+  // cannot follow the message.
+  matcher: [
+    '/((?!_next/static|_next/image|.*\\.[^/]*$).*)',
+    '/unsubscribe/:token*',
+    '/checkout/resume/:token*',
+  ],
 }

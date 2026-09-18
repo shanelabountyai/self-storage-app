@@ -7,7 +7,8 @@ import {
   dictionaryFor,
   translate,
 } from '@/lib/i18n'
-import { getLocale, shouldOfferSpanish } from '@/lib/i18n/server'
+import { shouldOfferSpanish } from '@/lib/i18n/server'
+import { requestLinkLocale } from '@/lib/i18n/link-locale'
 
 // Public-site shell (PRD 01 §6.1). A route group rather than a path segment,
 // so these pages keep clean URLs (/faq, not /public/faq) while /admin, /login,
@@ -19,7 +20,12 @@ import { getLocale, shouldOfferSpanish } from '@/lib/i18n/server'
 // request, so the header and the page it wraps cannot end up in different
 // languages.
 export default async function PublicLayout({ children }: { children: React.ReactNode }) {
-  const [locale, offerSpanish] = await Promise.all([getLocale(), shouldOfferSpanish()])
+  // B-321. `/checkout/resume/<token>` and `/waitlist/cancel/<token>` speak the
+  // language of the email that linked to them; every other page here reads the
+  // cookie, exactly as before. Offering Spanish on a page already in it would
+  // be noise, so the offer waits for an English one.
+  const [locale, spanishWanted] = await Promise.all([requestLinkLocale(), shouldOfferSpanish()])
+  const offerSpanish = spanishWanted && locale !== 'es'
   const dict = dictionaryFor(locale)
 
   return (

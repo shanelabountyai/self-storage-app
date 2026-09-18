@@ -316,6 +316,28 @@ describe('i18n dictionaries', () => {
       'confemail.error.expired',
       'confemail.error.callLead',
       'confemail.error.backLink',
+      // B-321: the three pages a message links to.
+      'resume.title',
+      'resume.invalidHeading',
+      'resume.invalidBody',
+      'resume.completeHeading',
+      'resume.completeBody',
+      'resume.signIn',
+      'wlcancel.title',
+      'wlcancel.removed',
+      'wlcancel.notFound',
+      'wlcancel.alreadyOff',
+      'wlcancel.offBody',
+      'wlcancel.notFoundBody',
+      'wlcancel.findStorage',
+      'unsub.title',
+      'unsub.invalidHeading',
+      'unsub.invalidBody',
+      'unsub.doneHeading',
+      'unsub.doneBody',
+      'unsub.confirmHeading',
+      'unsub.confirmBody',
+      'unsub.confirmButton',
     ] as const
     const untranslated = Object.keys(en)
       .filter((key) => key.startsWith('err.') || MUST_ALSO_DIFFER.includes(key as never))

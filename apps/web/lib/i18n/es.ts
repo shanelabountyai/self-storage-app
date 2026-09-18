@@ -1846,4 +1846,33 @@ export const es: Dictionary = {
     'Puede haber vencido, haberse usado ya, o haber sido reemplazado por una solicitud más reciente. Nada ha cambiado.',
   'confemail.error.callLead': 'Puede comenzar de nuevo desde su cuenta, o llamar al',
   'confemail.error.backLink': 'Volver a los datos de contacto',
+  // --- Páginas a las que enlaza un mensaje (B-321) -----------------------
+  'resume.title': 'Continuar su renta',
+  'resume.invalidHeading': 'Este enlace no es válido',
+  'resume.invalidBody': 'Puede que haya vencido. No se ha cobrado nada.',
+  'resume.completeHeading': 'Esta renta ya está completa',
+  'resume.completeBody':
+    'No queda nada por terminar — revise su correo para ver la confirmación de su mudanza.',
+  'resume.signIn': 'Iniciar sesión en su cuenta',
+  'wlcancel.title': 'Lista de espera',
+  'wlcancel.removed': 'Ya no está en la lista.',
+  'wlcancel.notFound': 'No encontramos ese enlace de la lista de espera.',
+  'wlcancel.alreadyOff':
+    'Ya no estaba en esta lista — no hay nada más que hacer. No le volveremos a escribir sobre este tamaño.',
+  'wlcancel.offBody':
+    'No le volveremos a escribir sobre este tamaño. Nada más cambia, y puede volver a inscribirse cuando quiera desde la página de la sucursal.',
+  'wlcancel.notFoundBody':
+    'Puede que el enlace ya se haya usado, o que su programa de correo lo haya cortado. En cualquier caso, nada ha cambiado — si sigue recibiendo correos que no quiere, responda a uno y lo resolvemos.',
+  'wlcancel.findStorage': 'Buscar bodegas cerca de usted',
+  'unsub.title': 'Cancelar la suscripción',
+  'unsub.invalidHeading': 'Este enlace no es válido',
+  'unsub.invalidBody':
+    'Puede que haya vencido. Si sigue recibiendo correos que no quiere, llame a la sucursal y pida que lo quiten de la lista.',
+  'unsub.doneHeading': 'Su suscripción se canceló',
+  'unsub.doneBody':
+    '{address} no volverá a recibir correos promocionales de nuestra parte. El cambio es inmediato.',
+  'unsub.confirmHeading': '¿Cancelar la suscripción de {address}?',
+  'unsub.confirmBody':
+    'Dejará de recibir correos promocionales de nuestra parte en esta dirección. Seguirá recibiendo correos sobre cualquier cuenta o reserva que tenga activa.',
+  'unsub.confirmButton': 'Cancelar mi suscripción',
 }

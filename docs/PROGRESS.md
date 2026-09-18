@@ -10477,3 +10477,29 @@ The counter form's Method select was uncontrolled under `key={former | account |
 - The accessibility statement was not re-read for content: nothing customer-facing changed. Every screen touched is under `/admin`.
 
 **Verification.** Typecheck and lint are clean (the six `_prev`/`_formData` warnings were already there). `e2e/admin-pos.spec.ts`: 32 passed of 32 on the production build, counting the two auth setup steps. Full unit suite: **4,597 passed, 8 skipped, of 4,605**, which is B-319's 4,600 plus this item's five.
+
+## B-321 — the pages a message links to speak that message's language, and the resume refusals are no longer dead ends (2026-09-18, `SHA-PENDING`)
+
+**What it built.**
+
+1. **`messageLinkLocale(path)`** (`apps/web/lib/i18n/link-locale.ts`, new). This is B-283's `payLinkLocale` applied to the three other token routes. `/checkout/resume/<token>` reads the session's tenant's `preferredLocale`, which is the recipient `checkout.abandonment_step` is raised against. `/waitlist/cancel/<token>` reads the entry's own `preferredLocale` (B-265). `/unsubscribe/<token>` reads the language **signed into the token**. A token that names nothing falls back to `writingLocale`, which means the cookie. `requestLinkLocale()` reads the path from the proxy header and falls back to the cookie. The root layout (`<html lang>`), the `(public)` layout (header and footer), `generateMetadata` and all three page bodies read it, so they cannot disagree.
+2. **`proxy.ts`** sets `MESSAGE_LINK_HEADER` to the path when it matches `MESSAGE_LINK_PATH`. It is deleted first, so a visitor cannot inject it. **The matcher gains `/unsubscribe/:token*` and `/checkout/resume/:token*`.** Both tokens contain a `.`, and the matcher's extension test treated them as files, so the proxy never ran on either route. Without the extra entries the header would never be set. A side effect: both routes now also get the `X-Robots-Tag: noindex` header that `NOINDEX_PREFIXES` already claimed for them.
+3. **The unsubscribe token carries `l`** (the email's locale). `mintUnsubscribeToken(address, locale)` now requires it, and both senders pass the locale they rendered in (`recipient.locale` / `input.locale`). `verifyUnsubscribeToken` returns `locale: Locale | null`. The version is still `1`: tokens never expire, so every pre-B-321 token must keep verifying, and those read as `null`.
+4. **21 dictionary keys** (`resume.*`, `wlcancel.*`, `unsub.*`) in both languages, all added to `MUST_ALSO_DIFFER`. Spanish follows D-122: `renta`, `sucursal`, `reserva`, `promocionales`, and `bodegas` only as the plural category noun. The English is unchanged except for the resume refusals.
+5. **`/checkout/resume` refusals end in real actions.** A bad token shows "Find a unit" → `/storage/search`. A completed booking shows "Sign in to your account" → `/portal`. Both also show "or call" plus a `tel:` link to `SITE.phone`. The links are `min-h-11` (44px, PRD 01 §6.2). The old copy named "the facility page" and "call" and linked neither.
+6. **The `(public)` layout no longer offers Spanish on a page that is already Spanish.** `LanguageOffer` is now shown only when the resolved locale is English.
+7. Tests: `tests/message-link-locale-db.test.ts` (new) covers each route resolving from its record, the fallbacks, and a non-link path. `tests/unsubscribe-token.test.ts` covers the locale round trip and a forged `l` being refused. `e2e/message-link-locale.spec.ts` (new) uses its own disposable fixtures (B-120 discipline 1). It checks `<html lang="es">`, the heading and the title for all three tokens. It checks the completed-booking refusal's two links, with an axe scan, and the bad-token refusal's two links.
+
+**What it decided.**
+
+- **An unsubscribe token records its email's language, and the address alone does not.** An address can belong to a lead, a tenant, or nobody. The token is the only thing that knows which email carried it. It is signed, so the page can trust it.
+- **Link language beats the cookie on these three routes**, the same rule as `/pay` and `/reset-password`. The header's toggle still renders on the two `(public)` routes, and pressing it there writes a cookie these pages ignore. This is the same accepted dead control B-311 noted on `/reset-password`.
+- **`/waitlist/cancel` still mutates on GET.** The row ruled this out of scope, and the reviewer's reasoning is in the row.
+
+**What it left behind.**
+
+- **`/checkout` itself, after a valid resume redirect, still follows the cookie.** The row names the three landing pages. A Spanish abandonment email opened on a device with no Spanish cookie lands on an English checkout. Fixing that means the resume route setting the cookie, which the owner has to decide. No row.
+- **The unsubscribe refusal ("call the facility") has no `tel:` link.** The token names only an address, so there is no facility to call. The row limited the dead-end fix to `/checkout/resume`. No row.
+- **Found, not fixed: `e2e/i18n.spec.ts` › `/confirm-email renders in Spanish` fails on both projects.** The page's `<title>` is always `confemail.title` ("Confirme su correo electrónico"), but the spec expects the error heading "Ese enlace no funcionó". Neither file is touched here. Both last changed in B-311/B-315.
+
+**Verification.** Typecheck and lint are clean (the six `_prev`/`_formData` warnings were already there). `e2e/message-link-locale.spec.ts` + `e2e/i18n.spec.ts` on the production build: **108 passed, 2 failed**. Both failures are the pre-existing `/confirm-email` title above. The new spec passed 8 of 8 across both projects. Full unit suite: **4,602 passed, 8 skipped, of 4,610**, which is B-320's 4,605 plus this item's five.

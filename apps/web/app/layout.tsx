@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import { headers } from 'next/headers'
 import { PAY_TOKEN_HEADER, RESET_TOKEN_HEADER } from '@/lib/i18n'
-import { getLocale } from '@/lib/i18n/server'
+import { requestLinkLocale } from '@/lib/i18n/link-locale'
 import { payLinkLocale } from '@/lib/portal/pay-links'
 import { resetLinkLocale } from '@/lib/auth/flows'
 
@@ -71,6 +71,9 @@ export default async function RootLayout({
   // B-311. Same rule for `/reset-password?token=`: `resetLinkLocale` reads the
   // same header the shared `(auth)` layout does, so `<html lang>` and the page
   // body never disagree either.
+  //
+  // B-321. And for the three other pages a message links to — `requestLinkLocale`
+  // is the cookie everywhere else, which is why it can be the fallback here.
   const requestHeaders = await headers()
   const payToken = requestHeaders.get(PAY_TOKEN_HEADER)
   const resetToken = requestHeaders.get(RESET_TOKEN_HEADER)
@@ -78,7 +81,7 @@ export default async function RootLayout({
     ? await payLinkLocale(payToken)
     : resetToken
       ? await resetLinkLocale(resetToken)
-      : await getLocale()
+      : await requestLinkLocale()
 
   return (
     <html

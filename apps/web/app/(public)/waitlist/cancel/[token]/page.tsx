@@ -1,5 +1,8 @@
+import type { Metadata } from 'next'
 import Link from 'next/link'
 import { ProsePage } from '@/components/site/prose-page'
+import { dictionaryFor, translate } from '@/lib/i18n'
+import { requestLinkLocale } from '@/lib/i18n/link-locale'
 import { cancelWaitlist } from '@/lib/waitlist/service'
 
 // PRD 01 §9 Phase 3 (B-090 part 1). Taking yourself off a waitlist.
@@ -15,7 +18,12 @@ import { cancelWaitlist } from '@/lib/waitlist/service'
 // non-destructive: the worst a prefetcher can do is take somebody off a list
 // they asked to leave.
 
-export const metadata = { title: 'Waitlist', robots: { index: false, follow: false } }
+// B-321. In the language the entry was joined in — the one its "a unit came
+// free" mail was written in (`messageLinkLocale`) — not the cookie's.
+export async function generateMetadata(): Promise<Metadata> {
+  const dict = dictionaryFor(await requestLinkLocale())
+  return { title: translate(dict, 'wlcancel.title'), robots: { index: false, follow: false } }
+}
 export const dynamic = 'force-dynamic'
 
 export default async function WaitlistCancelPage({
@@ -24,34 +32,26 @@ export default async function WaitlistCancelPage({
   params: Promise<{ token: string }>
 }) {
   const { token } = await params
+  // Resolved before the cancel, though the order does not matter: cancelling
+  // changes the entry's status, never its `preferredLocale`.
+  const dict = dictionaryFor(await requestLinkLocale())
   const result = await cancelWaitlist(token)
 
   return (
     <ProsePage
-      title="Waitlist"
-      intro={
-        result.ok
-          ? 'You are off the list.'
-          : 'We could not find that waitlist link.'
-      }
+      title={translate(dict, 'wlcancel.title')}
+      intro={translate(dict, result.ok ? 'wlcancel.removed' : 'wlcancel.notFound')}
     >
-      {result.ok ? (
-        <p>
-          {result.alreadyClosed
-            ? 'You were already off this list — nothing more to do. We will not email you about this size again.'
-            : 'We will not email you about this size again. Nothing else changes, and you can join again any time from the facility page.'}
-        </p>
-      ) : (
-        <p>
-          The link may have been used already, or it may have been cut in half by an email
-          client. Nothing has changed either way — if you are still getting emails you do not
-          want, reply to one and we will sort it out.
-        </p>
-      )}
+      <p>
+        {translate(
+          dict,
+          !result.ok ? 'wlcancel.notFoundBody' : result.alreadyClosed ? 'wlcancel.alreadyOff' : 'wlcancel.offBody',
+        )}
+      </p>
 
       <p>
         <Link href="/storage/search" className="underline underline-offset-4">
-          Find storage near you
+          {translate(dict, 'wlcancel.findStorage')}
         </Link>
       </p>
     </ProsePage>
