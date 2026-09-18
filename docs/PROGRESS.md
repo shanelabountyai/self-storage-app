@@ -10522,7 +10522,7 @@ The counter form's Method select was uncontrolled under `key={former | account |
 
 **Verification.** Typecheck and lint are clean (the same six warnings as before, none in files this row touched). `npm test -- tests/i18n.test.ts tests/portal-payment.test.ts`: 49 passed. `e2e/portal-billing-account.spec.ts` on the production build: **16 passed**, including the new test in both languages on both projects. I did not run the full unit or e2e sweep. CI owns those.
 
-## B-323 — two staff-facing strings print internal identifiers at the customer counter (2026-09-18, `PENDING`)
+## B-323 — two staff-facing strings print internal identifiers at the customer counter (2026-09-18, `128f7fb`)
 
 **What it built.**
 
