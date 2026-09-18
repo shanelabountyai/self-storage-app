@@ -87,6 +87,8 @@ export type DirectProse = {
   /// B-287. Leads the reset email when staff, not the recipient, caused it:
   /// they were just given sight of a business account. Says why the mail came
   /// and that the link is optional for somebody who already has a password.
+  /// B-325: three paragraphs, fact first, at most one conditional per
+  /// sentence (`tests/auth-email-conditionals.test.ts`).
   authAccountAccess: (account: string, site: string) => string
 
   // ── email change, to the NEW address (US-706) ─────────────────────────────
@@ -372,7 +374,7 @@ const en: CommsProse = {
     authExpiry: (minutes) => `This link expires in ${minutes} minutes.`,
     authIgnore: 'If you did not request this, you can ignore this email.',
     authAccountAccess: (account, site) =>
-      `${site} gave you access to see the business account ${account} in your portal. If you already have a password, sign in as usual. If not, use the link below to choose one; if it has expired, ask for a new one from the sign-in page.`,
+      `${site} gave you access to see the business account ${account}. When you sign in, you can see what it owes.\n\nIf you already have a password, sign in as usual. If not, use the link below to choose one.\n\nIf the link has expired, ask for a new one from the sign-in page.`,
 
     emailChangeConfirmSubject: 'Confirm your new email address',
     emailChangeConfirmIntro: (site) =>
@@ -547,7 +549,7 @@ const es: CommsProse = {
       `Este enlace vence en ${minutes} ${minutes === 1 ? 'minuto' : 'minutos'}.`,
     authIgnore: 'Si usted no lo pidió, puede ignorar este correo.',
     authAccountAccess: (account, site) =>
-      `${site} le dio acceso para ver la cuenta de empresa ${account} en su portal. Si ya tiene contraseña, inicie sesión como siempre. Si no, use el enlace de abajo para elegir una; si ya venció, pida uno nuevo desde la página de inicio de sesión.`,
+      `${site} le dio acceso para ver la cuenta de empresa ${account}. Al iniciar sesión, puede ver lo que debe la cuenta.\n\nSi ya tiene contraseña, inicie sesión como siempre. Si no, use el enlace de abajo para elegir una.\n\nSi el enlace ya venció, pida uno nuevo desde la página de inicio de sesión.`,
 
     emailChangeConfirmSubject: 'Confirme su nueva dirección de correo',
     emailChangeConfirmIntro: (site) =>

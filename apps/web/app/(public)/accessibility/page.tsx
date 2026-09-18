@@ -2773,6 +2773,10 @@ function reviewedOn(locale: Locale): string {
 // their table's full caption. They now use short names, as `ScrollRegion`'s
 // contract says. SC 1.3.1 was already met, so there is nothing to disclose or
 // claim. No visible line changes; `LAST_REVIEWED` is not bumped (D-115).
+//
+// Re-read 2026-09-18, at B-325. The business-account access email is now short
+// sentences with one conditional each, in both languages. This page makes no
+// claim about email (see B-198), so nothing is added or withdrawn.
 
 export default async function AccessibilityPage() {
   const locale = await getLocale()

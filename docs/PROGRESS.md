@@ -10623,3 +10623,22 @@ The counter form's Method select was uncontrolled under `key={former | account |
 - The local demo has no occupying lease older than twelve months (checked in `storage_test`'s `public` schema), so the e2e suite does not exercise this path.
 
 **Verification.** Lint and typecheck are clean. No schema change was made, so there is no drift to check. Full unit suite: 274 files passed and 1 skipped; 4,613 tests passed and 8 skipped (4,621, which is B-327's total plus the three new tests). No e2e was run: the only customer-facing change is admin copy, and CI owns the sweep.
+
+## B-325 — the business-account access email was one 62-word sentence doing three jobs (2026-09-18, `PENDING`)
+
+**What it built.**
+
+1. **`authAccountAccess` is now three short paragraphs, fact first, in both languages** (`apps/web/lib/comms/prose.ts`). The first says who gave access to which account, then that the member can see what it owes when they sign in. The second is the password line. The third is what to do if the link has expired. "In your portal" / "en su portal" is gone. The paragraphs are `\n\n` inside the string, so `sendAuthEmail` did not change: it joins on `\n\n`, and the HTML turns those into `<br>`s.
+2. **`tests/auth-email-conditionals.test.ts`**: no sentence in `authAccountAccess`, `authExpiry` or `authIgnore` contains more than one `if` / `unless` / `si` / `a menos que`, in either dictionary. A semicolon does not end a sentence here, because that is how the old copy hid its second "if". Both locales fail on the old copy.
+
+**What it decided.**
+
+- **The first sentence keeps "gave you access to see the business account {account}"** rather than the row's suggested "added you to". The acceptance requires `tests/auth-email-ignore.test.ts` to pass unchanged, and that test asserts this phrase. The fact still comes first; only the verb differs from the example.
+- Spanish stays in usted, and "cuenta de empresa" is unchanged (D-122).
+
+**What it left behind.**
+
+- The expiry instruction still points a Spanish reader at the English sign-in page. **B-311** owns that, as the row says.
+- **B-301**'s backfill will send this wording. That is the reason for the ordering.
+
+**Verification.** Lint and typecheck are clean. There was no schema change. The three affected files pass: the new test, `auth-email-ignore` unchanged, and `billing-account-members-db`. The first full-suite run was killed with 137 before any test ran (zero failures, and no jetsam event for that minute), which is the known sibling-project kill. **Real finding from that kill:** because `afterAll` never ran, it left an orphan `auth-flows-test@example.com` tenant (no password) in `storage_test`. `authenticateWithPassword` looks up by email, so on the next run three `tests/auth-flows.test.ts` cases failed identically on `main` and on this branch ("expected null"). Deleting the orphan row fixed them. **A killed sweep can leave fixtures that break the next one, so check for rows with the test email before debugging auth code.** Full unit suite on the third run: 275 files passed and 1 skipped; 4,615 tests passed and 8 skipped (4,623, which is B-328's total plus the two new tests). No e2e was run, because the change is email copy only.
